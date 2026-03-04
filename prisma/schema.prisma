@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String
+  code      String?  @unique
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stockBalances StockBalance[]
+  stockMovesFrom StockMovement[] @relation("StockFrom")
+  stockMovesTo   StockMovement[] @relation("StockTo")
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  name      String
+  brand     String?
+  supplier  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants Variant[]
+}
+
+model Variant {
+  id        String   @id @default(cuid())
+  productId String
+  sku       String   @unique
+  name      String?
+
+  pricePence Int?
+  costPence  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product   Product @relation(fields: [productId], references: [id])
+  barcodes  Barcode[]
+  balances  StockBalance[]
+  movements StockMovement[]
+}
+
+model Barcode {
+  id        String  @id @default(cuid())
+  variantId String
+  code      String  @unique
+  type      BarcodeType @default(EAN)
+  isPrimary Boolean @default(false)
+  packQty   Int     @default(1)
+
+  createdAt DateTime @default(now())
+
+  variant   Variant @relation(fields: [variantId], references: [id])
+}
+
+enum BarcodeType {
+  EAN
+  INTERNAL
+}
+
+model StockBalance {
+  id         String @id @default(cuid())
+  variantId  String
+  locationId String
+  onHand     Int    @default(0)
+
+  updatedAt  DateTime @updatedAt
+
+  variant   Variant  @relation(fields: [variantId], references: [id])
+  location  Location @relation(fields: [locationId], references: [id])
+
+  @@unique([variantId, locationId])
+}
+
+model StockMovement {
+  id             String @id @default(cuid())
+  variantId      String
+  qty            Int
+  fromLocationId String?
+  toLocationId   String?
+  reason         StockMoveReason
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  variant       Variant   @relation(fields: [variantId], references: [id])
+  fromLocation  Location? @relation("StockFrom", fields: [fromLocationId], references: [id])
+  toLocation    Location? @relation("StockTo", fields: [toLocationId], references: [id])
+}
+
+enum StockMoveReason {
+  PURCHASE_RECEIPT
+  SALE
+  RETURN
+  TRANSFER
+  ADJUSTMENT
+  STOCK_TAKE
+  WORKSHOP_ALLOCATE
+  WORKSHOP_CONSUME
+} 
+enum UserRole {
+  STAFF
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  name         String?
+  passwordHash String
+  role         UserRole @default(STAFF)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
