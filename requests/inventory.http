@@ -1,0 +1,77 @@
+@baseUrl = http://localhost:3000
+
+### List products
+GET {{baseUrl}}/api/products
+
+### Create product
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+
+{
+  "name": "Tyre",
+  "brand": "Continental",
+  "description": "Grand Prix road tyre",
+  "isActive": true
+}
+
+### Get product by id
+GET {{baseUrl}}/api/products/{{productId}}
+
+### Patch product
+PATCH {{baseUrl}}/api/products/{{productId}}
+Content-Type: application/json
+
+{
+  "description": "Updated description",
+  "isActive": true
+}
+
+### List variants (optionally filter by productId query)
+GET {{baseUrl}}/api/variants?productId={{productId}}
+
+### Create variant
+POST {{baseUrl}}/api/variants
+Content-Type: application/json
+
+{
+  "productId": "{{productId}}",
+  "sku": "TYRE-700X28-BLK",
+  "barcode": "5000000000001",
+  "name": "700x28 Black",
+  "option": "700x28",
+  "retailPricePence": 4999,
+  "costPricePence": 2600,
+  "taxCode": "STD",
+  "isActive": true
+}
+
+### Get variant by id
+GET {{baseUrl}}/api/variants/{{variantId}}
+
+### Patch variant
+PATCH {{baseUrl}}/api/variants/{{variantId}}
+Content-Type: application/json
+
+{
+  "retailPricePence": 5299,
+  "costPricePence": 2700,
+  "taxCode": "STD"
+}
+
+### Get stock on hand for variant (all locations)
+GET {{baseUrl}}/api/stock/variants/{{variantId}}
+
+### Get stock on hand for variant at a location
+GET {{baseUrl}}/api/stock/variants/{{variantId}}?locationId={{locationId}}
+
+### Create stock adjustment (uses default location if locationId omitted)
+POST {{baseUrl}}/api/stock/adjustments
+Content-Type: application/json
+
+{
+  "variantId": "{{variantId}}",
+  "quantityDelta": 5,
+  "note": "Opening stock",
+  "referenceType": "MANUAL_ADJUSTMENT",
+  "referenceId": "open_stock_001"
+}

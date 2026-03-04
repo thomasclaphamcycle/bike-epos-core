@@ -24,7 +24,8 @@ model Product {
   id        String   @id @default(cuid())
   name      String
   brand     String?
-  supplier  String?
+  description String?
+  isActive  Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -36,10 +37,13 @@ model Variant {
   id        String   @id @default(cuid())
   productId String
   sku       String   @unique
+  barcode   String?  @unique
   name      String?
-
-  pricePence Int?
-  costPence  Int?
+  option    String?
+  retailPricePence Int @default(0)
+  costPricePence  Int?
+  taxCode   String?
+  isActive  Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -48,6 +52,10 @@ model Variant {
   barcodes  Barcode[]
   balances  StockBalance[]
   movements StockMovement[]
+  basketItems BasketItem[]
+  saleItems SaleItem[]
+  inventoryMovements InventoryMovement[]
+  stockLedgerEntries StockLedgerEntry[]
 }
 
 model Barcode {
@@ -106,7 +114,403 @@ enum StockMoveReason {
   STOCK_TAKE
   WORKSHOP_ALLOCATE
   WORKSHOP_CONSUME
-} 
+}
+
+model StockLocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  stockLedgerEntries StockLedgerEntry[]
+
+  @@index([name])
+}
+
+enum StockLedgerEntryType {
+  ADJUSTMENT
+  SALE
+  WORKSHOP
+  PURCHASE
+  RETURN
+  TRANSFER
+}
+
+model StockLedgerEntry {
+  id               String              @id @default(uuid()) @db.Uuid
+  variantId        String
+  locationId       String              @db.Uuid
+  type             StockLedgerEntryType
+  quantityDelta    Int
+  referenceType    String
+  referenceId      String
+  note             String?
+  createdAt        DateTime            @default(now())
+  createdByStaffId String?
+
+  variant          Variant             @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location         StockLocation       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdByStaff   User?               @relation("StockLedgerEntryCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([variantId, locationId, createdAt])
+  @@index([referenceType, referenceId])
+  @@index([createdByStaffId])
+}
+
+enum BasketStatus {
+  OPEN
+  CHECKED_OUT
+  ABANDONED
+}
+
+model Basket {
+  id        String       @id @default(uuid()) @db.Uuid
+  status    BasketStatus @default(OPEN)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  items     BasketItem[]
+  sale      Sale?
+}
+
+model BasketItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  basketId   String   @db.Uuid
+  variantId  String
+  quantity   Int
+  unitPrice  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  basket     Basket  @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  variant    Variant @relation(fields: [variantId], references: [id])
+
+  @@unique([basketId, variantId])
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  OTHER
+}
+
+enum PaymentPurpose {
+  DEPOSIT
+  FINAL
+  ADJUSTMENT
+  CREDIT_APPLIED
+  CREDIT_ISSUED
+}
+
+enum PaymentStatus {
+  COMPLETED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+model Sale {
+  id            String   @id @default(uuid()) @db.Uuid
+  basketId      String?  @unique @db.Uuid
+  workshopJobId String?  @unique @db.Uuid
+  customerId    String?  @db.Uuid
+  subtotalPence Int
+  taxPence      Int
+  totalPence    Int
+  createdAt     DateTime @default(now())
+
+  basket        Basket?  @relation(fields: [basketId], references: [id], onDelete: SetNull)
+  workshopJob   WorkshopJob? @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items         SaleItem[]
+  payments      Payment[]
+  returns       SaleReturn[]
+
+  @@index([customerId])
+  @@index([workshopJobId])
+}
+
+model SaleItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  saleId         String   @db.Uuid
+  variantId      String
+  quantity       Int
+  unitPricePence Int
+  lineTotalPence Int
+
+  sale           Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant        Variant @relation(fields: [variantId], references: [id])
+  returnItems    SaleReturnItem[]
+}
+
+model Payment {
+  id                String         @id @default(uuid()) @db.Uuid
+  saleId            String?        @db.Uuid
+  workshopJobId     String?        @db.Uuid
+  method            PaymentMethod
+  purpose           PaymentPurpose @default(FINAL)
+  status            PaymentStatus  @default(COMPLETED)
+  amountPence       Int
+  refundedTotalPence Int           @default(0)
+  providerRef       String?
+  createdAt         DateTime       @default(now())
+
+  sale              Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  workshopJob       WorkshopJob?   @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  refunds           PaymentRefund[]
+  creditEntries     CreditLedgerEntry[]
+
+  @@index([workshopJobId])
+  @@index([purpose, createdAt])
+}
+
+enum RefundStatus {
+  RECORDED
+  PROCESSOR_PENDING
+  PROCESSOR_SUCCEEDED
+  PROCESSOR_FAILED
+}
+
+model PaymentRefund {
+  id                String       @id @default(uuid()) @db.Uuid
+  paymentId         String       @db.Uuid
+  amountPence       Int
+  reason            String
+  status            RefundStatus @default(RECORDED)
+  processorRefundId String?
+  idempotencyKey    String?
+  createdAt         DateTime     @default(now())
+
+  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  cancellations     WorkshopCancellation[]
+
+  @@index([paymentId, createdAt])
+  @@unique([paymentId, idempotencyKey])
+}
+
+enum InventoryMovementReason {
+  SALE
+  RETURN
+  PURCHASE
+  ADJUSTMENT
+}
+
+model InventoryMovement {
+  id            String                  @id @default(uuid()) @db.Uuid
+  variantId     String
+  quantityDelta Int
+  reason        InventoryMovementReason
+  referenceType String
+  referenceId   String
+  createdAt     DateTime                @default(now())
+
+  variant       Variant                 @relation(fields: [variantId], references: [id])
+
+  @@index([variantId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model SaleReturn {
+  id        String   @id @default(uuid()) @db.Uuid
+  saleId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  items     SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id             String     @id @default(uuid()) @db.Uuid
+  returnId       String     @db.Uuid
+  saleItemId     String     @db.Uuid
+  quantity       Int
+  unitPricePence Int
+  lineTotalPence Int
+  createdAt      DateTime   @default(now())
+
+  saleReturn     SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleItem       SaleItem   @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+
+  @@index([saleItemId])
+}
+
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  firstName String
+  lastName  String
+  email     String?  @unique
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales     Sale[]
+  workshopJobs WorkshopJob[]
+  creditAccounts CreditAccount[]
+
+  @@index([phone])
+}
+
+enum WorkshopJobStatus {
+  BOOKING_MADE
+  BIKE_ARRIVED
+  WAITING_FOR_APPROVAL
+  APPROVED
+  WAITING_FOR_PARTS
+  ON_HOLD
+  BIKE_READY
+  COMPLETED
+  CANCELLED
+}
+
+enum WorkshopJobSource {
+  ONLINE
+  IN_STORE
+}
+
+enum WorkshopDepositStatus {
+  NOT_REQUIRED
+  REQUIRED
+  PAID
+}
+
+enum CancellationOutcome {
+  REFUND_DEPOSIT
+  FORFEIT_DEPOSIT
+  CONVERT_TO_CREDIT
+  NO_DEPOSIT
+}
+
+model WorkshopJob {
+  id            String            @id @default(uuid()) @db.Uuid
+  customerId    String?           @db.Uuid
+  assignedStaffId String?
+  assignedStaffName String?
+  status        WorkshopJobStatus @default(BOOKING_MADE)
+  scheduledDate DateTime?
+  source        WorkshopJobSource @default(IN_STORE)
+  depositRequiredPence Int        @default(0)
+  depositStatus WorkshopDepositStatus @default(NOT_REQUIRED)
+  manageToken   String?           @unique
+  manageTokenExpiresAt DateTime?
+  cancelledAt   DateTime?
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  customer      Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignedStaff User?             @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  sale          Sale?
+  payments      Payment[]
+  cancellations WorkshopCancellation[]
+  jobNotes      WorkshopJobNote[]
+
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([assignedStaffId])
+}
+
+enum WorkshopJobNoteVisibility {
+  INTERNAL
+  CUSTOMER
+}
+
+model WorkshopJobNote {
+  id            String                    @id @default(uuid()) @db.Uuid
+  workshopJobId String                    @db.Uuid
+  authorStaffId String?
+  visibility    WorkshopJobNoteVisibility @default(INTERNAL)
+  note          String
+  createdAt     DateTime                  @default(now())
+
+  workshopJob   WorkshopJob               @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  authorStaff   User?                     @relation("WorkshopJobNoteAuthor", fields: [authorStaffId], references: [id], onDelete: SetNull)
+
+  @@index([workshopJobId, createdAt])
+  @@index([authorStaffId])
+}
+
+model CreditAccount {
+  id          String   @id @default(uuid()) @db.Uuid
+  customerId  String?  @db.Uuid
+  email       String?
+  phone       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  entries     CreditLedgerEntry[]
+  cancellations WorkshopCancellation[]
+
+  @@unique([customerId])
+  @@unique([email, phone])
+  @@index([email])
+  @@index([phone])
+}
+
+model CreditLedgerEntry {
+  id             String   @id @default(uuid()) @db.Uuid
+  creditAccountId String  @db.Uuid
+  paymentId      String?  @db.Uuid
+  amountPence    Int
+  sourceType     String
+  sourceRef      String
+  idempotencyKey String?
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  creditAccount  CreditAccount @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
+  payment        Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  cancellations  WorkshopCancellation[]
+
+  @@index([creditAccountId, createdAt])
+  @@index([sourceType, sourceRef])
+  @@unique([creditAccountId, idempotencyKey])
+  @@unique([creditAccountId, sourceType, sourceRef, amountPence])
+}
+
+model WorkshopCancellation {
+  id                String              @id @default(uuid()) @db.Uuid
+  workshopJobId     String              @unique @db.Uuid
+  outcome           CancellationOutcome
+  notes             String?
+  paymentRefundId   String?             @db.Uuid
+  creditAccountId   String?             @db.Uuid
+  creditLedgerEntryId String?           @db.Uuid
+  cancelledAt       DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+
+  workshopJob       WorkshopJob         @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  paymentRefund     PaymentRefund?      @relation(fields: [paymentRefundId], references: [id], onDelete: SetNull)
+  creditAccount     CreditAccount?      @relation(fields: [creditAccountId], references: [id], onDelete: SetNull)
+  creditLedgerEntry CreditLedgerEntry?  @relation(fields: [creditLedgerEntryId], references: [id], onDelete: SetNull)
+
+  @@index([cancelledAt])
+  @@index([outcome, cancelledAt])
+}
+
+model BookingSettings {
+  id              Int      @id @default(1)
+  minBookableDate DateTime
+  maxBookingsPerDay Int
+  defaultDepositPence Int @default(1000)
+  updatedAt       DateTime @updatedAt
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  action     String
+  entityType String
+  entityId   String
+  actorRole  String?
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+}
+
 enum UserRole {
   STAFF
   ADMIN
@@ -118,6 +522,10 @@ model User {
   name         String?
   passwordHash String
   role         UserRole @default(STAFF)
+
+  assignedWorkshopJobs WorkshopJob[]    @relation("WorkshopJobAssignedStaff")
+  workshopJobNotes     WorkshopJobNote[] @relation("WorkshopJobNoteAuthor")
+  stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
