@@ -1,0 +1,380 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@managerRole = MANAGER
+
+### Temporary role header auth (M13)
+### TODO(auth): replace X-Staff-Role/X-Staff-Id with real authenticated user roles.
+
+### Availability for a date range
+GET {{baseUrl}}/api/workshop/availability?from=2026-03-06&to=2026-03-10
+
+### Workshop dashboard (STAFF+)
+GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Workshop dashboard filters (M14)
+### assignedTo, unassigned, hasNotes
+GET {{baseUrl}}/api/workshop/dashboard?assignedTo=demo-staff-id&hasNotes=true&limit=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Create an online workshop booking
+POST {{baseUrl}}/api/workshop-bookings
+Content-Type: application/json
+
+{
+  "firstName": "Alex",
+  "lastName": "Rider",
+  "email": "alex.rider@example.com",
+  "phone": "07111222333",
+  "scheduledDate": "2026-03-06",
+  "notes": "Gear indexing and brake check"
+}
+
+### Create booking (capture manageToken from response)
+POST {{baseUrl}}/api/workshop-bookings
+Content-Type: application/json
+
+{
+  "firstName": "Token",
+  "lastName": "Owner",
+  "phone": "07111999000",
+  "scheduledDate": "2026-03-08",
+  "notes": "Needs chain replacement"
+}
+
+### Pay booking deposit (£10 / 1000p) by manage token
+### Response contract:
+### - 201 Created: first successful deposit payment
+### - 200 OK: idempotent replay (same payment returned)
+POST {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}/pay-deposit
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "method": "CARD",
+  "providerRef": "dep-test-001"
+}
+
+### Workshop checkout (sale total 6999, deposit 1000 already paid, outstanding 5999)
+### Response contract:
+### - 201 Created: sale created
+### - 200 OK: idempotent replay (existing sale returned)
+### - 409 DEPOSIT_REQUIRED: online booking requires paid deposit unless override
+### Example response fields:
+### {
+###   "sale": { "id": "...", "workshopJobId": "..." },
+###   "saleTotalPence": 6999,
+###   "depositPaidPence": 1000,
+###   "creditPence": 0,
+###   "outstandingPence": 5999,
+###   "payment": { "id": "...", "amountPence": 5999 },
+###   "idempotent": false
+### }
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/checkout
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "saleTotalPence": 6999,
+  "paymentMethod": "CARD",
+  "amountPence": 5999,
+  "providerRef": "final-test-001"
+}
+
+### Checkout again should be idempotent (same sale returned)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/checkout
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "saleTotalPence": 6999
+}
+
+### Get booking by manage token
+GET {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}
+
+### Reschedule by manage token
+PATCH {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}
+Content-Type: application/json
+
+{
+  "scheduledDate": "2026-03-09",
+  "notes": "Can drop off after 5pm"
+}
+
+### Reschedule to full day (expect 409 WORKSHOP_FULL)
+PATCH {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}
+Content-Type: application/json
+
+{
+  "scheduledDate": "2026-03-07"
+}
+
+### Cancel by manage token
+PATCH {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}
+Content-Type: application/json
+
+{
+  "status": "CANCELLED"
+}
+
+### Expired/invalid token (expect 404)
+GET {{baseUrl}}/api/workshop-bookings/manage/expired-or-invalid-token
+
+### Create an online booking without email (matches by phone if customer exists)
+POST {{baseUrl}}/api/workshop-bookings
+Content-Type: application/json
+
+{
+  "firstName": "Alex",
+  "lastName": "Rider",
+  "phone": "07111222333",
+  "scheduledDate": "2026-03-06"
+}
+
+### Expect 409 DATE_NOT_BOOKABLE when date is before minBookableDate
+POST {{baseUrl}}/api/workshop-bookings
+Content-Type: application/json
+
+{
+  "firstName": "Early",
+  "lastName": "Bird",
+  "phone": "07000000001",
+  "scheduledDate": "2026-03-01"
+}
+
+### Expect 409 WORKSHOP_FULL when maxBookingsPerDay is reached
+POST {{baseUrl}}/api/workshop-bookings
+Content-Type: application/json
+
+{
+  "firstName": "Full",
+  "lastName": "Day",
+  "phone": "07000000002",
+  "scheduledDate": "2026-03-07"
+}
+
+### Cancel booking by manage token (idempotent by workshop job)
+### outcomes: REFUND_DEPOSIT | FORFEIT_DEPOSIT | CONVERT_TO_CREDIT | NO_DEPOSIT
+### Idempotency scope: underlying workshopJobId (same booking/job cannot be cancelled twice)
+### Permissions: REFUND_DEPOSIT / CONVERT_TO_CREDIT require MANAGER+
+POST {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}/cancel
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "outcome": "REFUND_DEPOSIT",
+  "notes": "Customer requested cancellation",
+  "refundReason": "Workshop booking cancelled",
+  "idempotencyKey": "cancel-manage-001"
+}
+
+### Cancel workshop job by id (staff operation)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/cancel
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "outcome": "FORFEIT_DEPOSIT",
+  "notes": "Late cancellation, deposit forfeited"
+}
+
+### Assign workshop job (M14)
+### STAFF can assign to self only; MANAGER+ can assign anyone.
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/assign
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "staffId": "demo-staff"
+}
+
+### Unassign workshop job
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/assign
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "staffId": null
+}
+
+### Add internal workshop note (M14)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notes
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "visibility": "INTERNAL",
+  "note": "Customer waiting for quote"
+}
+
+### Add customer-visible workshop note (M14, MANAGER+)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notes
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "visibility": "CUSTOMER",
+  "note": "Your bike is ready for collection"
+}
+
+### List workshop notes
+GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notes
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Change workshop status (M14)
+### Allowed progression: BOOKED -> IN_PROGRESS -> READY -> COMPLETED, and any -> CANCELLED
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "IN_PROGRESS"
+}
+
+### Invalid status transition example (expect 409 INVALID_STATUS_TRANSITION)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "READY"
+}
+
+### Refund any payment by id
+### Response: 201 created, 200 idempotent replay, 409 REFUND_EXCEEDS_PAYMENT
+### Permissions: MANAGER+
+POST {{baseUrl}}/api/payments/{{paymentId}}/refund
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "amountPence": 500,
+  "reason": "Partial goodwill refund",
+  "status": "RECORDED",
+  "idempotencyKey": "refund-001"
+}
+
+### Payment detail (support/debug)
+### Includes payment + refunds + linked sale/workshop booking
+GET {{baseUrl}}/api/payments/{{paymentId}}
+
+### Get credit balance by identity
+GET {{baseUrl}}/api/credits/balance?email=alex.rider@example.com&phone=07111222333
+
+### Issue credit manually
+### Primary idempotency: required idempotencyKey (per credit account)
+### Permissions: MANAGER+
+POST {{baseUrl}}/api/credits/issue
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "email": "alex.rider@example.com",
+  "phone": "07111222333",
+  "amountPence": 1500,
+  "notes": "Goodwill credit",
+  "sourceRef": "MANUAL-CREDIT-001",
+  "idempotencyKey": "credit-issue-001"
+}
+
+### Apply credit to sale/job checkout
+### Primary idempotency: required idempotencyKey (per credit account)
+### Secondary uniqueness guard: same account + target + amount returns 409 CREDIT_APPLICATION_CONFLICT
+### Permissions: MANAGER+
+POST {{baseUrl}}/api/credits/apply
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "saleId": "{{saleId}}",
+  "email": "alex.rider@example.com",
+  "phone": "07111222333",
+  "amountPence": 1000,
+  "notes": "Applying stored credit",
+  "idempotencyKey": "credit-apply-001"
+}
+
+### Workshop payments report
+GET {{baseUrl}}/api/reports/workshop/payments?from=2026-03-01&to=2026-03-31
+
+### Workshop deposits report
+GET {{baseUrl}}/api/reports/workshop/deposits?from=2026-03-01&to=2026-03-31
+
+### Workshop credits report
+GET {{baseUrl}}/api/reports/workshop/credits?from=2026-03-01&to=2026-03-31
+
+### Audit query (MANAGER+)
+GET {{baseUrl}}/api/audit?entityType=WORKSHOP_JOB&entityId={{bookingId}}&from=2026-03-01&to=2026-03-31&limit=100
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+### M16: list workshop job parts
+GET {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### M16: add workshop part line
+### status USED immediately creates a WORKSHOP stock ledger deduction.
+POST {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "variantId": "{{variantId}}",
+  "quantity": 1,
+  "status": "USED",
+  "note": "Brake pads fitted"
+}
+
+### M16: update workshop part line
+### status RETURNED creates a compensating stock ledger entry.
+PATCH {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts/{{partId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "quantity": 2,
+  "status": "USED",
+  "note": "Used two items"
+}
+
+### M16: remove workshop part line
+### Removing a USED line creates a compensating +stock ledger entry.
+DELETE {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts/{{partId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "note": "Part line removed"
+}
+
+### M16: workshop checkout now includes USED parts in saleTotal/outstanding
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/checkout
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "saleTotalPence": 5000
+}
