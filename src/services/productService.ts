@@ -22,6 +22,7 @@ type CreateVariantInput = {
   barcode?: string;
   name?: string;
   option?: string;
+  retailPrice?: string | number;
   retailPricePence?: number;
   costPricePence?: number;
   taxCode?: string;
@@ -34,10 +35,26 @@ type UpdateVariantInput = {
   barcode?: string | null;
   name?: string;
   option?: string;
+  retailPrice?: string | number;
   retailPricePence?: number;
   costPricePence?: number | null;
   taxCode?: string | null;
   isActive?: boolean;
+};
+
+type ListProductsInput = {
+  q?: string;
+  isActive?: boolean;
+  take?: number;
+  skip?: number;
+};
+
+type ListVariantsInput = {
+  q?: string;
+  isActive?: boolean;
+  take?: number;
+  skip?: number;
+  productId?: string;
 };
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -60,6 +77,110 @@ const normalizeOptionalNullableText = (value: string | undefined | null): string
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const toNormalizedTake = (take: number | undefined): number | undefined => {
+  if (take === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(take) || take < 1 || take > 200) {
+    throw new HttpError(400, "take must be an integer between 1 and 200", "INVALID_PAGINATION");
+  }
+  return take;
+};
+
+const toNormalizedSkip = (skip: number | undefined): number | undefined => {
+  if (skip === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(skip) || skip < 0) {
+    throw new HttpError(400, "skip must be an integer greater than or equal to 0", "INVALID_PAGINATION");
+  }
+  return skip;
+};
+
+const decimalToPence = (value: Prisma.Decimal): number =>
+  value.mul(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).toNumber();
+
+const parseRetailPriceInput = (
+  retailPrice: string | number | undefined,
+  retailPricePence: number | undefined,
+  code: string,
+) => {
+  const hasRetailPrice = retailPrice !== undefined;
+  const hasRetailPricePence = retailPricePence !== undefined;
+
+  if (!hasRetailPrice && !hasRetailPricePence) {
+    throw new HttpError(400, "retailPrice is required", code);
+  }
+
+  if (hasRetailPricePence) {
+    if (!Number.isInteger(retailPricePence) || (retailPricePence ?? -1) < 0) {
+      throw new HttpError(
+        400,
+        "retailPricePence must be a non-negative integer",
+        code,
+      );
+    }
+  }
+
+  let decimal: Prisma.Decimal | undefined;
+  if (hasRetailPrice) {
+    try {
+      decimal = new Prisma.Decimal(retailPrice as string | number);
+    } catch {
+      throw new HttpError(400, "retailPrice must be a valid decimal value", code);
+    }
+    if (decimal.isNegative()) {
+      throw new HttpError(400, "retailPrice must be non-negative", code);
+    }
+    if (decimal.decimalPlaces() > 2) {
+      throw new HttpError(400, "retailPrice must have up to 2 decimal places", code);
+    }
+  }
+
+  if (decimal && hasRetailPricePence) {
+    const derived = decimalToPence(decimal);
+    if (derived !== retailPricePence) {
+      throw new HttpError(
+        400,
+        "retailPrice and retailPricePence do not match",
+        code,
+      );
+    }
+  }
+
+  if (decimal) {
+    return {
+      retailPrice: decimal.toDecimalPlaces(2),
+      retailPricePence: decimalToPence(decimal),
+    };
+  }
+
+  return {
+    retailPrice: new Prisma.Decimal((retailPricePence as number) / 100).toDecimalPlaces(2),
+    retailPricePence: retailPricePence as number,
+  };
+};
+
+const parseRetailPricePatch = (
+  input: UpdateVariantInput,
+  code: string,
+): { retailPrice?: Prisma.Decimal; retailPricePence?: number } => {
+  const hasRetailPrice = Object.prototype.hasOwnProperty.call(input, "retailPrice");
+  const hasRetailPricePence = Object.prototype.hasOwnProperty.call(input, "retailPricePence");
+
+  if (!hasRetailPrice && !hasRetailPricePence) {
+    return {};
+  }
+
+  const parsed = parseRetailPriceInput(
+    hasRetailPrice ? input.retailPrice : undefined,
+    hasRetailPricePence ? input.retailPricePence : undefined,
+    code,
+  );
+
+  return parsed;
 };
 
 const toProductResponse = (product: {
@@ -93,6 +214,7 @@ const toVariantResponse = (variant: {
   barcode: string | null;
   name: string | null;
   option: string | null;
+  retailPrice: Prisma.Decimal;
   retailPricePence: number;
   costPricePence: number | null;
   taxCode: string | null;
@@ -102,6 +224,7 @@ const toVariantResponse = (variant: {
   product?: {
     id: string;
     name: string;
+    brand: string | null;
   };
 }) => {
   return {
@@ -111,6 +234,7 @@ const toVariantResponse = (variant: {
     barcode: variant.barcode,
     name: variant.name,
     option: variant.option,
+    retailPrice: variant.retailPrice.toFixed(2),
     retailPricePence: variant.retailPricePence,
     costPricePence: variant.costPricePence,
     taxCode: variant.taxCode,
@@ -119,6 +243,7 @@ const toVariantResponse = (variant: {
       ? {
           id: variant.product.id,
           name: variant.product.name,
+          brand: variant.product.brand,
         }
       : undefined,
     createdAt: variant.createdAt,
@@ -241,20 +366,45 @@ const clearPrimaryBarcodeForVariant = async (
   });
 };
 
-export const listProducts = async (query?: string) => {
-  const normalizedQuery = normalizeOptionalText(query);
+const toVariantConflictError = (
+  prismaError: { meta?: { target?: unknown } },
+): HttpError => {
+  const target = Array.isArray(prismaError.meta?.target)
+    ? prismaError.meta?.target.map(String)
+    : [];
+
+  if (target.includes("sku")) {
+    return new HttpError(409, "SKU already exists", "SKU_EXISTS");
+  }
+
+  if (target.includes("barcode")) {
+    return new HttpError(409, "Barcode already exists", "BARCODE_EXISTS");
+  }
+
+  return new HttpError(409, "Variant SKU or barcode already exists", "VARIANT_EXISTS");
+};
+
+export const listProducts = async (filters: ListProductsInput = {}) => {
+  const normalizedQuery = normalizeOptionalText(filters.q);
+  const take = toNormalizedTake(filters.take);
+  const skip = toNormalizedSkip(filters.skip);
 
   const products = await prisma.product.findMany({
-    where: normalizedQuery
-      ? {
-          OR: [
-            { name: { contains: normalizedQuery, mode: "insensitive" } },
-            { brand: { contains: normalizedQuery, mode: "insensitive" } },
-            { description: { contains: normalizedQuery, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
+    where: {
+      ...(normalizedQuery
+        ? {
+            OR: [
+              { name: { contains: normalizedQuery, mode: "insensitive" } },
+              { brand: { contains: normalizedQuery, mode: "insensitive" } },
+              { description: { contains: normalizedQuery, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+    },
     orderBy: [{ createdAt: "desc" }],
+    ...(take !== undefined ? { take } : {}),
+    ...(skip !== undefined ? { skip } : {}),
     include: {
       _count: {
         select: {
@@ -368,25 +518,50 @@ export const updateProductById = async (productId: string, input: UpdateProductI
   }
 };
 
-export const listVariants = async (productId?: string) => {
-  const normalizedProductId = normalizeOptionalText(productId);
+export const listVariants = async (filters: ListVariantsInput = {}) => {
+  const normalizedProductId = normalizeOptionalText(filters.productId);
+  const normalizedQuery = normalizeOptionalText(filters.q);
+  const take = toNormalizedTake(filters.take);
+  const skip = toNormalizedSkip(filters.skip);
 
   if (normalizedProductId) {
     await ensureProductExists(prisma, normalizedProductId);
   }
 
   const variants = await prisma.variant.findMany({
-    where: normalizedProductId
-      ? {
-          productId: normalizedProductId,
-        }
-      : undefined,
+    where: {
+      ...(normalizedProductId ? { productId: normalizedProductId } : {}),
+      ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+      ...(normalizedQuery
+        ? {
+            OR: [
+              { sku: { contains: normalizedQuery, mode: "insensitive" } },
+              { barcode: { contains: normalizedQuery, mode: "insensitive" } },
+              { name: { contains: normalizedQuery, mode: "insensitive" } },
+              { option: { contains: normalizedQuery, mode: "insensitive" } },
+              {
+                product: {
+                  name: { contains: normalizedQuery, mode: "insensitive" },
+                },
+              },
+              {
+                product: {
+                  brand: { contains: normalizedQuery, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : {}),
+    },
     orderBy: [{ createdAt: "desc" }],
+    ...(take !== undefined ? { take } : {}),
+    ...(skip !== undefined ? { skip } : {}),
     include: {
       product: {
         select: {
           id: true,
           name: true,
+          brand: true,
         },
       },
     },
@@ -408,17 +583,15 @@ export const createVariant = async (input: CreateVariantInput) => {
   if (!productId || !sku) {
     throw new HttpError(400, "productId and sku are required", "INVALID_VARIANT");
   }
-
-  if (
-    !Number.isInteger(input.retailPricePence) ||
-    (input.retailPricePence ?? -1) < 0
-  ) {
-    throw new HttpError(
-      400,
-      "retailPricePence must be a non-negative integer",
-      "INVALID_VARIANT",
-    );
+  if (sku.length < 2) {
+    throw new HttpError(400, "sku must be at least 2 characters", "INVALID_VARIANT");
   }
+
+  const parsedRetailPrice = parseRetailPriceInput(
+    input.retailPrice,
+    input.retailPricePence,
+    "INVALID_VARIANT",
+  );
 
   if (
     input.costPricePence !== undefined &&
@@ -451,7 +624,8 @@ export const createVariant = async (input: CreateVariantInput) => {
           barcode,
           name,
           option,
-          retailPricePence: input.retailPricePence,
+          retailPrice: parsedRetailPrice.retailPrice,
+          retailPricePence: parsedRetailPrice.retailPricePence,
           costPricePence: input.costPricePence,
           taxCode,
           isActive: input.isActive ?? true,
@@ -466,7 +640,7 @@ export const createVariant = async (input: CreateVariantInput) => {
     } catch (error) {
       const prismaError = error as { code?: string; meta?: { target?: unknown } };
       if (prismaError.code === "P2002") {
-        throw new HttpError(409, "Variant SKU or barcode already exists", "VARIANT_EXISTS");
+        throw toVariantConflictError(prismaError);
       }
       throw error;
     }
@@ -485,6 +659,7 @@ export const getVariantById = async (variantId: string) => {
         select: {
           id: true,
           name: true,
+          brand: true,
         },
       },
     },
@@ -508,6 +683,7 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
     Object.prototype.hasOwnProperty.call(input, "barcode") ||
     Object.prototype.hasOwnProperty.call(input, "name") ||
     Object.prototype.hasOwnProperty.call(input, "option") ||
+    Object.prototype.hasOwnProperty.call(input, "retailPrice") ||
     Object.prototype.hasOwnProperty.call(input, "retailPricePence") ||
     Object.prototype.hasOwnProperty.call(input, "costPricePence") ||
     Object.prototype.hasOwnProperty.call(input, "taxCode") ||
@@ -542,6 +718,9 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
       if (!sku) {
         throw new HttpError(400, "sku cannot be empty", "INVALID_VARIANT_UPDATE");
       }
+      if (sku.length < 2) {
+        throw new HttpError(400, "sku must be at least 2 characters", "INVALID_VARIANT_UPDATE");
+      }
       await ensureSkuAvailable(tx, sku, variantId);
       data.sku = sku;
     }
@@ -564,18 +743,12 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
       data.option = normalizeOptionalNullableText(input.option);
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "retailPricePence")) {
-      if (
-        !Number.isInteger(input.retailPricePence) ||
-        (input.retailPricePence ?? -1) < 0
-      ) {
-        throw new HttpError(
-          400,
-          "retailPricePence must be a non-negative integer",
-          "INVALID_VARIANT_UPDATE",
-        );
-      }
-      data.retailPricePence = input.retailPricePence;
+    const retailPricePatch = parseRetailPricePatch(input, "INVALID_VARIANT_UPDATE");
+    if (retailPricePatch.retailPrice !== undefined) {
+      data.retailPrice = retailPricePatch.retailPrice;
+    }
+    if (retailPricePatch.retailPricePence !== undefined) {
+      data.retailPricePence = retailPricePatch.retailPricePence;
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "costPricePence")) {
@@ -621,7 +794,7 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
     } catch (error) {
       const prismaError = error as { code?: string; meta?: { target?: unknown } };
       if (prismaError.code === "P2002") {
-        throw new HttpError(409, "Variant SKU or barcode already exists", "VARIANT_EXISTS");
+        throw toVariantConflictError(prismaError);
       }
       throw error;
     }

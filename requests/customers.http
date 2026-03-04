@@ -1,0 +1,38 @@
+@baseUrl = http://localhost:3000
+
+### Create customer
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "email": "jane.smith@example.com",
+  "phone": "07123456789",
+  "notes": "Workshop regular"
+}
+
+### Get customer by id
+GET {{baseUrl}}/api/customers/{{customerId}}
+
+### Search customers by name/email/phone
+GET {{baseUrl}}/api/customers?query=jane
+
+### Attach customer to sale
+PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}"
+}
+
+### Detach customer from sale
+PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
+Content-Type: application/json
+
+{
+  "customerId": null
+}
+
+### Fetch sale (should include customer)
+GET {{baseUrl}}/api/sales/{{saleId}}

@@ -1,0 +1,55 @@
+@baseUrl = http://localhost:3000
+
+### Create stocktake session
+POST {{baseUrl}}/api/stocktakes
+Content-Type: application/json
+
+{
+  "locationId": "{{locationId}}",
+  "notes": "March cycle count"
+}
+
+### Add or update counted line
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/lines
+Content-Type: application/json
+
+{
+  "variantId": "{{variantId}}",
+  "countedQty": 8
+}
+
+### Add second line
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/lines
+Content-Type: application/json
+
+{
+  "variantId": "{{variantId2}}",
+  "countedQty": 2
+}
+
+### Get stocktake (includes preview currentOnHand + deltaNeeded)
+GET {{baseUrl}}/api/stocktakes/{{stocktakeId}}
+
+### Remove a line
+DELETE {{baseUrl}}/api/stocktakes/{{stocktakeId}}/lines/{{stocktakeLineId}}
+
+### Post stocktake (writes ADJUSTMENT ledger deltas)
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/post
+
+### Posting again should fail (409 STOCKTAKE_NOT_OPEN)
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/post
+
+### Create and cancel an open stocktake
+POST {{baseUrl}}/api/stocktakes
+Content-Type: application/json
+
+{
+  "locationId": "{{locationId}}",
+  "notes": "Cancelled count"
+}
+
+### Cancel stocktake
+POST {{baseUrl}}/api/stocktakes/{{stocktakeIdToCancel}}/cancel
+
+### Cancel again should fail (409 STOCKTAKE_NOT_OPEN)
+POST {{baseUrl}}/api/stocktakes/{{stocktakeIdToCancel}}/cancel

@@ -7,9 +7,53 @@ import {
 } from "../services/productService";
 import { HttpError } from "../utils/http";
 
+const parseActiveQuery = (value: unknown): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new HttpError(400, "active must be 1 or 0", "INVALID_VARIANT_FILTER");
+  }
+  const normalized = value.trim();
+  if (normalized === "1") {
+    return true;
+  }
+  if (normalized === "0") {
+    return false;
+  }
+  throw new HttpError(400, "active must be 1 or 0", "INVALID_VARIANT_FILTER");
+};
+
+const parseOptionalIntQuery = (
+  value: unknown,
+  field: "take" | "skip",
+): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HttpError(400, `${field} must be an integer`, "INVALID_VARIANT_FILTER");
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new HttpError(400, `${field} must be an integer`, "INVALID_VARIANT_FILTER");
+  }
+  return parsed;
+};
+
 export const listVariantsHandler = async (req: Request, res: Response) => {
   const productId = typeof req.query.productId === "string" ? req.query.productId : undefined;
-  const variants = await listVariants(productId);
+  const q =
+    typeof req.query.q === "string"
+      ? req.query.q
+      : typeof req.query.query === "string"
+        ? req.query.query
+        : undefined;
+  const isActive = parseActiveQuery(req.query.active);
+  const take = parseOptionalIntQuery(req.query.take, "take");
+  const skip = parseOptionalIntQuery(req.query.skip, "skip");
+
+  const variants = await listVariants({ q, isActive, take, skip, productId });
   res.json(variants);
 };
 
@@ -20,6 +64,7 @@ export const createVariantHandler = async (req: Request, res: Response) => {
     barcode?: string;
     name?: string;
     option?: string;
+    retailPrice?: string | number;
     retailPricePence?: number;
     costPricePence?: number;
     taxCode?: string;
@@ -41,6 +86,13 @@ export const createVariantHandler = async (req: Request, res: Response) => {
   if (body.option !== undefined && typeof body.option !== "string") {
     throw new HttpError(400, "option must be a string", "INVALID_VARIANT");
   }
+  if (
+    body.retailPrice !== undefined &&
+    typeof body.retailPrice !== "number" &&
+    typeof body.retailPrice !== "string"
+  ) {
+    throw new HttpError(400, "retailPrice must be a number or string", "INVALID_VARIANT");
+  }
   if (body.taxCode !== undefined && typeof body.taxCode !== "string") {
     throw new HttpError(400, "taxCode must be a string", "INVALID_VARIANT");
   }
@@ -49,6 +101,52 @@ export const createVariantHandler = async (req: Request, res: Response) => {
   }
 
   const variant = await createVariant(body);
+  res.status(201).json(variant);
+};
+
+export const createVariantForProductHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    sku?: string;
+    barcode?: string;
+    name?: string;
+    option?: string;
+    retailPrice?: string | number;
+    retailPricePence?: number;
+    costPricePence?: number;
+    taxCode?: string;
+    isActive?: boolean;
+  };
+
+  if (body.sku !== undefined && typeof body.sku !== "string") {
+    throw new HttpError(400, "sku must be a string", "INVALID_VARIANT");
+  }
+  if (body.barcode !== undefined && typeof body.barcode !== "string") {
+    throw new HttpError(400, "barcode must be a string", "INVALID_VARIANT");
+  }
+  if (body.name !== undefined && typeof body.name !== "string") {
+    throw new HttpError(400, "name must be a string", "INVALID_VARIANT");
+  }
+  if (body.option !== undefined && typeof body.option !== "string") {
+    throw new HttpError(400, "option must be a string", "INVALID_VARIANT");
+  }
+  if (
+    body.retailPrice !== undefined &&
+    typeof body.retailPrice !== "number" &&
+    typeof body.retailPrice !== "string"
+  ) {
+    throw new HttpError(400, "retailPrice must be a number or string", "INVALID_VARIANT");
+  }
+  if (body.taxCode !== undefined && typeof body.taxCode !== "string") {
+    throw new HttpError(400, "taxCode must be a string", "INVALID_VARIANT");
+  }
+  if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+    throw new HttpError(400, "isActive must be a boolean", "INVALID_VARIANT");
+  }
+
+  const variant = await createVariant({
+    ...body,
+    productId: req.params.productId,
+  });
   res.status(201).json(variant);
 };
 
@@ -64,6 +162,7 @@ export const patchVariantHandler = async (req: Request, res: Response) => {
     barcode?: string | null;
     name?: string;
     option?: string;
+    retailPrice?: string | number;
     retailPricePence?: number;
     costPricePence?: number | null;
     taxCode?: string | null;
@@ -84,6 +183,17 @@ export const patchVariantHandler = async (req: Request, res: Response) => {
   }
   if (body.option !== undefined && typeof body.option !== "string") {
     throw new HttpError(400, "option must be a string", "INVALID_VARIANT_UPDATE");
+  }
+  if (
+    body.retailPrice !== undefined &&
+    typeof body.retailPrice !== "number" &&
+    typeof body.retailPrice !== "string"
+  ) {
+    throw new HttpError(
+      400,
+      "retailPrice must be a number or string",
+      "INVALID_VARIANT_UPDATE",
+    );
   }
   if (body.taxCode !== undefined && body.taxCode !== null && typeof body.taxCode !== "string") {
     throw new HttpError(400, "taxCode must be a string or null", "INVALID_VARIANT_UPDATE");

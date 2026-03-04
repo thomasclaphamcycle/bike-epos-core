@@ -33,6 +33,65 @@ model Product {
   variants Variant[]
 }
 
+model Supplier {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+
+  @@index([name])
+  @@index([email])
+  @@index([phone])
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id         String              @id @default(uuid()) @db.Uuid
+  supplierId String              @db.Uuid
+  status     PurchaseOrderStatus @default(DRAFT)
+  orderedAt  DateTime?
+  expectedAt DateTime?
+  notes      String?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items      PurchaseOrderItem[]
+
+  @@index([supplierId])
+  @@index([status, createdAt])
+}
+
+model PurchaseOrderItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String   @db.Uuid
+  variantId        String
+  quantityOrdered  Int
+  quantityReceived Int      @default(0)
+  unitCostPence    Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  variant          Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseOrderId, variantId])
+  @@index([purchaseOrderId, createdAt])
+  @@index([variantId])
+}
+
 model Variant {
   id        String   @id @default(cuid())
   productId String
@@ -40,6 +99,7 @@ model Variant {
   barcode   String?  @unique
   name      String?
   option    String?
+  retailPrice      Decimal @default(0) @db.Decimal(12, 2)
   retailPricePence Int @default(0)
   costPricePence  Int?
   taxCode   String?
@@ -57,6 +117,8 @@ model Variant {
   inventoryMovements InventoryMovement[]
   stockLedgerEntries StockLedgerEntry[]
   workshopParts WorkshopJobPart[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stocktakeLines     StocktakeLine[]
 }
 
 model Barcode {
@@ -124,6 +186,7 @@ model StockLocation {
   createdAt DateTime @default(now())
 
   stockLedgerEntries StockLedgerEntry[]
+  stocktakes         Stocktake[]
 
   @@index([name])
 }
@@ -143,6 +206,7 @@ model StockLedgerEntry {
   locationId       String              @db.Uuid
   type             StockLedgerEntryType
   quantityDelta    Int
+  unitCostPence    Int?
   referenceType    String
   referenceId      String
   note             String?
@@ -156,6 +220,42 @@ model StockLedgerEntry {
   @@index([variantId, locationId, createdAt])
   @@index([referenceType, referenceId])
   @@index([createdByStaffId])
+}
+
+enum StocktakeStatus {
+  OPEN
+  POSTED
+  CANCELLED
+}
+
+model Stocktake {
+  id         String          @id @default(uuid()) @db.Uuid
+  locationId String          @db.Uuid
+  status     StocktakeStatus @default(OPEN)
+  startedAt  DateTime        @default(now())
+  postedAt   DateTime?
+  notes      String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  location   StockLocation   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines      StocktakeLine[]
+
+  @@index([locationId, status])
+}
+
+model StocktakeLine {
+  id         String    @id @default(uuid()) @db.Uuid
+  stocktakeId String   @db.Uuid
+  variantId  String
+  countedQty Int
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  stocktake  Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  variant    Variant   @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([stocktakeId, variantId])
 }
 
 enum BasketStatus {
@@ -288,26 +388,31 @@ model PaymentRefund {
   @@unique([paymentId, idempotencyKey])
 }
 
-enum InventoryMovementReason {
-  SALE
-  RETURN
+enum InventoryMovementType {
   PURCHASE
+  SALE
   ADJUSTMENT
+  WORKSHOP_USE
+  RETURN
 }
 
 model InventoryMovement {
-  id            String                  @id @default(uuid()) @db.Uuid
-  variantId     String
-  quantityDelta Int
-  reason        InventoryMovementReason
-  referenceType String
-  referenceId   String
-  createdAt     DateTime                @default(now())
+  id               String                @id @default(cuid())
+  variantId        String
+  type             InventoryMovementType
+  quantity         Int
+  unitCost         Decimal?              @db.Decimal(14, 4)
+  referenceType    String?
+  referenceId      String?
+  note             String?
+  createdByStaffId String?
+  createdAt        DateTime              @default(now())
 
-  variant       Variant                 @relation(fields: [variantId], references: [id])
+  variant          Variant               @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
-  @@index([variantId, createdAt])
-  @@index([referenceType, referenceId])
+  @@index([variantId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 model SaleReturn {
@@ -394,6 +499,7 @@ model WorkshopJob {
   manageToken   String?           @unique
   manageTokenExpiresAt DateTime?
   cancelledAt   DateTime?
+  completedAt   DateTime?
   notes         String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -408,6 +514,7 @@ model WorkshopJob {
 
   @@index([scheduledDate])
   @@index([status])
+  @@index([status, completedAt])
   @@index([assignedStaffId])
 }
 

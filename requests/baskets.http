@@ -1,0 +1,127 @@
+@baseUrl = http://localhost:3000
+
+### Create basket
+POST {{baseUrl}}/api/baskets
+Content-Type: application/json
+
+{}
+
+### Get basket by id
+GET {{baseUrl}}/api/baskets/{{basketId}}
+
+### Add by barcode
+POST {{baseUrl}}/api/baskets/{{basketId}}/items
+Content-Type: application/json
+
+{
+  "barcode": "1234567890123",
+  "quantity": 1
+}
+
+### Add by variant id
+POST {{baseUrl}}/api/baskets/{{basketId}}/items
+Content-Type: application/json
+
+{
+  "variantId": "REPLACE_WITH_VARIANT_ID",
+  "quantity": 2
+}
+
+### Update item quantity
+PATCH {{baseUrl}}/api/baskets/{{basketId}}/items/{{itemId}}
+Content-Type: application/json
+
+{
+  "quantity": 3
+}
+
+### Remove item
+DELETE {{baseUrl}}/api/baskets/{{basketId}}/items/{{itemId}}
+
+### Checkout basket (optional)
+POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
+Content-Type: application/json
+
+{}
+
+### Checkout basket with CASH payment
+POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
+Content-Type: application/json
+
+{
+  "paymentMethod": "CASH",
+  "amountPence": 699
+}
+
+### Checkout basket again (idempotent: should return same sale)
+POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
+Content-Type: application/json
+
+{}
+
+### Get sale by id
+GET {{baseUrl}}/api/sales/{{saleId}}
+
+### List sales (optional date filters)
+GET {{baseUrl}}/api/sales?from=2026-03-01&to=2026-03-31
+
+### Return 1 unit from a sale item (no refund)
+POST {{baseUrl}}/api/sales/{{saleId}}/returns
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "saleItemId": "{{saleItemId}}",
+      "quantity": 1
+    }
+  ]
+}
+
+### Return 1 unit with refund
+POST {{baseUrl}}/api/sales/{{saleId}}/returns
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "saleItemId": "{{saleItemId}}",
+      "quantity": 1
+    }
+  ],
+  "refund": {
+    "method": "CARD",
+    "amountPence": 699,
+    "providerRef": "refund-001"
+  }
+}
+
+### Attempt to return more than sold quantity (expect 409)
+POST {{baseUrl}}/api/sales/{{saleId}}/returns
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "saleItemId": "{{saleItemId}}",
+      "quantity": 999
+    }
+  ]
+}
+
+### Refund mismatch amount (expect 400 RETURN_PAYMENT_MISMATCH)
+POST {{baseUrl}}/api/sales/{{saleId}}/returns
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "saleItemId": "{{saleItemId}}",
+      "quantity": 1
+    }
+  ],
+  "refund": {
+    "method": "CASH",
+    "amountPence": 1
+  }
+}

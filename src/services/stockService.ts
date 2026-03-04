@@ -220,6 +220,18 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
       },
     });
 
+    await tx.inventoryMovement.create({
+      data: {
+        variantId,
+        type: "ADJUSTMENT",
+        quantity: input.quantityDelta,
+        referenceType,
+        referenceId,
+        note: note ?? null,
+        createdByStaffId: createdByStaffId ?? null,
+      },
+    });
+
     const onHandAtLocation = await getLocationOnHandTx(tx, variantId, location.id);
     const totalOnHand = await getTotalOnHandTx(tx, variantId);
 

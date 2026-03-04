@@ -5,10 +5,11 @@ import {
   listVariantsHandler,
   patchVariantHandler,
 } from "../controllers/variantController";
+import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const variantRouter = Router();
 
-variantRouter.get("/", listVariantsHandler);
-variantRouter.post("/", createVariantHandler);
-variantRouter.get("/:id", getVariantHandler);
-variantRouter.patch("/:id", patchVariantHandler);
+variantRouter.get("/", requireRoleAtLeast("STAFF"), listVariantsHandler);
+variantRouter.post("/", requireRoleAtLeast("MANAGER"), createVariantHandler);
+variantRouter.get("/:id", requireRoleAtLeast("STAFF"), getVariantHandler);
+variantRouter.patch("/:id", requireRoleAtLeast("MANAGER"), patchVariantHandler);

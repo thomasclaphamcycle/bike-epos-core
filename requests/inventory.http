@@ -75,3 +75,44 @@ Content-Type: application/json
   "referenceType": "MANUAL_ADJUSTMENT",
   "referenceId": "open_stock_001"
 }
+
+### M24: Record inventory movement (STAFF+)
+POST {{baseUrl}}/api/inventory/movements
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
+{
+  "variantId": "{{variantId}}",
+  "type": "PURCHASE",
+  "quantity": 10,
+  "unitCost": 100,
+  "referenceType": "PO_RECEIPT",
+  "referenceId": "po_123_line_1",
+  "note": "Initial receipt"
+}
+
+### M24: ADJUSTMENT movement requires MANAGER+
+POST {{baseUrl}}/api/inventory/movements
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+{
+  "variantId": "{{variantId}}",
+  "type": "ADJUSTMENT",
+  "quantity": 1,
+  "referenceType": "COUNT_FIX",
+  "referenceId": "count_001",
+  "note": "Count correction"
+}
+
+### M24: Get on-hand by variant (STAFF+)
+GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
+### M24: List movements for a variant (MANAGER+)
+GET {{baseUrl}}/api/inventory/movements?variantId={{variantId}}&from=2026-03-01&to=2026-03-31&type=PURCHASE
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

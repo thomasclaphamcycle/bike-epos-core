@@ -210,6 +210,18 @@ const writeWorkshopStockLedgerDeltaTx = async (
       createdByStaffId: staffId,
     },
   });
+
+  await tx.inventoryMovement.create({
+    data: {
+      variantId: input.variantId,
+      type: "WORKSHOP_USE",
+      quantity: input.quantityDelta,
+      referenceType: "WORKSHOP_JOB_PART",
+      referenceId: input.partId,
+      note: normalizeOptionalText(input.note) ?? null,
+      createdByStaffId: staffId ?? null,
+    },
+  });
 };
 
 const getWorkshopJobPartsSnapshotTx = async (

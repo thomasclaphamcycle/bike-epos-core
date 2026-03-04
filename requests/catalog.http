@@ -1,0 +1,49 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@staffRole = STAFF
+@productId = REPLACE_PRODUCT_ID
+@variantId = REPLACE_VARIANT_ID
+
+### List products (STAFF+)
+GET {{baseUrl}}/api/products?q=tube&active=1&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
+### Create product (MANAGER+)
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+
+{
+  "name": "Road Tube",
+  "brand": "Schwalbe",
+  "description": "700c road inner tube",
+  "isActive": true
+}
+
+### Add variant to product (MANAGER+)
+POST {{baseUrl}}/api/products/{{productId}}/variants
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+
+{
+  "sku": "TUBE-700X25",
+  "barcode": "5012345678901",
+  "retailPrice": "6.99",
+  "isActive": true
+}
+
+### List variants (STAFF+)
+GET {{baseUrl}}/api/variants?q=tube&active=1&take=100&skip=0
+X-Staff-Role: {{staffRole}}
+
+### Update variant (MANAGER+)
+PATCH {{baseUrl}}/api/variants/{{variantId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+
+{
+  "sku": "TUBE-700X25-B",
+  "barcode": "5012345678902",
+  "retailPrice": "7.49",
+  "isActive": true
+}

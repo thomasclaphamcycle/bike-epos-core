@@ -1,0 +1,85 @@
+@baseUrl = http://localhost:3000
+
+### Create supplier
+POST {{baseUrl}}/api/suppliers
+Content-Type: application/json
+
+{
+  "name": "Madison",
+  "email": "trade@madison.co.uk",
+  "phone": "02071234567",
+  "notes": "Main UK distributor"
+}
+
+### Search suppliers
+GET {{baseUrl}}/api/suppliers?query=mad
+
+### Create purchase order
+POST {{baseUrl}}/api/purchase-orders
+Content-Type: application/json
+
+{
+  "supplierId": "{{supplierId}}",
+  "orderedAt": "2026-03-05T10:00:00.000Z",
+  "expectedAt": "2026-03-12T10:00:00.000Z",
+  "notes": "Weekly replenishment"
+}
+
+### Add/update purchase order items
+POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/items
+Content-Type: application/json
+
+{
+  "lines": [
+    {
+      "variantId": "{{variantId}}",
+      "quantityOrdered": 10,
+      "unitCostPence": 2100
+    }
+  ]
+}
+
+### Get purchase order with items
+GET {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}
+
+### Receive partial line quantity (stock +)
+POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
+Content-Type: application/json
+
+{
+  "locationId": "{{locationId}}",
+  "lines": [
+    {
+      "purchaseOrderItemId": "{{purchaseOrderItemId}}",
+      "quantity": 4
+    }
+  ]
+}
+
+### Receive remaining quantity -> status RECEIVED
+POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
+Content-Type: application/json
+
+{
+  "locationId": "{{locationId}}",
+  "lines": [
+    {
+      "purchaseOrderItemId": "{{purchaseOrderItemId}}",
+      "quantity": 6
+    }
+  ]
+}
+
+### Over-receive should fail with 409
+POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
+Content-Type: application/json
+
+{
+  "locationId": "{{locationId}}",
+  "lines": [
+    {
+      "purchaseOrderItemId": "{{purchaseOrderItemId}}",
+      "quantity": 1
+    }
+  ]
+}

@@ -7,9 +7,52 @@ import {
 } from "../services/productService";
 import { HttpError } from "../utils/http";
 
+const parseActiveQuery = (value: unknown): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new HttpError(400, "active must be 1 or 0", "INVALID_PRODUCT_FILTER");
+  }
+  const normalized = value.trim();
+  if (normalized === "1") {
+    return true;
+  }
+  if (normalized === "0") {
+    return false;
+  }
+  throw new HttpError(400, "active must be 1 or 0", "INVALID_PRODUCT_FILTER");
+};
+
+const parseOptionalIntQuery = (
+  value: unknown,
+  field: "take" | "skip",
+): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HttpError(400, `${field} must be an integer`, "INVALID_PRODUCT_FILTER");
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new HttpError(400, `${field} must be an integer`, "INVALID_PRODUCT_FILTER");
+  }
+  return parsed;
+};
+
 export const listProductsHandler = async (req: Request, res: Response) => {
-  const query = typeof req.query.query === "string" ? req.query.query : undefined;
-  const products = await listProducts(query);
+  const q =
+    typeof req.query.q === "string"
+      ? req.query.q
+      : typeof req.query.query === "string"
+        ? req.query.query
+        : undefined;
+  const isActive = parseActiveQuery(req.query.active);
+  const take = parseOptionalIntQuery(req.query.take, "take");
+  const skip = parseOptionalIntQuery(req.query.skip, "skip");
+
+  const products = await listProducts({ q, isActive, take, skip });
   res.json(products);
 };
 

@@ -140,6 +140,7 @@ const cleanup = async (state) => {
 
   if (variantIds.length > 0) {
     await prisma.stockLedgerEntry.deleteMany({ where: { variantId: { in: variantIds } } });
+    await prisma.inventoryMovement.deleteMany({ where: { variantId: { in: variantIds } } });
     await prisma.barcode.deleteMany({ where: { variantId: { in: variantIds } } });
     await prisma.variant.deleteMany({ where: { id: { in: variantIds } } });
   }

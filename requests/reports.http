@@ -1,0 +1,48 @@
+@baseUrl = http://localhost:3000
+
+### Reports UI page (MANAGER+ via header guard)
+GET {{baseUrl}}/reports
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Locations source for inventory report dropdown (MANAGER+)
+GET {{baseUrl}}/api/locations
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Sales daily report
+### refundsPence is "refunds posted that day":
+### calculated from negative Payment rows by payment created date (Europe/London).
+### netPence can be negative on high-refund/low-gross days.
+GET {{baseUrl}}/api/reports/sales/daily?from=2026-03-01&to=2026-03-31
+
+### Sales daily CSV (MANAGER+)
+GET {{baseUrl}}/api/reports/sales/daily.csv?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Workshop daily report
+### Uses WorkshopJob.completedAt as completion date.
+### Date bucketing is Europe/London.
+GET {{baseUrl}}/api/reports/workshop/daily?from=2026-03-01&to=2026-03-31
+
+### Workshop daily CSV (MANAGER+)
+GET {{baseUrl}}/api/reports/workshop/daily.csv?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Inventory on-hand by location
+GET {{baseUrl}}/api/reports/inventory/on-hand?locationId={{locationId}}
+
+### Inventory on-hand CSV (MANAGER+)
+GET {{baseUrl}}/api/reports/inventory/on-hand.csv?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Inventory value by location (purchase average cost v1)
+GET {{baseUrl}}/api/reports/inventory/value?locationId={{locationId}}
+
+### Inventory value CSV (MANAGER+)
+GET {{baseUrl}}/api/reports/inventory/value.csv?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

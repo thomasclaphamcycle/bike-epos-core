@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": [
+    "src/services/reportService.ts",
+    "src/controllers/reportController.ts",
+    "src/routes/reportRoutes.ts",
+    "src/lib/prisma.ts",
+    "src/utils/http.ts"
+  ]
+}
