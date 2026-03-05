@@ -3,24 +3,42 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
+type WorkshopStatusV1 =
+  | "NEW"
+  | "IN_PROGRESS"
+  | "AWAITING_PARTS"
+  | "READY"
+  | "COLLECTED"
+  | "CANCELLED";
 
 type CreateWorkshopJobInput = {
   customerName?: string;
+  customerId?: string;
+  title?: string;
   bikeDescription?: string;
   notes?: string;
+  promisedAt?: string;
+  assignedToStaffId?: string;
   status?: string;
 };
 
 type UpdateWorkshopJobInput = {
   customerName?: string;
+  customerId?: string | null;
+  title?: string;
   bikeDescription?: string;
   notes?: string;
+  promisedAt?: string | null;
+  assignedToStaffId?: string | null;
   status?: string;
 };
 
 type ListWorkshopJobsInput = {
   status?: string;
   q?: string;
+  search?: string;
+  from?: string;
+  to?: string;
   take?: number;
   skip?: number;
 };
@@ -65,29 +83,68 @@ const normalizeSkip = (skip: number | undefined): number => {
   return skip;
 };
 
+const parseDateOnlyOrThrow = (value: string, label: "from" | "to"): Date => {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateOnly.test(value)) {
+    throw new HttpError(400, `${label} must be YYYY-MM-DD`, "INVALID_FILTER");
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `${label} is invalid`, "INVALID_FILTER");
+  }
+  return date;
+};
+
+const parseDateTimeOrThrow = (value: string, label: "promisedAt"): Date => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new HttpError(400, `${label} must be a valid date-time`, "INVALID_WORKSHOP_JOB");
+  }
+  return parsed;
+};
+
 const parseWorkflowStatus = (value: string): WorkflowStatus => {
   const normalized = value.trim().toUpperCase();
   switch (normalized) {
+    case "NEW":
     case "BOOKED":
+    case "BOOKING_MADE":
       return "BOOKED";
+    case "AWAITING_PARTS":
+    case "WAITING_FOR_PARTS":
+    case "WAITING_FOR_APPROVAL":
+    case "APPROVED":
+    case "ON_HOLD":
+    case "BIKE_ARRIVED":
     case "IN_PROGRESS":
       return "IN_PROGRESS";
     case "READY":
+    case "BIKE_READY":
       return "READY";
     case "COLLECTED":
+    case "COMPLETED":
       return "COLLECTED";
+    case "CANCELLED":
     case "CLOSED":
       return "CLOSED";
     default:
       throw new HttpError(
         400,
-        "status must be BOOKED, IN_PROGRESS, READY, COLLECTED, or CLOSED",
+        "status must be NEW, IN_PROGRESS, AWAITING_PARTS, READY, COLLECTED, CANCELLED, or legacy BOOKED/CLOSED",
         "INVALID_WORKSHOP_STATUS",
       );
   }
 };
 
-const toWorkshopJobStatus = (status: WorkflowStatus): WorkshopJobStatus => {
+const toWorkshopJobStatus = (status: WorkflowStatus, rawStatus?: string): WorkshopJobStatus => {
+  const normalizedRaw = normalizeOptionalText(rawStatus)?.toUpperCase();
+  if (normalizedRaw === "AWAITING_PARTS" || normalizedRaw === "WAITING_FOR_PARTS") {
+    return "WAITING_FOR_PARTS";
+  }
+  if (normalizedRaw === "CANCELLED") {
+    return "CANCELLED";
+  }
+
   switch (status) {
     case "BOOKED":
       return "BOOKING_MADE";
@@ -124,6 +181,75 @@ const toWorkflowStatus = (job: {
   }
 };
 
+const toStatusV1 = (job: { status: WorkshopJobStatus }): WorkshopStatusV1 => {
+  switch (job.status) {
+    case "BOOKING_MADE":
+      return "NEW";
+    case "WAITING_FOR_PARTS":
+      return "AWAITING_PARTS";
+    case "BIKE_READY":
+      return "READY";
+    case "COMPLETED":
+      return "COLLECTED";
+    case "CANCELLED":
+      return "CANCELLED";
+    default:
+      return "IN_PROGRESS";
+  }
+};
+
+const parseStatusFilter = (value: string): Prisma.WorkshopJobWhereInput => {
+  const normalized = value.trim().toUpperCase();
+  switch (normalized) {
+    case "NEW":
+    case "BOOKED":
+    case "BOOKING_MADE":
+      return {
+        status: "BOOKING_MADE",
+        closedAt: null,
+      };
+    case "IN_PROGRESS":
+      return {
+        status: {
+          in: ["BIKE_ARRIVED", "WAITING_FOR_APPROVAL", "APPROVED", "ON_HOLD"],
+        },
+        closedAt: null,
+      };
+    case "AWAITING_PARTS":
+    case "WAITING_FOR_PARTS":
+      return {
+        status: "WAITING_FOR_PARTS",
+        closedAt: null,
+      };
+    case "READY":
+    case "BIKE_READY":
+      return {
+        status: "BIKE_READY",
+        closedAt: null,
+      };
+    case "COLLECTED":
+    case "COMPLETED":
+      return {
+        status: "COMPLETED",
+        closedAt: null,
+      };
+    case "CANCELLED":
+      return {
+        status: "CANCELLED",
+      };
+    case "CLOSED":
+      return {
+        closedAt: { not: null },
+      };
+    default:
+      throw new HttpError(
+        400,
+        "status must be NEW, IN_PROGRESS, AWAITING_PARTS, READY, COLLECTED, CANCELLED, or legacy BOOKED/CLOSED",
+        "INVALID_WORKSHOP_STATUS",
+      );
+  }
+};
+
 const ensureWorkshopJobExistsTx = async (
   tx: Prisma.TransactionClient,
   workshopJobId: string,
@@ -135,6 +261,55 @@ const ensureWorkshopJobExistsTx = async (
     throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
   }
   return job;
+};
+
+const resolveCustomerDisplayName = (customer: {
+  name: string;
+  firstName: string;
+  lastName: string;
+}) =>
+  normalizeOptionalText(customer.name) ??
+  [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
+
+const resolveCustomerByIdTx = async (
+  tx: Prisma.TransactionClient,
+  customerId: string,
+) => {
+  const customer = await tx.customer.findUnique({
+    where: { id: customerId },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+    },
+  });
+
+  if (!customer) {
+    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+  }
+
+  return customer;
+};
+
+const resolveAssignedStaffByIdTx = async (
+  tx: Prisma.TransactionClient,
+  staffId: string,
+) => {
+  const staff = await tx.user.findUnique({
+    where: { id: staffId },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+    },
+  });
+
+  if (!staff) {
+    throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
+  }
+
+  return staff;
 };
 
 const ensureProductExistsTx = async (tx: Prisma.TransactionClient, productId: string) => {
@@ -315,8 +490,13 @@ const toJobResponse = (job: {
   customerId: string | null;
   customerName: string | null;
   bikeDescription: string | null;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  scheduledDate: Date | null;
   status: WorkshopJobStatus;
   notes: string | null;
+  cancelledAt: Date | null;
+  completedAt: Date | null;
   finalizedBasketId: string | null;
   closedAt: Date | null;
   createdAt: Date;
@@ -325,9 +505,16 @@ const toJobResponse = (job: {
   id: job.id,
   customerId: job.customerId,
   customerName: job.customerName,
+  title: job.bikeDescription,
   bikeDescription: job.bikeDescription,
+  assignedToStaffId: job.assignedStaffId,
+  assignedToStaffName: job.assignedStaffName,
+  promisedAt: job.scheduledDate,
+  statusV1: toStatusV1(job),
   status: toWorkflowStatus(job),
   notes: job.notes,
+  cancelledAt: job.cancelledAt,
+  completedAt: job.completedAt,
   finalizedBasketId: job.finalizedBasketId,
   closedAt: job.closedAt,
   createdAt: job.createdAt,
@@ -384,62 +571,109 @@ const buildBasketResponseTx = async (tx: Prisma.TransactionClient, basketId: str
 };
 
 export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
-  const customerName = normalizeOptionalText(input.customerName);
-  const bikeDescription = normalizeOptionalText(input.bikeDescription);
+  const rawCustomerName = normalizeOptionalText(input.customerName);
+  const customerId = normalizeOptionalText(input.customerId);
+  const title = normalizeOptionalText(input.title);
+  const bikeDescription = normalizeOptionalText(input.bikeDescription) ?? title;
   const notes = normalizeOptionalText(input.notes);
+  const promisedAtRaw = normalizeOptionalText(input.promisedAt);
+  const assignedToStaffId = normalizeOptionalText(input.assignedToStaffId);
+  const promisedAt = promisedAtRaw ? parseDateTimeOrThrow(promisedAtRaw, "promisedAt") : undefined;
 
-  if (!customerName) {
-    throw new HttpError(400, "customerName is required", "INVALID_WORKSHOP_JOB");
+  if (customerId && !isUuid(customerId)) {
+    throw new HttpError(400, "customerId must be a uuid", "INVALID_WORKSHOP_JOB");
   }
   if (!bikeDescription) {
-    throw new HttpError(400, "bikeDescription is required", "INVALID_WORKSHOP_JOB");
+    throw new HttpError(
+      400,
+      "title or bikeDescription is required",
+      "INVALID_WORKSHOP_JOB",
+    );
+  }
+  if (assignedToStaffId && !isUuid(assignedToStaffId)) {
+    throw new HttpError(400, "assignedToStaffId must be a uuid", "INVALID_WORKSHOP_JOB");
   }
 
   const targetStatus = input.status
     ? parseWorkflowStatus(input.status)
     : ("BOOKED" as WorkflowStatus);
 
-  const job = await prisma.workshopJob.create({
-    data: {
-      customerName,
-      bikeDescription,
-      notes,
-      status: toWorkshopJobStatus(targetStatus),
-      source: "IN_STORE",
-      depositStatus: "NOT_REQUIRED",
-      depositRequiredPence: 0,
-      ...(targetStatus === "CLOSED"
-        ? {
-            closedAt: new Date(),
-            completedAt: new Date(),
-          }
-        : targetStatus === "COLLECTED"
-          ? {
-              completedAt: new Date(),
-            }
-          : {}),
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+    let customerName = rawCustomerName;
+    if (customerId) {
+      const customer = await resolveCustomerByIdTx(tx, customerId);
+      customerName = customerName ?? resolveCustomerDisplayName(customer);
+    }
 
-  return toJobResponse(job);
+    if (!customerName) {
+      throw new HttpError(400, "customerName or customerId is required", "INVALID_WORKSHOP_JOB");
+    }
+
+    let assignedStaffName: string | undefined;
+    if (assignedToStaffId) {
+      const staff = await resolveAssignedStaffByIdTx(tx, assignedToStaffId);
+      assignedStaffName = normalizeOptionalText(staff.name) ?? staff.username;
+    }
+
+    const job = await tx.workshopJob.create({
+      data: {
+        customerId: customerId ?? undefined,
+        customerName,
+        bikeDescription,
+        notes,
+        scheduledDate: promisedAt ?? null,
+        assignedStaffId: assignedToStaffId ?? undefined,
+        assignedStaffName: assignedStaffName ?? null,
+        status: toWorkshopJobStatus(targetStatus, input.status),
+        source: "IN_STORE",
+        depositStatus: "NOT_REQUIRED",
+        depositRequiredPence: 0,
+        ...(normalizeOptionalText(input.status)?.toUpperCase() === "CANCELLED"
+          ? {
+              cancelledAt: new Date(),
+            }
+          : targetStatus === "CLOSED"
+            ? {
+                closedAt: new Date(),
+                completedAt: new Date(),
+              }
+            : targetStatus === "COLLECTED"
+              ? {
+                  completedAt: new Date(),
+                }
+              : {}),
+      },
+    });
+
+    return toJobResponse(job);
+  });
 };
 
 export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {
-  const q = normalizeOptionalText(filters.q);
+  const q = normalizeOptionalText(filters.q) ?? normalizeOptionalText(filters.search);
   const take = normalizeTake(filters.take);
   const skip = normalizeSkip(filters.skip);
-  const requestedStatus = filters.status ? parseWorkflowStatus(filters.status) : undefined;
+  const requestedStatusWhere = filters.status ? parseStatusFilter(filters.status) : undefined;
+  const fromDate = filters.from ? parseDateOnlyOrThrow(filters.from, "from") : undefined;
+  const toDateExclusive = filters.to ? parseDateOnlyOrThrow(filters.to, "to") : undefined;
+  if (toDateExclusive) {
+    toDateExclusive.setUTCDate(toDateExclusive.getUTCDate() + 1);
+  }
+  if (fromDate && toDateExclusive && fromDate >= toDateExclusive) {
+    throw new HttpError(400, "from must be before or equal to to", "INVALID_FILTER");
+  }
 
   const jobs = await prisma.workshopJob.findMany({
     where: {
-      ...(requestedStatus === "CLOSED"
-        ? { closedAt: { not: null } }
-        : requestedStatus
-          ? {
-              status: toWorkshopJobStatus(requestedStatus),
-              closedAt: null,
-            }
-          : {}),
+      ...(requestedStatusWhere ?? {}),
+      ...(fromDate || toDateExclusive
+        ? {
+            createdAt: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDateExclusive ? { lt: toDateExclusive } : {}),
+            },
+          }
+        : {}),
       ...(q
         ? {
             OR: [
@@ -516,8 +750,12 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
 
   const hasAnyField =
     Object.prototype.hasOwnProperty.call(input, "customerName") ||
+    Object.prototype.hasOwnProperty.call(input, "customerId") ||
+    Object.prototype.hasOwnProperty.call(input, "title") ||
     Object.prototype.hasOwnProperty.call(input, "bikeDescription") ||
     Object.prototype.hasOwnProperty.call(input, "notes") ||
+    Object.prototype.hasOwnProperty.call(input, "promisedAt") ||
+    Object.prototype.hasOwnProperty.call(input, "assignedToStaffId") ||
     Object.prototype.hasOwnProperty.call(input, "status");
 
   if (!hasAnyField) {
@@ -527,6 +765,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
   return prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
     const data: Prisma.WorkshopJobUpdateInput = {};
+    let customerNameFromCustomer: string | undefined;
 
     if (Object.prototype.hasOwnProperty.call(input, "customerName")) {
       const customerName = normalizeOptionalText(input.customerName);
@@ -536,12 +775,38 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
       data.customerName = customerName;
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "bikeDescription")) {
-      const bikeDescription = normalizeOptionalText(input.bikeDescription);
+    if (Object.prototype.hasOwnProperty.call(input, "customerId")) {
+      const customerId = input.customerId;
+      if (customerId !== null && !normalizeOptionalText(customerId)) {
+        throw new HttpError(400, "customerId must be a uuid or null", "INVALID_WORKSHOP_JOB_UPDATE");
+      }
+      if (customerId !== null && !isUuid(customerId)) {
+        throw new HttpError(400, "customerId must be a uuid or null", "INVALID_WORKSHOP_JOB_UPDATE");
+      }
+
+      if (customerId) {
+        const customer = await resolveCustomerByIdTx(tx, customerId);
+        customerNameFromCustomer = resolveCustomerDisplayName(customer);
+      }
+      data.customerId = customerId ?? null;
+      if (!Object.prototype.hasOwnProperty.call(input, "customerName")) {
+        data.customerName = customerId ? customerNameFromCustomer : null;
+      }
+    }
+
+    const nextBikeDescriptionValue = Object.prototype.hasOwnProperty.call(input, "title")
+      ? input.title
+      : input.bikeDescription;
+
+    if (
+      Object.prototype.hasOwnProperty.call(input, "bikeDescription") ||
+      Object.prototype.hasOwnProperty.call(input, "title")
+    ) {
+      const bikeDescription = normalizeOptionalText(nextBikeDescriptionValue);
       if (!bikeDescription) {
         throw new HttpError(
           400,
-          "bikeDescription cannot be empty",
+          "title or bikeDescription cannot be empty",
           "INVALID_WORKSHOP_JOB_UPDATE",
         );
       }
@@ -552,14 +817,53 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
       data.notes = normalizeOptionalText(input.notes) ?? null;
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "promisedAt")) {
+      const promisedAtRaw = normalizeOptionalText(input.promisedAt ?? undefined);
+      data.scheduledDate = promisedAtRaw ? parseDateTimeOrThrow(promisedAtRaw, "promisedAt") : null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "assignedToStaffId")) {
+      const assignedToStaffId = input.assignedToStaffId;
+      if (assignedToStaffId !== null && !normalizeOptionalText(assignedToStaffId)) {
+        throw new HttpError(
+          400,
+          "assignedToStaffId must be a uuid or null",
+          "INVALID_WORKSHOP_JOB_UPDATE",
+        );
+      }
+      if (assignedToStaffId !== null && !isUuid(assignedToStaffId)) {
+        throw new HttpError(
+          400,
+          "assignedToStaffId must be a uuid or null",
+          "INVALID_WORKSHOP_JOB_UPDATE",
+        );
+      }
+
+      if (assignedToStaffId) {
+        const staff = await resolveAssignedStaffByIdTx(tx, assignedToStaffId);
+        data.assignedStaffId = assignedToStaffId;
+        data.assignedStaffName = normalizeOptionalText(staff.name) ?? staff.username;
+      } else {
+        data.assignedStaffId = null;
+        data.assignedStaffName = null;
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "status")) {
-      const parsed = parseWorkflowStatus(input.status ?? "");
-      data.status = toWorkshopJobStatus(parsed);
-      if (parsed === "CLOSED") {
+      const rawStatus = input.status ?? "";
+      const parsed = parseWorkflowStatus(rawStatus);
+      const normalizedRaw = normalizeOptionalText(rawStatus)?.toUpperCase();
+      data.status = toWorkshopJobStatus(parsed, rawStatus);
+      if (normalizedRaw === "CANCELLED") {
+        data.cancelledAt = job.cancelledAt ?? new Date();
+        data.closedAt = null;
+      } else if (parsed === "CLOSED") {
         data.closedAt = job.closedAt ?? new Date();
         data.completedAt = job.completedAt ?? new Date();
+        data.cancelledAt = null;
       } else {
         data.closedAt = null;
+        data.cancelledAt = null;
         if (parsed === "COLLECTED") {
           data.completedAt = job.completedAt ?? new Date();
         }

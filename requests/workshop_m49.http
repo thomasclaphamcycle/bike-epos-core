@@ -1,0 +1,51 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@customerId = REPLACE_CUSTOMER_ID
+@jobId = REPLACE_WORKSHOP_JOB_ID
+
+### Create workshop job card (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": "{{customerId}}",
+  "title": "Rear brake service",
+  "notes": "Customer reports rubbing under load",
+  "promisedAt": "2026-03-12T10:30:00.000Z",
+  "status": "NEW"
+}
+
+### List workshop jobs by status (STAFF+)
+GET {{baseUrl}}/api/workshop/jobs?status=IN_PROGRESS&search=brake&from=2026-01-01&to=2026-12-31
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get workshop job (STAFF+)
+GET {{baseUrl}}/api/workshop/jobs/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Update workshop job status/title/notes (STAFF+)
+PATCH {{baseUrl}}/api/workshop/jobs/{{jobId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "status": "AWAITING_PARTS",
+  "title": "Rear brake service + rotor check",
+  "notes": "Awaiting 160mm rotor delivery"
+}
+
+### Workshop board page (STAFF+)
+GET {{baseUrl}}/workshop
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Workshop job card page (STAFF+)
+GET {{baseUrl}}/workshop/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

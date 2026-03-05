@@ -116,19 +116,35 @@ const parseOptionalIntegerQuery = (value: unknown, field: string): number | unde
 export const createWorkshopJobHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     customerName?: string;
+    customerId?: string;
+    title?: string;
     bikeDescription?: string;
     notes?: string;
+    promisedAt?: string;
+    assignedToStaffId?: string;
     status?: string;
   };
 
   if (body.customerName !== undefined && typeof body.customerName !== "string") {
     throw new HttpError(400, "customerName must be a string", "INVALID_WORKSHOP_JOB");
   }
+  if (body.customerId !== undefined && typeof body.customerId !== "string") {
+    throw new HttpError(400, "customerId must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.title !== undefined && typeof body.title !== "string") {
+    throw new HttpError(400, "title must be a string", "INVALID_WORKSHOP_JOB");
+  }
   if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
     throw new HttpError(400, "bikeDescription must be a string", "INVALID_WORKSHOP_JOB");
   }
   if (body.notes !== undefined && typeof body.notes !== "string") {
     throw new HttpError(400, "notes must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.promisedAt !== undefined && typeof body.promisedAt !== "string") {
+    throw new HttpError(400, "promisedAt must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.assignedToStaffId !== undefined && typeof body.assignedToStaffId !== "string") {
+    throw new HttpError(400, "assignedToStaffId must be a string", "INVALID_WORKSHOP_JOB");
   }
   if (body.status !== undefined && typeof body.status !== "string") {
     throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB");
@@ -143,15 +159,22 @@ export const listWorkshopJobsHandler = async (req: Request, res: Response) => {
   const q =
     typeof req.query.q === "string"
       ? req.query.q
+      : typeof req.query.search === "string"
+        ? req.query.search
       : typeof req.query.query === "string"
         ? req.query.query
         : undefined;
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
   const take = parseOptionalIntegerQuery(req.query.take, "take");
   const skip = parseOptionalIntegerQuery(req.query.skip, "skip");
 
   const result = await listWorkshopJobs({
     status,
     q,
+    search: q,
+    from,
+    to,
     take,
     skip,
   });
@@ -166,13 +189,23 @@ export const getWorkshopJobHandler = async (req: Request, res: Response) => {
 export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     customerName?: string;
+    customerId?: string | null;
+    title?: string;
     bikeDescription?: string;
     notes?: string;
+    promisedAt?: string | null;
+    assignedToStaffId?: string | null;
     status?: string;
   };
 
   if (body.customerName !== undefined && typeof body.customerName !== "string") {
     throw new HttpError(400, "customerName must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (body.customerId !== undefined && body.customerId !== null && typeof body.customerId !== "string") {
+    throw new HttpError(400, "customerId must be a string or null", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (body.title !== undefined && typeof body.title !== "string") {
+    throw new HttpError(400, "title must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
   }
   if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
     throw new HttpError(
@@ -183,6 +216,20 @@ export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
   }
   if (body.notes !== undefined && typeof body.notes !== "string") {
     throw new HttpError(400, "notes must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (body.promisedAt !== undefined && body.promisedAt !== null && typeof body.promisedAt !== "string") {
+    throw new HttpError(400, "promisedAt must be a string or null", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (
+    body.assignedToStaffId !== undefined &&
+    body.assignedToStaffId !== null &&
+    typeof body.assignedToStaffId !== "string"
+  ) {
+    throw new HttpError(
+      400,
+      "assignedToStaffId must be a string or null",
+      "INVALID_WORKSHOP_JOB_UPDATE",
+    );
   }
   if (body.status !== undefined && typeof body.status !== "string") {
     throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB_UPDATE");

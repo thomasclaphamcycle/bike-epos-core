@@ -101,15 +101,19 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
           <div class="field"><label for="job-status-filter">Status</label>
             <select id="job-status-filter">
               <option value="">All</option>
-              <option value="BOOKED">BOOKED</option>
+              <option value="NEW">NEW</option>
               <option value="IN_PROGRESS">IN_PROGRESS</option>
+              <option value="AWAITING_PARTS">AWAITING_PARTS</option>
               <option value="READY">READY</option>
               <option value="COLLECTED">COLLECTED</option>
-              <option value="CLOSED">CLOSED</option>
+              <option value="CANCELLED">CANCELLED</option>
+              <option value="BOOKED">BOOKED (legacy)</option>
+              <option value="CLOSED">CLOSED (legacy)</option>
             </select>
           </div>
         </div>
         <div id="jobs-status" class="status"></div>
+        <div id="jobs-board" class="table-wrap"></div>
         <div id="jobs-wrap" class="table-wrap"></div>
       </div>
 
@@ -246,24 +250,64 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
 
       const renderJobs = () => {
         const wrap = qs("#jobs-wrap");
-        if (!wrap) {
+        const boardWrap = qs("#jobs-board");
+        if (!wrap || !boardWrap) {
           return;
         }
 
         if (state.jobs.length === 0) {
+          boardWrap.innerHTML = '<div style="padding: 10px;" class="muted">No jobs found.</div>';
           wrap.innerHTML = '<div style="padding: 10px;" class="muted">No jobs found.</div>';
           return;
         }
+
+        const grouped = state.jobs.reduce((acc, job) => {
+          const key = job.statusV1 || job.status || "UNKNOWN";
+          if (!acc[key]) {
+            acc[key] = [];
+          }
+          acc[key].push(job);
+          return acc;
+        }, {});
+
+        const boardCards = Object.keys(grouped)
+          .sort()
+          .map((statusKey) => {
+            const jobs = grouped[statusKey];
+            const links = jobs
+              .slice(0, 8)
+              .map(
+                (job) =>
+                  '<div><a href="/workshop/' +
+                  encodeURIComponent(job.id) +
+                  '">' +
+                  toSafeText((job.title || job.bikeDescription || job.id) + " (" + (job.customerName || "No customer") + ")") +
+                  "</a></div>",
+              )
+              .join("");
+            return (
+              '<div style="min-width: 200px; border: 1px solid #d5dbe2; border-radius: 8px; padding: 8px;">' +
+              '<div style="font-size: 12px; color: #5a6672;">' + toSafeText(statusKey) + '</div>' +
+              '<div style="font-size: 20px; font-weight: 700; margin: 4px 0 8px;">' + jobs.length + "</div>" +
+              (links || '<div class="muted">No jobs</div>') +
+              "</div>"
+            );
+          })
+          .join("");
+        boardWrap.innerHTML = '<div style="display:flex; gap:8px; flex-wrap: wrap; padding: 10px;">' + boardCards + "</div>";
 
         const rows = state.jobs
           .map((job) =>
             '<tr>' +
             '<td>' + toSafeText(job.id) + '</td>' +
             '<td>' + toSafeText(job.customerName || "") + '</td>' +
-            '<td>' + toSafeText(job.bikeDescription || "") + '</td>' +
-            '<td>' + toSafeText(job.status || "") + '</td>' +
+            '<td>' + toSafeText(job.title || job.bikeDescription || "") + '</td>' +
+            '<td>' + toSafeText((job.statusV1 || job.status || "") + (job.statusV1 ? " / " + job.status : "")) + '</td>' +
             '<td>' + (job.lineCount || 0) + '</td>' +
-            '<td><button type="button" class="select-job-btn" data-job-id="' + toSafeText(job.id) + '">Open</button></td>' +
+            '<td>' +
+            '<button type="button" class="select-job-btn" data-job-id="' + toSafeText(job.id) + '">Open</button> ' +
+            '<a href="/workshop/' + encodeURIComponent(job.id) + '">Card</a>' +
+            '</td>' +
             '</tr>',
           )
           .join("");
@@ -292,7 +336,7 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
         meta.textContent =
           "Job: " + job.id +
           " | Customer: " + (job.customerName || "") +
-          " | Status: " + (job.status || "") +
+          " | Status: " + (job.statusV1 || job.status || "") +
           (job.finalizedBasketId ? " | Basket: " + job.finalizedBasketId : "");
 
         const lines = Array.isArray(state.selectedJob.lines) ? state.selectedJob.lines : [];
