@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import { HttpError } from "../utils/http";
+import { wrapAuthedPage } from "../views/appShell";
 import { renderAdminPage } from "../views/adminPage";
 import { renderAdminAuditPage } from "../views/adminAuditPage";
 
@@ -17,12 +19,32 @@ const setPageHeaders = (res: Response) => {
   );
 };
 
-export const getAdminPageHandler = async (_req: Request, res: Response) => {
+export const getAdminPageHandler = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
   setPageHeaders(res);
-  res.type("html").send(renderAdminPage());
+  res.type("html").send(
+    wrapAuthedPage({
+      html: renderAdminPage(),
+      title: "Admin Users",
+      user: req.user,
+      activeNav: "admin-users",
+    }),
+  );
 };
 
-export const getAdminAuditPageHandler = async (_req: Request, res: Response) => {
+export const getAdminAuditPageHandler = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
   setPageHeaders(res);
-  res.type("html").send(renderAdminAuditPage());
+  res.type("html").send(
+    wrapAuthedPage({
+      html: renderAdminAuditPage(),
+      title: "Admin Audit",
+      user: req.user,
+      activeNav: "admin-audit",
+    }),
+  );
 };

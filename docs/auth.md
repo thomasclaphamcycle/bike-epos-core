@@ -65,6 +65,16 @@ POST /api/auth/bootstrap
 3. Login with staff credentials.
 4. Navigate to `/pos`, `/workshop`, `/admin`, `/till` based on role.
 
+## Default Routes and Navigation
+
+- `/` redirects to `/pos` when authenticated, otherwise `/login`.
+- Protected HTML pages redirect to `/login?next=...` if unauthenticated.
+- If authenticated but role is insufficient, HTML pages redirect to `/not-authorized`.
+- App shell nav visibility:
+  - `STAFF+`: POS, Workshop, Inventory
+  - `MANAGER+`: Till / Cash Up
+  - `ADMIN`: Admin Users, Admin Audit
+
 ## Smoke Tests and Auth
 
 Smoke scripts run with `NODE_ENV=test`, so header fallback remains available for existing milestone scripts.

@@ -1,11 +1,23 @@
 import { Request, Response } from "express";
+import { HttpError } from "../utils/http";
 import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staffRole";
+import { wrapAuthedPage } from "../views/appShell";
 import { renderInventoryAdjustPage } from "../views/inventoryAdjustPage";
 
 export const getInventoryAdjustPageHandler = async (req: Request, res: Response) => {
-  const html = renderInventoryAdjustPage({
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const bodyHtml = renderInventoryAdjustPage({
     staffRole: getRequestStaffRole(req),
     staffId: getRequestStaffActorId(req),
+  });
+  const html = wrapAuthedPage({
+    html: bodyHtml,
+    title: "Inventory Adjust",
+    user: req.user,
+    activeNav: "inventory",
   });
 
   res.setHeader("Cache-Control", "no-store");

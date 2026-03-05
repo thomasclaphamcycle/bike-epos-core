@@ -47,6 +47,20 @@ Alternative (only when DB has no users): `POST /api/auth/bootstrap`.
 
 See [docs/auth.md](docs/auth.md) for full mode/flag details.
 
+## App Navigation (M38)
+
+Authenticated pages now use a shared app shell with role-aware navigation.
+
+- `/` redirects to `/pos` when authenticated, otherwise `/login`.
+- Unauthenticated access to protected pages redirects to `/login?next=...`.
+- Role-based page access redirects to `/not-authorized` for HTML requests.
+
+Navigation visibility:
+
+- `STAFF+`: POS, Workshop, Inventory
+- `MANAGER+`: Till / Cash Up
+- `ADMIN`: Admin Users, Admin Audit
+
 ## Test Commands
 
 ### Baseline + new milestone smoke suite

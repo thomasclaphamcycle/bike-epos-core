@@ -1,11 +1,23 @@
 import { Request, Response } from "express";
+import { HttpError } from "../utils/http";
 import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staffRole";
+import { wrapAuthedPage } from "../views/appShell";
 import { renderInventoryPage } from "../views/inventoryPage";
 
 export const getInventoryPageHandler = async (req: Request, res: Response) => {
-  const html = renderInventoryPage({
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const bodyHtml = renderInventoryPage({
     staffRole: getRequestStaffRole(req),
     staffId: getRequestStaffActorId(req),
+  });
+  const html = wrapAuthedPage({
+    html: bodyHtml,
+    title: "Inventory",
+    user: req.user,
+    activeNav: "inventory",
   });
 
   res.setHeader("Cache-Control", "no-store");

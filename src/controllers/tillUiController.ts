@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
+import { HttpError } from "../utils/http";
+import { wrapAuthedPage } from "../views/appShell";
 import { renderTillPage } from "../views/tillPage";
 
-export const getTillPageHandler = async (_req: Request, res: Response) => {
+export const getTillPageHandler = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
   res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Security-Policy",
@@ -14,5 +20,12 @@ export const getTillPageHandler = async (_req: Request, res: Response) => {
       "script-src 'self' 'unsafe-inline'",
     ].join("; "),
   );
-  res.type("html").send(renderTillPage());
+  res.type("html").send(
+    wrapAuthedPage({
+      html: renderTillPage(),
+      title: "Till / Cash Up",
+      user: req.user,
+      activeNav: "till",
+    }),
+  );
 };

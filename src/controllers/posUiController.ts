@@ -1,11 +1,23 @@
 import { Request, Response } from "express";
+import { HttpError } from "../utils/http";
 import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staffRole";
+import { wrapAuthedPage } from "../views/appShell";
 import { renderPosPage } from "../views/posPage";
 
 export const getPosPageHandler = async (req: Request, res: Response) => {
-  const html = renderPosPage({
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const bodyHtml = renderPosPage({
     staffRole: getRequestStaffRole(req),
     staffId: getRequestStaffActorId(req),
+  });
+  const html = wrapAuthedPage({
+    html: bodyHtml,
+    title: "POS",
+    user: req.user,
+    activeNav: "pos",
   });
 
   res.setHeader("Cache-Control", "no-store");

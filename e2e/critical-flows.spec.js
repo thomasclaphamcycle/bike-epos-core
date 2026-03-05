@@ -17,6 +17,45 @@ const parseOnHand = (labelText) => {
 
 test.describe.configure({ mode: "serial" });
 
+test("Auth routing redirects and navigation visibility follows role", async ({ page, request }) => {
+  await page.context().clearCookies();
+  await page.goto("/workshop");
+  await expect(page).toHaveURL(/\/login\?next=%2Fworkshop/);
+
+  const staffCredentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "nav-staff",
+  });
+  await loginViaUi(page, staffCredentials, "/pos");
+  await expect(page.getByTestId("app-nav-pos")).toBeVisible();
+  await expect(page.getByTestId("app-nav-workshop")).toBeVisible();
+  await expect(page.getByTestId("app-nav-inventory")).toBeVisible();
+  await expect(page.locator('[data-testid="app-nav-till"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="app-nav-admin-users"]')).toHaveCount(0);
+  await page.click('[data-testid="app-nav-workshop"]');
+  await expect(page).toHaveURL(/\/workshop/);
+
+  const managerCredentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "nav-manager",
+  });
+  await page.context().clearCookies();
+  await loginViaUi(page, managerCredentials, "/pos");
+  await expect(page.getByTestId("app-nav-till")).toBeVisible();
+  await expect(page.locator('[data-testid="app-nav-admin-users"]')).toHaveCount(0);
+  await page.click('[data-testid="app-nav-till"]');
+  await expect(page).toHaveURL(/\/till/);
+
+  const adminCredentials = await ensureUserViaAdminBypass(request, {
+    role: "ADMIN",
+    prefix: "nav-admin",
+  });
+  await page.context().clearCookies();
+  await loginViaUi(page, adminCredentials, "/admin");
+  await expect(page.getByTestId("app-nav-admin-users")).toBeVisible();
+  await expect(page.getByTestId("app-nav-admin-audit")).toBeVisible();
+});
+
 test("Login then POS page loads and can search products", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",

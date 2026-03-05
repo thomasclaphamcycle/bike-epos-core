@@ -264,6 +264,24 @@ const maybeRedirectHtmlToLogin = (req: Request, res: Response) => {
   return false;
 };
 
+const maybeRedirectHtmlToNotAuthorized = (
+  req: Request,
+  res: Response,
+  minimumRole: StaffRole,
+  actualRole: StaffRole,
+) => {
+  const accepts = req.header("accept") || "";
+  const wantsHtml = accepts.includes("text/html");
+  const isApiRoute = req.originalUrl.startsWith("/api/");
+  if (req.method === "GET" && wantsHtml && !isApiRoute) {
+    const required = encodeURIComponent(minimumRole);
+    const actual = encodeURIComponent(actualRole);
+    res.redirect(`/not-authorized?required=${required}&actual=${actual}`);
+    return true;
+  }
+  return false;
+};
+
 export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = await resolveAuthenticatedUser(req);
@@ -334,7 +352,13 @@ export const requireRoleAtLeast = (minimumRole: StaffRole) => {
         throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
       }
       assertUserIsActive(user);
-      assertRoleAtLeast(req, minimumRole);
+      const actualRole = toStaffRole(user.role);
+      if (roleRank[actualRole] < roleRank[minimumRole]) {
+        if (maybeRedirectHtmlToNotAuthorized(req, res, minimumRole, actualRole)) {
+          return;
+        }
+        throw new HttpError(403, `${minimumRole} role required`, "INSUFFICIENT_ROLE");
+      }
       next();
     } catch (error) {
       next(error);

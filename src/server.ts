@@ -97,6 +97,13 @@ app.post("/dev/seed-tube", async (req, res) => {
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
+app.get("/", (req, res) => {
+  if (req.user) {
+    return res.redirect("/pos");
+  }
+  return res.redirect("/login");
+});
+
 app.get("/users", requireRoleAtLeast("ADMIN"), async (req, res) => {
   const users = await prisma.user.findMany({
     select: {
