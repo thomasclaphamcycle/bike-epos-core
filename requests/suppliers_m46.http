@@ -1,0 +1,55 @@
+@baseUrl = http://localhost:3000
+@staffRole = MANAGER
+@staffId = manager-1
+@supplierId = REPLACE_SUPPLIER_ID
+
+### Create supplier (MANAGER+)
+POST {{baseUrl}}/api/suppliers
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "name": "M46 Supplier",
+  "email": "m46@supplier.test",
+  "phone": "02070000000",
+  "leadTimeDays": 5,
+  "notes": "Primary distributor"
+}
+
+### Search suppliers (MANAGER+)
+GET {{baseUrl}}/api/suppliers?search=M46
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get supplier by id (MANAGER+)
+GET {{baseUrl}}/api/suppliers/{{supplierId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Update supplier (MANAGER+)
+PATCH {{baseUrl}}/api/suppliers/{{supplierId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "name": "M46 Supplier Updated",
+  "leadTimeDays": 7,
+  "notes": "Updated notes"
+}
+
+### Optional: list supplier purchase orders (MANAGER+)
+GET {{baseUrl}}/api/suppliers/{{supplierId}}/purchase-orders
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Suppliers UI page (MANAGER+)
+GET {{baseUrl}}/suppliers
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Purchasing UI page uses supplier selection
+GET {{baseUrl}}/purchasing
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

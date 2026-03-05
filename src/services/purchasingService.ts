@@ -6,7 +6,16 @@ type CreateSupplierInput = {
   name?: string;
   email?: string;
   phone?: string;
+  leadTimeDays?: number;
   notes?: string;
+};
+
+type UpdateSupplierInput = {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  leadTimeDays?: number | null;
+  notes?: string | null;
 };
 
 type CreatePurchaseOrderInput = {
@@ -224,6 +233,7 @@ const toSupplierResponse = (supplier: {
   name: string;
   email: string | null;
   phone: string | null;
+  leadTimeDays: number | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -232,6 +242,7 @@ const toSupplierResponse = (supplier: {
   name: supplier.name,
   email: supplier.email,
   phone: supplier.phone,
+  leadTimeDays: supplier.leadTimeDays,
   notes: supplier.notes,
   createdAt: supplier.createdAt,
   updatedAt: supplier.updatedAt,
@@ -702,12 +713,19 @@ export const createSupplier = async (input: CreateSupplierInput) => {
   if (!name) {
     throw new HttpError(400, "name is required", "INVALID_SUPPLIER");
   }
+  if (
+    input.leadTimeDays !== undefined &&
+    (!Number.isInteger(input.leadTimeDays) || input.leadTimeDays < 0)
+  ) {
+    throw new HttpError(400, "leadTimeDays must be an integer >= 0", "INVALID_SUPPLIER");
+  }
 
   const supplier = await prisma.supplier.create({
     data: {
       name,
       email: normalizeOptionalText(input.email),
       phone: normalizeOptionalText(input.phone),
+      leadTimeDays: input.leadTimeDays ?? null,
       notes: normalizeOptionalText(input.notes),
     },
   });
@@ -733,6 +751,134 @@ export const searchSuppliers = async (query?: string) => {
 
   return {
     suppliers: suppliers.map(toSupplierResponse),
+  };
+};
+
+export const getSupplierById = async (supplierId: string) => {
+  if (!isUuid(supplierId)) {
+    throw new HttpError(400, "Invalid supplier id", "INVALID_SUPPLIER_ID");
+  }
+
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: supplierId },
+  });
+  if (!supplier) {
+    throw new HttpError(404, "Supplier not found", "SUPPLIER_NOT_FOUND");
+  }
+
+  return toSupplierResponse(supplier);
+};
+
+export const updateSupplier = async (
+  supplierId: string,
+  input: UpdateSupplierInput,
+) => {
+  if (!isUuid(supplierId)) {
+    throw new HttpError(400, "Invalid supplier id", "INVALID_SUPPLIER_ID");
+  }
+
+  const hasName = Object.prototype.hasOwnProperty.call(input, "name");
+  const hasEmail = Object.prototype.hasOwnProperty.call(input, "email");
+  const hasPhone = Object.prototype.hasOwnProperty.call(input, "phone");
+  const hasLeadTime = Object.prototype.hasOwnProperty.call(input, "leadTimeDays");
+  const hasNotes = Object.prototype.hasOwnProperty.call(input, "notes");
+
+  if (!hasName && !hasEmail && !hasPhone && !hasLeadTime && !hasNotes) {
+    throw new HttpError(400, "No fields supplied for update", "INVALID_SUPPLIER_UPDATE");
+  }
+
+  const data: {
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    leadTimeDays?: number | null;
+    notes?: string | null;
+  } = {};
+
+  if (hasName) {
+    const normalizedName = normalizeOptionalText(input.name);
+    if (!normalizedName) {
+      throw new HttpError(400, "name is required", "INVALID_SUPPLIER_UPDATE");
+    }
+    data.name = normalizedName;
+  }
+
+  if (hasEmail) {
+    data.email = input.email === null ? null : normalizeOptionalText(input.email ?? undefined) ?? null;
+  }
+
+  if (hasPhone) {
+    data.phone = input.phone === null ? null : normalizeOptionalText(input.phone ?? undefined) ?? null;
+  }
+
+  if (hasLeadTime) {
+    if (input.leadTimeDays === null) {
+      data.leadTimeDays = null;
+    } else {
+      if (!Number.isInteger(input.leadTimeDays) || (input.leadTimeDays ?? -1) < 0) {
+        throw new HttpError(400, "leadTimeDays must be an integer >= 0 or null", "INVALID_SUPPLIER_UPDATE");
+      }
+      data.leadTimeDays = input.leadTimeDays;
+    }
+  }
+
+  if (hasNotes) {
+    data.notes = input.notes === null ? null : normalizeOptionalText(input.notes ?? undefined) ?? null;
+  }
+
+  try {
+    const supplier = await prisma.supplier.update({
+      where: { id: supplierId },
+      data,
+    });
+    return toSupplierResponse(supplier);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      throw new HttpError(404, "Supplier not found", "SUPPLIER_NOT_FOUND");
+    }
+    throw error;
+  }
+};
+
+export const listSupplierPurchaseOrders = async (supplierId: string) => {
+  if (!isUuid(supplierId)) {
+    throw new HttpError(400, "Invalid supplier id", "INVALID_SUPPLIER_ID");
+  }
+
+  await ensureSupplierExists(prisma, supplierId);
+
+  const purchaseOrders = await prisma.purchaseOrder.findMany({
+    where: { supplierId },
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      supplier: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          variant: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    purchaseOrders: purchaseOrders.map(toPurchaseOrderResponse),
   };
 };
 

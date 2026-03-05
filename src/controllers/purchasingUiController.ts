@@ -4,6 +4,7 @@ import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staff
 import { wrapAuthedPage } from "../views/appShell";
 import { renderPurchasingPage } from "../views/purchasingPage";
 import { renderReceivingPage } from "../views/receivingPage";
+import { renderSuppliersPage } from "../views/suppliersPage";
 
 export const getPurchasingPageHandler = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -47,6 +48,34 @@ export const getReceivingPageHandler = async (req: Request, res: Response) => {
     title: "Receiving",
     user: req.user,
     activeNav: "receiving",
+  });
+
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline'",
+    ].join("; "),
+  );
+
+  res.type("html").send(html);
+};
+
+export const getSuppliersPageHandler = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const html = wrapAuthedPage({
+    html: renderSuppliersPage(),
+    title: "Suppliers",
+    user: req.user,
+    activeNav: "suppliers",
   });
 
   res.setHeader("Cache-Control", "no-store");
