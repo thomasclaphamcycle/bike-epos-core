@@ -140,6 +140,11 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
       <div id="line-status" class="status"></div>
       <div id="line-totals" class="status"></div>
       <div id="lines-wrap" class="table-wrap"></div>
+      <div class="controls" style="margin-top: 10px;">
+        <button id="convert-sale-btn" class="primary" type="button">Create Invoice (MANAGER+)</button>
+        <a id="convert-sale-link" href="#" style="display:none;">Open Invoice in POS</a>
+      </div>
+      <div id="convert-sale-status" class="status"></div>
     </div>
   </div>
 
@@ -204,6 +209,36 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
 
       const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
 
+      const canConvertToSale = () => {
+        const role = String(roleInput.value || "STAFF").trim().toUpperCase();
+        return role === "MANAGER" || role === "ADMIN";
+      };
+
+      const updateConvertButtonVisibility = () => {
+        const btn = qs("#convert-sale-btn");
+        if (!(btn instanceof HTMLButtonElement)) {
+          return;
+        }
+        btn.style.display = canConvertToSale() ? "inline-block" : "none";
+      };
+
+      const setSaleLink = (saleId, saleUrl) => {
+        const link = qs("#convert-sale-link");
+        if (!(link instanceof HTMLAnchorElement)) {
+          return;
+        }
+        if (!saleId) {
+          link.style.display = "none";
+          link.removeAttribute("href");
+          link.textContent = "";
+          return;
+        }
+
+        link.href = saleUrl || ("/pos?saleId=" + encodeURIComponent(saleId));
+        link.style.display = "inline";
+        link.textContent = "Open Invoice in POS";
+      };
+
       const renderJob = () => {
         const meta = qs("#job-meta");
         const linesWrap = qs("#lines-wrap");
@@ -222,6 +257,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
           { label: "Status (legacy)", value: job.status || "-" },
           { label: "Status (v1)", value: job.statusV1 || "-" },
           { label: "Title", value: job.title || "-" },
+          { label: "Invoice Sale", value: job.saleId || "-" },
           { label: "Promised At", value: job.promisedAt ? new Date(job.promisedAt).toLocaleString() : "-" },
           { label: "Assigned To", value: job.assignedToStaffName || job.assignedToStaffId || "-" },
         ];
@@ -237,6 +273,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
 
         const lines = Array.isArray(jobPayload?.lines) ? jobPayload.lines : [];
         const totals = jobPayload?.totals || { subtotalPence: 0, taxPence: 0, totalPence: 0 };
+        setSaleLink(job.saleId || null, job.saleId ? "/pos?saleId=" + encodeURIComponent(job.saleId) : null);
         if (lineTotals) {
           lineTotals.innerHTML =
             "Subtotal: " + escapeHtml(formatMoney(totals.subtotalPence)) +
@@ -430,9 +467,42 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         }
       };
 
+      const convertToSale = async () => {
+        if (!canConvertToSale()) {
+          setStatus("convert-sale-status", "Create Invoice requires MANAGER+.", "error");
+          return;
+        }
+
+        setStatus("convert-sale-status", "Creating invoice sale...");
+        try {
+          const payload = await apiRequest(
+            "/api/workshop/jobs/" + encodeURIComponent(jobId) + "/convert-to-sale",
+            {
+              method: "POST",
+              body: JSON.stringify({}),
+            },
+          );
+          if (payload?.saleId) {
+            setSaleLink(payload.saleId, payload.saleUrl || null);
+          }
+          await loadJob();
+          setStatus(
+            "convert-sale-status",
+            payload?.idempotent
+              ? "Invoice already existed. POS link is ready."
+              : "Invoice created. POS link is ready.",
+            "ok",
+          );
+        } catch (error) {
+          setStatus("convert-sale-status", error.message || "Failed to create invoice", "error");
+        }
+      };
+
       qs("#save-status-btn")?.addEventListener("click", saveStatus);
       qs("#save-notes-btn")?.addEventListener("click", saveNotesAndTitle);
       qs("#line-add-btn")?.addEventListener("click", addLine);
+      qs("#convert-sale-btn")?.addEventListener("click", convertToSale);
+      roleInput.addEventListener("change", updateConvertButtonVisibility);
       qs("#lines-wrap")?.addEventListener("click", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLButtonElement)) return;
@@ -445,6 +515,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
           deleteLine(lineId);
         }
       });
+      updateConvertButtonVisibility();
       renderJob();
       loadJob();
     })();

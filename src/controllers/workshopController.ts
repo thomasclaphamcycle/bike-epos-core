@@ -33,6 +33,7 @@ import {
   addWorkshopJobLine,
   attachCustomerToWorkshopJob,
   closeWorkshopJob,
+  convertWorkshopJobToSale,
   createWorkshopJob,
   deleteWorkshopJobLine,
   finalizeWorkshopJob,
@@ -454,6 +455,11 @@ export const patchWorkshopJobLineHandler = async (req: Request, res: Response) =
 export const deleteWorkshopJobLineHandler = async (req: Request, res: Response) => {
   const result = await deleteWorkshopJobLine(req.params.id, req.params.lineId);
   res.json(result);
+};
+
+export const convertWorkshopJobToSaleHandler = async (req: Request, res: Response) => {
+  const result = await convertWorkshopJobToSale(req.params.id, getRequestStaffActorId(req));
+  res.status(result.idempotent ? 200 : 201).json(result);
 };
 
 export const finalizeWorkshopJobHandler = async (req: Request, res: Response) => {

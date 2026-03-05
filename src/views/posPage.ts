@@ -1087,7 +1087,15 @@ export const renderPosPage = (input: PosPageInput) => {
       const parseCheckoutAmount = () => {
         const amountRaw = (qs("#checkout-amount").value || "").trim();
         if (!amountRaw) {
-          return Number(state.basket?.totals?.totalPence || 0);
+          const tenderRemaining = Number(state.tenderSummary?.remainingPence || 0);
+          if (tenderRemaining > 0) {
+            return tenderRemaining;
+          }
+          const basketTotal = Number(state.basket?.totals?.totalPence || 0);
+          if (basketTotal > 0) {
+            return basketTotal;
+          }
+          return Number(state.lastSale?.sale?.totalPence || 0);
         }
         const parsed = Number.parseInt(amountRaw, 10);
         return Number.isInteger(parsed) ? parsed : NaN;
@@ -1134,13 +1142,13 @@ export const renderPosPage = (input: PosPageInput) => {
       };
 
       const ensureSaleCheckedOut = async () => {
-        if (!state.basket) {
-          return null;
+        const currentSale = state.lastSale?.sale;
+        if (currentSale?.id && (!state.basket || !currentSale.basketId || currentSale.basketId === state.basket.id)) {
+          return state.lastSale;
         }
 
-        const currentSale = state.lastSale?.sale;
-        if (currentSale?.basketId && currentSale.basketId === state.basket.id) {
-          return state.lastSale;
+        if (!state.basket) {
+          return null;
         }
 
         return checkoutOnly();
@@ -1429,6 +1437,31 @@ export const renderPosPage = (input: PosPageInput) => {
         removeTender(tenderId);
       });
 
+      const getSaleIdQueryParam = () => {
+        const params = new URLSearchParams(window.location.search || "");
+        const rawSaleId = (params.get("saleId") || "").trim();
+        return rawSaleId || null;
+      };
+
+      const loadSaleFromQuery = async (saleId) => {
+        setStatus("checkout-status", "Loading requested sale...");
+        try {
+          const salePayload = await refreshSaleAndReceiptState(saleId);
+          const basketId = salePayload?.sale?.basketId || "";
+          if (basketId) {
+            qs("#basket-id-input").value = basketId;
+            await loadBasket();
+          } else {
+            state.basket = null;
+            renderBasket();
+            setStatus("basket-status", "Loaded sale has no basket (invoice mode).", "ok");
+          }
+          setStatus("checkout-status", "Loaded sale " + saleId + ".", "ok");
+        } catch (error) {
+          setStatus("checkout-status", error.message || "Failed to load requested sale", "error");
+        }
+      };
+
       const initialize = async () => {
         renderSearchTable();
         renderQuickPanel();
@@ -1436,7 +1469,12 @@ export const renderPosPage = (input: PosPageInput) => {
         renderTenderPanel();
         renderCustomerPanel();
         renderReceipt();
-        await createBasket();
+        const saleIdFromQuery = getSaleIdQueryParam();
+        if (saleIdFromQuery) {
+          await loadSaleFromQuery(saleIdFromQuery);
+        } else {
+          await createBasket();
+        }
       };
 
       initialize();

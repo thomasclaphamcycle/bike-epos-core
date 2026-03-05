@@ -1,0 +1,55 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@managerStaffId = manager-1
+@jobId = REPLACE_WORKSHOP_JOB_ID
+@saleId = REPLACE_SALE_ID
+@productId = REPLACE_PRODUCT_ID
+
+### Add labour line for workshop invoice
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{
+  "type": "LABOUR",
+  "description": "Full service labour",
+  "quantity": 1,
+  "unitPricePence": 5500
+}
+
+### Add part line for workshop invoice
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{
+  "type": "PART",
+  "productId": "{{productId}}",
+  "quantity": 2,
+  "unitPricePence": 1200
+}
+
+### Convert workshop job to sale (MANAGER+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/convert-to-sale
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{}
+
+### Get workshop job now linked to sale
+GET {{baseUrl}}/api/workshop/jobs/{{jobId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+### Get converted sale
+GET {{baseUrl}}/api/sales/{{saleId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+### Open POS directly on converted sale
+GET {{baseUrl}}/pos?saleId={{saleId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}

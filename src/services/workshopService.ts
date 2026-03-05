@@ -538,6 +538,10 @@ const toJobResponse = (job: {
   completedAt: Date | null;
   finalizedBasketId: string | null;
   closedAt: Date | null;
+  saleId?: string | null;
+  sale?: {
+    id: string;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }) => ({
@@ -556,6 +560,7 @@ const toJobResponse = (job: {
   completedAt: job.completedAt,
   finalizedBasketId: job.finalizedBasketId,
   closedAt: job.closedAt,
+  saleId: job.saleId ?? job.sale?.id ?? null,
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
 });
@@ -751,6 +756,11 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
   const job = await prisma.workshopJob.findUnique({
     where: { id: workshopJobId },
     include: {
+      sale: {
+        select: {
+          id: true,
+        },
+      },
       lines: {
         include: workshopLineInclude,
         orderBy: [{ createdAt: "asc" }],
@@ -767,6 +777,127 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     lines: job.lines.map((line) => toLineResponse(line)),
     totals: toWorkshopJobTotals(job.lines),
   };
+};
+
+export const convertWorkshopJobToSale = async (
+  workshopJobId: string,
+  createdByStaffId?: string,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  const normalizedCreatedBy = normalizeOptionalText(createdByStaffId) ?? null;
+
+  return prisma.$transaction(async (tx) => {
+    // Serialize conversion attempts to keep idempotent behavior deterministic.
+    await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
+
+    const job = await tx.workshopJob.findUnique({
+      where: { id: workshopJobId },
+      include: {
+        sale: {
+          select: {
+            id: true,
+          },
+        },
+        lines: {
+          include: workshopLineInclude,
+          orderBy: [{ createdAt: "asc" }],
+        },
+      },
+    });
+
+    if (!job) {
+      throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+    }
+
+    if (job.status === "CANCELLED") {
+      throw new HttpError(
+        409,
+        "Cancelled workshop jobs cannot be converted to sale",
+        "WORKSHOP_JOB_NOT_CONVERTIBLE",
+      );
+    }
+
+    if (job.lines.length === 0) {
+      throw new HttpError(400, "Workshop job has no lines", "EMPTY_WORKSHOP_JOB");
+    }
+
+    if (job.sale) {
+      return {
+        workshopJobId: job.id,
+        saleId: job.sale.id,
+        saleUrl: `/pos?saleId=${encodeURIComponent(job.sale.id)}`,
+        idempotent: true,
+      };
+    }
+
+    const needsLabourVariant = job.lines.some((line) => line.type === "LABOUR");
+    const labourVariant = needsLabourVariant ? await getOrCreateLabourVariantTx(tx) : null;
+
+    const saleLineInput = job.lines.map((line) => {
+      if (line.type === "PART") {
+        if (!line.variantId) {
+          throw new HttpError(
+            400,
+            "PART workshop lines must include variantId before conversion",
+            "INVALID_WORKSHOP_LINE",
+          );
+        }
+
+        return {
+          variantId: line.variantId,
+          quantity: line.qty,
+          unitPricePence: line.unitPricePence,
+          lineTotalPence: line.qty * line.unitPricePence,
+        };
+      }
+
+      if (!labourVariant) {
+        throw new HttpError(500, "Could not resolve labour variant", "LABOUR_VARIANT_NOT_FOUND");
+      }
+
+      return {
+        variantId: labourVariant.id,
+        quantity: line.qty,
+        unitPricePence: line.unitPricePence,
+        lineTotalPence: line.qty * line.unitPricePence,
+      };
+    });
+
+    const subtotalPence = saleLineInput.reduce((sum, line) => sum + line.lineTotalPence, 0);
+    const taxPence = 0;
+    const totalPence = subtotalPence + taxPence;
+
+    const sale = await tx.sale.create({
+      data: {
+        workshopJobId: job.id,
+        customerId: job.customerId,
+        subtotalPence,
+        taxPence,
+        totalPence,
+        createdByStaffId: normalizedCreatedBy,
+      },
+    });
+
+    await tx.saleItem.createMany({
+      data: saleLineInput.map((line) => ({
+        saleId: sale.id,
+        variantId: line.variantId,
+        quantity: line.quantity,
+        unitPricePence: line.unitPricePence,
+        lineTotalPence: line.lineTotalPence,
+      })),
+    });
+
+    return {
+      workshopJobId: job.id,
+      saleId: sale.id,
+      saleUrl: `/pos?saleId=${encodeURIComponent(sale.id)}`,
+      idempotent: false,
+    };
+  });
 };
 
 export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWorkshopJobInput) => {
