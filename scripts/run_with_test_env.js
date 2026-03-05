@@ -24,6 +24,15 @@ if (!env.TEST_BASE_URL) {
 if (!env.NODE_ENV) {
   env.NODE_ENV = "test";
 }
+if (!env.PORT) {
+  env.PORT = "3000";
+}
+if (!env.JWT_SECRET && !env.AUTH_JWT_SECRET) {
+  env.JWT_SECRET = "test-jwt-secret";
+}
+if (!env.COOKIE_SECRET) {
+  env.COOKIE_SECRET = "test-cookie-secret";
+}
 
 const result = spawnSync(command, args, {
   stdio: "inherit",

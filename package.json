@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "start": "ts-node --transpile-only src/server.ts",
     "typecheck:reports": "tsc -p tsconfig.reports.json --noEmit",
     "test": "npm run typecheck:reports && npm run test:smoke",
     "test:smoke": "node scripts/run_smoke_suite.js",
@@ -59,7 +60,8 @@
     "test:m55": "node scripts/run_smoke_test.js scripts/workshop_print_m55_smoke_tests.js",
     "test:m56": "node scripts/run_smoke_test.js scripts/sale_receipt_m56_smoke_tests.js",
     "test:m57": "node scripts/run_smoke_test.js scripts/audit_log_m57_smoke_tests.js",
-    "test:m58": "node scripts/run_smoke_test.js scripts/data_export_m58_smoke_tests.js"
+    "test:m58": "node scripts/run_smoke_test.js scripts/data_export_m58_smoke_tests.js",
+    "test:m59": "node scripts/run_smoke_test.js scripts/health_check_m59_smoke_tests.js"
   },
   "repository": {
     "type": "git",

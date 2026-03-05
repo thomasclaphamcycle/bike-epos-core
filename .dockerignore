@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log*
+.git
+.gitignore
+.env
+.env.test
+.DS_Store
+playwright-report
+test-results
+coverage
+docs
+requests
+scripts

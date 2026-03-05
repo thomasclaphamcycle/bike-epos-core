@@ -47,15 +47,23 @@ import { errorHandler } from "./middleware/errorHandler";
 import { enforceAuthMode, requireRoleAtLeast } from "./middleware/staffRole";
 import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
+import { requestLogging } from "./middleware/requestLogging";
+import { validateServerEnv } from "./config/runtimeEnv";
+
+const runtimeEnv = validateServerEnv();
+const isProduction = runtimeEnv.nodeEnv === "production";
 
 const app = express();
+if (isProduction) {
+  app.use(requestLogging);
+}
 app.use(express.json());
 app.use(enforceAuthMode);
 
 app.post("/auth/bootstrap", bootstrapHandler);
 
 app.post("/dev/product", async (req, res) => {
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     return res.status(404).json({ error: "Not found" });
   }
 
@@ -71,7 +79,7 @@ app.post("/dev/product", async (req, res) => {
 });
 
 app.post("/dev/seed-tube", async (req, res) => {
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     return res.status(404).json({ error: "Not found" });
   }
 
@@ -101,7 +109,12 @@ app.post("/dev/seed-tube", async (req, res) => {
   res.json({ variant, barcode });
 });
 
-app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/health", (req, res) =>
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+  }),
+);
 
 app.get("/", (req, res) => {
   if (req.user) {
@@ -190,6 +203,43 @@ app.use("/", receiptUiRouter);
 app.use("/", tillUiRouter);
 app.use(errorHandler);
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+const server = app.listen(runtimeEnv.port, () => {
+  console.log(`Server running on http://localhost:${runtimeEnv.port}`);
+});
+
+let shutdownInProgress = false;
+
+const shutdown = async (signal: NodeJS.Signals) => {
+  if (shutdownInProgress) {
+    return;
+  }
+  shutdownInProgress = true;
+
+  console.log(`[shutdown] Received ${signal}, closing server...`);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+    await prisma.$disconnect();
+    console.log("[shutdown] Completed graceful shutdown.");
+    process.exit(0);
+  } catch (error) {
+    console.error("[shutdown] Graceful shutdown failed:", error);
+    process.exit(1);
+  }
+};
+
+process.once("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.once("SIGTERM", () => {
+  void shutdown("SIGTERM");
 });

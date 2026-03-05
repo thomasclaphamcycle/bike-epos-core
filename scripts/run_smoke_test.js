@@ -17,6 +17,9 @@ const env = {
   AUTH_MODE: process.env.AUTH_MODE || "real",
   ALLOW_EXISTING_SERVER: process.env.ALLOW_EXISTING_SERVER || "1",
   TEST_BASE_URL: process.env.TEST_BASE_URL || "http://localhost:3000",
+  PORT: process.env.PORT || "3000",
+  JWT_SECRET: process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || "test-jwt-secret",
+  COOKIE_SECRET: process.env.COOKIE_SECRET || "test-cookie-secret",
 };
 
 if (!env.DATABASE_URL && env.TEST_DATABASE_URL) {

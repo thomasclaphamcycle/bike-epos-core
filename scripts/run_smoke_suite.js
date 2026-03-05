@@ -34,6 +34,7 @@ const baselineSteps = [
   "test:m56",
   "test:m57",
   "test:m58",
+  "test:m59",
 ];
 
 const env = {
@@ -41,6 +42,9 @@ const env = {
   NODE_ENV: process.env.NODE_ENV || "test",
   AUTH_MODE: process.env.AUTH_MODE || "real",
   ALLOW_EXISTING_SERVER: process.env.ALLOW_EXISTING_SERVER || "1",
+  PORT: process.env.PORT || "3000",
+  JWT_SECRET: process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || "test-jwt-secret",
+  COOKIE_SECRET: process.env.COOKIE_SECRET || "test-cookie-secret",
 };
 
 if (!env.DATABASE_URL && env.TEST_DATABASE_URL) {

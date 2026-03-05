@@ -1,21 +1,10 @@
 import * as jwt from "jsonwebtoken";
 import { UserRole } from "@prisma/client";
+import { getJwtSecret } from "../config/runtimeEnv";
 
 export const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "bike_epos_auth";
 
-const DEFAULT_AUTH_SECRET = "dev-only-auth-secret-change-me";
 const DEFAULT_TTL_SECONDS = 60 * 60 * 12;
-
-const getAuthSecret = () => {
-  const configured = process.env.AUTH_JWT_SECRET?.trim();
-  if (configured) {
-    return configured;
-  }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_JWT_SECRET is required in production");
-  }
-  return DEFAULT_AUTH_SECRET;
-};
 
 const parseTtlSeconds = () => {
   const raw = process.env.AUTH_TOKEN_TTL_SECONDS?.trim();
@@ -30,7 +19,7 @@ const parseTtlSeconds = () => {
   return parsed;
 };
 
-const AUTH_JWT_SECRET = getAuthSecret();
+const AUTH_JWT_SECRET = getJwtSecret();
 const AUTH_TOKEN_TTL_SECONDS = parseTtlSeconds();
 
 type AuthJwtClaims = {
