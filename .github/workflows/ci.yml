@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: bike_epos_test
+          POSTGRES_PASSWORD: bike_epos_test_pw
+          POSTGRES_DB: bike_epos_test
+        options: >-
+          --health-cmd "pg_isready -U bike_epos_test -d bike_epos_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      AUTH_MODE: header
+      TEST_BASE_URL: http://localhost:3000
+      TEST_DATABASE_URL: postgresql://bike_epos_test:bike_epos_test_pw@localhost:5432/bike_epos_test
+      DATABASE_URL: postgresql://bike_epos_test:bike_epos_test_pw@localhost:5432/bike_epos_test
+      ALLOW_EXISTING_SERVER: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Start API server
+        run: |
+          npx ts-node --transpile-only src/server.ts > /tmp/server.log 2>&1 &
+          echo $! > /tmp/server.pid
+
+      - name: Wait for health endpoint
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$TEST_BASE_URL/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not become healthy in time"
+          cat /tmp/server.log || true
+          exit 1
+
+      - name: Run baseline tests
+        run: npm test
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/server.pid ]; then
+            kill "$(cat /tmp/server.pid)" || true
+          fi
+
+      - name: Run Playwright E2E
+        run: npm run e2e
+
+      - name: Upload server log on failure
+        if: failure()
+        run: cat /tmp/server.log || true

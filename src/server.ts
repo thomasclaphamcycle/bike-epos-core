@@ -32,10 +32,12 @@ import { supplierRouter } from "./routes/supplierRoutes";
 import { purchaseOrderRouter } from "./routes/purchaseOrderRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
+import { enforceAuthMode } from "./middleware/staffRole";
 import { HttpError } from "./utils/http";
 
 const app = express();
 app.use(express.json());
+app.use(enforceAuthMode);
 
 app.post("/auth/bootstrap", async (req, res) => {
   const { username, name, password } = req.body as {

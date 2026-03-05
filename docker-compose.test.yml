@@ -1,0 +1,20 @@
+services:
+  db_test:
+    image: postgres:16-alpine
+    container_name: bike-epos-core-db-test
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: bike_epos_test
+      POSTGRES_PASSWORD: bike_epos_test_pw
+      POSTGRES_DB: bike_epos_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bike_epos_test -d bike_epos_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - bike_epos_test_db_data:/var/lib/postgresql/data
+
+volumes:
+  bike_epos_test_db_data:
