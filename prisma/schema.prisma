@@ -56,6 +56,8 @@ enum PurchaseOrderStatus {
   SENT
   PARTIALLY_RECEIVED
   RECEIVED
+  RECEIVED_PARTIAL
+  RECEIVED_COMPLETE
   CANCELLED
 }
 
@@ -79,6 +81,7 @@ model PurchaseOrder {
 
   supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   items      PurchaseOrderItem[]
+  receipts   PurchaseReceipt[]
   createdByStaff User?           @relation("PurchaseOrderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   @@index([supplierId])
@@ -99,10 +102,44 @@ model PurchaseOrderItem {
 
   purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   variant          Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  receiptLines     PurchaseReceiptLine[]
 
   @@unique([purchaseOrderId, variantId])
   @@index([purchaseOrderId, createdAt])
   @@index([variantId])
+}
+
+model PurchaseReceipt {
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String   @db.Uuid
+  receivedAt       DateTime @default(now())
+  receivedByStaffId String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  receivedByStaff  User?         @relation("PurchaseReceiptReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
+  lines            PurchaseReceiptLine[]
+
+  @@index([purchaseOrderId, receivedAt])
+  @@index([receivedByStaffId])
+}
+
+model PurchaseReceiptLine {
+  id                String   @id @default(uuid()) @db.Uuid
+  receiptId         String   @db.Uuid
+  purchaseOrderLineId String @db.Uuid
+  quantityReceived  Int
+  unitCostPence     Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  receipt           PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderItem @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, purchaseOrderLineId])
+  @@index([purchaseOrderLineId])
 }
 
 model Variant {
@@ -571,6 +608,7 @@ model PaymentRefund {
 }
 
 enum InventoryMovementType {
+  PURCHASE_RECEIPT
   PURCHASE
   SALE
   ADJUSTMENT
@@ -889,6 +927,7 @@ model User {
   cashMovements        CashMovement[] @relation("CashMovementCreatedBy")
   cashCounts           CashCount[] @relation("CashCountCountedBy")
   createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedByStaff")
+  receivedPurchaseReceipts PurchaseReceipt[] @relation("PurchaseReceiptReceivedByStaff")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

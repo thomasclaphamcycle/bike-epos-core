@@ -238,6 +238,8 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
             <option value="SENT">SENT</option>
             <option value="PARTIALLY_RECEIVED">PARTIALLY_RECEIVED</option>
             <option value="RECEIVED">RECEIVED</option>
+            <option value="RECEIVED_PARTIAL">RECEIVED_PARTIAL</option>
+            <option value="RECEIVED_COMPLETE">RECEIVED_COMPLETE</option>
             <option value="CANCELLED">CANCELLED</option>
           </select>
         </div>
@@ -831,7 +833,7 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
             : lines
                 .map((line) => {
                   const editable = canManage() && po.status === "DRAFT";
-                  const receivable = canManage() && (po.status === "DRAFT" || po.status === "SUBMITTED" || po.status === "SENT" || po.status === "PARTIALLY_RECEIVED");
+                  const receivable = canManage() && (po.status === "DRAFT" || po.status === "SUBMITTED" || po.status === "SENT" || po.status === "PARTIALLY_RECEIVED" || po.status === "RECEIVED_PARTIAL");
 
                   return (
                     '<tr>' +

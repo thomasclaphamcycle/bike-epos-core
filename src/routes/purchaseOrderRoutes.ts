@@ -5,6 +5,7 @@ import {
   createPurchaseOrderHandler,
   deletePurchaseOrderLineHandler,
   getPurchaseOrderHandler,
+  listPurchaseOrderReceiptsHandler,
   listPurchaseOrdersHandler,
   patchPurchaseOrderHandler,
   patchPurchaseOrderItemHandler,
@@ -19,6 +20,7 @@ export const purchaseOrderRouter = Router();
 purchaseOrderRouter.get("/", requireRoleAtLeast("STAFF"), listPurchaseOrdersHandler);
 purchaseOrderRouter.post("/", requireRoleAtLeast("MANAGER"), createPurchaseOrderHandler);
 purchaseOrderRouter.get("/:id", requireRoleAtLeast("STAFF"), getPurchaseOrderHandler);
+purchaseOrderRouter.get("/:id/receipts", requireRoleAtLeast("MANAGER"), listPurchaseOrderReceiptsHandler);
 purchaseOrderRouter.patch("/:id", requireRoleAtLeast("MANAGER"), patchPurchaseOrderHandler);
 purchaseOrderRouter.post("/:id/items", requireRoleAtLeast("MANAGER"), addPurchaseOrderItemsHandler);
 purchaseOrderRouter.post("/:id/lines", requireRoleAtLeast("MANAGER"), upsertPurchaseOrderLineHandler);

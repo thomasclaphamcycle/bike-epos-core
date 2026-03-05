@@ -54,9 +54,13 @@ type UpdatePurchaseOrderItemInput = {
 
 type ReceivePurchaseOrderInput = {
   locationId?: string;
+  notes?: string;
   lines?: Array<{
     purchaseOrderItemId?: string;
+    lineId?: string;
     quantity?: number;
+    quantityReceived?: number;
+    unitCost?: number;
     unitCostPence?: number;
   }>;
 };
@@ -117,6 +121,10 @@ const toPurchaseOrderStatusV1 = (status: PurchaseOrderStatus) => {
     case "PARTIALLY_RECEIVED":
       return "RECEIVED_PARTIAL";
     case "RECEIVED":
+      return "RECEIVED_COMPLETE";
+    case "RECEIVED_PARTIAL":
+      return "RECEIVED_PARTIAL";
+    case "RECEIVED_COMPLETE":
       return "RECEIVED_COMPLETE";
     default:
       return status;
@@ -275,6 +283,9 @@ const calculatePurchaseOrderStatus = (
     return "CANCELLED";
   }
 
+  const useV1ReceiveStatuses =
+    status === "SUBMITTED" || status === "RECEIVED_PARTIAL" || status === "RECEIVED_COMPLETE";
+
   if (items.length === 0) {
     return status;
   }
@@ -283,14 +294,20 @@ const calculatePurchaseOrderStatus = (
   const totalReceived = items.reduce((sum, item) => sum + item.quantityReceived, 0);
 
   if (totalReceived <= 0) {
-    return status === "RECEIVED" ? "PARTIALLY_RECEIVED" : status;
+    if (status === "RECEIVED") {
+      return "PARTIALLY_RECEIVED";
+    }
+    if (status === "RECEIVED_COMPLETE") {
+      return "RECEIVED_PARTIAL";
+    }
+    return status;
   }
 
   if (totalReceived >= totalOrdered) {
-    return "RECEIVED";
+    return useV1ReceiveStatuses ? "RECEIVED_COMPLETE" : "RECEIVED";
   }
 
-  return "PARTIALLY_RECEIVED";
+  return useV1ReceiveStatuses ? "RECEIVED_PARTIAL" : "PARTIALLY_RECEIVED";
 };
 
 const assertDraftForLineEdits = (status: PurchaseOrderStatus) => {
@@ -307,10 +324,15 @@ const getNextStatusOrThrow = (
   current: PurchaseOrderStatus,
   requested: PurchaseOrderStatus,
 ): PurchaseOrderStatus => {
-  if (requested === "PARTIALLY_RECEIVED" || requested === "RECEIVED") {
+  if (
+    requested === "PARTIALLY_RECEIVED" ||
+    requested === "RECEIVED" ||
+    requested === "RECEIVED_PARTIAL" ||
+    requested === "RECEIVED_COMPLETE"
+  ) {
     throw new HttpError(
       400,
-      "status PARTIALLY_RECEIVED/RECEIVED is system-managed via receiving",
+      "status receive states are system-managed via receiving",
       "INVALID_PURCHASE_ORDER_STATUS",
     );
   }
@@ -319,7 +341,7 @@ const getNextStatusOrThrow = (
     return current;
   }
 
-  if (current === "RECEIVED") {
+  if (current === "RECEIVED" || current === "RECEIVED_COMPLETE") {
     throw new HttpError(409, "Received purchase orders cannot be edited", "PURCHASE_ORDER_RECEIVED");
   }
   if (current === "CANCELLED") {
@@ -354,7 +376,7 @@ const getNextStatusOrThrow = (
     );
   }
 
-  if (current === "PARTIALLY_RECEIVED") {
+  if (current === "PARTIALLY_RECEIVED" || current === "RECEIVED_PARTIAL") {
     throw new HttpError(
       409,
       "Partially received purchase orders cannot be manually re-stated",
@@ -455,6 +477,84 @@ const toPurchaseOrderResponse = (po: {
   };
 };
 
+const toPurchaseReceiptLineResponse = (line: {
+  id: string;
+  receiptId: string;
+  purchaseOrderLineId: string;
+  quantityReceived: number;
+  unitCostPence: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  purchaseOrderLine: {
+    id: string;
+    variantId: string;
+    variant: {
+      id: string;
+      sku: string;
+      name: string | null;
+      product: {
+        id: string;
+        name: string;
+      };
+    };
+  };
+}) => ({
+  id: line.id,
+  receiptId: line.receiptId,
+  purchaseOrderLineId: line.purchaseOrderLineId,
+  lineId: line.purchaseOrderLineId,
+  quantityReceived: line.quantityReceived,
+  unitCostPence: line.unitCostPence,
+  variantId: line.purchaseOrderLine.variantId,
+  sku: line.purchaseOrderLine.variant.sku,
+  variantName: line.purchaseOrderLine.variant.name,
+  productId: line.purchaseOrderLine.variant.product.id,
+  productName: line.purchaseOrderLine.variant.product.name,
+  createdAt: line.createdAt,
+  updatedAt: line.updatedAt,
+});
+
+const toPurchaseReceiptResponse = (receipt: {
+  id: string;
+  purchaseOrderId: string;
+  receivedAt: Date;
+  receivedByStaffId: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  lines: Array<{
+    id: string;
+    receiptId: string;
+    purchaseOrderLineId: string;
+    quantityReceived: number;
+    unitCostPence: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+    purchaseOrderLine: {
+      id: string;
+      variantId: string;
+      variant: {
+        id: string;
+        sku: string;
+        name: string | null;
+        product: {
+          id: string;
+          name: string;
+        };
+      };
+    };
+  }>;
+}) => ({
+  id: receipt.id,
+  purchaseOrderId: receipt.purchaseOrderId,
+  receivedAt: receipt.receivedAt,
+  receivedByStaffId: receipt.receivedByStaffId,
+  notes: receipt.notes,
+  createdAt: receipt.createdAt,
+  updatedAt: receipt.updatedAt,
+  lines: receipt.lines.map(toPurchaseReceiptLineResponse),
+});
+
 const ensureSupplierExists = async (
   tx: Prisma.TransactionClient | typeof prisma,
   supplierId: string,
@@ -536,6 +636,65 @@ const ensureStockLocationExists = async (
     throw new HttpError(404, "Stock location not found", "LOCATION_NOT_FOUND");
   }
   return location;
+};
+
+const resolveReceivingLocationId = async (
+  tx: Prisma.TransactionClient,
+  locationId: string | undefined,
+) => {
+  const normalizedLocationId = normalizeOptionalText(locationId);
+  if (normalizedLocationId) {
+    if (!isUuid(normalizedLocationId)) {
+      throw new HttpError(400, "locationId must be a valid UUID", "INVALID_LOCATION_ID");
+    }
+    await ensureStockLocationExists(tx, normalizedLocationId);
+    return normalizedLocationId;
+  }
+
+  const defaultLocation = await tx.stockLocation.findFirst({
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
+  if (!defaultLocation) {
+    throw new HttpError(409, "No stock location available for receiving", "LOCATION_NOT_FOUND");
+  }
+  return defaultLocation.id;
+};
+
+const getPurchaseReceiptOrThrow = async (
+  tx: Prisma.TransactionClient | typeof prisma,
+  receiptId: string,
+) => {
+  const receipt = await tx.purchaseReceipt.findUnique({
+    where: { id: receiptId },
+    include: {
+      lines: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          purchaseOrderLine: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!receipt) {
+    throw new HttpError(404, "Purchase receipt not found", "PURCHASE_RECEIPT_NOT_FOUND");
+  }
+
+  return receipt;
 };
 
 export const createSupplier = async (input: CreateSupplierInput) => {
@@ -1404,6 +1563,264 @@ export const cancelPurchaseOrder = async (
   return toPurchaseOrderResponse(updated);
 };
 
+export const listPurchaseOrderReceipts = async (purchaseOrderId: string) => {
+  if (!isUuid(purchaseOrderId)) {
+    throw new HttpError(400, "Invalid purchase order id", "INVALID_PURCHASE_ORDER_ID");
+  }
+
+  await getPurchaseOrderOrThrow(prisma, purchaseOrderId);
+
+  const receipts = await prisma.purchaseReceipt.findMany({
+    where: {
+      purchaseOrderId,
+    },
+    orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
+    include: {
+      lines: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          purchaseOrderLine: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    receipts: receipts.map(toPurchaseReceiptResponse),
+  };
+};
+
+export const getPurchaseReceiptById = async (receiptId: string) => {
+  if (!isUuid(receiptId)) {
+    throw new HttpError(400, "Invalid purchase receipt id", "INVALID_PURCHASE_RECEIPT_ID");
+  }
+
+  const receipt = await getPurchaseReceiptOrThrow(prisma, receiptId);
+  return {
+    receipt: toPurchaseReceiptResponse(receipt),
+  };
+};
+
+export const receivePurchaseOrderV1 = async (
+  purchaseOrderId: string,
+  input: ReceivePurchaseOrderInput,
+  createdByStaffId?: string,
+) => {
+  if (!isUuid(purchaseOrderId)) {
+    throw new HttpError(400, "Invalid purchase order id", "INVALID_PURCHASE_ORDER_ID");
+  }
+
+  if (!Array.isArray(input.lines) || input.lines.length === 0) {
+    throw new HttpError(400, "lines must be a non-empty array", "INVALID_RECEIVING_LINES");
+  }
+
+  const parsedLines = input.lines.map((line) => {
+    const purchaseOrderItemId = normalizeOptionalText(line.lineId ?? line.purchaseOrderItemId);
+    if (!purchaseOrderItemId || !isUuid(purchaseOrderItemId)) {
+      throw new HttpError(400, "lineId must be a valid UUID", "INVALID_RECEIVING_LINES");
+    }
+
+    const quantity = line.quantityReceived ?? line.quantity;
+    if (!Number.isInteger(quantity) || (quantity ?? 0) <= 0) {
+      throw new HttpError(400, "quantityReceived must be a positive integer", "INVALID_RECEIVING_LINES");
+    }
+
+    const unitCostPence = parseOptionalUnitCostPence(line.unitCost, line.unitCostPence);
+
+    return {
+      purchaseOrderItemId,
+      quantity,
+      unitCostPence,
+    };
+  });
+
+  const uniqueItemIds = new Set(parsedLines.map((line) => line.purchaseOrderItemId));
+  if (uniqueItemIds.size !== parsedLines.length) {
+    throw new HttpError(
+      400,
+      "Each lineId can only appear once per receive request",
+      "DUPLICATE_RECEIVING_LINE",
+    );
+  }
+
+  const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
+
+  return prisma.$transaction(async (tx) => {
+    const po = await tx.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        items: {
+          include: {
+            variant: true,
+          },
+        },
+      },
+    });
+
+    if (!po) {
+      throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
+    }
+    if (po.status === "CANCELLED") {
+      throw new HttpError(409, "Cancelled purchase orders cannot be received", "PURCHASE_ORDER_CANCELLED");
+    }
+    if (po.status === "RECEIVED" || po.status === "RECEIVED_COMPLETE") {
+      throw new HttpError(409, "Received purchase orders cannot be received", "PURCHASE_ORDER_RECEIVED");
+    }
+    if (
+      po.status !== "SUBMITTED" &&
+      po.status !== "RECEIVED_PARTIAL" &&
+      po.status !== "SENT" &&
+      po.status !== "PARTIALLY_RECEIVED"
+    ) {
+      throw new HttpError(
+        409,
+        "Purchase order must be SUBMITTED or RECEIVED_PARTIAL before receiving",
+        "PURCHASE_ORDER_NOT_RECEIVABLE",
+      );
+    }
+
+    const locationId = await resolveReceivingLocationId(tx, input.locationId);
+
+    if (normalizedCreatedByStaffId) {
+      const staff = await tx.user.findUnique({ where: { id: normalizedCreatedByStaffId } });
+      if (!staff) {
+        throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
+      }
+    }
+
+    const itemById = new Map(po.items.map((item) => [item.id, item]));
+
+    const receipt = await tx.purchaseReceipt.create({
+      data: {
+        purchaseOrderId,
+        receivedByStaffId: normalizedCreatedByStaffId ?? null,
+        notes: normalizeOptionalText(input.notes) ?? null,
+      },
+    });
+
+    for (const line of parsedLines) {
+      const item = itemById.get(line.purchaseOrderItemId);
+      if (!item) {
+        throw new HttpError(
+          400,
+          "Each lineId must belong to the purchase order",
+          "PURCHASE_ORDER_ITEM_MISMATCH",
+        );
+      }
+
+      const remaining = item.quantityOrdered - item.quantityReceived;
+      if (line.quantity > remaining) {
+        throw new HttpError(
+          409,
+          "Receive quantity exceeds remaining quantity",
+          "PURCHASE_ORDER_OVER_RECEIVE",
+        );
+      }
+
+      const resolvedUnitCostPence = line.unitCostPence ?? item.unitCostPence ?? item.variant.costPricePence ?? null;
+      const nextLineTotalPence = computeLineTotalPence(item.quantityOrdered, resolvedUnitCostPence);
+
+      await tx.purchaseOrderItem.update({
+        where: {
+          id: item.id,
+        },
+        data: {
+          quantityReceived: {
+            increment: line.quantity,
+          },
+          ...(line.unitCostPence !== undefined ? { unitCostPence: line.unitCostPence } : {}),
+          lineTotalPence: nextLineTotalPence,
+        },
+      });
+
+      const receiptLine = await tx.purchaseReceiptLine.create({
+        data: {
+          receiptId: receipt.id,
+          purchaseOrderLineId: item.id,
+          quantityReceived: line.quantity,
+          unitCostPence: resolvedUnitCostPence,
+        },
+      });
+
+      await tx.stockLedgerEntry.create({
+        data: {
+          variantId: item.variantId,
+          locationId,
+          type: "PURCHASE",
+          quantityDelta: line.quantity,
+          unitCostPence: resolvedUnitCostPence,
+          referenceType: "PURCHASE_RECEIPT",
+          referenceId: receipt.id,
+          note: resolvedUnitCostPence !== null ? `PO_RECEIPT unitCostPence=${resolvedUnitCostPence}` : "PO_RECEIPT",
+          createdByStaffId: normalizedCreatedByStaffId,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: item.variantId,
+          type: "PURCHASE_RECEIPT",
+          quantity: line.quantity,
+          unitCost: resolvedUnitCostPence,
+          referenceType: "PURCHASE_RECEIPT_LINE",
+          referenceId: receiptLine.id,
+          note: resolvedUnitCostPence !== null ? `PO_RECEIPT unitCost=${resolvedUnitCostPence}` : "PO_RECEIPT",
+          createdByStaffId: normalizedCreatedByStaffId ?? null,
+        },
+      });
+    }
+
+    const refreshedItems = await tx.purchaseOrderItem.findMany({
+      where: {
+        purchaseOrderId,
+      },
+      select: {
+        quantityOrdered: true,
+        quantityReceived: true,
+      },
+    });
+
+    const statusForCalculation =
+      po.status === "SENT"
+        ? "SUBMITTED"
+        : po.status === "PARTIALLY_RECEIVED"
+          ? "RECEIVED_PARTIAL"
+          : po.status;
+
+    const nextStatus = calculatePurchaseOrderStatus(statusForCalculation, refreshedItems);
+
+    if (nextStatus !== po.status) {
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          status: nextStatus,
+        },
+      });
+    }
+
+    const updatedPo = await getPurchaseOrderOrThrow(tx, purchaseOrderId);
+    const updatedReceipt = await getPurchaseReceiptOrThrow(tx, receipt.id);
+
+    return {
+      purchaseOrder: toPurchaseOrderResponse(updatedPo),
+      receipt: toPurchaseReceiptResponse(updatedReceipt),
+    };
+  });
+};
+
 export const receivePurchaseOrder = async (
   purchaseOrderId: string,
   input: ReceivePurchaseOrderInput,
@@ -1480,7 +1897,7 @@ export const receivePurchaseOrder = async (
     if (po.status === "CANCELLED") {
       throw new HttpError(409, "Cancelled purchase orders cannot be received", "PURCHASE_ORDER_CANCELLED");
     }
-    if (po.status === "RECEIVED") {
+    if (po.status === "RECEIVED" || po.status === "RECEIVED_COMPLETE") {
       throw new HttpError(409, "Received purchase orders cannot be received", "PURCHASE_ORDER_RECEIVED");
     }
 

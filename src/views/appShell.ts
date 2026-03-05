@@ -13,6 +13,7 @@ type AppNavKey =
   | "workshop"
   | "inventory"
   | "purchasing"
+  | "receiving"
   | "till"
   | "manager-cash"
   | "manager-refunds"
@@ -42,6 +43,7 @@ const navItems: Array<{
   { key: "workshop", label: "Workshop", href: "/workshop", minRole: "STAFF" },
   { key: "inventory", label: "Inventory", href: "/inventory", minRole: "STAFF" },
   { key: "purchasing", label: "Purchasing", href: "/purchasing", minRole: "MANAGER" },
+  { key: "receiving", label: "Receiving", href: "/receiving", minRole: "MANAGER" },
   { key: "till", label: "Till / Cash Up", href: "/till", minRole: "MANAGER" },
   { key: "manager-cash", label: "Manager Cash", href: "/manager/cash", minRole: "MANAGER" },
   {

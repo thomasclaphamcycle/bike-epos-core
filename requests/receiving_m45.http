@@ -1,0 +1,38 @@
+@baseUrl = http://localhost:3000
+@staffRole = MANAGER
+@staffId = manager-1
+@poId = REPLACE_PO_ID
+@lineId = REPLACE_PO_LINE_ID
+@receiptId = REPLACE_RECEIPT_ID
+
+### Receive submitted purchase order lines (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders/{{poId}}/receive
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "notes": "First goods-in delivery",
+  "lines": [
+    {
+      "lineId": "{{lineId}}",
+      "quantityReceived": 3,
+      "unitCost": 18.5
+    }
+  ]
+}
+
+### List receipts for a purchase order (MANAGER+)
+GET {{baseUrl}}/api/purchase-orders/{{poId}}/receipts
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Fetch one purchase receipt (MANAGER+)
+GET {{baseUrl}}/api/purchase-receipts/{{receiptId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Receiving page (MANAGER+)
+GET {{baseUrl}}/receiving
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

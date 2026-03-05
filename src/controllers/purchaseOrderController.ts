@@ -6,8 +6,10 @@ import {
   createPurchaseOrder,
   deletePurchaseOrderLine,
   getPurchaseOrderById,
+  listPurchaseOrderReceipts,
   listPurchaseOrders,
   receivePurchaseOrder,
+  receivePurchaseOrderV1,
   submitPurchaseOrder,
   updatePurchaseOrder,
   updatePurchaseOrderItem,
@@ -31,11 +33,13 @@ const parsePurchaseOrderStatus = (
     normalized !== "SENT" &&
     normalized !== "PARTIALLY_RECEIVED" &&
     normalized !== "RECEIVED" &&
+    normalized !== "RECEIVED_PARTIAL" &&
+    normalized !== "RECEIVED_COMPLETE" &&
     normalized !== "CANCELLED"
   ) {
     throw new HttpError(
       400,
-      "status must be one of DRAFT, SUBMITTED, SENT, PARTIALLY_RECEIVED, RECEIVED, CANCELLED",
+      "status must be one of DRAFT, SUBMITTED, SENT, PARTIALLY_RECEIVED, RECEIVED, RECEIVED_PARTIAL, RECEIVED_COMPLETE, CANCELLED",
       code,
     );
   }
@@ -238,18 +242,30 @@ export const cancelPurchaseOrderHandler = async (req: Request, res: Response) =>
   res.json(po);
 };
 
+export const listPurchaseOrderReceiptsHandler = async (req: Request, res: Response) => {
+  const result = await listPurchaseOrderReceipts(req.params.id);
+  res.json(result);
+};
+
 export const receivePurchaseOrderHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     locationId?: string;
+    notes?: string;
     lines?: Array<{
       purchaseOrderItemId?: string;
+      lineId?: string;
       quantity?: number;
+      quantityReceived?: number;
+      unitCost?: number;
       unitCostPence?: number;
     }>;
   };
 
   if (body.locationId !== undefined && typeof body.locationId !== "string") {
     throw new HttpError(400, "locationId must be a string", "INVALID_RECEIVING");
+  }
+  if (body.notes !== undefined && typeof body.notes !== "string") {
+    throw new HttpError(400, "notes must be a string", "INVALID_RECEIVING");
   }
   if (!Array.isArray(body.lines)) {
     throw new HttpError(400, "lines must be an array", "INVALID_RECEIVING");
@@ -259,12 +275,36 @@ export const receivePurchaseOrderHandler = async (req: Request, res: Response) =
     if (line.purchaseOrderItemId !== undefined && typeof line.purchaseOrderItemId !== "string") {
       throw new HttpError(400, "purchaseOrderItemId must be a string", "INVALID_RECEIVING");
     }
+    if (line.lineId !== undefined && typeof line.lineId !== "string") {
+      throw new HttpError(400, "lineId must be a string", "INVALID_RECEIVING");
+    }
     if (line.quantity !== undefined && typeof line.quantity !== "number") {
       throw new HttpError(400, "quantity must be a number", "INVALID_RECEIVING");
+    }
+    if (line.quantityReceived !== undefined && typeof line.quantityReceived !== "number") {
+      throw new HttpError(400, "quantityReceived must be a number", "INVALID_RECEIVING");
+    }
+    if (line.unitCost !== undefined && typeof line.unitCost !== "number") {
+      throw new HttpError(400, "unitCost must be a number", "INVALID_RECEIVING");
     }
     if (line.unitCostPence !== undefined && typeof line.unitCostPence !== "number") {
       throw new HttpError(400, "unitCostPence must be a number", "INVALID_RECEIVING");
     }
+  }
+
+  const useV1Payload =
+    body.notes !== undefined ||
+    body.lines.some(
+      (line) =>
+        line.lineId !== undefined ||
+        line.quantityReceived !== undefined ||
+        line.unitCost !== undefined,
+    );
+
+  if (useV1Payload) {
+    const result = await receivePurchaseOrderV1(req.params.id, body, getRequestStaffActorId(req));
+    res.json(result);
+    return;
   }
 
   const po = await receivePurchaseOrder(req.params.id, body, getRequestStaffActorId(req));

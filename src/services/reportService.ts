@@ -293,7 +293,9 @@ export const getInventoryValueReport = async (locationId?: string) => {
             variantId: {
               in: variantIds,
             },
-            type: "PURCHASE",
+            type: {
+              in: ["PURCHASE", "PURCHASE_RECEIPT"],
+            },
             quantity: {
               gt: 0,
             },
