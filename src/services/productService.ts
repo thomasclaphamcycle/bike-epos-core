@@ -1,6 +1,7 @@
 import { BarcodeType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 
 type CreateProductInput = {
   name?: string;
@@ -61,6 +62,7 @@ type SearchProductsInput = {
   q?: string;
   barcode?: string;
   sku?: string;
+  locationId?: string;
   take?: number;
   skip?: number;
 };
@@ -710,18 +712,29 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
   });
 
   const variantIds = variants.map((variant) => variant.id);
+  const requestedLocationId = normalizeOptionalText(filters.locationId);
   const groupedOnHand =
     variantIds.length > 0
-      ? await prisma.inventoryMovement.groupBy({
-          by: ["variantId"],
-          where: {
-            variantId: {
-              in: variantIds,
+      ? await prisma.$transaction(async (tx) => {
+          const location = requestedLocationId
+            ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+            : await ensureDefaultLocationTx(tx);
+          if (!location) {
+            throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+          }
+
+          return tx.inventoryMovement.groupBy({
+            by: ["variantId"],
+            where: {
+              locationId: location.id,
+              variantId: {
+                in: variantIds,
+              },
             },
-          },
-          _sum: {
-            quantity: true,
-          },
+            _sum: {
+              quantity: true,
+            },
+          });
         })
       : [];
 

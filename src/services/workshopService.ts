@@ -1,6 +1,7 @@
 import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 
@@ -9,6 +10,7 @@ type CreateWorkshopJobInput = {
   bikeDescription?: string;
   notes?: string;
   status?: string;
+  locationId?: string;
 };
 
 type UpdateWorkshopJobInput = {
@@ -21,6 +23,7 @@ type UpdateWorkshopJobInput = {
 type ListWorkshopJobsInput = {
   status?: string;
   q?: string;
+  locationId?: string;
   take?: number;
   skip?: number;
 };
@@ -319,6 +322,7 @@ const toLineResponse = (line: {
 const toJobResponse = (job: {
   id: string;
   customerId: string | null;
+  locationId: string;
   customerName: string | null;
   bikeDescription: string | null;
   status: WorkshopJobStatus;
@@ -330,6 +334,7 @@ const toJobResponse = (job: {
 }) => ({
   id: job.id,
   customerId: job.customerId,
+  locationId: job.locationId,
   customerName: job.customerName,
   bikeDescription: job.bikeDescription,
   status: toWorkflowStatus(job),
@@ -405,26 +410,37 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
     ? parseWorkflowStatus(input.status)
     : ("BOOKED" as WorkflowStatus);
 
-  const job = await prisma.workshopJob.create({
-    data: {
-      customerName,
-      bikeDescription,
-      notes,
-      status: toWorkshopJobStatus(targetStatus),
-      source: "IN_STORE",
-      depositStatus: "NOT_REQUIRED",
-      depositRequiredPence: 0,
-      ...(targetStatus === "CLOSED"
-        ? {
-            closedAt: new Date(),
-            completedAt: new Date(),
-          }
-        : targetStatus === "COLLECTED"
+  const requestedLocationId = normalizeOptionalText(input.locationId);
+  const job = await prisma.$transaction(async (tx) => {
+    const location = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
+    return tx.workshopJob.create({
+      data: {
+        locationId: location.id,
+        customerName,
+        bikeDescription,
+        notes,
+        status: toWorkshopJobStatus(targetStatus),
+        source: "IN_STORE",
+        depositStatus: "NOT_REQUIRED",
+        depositRequiredPence: 0,
+        ...(targetStatus === "CLOSED"
           ? {
+              closedAt: new Date(),
               completedAt: new Date(),
             }
-          : {}),
-    },
+          : targetStatus === "COLLECTED"
+            ? {
+                completedAt: new Date(),
+              }
+            : {}),
+      },
+    });
   });
 
   return toJobResponse(job);
@@ -432,12 +448,14 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
 
 export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {
   const q = normalizeOptionalText(filters.q);
+  const locationId = normalizeOptionalText(filters.locationId);
   const take = normalizeTake(filters.take);
   const skip = normalizeSkip(filters.skip);
   const requestedStatus = filters.status ? parseWorkflowStatus(filters.status) : undefined;
 
   const jobs = await prisma.workshopJob.findMany({
     where: {
+      ...(locationId ? { locationId } : {}),
       ...(requestedStatus === "CLOSED"
         ? { closedAt: { not: null } }
         : requestedStatus
@@ -996,6 +1014,7 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
         await tx.inventoryMovement.create({
           data: {
             variantId,
+            locationId: job.locationId,
             type: "WORKSHOP_USE",
             quantity: -line.qty,
             referenceType: "WORKSHOP_JOB_LINE",

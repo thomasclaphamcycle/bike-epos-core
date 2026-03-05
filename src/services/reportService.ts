@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getPaymentsReportRows } from "./paymentIntentService";
@@ -115,9 +116,33 @@ const assertLocationIdOrThrow = async (locationId?: string) => {
   return locationId;
 };
 
-export const getSalesDailyReport = async (from?: string, to?: string) => {
+const assertBusinessLocationIdOrThrow = async (locationId?: string) => {
+  if (!locationId) {
+    return undefined;
+  }
+
+  const normalized = locationId.trim();
+  if (!normalized) {
+    throw new HttpError(400, "locationId must be provided", "INVALID_LOCATION_ID");
+  }
+
+  const location = await prisma.location.findUnique({
+    where: { id: normalized },
+    select: { id: true },
+  });
+  if (!location) {
+    throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+  }
+  return normalized;
+};
+
+export const getSalesDailyReport = async (from?: string, to?: string, locationId?: string) => {
   const range = getDateRangeOrThrow(from, to);
+  const resolvedLocationId = await assertBusinessLocationIdOrThrow(locationId);
   const days = listDateKeys(range.from, range.to);
+  const salesLocationFilter = resolvedLocationId
+    ? Prisma.sql`AND s."locationId" = ${resolvedLocationId}`
+    : Prisma.empty;
 
   const salesRows = await prisma.$queryRaw<
     Array<{ date: string; saleCount: number; grossPence: number }>
@@ -128,6 +153,7 @@ export const getSalesDailyReport = async (from?: string, to?: string) => {
       COALESCE(SUM(s."totalPence"), 0)::bigint AS "grossPence"
     FROM "Sale" s
     WHERE (s."createdAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      ${salesLocationFilter}
     GROUP BY "date"
     ORDER BY "date" ASC
   `;
@@ -179,9 +205,13 @@ export const getSalesDailyReport = async (from?: string, to?: string) => {
   });
 };
 
-export const getWorkshopDailyReport = async (from?: string, to?: string) => {
+export const getWorkshopDailyReport = async (from?: string, to?: string, locationId?: string) => {
   const range = getDateRangeOrThrow(from, to);
+  const resolvedLocationId = await assertBusinessLocationIdOrThrow(locationId);
   const days = listDateKeys(range.from, range.to);
+  const workshopLocationFilter = resolvedLocationId
+    ? Prisma.sql`AND w."locationId" = ${resolvedLocationId}`
+    : Prisma.empty;
 
   const rows = await prisma.$queryRaw<Array<{ date: string; jobCount: number; revenuePence: number }>>`
     SELECT
@@ -194,6 +224,7 @@ export const getWorkshopDailyReport = async (from?: string, to?: string) => {
       w.status = 'COMPLETED'
       AND w."completedAt" IS NOT NULL
       AND (w."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      ${workshopLocationFilter}
     GROUP BY "date"
     ORDER BY "date" ASC
   `;

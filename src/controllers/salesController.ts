@@ -12,6 +12,7 @@ import {
 } from "../services/salesService";
 import { HttpError } from "../utils/http";
 import { getRequestStaffActorId } from "../middleware/staffRole";
+import { resolveRequestLocation } from "../services/locationService";
 
 export const getSaleHandler = async (req: Request, res: Response) => {
   const result = await getSaleById(req.params.id);
@@ -23,7 +24,8 @@ export const listSalesHandler = async (req: Request, res: Response) => {
     typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-  const result = await listSales({ from, to });
+  const location = await resolveRequestLocation(req);
+  const result = await listSales({ from, to, locationId: location.id });
   res.json(result);
 };
 

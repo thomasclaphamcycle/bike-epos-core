@@ -1,6 +1,7 @@
 import { Prisma, StocktakeStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 
 type CreateStocktakeInput = {
   locationId?: string;
@@ -469,6 +470,7 @@ export const postStocktake = async (stocktakeId: string, createdByStaffId?: stri
 
     const variantIds = lines.map((line) => line.variantId);
     const onHandByVariant = await buildOnHandPreviewMapTx(tx, locked.locationId, variantIds);
+    const inventoryLocation = await ensureDefaultLocationTx(tx);
 
     for (const line of lines) {
       const currentOnHand = onHandByVariant.get(line.variantId) ?? 0;
@@ -492,6 +494,7 @@ export const postStocktake = async (stocktakeId: string, createdByStaffId?: stri
         await tx.inventoryMovement.create({
           data: {
             variantId: line.variantId,
+            locationId: inventoryLocation.id,
             type: "ADJUSTMENT",
             quantity: deltaNeeded,
             referenceType: "STOCKTAKE_LINE",

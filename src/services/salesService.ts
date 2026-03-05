@@ -1,6 +1,7 @@
 import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 import {
   recordCashRefundMovementForPaymentTx,
   recordCashSaleMovementForSaleTx,
@@ -157,6 +158,7 @@ const toSaleResponse = async (saleId: string) => {
     sale: {
       id: sale.id,
       basketId: sale.basketId,
+      locationId: sale.locationId,
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
@@ -731,11 +733,13 @@ export const checkoutBasketToSale = async (
   basketId: string,
   paymentInput: CheckoutPaymentInput,
   createdByStaffId?: string,
+  locationId?: string,
 ) => {
   if (!isUuid(basketId)) {
     throw new HttpError(400, "Invalid basket id", "INVALID_BASKET_ID");
   }
   const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
+  const requestedLocationId = normalizeOptionalText(locationId);
 
   const txResult = await prisma.$transaction(async (tx) => {
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
@@ -771,9 +775,17 @@ export const checkoutBasketToSale = async (
 
     const payment = validateCheckoutPayment(paymentInput, totalPence);
 
+    const saleLocation = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!saleLocation) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
     const sale = await tx.sale.create({
       data: {
         basketId: basket.id,
+        locationId: saleLocation.id,
         subtotalPence,
         taxPence,
         totalPence,
@@ -808,6 +820,7 @@ export const checkoutBasketToSale = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: saleLocation.id,
           type: "SALE",
           quantity: -item.quantity,
           referenceType: "SALE_ITEM",
@@ -997,6 +1010,7 @@ export const createSaleReturn = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: sale.locationId,
           type: "RETURN",
           quantity: item.quantity,
           referenceType: "SALE_RETURN_ITEM",
@@ -1114,7 +1128,11 @@ export const attachCustomerToSale = async (
   return toSaleResponse(saleId);
 };
 
-export const listSales = async ({ from, to }: DateRangeInput) => {
+export const listSales = async ({
+  from,
+  to,
+  locationId,
+}: DateRangeInput & { locationId?: string }) => {
   const createdAt: Prisma.DateTimeFilter = {};
 
   if (from) {
@@ -1130,6 +1148,9 @@ export const listSales = async ({ from, to }: DateRangeInput) => {
   const where: Prisma.SaleWhereInput = {};
   if (Object.keys(createdAt).length > 0) {
     where.createdAt = createdAt;
+  }
+  if (locationId) {
+    where.locationId = locationId;
   }
 
   const sales = await prisma.sale.findMany({

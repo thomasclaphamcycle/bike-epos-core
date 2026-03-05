@@ -7,30 +7,33 @@ datasource db {
 }
 
 model Location {
-  id        String   @id @default(cuid())
-  name      String
-  code      String?  @unique
-  isActive  Boolean  @default(true)
+  id       String  @id @default(cuid())
+  name     String
+  code     String? @unique
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stockBalances StockBalance[]
-  stockMovesFrom StockMovement[] @relation("StockFrom")
-  stockMovesTo   StockMovement[] @relation("StockTo")
+  stockBalances      StockBalance[]
+  stockMovesFrom     StockMovement[]     @relation("StockFrom")
+  stockMovesTo       StockMovement[]     @relation("StockTo")
+  inventoryMovements InventoryMovement[]
+  sales              Sale[]
+  workshopJobs       WorkshopJob[]
 }
 
 model Product {
-  id        String   @id @default(cuid())
-  name      String
-  brand     String?
+  id          String  @id @default(cuid())
+  name        String
+  brand       String?
   description String?
-  isActive  Boolean  @default(true)
+  isActive    Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  variants Variant[]
+  variants      Variant[]
   workshopLines WorkshopJobLine[]
 }
 
@@ -68,8 +71,8 @@ model PurchaseOrder {
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
-  supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  items      PurchaseOrderItem[]
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    PurchaseOrderItem[]
 
   @@index([supplierId])
   @@index([status, createdAt])
@@ -85,8 +88,8 @@ model PurchaseOrderItem {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  variant          Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  variant       Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
   @@unique([purchaseOrderId, variantId])
   @@index([purchaseOrderId, createdAt])
@@ -94,46 +97,46 @@ model PurchaseOrderItem {
 }
 
 model Variant {
-  id        String   @id @default(cuid())
-  productId String
-  sku       String   @unique
-  barcode   String?  @unique
-  name      String?
-  option    String?
+  id               String  @id @default(cuid())
+  productId        String
+  sku              String  @unique
+  barcode          String? @unique
+  name             String?
+  option           String?
   retailPrice      Decimal @default(0) @db.Decimal(12, 2)
-  retailPricePence Int @default(0)
-  costPricePence  Int?
-  taxCode   String?
-  isActive  Boolean @default(true)
+  retailPricePence Int     @default(0)
+  costPricePence   Int?
+  taxCode          String?
+  isActive         Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  product   Product @relation(fields: [productId], references: [id])
-  barcodes  Barcode[]
-  balances  StockBalance[]
-  movements StockMovement[]
-  basketItems BasketItem[]
-  saleItems SaleItem[]
+  product            Product             @relation(fields: [productId], references: [id])
+  barcodes           Barcode[]
+  balances           StockBalance[]
+  movements          StockMovement[]
+  basketItems        BasketItem[]
+  saleItems          SaleItem[]
   inventoryMovements InventoryMovement[]
   stockLedgerEntries StockLedgerEntry[]
-  workshopParts WorkshopJobPart[]
+  workshopParts      WorkshopJobPart[]
   purchaseOrderItems PurchaseOrderItem[]
   stocktakeLines     StocktakeLine[]
   workshopLines      WorkshopJobLine[]
 }
 
 model Barcode {
-  id        String  @id @default(cuid())
+  id        String      @id @default(cuid())
   variantId String
-  code      String  @unique
+  code      String      @unique
   type      BarcodeType @default(EAN)
-  isPrimary Boolean @default(false)
-  packQty   Int     @default(1)
+  isPrimary Boolean     @default(false)
+  packQty   Int         @default(1)
 
   createdAt DateTime @default(now())
 
-  variant   Variant @relation(fields: [variantId], references: [id])
+  variant Variant @relation(fields: [variantId], references: [id])
 }
 
 enum BarcodeType {
@@ -147,27 +150,27 @@ model StockBalance {
   locationId String
   onHand     Int    @default(0)
 
-  updatedAt  DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
-  variant   Variant  @relation(fields: [variantId], references: [id])
-  location  Location @relation(fields: [locationId], references: [id])
+  variant  Variant  @relation(fields: [variantId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
 
   @@unique([variantId, locationId])
 }
 
 model StockMovement {
-  id             String @id @default(cuid())
+  id             String          @id @default(cuid())
   variantId      String
   qty            Int
   fromLocationId String?
   toLocationId   String?
   reason         StockMoveReason
   notes          String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime        @default(now())
 
-  variant       Variant   @relation(fields: [variantId], references: [id])
-  fromLocation  Location? @relation("StockFrom", fields: [fromLocationId], references: [id])
-  toLocation    Location? @relation("StockTo", fields: [toLocationId], references: [id])
+  variant      Variant   @relation(fields: [variantId], references: [id])
+  fromLocation Location? @relation("StockFrom", fields: [fromLocationId], references: [id])
+  toLocation   Location? @relation("StockTo", fields: [toLocationId], references: [id])
 }
 
 enum StockMoveReason {
@@ -203,21 +206,21 @@ enum StockLedgerEntryType {
 }
 
 model StockLedgerEntry {
-  id               String              @id @default(uuid()) @db.Uuid
+  id               String               @id @default(uuid()) @db.Uuid
   variantId        String
-  locationId       String              @db.Uuid
+  locationId       String               @db.Uuid
   type             StockLedgerEntryType
   quantityDelta    Int
   unitCostPence    Int?
   referenceType    String
   referenceId      String
   note             String?
-  createdAt        DateTime            @default(now())
+  createdAt        DateTime             @default(now())
   createdByStaffId String?
 
-  variant          Variant             @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  location         StockLocation       @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  createdByStaff   User?               @relation("StockLedgerEntryCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  variant        Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location       StockLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdByStaff User?         @relation("StockLedgerEntryCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   @@index([variantId, locationId, createdAt])
   @@index([referenceType, referenceId])
@@ -240,22 +243,22 @@ model Stocktake {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
-  location   StockLocation   @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  lines      StocktakeLine[]
+  location StockLocation   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines    StocktakeLine[]
 
   @@index([locationId, status])
 }
 
 model StocktakeLine {
-  id         String    @id @default(uuid()) @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
   stocktakeId String   @db.Uuid
-  variantId  String
-  countedQty Int
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  variantId   String
+  countedQty  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  stocktake  Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
-  variant    Variant   @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  variant   Variant   @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
   @@unique([stocktakeId, variantId])
 }
@@ -272,21 +275,21 @@ model Basket {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  items     BasketItem[]
-  sale      Sale?
+  items BasketItem[]
+  sale  Sale?
 }
 
 model BasketItem {
-  id         String   @id @default(uuid()) @db.Uuid
-  basketId   String   @db.Uuid
-  variantId  String
-  quantity   Int
-  unitPrice  Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  basketId  String   @db.Uuid
+  variantId String
+  quantity  Int
+  unitPrice Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  basket     Basket  @relation(fields: [basketId], references: [id], onDelete: Cascade)
-  variant    Variant @relation(fields: [variantId], references: [id])
+  basket  Basket  @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  variant Variant @relation(fields: [variantId], references: [id])
 
   @@unique([basketId, variantId])
 }
@@ -340,50 +343,53 @@ enum PaymentIntentStatus {
 }
 
 model Sale {
-  id            String   @id @default(uuid()) @db.Uuid
-  basketId      String?  @unique @db.Uuid
-  workshopJobId String?  @unique @db.Uuid
-  customerId    String?  @db.Uuid
-  subtotalPence Int
-  taxPence      Int
-  totalPence    Int
-  changeDuePence Int @default(0)
-  createdAt     DateTime @default(now())
-  completedAt   DateTime?
-  receiptNumber String?  @unique
+  id               String    @id @default(uuid()) @db.Uuid
+  basketId         String?   @unique @db.Uuid
+  workshopJobId    String?   @unique @db.Uuid
+  customerId       String?   @db.Uuid
+  locationId       String
+  subtotalPence    Int
+  taxPence         Int
+  totalPence       Int
+  changeDuePence   Int       @default(0)
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+  receiptNumber    String?   @unique
   createdByStaffId String?
 
-  basket        Basket?  @relation(fields: [basketId], references: [id], onDelete: SetNull)
-  workshopJob   WorkshopJob? @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
-  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  createdByStaff User?   @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  items         SaleItem[]
-  payments      Payment[]
-  tenders       SaleTender[]
-  receipt       Receipt?
+  basket         Basket?         @relation(fields: [basketId], references: [id], onDelete: SetNull)
+  workshopJob    WorkshopJob?    @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  location       Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdByStaff User?           @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  items          SaleItem[]
+  payments       Payment[]
+  tenders        SaleTender[]
+  receipt        Receipt?
   paymentIntents PaymentIntent[]
-  returns       SaleReturn[]
-  refunds       Refund[]
-  cashMovements CashMovement[] @relation("CashMovementSale")
+  returns        SaleReturn[]
+  refunds        Refund[]
+  cashMovements  CashMovement[]  @relation("CashMovementSale")
 
   @@index([customerId])
   @@index([workshopJobId])
+  @@index([locationId])
   @@index([completedAt])
   @@index([createdByStaffId])
 }
 
 model SaleItem {
-  id             String   @id @default(uuid()) @db.Uuid
-  saleId         String   @db.Uuid
+  id             String @id @default(uuid()) @db.Uuid
+  saleId         String @db.Uuid
   variantId      String
   quantity       Int
   unitPricePence Int
   lineTotalPence Int
 
-  sale           Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  variant        Variant @relation(fields: [variantId], references: [id])
-  returnItems    SaleReturnItem[]
-  refundLines    RefundLine[]
+  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant     Variant          @relation(fields: [variantId], references: [id])
+  returnItems SaleReturnItem[]
+  refundLines RefundLine[]
 }
 
 model SaleTender {
@@ -394,8 +400,8 @@ model SaleTender {
   createdAt        DateTime         @default(now())
   createdByStaffId String?
 
-  sale             Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  createdByStaff   User?            @relation("SaleTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  sale           Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdByStaff User? @relation("SaleTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   @@index([saleId, createdAt])
   @@index([createdByStaffId])
@@ -429,34 +435,34 @@ model Receipt {
   vatNumber       String?
   footerText      String?
 
-  sale            Sale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  refund          PaymentRefund? @relation(fields: [refundId], references: [id], onDelete: SetNull)
-  saleRefund      Refund?      @relation("SaleRefundReceipt", fields: [saleRefundId], references: [id], onDelete: SetNull)
-  issuedByStaff   User?        @relation("ReceiptIssuedByStaff", fields: [issuedByStaffId], references: [id], onDelete: SetNull)
+  sale          Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  refund        PaymentRefund? @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  saleRefund    Refund?        @relation("SaleRefundReceipt", fields: [saleRefundId], references: [id], onDelete: SetNull)
+  issuedByStaff User?          @relation("ReceiptIssuedByStaff", fields: [issuedByStaffId], references: [id], onDelete: SetNull)
 
   @@index([issuedAt])
   @@index([issuedByStaffId])
 }
 
 model Refund {
-  id               String            @id @default(uuid()) @db.Uuid
-  saleId           String            @db.Uuid
+  id               String             @id @default(uuid()) @db.Uuid
+  saleId           String             @db.Uuid
   status           RefundRecordStatus @default(DRAFT)
-  currency         String            @default("GBP")
-  subtotalPence    Int               @default(0)
-  taxPence         Int               @default(0)
-  totalPence       Int               @default(0)
+  currency         String             @default("GBP")
+  subtotalPence    Int                @default(0)
+  taxPence         Int                @default(0)
+  totalPence       Int                @default(0)
   createdByStaffId String?
   completedAt      DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
-  sale             Sale              @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  createdByStaff   User?             @relation("RefundCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  lines            RefundLine[]
-  tenders          RefundTender[]
-  receipt          Receipt?          @relation("SaleRefundReceipt")
-  cashMovements    CashMovement[]    @relation("CashMovementRefund")
+  sale           Sale           @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  createdByStaff User?          @relation("RefundCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  lines          RefundLine[]
+  tenders        RefundTender[]
+  receipt        Receipt?       @relation("SaleRefundReceipt")
+  cashMovements  CashMovement[] @relation("CashMovementRefund")
 
   @@index([saleId, createdAt])
   @@index([status, createdAt])
@@ -473,8 +479,8 @@ model RefundLine {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  refund         Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
-  saleLine       SaleItem @relation(fields: [saleLineId], references: [id], onDelete: Restrict)
+  refund   Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  saleLine SaleItem @relation(fields: [saleLineId], references: [id], onDelete: Restrict)
 
   @@unique([refundId, saleLineId])
   @@index([saleLineId])
@@ -489,29 +495,29 @@ model RefundTender {
   createdAt        DateTime         @default(now())
   createdByStaffId String?
 
-  refund           Refund           @relation(fields: [refundId], references: [id], onDelete: Cascade)
-  createdByStaff   User?            @relation("RefundTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  refund         Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  createdByStaff User?  @relation("RefundTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   @@index([refundId, createdAt])
   @@index([createdByStaffId])
 }
 
 model Payment {
-  id                String         @id @default(uuid()) @db.Uuid
-  saleId            String?        @db.Uuid
-  workshopJobId     String?        @db.Uuid
-  method            PaymentMethod
-  purpose           PaymentPurpose @default(FINAL)
-  status            PaymentStatus  @default(COMPLETED)
-  amountPence       Int
-  refundedTotalPence Int           @default(0)
-  providerRef       String?
-  createdAt         DateTime       @default(now())
+  id                 String         @id @default(uuid()) @db.Uuid
+  saleId             String?        @db.Uuid
+  workshopJobId      String?        @db.Uuid
+  method             PaymentMethod
+  purpose            PaymentPurpose @default(FINAL)
+  status             PaymentStatus  @default(COMPLETED)
+  amountPence        Int
+  refundedTotalPence Int            @default(0)
+  providerRef        String?
+  createdAt          DateTime       @default(now())
 
-  sale              Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  workshopJob       WorkshopJob?   @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
-  refunds           PaymentRefund[]
-  creditEntries     CreditLedgerEntry[]
+  sale          Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  workshopJob   WorkshopJob?        @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  refunds       PaymentRefund[]
+  creditEntries CreditLedgerEntry[]
 
   @@index([workshopJobId])
   @@index([purpose, createdAt])
@@ -527,7 +533,7 @@ model PaymentIntent {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  sale        Sale                @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId, createdAt])
   @@index([provider, status, createdAt])
@@ -550,12 +556,12 @@ model PaymentRefund {
   idempotencyKey    String?
   createdAt         DateTime     @default(now())
 
-  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  cancellations     WorkshopCancellation[]
-  receipt           Receipt?
+  payment       Payment                @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  cancellations WorkshopCancellation[]
+  receipt       Receipt?
 
-  @@index([paymentId, createdAt])
   @@unique([paymentId, idempotencyKey])
+  @@index([paymentId, createdAt])
 }
 
 enum InventoryMovementType {
@@ -569,6 +575,7 @@ enum InventoryMovementType {
 model InventoryMovement {
   id               String                @id @default(cuid())
   variantId        String
+  locationId       String
   type             InventoryMovementType
   quantity         Int
   unitCost         Decimal?              @db.Decimal(14, 4)
@@ -578,9 +585,11 @@ model InventoryMovement {
   createdByStaffId String?
   createdAt        DateTime              @default(now())
 
-  variant          Variant               @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  variant  Variant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
 
   @@index([variantId])
+  @@index([locationId])
   @@index([type])
   @@index([createdAt])
 }
@@ -590,21 +599,21 @@ model SaleReturn {
   saleId    String   @db.Uuid
   createdAt DateTime @default(now())
 
-  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  items     SaleReturnItem[]
+  sale  Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  items SaleReturnItem[]
 }
 
 model SaleReturnItem {
-  id             String     @id @default(uuid()) @db.Uuid
-  returnId       String     @db.Uuid
-  saleItemId     String     @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
+  returnId       String   @db.Uuid
+  saleItemId     String   @db.Uuid
   quantity       Int
   unitPricePence Int
   lineTotalPence Int
-  createdAt      DateTime   @default(now())
+  createdAt      DateTime @default(now())
 
-  saleReturn     SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  saleItem       SaleItem   @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleItem   SaleItem   @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
 
   @@index([saleItemId])
 }
@@ -620,8 +629,8 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sales     Sale[]
-  workshopJobs WorkshopJob[]
+  sales          Sale[]
+  workshopJobs   WorkshopJob[]
   creditAccounts CreditAccount[]
 
   @@index([name])
@@ -659,29 +668,31 @@ enum CancellationOutcome {
 }
 
 model WorkshopJob {
-  id            String            @id @default(uuid()) @db.Uuid
-  customerId    String?           @db.Uuid
-  customerName  String?
-  bikeDescription String?
-  assignedStaffId String?
-  assignedStaffName String?
-  status        WorkshopJobStatus @default(BOOKING_MADE)
-  scheduledDate DateTime?
-  source        WorkshopJobSource @default(IN_STORE)
-  depositRequiredPence Int        @default(0)
-  depositStatus WorkshopDepositStatus @default(NOT_REQUIRED)
-  manageToken   String?           @unique
+  id                   String                @id @default(uuid()) @db.Uuid
+  customerId           String?               @db.Uuid
+  locationId           String
+  customerName         String?
+  bikeDescription      String?
+  assignedStaffId      String?
+  assignedStaffName    String?
+  status               WorkshopJobStatus     @default(BOOKING_MADE)
+  scheduledDate        DateTime?
+  source               WorkshopJobSource     @default(IN_STORE)
+  depositRequiredPence Int                   @default(0)
+  depositStatus        WorkshopDepositStatus @default(NOT_REQUIRED)
+  manageToken          String?               @unique
   manageTokenExpiresAt DateTime?
-  cancelledAt   DateTime?
-  completedAt   DateTime?
-  closedAt      DateTime?
-  finalizedBasketId String?       @db.Uuid
-  notes         String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  cancelledAt          DateTime?
+  completedAt          DateTime?
+  closedAt             DateTime?
+  finalizedBasketId    String?               @db.Uuid
+  notes                String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
-  customer      Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  assignedStaff User?             @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  customer      Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  location      Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  assignedStaff User?                  @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
   sale          Sale?
   payments      Payment[]
   cancellations WorkshopCancellation[]
@@ -690,6 +701,7 @@ model WorkshopJob {
   lines         WorkshopJobLine[]
 
   @@index([scheduledDate])
+  @@index([locationId])
   @@index([status])
   @@index([status, completedAt])
   @@index([assignedStaffId])
@@ -703,18 +715,18 @@ enum WorkshopJobPartStatus {
 }
 
 model WorkshopJobPart {
-  id               String                @id @default(uuid()) @db.Uuid
-  workshopJobId    String                @db.Uuid
-  variantId        String
-  quantity         Int
-  unitPriceAtTime  Int
-  costPriceAtTime  Int?
-  status           WorkshopJobPartStatus @default(PLANNED)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id              String                @id @default(uuid()) @db.Uuid
+  workshopJobId   String                @db.Uuid
+  variantId       String
+  quantity        Int
+  unitPriceAtTime Int
+  costPriceAtTime Int?
+  status          WorkshopJobPartStatus @default(PLANNED)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
-  workshopJob      WorkshopJob           @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
-  variant          Variant               @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  workshopJob WorkshopJob @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  variant     Variant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
   @@index([workshopJobId, createdAt])
   @@index([variantId])
@@ -726,20 +738,20 @@ enum WorkshopJobLineType {
 }
 
 model WorkshopJobLine {
-  id            String              @id @default(uuid()) @db.Uuid
-  jobId         String              @db.Uuid
-  type          WorkshopJobLineType
-  productId     String?
-  variantId     String?
-  description   String
-  qty           Int
+  id             String              @id @default(uuid()) @db.Uuid
+  jobId          String              @db.Uuid
+  type           WorkshopJobLineType
+  productId      String?
+  variantId      String?
+  description    String
+  qty            Int
   unitPricePence Int
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  job           WorkshopJob         @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  product       Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
-  variant       Variant?            @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  job     WorkshopJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  product Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant Variant?    @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([jobId, createdAt])
   @@index([type])
@@ -760,23 +772,23 @@ model WorkshopJobNote {
   note          String
   createdAt     DateTime                  @default(now())
 
-  workshopJob   WorkshopJob               @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
-  authorStaff   User?                     @relation("WorkshopJobNoteAuthor", fields: [authorStaffId], references: [id], onDelete: SetNull)
+  workshopJob WorkshopJob @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  authorStaff User?       @relation("WorkshopJobNoteAuthor", fields: [authorStaffId], references: [id], onDelete: SetNull)
 
   @@index([workshopJobId, createdAt])
   @@index([authorStaffId])
 }
 
 model CreditAccount {
-  id          String   @id @default(uuid()) @db.Uuid
-  customerId  String?  @db.Uuid
-  email       String?
-  phone       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String?  @db.Uuid
+  email      String?
+  phone      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  entries     CreditLedgerEntry[]
+  customer      Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  entries       CreditLedgerEntry[]
   cancellations WorkshopCancellation[]
 
   @@unique([customerId])
@@ -786,52 +798,52 @@ model CreditAccount {
 }
 
 model CreditLedgerEntry {
-  id             String   @id @default(uuid()) @db.Uuid
-  creditAccountId String  @db.Uuid
-  paymentId      String?  @db.Uuid
-  amountPence    Int
-  sourceType     String
-  sourceRef      String
-  idempotencyKey String?
-  notes          String?
-  createdAt      DateTime @default(now())
+  id              String   @id @default(uuid()) @db.Uuid
+  creditAccountId String   @db.Uuid
+  paymentId       String?  @db.Uuid
+  amountPence     Int
+  sourceType      String
+  sourceRef       String
+  idempotencyKey  String?
+  notes           String?
+  createdAt       DateTime @default(now())
 
-  creditAccount  CreditAccount @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
-  payment        Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  cancellations  WorkshopCancellation[]
+  creditAccount CreditAccount          @relation(fields: [creditAccountId], references: [id], onDelete: Cascade)
+  payment       Payment?               @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  cancellations WorkshopCancellation[]
 
-  @@index([creditAccountId, createdAt])
-  @@index([sourceType, sourceRef])
   @@unique([creditAccountId, idempotencyKey])
   @@unique([creditAccountId, sourceType, sourceRef, amountPence])
+  @@index([creditAccountId, createdAt])
+  @@index([sourceType, sourceRef])
 }
 
 model WorkshopCancellation {
-  id                String              @id @default(uuid()) @db.Uuid
-  workshopJobId     String              @unique @db.Uuid
-  outcome           CancellationOutcome
-  notes             String?
-  paymentRefundId   String?             @db.Uuid
-  creditAccountId   String?             @db.Uuid
-  creditLedgerEntryId String?           @db.Uuid
-  cancelledAt       DateTime            @default(now())
-  createdAt         DateTime            @default(now())
+  id                  String              @id @default(uuid()) @db.Uuid
+  workshopJobId       String              @unique @db.Uuid
+  outcome             CancellationOutcome
+  notes               String?
+  paymentRefundId     String?             @db.Uuid
+  creditAccountId     String?             @db.Uuid
+  creditLedgerEntryId String?             @db.Uuid
+  cancelledAt         DateTime            @default(now())
+  createdAt           DateTime            @default(now())
 
-  workshopJob       WorkshopJob         @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
-  paymentRefund     PaymentRefund?      @relation(fields: [paymentRefundId], references: [id], onDelete: SetNull)
-  creditAccount     CreditAccount?      @relation(fields: [creditAccountId], references: [id], onDelete: SetNull)
-  creditLedgerEntry CreditLedgerEntry?  @relation(fields: [creditLedgerEntryId], references: [id], onDelete: SetNull)
+  workshopJob       WorkshopJob        @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  paymentRefund     PaymentRefund?     @relation(fields: [paymentRefundId], references: [id], onDelete: SetNull)
+  creditAccount     CreditAccount?     @relation(fields: [creditAccountId], references: [id], onDelete: SetNull)
+  creditLedgerEntry CreditLedgerEntry? @relation(fields: [creditLedgerEntryId], references: [id], onDelete: SetNull)
 
   @@index([cancelledAt])
   @@index([outcome, cancelledAt])
 }
 
 model BookingSettings {
-  id              Int      @id @default(1)
-  minBookableDate DateTime
-  maxBookingsPerDay Int
-  defaultDepositPence Int @default(1000)
-  updatedAt       DateTime @updatedAt
+  id                  Int      @id @default(1)
+  minBookableDate     DateTime
+  maxBookingsPerDay   Int
+  defaultDepositPence Int      @default(1000)
+  updatedAt           DateTime @updatedAt
 }
 
 model AuditEvent {
@@ -864,21 +876,21 @@ model User {
   role         UserRole @default(STAFF)
   isActive     Boolean  @default(true)
 
-  assignedWorkshopJobs WorkshopJob[]    @relation("WorkshopJobAssignedStaff")
-  workshopJobNotes     WorkshopJobNote[] @relation("WorkshopJobNoteAuthor")
+  assignedWorkshopJobs WorkshopJob[]      @relation("WorkshopJobAssignedStaff")
+  workshopJobNotes     WorkshopJobNote[]  @relation("WorkshopJobNoteAuthor")
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
-  createdSales         Sale[] @relation("SaleCreatedByStaff")
-  saleTenders          SaleTender[] @relation("SaleTenderCreatedByStaff")
-  createdRefunds       Refund[] @relation("RefundCreatedByStaff")
-  refundTenders        RefundTender[] @relation("RefundTenderCreatedByStaff")
-  issuedReceipts       Receipt[] @relation("ReceiptIssuedByStaff")
-  openedCashSessions   CashSession[] @relation("CashSessionOpenedBy")
-  closedCashSessions   CashSession[] @relation("CashSessionClosedBy")
-  cashMovements        CashMovement[] @relation("CashMovementCreatedBy")
-  cashCounts           CashCount[] @relation("CashCountCountedBy")
+  createdSales         Sale[]             @relation("SaleCreatedByStaff")
+  saleTenders          SaleTender[]       @relation("SaleTenderCreatedByStaff")
+  createdRefunds       Refund[]           @relation("RefundCreatedByStaff")
+  refundTenders        RefundTender[]     @relation("RefundTenderCreatedByStaff")
+  issuedReceipts       Receipt[]          @relation("ReceiptIssuedByStaff")
+  openedCashSessions   CashSession[]      @relation("CashSessionOpenedBy")
+  closedCashSessions   CashSession[]      @relation("CashSessionClosedBy")
+  cashMovements        CashMovement[]     @relation("CashMovementCreatedBy")
+  cashCounts           CashCount[]        @relation("CashCountCountedBy")
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("app_user")
 }
@@ -897,21 +909,21 @@ enum CashMovementType {
 }
 
 model CashSession {
-  id               String            @id @default(uuid()) @db.Uuid
-  businessDate     DateTime
-  openedAt         DateTime          @default(now())
-  closedAt         DateTime?
-  openedByStaffId  String?
-  closedByStaffId  String?
+  id                String            @id @default(uuid()) @db.Uuid
+  businessDate      DateTime
+  openedAt          DateTime          @default(now())
+  closedAt          DateTime?
+  openedByStaffId   String?
+  closedByStaffId   String?
   openingFloatPence Int
-  status           CashSessionStatus @default(OPEN)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  status            CashSessionStatus @default(OPEN)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  openedByStaff    User?             @relation("CashSessionOpenedBy", fields: [openedByStaffId], references: [id], onDelete: SetNull)
-  closedByStaff    User?             @relation("CashSessionClosedBy", fields: [closedByStaffId], references: [id], onDelete: SetNull)
-  movements        CashMovement[]
-  cashCount        CashCount?
+  openedByStaff User?          @relation("CashSessionOpenedBy", fields: [openedByStaffId], references: [id], onDelete: SetNull)
+  closedByStaff User?          @relation("CashSessionClosedBy", fields: [closedByStaffId], references: [id], onDelete: SetNull)
+  movements     CashMovement[]
+  cashCount     CashCount?
 
   @@index([businessDate, status])
   @@index([openedByStaffId])
@@ -931,30 +943,30 @@ model CashMovement {
   createdAt        DateTime         @default(now())
   createdByStaffId String?
 
-  session          CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  relatedSale      Sale?            @relation("CashMovementSale", fields: [relatedSaleId], references: [id], onDelete: SetNull)
-  relatedRefund    Refund?          @relation("CashMovementRefund", fields: [relatedRefundId], references: [id], onDelete: SetNull)
-  createdByStaff   User?            @relation("CashMovementCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  session        CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  relatedSale    Sale?       @relation("CashMovementSale", fields: [relatedSaleId], references: [id], onDelete: SetNull)
+  relatedRefund  Refund?     @relation("CashMovementRefund", fields: [relatedRefundId], references: [id], onDelete: SetNull)
+  createdByStaff User?       @relation("CashMovementCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
+  @@unique([sessionId, type, ref])
   @@index([sessionId, createdAt])
   @@index([locationId, createdAt])
   @@index([type, createdAt])
   @@index([relatedSaleId])
   @@index([relatedRefundId])
   @@index([createdByStaffId])
-  @@unique([sessionId, type, ref])
 }
 
 model CashCount {
-  id               String      @id @default(uuid()) @db.Uuid
-  sessionId        String      @unique @db.Uuid
+  id               String   @id @default(uuid()) @db.Uuid
+  sessionId        String   @unique @db.Uuid
   countedCashPence Int
   notes            String?
-  countedAt        DateTime    @default(now())
+  countedAt        DateTime @default(now())
   countedByStaffId String?
 
-  session          CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  countedByStaff   User?       @relation("CashCountCountedBy", fields: [countedByStaffId], references: [id], onDelete: SetNull)
+  session        CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  countedByStaff User?       @relation("CashCountCountedBy", fields: [countedByStaffId], references: [id], onDelete: SetNull)
 
   @@index([countedAt])
   @@index([countedByStaffId])

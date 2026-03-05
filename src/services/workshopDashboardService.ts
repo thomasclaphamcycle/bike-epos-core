@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 
 type WorkshopDashboardInput = {
+  locationId?: string;
   status?: string;
   source?: string;
   from?: string;
@@ -149,6 +150,7 @@ const getUtcDayBounds = () => {
 };
 
 const buildDashboardWhere = (input: {
+  locationId?: string;
   statuses: WorkshopJobStatus[];
   sources: WorkshopJobSource[];
   fromDate?: Date;
@@ -160,6 +162,9 @@ const buildDashboardWhere = (input: {
   hasNotes?: boolean;
 }): Prisma.WorkshopJobWhereInput => {
   const where: Prisma.WorkshopJobWhereInput = {};
+  if (input.locationId) {
+    where.locationId = input.locationId;
+  }
 
   if (input.statuses.length > 0) {
     where.status = { in: input.statuses };
@@ -209,6 +214,7 @@ const buildDashboardWhere = (input: {
 };
 
 export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
+  const locationId = normalizeText(input.locationId);
   const statuses = parseStatusFilterOrThrow(input.status);
   const sources = parseSourceFilterOrThrow(input.source);
   const search = normalizeText(input.search);
@@ -232,6 +238,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
   }
 
   const where = buildDashboardWhere({
+    locationId,
     statuses,
     sources,
     fromDate,
@@ -352,6 +359,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
 
   return {
     filters: {
+      locationId: locationId ?? null,
       status: statuses,
       source: sources,
       from: from ?? null,
@@ -378,6 +386,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
     },
     jobs: jobs.map((job) => ({
       id: job.id,
+      locationId: job.locationId,
       status: job.status,
       source: job.source,
       scheduledDate: job.scheduledDate,

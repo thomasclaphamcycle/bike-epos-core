@@ -1,10 +1,12 @@
 import { InventoryMovementType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 import { ensureVariantExistsById } from "./productService";
 
 type RecordMovementInput = {
   variantId?: string;
+  locationId?: string;
   type?: InventoryMovementType;
   quantity?: number;
   unitCost?: string | number | null;
@@ -16,6 +18,7 @@ type RecordMovementInput = {
 
 type ListMovementFilters = {
   variantId?: string;
+  locationId?: string;
   from?: string;
   to?: string;
   type?: InventoryMovementType;
@@ -23,6 +26,7 @@ type ListMovementFilters = {
 
 type ListOnHandFilters = {
   q?: string;
+  locationId?: string;
   isActive?: boolean;
   take?: number;
   skip?: number;
@@ -37,6 +41,7 @@ type InventoryAdjustmentReason =
 
 type RecordAdjustmentInput = {
   variantId?: string;
+  locationId?: string;
   quantityDelta?: number;
   reason?: InventoryAdjustmentReason;
   note?: string;
@@ -116,6 +121,7 @@ const parseToDate = (value: string): Date => {
 const toMovementResponse = (movement: {
   id: string;
   variantId: string;
+  locationId: string;
   type: InventoryMovementType;
   quantity: number;
   unitCost: Prisma.Decimal | null;
@@ -127,6 +133,7 @@ const toMovementResponse = (movement: {
 }) => ({
   id: movement.id,
   variantId: movement.variantId,
+  locationId: movement.locationId,
   type: movement.type,
   quantity: movement.quantity,
   unitCost: movement.unitCost === null ? null : movement.unitCost.toString(),
@@ -150,6 +157,7 @@ export const recordMovement = async (input: RecordMovementInput) => {
   if (!variantId) {
     throw new HttpError(400, "variantId is required", "INVALID_INVENTORY_MOVEMENT");
   }
+  const requestedLocationId = normalizeOptionalText(input.locationId);
 
   if (!input.type) {
     throw new HttpError(400, "type is required", "INVALID_INVENTORY_MOVEMENT");
@@ -167,6 +175,12 @@ export const recordMovement = async (input: RecordMovementInput) => {
 
   const movement = await prisma.$transaction(async (tx) => {
     await ensureVariantExistsById(tx, variantId);
+    const location = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
 
     const referenceType = normalizeOptionalText(input.referenceType) ?? null;
     const referenceId = normalizeOptionalText(input.referenceId) ?? null;
@@ -176,6 +190,7 @@ export const recordMovement = async (input: RecordMovementInput) => {
     return tx.inventoryMovement.create({
       data: {
         variantId,
+        locationId: location.id,
         type: input.type,
         quantity: input.quantity,
         unitCost: unitCost === undefined ? null : unitCost,
@@ -192,6 +207,7 @@ export const recordMovement = async (input: RecordMovementInput) => {
 
 export const recordAdjustment = async (input: RecordAdjustmentInput) => {
   const variantId = normalizeOptionalText(input.variantId);
+  const locationId = normalizeOptionalText(input.locationId);
   if (!variantId) {
     throw new HttpError(400, "variantId is required", "INVALID_INVENTORY_ADJUSTMENT");
   }
@@ -212,6 +228,7 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
 
   const movement = await recordMovement({
     variantId,
+    ...(locationId ? { locationId } : {}),
     type: "ADJUSTMENT",
     quantity: input.quantityDelta,
     referenceType: "ADJUSTMENT",
@@ -220,7 +237,7 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
     createdByStaffId: normalizeOptionalText(input.createdByStaffId),
   });
 
-  const onHand = await getOnHand(variantId);
+  const onHand = await getOnHand(variantId, locationId);
 
   return {
     movement: {
@@ -231,36 +248,51 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
   };
 };
 
-export const getOnHand = async (variantId?: string) => {
+export const getOnHand = async (variantId?: string, locationId?: string) => {
   const normalizedVariantId = normalizeOptionalText(variantId);
   if (!normalizedVariantId) {
     throw new HttpError(400, "variantId is required", "INVALID_VARIANT_ID");
   }
+  const requestedLocationId = normalizeOptionalText(locationId);
 
-  await ensureVariantExistsById(prisma, normalizedVariantId);
+  const onHandResult = await prisma.$transaction(async (tx) => {
+    await ensureVariantExistsById(tx, normalizedVariantId);
+    const location = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
 
-  const aggregate = await prisma.inventoryMovement.aggregate({
-    where: {
-      variantId: normalizedVariantId,
-    },
-    _sum: {
-      quantity: true,
-    },
+    const aggregate = await tx.inventoryMovement.aggregate({
+      where: {
+        variantId: normalizedVariantId,
+        locationId: location.id,
+      },
+      _sum: {
+        quantity: true,
+      },
+    });
+
+    return {
+      location,
+      aggregate,
+    };
   });
 
   return {
     variantId: normalizedVariantId,
-    onHand: aggregate._sum.quantity ?? 0,
+    locationId: onHandResult.location.id,
+    onHand: onHandResult.aggregate._sum.quantity ?? 0,
   };
 };
 
 export const listMovements = async (filters: ListMovementFilters) => {
   const variantId = normalizeOptionalText(filters.variantId);
+  const requestedLocationId = normalizeOptionalText(filters.locationId);
   if (!variantId) {
     throw new HttpError(400, "variantId is required", "INVALID_VARIANT_ID");
   }
-
-  await ensureVariantExistsById(prisma, variantId);
 
   const from = filters.from ? parseFromDate(filters.from) : undefined;
   const to = filters.to ? parseToDate(filters.to) : undefined;
@@ -273,104 +305,133 @@ export const listMovements = async (filters: ListMovementFilters) => {
     );
   }
 
-  const movements = await prisma.inventoryMovement.findMany({
-    where: {
-      variantId,
-      ...(filters.type ? { type: filters.type } : {}),
-      ...(from || to
-        ? {
-            createdAt: {
-              ...(from ? { gte: from } : {}),
-              ...(to ? { lte: to } : {}),
-            },
-          }
-        : {}),
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  const result = await prisma.$transaction(async (tx) => {
+    await ensureVariantExistsById(tx, variantId);
+    const location = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
+    const movements = await tx.inventoryMovement.findMany({
+      where: {
+        variantId,
+        locationId: location.id,
+        ...(filters.type ? { type: filters.type } : {}),
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+
+    return {
+      locationId: location.id,
+      movements,
+    };
   });
 
   return {
     variantId,
-    movements: movements.map((movement) => toMovementResponse(movement)),
+    locationId: result.locationId,
+    movements: result.movements.map((movement) => toMovementResponse(movement)),
   };
 };
 
 export const listOnHand = async (filters: ListOnHandFilters = {}) => {
+  const requestedLocationId = normalizeOptionalText(filters.locationId);
   const normalizedQuery = normalizeOptionalText(filters.q);
   const take = parseTake(filters.take);
   const skip = parseSkip(filters.skip);
 
-  const variants = await prisma.variant.findMany({
-    where: {
-      ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
-      ...(normalizedQuery
-        ? {
-            OR: [
-              { sku: { contains: normalizedQuery, mode: "insensitive" } },
-              { barcode: { contains: normalizedQuery, mode: "insensitive" } },
-              { name: { contains: normalizedQuery, mode: "insensitive" } },
-              { option: { contains: normalizedQuery, mode: "insensitive" } },
-              {
-                product: {
-                  name: { contains: normalizedQuery, mode: "insensitive" },
+  return prisma.$transaction(async (tx) => {
+    const location = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
+    const variants = await tx.variant.findMany({
+      where: {
+        ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+        ...(normalizedQuery
+          ? {
+              OR: [
+                { sku: { contains: normalizedQuery, mode: "insensitive" } },
+                { barcode: { contains: normalizedQuery, mode: "insensitive" } },
+                { name: { contains: normalizedQuery, mode: "insensitive" } },
+                { option: { contains: normalizedQuery, mode: "insensitive" } },
+                {
+                  product: {
+                    name: { contains: normalizedQuery, mode: "insensitive" },
+                  },
                 },
-              },
-              {
-                product: {
-                  brand: { contains: normalizedQuery, mode: "insensitive" },
+                {
+                  product: {
+                    brand: { contains: normalizedQuery, mode: "insensitive" },
+                  },
                 },
-              },
-            ],
-          }
-        : {}),
-    },
-    orderBy: [{ createdAt: "desc" }],
-    ...(take !== undefined ? { take } : {}),
-    ...(skip !== undefined ? { skip } : {}),
-    include: {
-      product: {
-        select: {
-          id: true,
-          name: true,
-          brand: true,
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: "desc" }],
+      ...(take !== undefined ? { take } : {}),
+      ...(skip !== undefined ? { skip } : {}),
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  const variantIds = variants.map((variant) => variant.id);
-  const grouped =
-    variantIds.length > 0
-      ? await prisma.inventoryMovement.groupBy({
-          by: ["variantId"],
-          where: {
-            variantId: {
-              in: variantIds,
+    const variantIds = variants.map((variant) => variant.id);
+    const grouped =
+      variantIds.length > 0
+        ? await tx.inventoryMovement.groupBy({
+            by: ["variantId"],
+            where: {
+              locationId: location.id,
+              variantId: {
+                in: variantIds,
+              },
             },
-          },
-          _sum: {
-            quantity: true,
-          },
-        })
-      : [];
+            _sum: {
+              quantity: true,
+            },
+          })
+        : [];
 
-  const onHandByVariant = new Map(
-    grouped.map((row) => [row.variantId, row._sum.quantity ?? 0]),
-  );
+    const onHandByVariant = new Map(
+      grouped.map((row) => [row.variantId, row._sum.quantity ?? 0]),
+    );
 
-  return {
-    rows: variants.map((variant) => ({
-      variantId: variant.id,
-      sku: variant.sku,
-      barcode: variant.barcode,
-      variantName: variant.name ?? variant.option,
-      option: variant.option,
-      productId: variant.product.id,
-      productName: variant.product.name,
-      brand: variant.product.brand,
-      retailPricePence: variant.retailPricePence,
-      isActive: variant.isActive,
-      onHand: onHandByVariant.get(variant.id) ?? 0,
-    })),
-  };
+    return {
+      locationId: location.id,
+      rows: variants.map((variant) => ({
+        variantId: variant.id,
+        sku: variant.sku,
+        barcode: variant.barcode,
+        variantName: variant.name ?? variant.option,
+        option: variant.option,
+        productId: variant.product.id,
+        productName: variant.product.name,
+        brand: variant.product.brand,
+        retailPricePence: variant.retailPricePence,
+        isActive: variant.isActive,
+        onHand: onHandByVariant.get(variant.id) ?? 0,
+      })),
+    };
+  });
 };

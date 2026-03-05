@@ -6,6 +6,7 @@ import {
   getSalesDailyReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
+import { resolveRequestLocation } from "../services/locationService";
 import { toCsv } from "../utils/csv";
 
 const getDateRangeQuery = (req: Request) => {
@@ -25,13 +26,15 @@ const sendCsv = (res: Response, filename: string, csv: string) => {
 
 export const getSalesDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const report = await getSalesDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const report = await getSalesDailyReport(from, to, location.id);
   res.json(report);
 };
 
 export const getWorkshopDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const report = await getWorkshopDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const report = await getWorkshopDailyReport(from, to, location.id);
   res.json(report);
 };
 
@@ -47,7 +50,8 @@ export const getInventoryValueReportHandler = async (req: Request, res: Response
 
 export const getSalesDailyReportCsvHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const rows = await getSalesDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const rows = await getSalesDailyReport(from, to, location.id);
 
   const csv = toCsv(rows, [
     { header: "date", value: (row) => row.date },
@@ -62,7 +66,8 @@ export const getSalesDailyReportCsvHandler = async (req: Request, res: Response)
 
 export const getWorkshopDailyReportCsvHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const rows = await getWorkshopDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const rows = await getWorkshopDailyReport(from, to, location.id);
 
   const csv = toCsv(rows, [
     { header: "date", value: (row) => row.date },
