@@ -61,7 +61,9 @@
     "test:m56": "node scripts/run_smoke_test.js scripts/sale_receipt_m56_smoke_tests.js",
     "test:m57": "node scripts/run_smoke_test.js scripts/audit_log_m57_smoke_tests.js",
     "test:m58": "node scripts/run_smoke_test.js scripts/data_export_m58_smoke_tests.js",
-    "test:m59": "node scripts/run_smoke_test.js scripts/health_check_m59_smoke_tests.js"
+    "test:m59": "node scripts/run_smoke_test.js scripts/health_check_m59_smoke_tests.js",
+    "test:m61": "node scripts/run_smoke_test.js scripts/rate_limit_m61_smoke_tests.js",
+    "test:security": "node scripts/security_auth_guard_tests.js"
   },
   "repository": {
     "type": "git",
@@ -81,6 +83,7 @@
     "bcryptjs": "^3.0.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.19.0"
   },

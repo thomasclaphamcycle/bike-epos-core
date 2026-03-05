@@ -33,6 +33,18 @@ if (!env.JWT_SECRET && !env.AUTH_JWT_SECRET) {
 if (!env.COOKIE_SECRET) {
   env.COOKIE_SECRET = "test-cookie-secret";
 }
+if (!env.RATE_LIMIT_AUTH_LOGIN_WINDOW_MS) {
+  env.RATE_LIMIT_AUTH_LOGIN_WINDOW_MS = "60000";
+}
+if (!env.RATE_LIMIT_AUTH_LOGIN_MAX) {
+  env.RATE_LIMIT_AUTH_LOGIN_MAX = "100";
+}
+if (!env.RATE_LIMIT_WORKSHOP_MANAGE_WINDOW_MS) {
+  env.RATE_LIMIT_WORKSHOP_MANAGE_WINDOW_MS = "60000";
+}
+if (!env.RATE_LIMIT_WORKSHOP_MANAGE_MAX) {
+  env.RATE_LIMIT_WORKSHOP_MANAGE_MAX = "300";
+}
 
 const result = spawnSync(command, args, {
   stdio: "inherit",

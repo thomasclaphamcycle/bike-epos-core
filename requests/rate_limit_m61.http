@@ -1,0 +1,13 @@
+@baseUrl = http://localhost:3000
+
+### Login rate limit (repeat this request >10 times within 1 minute from same IP to trigger 429)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "noone@example.com",
+  "password": "wrong-password"
+}
+
+### Workshop manage-token rate limit (repeat this request >30 times within 1 minute from same IP to trigger 429)
+GET {{baseUrl}}/api/workshop-bookings/manage/test-token
