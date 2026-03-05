@@ -500,7 +500,7 @@ export const recordCashSaleMovementForPaymentTx = async (
       type: "CASH_SALE",
       amountPence: input.amountPence,
       ref: `PAYMENT:${input.paymentId}`,
-      relatedSaleId: input.saleId,
+      ...(input.saleId ? { relatedSaleId: input.saleId } : {}),
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {
@@ -586,7 +586,7 @@ export const recordCashRefundMovementForRefundTx = async (
       type: "CASH_REFUND",
       amountPence: input.amountPence,
       ref: `REFUND:${input.paymentRefundId}:PAYMENT:${input.paymentId}`,
-      relatedSaleId: input.saleId ?? undefined,
+      ...(input.saleId ? { relatedSaleId: input.saleId } : {}),
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {
@@ -628,7 +628,7 @@ export const recordCashRefundMovementForPaymentTx = async (
       type: "CASH_REFUND",
       amountPence,
       ref: input.ref ?? `PAYMENT_REFUND:${input.paymentId}`,
-      relatedSaleId: input.saleId ?? undefined,
+      ...(input.saleId ? { relatedSaleId: input.saleId } : {}),
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {

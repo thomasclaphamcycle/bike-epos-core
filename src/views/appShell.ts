@@ -13,6 +13,8 @@ type AppNavKey =
   | "workshop"
   | "inventory"
   | "till"
+  | "manager-cash"
+  | "manager-refunds"
   | "admin-users"
   | "admin-audit";
 
@@ -39,6 +41,13 @@ const navItems: Array<{
   { key: "workshop", label: "Workshop", href: "/workshop", minRole: "STAFF" },
   { key: "inventory", label: "Inventory", href: "/inventory", minRole: "STAFF" },
   { key: "till", label: "Till / Cash Up", href: "/till", minRole: "MANAGER" },
+  { key: "manager-cash", label: "Manager Cash", href: "/manager/cash", minRole: "MANAGER" },
+  {
+    key: "manager-refunds",
+    label: "Manager Refunds",
+    href: "/manager/refunds",
+    minRole: "MANAGER",
+  },
   { key: "admin-users", label: "Admin Users", href: "/admin", minRole: "ADMIN" },
   { key: "admin-audit", label: "Admin Audit", href: "/admin/audit", minRole: "ADMIN" },
 ];
@@ -232,4 +241,3 @@ export const wrapAuthedPage = (input: AppShellInput): string => {
 
   return output;
 };
-

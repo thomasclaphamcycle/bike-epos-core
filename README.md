@@ -115,6 +115,20 @@ Manager cash operations now expose date-range movement and summary APIs in addit
 - Cash summary reports:
   - `float + paid_in - paid_out + cash_sales - cash_refunds`
 
+## Manager Ops UI (M43)
+
+Manager-only operations pages are now available inside the authenticated M38 app shell.
+
+- Pages:
+  - `/manager/cash`
+  - `/manager/refunds`
+- Role behavior:
+  - visible in nav for `MANAGER+`
+  - `STAFF` users are redirected to `/not-authorized`
+- Data sources:
+  - `/manager/cash` uses `/api/cash/summary` + `/api/cash/movements`
+  - `/manager/refunds` uses `/api/refunds?from&to`
+
 ## Test Commands
 
 ### Baseline + new milestone smoke suite
@@ -130,7 +144,7 @@ npm test
 
 `test:smoke` runs milestones in order:
 
-- m11, m12, m13, m28, m32, m34, m35, m36, m37, m38, m39, m40, m41, m42
+- m11, m12, m13, m28, m32, m34, m35, m36, m37, m38, m39, m40, m41, m42, m43
 
 ### Individual milestone tests
 
@@ -143,12 +157,13 @@ npm run test:m39
 npm run test:m40
 npm run test:m41
 npm run test:m42
+npm run test:m43
 ```
 
 ### Full regression smoke set (m11..m40)
 
 ```bash
-npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17 && npm run test:m18 && npm run test:m19 && npm run test:m19_1 && npm run test:m22 && npm run test:m23b && npm run test:m24 && npm run test:m25 && npm run test:m26 && npm run test:m27 && npm run test:m28 && npm run test:m29 && npm run test:m30 && npm run test:m31 && npm run test:m32 && npm run test:m33 && npm run test:m34 && npm run test:m35 && npm run test:m36 && npm run test:m37 && npm run test:m38 && npm run test:m39 && npm run test:m40 && npm run test:m41 && npm run test:m42
+npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17 && npm run test:m18 && npm run test:m19 && npm run test:m19_1 && npm run test:m22 && npm run test:m23b && npm run test:m24 && npm run test:m25 && npm run test:m26 && npm run test:m27 && npm run test:m28 && npm run test:m29 && npm run test:m30 && npm run test:m31 && npm run test:m32 && npm run test:m33 && npm run test:m34 && npm run test:m35 && npm run test:m36 && npm run test:m37 && npm run test:m38 && npm run test:m39 && npm run test:m40 && npm run test:m41 && npm run test:m42 && npm run test:m43
 ```
 
 ### Playwright E2E

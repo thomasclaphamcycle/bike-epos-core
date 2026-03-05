@@ -1,0 +1,30 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@managerId = manager-1
+@staffRole = STAFF
+@staffId = staff-1
+
+### Manager cash dashboard page (MANAGER+)
+GET {{baseUrl}}/manager/cash
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Manager refunds dashboard page (MANAGER+)
+GET {{baseUrl}}/manager/refunds
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Refund list API powering manager refunds page (MANAGER+)
+GET {{baseUrl}}/api/refunds?from=2026-03-01&to=2026-03-31
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Cash summary API powering manager cash page (MANAGER+)
+GET {{baseUrl}}/api/cash/summary?from=2026-03-01&to=2026-03-31
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### STAFF role should be redirected to /not-authorized for manager pages
+GET {{baseUrl}}/manager/cash
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

@@ -31,6 +31,8 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await expect(page.getByTestId("app-nav-workshop")).toBeVisible();
   await expect(page.getByTestId("app-nav-inventory")).toBeVisible();
   await expect(page.locator('[data-testid="app-nav-till"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="app-nav-manager-cash"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="app-nav-manager-refunds"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="app-nav-admin-users"]')).toHaveCount(0);
   await page.click('[data-testid="app-nav-workshop"]');
   await expect(page).toHaveURL(/\/workshop/);
@@ -42,9 +44,11 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await page.context().clearCookies();
   await loginViaUi(page, managerCredentials, "/pos");
   await expect(page.getByTestId("app-nav-till")).toBeVisible();
+  await expect(page.getByTestId("app-nav-manager-cash")).toBeVisible();
+  await expect(page.getByTestId("app-nav-manager-refunds")).toBeVisible();
   await expect(page.locator('[data-testid="app-nav-admin-users"]')).toHaveCount(0);
-  await page.click('[data-testid="app-nav-till"]');
-  await expect(page).toHaveURL(/\/till/);
+  await page.click('[data-testid="app-nav-manager-cash"]');
+  await expect(page).toHaveURL(/\/manager\/cash/);
 
   const adminCredentials = await ensureUserViaAdminBypass(request, {
     role: "ADMIN",
