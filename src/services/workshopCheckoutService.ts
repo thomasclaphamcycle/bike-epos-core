@@ -202,6 +202,7 @@ export const checkoutWorkshopJobToSale = async (
         paymentId: createdPayment.id,
         paymentMethod: createdPayment.method,
         amountPence: createdPayment.amountPence,
+        saleId: sale.id,
         createdByStaffId: auditActor?.actorId,
       });
 

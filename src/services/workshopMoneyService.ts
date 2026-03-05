@@ -323,6 +323,7 @@ const createRefundTx = async (
     paymentMethod: payment.method,
     paymentRefundId: refund.id,
     amountPence: refund.amountPence,
+    saleId: payment.saleId,
     createdByStaffId: auditActor?.actorId,
   });
 

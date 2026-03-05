@@ -830,6 +830,7 @@ export const checkoutBasketToSale = async (
         paymentId: createdPayment.id,
         paymentMethod: createdPayment.method,
         amountPence: createdPayment.amountPence,
+        saleId: sale.id,
         ...(normalizedCreatedByStaffId
           ? { createdByStaffId: normalizedCreatedByStaffId }
           : {}),
@@ -1027,6 +1028,7 @@ export const createSaleReturn = async (
         paymentId: refundPayment.id,
         paymentMethod: refundPayment.method,
         amountPence: refundPayment.amountPence,
+        saleId: refundPayment.saleId,
         ref: `SALE_RETURN_REFUND:${refundPayment.id}`,
       });
     }

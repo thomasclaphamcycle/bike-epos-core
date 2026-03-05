@@ -1,0 +1,49 @@
+@baseUrl = http://localhost:3000
+@staffRole = MANAGER
+@staffId = manager-1
+
+### Record float movement (MANAGER+)
+POST {{baseUrl}}/api/cash/movements
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "FLOAT",
+  "amountPence": 10000,
+  "note": "Opening float"
+}
+
+### Record paid in movement (MANAGER+)
+POST {{baseUrl}}/api/cash/movements
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "PAID_IN",
+  "amountPence": 500,
+  "note": "Safe drop"
+}
+
+### Record paid out movement (MANAGER+)
+POST {{baseUrl}}/api/cash/movements
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "PAID_OUT",
+  "amountPence": 300,
+  "note": "Petty cash"
+}
+
+### List cash movements by date range
+GET {{baseUrl}}/api/cash/movements?from=2026-03-01&to=2026-03-31
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Cash summary by date range
+GET {{baseUrl}}/api/cash/summary?from=2026-03-01&to=2026-03-31
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

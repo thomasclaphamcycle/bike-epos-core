@@ -28,6 +28,7 @@ type ListCashSessionsInput = {
 };
 
 const DATE_ONLY_REGEX = /^\\d{4}-\\d{2}-\\d{2}$/;
+export const DEFAULT_CASH_LOCATION_ID = "default";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -103,15 +104,23 @@ const createMovementTx = async (
     type: CashMovementType;
     amountPence: number;
     ref: string;
+    locationId?: string;
+    note?: string;
+    relatedSaleId?: string;
+    relatedRefundId?: string;
     createdByStaffId?: string;
   },
 ) =>
   tx.cashMovement.create({
     data: {
       sessionId: input.sessionId,
+      locationId: input.locationId ?? DEFAULT_CASH_LOCATION_ID,
       type: input.type,
       amountPence: input.amountPence,
       ref: input.ref,
+      note: input.note ?? null,
+      relatedSaleId: input.relatedSaleId ?? null,
+      relatedRefundId: input.relatedRefundId ?? null,
       createdByStaffId: input.createdByStaffId ?? null,
     },
   });
@@ -288,9 +297,13 @@ export const addPaidMovement = async (sessionId: string, input: AddPaidMovementI
       movement: {
         id: movement.id,
         sessionId: movement.sessionId,
+        locationId: movement.locationId,
         type: movement.type,
         amountPence: movement.amountPence,
         ref: movement.ref,
+        note: movement.note,
+        relatedSaleId: movement.relatedSaleId,
+        relatedRefundId: movement.relatedRefundId,
         createdAt: movement.createdAt,
         createdByStaffId: movement.createdByStaffId,
       },
@@ -468,6 +481,7 @@ export const recordCashSaleMovementForPaymentTx = async (
     paymentId: string;
     paymentMethod: string;
     amountPence: number;
+    saleId?: string;
     createdByStaffId?: string;
   },
 ) => {
@@ -486,6 +500,7 @@ export const recordCashSaleMovementForPaymentTx = async (
       type: "CASH_SALE",
       amountPence: input.amountPence,
       ref: `PAYMENT:${input.paymentId}`,
+      relatedSaleId: input.saleId,
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {
@@ -534,6 +549,7 @@ export const recordCashSaleMovementForSaleTx = async (
       type: "CASH_SALE",
       amountPence: netCashPence,
       ref: `SALE_TENDER:${input.saleId}`,
+      relatedSaleId: input.saleId,
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {
@@ -551,6 +567,7 @@ export const recordCashRefundMovementForRefundTx = async (
     paymentMethod: string;
     paymentRefundId: string;
     amountPence: number;
+    saleId?: string | null;
     createdByStaffId?: string;
   },
 ) => {
@@ -569,6 +586,7 @@ export const recordCashRefundMovementForRefundTx = async (
       type: "CASH_REFUND",
       amountPence: input.amountPence,
       ref: `REFUND:${input.paymentRefundId}:PAYMENT:${input.paymentId}`,
+      relatedSaleId: input.saleId ?? undefined,
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {
@@ -585,6 +603,7 @@ export const recordCashRefundMovementForPaymentTx = async (
     paymentId: string;
     paymentMethod: string;
     amountPence: number;
+    saleId?: string | null;
     ref?: string;
     createdByStaffId?: string;
   },
@@ -609,6 +628,44 @@ export const recordCashRefundMovementForPaymentTx = async (
       type: "CASH_REFUND",
       amountPence,
       ref: input.ref ?? `PAYMENT_REFUND:${input.paymentId}`,
+      relatedSaleId: input.saleId ?? undefined,
+      ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
+    });
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code !== "P2002") {
+      throw error;
+    }
+  }
+};
+
+export const recordCashRefundMovementForSaleRefundTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    saleRefundId: string;
+    saleId: string;
+    cashTenderedPence: number;
+    createdByStaffId?: string;
+  },
+) => {
+  const amountPence = Math.abs(input.cashTenderedPence);
+  if (amountPence <= 0) {
+    return;
+  }
+
+  const openSession = await getOpenSessionTx(tx);
+  if (!openSession) {
+    return;
+  }
+
+  try {
+    await createMovementTx(tx, {
+      sessionId: openSession.id,
+      type: "CASH_REFUND",
+      amountPence,
+      ref: `SALE_REFUND:${input.saleRefundId}`,
+      relatedSaleId: input.saleId,
+      relatedRefundId: input.saleRefundId,
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
   } catch (error) {

@@ -180,6 +180,7 @@ const upsertSalePaymentForIntentTx = async (
     paymentId: payment.id,
     paymentMethod: payment.method,
     amountPence: payment.amountPence,
+    saleId: input.saleId,
     ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
   });
 };

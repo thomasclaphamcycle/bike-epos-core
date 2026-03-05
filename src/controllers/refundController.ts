@@ -142,6 +142,6 @@ export const deleteRefundTenderHandler = async (req: Request, res: Response) => 
 };
 
 export const completeRefundHandler = async (req: Request, res: Response) => {
-  const result = await completeRefund(req.params.refundId);
+  const result = await completeRefund(req.params.refundId, getRequestStaffActorId(req));
   res.status(result.idempotent ? 200 : 201).json(result);
 };

@@ -1,6 +1,7 @@
 import { Prisma, RefundRecordStatus, RefundTenderType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { recordCashRefundMovementForSaleRefundTx } from "./tillService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -694,10 +695,12 @@ const assertRefundLineQuantitiesStillValidTx = async (
   }
 };
 
-export const completeRefund = async (refundId: string) => {
+export const completeRefund = async (refundId: string, completedByStaffId?: string) => {
   if (!isUuid(refundId)) {
     throw new HttpError(400, "Invalid refund id", "INVALID_REFUND_ID");
   }
+
+  const normalizedCompletedByStaffId = normalizeOptionalText(completedByStaffId);
 
   return prisma.$transaction(async (tx) => {
     const refund = await tx.refund.findUnique({
@@ -787,6 +790,17 @@ export const completeRefund = async (refundId: string) => {
         totalPence: totals.totalPence,
         completedAt: new Date(),
       },
+    });
+
+    const cashTenderedPence = refund.tenders
+      .filter((tender) => tender.tenderType === "CASH")
+      .reduce((sum, tender) => sum + tender.amountPence, 0);
+
+    await recordCashRefundMovementForSaleRefundTx(tx, {
+      saleRefundId: refund.id,
+      saleId: refund.saleId,
+      cashTenderedPence,
+      createdByStaffId: normalizedCompletedByStaffId ?? refund.createdByStaffId ?? undefined,
     });
 
     return {

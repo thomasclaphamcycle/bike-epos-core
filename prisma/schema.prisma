@@ -364,6 +364,7 @@ model Sale {
   paymentIntents PaymentIntent[]
   returns       SaleReturn[]
   refunds       Refund[]
+  cashMovements CashMovement[] @relation("CashMovementSale")
 
   @@index([customerId])
   @@index([workshopJobId])
@@ -455,6 +456,7 @@ model Refund {
   lines            RefundLine[]
   tenders          RefundTender[]
   receipt          Receipt?          @relation("SaleRefundReceipt")
+  cashMovements    CashMovement[]    @relation("CashMovementRefund")
 
   @@index([saleId, createdAt])
   @@index([status, createdAt])
@@ -919,17 +921,26 @@ model CashSession {
 model CashMovement {
   id               String           @id @default(uuid()) @db.Uuid
   sessionId        String           @db.Uuid
+  locationId       String           @default("default")
   type             CashMovementType
   amountPence      Int
   ref              String
+  note             String?
+  relatedSaleId    String?          @db.Uuid
+  relatedRefundId  String?          @db.Uuid
   createdAt        DateTime         @default(now())
   createdByStaffId String?
 
   session          CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  relatedSale      Sale?            @relation("CashMovementSale", fields: [relatedSaleId], references: [id], onDelete: SetNull)
+  relatedRefund    Refund?          @relation("CashMovementRefund", fields: [relatedRefundId], references: [id], onDelete: SetNull)
   createdByStaff   User?            @relation("CashMovementCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   @@index([sessionId, createdAt])
+  @@index([locationId, createdAt])
   @@index([type, createdAt])
+  @@index([relatedSaleId])
+  @@index([relatedRefundId])
   @@index([createdByStaffId])
   @@unique([sessionId, type, ref])
 }
