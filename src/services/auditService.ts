@@ -15,43 +15,47 @@ type AuditWriteInput = {
 };
 
 type AuditQueryInput = {
-  entityType?: string;
-  entityId?: string;
-  action?: string;
-  from?: string;
-  to?: string;
-  limit?: number;
+  entityType?: string | undefined;
+  entityId?: string | undefined;
+  action?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  limit?: number | undefined;
+  entity?: string | undefined;
+  staffId?: string | undefined;
+  dateFrom?: string | undefined;
+  dateTo?: string | undefined;
+};
+
+type AuditLogWriteInput = {
+  staffId?: string | undefined;
+  action: string;
+  entity: string;
+  entityId?: string | undefined;
+  details?: Prisma.InputJsonValue | undefined;
+};
+
+type ListAuditLogsInput = {
+  entity?: string | undefined;
+  entityId?: string | undefined;
+  staffId?: string | undefined;
+  fromDate?: string | undefined;
+  toDate?: string | undefined;
+  limit?: number | undefined;
+  action?: string | undefined;
 };
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
-const normalizeText = (value: string | undefined): string | undefined => {
-  if (value === undefined) {
+const normalizeText = (value: string | undefined | null): string | undefined => {
+  if (value === undefined || value === null) {
     return undefined;
   }
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const parseDateOnlyOrThrow = (value: string, field: "from" | "to") => {
-  if (!DATE_ONLY_REGEX.test(value)) {
-    throw new HttpError(400, `${field} must be YYYY-MM-DD`, "INVALID_DATE");
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) {
-    throw new HttpError(400, `${field} is invalid`, "INVALID_DATE");
-  }
-  return date;
-};
-
-const addDays = (date: Date, days: number) => {
-  const out = new Date(date);
-  out.setUTCDate(out.getUTCDate() + days);
-  return out;
 };
 
 const parseLimitOrThrow = (value: number | undefined) => {
@@ -68,6 +72,136 @@ const parseLimitOrThrow = (value: number | undefined) => {
   }
 
   return value;
+};
+
+const parseDateOrThrow = (
+  value: string,
+  field: "fromDate" | "toDate",
+  boundary: "start" | "end",
+) => {
+  if (DATE_ONLY_REGEX.test(value)) {
+    return new Date(
+      boundary === "start" ? `${value}T00:00:00.000Z` : `${value}T23:59:59.999Z`,
+    );
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new HttpError(400, `${field} must be a valid date`, "INVALID_DATE");
+  }
+  return parsed;
+};
+
+const toAuditLogCreateData = (
+  input: AuditLogWriteInput,
+): Prisma.AuditLogCreateInput => {
+  const action = normalizeText(input.action);
+  if (!action) {
+    throw new HttpError(400, "action is required", "INVALID_AUDIT_LOG");
+  }
+
+  const entity = normalizeText(input.entity);
+  if (!entity) {
+    throw new HttpError(400, "entity is required", "INVALID_AUDIT_LOG");
+  }
+
+  const staffId = normalizeText(input.staffId);
+  const entityId = normalizeText(input.entityId);
+
+  const data: Prisma.AuditLogCreateInput = {
+    action,
+    entity,
+  };
+
+  if (staffId !== undefined) {
+    data.staffId = staffId;
+  }
+  if (entityId !== undefined) {
+    data.entityId = entityId;
+  }
+  if (input.details !== undefined) {
+    data.details = input.details;
+  }
+
+  return data;
+};
+
+export const logActionTx = async (
+  tx: Prisma.TransactionClient,
+  input: AuditLogWriteInput,
+) => {
+  const data = toAuditLogCreateData(input);
+  return tx.auditLog.create({ data });
+};
+
+export const logAction = async (input: AuditLogWriteInput) => {
+  const data = toAuditLogCreateData(input);
+  return prisma.auditLog.create({ data });
+};
+
+export const listAuditLogs = async (input: ListAuditLogsInput) => {
+  const entity = normalizeText(input.entity);
+  const entityId = normalizeText(input.entityId);
+  const staffId = normalizeText(input.staffId);
+  const action = normalizeText(input.action);
+  const fromDateRaw = normalizeText(input.fromDate);
+  const toDateRaw = normalizeText(input.toDate);
+  const limit = parseLimitOrThrow(input.limit);
+
+  let fromDate: Date | undefined;
+  let toDate: Date | undefined;
+
+  if (fromDateRaw) {
+    fromDate = parseDateOrThrow(fromDateRaw, "fromDate", "start");
+  }
+  if (toDateRaw) {
+    toDate = parseDateOrThrow(toDateRaw, "toDate", "end");
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    throw new HttpError(400, "fromDate must be before or equal to toDate", "INVALID_DATE_RANGE");
+  }
+
+  const where: Prisma.AuditLogWhereInput = {};
+  if (entity) {
+    where.entity = entity;
+  }
+  if (entityId) {
+    where.entityId = entityId;
+  }
+  if (staffId) {
+    where.staffId = staffId;
+  }
+  if (action) {
+    where.action = action;
+  }
+  if (fromDate || toDate) {
+    where.createdAt = {};
+    if (fromDate) {
+      where.createdAt.gte = fromDate;
+    }
+    if (toDate) {
+      where.createdAt.lte = toDate;
+    }
+  }
+
+  const logs = await prisma.auditLog.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  return {
+    filters: {
+      entity: entity ?? null,
+      entityId: entityId ?? null,
+      staffId: staffId ?? null,
+      action: action ?? null,
+      fromDate: fromDateRaw ?? null,
+      toDate: toDateRaw ?? null,
+      limit,
+    },
+    logs,
+  };
 };
 
 export const createAuditEventTx = async (
@@ -96,67 +230,58 @@ export const createAuditEventTx = async (
   await tx.auditEvent.create({
     data,
   });
+
+  await logActionTx(tx, {
+    staffId: actor?.actorId,
+    action: input.action,
+    entity: input.entityType,
+    entityId: input.entityId,
+    details: input.metadata,
+  });
 };
 
 export const getAuditEvents = async (input: AuditQueryInput) => {
-  const entityType = normalizeText(input.entityType);
+  const entity = normalizeText(input.entityType) ?? normalizeText(input.entity);
   const entityId = normalizeText(input.entityId);
   const action = normalizeText(input.action);
-  const from = normalizeText(input.from);
-  const to = normalizeText(input.to);
+  const staffId = normalizeText(input.staffId);
+  const fromDate = normalizeText(input.from) ?? normalizeText(input.dateFrom);
+  const toDate = normalizeText(input.to) ?? normalizeText(input.dateTo);
   const limit = parseLimitOrThrow(input.limit);
 
-  let fromDate: Date | undefined;
-  let toDateExclusive: Date | undefined;
-
-  if (from) {
-    fromDate = parseDateOnlyOrThrow(from, "from");
-  }
-  if (to) {
-    const toDate = parseDateOnlyOrThrow(to, "to");
-    toDateExclusive = addDays(toDate, 1);
-  }
-
-  if (fromDate && toDateExclusive && fromDate >= toDateExclusive) {
-    throw new HttpError(400, "from must be before or equal to to", "INVALID_DATE_RANGE");
-  }
-
-  const where: Prisma.AuditEventWhereInput = {};
-
-  if (entityType) {
-    where.entityType = entityType;
-  }
-  if (entityId) {
-    where.entityId = entityId;
-  }
-  if (action) {
-    where.action = action;
-  }
-  if (fromDate || toDateExclusive) {
-    where.createdAt = {};
-    if (fromDate) {
-      where.createdAt.gte = fromDate;
-    }
-    if (toDateExclusive) {
-      where.createdAt.lt = toDateExclusive;
-    }
-  }
-
-  const events = await prisma.auditEvent.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit,
+  const result = await listAuditLogs({
+    entity,
+    entityId,
+    staffId,
+    action,
+    fromDate,
+    toDate,
+    limit,
   });
 
   return {
     filters: {
-      entityType: entityType ?? null,
-      entityId: entityId ?? null,
-      action: action ?? null,
-      from: from ?? null,
-      to: to ?? null,
-      limit,
+      entityType: result.filters.entity,
+      entityId: result.filters.entityId,
+      action: result.filters.action,
+      from: result.filters.fromDate,
+      to: result.filters.toDate,
+      limit: result.filters.limit,
+      entity: result.filters.entity,
+      staffId: result.filters.staffId,
+      dateFrom: result.filters.fromDate,
+      dateTo: result.filters.toDate,
     },
-    events,
+    events: result.logs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      entityType: log.entity,
+      entityId: log.entityId ?? "",
+      actorRole: null,
+      actorId: log.staffId ?? null,
+      metadata: log.details ?? null,
+      createdAt: log.createdAt,
+    })),
+    logs: result.logs,
   };
 };

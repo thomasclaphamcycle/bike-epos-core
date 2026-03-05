@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { ensureVariantExistsById } from "./productService";
 import { getReservedQuantityByVariantIdsTx, getReservedQuantityForVariantTx } from "./stockReservationService";
+import { logActionTx } from "./auditService";
 
 type RecordMovementInput = {
   variantId?: string;
@@ -174,7 +175,7 @@ export const recordMovement = async (input: RecordMovementInput) => {
     const note = normalizeOptionalText(input.note) ?? null;
     const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
 
-    return tx.inventoryMovement.create({
+    const created = await tx.inventoryMovement.create({
       data: {
         variantId,
         type: input.type,
@@ -186,6 +187,23 @@ export const recordMovement = async (input: RecordMovementInput) => {
         createdByStaffId,
       },
     });
+
+    await logActionTx(tx, {
+      staffId: createdByStaffId ?? undefined,
+      action: "INVENTORY_MOVEMENT",
+      entity: "INVENTORY_MOVEMENT",
+      entityId: created.id,
+      details: {
+        variantId,
+        type: input.type,
+        quantity: input.quantity,
+        referenceType,
+        referenceId,
+        note,
+      },
+    });
+
+    return created;
   });
 
   return toMovementResponse(movement);

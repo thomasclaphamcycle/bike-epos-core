@@ -920,6 +920,21 @@ model AuditEvent {
   @@index([action, createdAt])
 }
 
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  staffId   String?
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+
+  @@index([entity, entityId])
+  @@index([staffId])
+  @@index([createdAt])
+}
+
 enum UserRole {
   STAFF
   MANAGER

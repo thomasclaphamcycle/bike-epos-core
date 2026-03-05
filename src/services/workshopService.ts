@@ -6,6 +6,7 @@ import {
   computeWorkshopPartsReconciliationTx,
   releaseReservationsForJobTx,
 } from "./stockReservationService";
+import { logActionTx } from "./auditService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 type WorkshopStatusV1 =
@@ -1046,10 +1047,16 @@ export const convertWorkshopJobToSale = async (
   });
 };
 
-export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWorkshopJobInput) => {
+export const updateWorkshopJob = async (
+  workshopJobId: string,
+  input: UpdateWorkshopJobInput,
+  staffId?: string,
+) => {
   if (!isUuid(workshopJobId)) {
     throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
   }
+
+  const normalizedStaffId = normalizeOptionalText(staffId);
 
   const hasAnyField =
     Object.prototype.hasOwnProperty.call(input, "customerName") ||
@@ -1067,6 +1074,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
 
   return prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    const previousStatus = job.status;
     const data: Prisma.WorkshopJobUpdateInput = {};
     let shouldReleaseReservations = false;
     let customerNameFromCustomer: string | undefined;
@@ -1196,6 +1204,33 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
 
     if (shouldReleaseReservations) {
       await releaseReservationsForJobTx(tx, workshopJobId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "status") && updated.status !== previousStatus) {
+      await logActionTx(tx, {
+        staffId: normalizedStaffId,
+        action: "WORKSHOP_STATUS_CHANGED",
+        entity: "WORKSHOP_JOB",
+        entityId: workshopJobId,
+        details: {
+          fromStatus: previousStatus,
+          toStatus: updated.status,
+        },
+      });
+    }
+
+    if (updated.status === "CANCELLED" && previousStatus !== "CANCELLED") {
+      await logActionTx(tx, {
+        staffId: normalizedStaffId,
+        action: "WORKSHOP_CANCELLED",
+        entity: "WORKSHOP_JOB",
+        entityId: workshopJobId,
+        details: {
+          via: "PATCH_WORKSHOP_JOB",
+          fromStatus: previousStatus,
+          toStatus: updated.status,
+        },
+      });
     }
 
     return toJobResponse(updated);

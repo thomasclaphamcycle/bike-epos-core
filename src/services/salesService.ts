@@ -7,6 +7,7 @@ import {
   recordCashSaleMovementForPaymentTx,
 } from "./tillService";
 import { consumeReservationsForSaleTx } from "./stockReservationService";
+import { logActionTx } from "./auditService";
 
 type CheckoutPaymentInput = {
   paymentMethod?: PaymentMethod;
@@ -642,6 +643,18 @@ export const completeSaleIfEligibleTx = async (
       saleId: sale.id,
     });
   }
+
+  await logActionTx(tx, {
+    staffId: staffActorId,
+    action: "SALE_COMPLETED",
+    entity: "SALE",
+    entityId: updatedSale.id,
+    details: {
+      totalPence: sale.totalPence,
+      tenderedPence: tenderSummary.tenderedPence,
+      changeDuePence,
+    },
+  });
 
   return {
     saleId: updatedSale.id,

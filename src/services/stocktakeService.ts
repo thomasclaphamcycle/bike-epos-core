@@ -1,6 +1,7 @@
 import { Prisma, StocktakeStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { logActionTx } from "./auditService";
 
 type CreateStocktakeInput = {
   locationId?: string;
@@ -489,7 +490,7 @@ export const postStocktake = async (stocktakeId: string, createdByStaffId?: stri
           },
         });
 
-        await tx.inventoryMovement.create({
+        const movement = await tx.inventoryMovement.create({
           data: {
             variantId: line.variantId,
             type: "ADJUSTMENT",
@@ -498,6 +499,35 @@ export const postStocktake = async (stocktakeId: string, createdByStaffId?: stri
             referenceId: line.id,
             note: `Stocktake ${stocktakeId}`,
             createdByStaffId: normalizedCreatedByStaffId ?? null,
+          },
+        });
+
+        await logActionTx(tx, {
+          staffId: normalizedCreatedByStaffId,
+          action: "INVENTORY_MOVEMENT",
+          entity: "INVENTORY_MOVEMENT",
+          entityId: movement.id,
+          details: {
+            variantId: line.variantId,
+            type: "ADJUSTMENT",
+            quantity: deltaNeeded,
+            referenceType: "STOCKTAKE_LINE",
+            referenceId: line.id,
+            stocktakeId,
+          },
+        });
+
+        await logActionTx(tx, {
+          staffId: normalizedCreatedByStaffId,
+          action: "STOCK_ADJUSTMENT",
+          entity: "STOCKTAKE",
+          entityId: stocktakeId,
+          details: {
+            stocktakeLineId: line.id,
+            variantId: line.variantId,
+            quantityDelta: deltaNeeded,
+            inventoryMovementId: movement.id,
+            locationId: locked.locationId,
           },
         });
       }

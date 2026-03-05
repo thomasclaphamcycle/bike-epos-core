@@ -1,0 +1,33 @@
+@baseUrl = http://localhost:3000
+@staffRole = MANAGER
+@staffId = manager-1
+@saleId = REPLACE_SALE_ID
+@jobId = REPLACE_WORKSHOP_JOB_ID
+@auditStaffId = REPLACE_STAFF_ID
+@fromDate = 2026-03-01
+@toDate = 2026-03-31
+
+### List recent audit logs (MANAGER+)
+GET {{baseUrl}}/api/audit?limit=100
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Filter by entity + entityId
+GET {{baseUrl}}/api/audit?entity=SALE&entityId={{saleId}}&limit=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Filter workshop logs
+GET {{baseUrl}}/api/audit?entity=WORKSHOP_JOB&entityId={{jobId}}&limit=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Filter by staff + date range
+GET {{baseUrl}}/api/audit?staffId={{auditStaffId}}&dateFrom={{fromDate}}&dateTo={{toDate}}&limit=200
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Legacy compatible filters still supported
+GET {{baseUrl}}/api/audit?entityType=WORKSHOP_JOB&entityId={{jobId}}&from={{fromDate}}&to={{toDate}}&limit=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

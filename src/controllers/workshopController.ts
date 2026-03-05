@@ -342,7 +342,7 @@ export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
     throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
   }
 
-  const job = await updateWorkshopJob(req.params.id, body);
+  const job = await updateWorkshopJob(req.params.id, body, getRequestStaffActorId(req));
   res.json(job);
 };
 
