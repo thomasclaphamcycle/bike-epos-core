@@ -52,6 +52,14 @@ type AddWorkshopJobLineInput = {
   unitPricePence?: number;
 };
 
+type UpdateWorkshopJobLineInput = {
+  description?: string;
+  qty?: number;
+  unitPricePence?: number;
+  productId?: string | null;
+  variantId?: string | null;
+};
+
 const LABOUR_VARIANT_SKU = "WORKSHOP-LABOUR-SERVICE";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -485,6 +493,37 @@ const toLineResponse = (line: {
   updatedAt: line.updatedAt,
 });
 
+const workshopLineInclude = {
+  product: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  variant: {
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+    },
+  },
+};
+
+const toWorkshopJobTotals = (
+  lines: Array<{
+    qty: number;
+    unitPricePence: number;
+  }>,
+) => {
+  const subtotalPence = lines.reduce((sum, line) => sum + line.qty * line.unitPricePence, 0);
+  const taxPence = 0;
+  return {
+    subtotalPence,
+    taxPence,
+    totalPence: subtotalPence + taxPence,
+  };
+};
+
 const toJobResponse = (job: {
   id: string;
   customerId: string | null;
@@ -713,21 +752,7 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     where: { id: workshopJobId },
     include: {
       lines: {
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          variant: {
-            select: {
-              id: true,
-              sku: true,
-              name: true,
-            },
-          },
-        },
+        include: workshopLineInclude,
         orderBy: [{ createdAt: "asc" }],
       },
     },
@@ -740,6 +765,7 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
   return {
     job: toJobResponse(job),
     lines: job.lines.map((line) => toLineResponse(line)),
+    totals: toWorkshopJobTotals(job.lines),
   };
 };
 
@@ -941,11 +967,13 @@ export const addWorkshopJobLine = async (
     throw new HttpError(400, "type must be PART or LABOUR", "INVALID_WORKSHOP_LINE");
   }
 
-  if (!Number.isInteger(input.qty) || (input.qty ?? 0) <= 0) {
+  const quantity = input.qty ?? 1;
+  if (!Number.isInteger(quantity) || quantity <= 0) {
     throw new HttpError(400, "qty must be a positive integer", "INVALID_WORKSHOP_LINE");
   }
 
-  if (!Number.isInteger(input.unitPricePence) || (input.unitPricePence ?? -1) < 0) {
+  const unitPricePence = input.unitPricePence ?? 0;
+  if (!Number.isInteger(unitPricePence) || unitPricePence < 0) {
     throw new HttpError(
       400,
       "unitPricePence must be a non-negative integer",
@@ -982,24 +1010,10 @@ export const addWorkshopJobLine = async (
           productId,
           variantId: variant.id,
           description,
-          qty: input.qty,
-          unitPricePence: input.unitPricePence,
+          qty: quantity,
+          unitPricePence,
         },
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          variant: {
-            select: {
-              id: true,
-              sku: true,
-              name: true,
-            },
-          },
-        },
+        include: workshopLineInclude,
       });
     } else {
       const description = normalizeOptionalText(input.description);
@@ -1012,29 +1026,216 @@ export const addWorkshopJobLine = async (
           jobId: workshopJobId,
           type: "LABOUR",
           description,
-          qty: input.qty,
-          unitPricePence: input.unitPricePence,
+          qty: quantity,
+          unitPricePence,
         },
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          variant: {
-            select: {
-              id: true,
-              sku: true,
-              name: true,
-            },
-          },
-        },
+        include: workshopLineInclude,
       });
     }
 
     return {
       line: toLineResponse(line),
+    };
+  });
+};
+
+export const updateWorkshopJobLine = async (
+  workshopJobId: string,
+  lineId: string,
+  input: UpdateWorkshopJobLineInput,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+  if (!isUuid(lineId)) {
+    throw new HttpError(400, "Invalid workshop line id", "INVALID_WORKSHOP_LINE_ID");
+  }
+
+  const hasAnyField =
+    Object.prototype.hasOwnProperty.call(input, "description") ||
+    Object.prototype.hasOwnProperty.call(input, "qty") ||
+    Object.prototype.hasOwnProperty.call(input, "unitPricePence") ||
+    Object.prototype.hasOwnProperty.call(input, "productId") ||
+    Object.prototype.hasOwnProperty.call(input, "variantId");
+
+  if (!hasAnyField) {
+    throw new HttpError(400, "No line fields provided", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    if (job.closedAt) {
+      throw new HttpError(409, "Closed jobs cannot be edited", "WORKSHOP_JOB_CLOSED");
+    }
+
+    const line = await tx.workshopJobLine.findUnique({
+      where: { id: lineId },
+      include: workshopLineInclude,
+    });
+    if (!line || line.jobId !== workshopJobId) {
+      throw new HttpError(404, "Workshop line not found", "WORKSHOP_LINE_NOT_FOUND");
+    }
+
+    const data: Prisma.WorkshopJobLineUpdateInput = {};
+
+    if (Object.prototype.hasOwnProperty.call(input, "description")) {
+      const description = normalizeOptionalText(input.description);
+      if (!description) {
+        throw new HttpError(400, "description cannot be empty", "INVALID_WORKSHOP_LINE_UPDATE");
+      }
+      data.description = description;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "qty")) {
+      if (!Number.isInteger(input.qty) || (input.qty ?? 0) <= 0) {
+        throw new HttpError(
+          400,
+          "qty must be a positive integer",
+          "INVALID_WORKSHOP_LINE_UPDATE",
+        );
+      }
+      data.qty = input.qty;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "unitPricePence")) {
+      if (!Number.isInteger(input.unitPricePence) || (input.unitPricePence ?? -1) < 0) {
+        throw new HttpError(
+          400,
+          "unitPricePence must be a non-negative integer",
+          "INVALID_WORKSHOP_LINE_UPDATE",
+        );
+      }
+      data.unitPricePence = input.unitPricePence;
+    }
+
+    const hasProductId = Object.prototype.hasOwnProperty.call(input, "productId");
+    const hasVariantId = Object.prototype.hasOwnProperty.call(input, "variantId");
+
+    if (line.type === "LABOUR") {
+      if (hasProductId && normalizeOptionalText(input.productId ?? undefined)) {
+        throw new HttpError(
+          400,
+          "LABOUR lines cannot set productId",
+          "INVALID_WORKSHOP_LINE_UPDATE",
+        );
+      }
+      if (hasVariantId && normalizeOptionalText(input.variantId ?? undefined)) {
+        throw new HttpError(
+          400,
+          "LABOUR lines cannot set variantId",
+          "INVALID_WORKSHOP_LINE_UPDATE",
+        );
+      }
+      if (hasProductId) {
+        data.productId = null;
+      }
+      if (hasVariantId) {
+        data.variantId = null;
+      }
+    }
+
+    if (line.type === "PART" && (hasProductId || hasVariantId)) {
+      let nextProductId = line.productId;
+      let nextVariantId = line.variantId;
+
+      if (hasProductId) {
+        const productId = normalizeOptionalText(input.productId ?? undefined) ?? null;
+        nextProductId = productId;
+        if (nextProductId === null) {
+          nextVariantId = null;
+        } else {
+          await ensureProductExistsTx(tx, nextProductId);
+          if (!hasVariantId) {
+            if (nextVariantId) {
+              const currentVariant = await tx.variant.findUnique({
+                where: { id: nextVariantId },
+                select: { id: true, productId: true },
+              });
+              if (!currentVariant || currentVariant.productId !== nextProductId) {
+                const fallbackVariant = await ensureVariantForPartTx(tx, {
+                  productId: nextProductId,
+                });
+                nextVariantId = fallbackVariant.id;
+              }
+            } else {
+              const fallbackVariant = await ensureVariantForPartTx(tx, {
+                productId: nextProductId,
+              });
+              nextVariantId = fallbackVariant.id;
+            }
+          }
+        }
+      }
+
+      if (hasVariantId) {
+        const variantId = normalizeOptionalText(input.variantId ?? undefined) ?? null;
+        if (variantId === null) {
+          nextVariantId = null;
+        } else {
+          if (!nextProductId) {
+            throw new HttpError(
+              400,
+              "productId is required when setting variantId on PART lines",
+              "INVALID_WORKSHOP_LINE_UPDATE",
+            );
+          }
+          const variant = await ensureVariantForPartTx(tx, {
+            productId: nextProductId,
+            variantId,
+          });
+          nextVariantId = variant.id;
+        }
+      }
+
+      data.productId = nextProductId;
+      data.variantId = nextVariantId;
+    }
+
+    const updated = await tx.workshopJobLine.update({
+      where: { id: lineId },
+      data,
+      include: workshopLineInclude,
+    });
+
+    return {
+      line: toLineResponse(updated),
+    };
+  });
+};
+
+export const deleteWorkshopJobLine = async (workshopJobId: string, lineId: string) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+  if (!isUuid(lineId)) {
+    throw new HttpError(400, "Invalid workshop line id", "INVALID_WORKSHOP_LINE_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    if (job.closedAt) {
+      throw new HttpError(409, "Closed jobs cannot be edited", "WORKSHOP_JOB_CLOSED");
+    }
+
+    const line = await tx.workshopJobLine.findUnique({
+      where: { id: lineId },
+      select: {
+        id: true,
+        jobId: true,
+      },
+    });
+    if (!line || line.jobId !== workshopJobId) {
+      throw new HttpError(404, "Workshop line not found", "WORKSHOP_LINE_NOT_FOUND");
+    }
+
+    await tx.workshopJobLine.delete({
+      where: { id: lineId },
+    });
+
+    return {
+      deleted: true,
+      workshopJobId,
+      lineId,
     };
   });
 };

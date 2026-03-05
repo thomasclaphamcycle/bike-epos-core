@@ -111,6 +111,34 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
 
     <div class="card">
       <h2>Lines</h2>
+      <div class="controls">
+        <div class="field">
+          <label for="line-type">Type</label>
+          <select id="line-type">
+            <option value="LABOUR">LABOUR</option>
+            <option value="PART">PART</option>
+          </select>
+        </div>
+        <div class="field" style="min-width: 320px;">
+          <label for="line-description">Description</label>
+          <input id="line-description" type="text" />
+        </div>
+        <div class="field">
+          <label for="line-quantity">Quantity</label>
+          <input id="line-quantity" type="number" min="1" step="1" value="1" />
+        </div>
+        <div class="field">
+          <label for="line-unit-price">Unit Price (GBP)</label>
+          <input id="line-unit-price" type="number" min="0" step="0.01" value="0.00" />
+        </div>
+        <div class="field" style="min-width: 220px;">
+          <label for="line-product-id">Product Id (optional PART)</label>
+          <input id="line-product-id" type="text" placeholder="UUID" />
+        </div>
+        <button id="line-add-btn" class="primary" type="button">Add Line</button>
+      </div>
+      <div id="line-status" class="status"></div>
+      <div id="line-totals" class="status"></div>
       <div id="lines-wrap" class="table-wrap"></div>
     </div>
   </div>
@@ -174,9 +202,12 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         return payload;
       };
 
+      const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
+
       const renderJob = () => {
         const meta = qs("#job-meta");
         const linesWrap = qs("#lines-wrap");
+        const lineTotals = qs("#line-totals");
         if (!meta || !linesWrap) return;
 
         const job = jobPayload?.job;
@@ -205,6 +236,13 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         qs("#notes-input").value = job.notes || "";
 
         const lines = Array.isArray(jobPayload?.lines) ? jobPayload.lines : [];
+        const totals = jobPayload?.totals || { subtotalPence: 0, taxPence: 0, totalPence: 0 };
+        if (lineTotals) {
+          lineTotals.innerHTML =
+            "Subtotal: " + escapeHtml(formatMoney(totals.subtotalPence)) +
+            " | Tax: " + escapeHtml(formatMoney(totals.taxPence)) +
+            " | Total: " + escapeHtml(formatMoney(totals.totalPence));
+        }
         if (lines.length === 0) {
           linesWrap.innerHTML = '<div style="padding: 10px;">No lines.</div>';
           return;
@@ -214,15 +252,20 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
           .map((line) =>
             '<tr>' +
             '<td>' + escapeHtml(line.type) + '</td>' +
-            '<td>' + escapeHtml(line.description) + '</td>' +
+            '<td><input type="text" class="line-description-input" data-line-id="' + escapeHtml(line.id) + '" value="' + escapeHtml(line.description || "") + '" /></td>' +
             '<td>' + escapeHtml(line.variantSku || "-") + '</td>' +
-            '<td>' + escapeHtml(String(line.qty || 0)) + '</td>' +
-            '<td>' + escapeHtml(String(line.unitPricePence || 0)) + '</td>' +
+            '<td><input type="number" min="1" step="1" class="line-qty-input" data-line-id="' + escapeHtml(line.id) + '" value="' + escapeHtml(String(line.qty || 0)) + '" /></td>' +
+            '<td><input type="number" min="0" step="0.01" class="line-price-input" data-line-id="' + escapeHtml(line.id) + '" value="' + ((Number(line.unitPricePence || 0) / 100).toFixed(2)) + '" /></td>' +
+            '<td>' + escapeHtml(formatMoney(line.lineTotalPence || 0)) + '</td>' +
+            '<td>' +
+            '<button type="button" class="line-save-btn" data-line-id="' + escapeHtml(line.id) + '">Save</button> ' +
+            '<button type="button" class="line-delete-btn" data-line-id="' + escapeHtml(line.id) + '">Delete</button>' +
+            '</td>' +
             "</tr>",
           )
           .join("");
         linesWrap.innerHTML =
-          '<table><thead><tr><th>Type</th><th>Description</th><th>SKU</th><th>Qty</th><th>Unit (p)</th></tr></thead><tbody>' +
+          '<table><thead><tr><th>Type</th><th>Description</th><th>SKU</th><th>Qty</th><th>Unit (GBP)</th><th>Line Total</th><th>Actions</th></tr></thead><tbody>' +
           rows +
           "</tbody></table>";
       };
@@ -280,8 +323,128 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         }
       };
 
+      const addLine = async () => {
+        const type = (qs("#line-type").value || "").trim();
+        const description = (qs("#line-description").value || "").trim();
+        const quantity = Number.parseInt(qs("#line-quantity").value || "", 10);
+        const unitPrice = Number.parseFloat(qs("#line-unit-price").value || "");
+        const productId = (qs("#line-product-id").value || "").trim();
+
+        if (!description) {
+          setStatus("line-status", "Line description is required.", "error");
+          return;
+        }
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          setStatus("line-status", "Quantity must be a positive integer.", "error");
+          return;
+        }
+        if (Number.isNaN(unitPrice) || unitPrice < 0) {
+          setStatus("line-status", "Unit price must be >= 0.", "error");
+          return;
+        }
+        if (type === "PART" && !productId) {
+          setStatus("line-status", "PART lines require productId in this flow.", "error");
+          return;
+        }
+
+        setStatus("line-status", "Adding line...");
+        try {
+          await apiRequest("/api/workshop/jobs/" + encodeURIComponent(jobId) + "/lines", {
+            method: "POST",
+            body: JSON.stringify({
+              type,
+              description,
+              quantity,
+              unitPrice,
+              productId: productId || undefined,
+            }),
+          });
+          qs("#line-description").value = "";
+          qs("#line-product-id").value = "";
+          qs("#line-quantity").value = "1";
+          qs("#line-unit-price").value = "0.00";
+          await loadJob();
+          setStatus("line-status", "Line added.", "ok");
+        } catch (error) {
+          setStatus("line-status", error.message || "Failed to add line", "error");
+        }
+      };
+
+      const saveLine = async (lineId) => {
+        const descriptionInput = qs('.line-description-input[data-line-id="' + lineId + '"]');
+        const qtyInput = qs('.line-qty-input[data-line-id="' + lineId + '"]');
+        const priceInput = qs('.line-price-input[data-line-id="' + lineId + '"]');
+        if (!(descriptionInput instanceof HTMLInputElement)) return;
+        if (!(qtyInput instanceof HTMLInputElement)) return;
+        if (!(priceInput instanceof HTMLInputElement)) return;
+
+        const description = (descriptionInput.value || "").trim();
+        const quantity = Number.parseInt(qtyInput.value || "", 10);
+        const unitPrice = Number.parseFloat(priceInput.value || "");
+        if (!description) {
+          setStatus("line-status", "Description cannot be empty.", "error");
+          return;
+        }
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          setStatus("line-status", "Quantity must be a positive integer.", "error");
+          return;
+        }
+        if (Number.isNaN(unitPrice) || unitPrice < 0) {
+          setStatus("line-status", "Unit price must be >= 0.", "error");
+          return;
+        }
+
+        setStatus("line-status", "Saving line...");
+        try {
+          await apiRequest(
+            "/api/workshop/jobs/" + encodeURIComponent(jobId) + "/lines/" + encodeURIComponent(lineId),
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                description,
+                quantity,
+                unitPrice,
+              }),
+            },
+          );
+          await loadJob();
+          setStatus("line-status", "Line updated.", "ok");
+        } catch (error) {
+          setStatus("line-status", error.message || "Failed to save line", "error");
+        }
+      };
+
+      const deleteLine = async (lineId) => {
+        setStatus("line-status", "Deleting line...");
+        try {
+          await apiRequest(
+            "/api/workshop/jobs/" + encodeURIComponent(jobId) + "/lines/" + encodeURIComponent(lineId),
+            {
+              method: "DELETE",
+            },
+          );
+          await loadJob();
+          setStatus("line-status", "Line deleted.", "ok");
+        } catch (error) {
+          setStatus("line-status", error.message || "Failed to delete line", "error");
+        }
+      };
+
       qs("#save-status-btn")?.addEventListener("click", saveStatus);
       qs("#save-notes-btn")?.addEventListener("click", saveNotesAndTitle);
+      qs("#line-add-btn")?.addEventListener("click", addLine);
+      qs("#lines-wrap")?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) return;
+        const lineId = target.getAttribute("data-line-id");
+        if (!lineId) return;
+        if (target.classList.contains("line-save-btn")) {
+          saveLine(lineId);
+        }
+        if (target.classList.contains("line-delete-btn")) {
+          deleteLine(lineId);
+        }
+      });
       renderJob();
       loadJob();
     })();

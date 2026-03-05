@@ -34,9 +34,11 @@ import {
   attachCustomerToWorkshopJob,
   closeWorkshopJob,
   createWorkshopJob,
+  deleteWorkshopJobLine,
   finalizeWorkshopJob,
   getWorkshopJobById,
   listWorkshopJobs,
+  updateWorkshopJobLine,
   updateWorkshopJob,
 } from "../services/workshopService";
 import { HttpError } from "../utils/http";
@@ -111,6 +113,108 @@ const parseOptionalIntegerQuery = (value: unknown, field: string): number | unde
     throw new HttpError(400, `${field} must be an integer`, "INVALID_FILTER");
   }
   return parsed;
+};
+
+const hasOwn = (value: unknown, key: string) =>
+  !!value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key);
+
+const toUnitPricePenceOrThrow = (
+  value: unknown,
+  fieldName: "unitPricePence" | "unitPrice",
+  code: string,
+) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new HttpError(400, `${fieldName} must be a number`, code);
+  }
+
+  if (value < 0) {
+    throw new HttpError(400, `${fieldName} must be >= 0`, code);
+  }
+
+  if (fieldName === "unitPricePence") {
+    if (!Number.isInteger(value)) {
+      throw new HttpError(400, "unitPricePence must be an integer", code);
+    }
+    return value;
+  }
+
+  return Math.round(value * 100);
+};
+
+const parseLineInputFromBody = (
+  body: {
+    type?: string;
+    productId?: string | null;
+    variantId?: string | null;
+    description?: string;
+    qty?: number;
+    quantity?: number;
+    unitPricePence?: number;
+    unitPrice?: number;
+  },
+  mode: "create" | "patch",
+) => {
+  const code = mode === "create" ? "INVALID_WORKSHOP_LINE" : "INVALID_WORKSHOP_LINE_UPDATE";
+  const output: {
+    type?: string;
+    productId?: string | null;
+    variantId?: string | null;
+    description?: string;
+    qty?: number;
+    unitPricePence?: number;
+  } = {};
+
+  if (mode === "create") {
+    output.type = body.type;
+    output.productId = body.productId;
+    output.variantId = body.variantId;
+    output.description = body.description;
+  } else {
+    if (hasOwn(body, "productId")) {
+      output.productId = body.productId ?? null;
+    }
+    if (hasOwn(body, "variantId")) {
+      output.variantId = body.variantId ?? null;
+    }
+    if (hasOwn(body, "description")) {
+      output.description = body.description;
+    }
+    if (hasOwn(body, "type")) {
+      throw new HttpError(400, "type cannot be patched", code);
+    }
+  }
+
+  if (hasOwn(body, "qty") && hasOwn(body, "quantity")) {
+    throw new HttpError(400, "Specify either qty or quantity, not both", code);
+  }
+
+  if (hasOwn(body, "qty")) {
+    if (typeof body.qty !== "number") {
+      throw new HttpError(400, "qty must be a number", code);
+    }
+    output.qty = body.qty;
+  } else if (hasOwn(body, "quantity")) {
+    if (typeof body.quantity !== "number") {
+      throw new HttpError(400, "quantity must be a number", code);
+    }
+    output.qty = body.quantity;
+  } else if (mode === "create") {
+    output.qty = 1;
+  }
+
+  if (hasOwn(body, "unitPricePence") && hasOwn(body, "unitPrice")) {
+    throw new HttpError(400, "Specify either unitPricePence or unitPrice, not both", code);
+  }
+
+  if (hasOwn(body, "unitPricePence")) {
+    output.unitPricePence = toUnitPricePenceOrThrow(body.unitPricePence, "unitPricePence", code);
+  } else if (hasOwn(body, "unitPrice")) {
+    output.unitPricePence = toUnitPricePenceOrThrow(body.unitPrice, "unitPrice", code);
+  } else if (mode === "create") {
+    output.unitPricePence = 0;
+  }
+
+  return output;
 };
 
 export const createWorkshopJobHandler = async (req: Request, res: Response) => {
@@ -268,7 +372,9 @@ export const addWorkshopJobLineHandler = async (req: Request, res: Response) => 
     variantId?: string | null;
     description?: string;
     qty?: number;
+    quantity?: number;
     unitPricePence?: number;
+    unitPrice?: number;
   };
 
   if (body.type !== undefined && typeof body.type !== "string") {
@@ -283,15 +389,71 @@ export const addWorkshopJobLineHandler = async (req: Request, res: Response) => 
   if (body.description !== undefined && typeof body.description !== "string") {
     throw new HttpError(400, "description must be a string", "INVALID_WORKSHOP_LINE");
   }
+  if (body.quantity !== undefined && typeof body.quantity !== "number") {
+    throw new HttpError(400, "quantity must be a number", "INVALID_WORKSHOP_LINE");
+  }
   if (body.qty !== undefined && typeof body.qty !== "number") {
     throw new HttpError(400, "qty must be a number", "INVALID_WORKSHOP_LINE");
   }
   if (body.unitPricePence !== undefined && typeof body.unitPricePence !== "number") {
     throw new HttpError(400, "unitPricePence must be a number", "INVALID_WORKSHOP_LINE");
   }
+  if (body.unitPrice !== undefined && typeof body.unitPrice !== "number") {
+    throw new HttpError(400, "unitPrice must be a number", "INVALID_WORKSHOP_LINE");
+  }
 
-  const result = await addWorkshopJobLine(req.params.id, body);
+  const result = await addWorkshopJobLine(req.params.id, parseLineInputFromBody(body, "create"));
   res.status(201).json(result);
+};
+
+export const patchWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    description?: string;
+    qty?: number;
+    quantity?: number;
+    unitPricePence?: number;
+    unitPrice?: number;
+    productId?: string | null;
+    variantId?: string | null;
+    type?: string;
+  };
+
+  if (body.description !== undefined && typeof body.description !== "string") {
+    throw new HttpError(400, "description must be a string", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.qty !== undefined && typeof body.qty !== "number") {
+    throw new HttpError(400, "qty must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.quantity !== undefined && typeof body.quantity !== "number") {
+    throw new HttpError(400, "quantity must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.unitPricePence !== undefined && typeof body.unitPricePence !== "number") {
+    throw new HttpError(400, "unitPricePence must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.unitPrice !== undefined && typeof body.unitPrice !== "number") {
+    throw new HttpError(400, "unitPrice must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.productId !== undefined && body.productId !== null && typeof body.productId !== "string") {
+    throw new HttpError(400, "productId must be a string or null", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.variantId !== undefined && body.variantId !== null && typeof body.variantId !== "string") {
+    throw new HttpError(400, "variantId must be a string or null", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.type !== undefined) {
+    throw new HttpError(400, "type cannot be patched", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+
+  const result = await updateWorkshopJobLine(
+    req.params.id,
+    req.params.lineId,
+    parseLineInputFromBody(body, "patch"),
+  );
+  res.json(result);
+};
+
+export const deleteWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const result = await deleteWorkshopJobLine(req.params.id, req.params.lineId);
+  res.json(result);
 };
 
 export const finalizeWorkshopJobHandler = async (req: Request, res: Response) => {

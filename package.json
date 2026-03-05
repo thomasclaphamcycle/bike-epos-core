@@ -50,7 +50,8 @@
     "test:m46": "node scripts/run_smoke_test.js scripts/suppliers_m46_smoke_tests.js",
     "test:m47": "node scripts/run_smoke_test.js scripts/customers_m47_smoke_tests.js",
     "test:m48": "node scripts/run_smoke_test.js scripts/customer_sales_m48_smoke_tests.js",
-    "test:m49": "node scripts/run_smoke_test.js scripts/workshop_m49_smoke_tests.js"
+    "test:m49": "node scripts/run_smoke_test.js scripts/workshop_m49_smoke_tests.js",
+    "test:m50": "node scripts/run_smoke_test.js scripts/workshop_lines_m50_smoke_tests.js"
   },
   "repository": {
     "type": "git",

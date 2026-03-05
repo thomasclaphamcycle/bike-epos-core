@@ -1,0 +1,58 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@jobId = REPLACE_WORKSHOP_JOB_ID
+@lineId = REPLACE_WORKSHOP_LINE_ID
+@productId = REPLACE_PRODUCT_ID
+
+### Add labour line (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "LABOUR",
+  "description": "Brake setup labour",
+  "quantity": 2,
+  "unitPrice": 30.5
+}
+
+### Add part line (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "PART",
+  "productId": "{{productId}}",
+  "quantity": 1,
+  "unitPricePence": 1250
+}
+
+### Patch line quantity/price (STAFF+)
+PATCH {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines/{{lineId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "quantity": 3,
+  "unitPrice": 30.5
+}
+
+### Delete line (STAFF+)
+DELETE {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines/{{lineId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get workshop job with line totals (STAFF+)
+GET {{baseUrl}}/api/workshop/jobs/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Workshop job card page shows line controls (STAFF+)
+GET {{baseUrl}}/workshop/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
