@@ -8,6 +8,7 @@ import { authRouter } from "./routes/authRoutes";
 import { workshopRouter } from "./routes/workshopRoutes";
 import { workshopBookingRouter } from "./routes/workshopBookingRoutes";
 import { paymentRouter } from "./routes/paymentRoutes";
+import { receiptRouter } from "./routes/receiptRoutes";
 import { creditRouter } from "./routes/creditRoutes";
 import { workshopReportRouter } from "./routes/workshopReportRoutes";
 import { reportRouter } from "./routes/reportRoutes";
@@ -144,6 +145,7 @@ app.get("/scan/:code", async (req, res) => {
 app.use("/api/baskets", basketRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/sales", salesRouter);
+app.use("/api/receipts", receiptRouter);
 app.use("/api/customers", customerRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/products", productRouter);

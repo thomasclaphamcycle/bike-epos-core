@@ -1,35 +1,40 @@
-import type { SaleReceipt } from "../services/receiptService";
-
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+import type { DetailedReceipt } from "../services/receiptService";
+import { escapeHtml } from "../utils/escapeHtml";
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
-const formatDate = (value: Date | null) => (value ? value.toISOString() : "-");
+const formatDate = (value: Date | null) => (value ? new Date(value).toISOString() : "-");
 
 type ReceiptPageInput = {
-  receipt: SaleReceipt;
+  receipt: DetailedReceipt;
 };
 
 export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
   const itemRows = receipt.items
     .map(
       (item) =>
-        `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.sku)}</td><td>${item.qty}</td><td>${formatMoney(item.unitPrice)}</td><td>${formatMoney(item.lineTotal)}</td></tr>`,
+        `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.sku ?? "-")}</td><td>${item.qty}</td><td>${formatMoney(item.unitPricePence)}</td><td>${formatMoney(item.lineTotalPence)}</td></tr>`,
+    )
+    .join("");
+
+  const tenderRows = receipt.tenders
+    .map(
+      (tender) =>
+        `<tr><td>${escapeHtml(tender.method)}</td><td>${formatMoney(tender.amountPence)}</td><td>${escapeHtml(formatDate(tender.createdAt))}</td></tr>`,
     )
     .join("");
 
   const paymentRows = receipt.payments
     .map(
       (payment) =>
-        `<tr><td>${escapeHtml(payment.intentId)}</td><td>${escapeHtml(payment.provider)}</td><td>${escapeHtml(payment.method)}</td><td>${escapeHtml(payment.status)}</td><td>${formatMoney(payment.amount)}</td><td>${formatDate(payment.capturedAt)}</td></tr>`,
+        `<tr><td>${escapeHtml(payment.id)}</td><td>${escapeHtml(payment.method)}</td><td>${escapeHtml(payment.status)}</td><td>${formatMoney(payment.amountPence)}</td><td>${escapeHtml(formatDate(payment.createdAt))}</td></tr>`,
     )
     .join("");
+
+  const taxRow =
+    receipt.totals.taxPence > 0
+      ? `<div><strong>Tax/VAT:</strong> ${formatMoney(receipt.totals.taxPence)}</div>`
+      : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -65,12 +70,18 @@ export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
     <div class="card">
       <div class="top">
         <div>
-          <div><strong>Receipt:</strong> ${escapeHtml(receipt.receiptNumber)}</div>
-          <div><strong>Sale:</strong> ${escapeHtml(receipt.saleId)}</div>
-          <div><strong>Created:</strong> ${escapeHtml(receipt.createdAt.toISOString())}</div>
+          <div><strong>${escapeHtml(receipt.shop.name)}</strong></div>
+          <div>${escapeHtml(receipt.shop.address)}</div>
+          ${receipt.shop.vatNumber ? `<div><strong>VAT:</strong> ${escapeHtml(receipt.shop.vatNumber)}</div>` : ""}
+          <div style="margin-top:8px;"><strong>Receipt:</strong> ${escapeHtml(receipt.receiptNumber)}</div>
+          <div><strong>Type:</strong> ${escapeHtml(receipt.type)}</div>
+          <div><strong>Issued:</strong> ${escapeHtml(formatDate(receipt.issuedAt))}</div>
+          <div><strong>Created:</strong> ${escapeHtml(formatDate(receipt.createdAt))}</div>
           <div><strong>Completed:</strong> ${escapeHtml(formatDate(receipt.completedAt))}</div>
           <div><strong>Staff:</strong> ${escapeHtml(receipt.staff.id ?? "-")}${receipt.staff.name ? ` (${escapeHtml(receipt.staff.name)})` : ""}</div>
           <div><strong>Customer:</strong> ${receipt.customer ? `${escapeHtml(receipt.customer.name)}${receipt.customer.phone ? ` (${escapeHtml(receipt.customer.phone)})` : ""}` : "-"}</div>
+          ${receipt.saleId ? `<div><strong>Sale:</strong> ${escapeHtml(receipt.saleId)}</div>` : ""}
+          ${receipt.refundId ? `<div><strong>Refund:</strong> ${escapeHtml(receipt.refundId)}</div>` : ""}
         </div>
         <div class="actions">
           <button type="button" onclick="window.print()">Print</button>
@@ -82,31 +93,47 @@ export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
         <strong>Items</strong>
         <table>
           <thead>
-            <tr><th>Name</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Line</th></tr>
+            <tr><th>Description</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Line</th></tr>
           </thead>
           <tbody>
-            ${itemRows || "<tr><td colspan=\"5\" class=\"muted\">No sale items.</td></tr>"}
+            ${itemRows || "<tr><td colspan=\"5\" class=\"muted\">No items.</td></tr>"}
           </tbody>
         </table>
       </div>
 
       <div class="totals">
-        <div><strong>Subtotal:</strong> ${formatMoney(receipt.totals.subtotal)}</div>
-        <div><strong>Tax:</strong> ${formatMoney(receipt.totals.tax)}</div>
-        <div><strong>Total:</strong> ${formatMoney(receipt.totals.total)}</div>
+        <div><strong>Subtotal:</strong> ${formatMoney(receipt.totals.subtotalPence)}</div>
+        ${taxRow}
+        <div><strong>Total:</strong> ${formatMoney(receipt.totals.totalPence)}</div>
+        <div><strong>Change Due:</strong> ${formatMoney(receipt.totals.changeDuePence)}</div>
+      </div>
+
+      <div style="margin-top: 12px;">
+        <strong>Tenders</strong>
+        <table>
+          <thead>
+            <tr><th>Method</th><th>Amount</th><th>Created</th></tr>
+          </thead>
+          <tbody>
+            ${tenderRows || "<tr><td colspan=\"3\" class=\"muted\">No tenders.</td></tr>"}
+          </tbody>
+        </table>
       </div>
 
       <div style="margin-top: 12px;">
         <strong>Payments</strong>
         <table>
           <thead>
-            <tr><th>Intent</th><th>Provider</th><th>Method</th><th>Status</th><th>Amount</th><th>Captured</th></tr>
+            <tr><th>ID</th><th>Method</th><th>Status</th><th>Amount</th><th>Created</th></tr>
           </thead>
           <tbody>
-            ${paymentRows || "<tr><td colspan=\"6\" class=\"muted\">No payments.</td></tr>"}
+            ${paymentRows || "<tr><td colspan=\"5\" class=\"muted\">No payments.</td></tr>"}
           </tbody>
         </table>
       </div>
+
+      ${receipt.refund ? `<div class="totals"><div><strong>Refund Reason:</strong> ${escapeHtml(receipt.refund.reason)}</div></div>` : ""}
+      ${receipt.shop.footerText ? `<div class="muted" style="margin-top: 12px;">${escapeHtml(receipt.shop.footerText)}</div>` : ""}
     </div>
   </div>
 </body>

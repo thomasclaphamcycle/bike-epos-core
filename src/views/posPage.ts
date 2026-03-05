@@ -326,6 +326,7 @@ export const renderPosPage = (input: PosPageInput) => {
         basket: null,
         lastSale: null,
         tenderSummary: null,
+        lastIssuedReceipt: null,
         lastPaymentIntentId: null,
         customerResults: [],
         selectedCustomer: null,
@@ -559,6 +560,13 @@ export const renderPosPage = (input: PosPageInput) => {
         }
 
         const sale = state.lastSale.sale || {};
+        const issuedReceipt = state.lastIssuedReceipt;
+        const receiptNumber = issuedReceipt?.receiptNumber || sale.receiptNumber || "";
+        const printableReceiptHref = receiptNumber
+          ? "/r/" + encodeURIComponent(receiptNumber)
+          : sale.id
+            ? "/sales/" + encodeURIComponent(sale.id) + "/receipt"
+            : "";
         const customer = sale.customer || null;
         const customerLabel = customer
           ? (customer.name || [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() || customer.id)
@@ -584,9 +592,15 @@ export const renderPosPage = (input: PosPageInput) => {
           '<div><strong>Total:</strong> ' + formatMoney(sale.totalPence || 0) + '</div>' +
           '<div><strong>Change Due:</strong> ' + formatMoney(sale.changeDuePence || 0) + '</div>' +
           '<div><strong>Completed:</strong> ' + (sale.completedAt ? toSafeText(String(sale.completedAt)) : '-') + '</div>' +
-          (sale.id
-            ? '<div style="margin-top: 6px;"><a href="/sales/' + encodeURIComponent(sale.id) + '/receipt" target="_blank" rel="noopener">View Receipt</a></div>'
-            : '') +
+          (receiptNumber
+            ? '<div data-testid="receipt-number"><strong>Receipt:</strong> ' + toSafeText(receiptNumber) + '</div>'
+            : "") +
+          (printableReceiptHref
+            ? '<div style="margin-top: 6px; display:flex; gap:8px; flex-wrap:wrap;">' +
+              '<a data-testid="view-receipt-link" href="' + printableReceiptHref + '" target="_blank" rel="noopener">View Receipt</a>' +
+              '<a data-testid="print-receipt-link" href="' + printableReceiptHref + '" target="_blank" rel="noopener">Print Receipt</a>' +
+              '</div>'
+            : "") +
           '<div style="margin-top: 10px;" class="table-wrap">' +
           '<table>' +
           '<thead><tr><th>Product</th><th>Variant</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>' +
@@ -686,6 +700,26 @@ export const renderPosPage = (input: PosPageInput) => {
           state.tenderSummary = null;
           renderTenderPanel();
           setStatus("tender-status", error.message || "Failed to load tenders", "error");
+          return null;
+        }
+      };
+
+      const issueReceiptForSale = async (saleId) => {
+        if (!saleId) {
+          state.lastIssuedReceipt = null;
+          return null;
+        }
+
+        try {
+          const result = await apiRequest("/api/receipts/issue", {
+            method: "POST",
+            body: JSON.stringify({ saleId }),
+          });
+          state.lastIssuedReceipt = result?.receipt || null;
+          return state.lastIssuedReceipt;
+        } catch (error) {
+          state.lastIssuedReceipt = null;
+          setStatus("checkout-status", error.message || "Failed to issue receipt", "error");
           return null;
         }
       };
@@ -790,13 +824,13 @@ export const renderPosPage = (input: PosPageInput) => {
               body: JSON.stringify({}),
             },
           );
-          const salePayload = await apiRequest("/api/sales/" + encodeURIComponent(saleId));
-          state.lastSale = salePayload;
-          await loadTenderSummary(saleId);
-          renderReceipt();
+          await refreshSaleAndReceiptState(saleId);
+          const receiptLabel = state.lastIssuedReceipt?.receiptNumber
+            ? " Receipt: " + state.lastIssuedReceipt.receiptNumber + "."
+            : "";
           setStatus(
             "tender-status",
-            "Sale completed. Change due: " + formatMoney(completion.changeDuePence || 0),
+            "Sale completed. Change due: " + formatMoney(completion.changeDuePence || 0) + "." + receiptLabel,
             "ok",
           );
         } catch (error) {
@@ -814,6 +848,7 @@ export const renderPosPage = (input: PosPageInput) => {
           state.basket = basket;
           state.lastSale = null;
           state.tenderSummary = null;
+          state.lastIssuedReceipt = null;
           state.lastPaymentIntentId = null;
           qs("#basket-id-input").value = basket.id;
           renderBasket();
@@ -1076,6 +1111,11 @@ export const renderPosPage = (input: PosPageInput) => {
 
           state.lastSale = result;
           await loadTenderSummary(result.sale?.id);
+          if (result.sale?.id && result.sale?.completedAt) {
+            await issueReceiptForSale(result.sale.id);
+          } else {
+            state.lastIssuedReceipt = null;
+          }
           if (result.sale?.id && state.selectedCustomer?.id) {
             await attachSelectedCustomerToSale(result.sale.id);
           }
@@ -1134,6 +1174,25 @@ export const renderPosPage = (input: PosPageInput) => {
         return payload;
       };
 
+      const refreshSaleAndReceiptState = async (saleId) => {
+        if (!saleId) {
+          return null;
+        }
+
+        const salePayload = await apiRequest("/api/sales/" + encodeURIComponent(saleId));
+        state.lastSale = salePayload;
+        await loadTenderSummary(saleId);
+
+        if (salePayload.sale?.completedAt) {
+          await issueReceiptForSale(saleId);
+        } else {
+          state.lastIssuedReceipt = null;
+        }
+
+        renderReceipt();
+        return salePayload;
+      };
+
       const payCash = async () => {
         setStatus("checkout-status", "Creating cash payment intent...");
         try {
@@ -1142,7 +1201,7 @@ export const renderPosPage = (input: PosPageInput) => {
             return;
           }
           const paidLabel = result.salePayment?.paid ? "Sale is fully paid." : "Sale is partially paid.";
-          await loadTenderSummary(state.lastSale?.sale?.id);
+          await refreshSaleAndReceiptState(state.lastSale?.sale?.id);
           setStatus(
             "checkout-status",
             "Cash intent captured: " + result.intent.id + ". " + paidLabel,
@@ -1168,7 +1227,7 @@ export const renderPosPage = (input: PosPageInput) => {
             );
             return;
           }
-          await loadTenderSummary(state.lastSale?.sale?.id);
+          await refreshSaleAndReceiptState(state.lastSale?.sale?.id);
           setStatus("checkout-status", "Card intent status: " + result.intent.status, "ok");
         } catch (error) {
           setStatus("checkout-status", error.message || "Card payment intent failed", "error");
@@ -1191,7 +1250,7 @@ export const renderPosPage = (input: PosPageInput) => {
             },
           );
           const paidLabel = result.salePayment?.paid ? "Sale is fully paid." : "Sale is partially paid.";
-          await loadTenderSummary(state.lastSale?.sale?.id);
+          await refreshSaleAndReceiptState(state.lastSale?.sale?.id);
           setStatus(
             "checkout-status",
             "Intent captured: " + result.intent.id + ". " + paidLabel,

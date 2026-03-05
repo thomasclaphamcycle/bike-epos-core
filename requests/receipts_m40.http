@@ -1,0 +1,46 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@saleId = REPLACE_SALE_ID
+@refundId = REPLACE_REFUND_ID
+@receiptNumber = REPLACE_RECEIPT_NUMBER
+
+### Issue sale receipt (STAFF+)
+POST {{baseUrl}}/api/receipts/issue
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "saleId": "{{saleId}}"
+}
+
+### Issue refund receipt (STAFF+)
+POST {{baseUrl}}/api/receipts/issue
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "refundId": "{{refundId}}"
+}
+
+### Get receipt by number (STAFF+)
+GET {{baseUrl}}/api/receipts/{{receiptNumber}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Printable receipt by number (STAFF+)
+GET {{baseUrl}}/r/{{receiptNumber}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Legacy sale receipt JSON (STAFF+, backward compatible)
+GET {{baseUrl}}/api/sales/{{saleId}}/receipt
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Legacy sale receipt HTML (STAFF+, backward compatible)
+GET {{baseUrl}}/sales/{{saleId}}/receipt
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

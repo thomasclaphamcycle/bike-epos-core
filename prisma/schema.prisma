@@ -347,6 +347,7 @@ model Sale {
   items         SaleItem[]
   payments      Payment[]
   tenders       SaleTender[]
+  receipt       Receipt?
   paymentIntents PaymentIntent[]
   returns       SaleReturn[]
 
@@ -382,6 +383,41 @@ model SaleTender {
 
   @@index([saleId, createdAt])
   @@index([createdByStaffId])
+}
+
+model ReceiptSettings {
+  id          Int      @id @default(1)
+  shopName    String   @default("Bike EPOS")
+  shopAddress String   @default("123 Service Lane")
+  vatNumber   String?
+  footerText  String?  @default("Thank you for your custom.")
+  updatedAt   DateTime @updatedAt
+}
+
+model ReceiptCounter {
+  id        Int      @id @default(1)
+  nextValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model Receipt {
+  id              String   @id @default(uuid()) @db.Uuid
+  saleId          String?  @unique @db.Uuid
+  refundId        String?  @unique @db.Uuid
+  receiptNumber   String   @unique
+  issuedAt        DateTime @default(now())
+  issuedByStaffId String?
+  shopName        String
+  shopAddress     String
+  vatNumber       String?
+  footerText      String?
+
+  sale            Sale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  refund          PaymentRefund? @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  issuedByStaff   User?        @relation("ReceiptIssuedByStaff", fields: [issuedByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([issuedAt])
+  @@index([issuedByStaffId])
 }
 
 model Payment {
@@ -440,6 +476,7 @@ model PaymentRefund {
 
   payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   cancellations     WorkshopCancellation[]
+  receipt           Receipt?
 
   @@index([paymentId, createdAt])
   @@unique([paymentId, idempotencyKey])
@@ -756,6 +793,7 @@ model User {
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
   createdSales         Sale[] @relation("SaleCreatedByStaff")
   saleTenders          SaleTender[] @relation("SaleTenderCreatedByStaff")
+  issuedReceipts       Receipt[] @relation("ReceiptIssuedByStaff")
   openedCashSessions   CashSession[] @relation("CashSessionOpenedBy")
   closedCashSessions   CashSession[] @relation("CashSessionClosedBy")
   cashMovements        CashMovement[] @relation("CashMovementCreatedBy")

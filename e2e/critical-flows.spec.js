@@ -89,7 +89,9 @@ test("Login then POS add to basket, checkout cash, and open receipt page", async
   await page.click("#pay-cash-btn");
   await expect(page.locator("#checkout-status")).toContainText("Cash intent captured");
 
-  const receiptLink = page.locator('#sale-receipt a[href^="/sales/"][href$="/receipt"]');
+  const receiptPanel = page.locator("#sale-receipt");
+  await expect(receiptPanel).toContainText("Sale ID:");
+  const receiptLink = page.getByTestId("view-receipt-link");
   await expect(receiptLink).toHaveCount(1);
 
   const href = await receiptLink.first().getAttribute("href");
@@ -97,9 +99,26 @@ test("Login then POS add to basket, checkout cash, and open receipt page", async
     throw new Error("Receipt link href was empty");
   }
 
+  const receiptPanelText = await receiptPanel.innerText();
+  const saleIdMatch = receiptPanelText.match(/Sale ID:\s*([0-9a-f-]{36})/i);
+  if (!saleIdMatch) {
+    throw new Error(`Could not parse sale id from receipt panel: ${receiptPanelText}`);
+  }
+  const saleId = saleIdMatch[1];
+
+  const issuedReceipt = await apiJson(page.request, "POST", "/api/receipts/issue", {
+    data: { saleId },
+  });
+  const receiptNumber = issuedReceipt?.receipt?.receiptNumber;
+  expect(receiptNumber).toBeTruthy();
+
   await page.goto(href);
   await expect(page.locator("body")).toContainText("Receipt:");
   await expect(page.locator("body")).toContainText(seeded.sku);
+  await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
+
+  await page.goto(`/r/${encodeURIComponent(receiptNumber)}`);
+  await expect(page.locator("body")).toContainText(receiptNumber);
   await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
 });
 

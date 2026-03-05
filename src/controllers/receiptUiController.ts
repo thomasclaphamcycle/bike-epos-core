@@ -1,11 +1,9 @@
 import { Request, Response } from "express";
-import { getSaleReceiptById } from "../services/receiptService";
+import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getReceiptByNumber, issueReceipt } from "../services/receiptService";
 import { renderReceiptPage } from "../views/receiptPage";
 
-export const getReceiptPageHandler = async (req: Request, res: Response) => {
-  const receipt = await getSaleReceiptById(req.params.saleId);
-  const html = renderReceiptPage({ receipt });
-
+const setReceiptPageHeaders = (res: Response) => {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Security-Policy",
@@ -18,6 +16,25 @@ export const getReceiptPageHandler = async (req: Request, res: Response) => {
       "script-src 'self' 'unsafe-inline'",
     ].join("; "),
   );
+};
 
+export const getReceiptPageBySaleIdHandler = async (req: Request, res: Response) => {
+  const issued = await issueReceipt({
+    saleId: req.params.saleId,
+    issuedByStaffId: getRequestStaffActorId(req),
+  });
+
+  const receipt = await getReceiptByNumber(issued.receipt.receiptNumber);
+  const html = renderReceiptPage({ receipt });
+
+  setReceiptPageHeaders(res);
+  res.type("html").send(html);
+};
+
+export const getReceiptPageByNumberHandler = async (req: Request, res: Response) => {
+  const receipt = await getReceiptByNumber(req.params.receiptNumber);
+  const html = renderReceiptPage({ receipt });
+
+  setReceiptPageHeaders(res);
   res.type("html").send(html);
 };
