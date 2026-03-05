@@ -43,6 +43,7 @@ const fetchJson = async (path, options = {}) => {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      "X-Staff-Role": "MANAGER",
       ...(options.headers ?? {}),
     },
   });

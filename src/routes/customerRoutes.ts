@@ -3,10 +3,13 @@ import {
   createCustomerHandler,
   getCustomerHandler,
   listCustomersHandler,
+  searchCustomersHandler,
 } from "../controllers/customerController";
+import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const customerRouter = Router();
 
-customerRouter.post("/", createCustomerHandler);
-customerRouter.get("/", listCustomersHandler);
-customerRouter.get("/:id", getCustomerHandler);
+customerRouter.post("/", requireRoleAtLeast("STAFF"), createCustomerHandler);
+customerRouter.get("/", requireRoleAtLeast("STAFF"), listCustomersHandler);
+customerRouter.get("/search", requireRoleAtLeast("STAFF"), searchCustomersHandler);
+customerRouter.get("/:id", requireRoleAtLeast("STAFF"), getCustomerHandler);

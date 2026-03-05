@@ -1,0 +1,101 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@staffRole = STAFF
+@supplierId = REPLACE_SUPPLIER_ID
+@purchaseOrderId = REPLACE_PO_ID
+@purchaseOrderLineId = REPLACE_PO_LINE_ID
+@variantId = REPLACE_VARIANT_ID
+@locationId = REPLACE_LOCATION_ID
+
+### List suppliers (STAFF+)
+GET {{baseUrl}}/api/suppliers
+X-Staff-Role: {{staffRole}}
+
+### Create supplier (MANAGER+)
+POST {{baseUrl}}/api/suppliers
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "name": "M27 Supplier",
+  "email": "m27@supplier.test",
+  "phone": "02070000000",
+  "notes": "Primary distributor"
+}
+
+### Create purchase order (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "supplierId": "{{supplierId}}",
+  "orderedAt": "2026-03-05T10:00:00.000Z",
+  "expectedAt": "2026-03-12T10:00:00.000Z",
+  "notes": "Weekly replenishment"
+}
+
+### List purchase orders with filters (STAFF+)
+GET {{baseUrl}}/api/purchase-orders?status=DRAFT&q=m27&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
+### Update purchase order metadata/status (MANAGER+)
+PATCH {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "status": "SENT",
+  "notes": "Sent to supplier"
+}
+
+### Add/upsert purchase order lines (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/items
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "lines": [
+    {
+      "variantId": "{{variantId}}",
+      "quantityOrdered": 10,
+      "unitCostPence": 2100
+    }
+  ]
+}
+
+### Patch one purchase order line (MANAGER+)
+PATCH {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/lines/{{purchaseOrderLineId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "quantityOrdered": 12,
+  "unitCostPence": 2150
+}
+
+### Receive goods (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "locationId": "{{locationId}}",
+  "lines": [
+    {
+      "purchaseOrderItemId": "{{purchaseOrderLineId}}",
+      "quantity": 4,
+      "unitCostPence": 2150
+    }
+  ]
+}
+
+### Get purchase order by id (STAFF+)
+GET {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}
+X-Staff-Role: {{staffRole}}

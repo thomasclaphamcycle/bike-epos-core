@@ -21,6 +21,28 @@ type ListMovementFilters = {
   type?: InventoryMovementType;
 };
 
+type ListOnHandFilters = {
+  q?: string;
+  isActive?: boolean;
+  take?: number;
+  skip?: number;
+};
+
+type InventoryAdjustmentReason =
+  | "COUNT_CORRECTION"
+  | "DAMAGED"
+  | "SUPPLIER_ERROR"
+  | "THEFT"
+  | "OTHER";
+
+type RecordAdjustmentInput = {
+  variantId?: string;
+  quantityDelta?: number;
+  reason?: InventoryAdjustmentReason;
+  note?: string;
+  createdByStaffId?: string;
+};
+
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -30,6 +52,26 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const parseTake = (take: number | undefined): number | undefined => {
+  if (take === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(take) || take < 1 || take > 200) {
+    throw new HttpError(400, "take must be an integer between 1 and 200", "INVALID_ON_HAND_QUERY");
+  }
+  return take;
+};
+
+const parseSkip = (skip: number | undefined): number | undefined => {
+  if (skip === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(skip) || skip < 0) {
+    throw new HttpError(400, "skip must be an integer >= 0", "INVALID_ON_HAND_QUERY");
+  }
+  return skip;
 };
 
 const parseUnitCost = (
@@ -95,6 +137,14 @@ const toMovementResponse = (movement: {
   createdAt: movement.createdAt,
 });
 
+const VALID_ADJUSTMENT_REASONS = new Set<InventoryAdjustmentReason>([
+  "COUNT_CORRECTION",
+  "DAMAGED",
+  "SUPPLIER_ERROR",
+  "THEFT",
+  "OTHER",
+]);
+
 export const recordMovement = async (input: RecordMovementInput) => {
   const variantId = normalizeOptionalText(input.variantId);
   if (!variantId) {
@@ -138,6 +188,47 @@ export const recordMovement = async (input: RecordMovementInput) => {
   });
 
   return toMovementResponse(movement);
+};
+
+export const recordAdjustment = async (input: RecordAdjustmentInput) => {
+  const variantId = normalizeOptionalText(input.variantId);
+  if (!variantId) {
+    throw new HttpError(400, "variantId is required", "INVALID_INVENTORY_ADJUSTMENT");
+  }
+  if (!Number.isInteger(input.quantityDelta) || (input.quantityDelta ?? 0) === 0) {
+    throw new HttpError(
+      400,
+      "quantityDelta must be a non-zero integer",
+      "INVALID_INVENTORY_ADJUSTMENT",
+    );
+  }
+  if (!input.reason || !VALID_ADJUSTMENT_REASONS.has(input.reason)) {
+    throw new HttpError(
+      400,
+      "reason must be one of COUNT_CORRECTION, DAMAGED, SUPPLIER_ERROR, THEFT, OTHER",
+      "INVALID_INVENTORY_ADJUSTMENT",
+    );
+  }
+
+  const movement = await recordMovement({
+    variantId,
+    type: "ADJUSTMENT",
+    quantity: input.quantityDelta,
+    referenceType: "ADJUSTMENT",
+    referenceId: input.reason,
+    note: normalizeOptionalText(input.note) ?? undefined,
+    createdByStaffId: normalizeOptionalText(input.createdByStaffId),
+  });
+
+  const onHand = await getOnHand(variantId);
+
+  return {
+    movement: {
+      ...movement,
+      reason: input.reason,
+    },
+    onHand: onHand.onHand,
+  };
 };
 
 export const getOnHand = async (variantId?: string) => {
@@ -201,5 +292,85 @@ export const listMovements = async (filters: ListMovementFilters) => {
   return {
     variantId,
     movements: movements.map((movement) => toMovementResponse(movement)),
+  };
+};
+
+export const listOnHand = async (filters: ListOnHandFilters = {}) => {
+  const normalizedQuery = normalizeOptionalText(filters.q);
+  const take = parseTake(filters.take);
+  const skip = parseSkip(filters.skip);
+
+  const variants = await prisma.variant.findMany({
+    where: {
+      ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+      ...(normalizedQuery
+        ? {
+            OR: [
+              { sku: { contains: normalizedQuery, mode: "insensitive" } },
+              { barcode: { contains: normalizedQuery, mode: "insensitive" } },
+              { name: { contains: normalizedQuery, mode: "insensitive" } },
+              { option: { contains: normalizedQuery, mode: "insensitive" } },
+              {
+                product: {
+                  name: { contains: normalizedQuery, mode: "insensitive" },
+                },
+              },
+              {
+                product: {
+                  brand: { contains: normalizedQuery, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: "desc" }],
+    ...(take !== undefined ? { take } : {}),
+    ...(skip !== undefined ? { skip } : {}),
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
+          brand: true,
+        },
+      },
+    },
+  });
+
+  const variantIds = variants.map((variant) => variant.id);
+  const grouped =
+    variantIds.length > 0
+      ? await prisma.inventoryMovement.groupBy({
+          by: ["variantId"],
+          where: {
+            variantId: {
+              in: variantIds,
+            },
+          },
+          _sum: {
+            quantity: true,
+          },
+        })
+      : [];
+
+  const onHandByVariant = new Map(
+    grouped.map((row) => [row.variantId, row._sum.quantity ?? 0]),
+  );
+
+  return {
+    rows: variants.map((variant) => ({
+      variantId: variant.id,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      variantName: variant.name ?? variant.option,
+      option: variant.option,
+      productId: variant.product.id,
+      productName: variant.product.name,
+      brand: variant.product.brand,
+      retailPricePence: variant.retailPricePence,
+      isActive: variant.isActive,
+      onHand: onHandByVariant.get(variant.id) ?? 0,
+    })),
   };
 };

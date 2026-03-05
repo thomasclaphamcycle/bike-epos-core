@@ -2,11 +2,13 @@ import { Request, Response } from "express";
 import { PaymentMethod } from "@prisma/client";
 import {
   attachCustomerToSale,
+  completeSaleIfEligible,
   createSaleReturn,
   getSaleById,
   listSales,
 } from "../services/salesService";
 import { HttpError } from "../utils/http";
+import { getRequestStaffActorId } from "../middleware/staffRole";
 
 export const getSaleHandler = async (req: Request, res: Response) => {
   const result = await getSaleById(req.params.id);
@@ -114,5 +116,13 @@ export const attachCustomerToSaleHandler = async (req: Request, res: Response) =
   }
 
   const result = await attachCustomerToSale(req.params.saleId, body.customerId ?? null);
+  res.json(result);
+};
+
+export const completeSaleHandler = async (req: Request, res: Response) => {
+  const result = await completeSaleIfEligible(req.params.saleId, {
+    staffActorId: getRequestStaffActorId(req),
+  });
+
   res.json(result);
 };

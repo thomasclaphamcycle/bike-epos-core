@@ -155,6 +155,7 @@ export const checkoutWorkshopJobToSale = async (
         subtotalPence: saleTotalPence,
         taxPence: 0,
         totalPence: saleTotalPence,
+        createdByStaffId: auditActor?.actorId ?? null,
       },
     });
 

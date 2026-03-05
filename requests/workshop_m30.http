@@ -1,0 +1,54 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = demo-staff
+@jobId = REPLACE_JOB_ID
+@productId = REPLACE_PRODUCT_ID
+@variantId = REPLACE_VARIANT_ID
+
+### Create workshop job (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerName": "Alex Rider",
+  "bikeDescription": "Trek Domane, brake rub",
+  "notes": "Customer wants same-day if possible"
+}
+
+### Add PART line (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "PART",
+  "productId": "{{productId}}",
+  "variantId": "{{variantId}}",
+  "qty": 1,
+  "unitPricePence": 1299
+}
+
+### Add LABOUR line (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "type": "LABOUR",
+  "description": "Brake alignment and test ride",
+  "qty": 1,
+  "unitPricePence": 2500
+}
+
+### Finalize job -> basket (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/finalize
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+

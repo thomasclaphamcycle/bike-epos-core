@@ -57,6 +57,14 @@ type ListVariantsInput = {
   productId?: string;
 };
 
+type SearchProductsInput = {
+  q?: string;
+  barcode?: string;
+  sku?: string;
+  take?: number;
+  skip?: number;
+};
+
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
@@ -569,6 +577,168 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
 
   return {
     variants: variants.map((variant) => toVariantResponse(variant)),
+  };
+};
+
+export const searchProducts = async (filters: SearchProductsInput = {}) => {
+  const normalizedQ = normalizeOptionalText(filters.q);
+  const normalizedBarcode = normalizeOptionalText(filters.barcode);
+  const normalizedSku = normalizeOptionalText(filters.sku);
+  const take = toNormalizedTake(filters.take) ?? 20;
+  const skip = toNormalizedSkip(filters.skip) ?? 0;
+
+  const hasFilter = Boolean(normalizedQ || normalizedBarcode || normalizedSku);
+  if (!hasFilter) {
+    return {
+      rows: [],
+    };
+  }
+
+  const variants = await prisma.variant.findMany({
+    where: {
+      isActive: true,
+      ...(normalizedSku
+        ? {
+            sku: {
+              contains: normalizedSku,
+              mode: "insensitive",
+            },
+          }
+        : {}),
+      ...(normalizedBarcode
+        ? {
+            OR: [
+              {
+                barcode: {
+                  equals: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+              {
+                barcode: {
+                  contains: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+              {
+                barcodes: {
+                  some: {
+                    code: {
+                      equals: normalizedBarcode,
+                      mode: "insensitive",
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(normalizedQ
+        ? {
+            OR: [
+              {
+                sku: {
+                  contains: normalizedQ,
+                  mode: "insensitive",
+                },
+              },
+              {
+                barcode: {
+                  contains: normalizedQ,
+                  mode: "insensitive",
+                },
+              },
+              {
+                name: {
+                  contains: normalizedQ,
+                  mode: "insensitive",
+                },
+              },
+              {
+                option: {
+                  contains: normalizedQ,
+                  mode: "insensitive",
+                },
+              },
+              {
+                product: {
+                  name: {
+                    contains: normalizedQ,
+                    mode: "insensitive",
+                  },
+                },
+              },
+              {
+                product: {
+                  brand: {
+                    contains: normalizedQ,
+                    mode: "insensitive",
+                  },
+                },
+              },
+              {
+                barcodes: {
+                  some: {
+                    code: {
+                      contains: normalizedQ,
+                      mode: "insensitive",
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      product: {
+        select: {
+          name: true,
+        },
+      },
+      barcodes: {
+        select: {
+          code: true,
+          isPrimary: true,
+        },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    take,
+    skip,
+  });
+
+  const variantIds = variants.map((variant) => variant.id);
+  const groupedOnHand =
+    variantIds.length > 0
+      ? await prisma.inventoryMovement.groupBy({
+          by: ["variantId"],
+          where: {
+            variantId: {
+              in: variantIds,
+            },
+          },
+          _sum: {
+            quantity: true,
+          },
+        })
+      : [];
+
+  const onHandByVariantId = new Map(
+    groupedOnHand.map((row) => [row.variantId, row._sum.quantity ?? 0]),
+  );
+
+  return {
+    rows: variants.map((variant) => ({
+      id: variant.id,
+      productId: variant.productId,
+      name: variant.name ?? variant.option ?? variant.product.name,
+      sku: variant.sku,
+      barcode: variant.barcode ?? variant.barcodes[0]?.code ?? null,
+      pricePence: variant.retailPricePence,
+      onHandQty: onHandByVariantId.get(variant.id) ?? 0,
+    })),
   };
 };
 

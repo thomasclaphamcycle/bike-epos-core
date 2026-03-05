@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getPaymentsReportRows } from "./paymentIntentService";
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -351,4 +352,13 @@ export const getInventoryValueReport = async (locationId?: string) => {
     countMissingCost,
     breakdown,
   };
+};
+
+export const getPaymentsReport = async (filters: {
+  status?: string;
+  provider?: string;
+  from?: string;
+  to?: string;
+} = {}) => {
+  return getPaymentsReportRows(filters);
 };

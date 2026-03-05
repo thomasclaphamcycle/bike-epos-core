@@ -4,4 +4,4 @@ import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const locationRouter = Router();
 
-locationRouter.get("/", requireRoleAtLeast("MANAGER"), listStockLocationsHandler);
+locationRouter.get("/", requireRoleAtLeast("STAFF"), listStockLocationsHandler);

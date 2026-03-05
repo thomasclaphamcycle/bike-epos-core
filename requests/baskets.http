@@ -1,52 +1,69 @@
 @baseUrl = http://localhost:3000
+@staffRole = STAFF
+@managerRole = MANAGER
 
-### Create basket
+### Create basket (STAFF+)
 POST {{baseUrl}}/api/baskets
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {}
 
-### Get basket by id
+### Get basket by id (STAFF+)
 GET {{baseUrl}}/api/baskets/{{basketId}}
+X-Staff-Role: {{staffRole}}
 
-### Add by barcode
+### Add by barcode (STAFF+)
 POST {{baseUrl}}/api/baskets/{{basketId}}/items
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {
   "barcode": "1234567890123",
   "quantity": 1
 }
 
-### Add by variant id
+### Add by variant id (STAFF+)
 POST {{baseUrl}}/api/baskets/{{basketId}}/items
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {
   "variantId": "REPLACE_WITH_VARIANT_ID",
   "quantity": 2
 }
 
-### Update item quantity
+### Update item quantity (STAFF+)
 PATCH {{baseUrl}}/api/baskets/{{basketId}}/items/{{itemId}}
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {
   "quantity": 3
 }
 
-### Remove item
+### Remove item (STAFF+)
 DELETE {{baseUrl}}/api/baskets/{{basketId}}/items/{{itemId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
-### Checkout basket (optional)
+### Checkout basket (optional payment, STAFF+)
 POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {}
 
-### Checkout basket with CASH payment
+### Checkout basket with CASH payment (STAFF+)
 POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {
   "paymentMethod": "CASH",
@@ -56,18 +73,24 @@ Content-Type: application/json
 ### Checkout basket again (idempotent: should return same sale)
 POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
 Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
 
 {}
 
-### Get sale by id
+### Get sale by id (STAFF+)
 GET {{baseUrl}}/api/sales/{{saleId}}
+X-Staff-Role: {{staffRole}}
 
-### List sales (optional date filters)
+### List sales (STAFF+, optional date filters)
 GET {{baseUrl}}/api/sales?from=2026-03-01&to=2026-03-31
+X-Staff-Role: {{staffRole}}
 
-### Return 1 unit from a sale item (no refund)
+### Return 1 unit from a sale item (MANAGER+)
 POST {{baseUrl}}/api/sales/{{saleId}}/returns
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "items": [
@@ -78,9 +101,11 @@ Content-Type: application/json
   ]
 }
 
-### Return 1 unit with refund
+### Return 1 unit with refund (MANAGER+)
 POST {{baseUrl}}/api/sales/{{saleId}}/returns
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "items": [
@@ -99,6 +124,8 @@ Content-Type: application/json
 ### Attempt to return more than sold quantity (expect 409)
 POST {{baseUrl}}/api/sales/{{saleId}}/returns
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "items": [
@@ -112,6 +139,8 @@ Content-Type: application/json
 ### Refund mismatch amount (expect 400 RETURN_PAYMENT_MISMATCH)
 POST {{baseUrl}}/api/sales/{{saleId}}/returns
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "items": [

@@ -1,8 +1,12 @@
 @baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@staffRole = STAFF
 
-### Create supplier
+### Create supplier (MANAGER+)
 POST {{baseUrl}}/api/suppliers
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "name": "Madison",
@@ -11,12 +15,15 @@ Content-Type: application/json
   "notes": "Main UK distributor"
 }
 
-### Search suppliers
+### Search suppliers (STAFF+)
 GET {{baseUrl}}/api/suppliers?query=mad
+X-Staff-Role: {{staffRole}}
 
-### Create purchase order
+### Create purchase order (MANAGER+)
 POST {{baseUrl}}/api/purchase-orders
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "supplierId": "{{supplierId}}",
@@ -25,9 +32,11 @@ Content-Type: application/json
   "notes": "Weekly replenishment"
 }
 
-### Add/update purchase order items
+### Add/update purchase order items (MANAGER+)
 POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/items
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "lines": [
@@ -39,12 +48,15 @@ Content-Type: application/json
   ]
 }
 
-### Get purchase order with items
+### Get purchase order with items (STAFF+)
 GET {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}
+X-Staff-Role: {{staffRole}}
 
-### Receive partial line quantity (stock +)
+### Receive partial line quantity (stock +, MANAGER+)
 POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "locationId": "{{locationId}}",
@@ -56,9 +68,11 @@ Content-Type: application/json
   ]
 }
 
-### Receive remaining quantity -> status RECEIVED
+### Receive remaining quantity -> status RECEIVED (MANAGER+)
 POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "locationId": "{{locationId}}",
@@ -70,9 +84,11 @@ Content-Type: application/json
   ]
 }
 
-### Over-receive should fail with 409
+### Over-receive should fail with 409 (MANAGER+)
 POST {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}/receive
 Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 {
   "locationId": "{{locationId}}",

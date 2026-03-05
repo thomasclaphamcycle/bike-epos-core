@@ -31,6 +31,7 @@ model Product {
   updatedAt DateTime @updatedAt
 
   variants Variant[]
+  workshopLines WorkshopJobLine[]
 }
 
 model Supplier {
@@ -119,6 +120,7 @@ model Variant {
   workshopParts WorkshopJobPart[]
   purchaseOrderItems PurchaseOrderItem[]
   stocktakeLines     StocktakeLine[]
+  workshopLines      WorkshopJobLine[]
 }
 
 model Barcode {
@@ -309,6 +311,14 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentIntentStatus {
+  REQUIRES_ACTION
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  CANCELED
+}
+
 model Sale {
   id            String   @id @default(uuid()) @db.Uuid
   basketId      String?  @unique @db.Uuid
@@ -318,16 +328,23 @@ model Sale {
   taxPence      Int
   totalPence    Int
   createdAt     DateTime @default(now())
+  completedAt   DateTime?
+  receiptNumber String?  @unique
+  createdByStaffId String?
 
   basket        Basket?  @relation(fields: [basketId], references: [id], onDelete: SetNull)
   workshopJob   WorkshopJob? @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
   customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdByStaff User?   @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   items         SaleItem[]
   payments      Payment[]
+  paymentIntents PaymentIntent[]
   returns       SaleReturn[]
 
   @@index([customerId])
   @@index([workshopJobId])
+  @@index([completedAt])
+  @@index([createdByStaffId])
 }
 
 model SaleItem {
@@ -362,6 +379,22 @@ model Payment {
 
   @@index([workshopJobId])
   @@index([purpose, createdAt])
+}
+
+model PaymentIntent {
+  id          String              @id @default(uuid()) @db.Uuid
+  provider    String
+  status      PaymentIntentStatus @default(REQUIRES_ACTION)
+  amountPence Int
+  saleId      String              @db.Uuid
+  externalRef String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  sale        Sale                @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId, createdAt])
+  @@index([provider, status, createdAt])
 }
 
 enum RefundStatus {
@@ -441,6 +474,7 @@ model SaleReturnItem {
 
 model Customer {
   id        String   @id @default(uuid()) @db.Uuid
+  name      String   @default("")
   firstName String
   lastName  String
   email     String?  @unique
@@ -453,6 +487,7 @@ model Customer {
   workshopJobs WorkshopJob[]
   creditAccounts CreditAccount[]
 
+  @@index([name])
   @@index([phone])
 }
 
@@ -489,6 +524,8 @@ enum CancellationOutcome {
 model WorkshopJob {
   id            String            @id @default(uuid()) @db.Uuid
   customerId    String?           @db.Uuid
+  customerName  String?
+  bikeDescription String?
   assignedStaffId String?
   assignedStaffName String?
   status        WorkshopJobStatus @default(BOOKING_MADE)
@@ -500,6 +537,8 @@ model WorkshopJob {
   manageTokenExpiresAt DateTime?
   cancelledAt   DateTime?
   completedAt   DateTime?
+  closedAt      DateTime?
+  finalizedBasketId String?       @db.Uuid
   notes         String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -511,11 +550,13 @@ model WorkshopJob {
   cancellations WorkshopCancellation[]
   jobNotes      WorkshopJobNote[]
   parts         WorkshopJobPart[]
+  lines         WorkshopJobLine[]
 
   @@index([scheduledDate])
   @@index([status])
   @@index([status, completedAt])
   @@index([assignedStaffId])
+  @@index([finalizedBasketId])
 }
 
 enum WorkshopJobPartStatus {
@@ -539,6 +580,33 @@ model WorkshopJobPart {
   variant          Variant               @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
   @@index([workshopJobId, createdAt])
+  @@index([variantId])
+}
+
+enum WorkshopJobLineType {
+  PART
+  LABOUR
+}
+
+model WorkshopJobLine {
+  id            String              @id @default(uuid()) @db.Uuid
+  jobId         String              @db.Uuid
+  type          WorkshopJobLineType
+  productId     String?
+  variantId     String?
+  description   String
+  qty           Int
+  unitPricePence Int
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  job           WorkshopJob         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  product       Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant       Variant?            @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([jobId, createdAt])
+  @@index([type])
+  @@index([productId])
   @@index([variantId])
 }
 
@@ -659,6 +727,7 @@ model User {
   assignedWorkshopJobs WorkshopJob[]    @relation("WorkshopJobAssignedStaff")
   workshopJobNotes     WorkshopJobNote[] @relation("WorkshopJobNoteAuthor")
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
+  createdSales         Sale[] @relation("SaleCreatedByStaff")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

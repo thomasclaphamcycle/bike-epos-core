@@ -4,6 +4,7 @@ import {
   getInventoryOnHandReportCsvHandler,
   getInventoryValueReportHandler,
   getInventoryValueReportCsvHandler,
+  getPaymentsReportCsvHandler,
   getSalesDailyReportHandler,
   getSalesDailyReportCsvHandler,
   getWorkshopDailyReportHandler,
@@ -33,3 +34,4 @@ reportRouter.get(
   requireRoleAtLeast("MANAGER"),
   getInventoryValueReportCsvHandler,
 );
+reportRouter.get("/payments", requireRoleAtLeast("MANAGER"), getPaymentsReportCsvHandler);

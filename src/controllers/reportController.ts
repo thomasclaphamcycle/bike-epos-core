@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   getInventoryOnHandReport,
   getInventoryValueReport,
+  getPaymentsReport,
   getSalesDailyReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
@@ -97,4 +98,27 @@ export const getInventoryValueReportCsvHandler = async (req: Request, res: Respo
   ]);
 
   sendCsv(res, "inventory_value.csv", csv);
+};
+
+export const getPaymentsReportCsvHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
+  const { from, to } = getDateRangeQuery(req);
+  const rows = await getPaymentsReport({
+    status,
+    provider,
+    from,
+    to,
+  });
+
+  const csv = toCsv(rows, [
+    { header: "intentId", value: (row) => row.intentId },
+    { header: "provider", value: (row) => row.provider },
+    { header: "status", value: (row) => row.status },
+    { header: "amount", value: (row) => row.amount },
+    { header: "saleId", value: (row) => row.saleId },
+    { header: "timestamp", value: (row) => row.timestamp },
+  ]);
+
+  sendCsv(res, "payments.csv", csv);
 };

@@ -1,0 +1,71 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@staffRole = STAFF
+@variantId = REPLACE_VARIANT_ID
+@locationId = REPLACE_LOCATION_ID
+@sessionId = REPLACE_SESSION_ID
+
+### Inventory on-hand search (STAFF+)
+GET {{baseUrl}}/api/inventory/on-hand/search?q=tube&active=1&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
+### Manual stock adjustment via inventory movement (MANAGER+ for ADJUSTMENT)
+POST {{baseUrl}}/api/inventory/movements
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "variantId": "{{variantId}}",
+  "type": "ADJUSTMENT",
+  "quantity": 3,
+  "note": "Cycle count correction",
+  "referenceType": "M26_MANUAL_ADJUST",
+  "referenceId": "m26-adjust-001"
+}
+
+### Create stocktake session (MANAGER+)
+POST {{baseUrl}}/api/stocktake/sessions
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "locationId": "{{locationId}}",
+  "notes": "Monthly count"
+}
+
+### List stocktake sessions (STAFF+)
+GET {{baseUrl}}/api/stocktake/sessions?status=OPEN&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
+### Get stocktake session detail (STAFF+)
+GET {{baseUrl}}/api/stocktake/sessions/{{sessionId}}?includePreview=true
+X-Staff-Role: {{staffRole}}
+
+### Upsert stocktake line (MANAGER+)
+POST {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "variantId": "{{variantId}}",
+  "countedQty": 12
+}
+
+### Finalize stocktake session (MANAGER+)
+POST {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/finalize
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{}
+
+### Cancel stocktake session (MANAGER+)
+POST {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/cancel
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{}

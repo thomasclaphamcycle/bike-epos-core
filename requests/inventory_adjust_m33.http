@@ -1,0 +1,40 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = demo-staff
+@variantId = REPLACE_VARIANT_ID
+
+### Inventory adjust page (STAFF+)
+GET {{baseUrl}}/inventory/adjust
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Post positive adjustment (STAFF+)
+POST {{baseUrl}}/api/inventory/adjustments
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "variantId": "{{variantId}}",
+  "quantityDelta": 5,
+  "reason": "COUNT_CORRECTION",
+  "note": "Cycle count correction"
+}
+
+### Post negative adjustment (STAFF+)
+POST {{baseUrl}}/api/inventory/adjustments
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "variantId": "{{variantId}}",
+  "quantityDelta": -2,
+  "reason": "DAMAGED",
+  "note": "Damaged in transit"
+}
+
+### Check on-hand after adjustments
+GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

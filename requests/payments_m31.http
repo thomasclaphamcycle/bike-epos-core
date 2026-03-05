@@ -1,0 +1,45 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@managerRole = MANAGER
+@staffId = demo-staff
+@saleId = REPLACE_SALE_ID
+@intentId = REPLACE_INTENT_ID
+
+### Create cash payment intent (STAFF+)
+POST {{baseUrl}}/api/payments/intents
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "saleId": "{{saleId}}",
+  "provider": "CASH",
+  "amountPence": 2500
+}
+
+### Capture payment intent (STAFF+)
+POST {{baseUrl}}/api/payments/intents/{{intentId}}/capture
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### Cancel payment intent (STAFF+)
+POST {{baseUrl}}/api/payments/intents/{{intentId}}/cancel
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### List payment intents (MANAGER+)
+GET {{baseUrl}}/api/payments/intents?provider=CASH&status=CAPTURED
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+### Payments CSV report (MANAGER+)
+GET {{baseUrl}}/api/reports/payments?provider=CASH
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+

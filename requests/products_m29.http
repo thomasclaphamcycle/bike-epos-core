@@ -1,0 +1,13 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+
+### Product search by text query (STAFF+)
+GET {{baseUrl}}/api/products/search?q=tube&take=20&skip=0
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Product search by barcode (STAFF+)
+GET {{baseUrl}}/api/products/search?barcode=1234567890123&take=20&skip=0
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+

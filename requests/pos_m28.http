@@ -1,0 +1,95 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@managerRole = MANAGER
+@basketId = REPLACE_BASKET_ID
+@basketLineId = REPLACE_BASKET_LINE_ID
+@variantId = REPLACE_VARIANT_ID
+
+### POS page (STAFF+)
+GET {{baseUrl}}/pos
+X-Staff-Role: {{staffRole}}
+
+### Create basket (STAFF+)
+POST {{baseUrl}}/api/baskets
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{}
+
+### Get basket (STAFF+)
+GET {{baseUrl}}/api/baskets/{{basketId}}
+X-Staff-Role: {{staffRole}}
+
+### Add basket line (STAFF+, M28 alias)
+POST {{baseUrl}}/api/baskets/{{basketId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "variantId": "{{variantId}}",
+  "quantity": 2
+}
+
+### Update basket line qty (STAFF+, M28 alias)
+PATCH {{baseUrl}}/api/baskets/{{basketId}}/lines/{{basketLineId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "quantity": 3
+}
+
+### Remove basket line (STAFF+, M28 alias)
+DELETE {{baseUrl}}/api/baskets/{{basketId}}/lines/{{basketLineId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+### Checkout basket to sale (STAFF+)
+POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "paymentMethod": "CARD",
+  "amountPence": 2097,
+  "providerRef": "m28-pos-checkout-001"
+}
+
+### Re-checkout same basket (idempotent)
+POST {{baseUrl}}/api/baskets/{{basketId}}/checkout
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "paymentMethod": "CARD",
+  "amountPence": 2097
+}
+
+### Get sale (STAFF+)
+GET {{baseUrl}}/api/sales/{{saleId}}
+X-Staff-Role: {{staffRole}}
+
+### Sale return (MANAGER+)
+POST {{baseUrl}}/api/sales/{{saleId}}/returns
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "items": [
+    {
+      "saleItemId": "{{saleItemId}}",
+      "quantity": 1
+    }
+  ],
+  "refund": {
+    "method": "CARD",
+    "amountPence": 699,
+    "providerRef": "m28-refund-001"
+  }
+}

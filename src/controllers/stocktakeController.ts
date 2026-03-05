@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
+import { StocktakeStatus } from "@prisma/client";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import {
   cancelStocktake,
   createStocktake,
   deleteStocktakeLine,
   getStocktakeById,
+  listStocktakes,
   postStocktake,
   upsertStocktakeLine,
 } from "../services/stocktakeService";
@@ -24,6 +26,57 @@ const parseBooleanQuery = (value: string | undefined): boolean | undefined => {
   }
 
   throw new HttpError(400, "includePreview must be true or false", "INVALID_QUERY");
+};
+
+const parseStocktakeStatusQuery = (value: string | undefined): StocktakeStatus | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (normalized !== "OPEN" && normalized !== "POSTED" && normalized !== "CANCELLED") {
+    throw new HttpError(
+      400,
+      "status must be one of OPEN, POSTED, CANCELLED",
+      "INVALID_STOCKTAKE_QUERY",
+    );
+  }
+
+  return normalized as StocktakeStatus;
+};
+
+const parseOptionalIntQuery = (
+  value: string | undefined,
+  field: "take" | "skip",
+): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new HttpError(400, `${field} must be an integer`, "INVALID_STOCKTAKE_QUERY");
+  }
+
+  return parsed;
+};
+
+export const listStocktakesHandler = async (req: Request, res: Response) => {
+  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const status = parseStocktakeStatusQuery(
+    typeof req.query.status === "string" ? req.query.status : undefined,
+  );
+  const take = parseOptionalIntQuery(
+    typeof req.query.take === "string" ? req.query.take : undefined,
+    "take",
+  );
+  const skip = parseOptionalIntQuery(
+    typeof req.query.skip === "string" ? req.query.skip : undefined,
+    "skip",
+  );
+
+  const result = await listStocktakes({ locationId, status, take, skip });
+  res.json(result);
 };
 
 export const createStocktakeHandler = async (req: Request, res: Response) => {
@@ -78,6 +131,8 @@ export const postStocktakeHandler = async (req: Request, res: Response) => {
   const stocktake = await postStocktake(req.params.id, getRequestStaffActorId(req));
   res.json(stocktake);
 };
+
+export const finalizeStocktakeHandler = postStocktakeHandler;
 
 export const cancelStocktakeHandler = async (req: Request, res: Response) => {
   const stocktake = await cancelStocktake(req.params.id);

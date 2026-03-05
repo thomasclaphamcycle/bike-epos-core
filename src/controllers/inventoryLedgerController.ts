@@ -6,6 +6,7 @@ import {
 } from "../middleware/staffRole";
 import {
   getOnHand,
+  listOnHand,
   listMovements,
   recordMovement,
 } from "../services/inventoryLedgerService";
@@ -154,4 +155,43 @@ export const getInventoryOnHandHandler = async (req: Request, res: Response) => 
   const variantId = typeof req.query.variantId === "string" ? req.query.variantId : undefined;
   const response = await getOnHand(variantId);
   res.json(response);
+};
+
+const parseOptionalIntQuery = (value: unknown): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HttpError(400, "take/skip must be an integer", "INVALID_ON_HAND_QUERY");
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new HttpError(400, "take/skip must be an integer", "INVALID_ON_HAND_QUERY");
+  }
+  return parsed;
+};
+
+export const listInventoryOnHandHandler = async (req: Request, res: Response) => {
+  const q =
+    typeof req.query.q === "string"
+      ? req.query.q
+      : typeof req.query.query === "string"
+        ? req.query.query
+        : undefined;
+  const activeRaw = typeof req.query.active === "string" ? req.query.active : undefined;
+  let isActive: boolean | undefined;
+  if (activeRaw !== undefined) {
+    if (activeRaw === "1") {
+      isActive = true;
+    } else if (activeRaw === "0") {
+      isActive = false;
+    } else {
+      throw new HttpError(400, "active must be 1 or 0", "INVALID_ON_HAND_QUERY");
+    }
+  }
+
+  const take = parseOptionalIntQuery(req.query.take);
+  const skip = parseOptionalIntQuery(req.query.skip);
+  const result = await listOnHand({ q, isActive, take, skip });
+  res.json(result);
 };

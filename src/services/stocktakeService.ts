@@ -12,6 +12,13 @@ type UpsertStocktakeLineInput = {
   countedQty?: number;
 };
 
+type ListStocktakeFilters = {
+  locationId?: string;
+  status?: StocktakeStatus;
+  take?: number;
+  skip?: number;
+};
+
 type StocktakeWithLines = {
   id: string;
   locationId: string;
@@ -52,6 +59,26 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const parseTake = (value: number | undefined): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > 200) {
+    throw new HttpError(400, "take must be an integer between 1 and 200", "INVALID_STOCKTAKE_QUERY");
+  }
+  return value;
+};
+
+const parseSkip = (value: number | undefined): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || value < 0) {
+    throw new HttpError(400, "skip must be an integer >= 0", "INVALID_STOCKTAKE_QUERY");
+  }
+  return value;
 };
 
 const assertUuidOrThrow = (value: string, message: string, code: string) => {
@@ -251,6 +278,56 @@ export const createStocktake = async (input: CreateStocktakeInput) => {
 
     return toStocktakeResponseTx(tx, stocktake, true);
   });
+};
+
+export const listStocktakes = async (filters: ListStocktakeFilters = {}) => {
+  const locationId = normalizeOptionalText(filters.locationId);
+  if (locationId) {
+    assertUuidOrThrow(locationId, "Invalid location id", "INVALID_LOCATION_ID");
+    await ensureLocationExistsTx(prisma, locationId);
+  }
+
+  const take = parseTake(filters.take);
+  const skip = parseSkip(filters.skip);
+
+  const stocktakes = await prisma.stocktake.findMany({
+    where: {
+      ...(locationId ? { locationId } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+    },
+    orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    ...(take !== undefined ? { take } : {}),
+    ...(skip !== undefined ? { skip } : {}),
+    include: {
+      location: {
+        select: {
+          id: true,
+          name: true,
+          isDefault: true,
+        },
+      },
+      _count: {
+        select: {
+          lines: true,
+        },
+      },
+    },
+  });
+
+  return {
+    stocktakes: stocktakes.map((stocktake) => ({
+      id: stocktake.id,
+      locationId: stocktake.locationId,
+      location: stocktake.location,
+      status: stocktake.status,
+      startedAt: stocktake.startedAt,
+      postedAt: stocktake.postedAt,
+      notes: stocktake.notes,
+      createdAt: stocktake.createdAt,
+      updatedAt: stocktake.updatedAt,
+      lineCount: stocktake._count.lines,
+    })),
+  };
 };
 
 export const getStocktakeById = async (stocktakeId: string, includePreview = true) => {

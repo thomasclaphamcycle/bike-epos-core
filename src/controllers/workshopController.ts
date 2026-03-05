@@ -29,6 +29,16 @@ import {
   changeWorkshopJobStatus,
   getWorkshopJobNotes,
 } from "../services/workshopWorkflowService";
+import {
+  addWorkshopJobLine,
+  attachCustomerToWorkshopJob,
+  closeWorkshopJob,
+  createWorkshopJob,
+  finalizeWorkshopJob,
+  getWorkshopJobById,
+  listWorkshopJobs,
+  updateWorkshopJob,
+} from "../services/workshopService";
 import { HttpError } from "../utils/http";
 
 const parsePaymentMethod = (
@@ -101,6 +111,150 @@ const parseOptionalIntegerQuery = (value: unknown, field: string): number | unde
     throw new HttpError(400, `${field} must be an integer`, "INVALID_FILTER");
   }
   return parsed;
+};
+
+export const createWorkshopJobHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    customerName?: string;
+    bikeDescription?: string;
+    notes?: string;
+    status?: string;
+  };
+
+  if (body.customerName !== undefined && typeof body.customerName !== "string") {
+    throw new HttpError(400, "customerName must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
+    throw new HttpError(400, "bikeDescription must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.notes !== undefined && typeof body.notes !== "string") {
+    throw new HttpError(400, "notes must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.status !== undefined && typeof body.status !== "string") {
+    throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB");
+  }
+
+  const job = await createWorkshopJob(body);
+  res.status(201).json(job);
+};
+
+export const listWorkshopJobsHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const q =
+    typeof req.query.q === "string"
+      ? req.query.q
+      : typeof req.query.query === "string"
+        ? req.query.query
+        : undefined;
+  const take = parseOptionalIntegerQuery(req.query.take, "take");
+  const skip = parseOptionalIntegerQuery(req.query.skip, "skip");
+
+  const result = await listWorkshopJobs({
+    status,
+    q,
+    take,
+    skip,
+  });
+  res.json(result);
+};
+
+export const getWorkshopJobHandler = async (req: Request, res: Response) => {
+  const result = await getWorkshopJobById(req.params.id);
+  res.json(result);
+};
+
+export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    customerName?: string;
+    bikeDescription?: string;
+    notes?: string;
+    status?: string;
+  };
+
+  if (body.customerName !== undefined && typeof body.customerName !== "string") {
+    throw new HttpError(400, "customerName must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
+    throw new HttpError(
+      400,
+      "bikeDescription must be a string",
+      "INVALID_WORKSHOP_JOB_UPDATE",
+    );
+  }
+  if (body.notes !== undefined && typeof body.notes !== "string") {
+    throw new HttpError(400, "notes must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (body.status !== undefined && typeof body.status !== "string") {
+    throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+
+  const job = await updateWorkshopJob(req.params.id, body);
+  res.json(job);
+};
+
+export const attachWorkshopJobCustomerHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { customerId?: string | null };
+  if (!Object.prototype.hasOwnProperty.call(body, "customerId")) {
+    throw new HttpError(
+      400,
+      "customerId is required and must be a uuid or null",
+      "INVALID_CUSTOMER_ID",
+    );
+  }
+
+  if (body.customerId !== null && typeof body.customerId !== "string") {
+    throw new HttpError(
+      400,
+      "customerId is required and must be a uuid or null",
+      "INVALID_CUSTOMER_ID",
+    );
+  }
+
+  const result = await attachCustomerToWorkshopJob(req.params.id, body.customerId ?? null);
+  res.json(result);
+};
+
+export const addWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    type?: string;
+    productId?: string | null;
+    variantId?: string | null;
+    description?: string;
+    qty?: number;
+    unitPricePence?: number;
+  };
+
+  if (body.type !== undefined && typeof body.type !== "string") {
+    throw new HttpError(400, "type must be a string", "INVALID_WORKSHOP_LINE");
+  }
+  if (body.productId !== undefined && body.productId !== null && typeof body.productId !== "string") {
+    throw new HttpError(400, "productId must be a string or null", "INVALID_WORKSHOP_LINE");
+  }
+  if (body.variantId !== undefined && body.variantId !== null && typeof body.variantId !== "string") {
+    throw new HttpError(400, "variantId must be a string or null", "INVALID_WORKSHOP_LINE");
+  }
+  if (body.description !== undefined && typeof body.description !== "string") {
+    throw new HttpError(400, "description must be a string", "INVALID_WORKSHOP_LINE");
+  }
+  if (body.qty !== undefined && typeof body.qty !== "number") {
+    throw new HttpError(400, "qty must be a number", "INVALID_WORKSHOP_LINE");
+  }
+  if (body.unitPricePence !== undefined && typeof body.unitPricePence !== "number") {
+    throw new HttpError(400, "unitPricePence must be a number", "INVALID_WORKSHOP_LINE");
+  }
+
+  const result = await addWorkshopJobLine(req.params.id, body);
+  res.status(201).json(result);
+};
+
+export const finalizeWorkshopJobHandler = async (req: Request, res: Response) => {
+  const result = await finalizeWorkshopJob(req.params.id);
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const closeWorkshopJobHandler = async (req: Request, res: Response) => {
+  const result = await closeWorkshopJob(req.params.id);
+  res.status(result.idempotent ? 200 : 201).json(result);
 };
 
 export const getWorkshopAvailabilityHandler = async (req: Request, res: Response) => {

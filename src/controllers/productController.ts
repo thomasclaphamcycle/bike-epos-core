@@ -3,6 +3,7 @@ import {
   createProduct,
   getProductById,
   listProducts,
+  searchProducts,
   updateProductById,
 } from "../services/productService";
 import { HttpError } from "../utils/http";
@@ -54,6 +55,22 @@ export const listProductsHandler = async (req: Request, res: Response) => {
 
   const products = await listProducts({ q, isActive, take, skip });
   res.json(products);
+};
+
+export const searchProductsHandler = async (req: Request, res: Response) => {
+  const q =
+    typeof req.query.q === "string"
+      ? req.query.q
+      : typeof req.query.query === "string"
+        ? req.query.query
+        : undefined;
+  const barcode = typeof req.query.barcode === "string" ? req.query.barcode : undefined;
+  const sku = typeof req.query.sku === "string" ? req.query.sku : undefined;
+  const take = parseOptionalIntQuery(req.query.take, "take");
+  const skip = parseOptionalIntQuery(req.query.skip, "skip");
+
+  const results = await searchProducts({ q, barcode, sku, take, skip });
+  res.json(results);
 };
 
 export const createProductHandler = async (req: Request, res: Response) => {

@@ -24,6 +24,11 @@ type DateRangeInput = {
   to?: string;
 };
 
+type CompleteSaleInput = {
+  requireCapturedIntent?: boolean;
+  staffActorId?: string;
+};
+
 const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
   if (!dateOnly.test(value)) {
@@ -36,6 +41,35 @@ const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
   }
 
   return date;
+};
+
+const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const toCustomerName = (customer: {
+  name?: string | null;
+  firstName: string;
+  lastName: string;
+}) => {
+  const explicitName = normalizeOptionalText(customer.name ?? undefined);
+  if (explicitName) {
+    return explicitName;
+  }
+  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
+};
+
+const toReceiptNumber = (saleId: string, completedAt: Date) => {
+  const y = completedAt.getUTCFullYear();
+  const m = String(completedAt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(completedAt.getUTCDate()).padStart(2, "0");
+  const normalizedSaleId = saleId.replaceAll("-", "").toUpperCase();
+  return `S-${y}${m}${d}-${normalizedSaleId}`;
 };
 
 const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
@@ -61,6 +95,7 @@ const toSaleResponse = async (saleId: string) => {
     where: { id: saleId },
     include: {
       customer: true,
+      createdByStaff: true,
       items: {
         include: {
           variant: {
@@ -90,9 +125,19 @@ const toSaleResponse = async (saleId: string) => {
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
       createdAt: sale.createdAt,
+      completedAt: sale.completedAt,
+      receiptNumber: sale.receiptNumber,
+      createdByStaff: sale.createdByStaff
+        ? {
+            id: sale.createdByStaff.id,
+            username: sale.createdByStaff.username,
+            name: sale.createdByStaff.name,
+          }
+        : null,
       customer: sale.customer
         ? {
             id: sale.customer.id,
+            name: toCustomerName(sale.customer),
             firstName: sale.customer.firstName,
             lastName: sale.customer.lastName,
             email: sale.customer.email,
@@ -196,13 +241,112 @@ const validateReturnRefund = (
   };
 };
 
+const ensureCapturedIntentExistsTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+) => {
+  const capturedIntent = await tx.paymentIntent.findFirst({
+    where: {
+      saleId,
+      status: "CAPTURED",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!capturedIntent) {
+    throw new HttpError(
+      409,
+      "Sale cannot be completed until at least one payment intent is captured",
+      "SALE_NOT_ELIGIBLE_FOR_COMPLETION",
+    );
+  }
+};
+
+export const completeSaleIfEligibleTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+  input: CompleteSaleInput = {},
+) => {
+  const requireCapturedIntent = input.requireCapturedIntent ?? true;
+  const staffActorId = normalizeOptionalText(input.staffActorId);
+
+  const sale = await tx.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      id: true,
+      completedAt: true,
+      receiptNumber: true,
+      createdByStaffId: true,
+    },
+  });
+
+  if (!sale) {
+    throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+  }
+
+  if (requireCapturedIntent) {
+    await ensureCapturedIntentExistsTx(tx, sale.id);
+  }
+
+  if (sale.completedAt) {
+    if (!sale.createdByStaffId && staffActorId) {
+      await tx.sale.update({
+        where: { id: sale.id },
+        data: {
+          createdByStaffId: staffActorId,
+        },
+      });
+    }
+    return {
+      saleId: sale.id,
+      completedAt: sale.completedAt,
+    };
+  }
+
+  const completedAt = new Date();
+  const receiptNumber = sale.receiptNumber ?? toReceiptNumber(sale.id, completedAt);
+
+  const updatedSale = await tx.sale.update({
+    where: { id: sale.id },
+    data: {
+      completedAt,
+      receiptNumber,
+      ...(sale.createdByStaffId ? {} : { createdByStaffId: staffActorId ?? null }),
+    },
+    select: {
+      id: true,
+      completedAt: true,
+    },
+  });
+
+  return {
+    saleId: updatedSale.id,
+    completedAt: updatedSale.completedAt,
+  };
+};
+
+export const completeSaleIfEligible = async (
+  saleId: string,
+  input: CompleteSaleInput = {},
+) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+
+  return prisma.$transaction((tx) => completeSaleIfEligibleTx(tx, saleId, input));
+};
+
 export const checkoutBasketToSale = async (
   basketId: string,
   paymentInput: CheckoutPaymentInput,
+  createdByStaffId?: string,
 ) => {
   if (!isUuid(basketId)) {
     throw new HttpError(400, "Invalid basket id", "INVALID_BASKET_ID");
   }
+  const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
 
   const txResult = await prisma.$transaction(async (tx) => {
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
@@ -244,6 +388,7 @@ export const checkoutBasketToSale = async (
         subtotalPence,
         taxPence,
         totalPence,
+        createdByStaffId: normalizedCreatedByStaffId,
       },
     });
 

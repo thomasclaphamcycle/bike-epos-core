@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
 import { RefundStatus } from "@prisma/client";
-import { getRequestAuditActor } from "../middleware/staffRole";
+import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
 import { getPaymentById, refundPaymentById } from "../services/workshopMoneyService";
+import {
+  cancelPaymentIntentById,
+  capturePaymentIntentById,
+  createPaymentIntent,
+  listPaymentIntents,
+} from "../services/paymentIntentService";
 import { HttpError } from "../utils/http";
 
 const parseRefundStatus = (value: string | undefined): RefundStatus | undefined => {
@@ -60,5 +66,55 @@ export const refundPaymentHandler = async (req: Request, res: Response) => {
 
 export const getPaymentHandler = async (req: Request, res: Response) => {
   const result = await getPaymentById(req.params.id);
+  res.json(result);
+};
+
+export const createPaymentIntentHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    saleId?: string;
+    amountPence?: number;
+    provider?: string;
+    externalRef?: string;
+  };
+
+  if (body.saleId !== undefined && typeof body.saleId !== "string") {
+    throw new HttpError(400, "saleId must be a string", "INVALID_PAYMENT_INTENT");
+  }
+  if (body.amountPence !== undefined && typeof body.amountPence !== "number") {
+    throw new HttpError(400, "amountPence must be a number", "INVALID_PAYMENT_INTENT");
+  }
+  if (body.provider !== undefined && typeof body.provider !== "string") {
+    throw new HttpError(400, "provider must be a string", "INVALID_PAYMENT_INTENT");
+  }
+  if (body.externalRef !== undefined && typeof body.externalRef !== "string") {
+    throw new HttpError(400, "externalRef must be a string", "INVALID_PAYMENT_INTENT");
+  }
+
+  const result = await createPaymentIntent(body, getRequestStaffActorId(req));
+  res.status(201).json(result);
+};
+
+export const capturePaymentIntentHandler = async (req: Request, res: Response) => {
+  const result = await capturePaymentIntentById(req.params.id, getRequestStaffActorId(req));
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const cancelPaymentIntentHandler = async (req: Request, res: Response) => {
+  const result = await cancelPaymentIntentById(req.params.id);
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const listPaymentIntentsHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
+
+  const result = await listPaymentIntents({
+    status,
+    provider,
+    from,
+    to,
+  });
   res.json(result);
 };

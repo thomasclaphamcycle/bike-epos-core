@@ -1,0 +1,69 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = demo-staff
+@customerId = REPLACE_CUSTOMER_ID
+@saleId = REPLACE_SALE_ID
+@workshopJobId = REPLACE_WORKSHOP_JOB_ID
+
+### Create customer (STAFF+)
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "name": "Jamie Rider",
+  "email": "jamie.rider@example.com",
+  "phone": "07123456789",
+  "notes": "Prefers SMS updates"
+}
+
+### Search customers (STAFF+)
+GET {{baseUrl}}/api/customers/search?q=jamie&take=20
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Legacy customer list/search alias (STAFF+)
+GET {{baseUrl}}/api/customers?query=jamie
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Attach customer to sale (STAFF+)
+PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": "{{customerId}}"
+}
+
+### Detach customer from sale (STAFF+)
+PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": null
+}
+
+### Attach customer to workshop job (STAFF+)
+PATCH {{baseUrl}}/api/workshop/jobs/{{workshopJobId}}/customer
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": "{{customerId}}"
+}
+
+### Detach customer from workshop job (STAFF+)
+PATCH {{baseUrl}}/api/workshop/jobs/{{workshopJobId}}/customer
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": null
+}

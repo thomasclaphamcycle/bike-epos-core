@@ -1,0 +1,43 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = demo-staff
+@saleId = REPLACE_SALE_ID
+@intentId = REPLACE_INTENT_ID
+
+### Complete sale manually (STAFF+, idempotent)
+POST {{baseUrl}}/api/sales/{{saleId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### Create CASH payment intent for sale (STAFF+)
+POST {{baseUrl}}/api/payments/intents
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "saleId": "{{saleId}}",
+  "provider": "CASH",
+  "amountPence": 2500
+}
+
+### Capture intent (STAFF+)
+POST {{baseUrl}}/api/payments/intents/{{intentId}}/capture
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### Receipt JSON (STAFF+)
+GET {{baseUrl}}/api/sales/{{saleId}}/receipt
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Receipt HTML page (STAFF+)
+GET {{baseUrl}}/sales/{{saleId}}/receipt
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
