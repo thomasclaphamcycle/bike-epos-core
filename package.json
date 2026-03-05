@@ -7,7 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "typecheck:reports": "tsc -p tsconfig.reports.json --noEmit",
     "test:workshop": "npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17",
-    "test:workshop:smoke": "NODE_ENV=test node scripts/workshop_checkout_deposit_tests.js",
+    "test:workshop:smoke": "NODE_ENV=test ALLOW_NON_TEST_DB=1 ALLOW_EXISTING_SERVER=1 node scripts/workshop_checkout_deposit_tests.js",
     "test:m11": "npm run test:workshop:smoke",
     "test:m12": "NODE_ENV=test node scripts/workshop_m12_smoke_tests.js",
     "test:m13": "NODE_ENV=test node scripts/workshop_m13_smoke_tests.js",
