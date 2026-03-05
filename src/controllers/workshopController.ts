@@ -37,6 +37,8 @@ import {
   finalizeWorkshopJob,
   getWorkshopJobById,
   listWorkshopJobs,
+  removeWorkshopJobLine,
+  updateWorkshopJobLine,
   updateWorkshopJob,
 } from "../services/workshopService";
 import { HttpError } from "../utils/http";
@@ -245,6 +247,36 @@ export const addWorkshopJobLineHandler = async (req: Request, res: Response) => 
 
   const result = await addWorkshopJobLine(req.params.id, body);
   res.status(201).json(result);
+};
+
+export const patchWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    description?: string;
+    qty?: number;
+    unitPricePence?: number;
+  };
+
+  if (body.description !== undefined && typeof body.description !== "string") {
+    throw new HttpError(400, "description must be a string", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.qty !== undefined && typeof body.qty !== "number") {
+    throw new HttpError(400, "qty must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.unitPricePence !== undefined && typeof body.unitPricePence !== "number") {
+    throw new HttpError(
+      400,
+      "unitPricePence must be a number",
+      "INVALID_WORKSHOP_LINE_UPDATE",
+    );
+  }
+
+  const result = await updateWorkshopJobLine(req.params.id, req.params.lineId, body);
+  res.json(result);
+};
+
+export const deleteWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const result = await removeWorkshopJobLine(req.params.id, req.params.lineId);
+  res.json(result);
 };
 
 export const finalizeWorkshopJobHandler = async (req: Request, res: Response) => {
