@@ -1,0 +1,21 @@
+@baseUrl = http://localhost:3000
+@adminRole = ADMIN
+@adminId = admin-1
+
+### Export sales data (ADMIN only)
+GET {{baseUrl}}/api/admin/export/sales
+X-Staff-Role: {{adminRole}}
+X-Staff-Id: {{adminId}}
+Accept: text/csv
+
+### Export workshop data (ADMIN only)
+GET {{baseUrl}}/api/admin/export/workshop
+X-Staff-Role: {{adminRole}}
+X-Staff-Id: {{adminId}}
+Accept: text/csv
+
+### Export inventory data (ADMIN only)
+GET {{baseUrl}}/api/admin/export/inventory
+X-Staff-Role: {{adminRole}}
+X-Staff-Id: {{adminId}}
+Accept: text/csv

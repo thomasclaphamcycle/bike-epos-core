@@ -6,6 +6,11 @@ import {
   adminResetUserPasswordHandler,
   adminUpdateUserHandler,
 } from "../controllers/adminUserController";
+import {
+  getAdminInventoryExportHandler,
+  getAdminSalesExportHandler,
+  getAdminWorkshopExportHandler,
+} from "../controllers/adminExportController";
 
 export const adminRouter = Router();
 
@@ -17,3 +22,7 @@ adminRouter.post(
   requireRoleAtLeast("ADMIN"),
   adminResetUserPasswordHandler,
 );
+
+adminRouter.get("/export/sales", requireRoleAtLeast("ADMIN"), getAdminSalesExportHandler);
+adminRouter.get("/export/workshop", requireRoleAtLeast("ADMIN"), getAdminWorkshopExportHandler);
+adminRouter.get("/export/inventory", requireRoleAtLeast("ADMIN"), getAdminInventoryExportHandler);
