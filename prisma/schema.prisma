@@ -32,6 +32,7 @@ model Product {
 
   variants Variant[]
   workshopLines WorkshopJobLine[]
+  stockReservations StockReservation[]
 }
 
 model Supplier {
@@ -171,6 +172,7 @@ model Variant {
   purchaseOrderItems PurchaseOrderItem[]
   stocktakeLines     StocktakeLine[]
   workshopLines      WorkshopJobLine[]
+  stockReservations  StockReservation[]
 }
 
 model Barcode {
@@ -739,12 +741,30 @@ model WorkshopJob {
   jobNotes      WorkshopJobNote[]
   parts         WorkshopJobPart[]
   lines         WorkshopJobLine[]
+  stockReservations StockReservation[]
 
   @@index([scheduledDate])
   @@index([status])
   @@index([status, completedAt])
   @@index([assignedStaffId])
   @@index([finalizedBasketId])
+}
+
+model StockReservation {
+  id            String   @id @default(uuid()) @db.Uuid
+  productId     String
+  variantId     String
+  workshopJobId String   @db.Uuid
+  quantity      Int
+  createdAt     DateTime @default(now())
+
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant       Variant      @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  workshopJob   WorkshopJob  @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+
+  @@index([variantId, createdAt])
+  @@index([workshopJobId, createdAt])
+  @@index([productId])
 }
 
 enum WorkshopJobPartStatus {

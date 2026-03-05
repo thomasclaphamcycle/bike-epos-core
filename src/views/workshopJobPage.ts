@@ -139,7 +139,22 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
       </div>
       <div id="line-status" class="status"></div>
       <div id="line-totals" class="status"></div>
+      <div id="parts-status" class="status"></div>
       <div id="lines-wrap" class="table-wrap"></div>
+      <h3 style="margin-top: 12px;">Part Reservations</h3>
+      <div class="controls">
+        <div class="field" style="min-width: 260px;">
+          <label for="reservation-product-id">Product Id</label>
+          <input id="reservation-product-id" type="text" placeholder="Product UUID" />
+        </div>
+        <div class="field">
+          <label for="reservation-quantity">Quantity</label>
+          <input id="reservation-quantity" type="number" min="1" step="1" value="1" />
+        </div>
+        <button id="reservation-add-btn" type="button">Reserve Stock</button>
+      </div>
+      <div id="reservation-status" class="status"></div>
+      <div id="reservations-wrap" class="table-wrap"></div>
       <div class="controls" style="margin-top: 10px;">
         <button id="convert-sale-btn" class="primary" type="button">Create Invoice (MANAGER+)</button>
         <a id="convert-sale-link" href="#" style="display:none;">Open Invoice in POS</a>
@@ -243,7 +258,9 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         const meta = qs("#job-meta");
         const linesWrap = qs("#lines-wrap");
         const lineTotals = qs("#line-totals");
-        if (!meta || !linesWrap) return;
+        const partsStatus = qs("#parts-status");
+        const reservationsWrap = qs("#reservations-wrap");
+        if (!meta || !linesWrap || !reservationsWrap) return;
 
         const job = jobPayload?.job;
         if (!job) {
@@ -258,6 +275,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
           { label: "Status (v1)", value: job.statusV1 || "-" },
           { label: "Title", value: job.title || "-" },
           { label: "Invoice Sale", value: job.saleId || "-" },
+          { label: "Parts Status", value: jobPayload?.partsStatus || "OK" },
           { label: "Promised At", value: job.promisedAt ? new Date(job.promisedAt).toLocaleString() : "-" },
           { label: "Assigned To", value: job.assignedToStaffName || job.assignedToStaffId || "-" },
         ];
@@ -272,7 +290,9 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         qs("#notes-input").value = job.notes || "";
 
         const lines = Array.isArray(jobPayload?.lines) ? jobPayload.lines : [];
+        const reservations = Array.isArray(jobPayload?.reservations) ? jobPayload.reservations : [];
         const totals = jobPayload?.totals || { subtotalPence: 0, taxPence: 0, totalPence: 0 };
+        const partsStatusValue = jobPayload?.partsStatus || "OK";
         setSaleLink(job.saleId || null, job.saleId ? "/pos?saleId=" + encodeURIComponent(job.saleId) : null);
         if (lineTotals) {
           lineTotals.innerHTML =
@@ -280,31 +300,55 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
             " | Tax: " + escapeHtml(formatMoney(totals.taxPence)) +
             " | Total: " + escapeHtml(formatMoney(totals.totalPence));
         }
+        if (partsStatus) {
+          partsStatus.textContent = "Parts status: " + partsStatusValue;
+          partsStatus.classList.remove("ok", "error");
+          partsStatus.classList.add(partsStatusValue === "OK" ? "ok" : "error");
+        }
         if (lines.length === 0) {
           linesWrap.innerHTML = '<div style="padding: 10px;">No lines.</div>';
-          return;
+        } else {
+          const rows = lines
+            .map((line) =>
+              '<tr>' +
+              '<td>' + escapeHtml(line.type) + '</td>' +
+              '<td><input type="text" class="line-description-input" data-line-id="' + escapeHtml(line.id) + '" value="' + escapeHtml(line.description || "") + '" /></td>' +
+              '<td>' + escapeHtml(line.variantSku || "-") + '</td>' +
+              '<td><input type="number" min="1" step="1" class="line-qty-input" data-line-id="' + escapeHtml(line.id) + '" value="' + escapeHtml(String(line.qty || 0)) + '" /></td>' +
+              '<td><input type="number" min="0" step="0.01" class="line-price-input" data-line-id="' + escapeHtml(line.id) + '" value="' + ((Number(line.unitPricePence || 0) / 100).toFixed(2)) + '" /></td>' +
+              '<td>' + escapeHtml(formatMoney(line.lineTotalPence || 0)) + '</td>' +
+              '<td>' +
+              '<button type="button" class="line-save-btn" data-line-id="' + escapeHtml(line.id) + '">Save</button> ' +
+              '<button type="button" class="line-delete-btn" data-line-id="' + escapeHtml(line.id) + '">Delete</button>' +
+              '</td>' +
+              "</tr>",
+            )
+            .join("");
+          linesWrap.innerHTML =
+            '<table><thead><tr><th>Type</th><th>Description</th><th>SKU</th><th>Qty</th><th>Unit (GBP)</th><th>Line Total</th><th>Actions</th></tr></thead><tbody>' +
+            rows +
+            "</tbody></table>";
         }
 
-        const rows = lines
-          .map((line) =>
-            '<tr>' +
-            '<td>' + escapeHtml(line.type) + '</td>' +
-            '<td><input type="text" class="line-description-input" data-line-id="' + escapeHtml(line.id) + '" value="' + escapeHtml(line.description || "") + '" /></td>' +
-            '<td>' + escapeHtml(line.variantSku || "-") + '</td>' +
-            '<td><input type="number" min="1" step="1" class="line-qty-input" data-line-id="' + escapeHtml(line.id) + '" value="' + escapeHtml(String(line.qty || 0)) + '" /></td>' +
-            '<td><input type="number" min="0" step="0.01" class="line-price-input" data-line-id="' + escapeHtml(line.id) + '" value="' + ((Number(line.unitPricePence || 0) / 100).toFixed(2)) + '" /></td>' +
-            '<td>' + escapeHtml(formatMoney(line.lineTotalPence || 0)) + '</td>' +
-            '<td>' +
-            '<button type="button" class="line-save-btn" data-line-id="' + escapeHtml(line.id) + '">Save</button> ' +
-            '<button type="button" class="line-delete-btn" data-line-id="' + escapeHtml(line.id) + '">Delete</button>' +
-            '</td>' +
-            "</tr>",
-          )
-          .join("");
-        linesWrap.innerHTML =
-          '<table><thead><tr><th>Type</th><th>Description</th><th>SKU</th><th>Qty</th><th>Unit (GBP)</th><th>Line Total</th><th>Actions</th></tr></thead><tbody>' +
-          rows +
-          "</tbody></table>";
+        if (reservations.length === 0) {
+          reservationsWrap.innerHTML = '<div style="padding: 10px;">No reservations.</div>';
+        } else {
+          const reservationRows = reservations
+            .map((reservation) =>
+              '<tr>' +
+              '<td>' + escapeHtml(reservation.productName || reservation.productId || "-") + '</td>' +
+              '<td>' + escapeHtml(reservation.variantSku || "-") + '</td>' +
+              '<td>' + escapeHtml(String(reservation.quantity || 0)) + '</td>' +
+              '<td>' + escapeHtml(new Date(reservation.createdAt).toLocaleString()) + '</td>' +
+              '<td><button type="button" class="reservation-delete-btn" data-reservation-id="' + escapeHtml(reservation.id) + '">Delete</button></td>' +
+              "</tr>",
+            )
+            .join("");
+          reservationsWrap.innerHTML =
+            '<table><thead><tr><th>Product</th><th>SKU</th><th>Qty</th><th>Created</th><th>Action</th></tr></thead><tbody>' +
+            reservationRows +
+            "</tbody></table>";
+        }
       };
 
       const loadJob = async () => {
@@ -467,6 +511,53 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         }
       };
 
+      const addReservation = async () => {
+        const productId = (qs("#reservation-product-id").value || "").trim();
+        const quantity = Number.parseInt(qs("#reservation-quantity").value || "", 10);
+
+        if (!productId) {
+          setStatus("reservation-status", "Product id is required.", "error");
+          return;
+        }
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          setStatus("reservation-status", "Quantity must be a positive integer.", "error");
+          return;
+        }
+
+        setStatus("reservation-status", "Reserving stock...");
+        try {
+          await apiRequest("/api/workshop/jobs/" + encodeURIComponent(jobId) + "/reservations", {
+            method: "POST",
+            body: JSON.stringify({
+              productId,
+              quantity,
+            }),
+          });
+          qs("#reservation-product-id").value = "";
+          qs("#reservation-quantity").value = "1";
+          await loadJob();
+          setStatus("reservation-status", "Stock reserved.", "ok");
+        } catch (error) {
+          setStatus("reservation-status", error.message || "Failed to reserve stock", "error");
+        }
+      };
+
+      const deleteReservation = async (reservationId) => {
+        setStatus("reservation-status", "Deleting reservation...");
+        try {
+          await apiRequest(
+            "/api/workshop/jobs/" + encodeURIComponent(jobId) + "/reservations/" + encodeURIComponent(reservationId),
+            {
+              method: "DELETE",
+            },
+          );
+          await loadJob();
+          setStatus("reservation-status", "Reservation deleted.", "ok");
+        } catch (error) {
+          setStatus("reservation-status", error.message || "Failed to delete reservation", "error");
+        }
+      };
+
       const convertToSale = async () => {
         if (!canConvertToSale()) {
           setStatus("convert-sale-status", "Create Invoice requires MANAGER+.", "error");
@@ -501,6 +592,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
       qs("#save-status-btn")?.addEventListener("click", saveStatus);
       qs("#save-notes-btn")?.addEventListener("click", saveNotesAndTitle);
       qs("#line-add-btn")?.addEventListener("click", addLine);
+      qs("#reservation-add-btn")?.addEventListener("click", addReservation);
       qs("#convert-sale-btn")?.addEventListener("click", convertToSale);
       roleInput.addEventListener("change", updateConvertButtonVisibility);
       qs("#lines-wrap")?.addEventListener("click", (event) => {
@@ -514,6 +606,14 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         if (target.classList.contains("line-delete-btn")) {
           deleteLine(lineId);
         }
+      });
+      qs("#reservations-wrap")?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) return;
+        if (!target.classList.contains("reservation-delete-btn")) return;
+        const reservationId = target.getAttribute("data-reservation-id");
+        if (!reservationId) return;
+        deleteReservation(reservationId);
       });
       updateConvertButtonVisibility();
       renderJob();

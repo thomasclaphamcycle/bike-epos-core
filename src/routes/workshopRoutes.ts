@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   addWorkshopJobNoteHandler,
+  addWorkshopJobReservationHandler,
   addWorkshopJobLineHandler,
   attachWorkshopJobCustomerHandler,
   assignWorkshopJobHandler,
@@ -11,6 +12,7 @@ import {
   checkoutWorkshopJobHandler,
   createWorkshopJobHandler,
   deleteWorkshopJobLineHandler,
+  deleteWorkshopJobReservationHandler,
   finalizeWorkshopJobHandler,
   getWorkshopAvailabilityHandler,
   getWorkshopDashboardHandler,
@@ -37,6 +39,16 @@ workshopRouter.delete(
   "/jobs/:id/lines/:lineId",
   requireRoleAtLeast("STAFF"),
   deleteWorkshopJobLineHandler,
+);
+workshopRouter.post(
+  "/jobs/:id/reservations",
+  requireRoleAtLeast("STAFF"),
+  addWorkshopJobReservationHandler,
+);
+workshopRouter.delete(
+  "/jobs/:id/reservations/:reservationId",
+  requireRoleAtLeast("STAFF"),
+  deleteWorkshopJobReservationHandler,
 );
 workshopRouter.post("/jobs/:id/finalize", requireRoleAtLeast("STAFF"), finalizeWorkshopJobHandler);
 workshopRouter.post("/jobs/:id/close", requireRoleAtLeast("STAFF"), closeWorkshopJobHandler);

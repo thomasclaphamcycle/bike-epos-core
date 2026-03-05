@@ -1,6 +1,7 @@
 import { BarcodeType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import { getReservedQuantityByVariantIdsTx } from "./stockReservationService";
 
 type CreateProductInput = {
   name?: string;
@@ -728,16 +729,20 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
   const onHandByVariantId = new Map(
     groupedOnHand.map((row) => [row.variantId, row._sum.quantity ?? 0]),
   );
+  const reservedByVariantId = await getReservedQuantityByVariantIdsTx(prisma, variantIds);
 
   return {
     rows: variants.map((variant) => ({
+      onHandQty: onHandByVariantId.get(variant.id) ?? 0,
+      reservedQty: reservedByVariantId.get(variant.id) ?? 0,
+      availableQty:
+        (onHandByVariantId.get(variant.id) ?? 0) - (reservedByVariantId.get(variant.id) ?? 0),
       id: variant.id,
       productId: variant.productId,
       name: variant.name ?? variant.option ?? variant.product.name,
       sku: variant.sku,
       barcode: variant.barcode ?? variant.barcodes[0]?.code ?? null,
       pricePence: variant.retailPricePence,
-      onHandQty: onHandByVariantId.get(variant.id) ?? 0,
     })),
   };
 };

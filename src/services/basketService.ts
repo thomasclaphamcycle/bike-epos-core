@@ -2,6 +2,7 @@ import { Basket, BasketItem, BasketStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findBarcodeOrThrow } from "./productLookupService";
 import { HttpError, isUuid } from "../utils/http";
+import { getVariantAvailabilityTx } from "./stockReservationService";
 
 type BasketWithItems = Basket & {
   items: Array<
@@ -146,6 +147,26 @@ export const addBasketItem = async (basketId: string, input: AddBasketItemInput)
   }
 
   const unitPrice = variant.retailPricePence;
+  const existingLine = await prisma.basketItem.findUnique({
+    where: {
+      basketId_variantId: {
+        basketId,
+        variantId,
+      },
+    },
+    select: {
+      quantity: true,
+    },
+  });
+  const requestedQty = (existingLine?.quantity ?? 0) + input.quantity;
+  const availability = await getVariantAvailabilityTx(prisma, variantId);
+  if (requestedQty > availability.availableQty) {
+    throw new HttpError(
+      409,
+      `Insufficient stock available. Requested ${requestedQty}, available ${availability.availableQty}`,
+      "INSUFFICIENT_AVAILABLE_STOCK",
+    );
+  }
 
   await prisma.basketItem.upsert({
     where: {
@@ -161,9 +182,7 @@ export const addBasketItem = async (basketId: string, input: AddBasketItemInput)
       unitPrice,
     },
     update: {
-      quantity: {
-        increment: input.quantity,
-      },
+      quantity: requestedQty,
     },
   });
 
@@ -197,6 +216,14 @@ export const updateBasketItemQuantity = async (
   const item = await prisma.basketItem.findUnique({ where: { id: itemId } });
   if (!item || item.basketId !== basketId) {
     throw new HttpError(404, "Basket item not found", "BASKET_ITEM_NOT_FOUND");
+  }
+  const availability = await getVariantAvailabilityTx(prisma, item.variantId);
+  if (quantity > availability.availableQty) {
+    throw new HttpError(
+      409,
+      `Insufficient stock available. Requested ${quantity}, available ${availability.availableQty}`,
+      "INSUFFICIENT_AVAILABLE_STOCK",
+    );
   }
 
   await prisma.basketItem.update({

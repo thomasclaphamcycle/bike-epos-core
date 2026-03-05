@@ -1,6 +1,7 @@
 import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getVariantAvailabilityTx } from "./stockReservationService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 type WorkshopStatusV1 =
@@ -58,6 +59,12 @@ type UpdateWorkshopJobLineInput = {
   unitPricePence?: number;
   productId?: string | null;
   variantId?: string | null;
+};
+
+type AddWorkshopJobReservationInput = {
+  productId?: string;
+  variantId?: string;
+  quantity?: number;
 };
 
 const LABOUR_VARIANT_SKU = "WORKSHOP-LABOUR-SERVICE";
@@ -493,7 +500,51 @@ const toLineResponse = (line: {
   updatedAt: line.updatedAt,
 });
 
+const toReservationResponse = (reservation: {
+  id: string;
+  workshopJobId: string;
+  productId: string;
+  variantId: string;
+  quantity: number;
+  createdAt: Date;
+  product: {
+    id: string;
+    name: string;
+  };
+  variant: {
+    id: string;
+    sku: string;
+    name: string | null;
+  };
+}) => ({
+  id: reservation.id,
+  workshopJobId: reservation.workshopJobId,
+  productId: reservation.productId,
+  productName: reservation.product.name,
+  variantId: reservation.variantId,
+  variantSku: reservation.variant.sku,
+  variantName: reservation.variant.name,
+  quantity: reservation.quantity,
+  createdAt: reservation.createdAt,
+});
+
 const workshopLineInclude = {
+  product: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  variant: {
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+    },
+  },
+};
+
+const workshopReservationInclude = {
   product: {
     select: {
       id: true,
@@ -522,6 +573,49 @@ const toWorkshopJobTotals = (
     taxPence,
     totalPence: subtotalPence + taxPence,
   };
+};
+
+const toWorkshopPartsStatus = (
+  lines: Array<{
+    type: WorkshopJobLineType;
+    variantId: string | null;
+    qty: number;
+  }>,
+  reservations: Array<{
+    variantId: string;
+    quantity: number;
+  }>,
+): "OK" | "SHORT" => {
+  const requiredByVariant = new Map<string, number>();
+  for (const line of lines) {
+    if (line.type !== "PART") {
+      continue;
+    }
+    if (!line.variantId) {
+      return "SHORT";
+    }
+    requiredByVariant.set(line.variantId, (requiredByVariant.get(line.variantId) ?? 0) + line.qty);
+  }
+
+  if (requiredByVariant.size === 0) {
+    return "OK";
+  }
+
+  const reservedByVariant = new Map<string, number>();
+  for (const reservation of reservations) {
+    reservedByVariant.set(
+      reservation.variantId,
+      (reservedByVariant.get(reservation.variantId) ?? 0) + reservation.quantity,
+    );
+  }
+
+  for (const [variantId, requiredQty] of requiredByVariant.entries()) {
+    if ((reservedByVariant.get(variantId) ?? 0) < requiredQty) {
+      return "SHORT";
+    }
+  }
+
+  return "OK";
 };
 
 const toJobResponse = (job: {
@@ -761,6 +855,10 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
           id: true,
         },
       },
+      stockReservations: {
+        include: workshopReservationInclude,
+        orderBy: [{ createdAt: "asc" }],
+      },
       lines: {
         include: workshopLineInclude,
         orderBy: [{ createdAt: "asc" }],
@@ -775,7 +873,9 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
   return {
     job: toJobResponse(job),
     lines: job.lines.map((line) => toLineResponse(line)),
+    reservations: job.stockReservations.map((reservation) => toReservationResponse(reservation)),
     totals: toWorkshopJobTotals(job.lines),
+    partsStatus: toWorkshopPartsStatus(job.lines, job.stockReservations),
   };
 };
 
@@ -1367,6 +1467,115 @@ export const deleteWorkshopJobLine = async (workshopJobId: string, lineId: strin
       deleted: true,
       workshopJobId,
       lineId,
+    };
+  });
+};
+
+export const addWorkshopJobReservation = async (
+  workshopJobId: string,
+  input: AddWorkshopJobReservationInput,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  const productId = normalizeOptionalText(input.productId);
+  if (!productId) {
+    throw new HttpError(400, "productId is required", "INVALID_STOCK_RESERVATION");
+  }
+
+  const quantity = input.quantity;
+  if (!Number.isInteger(quantity) || (quantity ?? 0) <= 0) {
+    throw new HttpError(400, "quantity must be a positive integer", "INVALID_STOCK_RESERVATION");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    if (job.closedAt || job.status === "CANCELLED") {
+      throw new HttpError(
+        409,
+        "Closed or cancelled workshop jobs cannot reserve stock",
+        "WORKSHOP_JOB_NOT_EDITABLE",
+      );
+    }
+
+    await ensureProductExistsTx(tx, productId);
+    const variant = await ensureVariantForPartTx(tx, {
+      productId,
+      variantId: normalizeOptionalText(input.variantId),
+    });
+    const availability = await getVariantAvailabilityTx(tx, variant.id);
+    if (quantity > availability.availableQty) {
+      throw new HttpError(
+        409,
+        `Insufficient stock available. Requested ${quantity}, available ${availability.availableQty}`,
+        "INSUFFICIENT_AVAILABLE_STOCK",
+      );
+    }
+
+    const created = await tx.stockReservation.create({
+      data: {
+        workshopJobId,
+        productId,
+        variantId: variant.id,
+        quantity,
+      },
+      include: workshopReservationInclude,
+    });
+
+    return {
+      reservation: toReservationResponse(created),
+      stock: {
+        variantId: variant.id,
+        onHandQty: availability.onHandQty,
+        reservedQty: availability.reservedQty + quantity,
+        availableQty: availability.availableQty - quantity,
+      },
+    };
+  });
+};
+
+export const deleteWorkshopJobReservation = async (
+  workshopJobId: string,
+  reservationId: string,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+  if (!isUuid(reservationId)) {
+    throw new HttpError(400, "Invalid reservation id", "INVALID_STOCK_RESERVATION_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    if (job.closedAt || job.status === "CANCELLED") {
+      throw new HttpError(
+        409,
+        "Closed or cancelled workshop jobs cannot be edited",
+        "WORKSHOP_JOB_NOT_EDITABLE",
+      );
+    }
+
+    const reservation = await tx.stockReservation.findUnique({
+      where: { id: reservationId },
+      select: {
+        id: true,
+        workshopJobId: true,
+      },
+    });
+
+    if (!reservation || reservation.workshopJobId !== workshopJobId) {
+      throw new HttpError(404, "Stock reservation not found", "STOCK_RESERVATION_NOT_FOUND");
+    }
+
+    await tx.stockReservation.delete({
+      where: { id: reservationId },
+    });
+
+    return {
+      deleted: true,
+      workshopJobId,
+      reservationId,
     };
   });
 };

@@ -1,0 +1,32 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@jobId = REPLACE_WORKSHOP_JOB_ID
+@productId = REPLACE_PRODUCT_ID
+@reservationId = REPLACE_RESERVATION_ID
+
+### Reserve stock for workshop job part line (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/reservations
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "productId": "{{productId}}",
+  "quantity": 2
+}
+
+### Delete reservation (STAFF+)
+DELETE {{baseUrl}}/api/workshop/jobs/{{jobId}}/reservations/{{reservationId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get workshop job with reservations + parts status (STAFF+)
+GET {{baseUrl}}/api/workshop/jobs/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Product search should return onHand, reserved, available
+GET {{baseUrl}}/api/products/search?query=&take=20
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

@@ -428,6 +428,8 @@ export const renderPosPage = (input: PosPageInput) => {
             '<td>' + toSafeText(row.barcode || "") + '</td>' +
             '<td>' + formatMoney(row.pricePence || 0) + '</td>' +
             '<td>' + Number(row.onHandQty || 0) + '</td>' +
+            '<td>' + Number(row.reservedQty || 0) + '</td>' +
+            '<td>' + Number((row.availableQty ?? row.onHandQty) || 0) + '</td>' +
             '<td><button type="button" class="select-product-btn" data-product-id="' + toSafeText(row.id) + '">Select</button></td>' +
             '</tr>',
           )
@@ -435,7 +437,7 @@ export const renderPosPage = (input: PosPageInput) => {
 
         wrap.innerHTML =
           '<table>' +
-          '<thead><tr><th>Name</th><th>SKU</th><th>Barcode</th><th>Price</th><th>On Hand</th><th>Action</th></tr></thead>' +
+          '<thead><tr><th>Name</th><th>SKU</th><th>Barcode</th><th>Price</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Action</th></tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
           '</table>';
       };
@@ -455,7 +457,7 @@ export const renderPosPage = (input: PosPageInput) => {
         panel.innerHTML =
           '<div><strong>' + toSafeText(selected.name || "") + '</strong></div>' +
           '<div class="muted" style="margin-top: 4px;">SKU: ' + toSafeText(selected.sku || "") + ' | Barcode: ' + toSafeText(selected.barcode || "-") + '</div>' +
-          '<div class="muted" style="margin-top: 2px;">Price: ' + formatMoney(selected.pricePence || 0) + ' | On hand: ' + Number(selected.onHandQty || 0) + '</div>' +
+          '<div class="muted" style="margin-top: 2px;">Price: ' + formatMoney(selected.pricePence || 0) + ' | On hand: ' + Number(selected.onHandQty || 0) + ' | Reserved: ' + Number(selected.reservedQty || 0) + ' | Available: ' + Number((selected.availableQty ?? selected.onHandQty) || 0) + '</div>' +
           '<div class="controls" style="margin-top: 10px;">' +
           '<button type="button" class="primary quick-add-1" data-product-id="' + toSafeText(selected.id) + '">Add x1</button>' +
           '<input id="quick-qty-input" type="number" min="1" step="1" value="1" style="width: 110px;" />' +

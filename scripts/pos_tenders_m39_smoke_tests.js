@@ -206,6 +206,19 @@ const run = async () => {
     });
     created.variantId = variant.id;
 
+    await apiJson({
+      path: "/api/inventory/movements",
+      method: "POST",
+      body: {
+        variantId: variant.id,
+        type: "PURCHASE",
+        quantity: 20,
+        referenceType: "M39_STOCK_SEED",
+        referenceId: `m39_${token}`,
+      },
+      cookie,
+    });
+
     const createSale = async () => {
       const basket = await apiJson({
         path: "/api/baskets",
@@ -372,6 +385,7 @@ const run = async () => {
     }
 
     if (created.variantId) {
+      await prisma.stockReservation.deleteMany({ where: { variantId: created.variantId } });
       await prisma.stockLedgerEntry.deleteMany({ where: { variantId: created.variantId } });
       await prisma.inventoryMovement.deleteMany({ where: { variantId: created.variantId } });
       await prisma.barcode.deleteMany({ where: { variantId: created.variantId } });
@@ -379,6 +393,7 @@ const run = async () => {
     }
 
     if (created.productId) {
+      await prisma.stockReservation.deleteMany({ where: { productId: created.productId } });
       await prisma.product.deleteMany({ where: { id: created.productId } });
     }
 

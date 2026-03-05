@@ -30,11 +30,13 @@ import {
   getWorkshopJobNotes,
 } from "../services/workshopWorkflowService";
 import {
+  addWorkshopJobReservation,
   addWorkshopJobLine,
   attachCustomerToWorkshopJob,
   closeWorkshopJob,
   convertWorkshopJobToSale,
   createWorkshopJob,
+  deleteWorkshopJobReservation,
   deleteWorkshopJobLine,
   finalizeWorkshopJob,
   getWorkshopJobById,
@@ -454,6 +456,32 @@ export const patchWorkshopJobLineHandler = async (req: Request, res: Response) =
 
 export const deleteWorkshopJobLineHandler = async (req: Request, res: Response) => {
   const result = await deleteWorkshopJobLine(req.params.id, req.params.lineId);
+  res.json(result);
+};
+
+export const addWorkshopJobReservationHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    productId?: string;
+    variantId?: string;
+    quantity?: number;
+  };
+
+  if (body.productId !== undefined && typeof body.productId !== "string") {
+    throw new HttpError(400, "productId must be a string", "INVALID_STOCK_RESERVATION");
+  }
+  if (body.variantId !== undefined && typeof body.variantId !== "string") {
+    throw new HttpError(400, "variantId must be a string", "INVALID_STOCK_RESERVATION");
+  }
+  if (body.quantity !== undefined && typeof body.quantity !== "number") {
+    throw new HttpError(400, "quantity must be a number", "INVALID_STOCK_RESERVATION");
+  }
+
+  const result = await addWorkshopJobReservation(req.params.id, body);
+  res.status(201).json(result);
+};
+
+export const deleteWorkshopJobReservationHandler = async (req: Request, res: Response) => {
+  const result = await deleteWorkshopJobReservation(req.params.id, req.params.reservationId);
   res.json(result);
 };
 

@@ -2,6 +2,7 @@ import { InventoryMovementType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { ensureVariantExistsById } from "./productService";
+import { getReservedQuantityByVariantIdsTx, getReservedQuantityForVariantTx } from "./stockReservationService";
 
 type RecordMovementInput = {
   variantId?: string;
@@ -247,10 +248,14 @@ export const getOnHand = async (variantId?: string) => {
       quantity: true,
     },
   });
+  const reservedQty = await getReservedQuantityForVariantTx(prisma, normalizedVariantId);
+  const onHand = aggregate._sum.quantity ?? 0;
 
   return {
     variantId: normalizedVariantId,
-    onHand: aggregate._sum.quantity ?? 0,
+    onHand,
+    reservedQty,
+    availableQty: onHand - reservedQty,
   };
 };
 
@@ -357,6 +362,7 @@ export const listOnHand = async (filters: ListOnHandFilters = {}) => {
   const onHandByVariant = new Map(
     grouped.map((row) => [row.variantId, row._sum.quantity ?? 0]),
   );
+  const reservedByVariant = await getReservedQuantityByVariantIdsTx(prisma, variantIds);
 
   return {
     rows: variants.map((variant) => ({
@@ -371,6 +377,9 @@ export const listOnHand = async (filters: ListOnHandFilters = {}) => {
       retailPricePence: variant.retailPricePence,
       isActive: variant.isActive,
       onHand: onHandByVariant.get(variant.id) ?? 0,
+      reservedQty: reservedByVariant.get(variant.id) ?? 0,
+      availableQty:
+        (onHandByVariant.get(variant.id) ?? 0) - (reservedByVariant.get(variant.id) ?? 0),
     })),
   };
 };

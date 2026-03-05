@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { ensureVariantExistsById } from "./productService";
+import { getReservedQuantityForVariantTx } from "./stockReservationService";
 
 type CreateStockAdjustmentInput = {
   variantId?: string;
@@ -115,10 +116,13 @@ export const getStockForVariant = async (variantId: string, locationId?: string)
     }
 
     const onHand = await getLocationOnHandTx(prisma, normalizedVariantId, normalizedLocationId);
+    const reservedQty = await getReservedQuantityForVariantTx(prisma, normalizedVariantId);
 
     return {
       variantId: normalizedVariantId,
       onHand,
+      reservedQty,
+      availableQty: onHand - reservedQty,
       locations: [
         {
           id: location.id,
@@ -165,10 +169,13 @@ export const getStockForVariant = async (variantId: string, locationId?: string)
   });
 
   const totalOnHand = locationsResponse.reduce((sum, row) => sum + row.onHand, 0);
+  const reservedQty = await getReservedQuantityForVariantTx(prisma, normalizedVariantId);
 
   return {
     variantId: normalizedVariantId,
     onHand: totalOnHand,
+    reservedQty,
+    availableQty: totalOnHand - reservedQty,
     locations: locationsResponse,
   };
 };

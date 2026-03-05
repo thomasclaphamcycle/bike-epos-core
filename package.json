@@ -52,7 +52,8 @@
     "test:m48": "node scripts/run_smoke_test.js scripts/customer_sales_m48_smoke_tests.js",
     "test:m49": "node scripts/run_smoke_test.js scripts/workshop_m49_smoke_tests.js",
     "test:m50": "node scripts/run_smoke_test.js scripts/workshop_lines_m50_smoke_tests.js",
-    "test:m51": "node scripts/run_smoke_test.js scripts/workshop_convert_sale_m51_smoke_tests.js"
+    "test:m51": "node scripts/run_smoke_test.js scripts/workshop_convert_sale_m51_smoke_tests.js",
+    "test:m52": "node scripts/run_smoke_test.js scripts/workshop_reservations_m52_smoke_tests.js"
   },
   "repository": {
     "type": "git",
