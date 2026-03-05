@@ -1,7 +1,10 @@
 import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { getVariantAvailabilityTx } from "./stockReservationService";
+import {
+  getVariantAvailabilityTx,
+  computeWorkshopPartsReconciliationTx,
+} from "./stockReservationService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 type WorkshopStatusV1 =
@@ -575,49 +578,6 @@ const toWorkshopJobTotals = (
   };
 };
 
-const toWorkshopPartsStatus = (
-  lines: Array<{
-    type: WorkshopJobLineType;
-    variantId: string | null;
-    qty: number;
-  }>,
-  reservations: Array<{
-    variantId: string;
-    quantity: number;
-  }>,
-): "OK" | "SHORT" => {
-  const requiredByVariant = new Map<string, number>();
-  for (const line of lines) {
-    if (line.type !== "PART") {
-      continue;
-    }
-    if (!line.variantId) {
-      return "SHORT";
-    }
-    requiredByVariant.set(line.variantId, (requiredByVariant.get(line.variantId) ?? 0) + line.qty);
-  }
-
-  if (requiredByVariant.size === 0) {
-    return "OK";
-  }
-
-  const reservedByVariant = new Map<string, number>();
-  for (const reservation of reservations) {
-    reservedByVariant.set(
-      reservation.variantId,
-      (reservedByVariant.get(reservation.variantId) ?? 0) + reservation.quantity,
-    );
-  }
-
-  for (const [variantId, requiredQty] of requiredByVariant.entries()) {
-    if ((reservedByVariant.get(variantId) ?? 0) < requiredQty) {
-      return "SHORT";
-    }
-  }
-
-  return "OK";
-};
-
 const toJobResponse = (job: {
   id: string;
   customerId: string | null;
@@ -870,12 +830,15 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
   }
 
+  const reconciliation = await computeWorkshopPartsReconciliationTx(prisma, workshopJobId);
+
   return {
     job: toJobResponse(job),
     lines: job.lines.map((line) => toLineResponse(line)),
     reservations: job.stockReservations.map((reservation) => toReservationResponse(reservation)),
     totals: toWorkshopJobTotals(job.lines),
-    partsStatus: toWorkshopPartsStatus(job.lines, job.stockReservations),
+    partsStatus: reconciliation.partsStatus,
+    partsReconciliation: reconciliation,
   };
 };
 

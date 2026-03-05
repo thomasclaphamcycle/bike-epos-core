@@ -6,6 +6,7 @@ import {
   recordCashSaleMovementForSaleTx,
   recordCashSaleMovementForPaymentTx,
 } from "./tillService";
+import { consumeReservationsForSaleTx } from "./stockReservationService";
 
 type CheckoutPaymentInput = {
   paymentMethod?: PaymentMethod;
@@ -39,6 +40,8 @@ type SaleTenderInput = {
   method?: SaleTenderMethod;
   amountPence?: number;
 };
+
+const WORKSHOP_LABOUR_VARIANT_SKU = "WORKSHOP-LABOUR-SERVICE";
 
 const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
@@ -512,6 +515,8 @@ export const completeSaleIfEligibleTx = async (
     where: { id: saleId },
     select: {
       id: true,
+      basketId: true,
+      workshopJobId: true,
       totalPence: true,
       changeDuePence: true,
       completedAt: true,
@@ -525,6 +530,13 @@ export const completeSaleIfEligibleTx = async (
   }
 
   if (sale.completedAt) {
+    if (sale.workshopJobId) {
+      await consumeReservationsForSaleTx(tx, {
+        workshopJobId: sale.workshopJobId,
+        saleId: sale.id,
+      });
+    }
+
     if (!sale.createdByStaffId && staffActorId) {
       await tx.sale.update({
         where: { id: sale.id },
@@ -578,6 +590,57 @@ export const completeSaleIfEligibleTx = async (
     changeDuePence,
     ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
   });
+
+  if (sale.workshopJobId && !sale.basketId) {
+    const saleItems = await tx.saleItem.findMany({
+      where: { saleId: sale.id },
+      select: {
+        id: true,
+        variantId: true,
+        quantity: true,
+        variant: {
+          select: {
+            sku: true,
+          },
+        },
+      },
+    });
+
+    const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    for (const saleItem of saleItems) {
+      if (saleItem.variant.sku === WORKSHOP_LABOUR_VARIANT_SKU) {
+        continue;
+      }
+
+      await tx.stockLedgerEntry.create({
+        data: {
+          variantId: saleItem.variantId,
+          locationId: defaultLocation.id,
+          type: "SALE",
+          quantityDelta: -saleItem.quantity,
+          referenceType: "SALE_ITEM",
+          referenceId: saleItem.id,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: saleItem.variantId,
+          type: "SALE",
+          quantity: -saleItem.quantity,
+          referenceType: "SALE_ITEM",
+          referenceId: saleItem.id,
+        },
+      });
+    }
+  }
+
+  if (sale.workshopJobId) {
+    await consumeReservationsForSaleTx(tx, {
+      workshopJobId: sale.workshopJobId,
+      saleId: sale.id,
+    });
+  }
 
   return {
     saleId: updatedSale.id,

@@ -1,0 +1,79 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@managerStaffId = manager-1
+@jobId = REPLACE_WORKSHOP_JOB_ID
+@otherJobId = REPLACE_OTHER_WORKSHOP_JOB_ID
+@productId = REPLACE_PRODUCT_ID
+@saleId = REPLACE_SALE_ID
+
+### Add PART line to workshop job (STAFF+)
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{
+  "type": "PART",
+  "productId": "{{productId}}",
+  "quantity": 3,
+  "unitPricePence": 1200
+}
+
+### Reserve stock for primary job
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/reservations
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{
+  "productId": "{{productId}}",
+  "quantity": 3
+}
+
+### Reserve same product on a different job (must not be consumed by saleId)
+POST {{baseUrl}}/api/workshop/jobs/{{otherJobId}}/reservations
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{
+  "productId": "{{productId}}",
+  "quantity": 2
+}
+
+### Convert job to sale
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/convert-to-sale
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{}
+
+### Tender full amount
+POST {{baseUrl}}/api/sales/{{saleId}}/tenders
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{
+  "method": "CARD",
+  "amountPence": 3600
+}
+
+### Complete sale (consumes reservations for linked job only)
+POST {{baseUrl}}/api/sales/{{saleId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+{}
+
+### Verify linked job reservations consumed and parts status reconciled
+GET {{baseUrl}}/api/workshop/jobs/{{jobId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
+
+### Verify other job reservations remain
+GET {{baseUrl}}/api/workshop/jobs/{{otherJobId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerStaffId}}
