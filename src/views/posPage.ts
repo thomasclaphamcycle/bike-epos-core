@@ -1,10 +1,4 @@
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+import { escapeHtml } from "../utils/escapeHtml";
 
 type PosPageInput = {
   staffRole: string;
@@ -367,6 +361,14 @@ export const renderPosPage = (input: PosPageInput) => {
       };
 
       const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      const toSafeText = (value) => escapeHtml(value);
 
       const getCustomerDisplayName = (customer) => {
         if (!customer) {
@@ -392,12 +394,12 @@ export const renderPosPage = (input: PosPageInput) => {
         const rows = state.searchRows
           .map((row) =>
             '<tr>' +
-            '<td>' + (row.name || "") + '</td>' +
-            '<td>' + (row.sku || "") + '</td>' +
-            '<td>' + (row.barcode || "") + '</td>' +
+            '<td>' + toSafeText(row.name || "") + '</td>' +
+            '<td>' + toSafeText(row.sku || "") + '</td>' +
+            '<td>' + toSafeText(row.barcode || "") + '</td>' +
             '<td>' + formatMoney(row.pricePence || 0) + '</td>' +
             '<td>' + Number(row.onHandQty || 0) + '</td>' +
-            '<td><button type="button" class="select-product-btn" data-product-id="' + row.id + '">Select</button></td>' +
+            '<td><button type="button" class="select-product-btn" data-product-id="' + toSafeText(row.id) + '">Select</button></td>' +
             '</tr>',
           )
           .join("");
@@ -422,13 +424,13 @@ export const renderPosPage = (input: PosPageInput) => {
         }
 
         panel.innerHTML =
-          '<div><strong>' + (selected.name || "") + '</strong></div>' +
-          '<div class="muted" style="margin-top: 4px;">SKU: ' + (selected.sku || "") + ' | Barcode: ' + (selected.barcode || "-") + '</div>' +
+          '<div><strong>' + toSafeText(selected.name || "") + '</strong></div>' +
+          '<div class="muted" style="margin-top: 4px;">SKU: ' + toSafeText(selected.sku || "") + ' | Barcode: ' + toSafeText(selected.barcode || "-") + '</div>' +
           '<div class="muted" style="margin-top: 2px;">Price: ' + formatMoney(selected.pricePence || 0) + ' | On hand: ' + Number(selected.onHandQty || 0) + '</div>' +
           '<div class="controls" style="margin-top: 10px;">' +
-          '<button type="button" class="primary quick-add-1" data-product-id="' + selected.id + '">Add x1</button>' +
+          '<button type="button" class="primary quick-add-1" data-product-id="' + toSafeText(selected.id) + '">Add x1</button>' +
           '<input id="quick-qty-input" type="number" min="1" step="1" value="1" style="width: 110px;" />' +
-          '<button type="button" class="quick-add-custom" data-product-id="' + selected.id + '">Add Custom Qty</button>' +
+          '<button type="button" class="quick-add-custom" data-product-id="' + toSafeText(selected.id) + '">Add Custom Qty</button>' +
           '</div>';
       };
 
@@ -456,10 +458,10 @@ export const renderPosPage = (input: PosPageInput) => {
         const rows = state.customerResults
           .map((customer) =>
             '<tr>' +
-            '<td>' + (getCustomerDisplayName(customer) || customer.id) + '</td>' +
-            '<td>' + (customer.email || "") + '</td>' +
-            '<td>' + (customer.phone || "") + '</td>' +
-            '<td><button type="button" class="select-customer-btn" data-customer-id="' + customer.id + '">Select</button></td>' +
+            '<td>' + toSafeText(getCustomerDisplayName(customer) || customer.id) + '</td>' +
+            '<td>' + toSafeText(customer.email || "") + '</td>' +
+            '<td>' + toSafeText(customer.phone || "") + '</td>' +
+            '<td><button type="button" class="select-customer-btn" data-customer-id="' + toSafeText(customer.id) + '">Select</button></td>' +
             '</tr>',
           )
           .join("");
@@ -494,14 +496,14 @@ export const renderPosPage = (input: PosPageInput) => {
           const rows = items
             .map((item) =>
               '<tr>' +
-              '<td>' + (item.productName || "") + '</td>' +
-              '<td>' + (item.variantName || "") + '</td>' +
-              '<td>' + (item.sku || "") + '</td>' +
+              '<td>' + toSafeText(item.productName || "") + '</td>' +
+              '<td>' + toSafeText(item.variantName || "") + '</td>' +
+              '<td>' + toSafeText(item.sku || "") + '</td>' +
               '<td>' + formatMoney(item.unitPricePence || 0) + '</td>' +
               '<td>' + formatMoney(item.lineTotalPence || 0) + '</td>' +
-              '<td><input type="number" min="1" step="1" value="' + (item.quantity || 1) + '" class="basket-qty" data-item-id="' + item.id + '" /></td>' +
-              '<td><button type="button" class="basket-update-btn" data-item-id="' + item.id + '">Update</button></td>' +
-              '<td><button type="button" class="basket-remove-btn" data-item-id="' + item.id + '">Remove</button></td>' +
+              '<td><input type="number" min="1" step="1" value="' + Number(item.quantity || 1) + '" class="basket-qty" data-item-id="' + toSafeText(item.id) + '" /></td>' +
+              '<td><button type="button" class="basket-update-btn" data-item-id="' + toSafeText(item.id) + '">Update</button></td>' +
+              '<td><button type="button" class="basket-remove-btn" data-item-id="' + toSafeText(item.id) + '">Remove</button></td>' +
               '</tr>',
             )
             .join("");
@@ -537,8 +539,8 @@ export const renderPosPage = (input: PosPageInput) => {
         const rows = saleItems
           .map((item) =>
             '<tr>' +
-            '<td>' + (item.productName || "") + '</td>' +
-            '<td>' + (item.variantName || "") + '</td>' +
+            '<td>' + toSafeText(item.productName || "") + '</td>' +
+            '<td>' + toSafeText(item.variantName || "") + '</td>' +
             '<td>' + (item.quantity || 0) + '</td>' +
             '<td>' + formatMoney(item.unitPricePence || 0) + '</td>' +
             '<td>' + formatMoney(item.lineTotalPence || 0) + '</td>' +
@@ -548,9 +550,9 @@ export const renderPosPage = (input: PosPageInput) => {
 
         wrap.innerHTML =
           '<div class="receipt">' +
-          '<div><strong>Sale ID:</strong> ' + (sale.id || "") + '</div>' +
-          '<div><strong>Basket ID:</strong> ' + (sale.basketId || "") + '</div>' +
-          '<div><strong>Customer:</strong> ' + customerLabel + '</div>' +
+          '<div><strong>Sale ID:</strong> ' + toSafeText(sale.id || "") + '</div>' +
+          '<div><strong>Basket ID:</strong> ' + toSafeText(sale.basketId || "") + '</div>' +
+          '<div><strong>Customer:</strong> ' + toSafeText(customerLabel) + '</div>' +
           '<div><strong>Total:</strong> ' + formatMoney(sale.totalPence || 0) + '</div>' +
           (sale.id
             ? '<div style="margin-top: 6px;"><a href="/sales/' + encodeURIComponent(sale.id) + '/receipt" target="_blank" rel="noopener">View Receipt</a></div>'

@@ -1,10 +1,4 @@
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+import { escapeHtml } from "../utils/escapeHtml";
 
 type WorkshopPageInput = {
   staffRole: string;
@@ -229,6 +223,14 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
       };
 
       const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      const toSafeText = (value) => escapeHtml(value);
       const isBarcodeLike = (value) => /^[0-9]{8,}$/.test(value);
       const getCustomerDisplayName = (customer) => {
         if (!customer) {
@@ -254,12 +256,12 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
         const rows = state.jobs
           .map((job) =>
             '<tr>' +
-            '<td>' + job.id + '</td>' +
-            '<td>' + (job.customerName || "") + '</td>' +
-            '<td>' + (job.bikeDescription || "") + '</td>' +
-            '<td>' + (job.status || "") + '</td>' +
+            '<td>' + toSafeText(job.id) + '</td>' +
+            '<td>' + toSafeText(job.customerName || "") + '</td>' +
+            '<td>' + toSafeText(job.bikeDescription || "") + '</td>' +
+            '<td>' + toSafeText(job.status || "") + '</td>' +
             '<td>' + (job.lineCount || 0) + '</td>' +
-            '<td><button type="button" class="select-job-btn" data-job-id="' + job.id + '">Open</button></td>' +
+            '<td><button type="button" class="select-job-btn" data-job-id="' + toSafeText(job.id) + '">Open</button></td>' +
             '</tr>',
           )
           .join("");
@@ -300,9 +302,9 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
         const rows = lines
           .map((line) =>
             '<tr>' +
-            '<td>' + line.type + '</td>' +
-            '<td>' + (line.description || "") + '</td>' +
-            '<td>' + (line.variantSku || "") + '</td>' +
+            '<td>' + toSafeText(line.type) + '</td>' +
+            '<td>' + toSafeText(line.description || "") + '</td>' +
+            '<td>' + toSafeText(line.variantSku || "") + '</td>' +
             '<td>' + line.qty + '</td>' +
             '<td>' + formatMoney(line.unitPricePence || 0) + '</td>' +
             '<td>' + formatMoney(line.lineTotalPence || 0) + '</td>' +
@@ -330,12 +332,12 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
           const rows = state.partResults
             .map((row) =>
               '<tr>' +
-              '<td>' + (row.name || "") + '</td>' +
-              '<td>' + (row.sku || "") + '</td>' +
-              '<td>' + (row.barcode || "") + '</td>' +
+              '<td>' + toSafeText(row.name || "") + '</td>' +
+              '<td>' + toSafeText(row.sku || "") + '</td>' +
+              '<td>' + toSafeText(row.barcode || "") + '</td>' +
               '<td>' + formatMoney(row.pricePence || 0) + '</td>' +
               '<td>' + Number(row.onHandQty || 0) + '</td>' +
-              '<td><button type="button" class="select-part-btn" data-variant-id="' + row.id + '">Use</button></td>' +
+              '<td><button type="button" class="select-part-btn" data-variant-id="' + toSafeText(row.id) + '">Use</button></td>' +
               '</tr>',
             )
             .join("");
@@ -384,10 +386,10 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
         const rows = state.customerResults
           .map((customer) =>
             '<tr>' +
-            '<td>' + (getCustomerDisplayName(customer) || customer.id) + '</td>' +
-            '<td>' + (customer.email || "") + '</td>' +
-            '<td>' + (customer.phone || "") + '</td>' +
-            '<td><button type="button" class="attach-customer-btn" data-customer-id="' + customer.id + '">Attach</button></td>' +
+            '<td>' + toSafeText(getCustomerDisplayName(customer) || customer.id) + '</td>' +
+            '<td>' + toSafeText(customer.email || "") + '</td>' +
+            '<td>' + toSafeText(customer.phone || "") + '</td>' +
+            '<td><button type="button" class="attach-customer-btn" data-customer-id="' + toSafeText(customer.id) + '">Attach</button></td>' +
             '</tr>',
           )
           .join("");

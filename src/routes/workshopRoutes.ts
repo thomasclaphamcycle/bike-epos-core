@@ -31,9 +31,9 @@ workshopRouter.patch("/jobs/:id/customer", requireRoleAtLeast("STAFF"), attachWo
 workshopRouter.post("/jobs/:id/lines", requireRoleAtLeast("STAFF"), addWorkshopJobLineHandler);
 workshopRouter.post("/jobs/:id/finalize", requireRoleAtLeast("STAFF"), finalizeWorkshopJobHandler);
 workshopRouter.post("/jobs/:id/close", requireRoleAtLeast("STAFF"), closeWorkshopJobHandler);
-workshopRouter.post("/jobs/:id/assign", assignWorkshopJobHandler);
-workshopRouter.post("/jobs/:id/status", changeWorkshopJobStatusHandler);
-workshopRouter.post("/jobs/:id/notes", addWorkshopJobNoteHandler);
-workshopRouter.get("/jobs/:id/notes", getWorkshopJobNotesHandler);
+workshopRouter.post("/jobs/:id/assign", requireRoleAtLeast("STAFF"), assignWorkshopJobHandler);
+workshopRouter.post("/jobs/:id/status", requireRoleAtLeast("STAFF"), changeWorkshopJobStatusHandler);
+workshopRouter.post("/jobs/:id/notes", requireRoleAtLeast("STAFF"), addWorkshopJobNoteHandler);
+workshopRouter.get("/jobs/:id/notes", requireRoleAtLeast("STAFF"), getWorkshopJobNotesHandler);
 workshopRouter.post("/jobs/:id/checkout", requireRoleAtLeast("STAFF"), checkoutWorkshopJobHandler);
-workshopRouter.post("/jobs/:id/cancel", cancelWorkshopJobHandler);
+workshopRouter.post("/jobs/:id/cancel", requireRoleAtLeast("STAFF"), cancelWorkshopJobHandler);

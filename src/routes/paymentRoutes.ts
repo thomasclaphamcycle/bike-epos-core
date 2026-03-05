@@ -16,5 +16,5 @@ paymentRouter.post("/intents/:id/capture", requireRoleAtLeast("STAFF"), captureP
 paymentRouter.post("/intents/:id/cancel", requireRoleAtLeast("STAFF"), cancelPaymentIntentHandler);
 paymentRouter.get("/intents", requireRoleAtLeast("MANAGER"), listPaymentIntentsHandler);
 
-paymentRouter.get("/:id", getPaymentHandler);
+paymentRouter.get("/:id", requireRoleAtLeast("MANAGER"), getPaymentHandler);
 paymentRouter.post("/:id/refund", requireRoleAtLeast("MANAGER"), refundPaymentHandler);

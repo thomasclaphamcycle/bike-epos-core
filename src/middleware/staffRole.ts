@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import type { AuditActor } from "../services/auditService";
@@ -34,8 +35,17 @@ const parseRoleHeaderOrThrow = (header: string | undefined): StaffRole => {
   return normalized;
 };
 
-const toPersistedUserRole = (role: StaffRole): "STAFF" | "ADMIN" =>
-  role === "STAFF" ? "STAFF" : "ADMIN";
+const toPersistedUserRole = (role: StaffRole): UserRole => {
+  switch (role) {
+    case "STAFF":
+      return "STAFF";
+    case "MANAGER":
+      // UserRole does not have MANAGER; persist as least-privileged role.
+      return "STAFF";
+    case "ADMIN":
+      return "ADMIN";
+  }
+};
 
 const toHeaderUserName = (actorId: string): string =>
   `header_${Buffer.from(actorId, "utf8").toString("hex")}`;
@@ -54,10 +64,8 @@ const ensureHeaderActorExists = async (
       passwordHash: "__header_actor__",
       role: persistedRole,
     },
-    update: {
-      name: actorId,
-      role: persistedRole,
-    },
+    // Never mutate an existing user from request headers.
+    update: {},
   });
 };
 

@@ -120,9 +120,11 @@ export const attachCustomerToSaleHandler = async (req: Request, res: Response) =
 };
 
 export const completeSaleHandler = async (req: Request, res: Response) => {
-  const result = await completeSaleIfEligible(req.params.saleId, {
-    staffActorId: getRequestStaffActorId(req),
-  });
+  const staffActorId = getRequestStaffActorId(req);
+  const result = await completeSaleIfEligible(
+    req.params.saleId,
+    staffActorId ? { staffActorId } : {},
+  );
 
   res.json(result);
 };

@@ -1,10 +1,4 @@
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+import { escapeHtml } from "../utils/escapeHtml";
 
 type InventoryPageInput = {
   staffRole: string;
@@ -379,6 +373,14 @@ export const renderInventoryPage = (input: InventoryPageInput) => {
       };
 
       const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      const toSafeText = (value) => escapeHtml(value);
 
       const renderOnHandTable = () => {
         const wrap = qs("#onhand-table-wrap");
@@ -393,18 +395,18 @@ export const renderInventoryPage = (input: InventoryPageInput) => {
 
         const rows = state.onHandRows
           .map((row) =>
-            '<tr data-variant-id="' + row.variantId + '">' +
-            '<td>' + (row.productName || "") + '</td>' +
-            '<td>' + (row.brand || "") + '</td>' +
-            '<td>' + (row.variantName || row.option || "") + '</td>' +
-            '<td>' + (row.sku || "") + '</td>' +
-            '<td>' + (row.barcode || "") + '</td>' +
+            '<tr data-variant-id="' + toSafeText(row.variantId) + '">' +
+            '<td>' + toSafeText(row.productName || "") + '</td>' +
+            '<td>' + toSafeText(row.brand || "") + '</td>' +
+            '<td>' + toSafeText(row.variantName || row.option || "") + '</td>' +
+            '<td>' + toSafeText(row.sku || "") + '</td>' +
+            '<td>' + toSafeText(row.barcode || "") + '</td>' +
             '<td>' + formatMoney(row.retailPricePence || 0) + '</td>' +
             '<td>' + (row.onHand ?? 0) + '</td>' +
             '<td><input type="number" step="1" data-field="qty" placeholder="+/-" /></td>' +
             '<td><input type="text" data-field="note" placeholder="reason" /></td>' +
-            '<td><button type="button" class="adjust-btn" data-variant-id="' + row.variantId + '">Adjust</button></td>' +
-            '<td class="row-status" data-status-for="' + row.variantId + '"></td>' +
+            '<td><button type="button" class="adjust-btn" data-variant-id="' + toSafeText(row.variantId) + '">Adjust</button></td>' +
+            '<td class="row-status" data-status-for="' + toSafeText(row.variantId) + '"></td>' +
             '</tr>',
           )
           .join("");
@@ -524,7 +526,7 @@ export const renderInventoryPage = (input: InventoryPageInput) => {
 
         select.innerHTML = state.locations
           .map((location) =>
-            '<option value="' + location.id + '">' + location.name + (location.isDefault ? " (Default)" : "") + '</option>',
+            '<option value="' + toSafeText(location.id) + '">' + toSafeText(location.name + (location.isDefault ? " (Default)" : "")) + '</option>',
           )
           .join("");
       };
@@ -555,17 +557,17 @@ export const renderInventoryPage = (input: InventoryPageInput) => {
         const rows = state.stocktakes
           .map((session) => {
             const actions =
-              '<button type="button" class="open-session-btn" data-session-id="' + session.id + '">Open</button>' +
-              '<button type="button" class="finalize-session-btn" data-session-id="' + session.id + '" ' +
+              '<button type="button" class="open-session-btn" data-session-id="' + toSafeText(session.id) + '">Open</button>' +
+              '<button type="button" class="finalize-session-btn" data-session-id="' + toSafeText(session.id) + '" ' +
               ((session.status === "OPEN" && canManage()) ? '' : 'disabled') + '>Finalize</button>' +
-              '<button type="button" class="cancel-session-btn" data-session-id="' + session.id + '" ' +
+              '<button type="button" class="cancel-session-btn" data-session-id="' + toSafeText(session.id) + '" ' +
               ((session.status === "OPEN" && canManage()) ? '' : 'disabled') + '>Cancel</button>';
 
             return (
               '<tr>' +
-              '<td>' + session.id + '</td>' +
-              '<td>' + (session.location?.name || "") + '</td>' +
-              '<td><span class="pill">' + session.status + '</span></td>' +
+              '<td>' + toSafeText(session.id) + '</td>' +
+              '<td>' + toSafeText(session.location?.name || "") + '</td>' +
+              '<td><span class="pill">' + toSafeText(session.status) + '</span></td>' +
               '<td>' + (session.lineCount ?? 0) + '</td>' +
               '<td>' + new Date(session.startedAt).toLocaleString() + '</td>' +
               '<td>' + (session.postedAt ? new Date(session.postedAt).toLocaleString() : '-') + '</td>' +
@@ -773,10 +775,10 @@ export const renderInventoryPage = (input: InventoryPageInput) => {
             : lines
                 .map((line) =>
                   '<tr>' +
-                  '<td>' + line.variantId + '</td>' +
-                  '<td>' + (line.productName || "") + '</td>' +
-                  '<td>' + (line.sku || "") + '</td>' +
-                  '<td>' + (line.variantName || "") + '</td>' +
+                  '<td>' + toSafeText(line.variantId) + '</td>' +
+                  '<td>' + toSafeText(line.productName || "") + '</td>' +
+                  '<td>' + toSafeText(line.sku || "") + '</td>' +
+                  '<td>' + toSafeText(line.variantName || "") + '</td>' +
                   '<td>' + (line.countedQty ?? 0) + '</td>' +
                   '<td>' + (line.currentOnHand ?? 0) + '</td>' +
                   '<td>' + (line.deltaNeeded ?? 0) + '</td>' +
@@ -787,22 +789,22 @@ export const renderInventoryPage = (input: InventoryPageInput) => {
         const variantOptions = state.sessionVariantOptions
           .map((variant) =>
             '<option value="' +
-            variant.id +
+            toSafeText(variant.id) +
             '">' +
-            (variant.sku || variant.id) +
+            toSafeText(variant.sku || variant.id) +
             ' — ' +
-            (variant.product?.name || "") +
+            toSafeText(variant.product?.name || "") +
             ' ' +
-            (variant.option || variant.name || "") +
+            toSafeText(variant.option || variant.name || "") +
             '</option>',
           )
           .join("");
 
         wrap.innerHTML =
           '<div class="session-open">' +
-          '<div><strong>ID:</strong> ' + session.id + '</div>' +
-          '<div><strong>Status:</strong> <span class="pill">' + session.status + '</span></div>' +
-          '<div><strong>Location:</strong> ' + (session.location?.name || "") + '</div>' +
+          '<div><strong>ID:</strong> ' + toSafeText(session.id) + '</div>' +
+          '<div><strong>Status:</strong> <span class="pill">' + toSafeText(session.status) + '</span></div>' +
+          '<div><strong>Location:</strong> ' + toSafeText(session.location?.name || "") + '</div>' +
           '<div style="margin-top: 10px;" class="controls">' +
           '<div class="field" style="min-width: 180px;"><label for="session-line-q">Variant search</label><input id="session-line-q" type="text" placeholder="sku/product/barcode" /></div>' +
           '<button id="session-line-search" type="button">Search Variants</button>' +

@@ -1,10 +1,4 @@
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+import { escapeHtml } from "../utils/escapeHtml";
 
 type InventoryAdjustPageInput = {
   staffRole: string;
@@ -191,6 +185,14 @@ export const renderInventoryAdjustPage = (input: InventoryAdjustPageInput) => {
       };
 
       const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      const toSafeText = (value) => escapeHtml(value);
       const isBarcodeLike = (value) => /^[0-9]{8,}$/.test(value);
 
       const renderRows = () => {
@@ -206,12 +208,12 @@ export const renderInventoryAdjustPage = (input: InventoryAdjustPageInput) => {
           const rowsHtml = state.rows
             .map((row) =>
               '<tr>' +
-              '<td>' + (row.name || "") + '</td>' +
-              '<td>' + (row.sku || "") + '</td>' +
-              '<td>' + (row.barcode || "") + '</td>' +
+              '<td>' + toSafeText(row.name || "") + '</td>' +
+              '<td>' + toSafeText(row.sku || "") + '</td>' +
+              '<td>' + toSafeText(row.barcode || "") + '</td>' +
               '<td>' + formatMoney(row.pricePence || 0) + '</td>' +
               '<td>' + Number(row.onHandQty || 0) + '</td>' +
-              '<td><button type="button" class="pick-variant-btn" data-variant-id="' + row.id + '">Select</button></td>' +
+              '<td><button type="button" class="pick-variant-btn" data-variant-id="' + toSafeText(row.id) + '">Select</button></td>' +
               '</tr>',
             )
             .join("");

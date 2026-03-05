@@ -188,19 +188,35 @@ const validateCheckoutPayment = (
     );
   }
 
-  if (!Number.isInteger(payment.amountPence) || payment.amountPence <= 0) {
+  const amountPence = payment.amountPence;
+  const method = payment.paymentMethod;
+  if (amountPence === undefined || method === undefined) {
+    throw new HttpError(
+      400,
+      "paymentMethod and amountPence are both required when payment is provided",
+      "INVALID_PAYMENT",
+    );
+  }
+
+  if (!Number.isInteger(amountPence) || amountPence <= 0) {
     throw new HttpError(400, "amountPence must be a positive integer", "INVALID_PAYMENT");
   }
 
-  if (payment.amountPence !== totalPence) {
+  if (amountPence !== totalPence) {
     throw new HttpError(400, "Payment amount must match basket total", "PAYMENT_MISMATCH");
   }
 
-  return {
-    method: payment.paymentMethod,
-    amountPence: payment.amountPence,
-    providerRef: payment.providerRef,
-  };
+  const providerRef = payment.providerRef;
+  return providerRef === undefined
+    ? {
+        method,
+        amountPence,
+      }
+    : {
+        method,
+        amountPence,
+        providerRef,
+      };
 };
 
 const validateReturnRefund = (
@@ -222,11 +238,21 @@ const validateReturnRefund = (
     );
   }
 
-  if (!Number.isInteger(refund.amountPence) || refund.amountPence <= 0) {
+  const amountPence = refund.amountPence;
+  const method = refund.method;
+  if (amountPence === undefined || method === undefined) {
+    throw new HttpError(
+      400,
+      "refund.method and refund.amountPence are both required when refund is provided",
+      "INVALID_REFUND",
+    );
+  }
+
+  if (!Number.isInteger(amountPence) || amountPence <= 0) {
     throw new HttpError(400, "refund.amountPence must be a positive integer", "INVALID_REFUND");
   }
 
-  if (refund.amountPence !== returnTotalPence) {
+  if (amountPence !== returnTotalPence) {
     throw new HttpError(
       400,
       "Refund amount must match returned items total",
@@ -234,11 +260,17 @@ const validateReturnRefund = (
     );
   }
 
-  return {
-    method: refund.method,
-    amountPence: refund.amountPence,
-    providerRef: refund.providerRef,
-  };
+  const providerRef = refund.providerRef;
+  return providerRef === undefined
+    ? {
+        method,
+        amountPence,
+      }
+    : {
+        method,
+        amountPence,
+        providerRef,
+      };
 };
 
 const ensureCapturedIntentExistsTx = async (
@@ -286,10 +318,6 @@ export const completeSaleIfEligibleTx = async (
     throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
   }
 
-  if (requireCapturedIntent) {
-    await ensureCapturedIntentExistsTx(tx, sale.id);
-  }
-
   if (sale.completedAt) {
     if (!sale.createdByStaffId && staffActorId) {
       await tx.sale.update({
@@ -303,6 +331,10 @@ export const completeSaleIfEligibleTx = async (
       saleId: sale.id,
       completedAt: sale.completedAt,
     };
+  }
+
+  if (requireCapturedIntent) {
+    await ensureCapturedIntentExistsTx(tx, sale.id);
   }
 
   const completedAt = new Date();
@@ -388,7 +420,7 @@ export const checkoutBasketToSale = async (
         subtotalPence,
         taxPence,
         totalPence,
-        createdByStaffId: normalizedCreatedByStaffId,
+        ...(normalizedCreatedByStaffId ? { createdByStaffId: normalizedCreatedByStaffId } : {}),
       },
     });
 
@@ -433,7 +465,7 @@ export const checkoutBasketToSale = async (
           saleId: sale.id,
           method: payment.method,
           amountPence: payment.amountPence,
-          providerRef: payment.providerRef,
+          ...(payment.providerRef !== undefined ? { providerRef: payment.providerRef } : {}),
         },
       });
     }
@@ -608,7 +640,7 @@ export const createSaleReturn = async (
 
     let refundPayment: {
       id: string;
-      saleId: string;
+      saleId: string | null;
       method: PaymentMethod;
       amountPence: number;
       providerRef: string | null;
@@ -621,7 +653,7 @@ export const createSaleReturn = async (
           saleId,
           method: refund.method,
           amountPence: -refund.amountPence,
-          providerRef: refund.providerRef,
+          ...(refund.providerRef !== undefined ? { providerRef: refund.providerRef } : {}),
         },
       });
     }
@@ -653,7 +685,7 @@ export const createSaleReturn = async (
     refundPayment: txResult.refundPayment
       ? {
           id: txResult.refundPayment.id,
-          saleId: txResult.refundPayment.saleId,
+          saleId: txResult.refundPayment.saleId ?? saleId,
           method: txResult.refundPayment.method,
           amountPence: txResult.refundPayment.amountPence,
           providerRef: txResult.refundPayment.providerRef,

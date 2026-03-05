@@ -189,6 +189,9 @@ const getSalePaymentSummaryTx = async (tx: Prisma.TransactionClient, saleId: str
   };
 };
 
+const toCompleteSaleInput = (staffActorId?: string) =>
+  staffActorId ? { staffActorId } : {};
+
 export const createPaymentIntent = async (
   input: CreatePaymentIntentInput,
   staffActorId?: string,
@@ -198,6 +201,10 @@ export const createPaymentIntent = async (
     throw new HttpError(400, "saleId must be a valid UUID", "INVALID_PAYMENT_INTENT");
   }
   if (!Number.isInteger(input.amountPence) || (input.amountPence ?? 0) <= 0) {
+    throw new HttpError(400, "amountPence must be a positive integer", "INVALID_PAYMENT_INTENT");
+  }
+  const amountPence = input.amountPence;
+  if (amountPence === undefined) {
     throw new HttpError(400, "amountPence must be a positive integer", "INVALID_PAYMENT_INTENT");
   }
 
@@ -211,7 +218,7 @@ export const createPaymentIntent = async (
     if (outstandingPence <= 0) {
       throw new HttpError(409, "Sale is already fully paid", "SALE_ALREADY_PAID");
     }
-    if (input.amountPence > outstandingPence) {
+    if (amountPence > outstandingPence) {
       throw new HttpError(
         400,
         "amountPence cannot exceed remaining outstanding amount",
@@ -224,7 +231,7 @@ export const createPaymentIntent = async (
     let externalRef = externalRefInput;
 
     if (provider === "CASH") {
-      const providerResult = await cashProvider.createPaymentIntent(saleId, input.amountPence);
+      const providerResult = await cashProvider.createPaymentIntent(saleId, amountPence);
       status = providerResult.status;
       externalRef = providerResult.externalRef ?? externalRefInput;
     } else {
@@ -235,7 +242,7 @@ export const createPaymentIntent = async (
       data: {
         provider,
         status,
-        amountPence: input.amountPence,
+        amountPence,
         saleId,
         externalRef,
       },
@@ -249,9 +256,7 @@ export const createPaymentIntent = async (
         amountPence: intent.amountPence,
       });
 
-      await completeSaleIfEligibleTx(tx, intent.saleId, {
-        staffActorId,
-      });
+      await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
     }
 
     const salePayment = await getSalePaymentSummaryTx(tx, saleId);
@@ -298,9 +303,7 @@ export const capturePaymentIntentById = async (
         amountPence: intent.amountPence,
       });
 
-      await completeSaleIfEligibleTx(tx, intent.saleId, {
-        staffActorId,
-      });
+      await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
 
       const salePayment = await getSalePaymentSummaryTx(tx, intent.saleId);
       return {
@@ -342,9 +345,7 @@ export const capturePaymentIntentById = async (
         amountPence: updated.amountPence,
       });
 
-      await completeSaleIfEligibleTx(tx, updated.saleId, {
-        staffActorId,
-      });
+      await completeSaleIfEligibleTx(tx, updated.saleId, toCompleteSaleInput(staffActorId));
     }
 
     const salePayment = await getSalePaymentSummaryTx(tx, updated.saleId);

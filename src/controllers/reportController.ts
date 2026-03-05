@@ -104,12 +104,20 @@ export const getPaymentsReportCsvHandler = async (req: Request, res: Response) =
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const provider = typeof req.query.provider === "string" ? req.query.provider : undefined;
   const { from, to } = getDateRangeQuery(req);
-  const rows = await getPaymentsReport({
-    status,
-    provider,
-    from,
-    to,
-  });
+  const filters: { status?: string; provider?: string; from?: string; to?: string } = {};
+  if (status !== undefined) {
+    filters.status = status;
+  }
+  if (provider !== undefined) {
+    filters.provider = provider;
+  }
+  if (from !== undefined) {
+    filters.from = from;
+  }
+  if (to !== undefined) {
+    filters.to = to;
+  }
+  const rows = await getPaymentsReport(filters);
 
   const csv = toCsv(rows, [
     { header: "intentId", value: (row) => row.intentId },
