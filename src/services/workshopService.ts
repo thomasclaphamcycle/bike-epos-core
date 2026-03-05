@@ -844,6 +844,87 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
   };
 };
 
+export const getWorkshopJobPrintById = async (workshopJobId: string) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  const job = await prisma.workshopJob.findUnique({
+    where: { id: workshopJobId },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+      sale: {
+        select: {
+          id: true,
+          completedAt: true,
+          receiptNumber: true,
+        },
+      },
+      lines: {
+        include: workshopLineInclude,
+        orderBy: [{ createdAt: "asc" }],
+      },
+    },
+  });
+
+  if (!job) {
+    throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+  }
+
+  const settings = await prisma.receiptSettings.findUnique({
+    where: { id: 1 },
+    select: {
+      shopName: true,
+      shopAddress: true,
+      vatNumber: true,
+    },
+  });
+
+  const customerDisplayName =
+    normalizeOptionalText(job.customerName) ??
+    (job.customer ? resolveCustomerDisplayName(job.customer) : undefined) ??
+    null;
+
+  return {
+    shop: {
+      name: settings?.shopName ?? "Bike EPOS",
+      address: settings?.shopAddress ?? "123 Service Lane",
+      vatNumber: settings?.vatNumber ?? null,
+    },
+    job: {
+      ...toJobResponse(job),
+      lines: job.lines.map((line) => toLineResponse(line)),
+      totals: toWorkshopJobTotals(job.lines),
+      partsStatus: (await computeWorkshopPartsReconciliationTx(prisma, workshopJobId)).partsStatus,
+    },
+    customer: customerDisplayName
+      ? {
+          id: job.customer?.id ?? null,
+          name: customerDisplayName,
+          email: job.customer?.email ?? null,
+          phone: job.customer?.phone ?? null,
+        }
+      : null,
+    sale: job.sale
+      ? {
+          id: job.sale.id,
+          completedAt: job.sale.completedAt,
+          receiptNumber: job.sale.receiptNumber,
+          receiptUrl: job.sale.receiptNumber ? `/r/${encodeURIComponent(job.sale.receiptNumber)}` : null,
+        }
+      : null,
+  };
+};
+
 export const convertWorkshopJobToSale = async (
   workshopJobId: string,
   createdByStaffId?: string,

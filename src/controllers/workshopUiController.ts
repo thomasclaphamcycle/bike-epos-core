@@ -4,6 +4,8 @@ import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staff
 import { wrapAuthedPage } from "../views/appShell";
 import { renderWorkshopPage } from "../views/workshopPage";
 import { renderWorkshopJobPage } from "../views/workshopJobPage";
+import { renderWorkshopPrintPage } from "../views/workshopPrintPage";
+import { getWorkshopJobPrintById } from "../services/workshopService";
 
 export const getWorkshopPageHandler = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -53,6 +55,30 @@ export const getWorkshopJobPageHandler = async (req: Request, res: Response) => 
     user: req.user,
     activeNav: "workshop",
   });
+
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline'",
+    ].join("; "),
+  );
+
+  res.type("html").send(html);
+};
+
+export const getWorkshopJobPrintPageHandler = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const payload = await getWorkshopJobPrintById(req.params.id);
+  const html = renderWorkshopPrintPage(payload);
 
   res.setHeader("Cache-Control", "no-store");
   res.setHeader(

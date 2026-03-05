@@ -1,0 +1,16 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@jobId = REPLACE_WORKSHOP_JOB_ID
+
+### Printable workshop job card (preferred short route)
+GET {{baseUrl}}/w/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Accept: text/html
+
+### Printable workshop job card (explicit route)
+GET {{baseUrl}}/workshop/{{jobId}}/print
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Accept: text/html

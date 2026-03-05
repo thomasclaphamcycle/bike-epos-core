@@ -68,6 +68,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
           <label for="staff-id">X-Staff-Id</label>
           <input id="staff-id" type="text" />
         </div>
+        <a id="print-view-link" href="/w/${jobId}" target="_blank" rel="noopener">Print View</a>
         <a href="/workshop">Back to Workshop</a>
       </div>
       <div id="load-status" class="status"></div>
