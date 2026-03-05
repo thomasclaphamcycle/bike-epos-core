@@ -89,3 +89,5 @@ typings/
 
 /src/generated/prisma
 .DS_Store
+playwright-report/
+test-results/
