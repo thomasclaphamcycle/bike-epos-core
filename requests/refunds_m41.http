@@ -1,0 +1,87 @@
+@baseUrl = http://localhost:3000
+@staffRole = MANAGER
+@staffId = manager-1
+@saleId = REPLACE_SALE_ID
+@refundId = REPLACE_REFUND_ID
+@saleLineId = REPLACE_SALE_LINE_ID
+@refundLineId = REPLACE_REFUND_LINE_ID
+@tenderId = REPLACE_TENDER_ID
+@receiptNumber = REPLACE_RECEIPT_NUMBER
+
+### Create refund from completed sale (MANAGER+)
+POST {{baseUrl}}/api/refunds
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "saleId": "{{saleId}}"
+}
+
+### Get refund detail (MANAGER+)
+GET {{baseUrl}}/api/refunds/{{refundId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Add or update refund line (upsert by saleLineId)
+POST {{baseUrl}}/api/refunds/{{refundId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "saleLineId": "{{saleLineId}}",
+  "quantity": 1
+}
+
+### Remove refund line
+DELETE {{baseUrl}}/api/refunds/{{refundId}}/lines/{{refundLineId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Add refund tender (single or split)
+POST {{baseUrl}}/api/refunds/{{refundId}}/tenders
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "tenderType": "CARD",
+  "amountPence": 1000,
+  "meta": {
+    "providerRef": "m41-refund-card-1"
+  }
+}
+
+### Remove refund tender
+DELETE {{baseUrl}}/api/refunds/{{refundId}}/tenders/{{tenderId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Complete refund (requires lines + exact tenders)
+POST {{baseUrl}}/api/refunds/{{refundId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### Issue refund receipt via existing M40 endpoint
+POST {{baseUrl}}/api/receipts/issue
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "refundId": "{{refundId}}"
+}
+
+### Get receipt JSON by number
+GET {{baseUrl}}/api/receipts/{{receiptNumber}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get printable receipt HTML
+GET {{baseUrl}}/r/{{receiptNumber}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

@@ -1,4 +1,4 @@
-import { PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
+import { PaymentMethod, Prisma, RefundTenderType, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 
@@ -35,6 +35,19 @@ const paymentMethodToTenderMethod = (method: PaymentMethod): SaleTenderMethod =>
   }
 };
 
+const refundTenderTypeToTenderMethod = (tenderType: RefundTenderType): SaleTenderMethod => {
+  switch (tenderType) {
+    case "CASH":
+      return "CASH";
+    case "CARD":
+      return "CARD";
+    case "VOUCHER":
+      return "VOUCHER";
+    default:
+      return "VOUCHER";
+  }
+};
+
 const providerToTenderMethod = (provider: string): SaleTenderMethod => {
   const normalized = normalizeOptionalText(provider)?.toUpperCase();
   if (normalized === "CASH") {
@@ -51,6 +64,16 @@ const toMethodForProvider = (provider: string): PaymentMethod => {
     return "CASH";
   }
   if (provider === "CARD") {
+    return "CARD";
+  }
+  return "OTHER";
+};
+
+const refundTenderTypeToPaymentMethod = (tenderType: RefundTenderType): PaymentMethod => {
+  if (tenderType === "CASH") {
+    return "CASH";
+  }
+  if (tenderType === "CARD") {
     return "CARD";
   }
   return "OTHER";
@@ -98,12 +121,15 @@ const toIssuedReceiptEnvelope = (receipt: {
   receiptNumber: string;
   saleId: string | null;
   refundId: string | null;
+  saleRefundId: string | null;
   issuedAt: Date;
 }) => ({
   id: receipt.id,
   receiptNumber: receipt.receiptNumber,
   saleId: receipt.saleId,
-  refundId: receipt.refundId,
+  refundId: receipt.saleRefundId ?? receipt.refundId,
+  paymentRefundId: receipt.refundId,
+  saleRefundId: receipt.saleRefundId,
   issuedAt: receipt.issuedAt,
 });
 
@@ -141,6 +167,7 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
           receiptNumber: true,
           saleId: true,
           refundId: true,
+          saleRefundId: true,
           issuedAt: true,
         },
       });
@@ -183,6 +210,7 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
           receiptNumber: true,
           saleId: true,
           refundId: true,
+          saleRefundId: true,
           issuedAt: true,
         },
       });
@@ -198,36 +226,99 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
       };
     }
 
-    const existing = await tx.receipt.findUnique({
+    const existingPaymentRefundReceipt = await tx.receipt.findUnique({
       where: { refundId: refundId! },
       select: {
         id: true,
         receiptNumber: true,
         saleId: true,
         refundId: true,
+        saleRefundId: true,
         issuedAt: true,
       },
     });
-    if (existing) {
+    if (existingPaymentRefundReceipt) {
       return {
-        receipt: toIssuedReceiptEnvelope(existing),
+        receipt: toIssuedReceiptEnvelope(existingPaymentRefundReceipt),
         idempotent: true,
       };
     }
 
-    const refund = await tx.paymentRefund.findUnique({
+    const existingSaleRefundReceipt = await tx.receipt.findUnique({
+      where: { saleRefundId: refundId! },
+      select: {
+        id: true,
+        receiptNumber: true,
+        saleId: true,
+        refundId: true,
+        saleRefundId: true,
+        issuedAt: true,
+      },
+    });
+    if (existingSaleRefundReceipt) {
+      return {
+        receipt: toIssuedReceiptEnvelope(existingSaleRefundReceipt),
+        idempotent: true,
+      };
+    }
+
+    const paymentRefund = await tx.paymentRefund.findUnique({
       where: { id: refundId! },
       select: { id: true },
     });
-    if (!refund) {
+    if (paymentRefund) {
+      const settings = await getOrCreateReceiptSettingsTx(tx);
+      const receiptNumber = await getNextReceiptNumberTx(tx);
+      const created = await tx.receipt.create({
+        data: {
+          refundId: paymentRefund.id,
+          receiptNumber,
+          issuedByStaffId: issuedByStaffId ?? null,
+          shopName: settings.shopName,
+          shopAddress: settings.shopAddress,
+          vatNumber: settings.vatNumber,
+          footerText: settings.footerText,
+        },
+        select: {
+          id: true,
+          receiptNumber: true,
+          saleId: true,
+          refundId: true,
+          saleRefundId: true,
+          issuedAt: true,
+        },
+      });
+
+      return {
+        receipt: toIssuedReceiptEnvelope(created),
+        idempotent: false,
+      };
+    }
+
+    const saleRefund = await tx.refund.findUnique({
+      where: { id: refundId! },
+      select: {
+        id: true,
+        status: true,
+        completedAt: true,
+      },
+    });
+    if (!saleRefund) {
       throw new HttpError(404, "Refund not found", "REFUND_NOT_FOUND");
+    }
+    if (saleRefund.status !== "COMPLETED" || !saleRefund.completedAt) {
+      throw new HttpError(
+        409,
+        "Refund must be completed before issuing receipt",
+        "REFUND_NOT_COMPLETED",
+      );
     }
 
     const settings = await getOrCreateReceiptSettingsTx(tx);
     const receiptNumber = await getNextReceiptNumberTx(tx);
     const created = await tx.receipt.create({
       data: {
-        refundId: refund.id,
+        saleRefundId: saleRefund.id,
         receiptNumber,
         issuedByStaffId: issuedByStaffId ?? null,
         shopName: settings.shopName,
@@ -235,14 +326,15 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
         vatNumber: settings.vatNumber,
         footerText: settings.footerText,
       },
-      select: {
-        id: true,
-        receiptNumber: true,
-        saleId: true,
-        refundId: true,
-        issuedAt: true,
-      },
-    });
+        select: {
+          id: true,
+          receiptNumber: true,
+          saleId: true,
+          refundId: true,
+          saleRefundId: true,
+          issuedAt: true,
+        },
+      });
 
     return {
       receipt: toIssuedReceiptEnvelope(created),
@@ -306,11 +398,12 @@ export type DetailedReceipt = {
   refund: {
     id: string;
     amountPence: number;
-    reason: string;
+    reason: string | null;
     status: string;
-    paymentId: string;
-    method: PaymentMethod;
+    paymentId: string | null;
+    method: string | null;
     saleId: string | null;
+    kind: "PAYMENT_REFUND" | "SALE_REFUND";
   } | null;
 };
 
@@ -482,10 +575,11 @@ const buildDetailedSaleReceipt = (receipt: {
   };
 };
 
-const buildDetailedRefundReceipt = (receipt: {
+const buildDetailedPaymentRefundReceipt = (receipt: {
   receiptNumber: string;
   saleId: string | null;
   refundId: string | null;
+  saleRefundId: string | null;
   issuedAt: Date;
   shopName: string;
   shopAddress: string;
@@ -528,7 +622,7 @@ const buildDetailedRefundReceipt = (receipt: {
     receiptNumber: receipt.receiptNumber,
     issuedAt: receipt.issuedAt,
     saleId: receipt.saleId,
-    refundId: receipt.refundId,
+    refundId: receipt.saleRefundId ?? receipt.refundId,
     type: "REFUND",
     shop: {
       name: receipt.shopName,
@@ -592,6 +686,153 @@ const buildDetailedRefundReceipt = (receipt: {
       paymentId: refund.paymentId,
       method: refund.payment.method,
       saleId: refund.payment.saleId,
+      kind: "PAYMENT_REFUND",
+    },
+  };
+};
+
+const buildDetailedSaleRefundReceipt = (receipt: {
+  receiptNumber: string;
+  saleId: string | null;
+  refundId: string | null;
+  saleRefundId: string | null;
+  issuedAt: Date;
+  shopName: string;
+  shopAddress: string;
+  vatNumber: string | null;
+  footerText: string | null;
+  issuedByStaffId: string | null;
+  issuedByStaff: {
+    id: string;
+    name: string | null;
+    username: string;
+  } | null;
+  saleRefund: {
+    id: string;
+    saleId: string;
+    status: string;
+    currency: string;
+    subtotalPence: number;
+    taxPence: number;
+    totalPence: number;
+    createdAt: Date;
+    completedAt: Date | null;
+    sale: {
+      createdAt: Date;
+      completedAt: Date | null;
+      customer: {
+        id: string;
+        name: string;
+        firstName: string;
+        lastName: string;
+        email: string | null;
+        phone: string | null;
+      } | null;
+    };
+    lines: Array<{
+      id: string;
+      saleLineId: string;
+      quantity: number;
+      unitPricePence: number;
+      lineTotalPence: number;
+      saleLine: {
+        variantId: string;
+        variant: {
+          sku: string;
+          name: string | null;
+          option: string | null;
+          product: {
+            name: string;
+          };
+        };
+      };
+    }>;
+    tenders: Array<{
+      id: string;
+      tenderType: RefundTenderType;
+      amountPence: number;
+      createdAt: Date;
+    }>;
+  };
+}): DetailedReceipt => {
+  const saleRefund = receipt.saleRefund;
+
+  const items = saleRefund.lines.map((line) => {
+    const baseName = line.saleLine.variant.product.name;
+    const variantName = normalizeOptionalText(
+      line.saleLine.variant.name ?? line.saleLine.variant.option ?? undefined,
+    );
+
+    return {
+      variantId: line.saleLine.variantId,
+      sku: line.saleLine.variant.sku,
+      name: variantName ? `${baseName} - ${variantName}` : baseName,
+      qty: line.quantity,
+      unitPricePence: line.unitPricePence,
+      lineTotalPence: line.lineTotalPence,
+    };
+  });
+
+  const tenders = saleRefund.tenders.map((tender) => ({
+    id: tender.id,
+    method: refundTenderTypeToTenderMethod(tender.tenderType),
+    amountPence: tender.amountPence,
+    createdAt: tender.createdAt,
+  }));
+
+  return {
+    receiptNumber: receipt.receiptNumber,
+    issuedAt: receipt.issuedAt,
+    saleId: saleRefund.saleId,
+    refundId: receipt.saleRefundId ?? receipt.refundId,
+    type: "REFUND",
+    shop: {
+      name: receipt.shopName,
+      address: receipt.shopAddress,
+      vatNumber: receipt.vatNumber,
+      footerText: receipt.footerText,
+    },
+    staff: {
+      id: receipt.issuedByStaff?.id ?? receipt.issuedByStaffId,
+      name: receipt.issuedByStaff?.name ?? receipt.issuedByStaff?.username ?? null,
+    },
+    customer: saleRefund.sale.customer
+      ? {
+          id: saleRefund.sale.customer.id,
+          name: toCustomerName(saleRefund.sale.customer),
+          email: saleRefund.sale.customer.email,
+          phone: saleRefund.sale.customer.phone,
+        }
+      : null,
+    createdAt: saleRefund.createdAt,
+    completedAt: saleRefund.completedAt ?? saleRefund.sale.completedAt,
+    items,
+    totals: {
+      subtotalPence: saleRefund.subtotalPence,
+      taxPence: saleRefund.taxPence,
+      totalPence: saleRefund.totalPence,
+      changeDuePence: 0,
+    },
+    tenders,
+    payments: saleRefund.tenders.map((tender) => ({
+      id: tender.id,
+      method: refundTenderTypeToPaymentMethod(tender.tenderType),
+      amountPence: -tender.amountPence,
+      status: saleRefund.status,
+      providerRef: null,
+      createdAt: tender.createdAt,
+    })),
+    refund: {
+      id: saleRefund.id,
+      amountPence: saleRefund.totalPence,
+      reason: null,
+      status: saleRefund.status,
+      paymentId: null,
+      method: saleRefund.tenders[0]
+        ? refundTenderTypeToPaymentMethod(saleRefund.tenders[0].tenderType)
+        : null,
+      saleId: saleRefund.saleId,
+      kind: "SALE_REFUND",
     },
   };
 };
@@ -656,6 +897,32 @@ export const getReceiptByNumber = async (receiptNumber: string): Promise<Detaile
           },
         },
       },
+      saleRefund: {
+        include: {
+          sale: {
+            include: {
+              customer: true,
+            },
+          },
+          lines: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            include: {
+              saleLine: {
+                include: {
+                  variant: {
+                    include: {
+                      product: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          tenders: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          },
+        },
+      },
     },
   });
 
@@ -668,7 +935,15 @@ export const getReceiptByNumber = async (receiptNumber: string): Promise<Detaile
   }
 
   if (receipt.refund) {
-    return buildDetailedRefundReceipt(receipt as Parameters<typeof buildDetailedRefundReceipt>[0]);
+    return buildDetailedPaymentRefundReceipt(
+      receipt as Parameters<typeof buildDetailedPaymentRefundReceipt>[0],
+    );
+  }
+
+  if (receipt.saleRefund) {
+    return buildDetailedSaleRefundReceipt(
+      receipt as Parameters<typeof buildDetailedSaleRefundReceipt>[0],
+    );
   }
 
   throw new HttpError(409, "Receipt is not linked to a sale or refund", "INVALID_RECEIPT");

@@ -132,7 +132,15 @@ export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
         </table>
       </div>
 
-      ${receipt.refund ? `<div class="totals"><div><strong>Refund Reason:</strong> ${escapeHtml(receipt.refund.reason)}</div></div>` : ""}
+      ${
+        receipt.refund
+          ? `<div class="totals">${
+              receipt.refund.reason
+                ? `<div><strong>Refund Reason:</strong> ${escapeHtml(receipt.refund.reason)}</div>`
+                : `<div><strong>Refund Type:</strong> ${escapeHtml(receipt.refund.kind)}</div>`
+            }</div>`
+          : ""
+      }
       ${receipt.shop.footerText ? `<div class="muted" style="margin-top: 12px;">${escapeHtml(receipt.shop.footerText)}</div>` : ""}
     </div>
   </div>

@@ -304,6 +304,19 @@ enum SaleTenderMethod {
   VOUCHER
 }
 
+enum RefundRecordStatus {
+  DRAFT
+  COMPLETED
+  VOID
+}
+
+enum RefundTenderType {
+  CASH
+  CARD
+  VOUCHER
+  OTHER
+}
+
 enum PaymentPurpose {
   DEPOSIT
   FINAL
@@ -350,6 +363,7 @@ model Sale {
   receipt       Receipt?
   paymentIntents PaymentIntent[]
   returns       SaleReturn[]
+  refunds       Refund[]
 
   @@index([customerId])
   @@index([workshopJobId])
@@ -368,6 +382,7 @@ model SaleItem {
   sale           Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   variant        Variant @relation(fields: [variantId], references: [id])
   returnItems    SaleReturnItem[]
+  refundLines    RefundLine[]
 }
 
 model SaleTender {
@@ -404,6 +419,7 @@ model Receipt {
   id              String   @id @default(uuid()) @db.Uuid
   saleId          String?  @unique @db.Uuid
   refundId        String?  @unique @db.Uuid
+  saleRefundId    String?  @unique @db.Uuid
   receiptNumber   String   @unique
   issuedAt        DateTime @default(now())
   issuedByStaffId String?
@@ -414,10 +430,68 @@ model Receipt {
 
   sale            Sale?        @relation(fields: [saleId], references: [id], onDelete: SetNull)
   refund          PaymentRefund? @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  saleRefund      Refund?      @relation("SaleRefundReceipt", fields: [saleRefundId], references: [id], onDelete: SetNull)
   issuedByStaff   User?        @relation("ReceiptIssuedByStaff", fields: [issuedByStaffId], references: [id], onDelete: SetNull)
 
   @@index([issuedAt])
   @@index([issuedByStaffId])
+}
+
+model Refund {
+  id               String            @id @default(uuid()) @db.Uuid
+  saleId           String            @db.Uuid
+  status           RefundRecordStatus @default(DRAFT)
+  currency         String            @default("GBP")
+  subtotalPence    Int               @default(0)
+  taxPence         Int               @default(0)
+  totalPence       Int               @default(0)
+  createdByStaffId String?
+  completedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  sale             Sale              @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  createdByStaff   User?             @relation("RefundCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  lines            RefundLine[]
+  tenders          RefundTender[]
+  receipt          Receipt?          @relation("SaleRefundReceipt")
+
+  @@index([saleId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdByStaffId])
+}
+
+model RefundLine {
+  id             String   @id @default(uuid()) @db.Uuid
+  refundId       String   @db.Uuid
+  saleLineId     String   @db.Uuid
+  quantity       Int
+  unitPricePence Int
+  lineTotalPence Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  refund         Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  saleLine       SaleItem @relation(fields: [saleLineId], references: [id], onDelete: Restrict)
+
+  @@unique([refundId, saleLineId])
+  @@index([saleLineId])
+}
+
+model RefundTender {
+  id               String           @id @default(uuid()) @db.Uuid
+  refundId         String           @db.Uuid
+  tenderType       RefundTenderType
+  amountPence      Int
+  meta             Json?
+  createdAt        DateTime         @default(now())
+  createdByStaffId String?
+
+  refund           Refund           @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  createdByStaff   User?            @relation("RefundTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([refundId, createdAt])
+  @@index([createdByStaffId])
 }
 
 model Payment {
@@ -793,6 +867,8 @@ model User {
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
   createdSales         Sale[] @relation("SaleCreatedByStaff")
   saleTenders          SaleTender[] @relation("SaleTenderCreatedByStaff")
+  createdRefunds       Refund[] @relation("RefundCreatedByStaff")
+  refundTenders        RefundTender[] @relation("RefundTenderCreatedByStaff")
   issuedReceipts       Receipt[] @relation("ReceiptIssuedByStaff")
   openedCashSessions   CashSession[] @relation("CashSessionOpenedBy")
   closedCashSessions   CashSession[] @relation("CashSessionClosedBy")
