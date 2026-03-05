@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createCustomerHandler,
   getCustomerHandler,
+  listCustomerSalesHandler,
   listCustomersHandler,
   patchCustomerHandler,
   searchCustomersHandler,
@@ -13,5 +14,6 @@ export const customerRouter = Router();
 customerRouter.post("/", requireRoleAtLeast("STAFF"), createCustomerHandler);
 customerRouter.get("/", requireRoleAtLeast("STAFF"), listCustomersHandler);
 customerRouter.get("/search", requireRoleAtLeast("STAFF"), searchCustomersHandler);
+customerRouter.get("/:id/sales", requireRoleAtLeast("STAFF"), listCustomerSalesHandler);
 customerRouter.get("/:id", requireRoleAtLeast("STAFF"), getCustomerHandler);
 customerRouter.patch("/:id", requireRoleAtLeast("STAFF"), patchCustomerHandler);

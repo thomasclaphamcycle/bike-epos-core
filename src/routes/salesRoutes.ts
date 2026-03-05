@@ -16,7 +16,9 @@ export const salesRouter = Router();
 
 salesRouter.get("/", requireRoleAtLeast("STAFF"), listSalesHandler);
 salesRouter.post("/:saleId/returns", requireRoleAtLeast("MANAGER"), createSaleReturnHandler);
+salesRouter.patch("/:saleId", requireRoleAtLeast("STAFF"), attachCustomerToSaleHandler);
 salesRouter.patch("/:saleId/customer", requireRoleAtLeast("STAFF"), attachCustomerToSaleHandler);
+salesRouter.post("/:saleId/customer", requireRoleAtLeast("STAFF"), attachCustomerToSaleHandler);
 salesRouter.get("/:saleId/tenders", requireRoleAtLeast("STAFF"), listSaleTendersHandler);
 salesRouter.post("/:saleId/tenders", requireRoleAtLeast("STAFF"), addSaleTenderHandler);
 salesRouter.delete(

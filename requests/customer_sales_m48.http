@@ -1,0 +1,35 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@saleId = REPLACE_SALE_ID
+@customerId = REPLACE_CUSTOMER_ID
+
+### Attach customer to sale via sale patch (STAFF+)
+PATCH {{baseUrl}}/api/sales/{{saleId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": "{{customerId}}"
+}
+
+### Attach customer to sale via customer action endpoint (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/customer
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "customerId": "{{customerId}}"
+}
+
+### Customer completed sales history (STAFF+)
+GET {{baseUrl}}/api/customers/{{customerId}}/sales?from=2026-01-01&to=2026-12-31
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Customer profile page with sales table (STAFF+)
+GET {{baseUrl}}/customers/{{customerId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

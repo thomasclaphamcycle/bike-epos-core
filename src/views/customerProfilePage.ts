@@ -89,6 +89,23 @@ export const renderCustomerProfilePage = (input: CustomerProfilePageInput) => {
       </div>
       <div id="save-status" class="status"></div>
     </div>
+
+    <div class="card">
+      <h2>Recent Sales</h2>
+      <div class="controls">
+        <div class="field">
+          <label for="sales-from">From</label>
+          <input id="sales-from" type="date" />
+        </div>
+        <div class="field">
+          <label for="sales-to">To</label>
+          <input id="sales-to" type="date" />
+        </div>
+        <button id="sales-load-btn" type="button">Load Sales</button>
+      </div>
+      <div id="sales-status" class="status"></div>
+      <div id="sales-table" class="status"></div>
+    </div>
   </div>
 
   <script>
@@ -101,6 +118,7 @@ export const renderCustomerProfilePage = (input: CustomerProfilePageInput) => {
 
       const customerId = "${customerId}";
       let currentCustomer = null;
+      let customerSales = [];
 
       const setStatus = (id, message, mode = "info") => {
         const el = qs("#" + id);
@@ -180,12 +198,66 @@ export const renderCustomerProfilePage = (input: CustomerProfilePageInput) => {
         qs("#edit-notes").value = c.notes || "";
       };
 
+      const formatMoney = (pence) => "£" + ((Number(pence || 0) / 100).toFixed(2));
+
+      const renderSales = () => {
+        const wrap = qs("#sales-table");
+        if (!wrap) return;
+
+        if (!Array.isArray(customerSales) || customerSales.length === 0) {
+          wrap.innerHTML = '<div class="muted">No completed sales found for this customer.</div>';
+          return;
+        }
+
+        const rows = customerSales
+          .map((sale) =>
+            '<tr>' +
+            '<td>' + escapeHtml(sale.id) + '</td>' +
+            '<td>' + escapeHtml(sale.completedAt ? new Date(sale.completedAt).toLocaleString() : "-") + '</td>' +
+            '<td>' + escapeHtml(formatMoney(sale.totalPence)) + '</td>' +
+            '<td>' +
+            (sale.receiptNumber
+              ? '<a href="/r/' + encodeURIComponent(sale.receiptNumber) + '">' + escapeHtml(sale.receiptNumber) + "</a>"
+              : "-") +
+            "</td>" +
+            "</tr>",
+          )
+          .join("");
+
+        wrap.innerHTML =
+          '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; min-width: 520px;">' +
+          '<thead><tr><th style="text-align:left; border-bottom:1px solid #d5dbe2; padding:7px 9px; background:#f2f7fb;">Sale ID</th><th style="text-align:left; border-bottom:1px solid #d5dbe2; padding:7px 9px; background:#f2f7fb;">Completed</th><th style="text-align:left; border-bottom:1px solid #d5dbe2; padding:7px 9px; background:#f2f7fb;">Total</th><th style="text-align:left; border-bottom:1px solid #d5dbe2; padding:7px 9px; background:#f2f7fb;">Receipt</th></tr></thead>' +
+          '<tbody>' + rows + "</tbody></table></div>";
+      };
+
+      const loadCustomerSales = async () => {
+        const params = new URLSearchParams();
+        const from = (qs("#sales-from").value || "").trim();
+        const to = (qs("#sales-to").value || "").trim();
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
+
+        setStatus("sales-status", "Loading customer sales...");
+        try {
+          const payload = await apiRequest(
+            "/api/customers/" + encodeURIComponent(customerId) + "/sales" +
+              (params.toString() ? "?" + params.toString() : ""),
+          );
+          customerSales = Array.isArray(payload?.sales) ? payload.sales : [];
+          renderSales();
+          setStatus("sales-status", "Loaded " + customerSales.length + " sale(s).", "ok");
+        } catch (error) {
+          setStatus("sales-status", error.message || "Could not load customer sales", "error");
+        }
+      };
+
       const loadCustomer = async () => {
         setStatus("profile-status", "Loading customer profile...");
         try {
           currentCustomer = await apiRequest("/api/customers/" + encodeURIComponent(customerId));
           renderMeta();
           setStatus("profile-status", "Customer profile loaded.", "ok");
+          await loadCustomerSales();
         } catch (error) {
           setStatus("profile-status", error.message || "Could not load customer profile", "error");
         }
@@ -224,6 +296,15 @@ export const renderCustomerProfilePage = (input: CustomerProfilePageInput) => {
       };
 
       qs("#save-btn")?.addEventListener("click", saveCustomer);
+      qs("#sales-load-btn")?.addEventListener("click", loadCustomerSales);
+      const today = new Date();
+      const toDate = today.toISOString().slice(0, 10);
+      const fromDate = new Date(today.getTime() - (1000 * 60 * 60 * 24 * 30))
+        .toISOString()
+        .slice(0, 10);
+      qs("#sales-from").value = fromDate;
+      qs("#sales-to").value = toDate;
+      renderSales();
       loadCustomer();
     })();
   </script>

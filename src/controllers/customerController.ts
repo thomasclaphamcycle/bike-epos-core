@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   createCustomer,
   getCustomerById,
+  listCustomerSales,
   searchCustomers,
   updateCustomer,
 } from "../services/customerService";
@@ -134,4 +135,11 @@ export const patchCustomerHandler = async (req: Request, res: Response) => {
   });
 
   res.json(customer);
+};
+
+export const listCustomerSalesHandler = async (req: Request, res: Response) => {
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
+  const result = await listCustomerSales(req.params.id, { from, to });
+  res.json(result);
 };

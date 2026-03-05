@@ -17,6 +17,11 @@ type UpdateCustomerInput = {
   notes?: string | null;
 };
 
+type CustomerSalesFilterInput = {
+  from?: string;
+  to?: string;
+};
+
 const normalizeOptionalText = (value: string | undefined): string | undefined => {
   if (value === undefined) {
     return undefined;
@@ -24,6 +29,19 @@ const normalizeOptionalText = (value: string | undefined): string | undefined =>
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateOnly.test(value)) {
+    throw new HttpError(400, `${label} must be YYYY-MM-DD`, "INVALID_DATE");
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `${label} is invalid`, "INVALID_DATE");
+  }
+  return date;
 };
 
 const splitNameToParts = (name: string): { firstName: string; lastName: string } => {
@@ -241,4 +259,62 @@ export const updateCustomer = async (customerId: string, input: UpdateCustomerIn
     }
     throw error;
   }
+};
+
+export const listCustomerSales = async (
+  customerId: string,
+  filters: CustomerSalesFilterInput = {},
+) => {
+  if (!isUuid(customerId)) {
+    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
+  }
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+  });
+  if (!customer) {
+    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+  }
+
+  const completedAt: {
+    gte?: Date;
+    lt?: Date;
+    not?: null;
+  } = { not: null };
+
+  if (filters.from) {
+    completedAt.gte = toDateOrThrow(filters.from, "from");
+  }
+  if (filters.to) {
+    const toDate = toDateOrThrow(filters.to, "to");
+    toDate.setUTCDate(toDate.getUTCDate() + 1);
+    completedAt.lt = toDate;
+  }
+  if (completedAt.gte && completedAt.lt && completedAt.gte >= completedAt.lt) {
+    throw new HttpError(400, "from must be before or equal to to", "INVALID_DATE_RANGE");
+  }
+
+  const sales = await prisma.sale.findMany({
+    where: {
+      customerId,
+      completedAt,
+    },
+    orderBy: [{ completedAt: "desc" }],
+    take: 100,
+  });
+
+  return {
+    customer: toCustomerResponse(customer),
+    sales: sales.map((sale) => ({
+      id: sale.id,
+      subtotalPence: sale.subtotalPence,
+      taxPence: sale.taxPence,
+      totalPence: sale.totalPence,
+      changeDuePence: sale.changeDuePence,
+      createdAt: sale.createdAt,
+      completedAt: sale.completedAt,
+      receiptNumber: sale.receiptNumber,
+      printableReceiptPath: sale.receiptNumber ? `/r/${sale.receiptNumber}` : null,
+    })),
+  };
 };
