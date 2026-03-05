@@ -496,6 +496,54 @@ export const recordCashSaleMovementForPaymentTx = async (
   }
 };
 
+export const recordCashSaleMovementForSaleTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    saleId: string;
+    cashTenderedPence: number;
+    changeDuePence: number;
+    createdByStaffId?: string;
+  },
+) => {
+  const netCashPence = Math.max(0, input.cashTenderedPence - Math.max(0, input.changeDuePence));
+  if (netCashPence <= 0) {
+    return;
+  }
+
+  // Legacy flows that create Payment(method=CASH) already record movement by payment id.
+  const existingCashPayment = await tx.payment.findFirst({
+    where: {
+      saleId: input.saleId,
+      method: "CASH",
+      amountPence: { gt: 0 },
+    },
+    select: { id: true },
+  });
+  if (existingCashPayment) {
+    return;
+  }
+
+  const openSession = await getOpenSessionTx(tx);
+  if (!openSession) {
+    return;
+  }
+
+  try {
+    await createMovementTx(tx, {
+      sessionId: openSession.id,
+      type: "CASH_SALE",
+      amountPence: netCashPence,
+      ref: `SALE_TENDER:${input.saleId}`,
+      ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
+    });
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code !== "P2002") {
+      throw error;
+    }
+  }
+};
+
 export const recordCashRefundMovementForRefundTx = async (
   tx: Prisma.TransactionClient,
   input: {

@@ -1,10 +1,13 @@
 import { Request, Response } from "express";
-import { PaymentMethod } from "@prisma/client";
+import { PaymentMethod, SaleTenderMethod } from "@prisma/client";
 import {
+  addSaleTender,
   attachCustomerToSale,
   completeSaleIfEligible,
   createSaleReturn,
+  deleteSaleTender,
   getSaleById,
+  listSaleTenders,
   listSales,
 } from "../services/salesService";
 import { HttpError } from "../utils/http";
@@ -39,6 +42,30 @@ const parsePaymentMethod = (
     );
   }
   return value as PaymentMethod;
+};
+
+const parseSaleTenderMethod = (value: unknown): SaleTenderMethod => {
+  if (typeof value !== "string") {
+    throw new HttpError(
+      400,
+      "method must be one of CASH, CARD, BANK_TRANSFER, VOUCHER",
+      "INVALID_SALE_TENDER",
+    );
+  }
+  const normalized = value.trim().toUpperCase();
+  if (
+    normalized !== "CASH" &&
+    normalized !== "CARD" &&
+    normalized !== "BANK_TRANSFER" &&
+    normalized !== "VOUCHER"
+  ) {
+    throw new HttpError(
+      400,
+      "method must be one of CASH, CARD, BANK_TRANSFER, VOUCHER",
+      "INVALID_SALE_TENDER",
+    );
+  }
+  return normalized as SaleTenderMethod;
 };
 
 export const parsePaymentFromBody = (body: unknown): {
@@ -126,5 +153,36 @@ export const completeSaleHandler = async (req: Request, res: Response) => {
     staffActorId ? { staffActorId } : {},
   );
 
+  res.json(result);
+};
+
+export const addSaleTenderHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    method?: unknown;
+    amountPence?: unknown;
+  };
+
+  const amountPence =
+    typeof body.amountPence === "number" ? body.amountPence : Number.NaN;
+
+  const result = await addSaleTender(
+    req.params.saleId,
+    {
+      method: parseSaleTenderMethod(body.method),
+      amountPence,
+    },
+    getRequestStaffActorId(req),
+  );
+
+  res.status(201).json(result);
+};
+
+export const listSaleTendersHandler = async (req: Request, res: Response) => {
+  const result = await listSaleTenders(req.params.saleId);
+  res.json(result);
+};
+
+export const deleteSaleTenderHandler = async (req: Request, res: Response) => {
+  const result = await deleteSaleTender(req.params.saleId, req.params.tenderId);
   res.json(result);
 };

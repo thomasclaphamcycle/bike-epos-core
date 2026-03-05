@@ -103,6 +103,80 @@ test("Login then POS add to basket, checkout cash, and open receipt page", async
   await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
 });
 
+test("POS tender checkout supports split tenders and cash overpay change due", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-tenders",
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "pos-tenders",
+    retailPricePence: 1000,
+  });
+
+  await loginViaUi(page, credentials, "/pos");
+
+  const currentSession = await apiJson(page.request, "GET", "/api/till/sessions/current");
+  if (!currentSession?.session?.id) {
+    await apiJson(page.request, "POST", "/api/till/sessions/open", {
+      data: { openingFloatPence: 0 },
+    });
+  }
+  const baselineSession = await apiJson(page.request, "GET", "/api/till/sessions/current");
+  const baselineCashSales = baselineSession?.totals?.cashSalesPence || 0;
+
+  await page.fill("#search-q", seeded.sku);
+  await page.click("#search-load");
+  await expect(page.locator("#search-status")).toContainText("Loaded");
+
+  const checkoutAndCompleteTenderSale = async (buildTenders) => {
+    await page.click("#basket-new");
+    await expect(page.locator("#basket-status")).toContainText("Basket created");
+
+    await page.locator(".quick-add-1").first().click();
+    await expect(page.locator("#basket-status")).toContainText("Item added.");
+
+    await page.click("#checkout-btn");
+    await expect(page.locator("#checkout-status")).toContainText("Checkout");
+
+    await buildTenders();
+    await page.click("#tender-complete-btn");
+    await expect(page.locator("#tender-status")).toContainText("Sale completed.");
+  };
+
+  await checkoutAndCompleteTenderSale(async () => {
+    await page.click("#tender-add-cash-remaining");
+    await expect(page.locator("#tender-status")).toContainText("Tender added.");
+  });
+  await expect(page.locator("#sale-receipt")).toContainText("Change Due:");
+  await expect(page.locator("#sale-receipt")).toContainText("£0.00");
+
+  await checkoutAndCompleteTenderSale(async () => {
+    await page.selectOption("#tender-method", "CASH");
+    await page.fill("#tender-amount", "400");
+    await page.click("#tender-add-btn");
+    await expect(page.locator("#tender-status")).toContainText("Tender added.");
+    await page.click("#tender-add-card-remaining");
+    await expect(page.locator("#tender-status")).toContainText("Tender added.");
+  });
+  await expect(page.locator("#sale-receipt")).toContainText("£0.00");
+
+  await checkoutAndCompleteTenderSale(async () => {
+    await page.selectOption("#tender-method", "CASH");
+    await page.fill("#tender-amount", "1200");
+    await page.click("#tender-add-btn");
+    await expect(page.locator("#tender-status")).toContainText("Tender added.");
+  });
+  await expect(page.locator("#sale-receipt")).toContainText("£2.00");
+
+  const afterSession = await apiJson(page.request, "GET", "/api/till/sessions/current");
+  expect(afterSession.session.id).toBeTruthy();
+  const deltaCashSales = (afterSession.totals?.cashSalesPence || 0) - baselineCashSales;
+  expect(deltaCashSales).toBe(2400);
+});
+
 test("Login then workshop page can create a job", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
@@ -232,6 +306,20 @@ test("Manager can open till, record paid-in, and close with count", async ({ pag
   });
 
   await loginViaUi(page, managerCredentials, "/till");
+
+  const existing = await apiJson(page.request, "GET", "/api/till/sessions/current");
+  if (existing?.session?.id) {
+    await apiJson(page.request, "POST", `/api/till/sessions/${existing.session.id}/count`, {
+      data: {
+        countedCashPence: existing.totals?.expectedCashPence || 0,
+        notes: "playwright pre-close",
+      },
+    });
+    await apiJson(page.request, "POST", `/api/till/sessions/${existing.session.id}/close`, {
+      data: {},
+    });
+    await page.reload();
+  }
 
   await page.fill('[data-testid="till-open-float"]', "1000");
   await page.click('[data-testid="till-open-submit"]');

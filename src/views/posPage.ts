@@ -278,6 +278,31 @@ export const renderPosPage = (input: PosPageInput) => {
             <button id="capture-card-btn" type="button">Capture Card Intent</button>
           </div>
           <div id="checkout-status" class="status"></div>
+
+          <h3 style="margin-top: 14px;">Tender Checkout (M39)</h3>
+          <div class="controls">
+            <div class="field">
+              <label for="tender-method">Method</label>
+              <select id="tender-method" data-testid="tender-method">
+                <option value="CASH">CASH</option>
+                <option value="CARD">CARD</option>
+                <option value="BANK_TRANSFER">BANK_TRANSFER</option>
+                <option value="VOUCHER">VOUCHER</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="tender-amount">Amount (pence)</label>
+              <input id="tender-amount" type="number" min="1" step="1" data-testid="tender-amount" />
+            </div>
+            <button id="tender-add-btn" type="button" class="primary" data-testid="tender-add-btn">Add Tender</button>
+            <button id="tender-add-cash-remaining" type="button">Cash Remaining</button>
+            <button id="tender-add-card-remaining" type="button">Card Remaining</button>
+            <button id="tender-refresh-btn" type="button">Refresh Tenders</button>
+            <button id="tender-complete-btn" type="button" data-testid="tender-complete-btn">Complete Sale</button>
+          </div>
+          <div id="tender-status" class="status"></div>
+          <div id="tender-summary" class="muted" style="margin-top: 6px;">No sale/tender summary yet.</div>
+          <div id="tender-table-wrap" class="table-wrap"></div>
           <div id="sale-receipt"></div>
         </div>
       </div>
@@ -300,6 +325,7 @@ export const renderPosPage = (input: PosPageInput) => {
         selectedProductId: null,
         basket: null,
         lastSale: null,
+        tenderSummary: null,
         lastPaymentIntentId: null,
         customerResults: [],
         selectedCustomer: null,
@@ -556,6 +582,8 @@ export const renderPosPage = (input: PosPageInput) => {
           '<div><strong>Basket ID:</strong> ' + toSafeText(sale.basketId || "") + '</div>' +
           '<div><strong>Customer:</strong> ' + toSafeText(customerLabel) + '</div>' +
           '<div><strong>Total:</strong> ' + formatMoney(sale.totalPence || 0) + '</div>' +
+          '<div><strong>Change Due:</strong> ' + formatMoney(sale.changeDuePence || 0) + '</div>' +
+          '<div><strong>Completed:</strong> ' + (sale.completedAt ? toSafeText(String(sale.completedAt)) : '-') + '</div>' +
           (sale.id
             ? '<div style="margin-top: 6px;"><a href="/sales/' + encodeURIComponent(sale.id) + '/receipt" target="_blank" rel="noopener">View Receipt</a></div>'
             : '') +
@@ -568,6 +596,214 @@ export const renderPosPage = (input: PosPageInput) => {
           '</div>';
       };
 
+      const renderTenderPanel = () => {
+        const wrap = qs("#tender-table-wrap");
+        const summary = qs("#tender-summary");
+        const completeBtn = qs("#tender-complete-btn");
+        const amountInput = qs("#tender-amount");
+        if (!wrap || !summary || !completeBtn || !(amountInput instanceof HTMLInputElement)) {
+          return;
+        }
+
+        const saleId = state.lastSale?.sale?.id;
+        if (!saleId || !state.tenderSummary) {
+          summary.textContent = "No sale/tender summary yet.";
+          wrap.innerHTML = '<div style="padding: 12px;" class="muted">No tenders.</div>';
+          completeBtn.disabled = true;
+          amountInput.value = "";
+          return;
+        }
+
+        const tenderSummary = state.tenderSummary;
+        const tenders = Array.isArray(tenderSummary.tenders) ? tenderSummary.tenders : [];
+        const overTenderPence = Math.max(0, tenderSummary.tenderedPence - tenderSummary.totalPence);
+        const canComplete =
+          tenderSummary.tenderedPence >= tenderSummary.totalPence &&
+          (overTenderPence === 0 || tenderSummary.cashTenderedPence >= overTenderPence);
+        completeBtn.disabled = Boolean(tenderSummary.isCompleted) || !canComplete;
+
+        if (!amountInput.value) {
+          const suggested = tenderSummary.remainingPence > 0 ? tenderSummary.remainingPence : 0;
+          if (suggested > 0) {
+            amountInput.value = String(suggested);
+          }
+        }
+
+        summary.textContent =
+          "Total: " +
+          formatMoney(tenderSummary.totalPence || 0) +
+          " | Tendered: " +
+          formatMoney(tenderSummary.tenderedPence || 0) +
+          " | Remaining: " +
+          formatMoney(tenderSummary.remainingPence || 0) +
+          " | Change Due: " +
+          formatMoney(tenderSummary.changeDuePence || 0);
+
+        if (tenders.length === 0) {
+          wrap.innerHTML = '<div style="padding: 12px;" class="muted">No tenders.</div>';
+          return;
+        }
+
+        const rows = tenders
+          .map((tender) =>
+            '<tr>' +
+            '<td>' + toSafeText(tender.method || "") + '</td>' +
+            '<td>' + formatMoney(tender.amountPence || 0) + '</td>' +
+            '<td>' + toSafeText(tender.createdAt || "") + '</td>' +
+            '<td>' +
+            (tenderSummary.isCompleted
+              ? '-'
+              : '<button type="button" class="tender-remove-btn" data-tender-id="' +
+                toSafeText(tender.id) +
+                '">Remove</button>') +
+            '</td>' +
+            '</tr>',
+          )
+          .join("");
+
+        wrap.innerHTML =
+          '<table>' +
+          '<thead><tr><th>Method</th><th>Amount</th><th>Created</th><th>Action</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+          '</table>';
+      };
+
+      const loadTenderSummary = async (saleId) => {
+        if (!saleId) {
+          state.tenderSummary = null;
+          renderTenderPanel();
+          return null;
+        }
+
+        try {
+          const summary = await apiRequest(
+            "/api/sales/" + encodeURIComponent(saleId) + "/tenders",
+          );
+          state.tenderSummary = summary;
+          renderTenderPanel();
+          return summary;
+        } catch (error) {
+          state.tenderSummary = null;
+          renderTenderPanel();
+          setStatus("tender-status", error.message || "Failed to load tenders", "error");
+          return null;
+        }
+      };
+
+      const addTender = async (methodOverride, amountOverride) => {
+        const checkoutResult = await ensureSaleCheckedOut();
+        const saleId = checkoutResult?.sale?.id;
+        if (!saleId) {
+          setStatus("tender-status", "No sale available for tenders.", "error");
+          return;
+        }
+
+        const methodSelect = qs("#tender-method");
+        const amountInput = qs("#tender-amount");
+        if (!(methodSelect instanceof HTMLSelectElement) || !(amountInput instanceof HTMLInputElement)) {
+          return;
+        }
+
+        const method = methodOverride || methodSelect.value;
+        const rawAmount = amountOverride !== undefined ? String(amountOverride) : amountInput.value;
+        const amountPence = Number.parseInt(rawAmount || "", 10);
+        if (!Number.isInteger(amountPence) || amountPence <= 0) {
+          setStatus("tender-status", "Tender amount must be a positive integer.", "error");
+          return;
+        }
+
+        setStatus("tender-status", "Adding tender...");
+        try {
+          const result = await apiRequest(
+            "/api/sales/" + encodeURIComponent(saleId) + "/tenders",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                method,
+                amountPence,
+              }),
+            },
+          );
+          state.tenderSummary = result.summary;
+          renderTenderPanel();
+          setStatus("tender-status", "Tender added.", "ok");
+        } catch (error) {
+          setStatus("tender-status", error.message || "Failed to add tender", "error");
+        }
+      };
+
+      const addRemainingTender = async (method) => {
+        const saleId = state.lastSale?.sale?.id;
+        if (!saleId) {
+          setStatus("tender-status", "Checkout a basket first.", "error");
+          return;
+        }
+
+        const summary = state.tenderSummary || (await loadTenderSummary(saleId));
+        const remaining = Number(summary?.remainingPence || 0);
+        if (remaining <= 0) {
+          setStatus("tender-status", "No remaining amount to tender.", "error");
+          return;
+        }
+
+        await addTender(method, remaining);
+      };
+
+      const removeTender = async (tenderId) => {
+        const saleId = state.lastSale?.sale?.id;
+        if (!saleId) {
+          return;
+        }
+        if (!tenderId) {
+          return;
+        }
+
+        setStatus("tender-status", "Removing tender...");
+        try {
+          const summary = await apiRequest(
+            "/api/sales/" + encodeURIComponent(saleId) + "/tenders/" + encodeURIComponent(tenderId),
+            {
+              method: "DELETE",
+            },
+          );
+          state.tenderSummary = summary;
+          renderTenderPanel();
+          setStatus("tender-status", "Tender removed.", "ok");
+        } catch (error) {
+          setStatus("tender-status", error.message || "Failed to remove tender", "error");
+        }
+      };
+
+      const completeSaleWithTenders = async () => {
+        const saleId = state.lastSale?.sale?.id;
+        if (!saleId) {
+          setStatus("tender-status", "Checkout a basket first.", "error");
+          return;
+        }
+
+        setStatus("tender-status", "Completing sale...");
+        try {
+          const completion = await apiRequest(
+            "/api/sales/" + encodeURIComponent(saleId) + "/complete",
+            {
+              method: "POST",
+              body: JSON.stringify({}),
+            },
+          );
+          const salePayload = await apiRequest("/api/sales/" + encodeURIComponent(saleId));
+          state.lastSale = salePayload;
+          await loadTenderSummary(saleId);
+          renderReceipt();
+          setStatus(
+            "tender-status",
+            "Sale completed. Change due: " + formatMoney(completion.changeDuePence || 0),
+            "ok",
+          );
+        } catch (error) {
+          setStatus("tender-status", error.message || "Failed to complete sale", "error");
+        }
+      };
+
       const createBasket = async () => {
         setStatus("basket-status", "Creating basket...");
         try {
@@ -577,9 +813,11 @@ export const renderPosPage = (input: PosPageInput) => {
           });
           state.basket = basket;
           state.lastSale = null;
+          state.tenderSummary = null;
           state.lastPaymentIntentId = null;
           qs("#basket-id-input").value = basket.id;
           renderBasket();
+          renderTenderPanel();
           renderReceipt();
           setStatus("basket-status", "Basket created.", "ok");
         } catch (error) {
@@ -599,6 +837,7 @@ export const renderPosPage = (input: PosPageInput) => {
           const basket = await apiRequest("/api/baskets/" + encodeURIComponent(basketId));
           state.basket = basket;
           renderBasket();
+          renderTenderPanel();
           setStatus("basket-status", "Basket loaded.", "ok");
         } catch (error) {
           setStatus("basket-status", error.message || "Failed to load basket", "error");
@@ -836,6 +1075,7 @@ export const renderPosPage = (input: PosPageInput) => {
           );
 
           state.lastSale = result;
+          await loadTenderSummary(result.sale?.id);
           if (result.sale?.id && state.selectedCustomer?.id) {
             await attachSelectedCustomerToSale(result.sale.id);
           }
@@ -890,6 +1130,7 @@ export const renderPosPage = (input: PosPageInput) => {
         });
 
         state.lastPaymentIntentId = payload.intent?.id || null;
+        await loadTenderSummary(checkoutResult.sale.id);
         return payload;
       };
 
@@ -901,6 +1142,7 @@ export const renderPosPage = (input: PosPageInput) => {
             return;
           }
           const paidLabel = result.salePayment?.paid ? "Sale is fully paid." : "Sale is partially paid.";
+          await loadTenderSummary(state.lastSale?.sale?.id);
           setStatus(
             "checkout-status",
             "Cash intent captured: " + result.intent.id + ". " + paidLabel,
@@ -926,6 +1168,7 @@ export const renderPosPage = (input: PosPageInput) => {
             );
             return;
           }
+          await loadTenderSummary(state.lastSale?.sale?.id);
           setStatus("checkout-status", "Card intent status: " + result.intent.status, "ok");
         } catch (error) {
           setStatus("checkout-status", error.message || "Card payment intent failed", "error");
@@ -948,6 +1191,7 @@ export const renderPosPage = (input: PosPageInput) => {
             },
           );
           const paidLabel = result.salePayment?.paid ? "Sale is fully paid." : "Sale is partially paid.";
+          await loadTenderSummary(state.lastSale?.sale?.id);
           setStatus(
             "checkout-status",
             "Intent captured: " + result.intent.id + ". " + paidLabel,
@@ -1091,10 +1335,46 @@ export const renderPosPage = (input: PosPageInput) => {
         captureCardIntent();
       });
 
+      qs("#tender-add-btn")?.addEventListener("click", () => {
+        addTender();
+      });
+
+      qs("#tender-add-cash-remaining")?.addEventListener("click", () => {
+        addRemainingTender("CASH");
+      });
+
+      qs("#tender-add-card-remaining")?.addEventListener("click", () => {
+        addRemainingTender("CARD");
+      });
+
+      qs("#tender-refresh-btn")?.addEventListener("click", () => {
+        loadTenderSummary(state.lastSale?.sale?.id);
+      });
+
+      qs("#tender-complete-btn")?.addEventListener("click", () => {
+        completeSaleWithTenders();
+      });
+
+      qs("#tender-table-wrap")?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) {
+          return;
+        }
+        if (!target.classList.contains("tender-remove-btn")) {
+          return;
+        }
+        const tenderId = target.getAttribute("data-tender-id");
+        if (!tenderId) {
+          return;
+        }
+        removeTender(tenderId);
+      });
+
       const initialize = async () => {
         renderSearchTable();
         renderQuickPanel();
         renderBasket();
+        renderTenderPanel();
         renderCustomerPanel();
         renderReceipt();
         await createBasket();

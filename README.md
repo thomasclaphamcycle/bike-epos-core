@@ -61,6 +61,19 @@ Navigation visibility:
 - `MANAGER+`: Till / Cash Up
 - `ADMIN`: Admin Users, Admin Audit
 
+## POS Tenders (M39)
+
+Sales now support explicit tender lines (cash/card/bank transfer/voucher) with split payment and cash change-due handling.
+
+- Endpoints:
+  - `POST /api/sales/:saleId/tenders`
+  - `GET /api/sales/:saleId/tenders`
+  - `DELETE /api/sales/:saleId/tenders/:tenderId`
+- Sale completion (`POST /api/sales/:saleId/complete`) now validates tender coverage:
+  - tendered total must cover sale total
+  - over-tender is allowed only when cash tender covers the overage
+- Till integration records only net cash taken for split/overpaid tender flows.
+
 ## Test Commands
 
 ### Baseline + new milestone smoke suite
@@ -76,7 +89,7 @@ npm test
 
 `test:smoke` runs milestones in order:
 
-- m11, m12, m13, m28, m32, m34, m35, m36, m37
+- m11, m12, m13, m28, m32, m34, m35, m36, m37, m38, m39
 
 ### Individual milestone tests
 
@@ -84,12 +97,14 @@ npm test
 npm run test:m35
 npm run test:m36
 npm run test:m37
+npm run test:m38
+npm run test:m39
 ```
 
-### Full regression smoke set (m11..m37)
+### Full regression smoke set (m11..m39)
 
 ```bash
-npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17 && npm run test:m18 && npm run test:m19 && npm run test:m19_1 && npm run test:m22 && npm run test:m23b && npm run test:m24 && npm run test:m25 && npm run test:m26 && npm run test:m27 && npm run test:m28 && npm run test:m29 && npm run test:m30 && npm run test:m31 && npm run test:m32 && npm run test:m33 && npm run test:m34 && npm run test:m35 && npm run test:m36 && npm run test:m37
+npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17 && npm run test:m18 && npm run test:m19 && npm run test:m19_1 && npm run test:m22 && npm run test:m23b && npm run test:m24 && npm run test:m25 && npm run test:m26 && npm run test:m27 && npm run test:m28 && npm run test:m29 && npm run test:m30 && npm run test:m31 && npm run test:m32 && npm run test:m33 && npm run test:m34 && npm run test:m35 && npm run test:m36 && npm run test:m37 && npm run test:m38 && npm run test:m39
 ```
 
 ### Playwright E2E

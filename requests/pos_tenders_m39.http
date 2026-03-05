@@ -1,0 +1,45 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@saleId = REPLACE_SALE_ID
+@tenderId = REPLACE_TENDER_ID
+
+### List sale tenders (STAFF+)
+GET {{baseUrl}}/api/sales/{{saleId}}/tenders
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Add cash tender (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/tenders
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "method": "CASH",
+  "amountPence": 2000
+}
+
+### Add card tender for split payment (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/tenders
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "method": "CARD",
+  "amountPence": 500
+}
+
+### Remove tender line (sale must be incomplete)
+DELETE {{baseUrl}}/api/sales/{{saleId}}/tenders/{{tenderId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Complete sale using tenders
+POST {{baseUrl}}/api/sales/{{saleId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}

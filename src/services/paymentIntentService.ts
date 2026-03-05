@@ -199,7 +199,9 @@ const getSalePaymentSummaryTx = async (tx: Prisma.TransactionClient, saleId: str
 };
 
 const toCompleteSaleInput = (staffActorId?: string) =>
-  staffActorId ? { staffActorId } : {};
+  staffActorId
+    ? { staffActorId, requireCapturedIntent: true, requireTenders: true }
+    : { requireCapturedIntent: true, requireTenders: true };
 
 export const createPaymentIntent = async (
   input: CreatePaymentIntentInput,

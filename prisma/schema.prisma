@@ -297,6 +297,13 @@ enum PaymentMethod {
   OTHER
 }
 
+enum SaleTenderMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  VOUCHER
+}
+
 enum PaymentPurpose {
   DEPOSIT
   FINAL
@@ -327,6 +334,7 @@ model Sale {
   subtotalPence Int
   taxPence      Int
   totalPence    Int
+  changeDuePence Int @default(0)
   createdAt     DateTime @default(now())
   completedAt   DateTime?
   receiptNumber String?  @unique
@@ -338,6 +346,7 @@ model Sale {
   createdByStaff User?   @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   items         SaleItem[]
   payments      Payment[]
+  tenders       SaleTender[]
   paymentIntents PaymentIntent[]
   returns       SaleReturn[]
 
@@ -358,6 +367,21 @@ model SaleItem {
   sale           Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   variant        Variant @relation(fields: [variantId], references: [id])
   returnItems    SaleReturnItem[]
+}
+
+model SaleTender {
+  id               String           @id @default(uuid()) @db.Uuid
+  saleId           String           @db.Uuid
+  method           SaleTenderMethod
+  amountPence      Int
+  createdAt        DateTime         @default(now())
+  createdByStaffId String?
+
+  sale             Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdByStaff   User?            @relation("SaleTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([saleId, createdAt])
+  @@index([createdByStaffId])
 }
 
 model Payment {
@@ -731,6 +755,7 @@ model User {
   workshopJobNotes     WorkshopJobNote[] @relation("WorkshopJobNoteAuthor")
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
   createdSales         Sale[] @relation("SaleCreatedByStaff")
+  saleTenders          SaleTender[] @relation("SaleTenderCreatedByStaff")
   openedCashSessions   CashSession[] @relation("CashSessionOpenedBy")
   closedCashSessions   CashSession[] @relation("CashSessionClosedBy")
   cashMovements        CashMovement[] @relation("CashMovementCreatedBy")

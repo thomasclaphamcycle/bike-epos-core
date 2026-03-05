@@ -1,8 +1,9 @@
-import { BasketStatus, PaymentMethod, Prisma } from "@prisma/client";
+import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import {
   recordCashRefundMovementForPaymentTx,
+  recordCashSaleMovementForSaleTx,
   recordCashSaleMovementForPaymentTx,
 } from "./tillService";
 
@@ -30,7 +31,13 @@ type DateRangeInput = {
 
 type CompleteSaleInput = {
   requireCapturedIntent?: boolean;
+  requireTenders?: boolean;
   staffActorId?: string;
+};
+
+type SaleTenderInput = {
+  method?: SaleTenderMethod;
+  amountPence?: number;
 };
 
 const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
@@ -76,6 +83,28 @@ const toReceiptNumber = (saleId: string, completedAt: Date) => {
   return `S-${y}${m}${d}-${normalizedSaleId}`;
 };
 
+const toSaleTenderMethodFromPaymentMethod = (method: PaymentMethod): SaleTenderMethod => {
+  switch (method) {
+    case "CASH":
+      return "CASH";
+    case "CARD":
+      return "CARD";
+    default:
+      return "VOUCHER";
+  }
+};
+
+const toSaleTenderMethodFromProvider = (provider: string): SaleTenderMethod => {
+  const normalized = normalizeOptionalText(provider)?.toUpperCase();
+  if (normalized === "CASH") {
+    return "CASH";
+  }
+  if (normalized === "CARD") {
+    return "CARD";
+  }
+  return "CARD";
+};
+
 const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
   const existingDefault = await tx.stockLocation.findFirst({
     where: { isDefault: true },
@@ -112,6 +141,9 @@ const toSaleResponse = async (saleId: string) => {
       payments: {
         orderBy: { createdAt: "asc" },
       },
+      tenders: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
     },
   });
 
@@ -128,6 +160,7 @@ const toSaleResponse = async (saleId: string) => {
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
+      changeDuePence: sale.changeDuePence,
       createdAt: sale.createdAt,
       completedAt: sale.completedAt,
       receiptNumber: sale.receiptNumber,
@@ -170,6 +203,27 @@ const toSaleResponse = async (saleId: string) => {
           createdAt: primaryPayment.createdAt,
         }
       : null,
+    tenders: sale.tenders.map((tender) => ({
+      id: tender.id,
+      saleId: tender.saleId,
+      method: tender.method,
+      amountPence: tender.amountPence,
+      createdAt: tender.createdAt,
+      createdByStaffId: tender.createdByStaffId,
+    })),
+    tenderSummary: (() => {
+      const tenderedPence = sale.tenders.reduce((sum, tender) => sum + tender.amountPence, 0);
+      const changeDuePence = Math.max(0, tenderedPence - sale.totalPence);
+      return {
+        totalPence: sale.totalPence,
+        tenderedPence,
+        remainingPence: Math.max(0, sale.totalPence - tenderedPence),
+        changeDuePence,
+        cashTenderedPence: sale.tenders
+          .filter((tender) => tender.method === "CASH")
+          .reduce((sum, tender) => sum + tender.amountPence, 0),
+      };
+    })(),
   };
 };
 
@@ -300,18 +354,166 @@ const ensureCapturedIntentExistsTx = async (
   }
 };
 
+const getSaleTenderSummaryTx = async (tx: Prisma.TransactionClient, saleId: string) => {
+  const sale = await tx.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      id: true,
+      totalPence: true,
+      completedAt: true,
+      changeDuePence: true,
+      tenders: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          method: true,
+          amountPence: true,
+          createdAt: true,
+          createdByStaffId: true,
+        },
+      },
+    },
+  });
+
+  if (!sale) {
+    throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+  }
+
+  const tenderedPence = sale.tenders.reduce((sum, tender) => sum + tender.amountPence, 0);
+  const changeDuePence = Math.max(0, tenderedPence - sale.totalPence);
+  const cashTenderedPence = sale.tenders
+    .filter((tender) => tender.method === "CASH")
+    .reduce((sum, tender) => sum + tender.amountPence, 0);
+
+  return {
+    saleId: sale.id,
+    totalPence: sale.totalPence,
+    tenderedPence,
+    remainingPence: Math.max(0, sale.totalPence - tenderedPence),
+    changeDuePence,
+    cashTenderedPence,
+    isCompleted: Boolean(sale.completedAt),
+    tenders: sale.tenders.map((tender) => ({
+      id: tender.id,
+      method: tender.method,
+      amountPence: tender.amountPence,
+      createdAt: tender.createdAt,
+      createdByStaffId: tender.createdByStaffId,
+    })),
+  };
+};
+
+const hydrateSaleTendersFromLegacyPaymentSourcesTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+  staffActorId?: string,
+) => {
+  const existingTenderCount = await tx.saleTender.count({
+    where: { saleId },
+  });
+
+  if (existingTenderCount > 0) {
+    return;
+  }
+
+  const capturedIntents = await tx.paymentIntent.findMany({
+    where: {
+      saleId,
+      status: "CAPTURED",
+      amountPence: { gt: 0 },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      provider: true,
+      amountPence: true,
+    },
+  });
+
+  if (capturedIntents.length > 0) {
+    await tx.saleTender.createMany({
+      data: capturedIntents.map((intent) => ({
+        saleId,
+        method: toSaleTenderMethodFromProvider(intent.provider),
+        amountPence: intent.amountPence,
+        createdByStaffId: staffActorId ?? null,
+      })),
+    });
+    return;
+  }
+
+  const positivePayments = await tx.payment.findMany({
+    where: {
+      saleId,
+      amountPence: { gt: 0 },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      method: true,
+      amountPence: true,
+    },
+  });
+
+  if (positivePayments.length === 0) {
+    return;
+  }
+
+  await tx.saleTender.createMany({
+    data: positivePayments.map((payment) => ({
+      saleId,
+      method: toSaleTenderMethodFromPaymentMethod(payment.method),
+      amountPence: payment.amountPence,
+      createdByStaffId: staffActorId ?? null,
+    })),
+  });
+};
+
+const assertTenderRulesForCompletion = (input: {
+  totalPence: number;
+  tenderedPence: number;
+  cashTenderedPence: number;
+  requireTenders: boolean;
+}) => {
+  if (input.requireTenders && input.tenderedPence <= 0) {
+    throw new HttpError(
+      409,
+      "Sale cannot be completed without at least one tender",
+      "SALE_TENDER_REQUIRED",
+    );
+  }
+
+  if (input.tenderedPence < input.totalPence) {
+    throw new HttpError(
+      409,
+      "Sale cannot be completed until tendered amount covers total",
+      "SALE_TENDER_INSUFFICIENT",
+    );
+  }
+
+  const overTenderPence = Math.max(0, input.tenderedPence - input.totalPence);
+  if (overTenderPence > 0 && input.cashTenderedPence < overTenderPence) {
+    throw new HttpError(
+      409,
+      "Only cash tenders can exceed sale total",
+      "SALE_TENDER_OVERPAY_INVALID",
+    );
+  }
+};
+
 export const completeSaleIfEligibleTx = async (
   tx: Prisma.TransactionClient,
   saleId: string,
   input: CompleteSaleInput = {},
 ) => {
-  const requireCapturedIntent = input.requireCapturedIntent ?? true;
+  const requireCapturedIntent = input.requireCapturedIntent ?? false;
+  const requireTenders = input.requireTenders ?? true;
   const staffActorId = normalizeOptionalText(input.staffActorId);
 
   const sale = await tx.sale.findUnique({
     where: { id: saleId },
     select: {
       id: true,
+      totalPence: true,
+      changeDuePence: true,
       completedAt: true,
       receiptNumber: true,
       createdByStaffId: true,
@@ -334,6 +536,7 @@ export const completeSaleIfEligibleTx = async (
     return {
       saleId: sale.id,
       completedAt: sale.completedAt,
+      changeDuePence: sale.changeDuePence,
     };
   }
 
@@ -341,6 +544,16 @@ export const completeSaleIfEligibleTx = async (
     await ensureCapturedIntentExistsTx(tx, sale.id);
   }
 
+  await hydrateSaleTendersFromLegacyPaymentSourcesTx(tx, sale.id, staffActorId ?? undefined);
+  const tenderSummary = await getSaleTenderSummaryTx(tx, sale.id);
+  assertTenderRulesForCompletion({
+    totalPence: tenderSummary.totalPence,
+    tenderedPence: tenderSummary.tenderedPence,
+    cashTenderedPence: tenderSummary.cashTenderedPence,
+    requireTenders,
+  });
+
+  const changeDuePence = Math.max(0, tenderSummary.tenderedPence - sale.totalPence);
   const completedAt = new Date();
   const receiptNumber = sale.receiptNumber ?? toReceiptNumber(sale.id, completedAt);
 
@@ -348,18 +561,28 @@ export const completeSaleIfEligibleTx = async (
     where: { id: sale.id },
     data: {
       completedAt,
+      changeDuePence,
       receiptNumber,
       ...(sale.createdByStaffId ? {} : { createdByStaffId: staffActorId ?? null }),
     },
     select: {
       id: true,
       completedAt: true,
+      changeDuePence: true,
     },
+  });
+
+  await recordCashSaleMovementForSaleTx(tx, {
+    saleId: sale.id,
+    cashTenderedPence: tenderSummary.cashTenderedPence,
+    changeDuePence,
+    ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
   });
 
   return {
     saleId: updatedSale.id,
     completedAt: updatedSale.completedAt,
+    changeDuePence: updatedSale.changeDuePence,
   };
 };
 
@@ -372,6 +595,136 @@ export const completeSaleIfEligible = async (
   }
 
   return prisma.$transaction((tx) => completeSaleIfEligibleTx(tx, saleId, input));
+};
+
+const parseSaleTenderMethodOrThrow = (value: SaleTenderMethod | undefined): SaleTenderMethod => {
+  if (
+    value !== "CASH" &&
+    value !== "CARD" &&
+    value !== "BANK_TRANSFER" &&
+    value !== "VOUCHER"
+  ) {
+    throw new HttpError(
+      400,
+      "method must be one of CASH, CARD, BANK_TRANSFER, VOUCHER",
+      "INVALID_SALE_TENDER",
+    );
+  }
+  return value;
+};
+
+export const listSaleTenders = async (saleId: string) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await hydrateSaleTendersFromLegacyPaymentSourcesTx(tx, saleId);
+    return getSaleTenderSummaryTx(tx, saleId);
+  });
+};
+
+export const addSaleTender = async (
+  saleId: string,
+  input: SaleTenderInput,
+  createdByStaffId?: string,
+) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+
+  const method = parseSaleTenderMethodOrThrow(input.method);
+  const rawAmountPence = input.amountPence;
+  if (
+    rawAmountPence === undefined ||
+    !Number.isInteger(rawAmountPence) ||
+    rawAmountPence <= 0
+  ) {
+    throw new HttpError(400, "amountPence must be a positive integer", "INVALID_SALE_TENDER");
+  }
+  const amountPence = rawAmountPence;
+
+  const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
+
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: {
+        id: true,
+        completedAt: true,
+      },
+    });
+
+    if (!sale) {
+      throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+    }
+    if (sale.completedAt) {
+      throw new HttpError(409, "Cannot modify tenders for a completed sale", "SALE_COMPLETED");
+    }
+
+    const tender = await tx.saleTender.create({
+      data: {
+        saleId,
+        method,
+        amountPence,
+        createdByStaffId: normalizedCreatedByStaffId ?? null,
+      },
+      select: {
+        id: true,
+        saleId: true,
+        method: true,
+        amountPence: true,
+        createdAt: true,
+        createdByStaffId: true,
+      },
+    });
+
+    const summary = await getSaleTenderSummaryTx(tx, saleId);
+    return { tender, summary };
+  });
+};
+
+export const deleteSaleTender = async (saleId: string, tenderId: string) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+  if (!isUuid(tenderId)) {
+    throw new HttpError(400, "Invalid tender id", "INVALID_TENDER_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: {
+        id: true,
+        completedAt: true,
+      },
+    });
+
+    if (!sale) {
+      throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+    }
+    if (sale.completedAt) {
+      throw new HttpError(409, "Cannot modify tenders for a completed sale", "SALE_COMPLETED");
+    }
+
+    const tender = await tx.saleTender.findUnique({
+      where: { id: tenderId },
+      select: {
+        id: true,
+        saleId: true,
+      },
+    });
+    if (!tender || tender.saleId !== saleId) {
+      throw new HttpError(404, "Tender not found", "SALE_TENDER_NOT_FOUND");
+    }
+
+    await tx.saleTender.delete({
+      where: { id: tenderId },
+    });
+
+    return getSaleTenderSummaryTx(tx, saleId);
+  });
 };
 
 export const checkoutBasketToSale = async (
