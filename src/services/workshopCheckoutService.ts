@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { getWorkshopJobUsedPartsTotalPenceTx } from "./workshopPartService";
+import { recordCashSaleMovementForPaymentTx } from "./tillService";
 
 export type WorkshopCheckoutInput = {
   saleTotalPence?: number;
@@ -195,6 +196,13 @@ export const checkoutWorkshopJobToSale = async (
           amountPence: outstandingPence,
           providerRef: input.providerRef,
         },
+      });
+
+      await recordCashSaleMovementForPaymentTx(tx, {
+        paymentId: createdPayment.id,
+        paymentMethod: createdPayment.method,
+        amountPence: createdPayment.amountPence,
+        createdByStaffId: auditActor?.actorId,
       });
 
       payment = {

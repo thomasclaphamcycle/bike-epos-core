@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:3000
+
+### List users (ADMIN)
+GET {{baseUrl}}/api/admin/users
+
+### Create user (ADMIN)
+POST {{baseUrl}}/api/admin/users
+Content-Type: application/json
+
+{
+  "name": "Store Staff",
+  "email": "staff@example.com",
+  "role": "STAFF",
+  "tempPassword": "TempPass123!"
+}
+
+### Update user (ADMIN)
+PATCH {{baseUrl}}/api/admin/users/{{userId}}
+Content-Type: application/json
+
+{
+  "name": "Store Staff Updated",
+  "role": "MANAGER",
+  "isActive": true
+}
+
+### Reset user password (ADMIN)
+POST {{baseUrl}}/api/admin/users/{{userId}}/reset-password
+Content-Type: application/json
+
+{
+  "tempPassword": "AnotherTempPass123!"
+}
+
+### Audit feed (MANAGER+)
+GET {{baseUrl}}/api/audit?entityType=USER&limit=50

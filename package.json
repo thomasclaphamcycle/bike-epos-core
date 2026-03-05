@@ -10,6 +10,7 @@
     "test:smoke": "node scripts/run_smoke_suite.js",
     "test:db:up": "bash scripts/test_db_up.sh",
     "test:db:down": "bash scripts/test_db_down.sh",
+    "auth:seed-admin": "node scripts/create_admin_user.js",
     "e2e": "node scripts/run_with_test_env.js npx playwright test",
     "test:workshop": "npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17",
     "test:workshop:smoke": "node scripts/run_smoke_test.js scripts/workshop_checkout_deposit_tests.js",
@@ -34,7 +35,10 @@
     "test:m31": "node scripts/run_smoke_test.js scripts/payments_m31_smoke_tests.js",
     "test:m32": "node scripts/run_smoke_test.js scripts/sales_m32_smoke_tests.js",
     "test:m33": "node scripts/run_smoke_test.js scripts/inventory_adjust_m33_smoke_tests.js",
-    "test:m34": "node scripts/run_smoke_test.js scripts/customers_m34_smoke_tests.js"
+    "test:m34": "node scripts/run_smoke_test.js scripts/customers_m34_smoke_tests.js",
+    "test:m35": "node scripts/run_smoke_test.js scripts/auth_m35_smoke_tests.js",
+    "test:m36": "node scripts/run_smoke_test.js scripts/admin_m36_smoke_tests.js",
+    "test:m37": "node scripts/run_smoke_test.js scripts/till_m37_smoke_tests.js"
   },
   "repository": {
     "type": "git",
@@ -51,13 +55,16 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "^7.4.2",
+    "bcryptjs": "^3.0.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
     "pg": "^8.19.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.3.3",
     "prisma": "^7.4.2",
     "ts-node": "^10.9.2",

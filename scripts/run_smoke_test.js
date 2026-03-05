@@ -14,7 +14,7 @@ if (!smokeScript) {
 const env = {
   ...process.env,
   NODE_ENV: process.env.NODE_ENV || "test",
-  AUTH_MODE: process.env.AUTH_MODE || "header",
+  AUTH_MODE: process.env.AUTH_MODE || "real",
   ALLOW_EXISTING_SERVER: process.env.ALLOW_EXISTING_SERVER || "1",
   TEST_BASE_URL: process.env.TEST_BASE_URL || "http://localhost:3000",
 };

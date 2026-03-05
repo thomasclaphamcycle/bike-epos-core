@@ -9,6 +9,7 @@
     "src/controllers/reportController.ts",
     "src/routes/reportRoutes.ts",
     "src/lib/prisma.ts",
-    "src/utils/http.ts"
+    "src/utils/http.ts",
+    "src/types/express.d.ts"
   ]
 }

@@ -9,6 +9,7 @@ import {
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { recordCashRefundMovementForRefundTx } from "./tillService";
 
 type SerializableTx = Prisma.TransactionClient;
 
@@ -315,6 +316,14 @@ const createRefundTx = async (
       refundedTotalPence: newRefundedTotalPence,
       status: newStatus,
     },
+  });
+
+  await recordCashRefundMovementForRefundTx(tx, {
+    paymentId: payment.id,
+    paymentMethod: payment.method,
+    paymentRefundId: refund.id,
+    amountPence: refund.amountPence,
+    createdByStaffId: auditActor?.actorId,
   });
 
   await createAuditEventTx(

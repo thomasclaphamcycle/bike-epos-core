@@ -2,81 +2,144 @@
 
 Node/TypeScript + Express + Prisma + Postgres backend for bike EPOS workflows.
 
-## Local Test Setup (Recommended)
+## Local Setup
 
-1. Copy test env template:
+1. Install dependencies:
+
+```bash
+npm ci
+```
+
+2. Create local env files:
 
 ```bash
 cp .env.test.example .env.test
+# keep your existing .env for dev DATABASE_URL
 ```
 
-2. Start the dedicated test database and apply migrations:
+3. Start dedicated test DB + migrations:
 
 ```bash
 npm run test:db:up
 ```
 
-3. Run baseline test suite:
+## Auth (M35)
+
+Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
+
+- Login API: `POST /api/auth/login`
+- Logout API: `POST /api/auth/logout`
+- Current user: `GET /api/auth/me`
+- Login UI: `/login`
+
+### Create initial admin
+
+Recommended:
+
+```bash
+ADMIN_NAME="Admin User" \
+ADMIN_EMAIL="admin@example.com" \
+ADMIN_PASSWORD="ChangeMe123!" \
+npm run auth:seed-admin
+```
+
+Alternative (only when DB has no users): `POST /api/auth/bootstrap`.
+
+See [docs/auth.md](docs/auth.md) for full mode/flag details.
+
+## Test Commands
+
+### Baseline + new milestone smoke suite
 
 ```bash
 npm test
 ```
 
-4. Run browser E2E suite:
+`npm test` runs:
+
+1. `npm run typecheck:reports`
+2. `npm run test:smoke`
+
+`test:smoke` runs milestones in order:
+
+- m11, m12, m13, m28, m32, m34, m35, m36, m37
+
+### Individual milestone tests
+
+```bash
+npm run test:m35
+npm run test:m36
+npm run test:m37
+```
+
+### Full regression smoke set (m11..m37)
+
+```bash
+npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17 && npm run test:m18 && npm run test:m19 && npm run test:m19_1 && npm run test:m22 && npm run test:m23b && npm run test:m24 && npm run test:m25 && npm run test:m26 && npm run test:m27 && npm run test:m28 && npm run test:m29 && npm run test:m30 && npm run test:m31 && npm run test:m32 && npm run test:m33 && npm run test:m34 && npm run test:m35 && npm run test:m36 && npm run test:m37
+```
+
+### Playwright E2E
+
+Install browser once:
+
+```bash
+npx playwright install chromium
+```
+
+Run suite:
 
 ```bash
 npm run e2e
 ```
 
-5. Stop and reset test database when done:
+E2E covers:
+
+- login + POS critical paths
+- login + workshop critical paths
+- admin permissions
+- till open/paid-in/count/close flow
+
+## Dev Workflow
+
+Start dev server:
 
 ```bash
-npm run test:db:down
+npm run dev
 ```
 
-## Baseline Smoke Suite
+Useful UI routes:
 
-`npm test` runs:
-
-- `npm run typecheck:reports`
-- `npm run test:smoke`
-
-`test:smoke` runs milestone smoke tests in this order:
-
-1. `m11`
-2. `m12`
-3. `m13`
-4. `m28`
-5. `m32`
-6. `m34`
-
-All milestone smoke scripts now load `.env.test` automatically when present and default to:
-
-- `NODE_ENV=test`
-- `AUTH_MODE=header`
-- `ALLOW_EXISTING_SERVER=1`
-- `DATABASE_URL=TEST_DATABASE_URL` (when `DATABASE_URL` is unset)
-
-Safety check remains in place: smoke scripts refuse non-test DB URLs unless `ALLOW_NON_TEST_DB=1` is explicitly set.
-
-## Auth Modes
-
-See [docs/auth.md](docs/auth.md) for full details.
-
-Quick summary:
-
-- `AUTH_MODE=header` is for local/CI smoke runs only.
-- `AUTH_MODE=header` with `NODE_ENV=production` hard-fails at startup.
-- Non-header modes reject incoming `X-Staff-*` header auth input.
+- `/login`
+- `/pos`
+- `/workshop`
+- `/inventory`
+- `/inventory/adjust`
+- `/admin`
+- `/admin/audit`
+- `/till`
+- `/reports`
 
 ## CI
 
 GitHub Actions workflow: `.github/workflows/ci.yml`
 
-On push and pull requests it:
+On push + PR:
 
-1. Starts a Postgres service container
-2. Installs dependencies
-3. Runs Prisma generate + migrate deploy
-4. Runs baseline `npm test`
-5. Runs `npm run e2e` (Playwright)
+1. Start Postgres service container
+2. `npm ci`
+3. `prisma generate`
+4. `prisma migrate deploy`
+5. `npm test`
+6. `npm run e2e`
+
+CI runs with:
+
+- `NODE_ENV=test`
+- `AUTH_MODE=real`
+- `TEST_DATABASE_URL` + `DATABASE_URL` pointed at CI Postgres
+
+## Cleanup Test DB
+
+```bash
+npm run test:db:down
+```

@@ -26,7 +26,7 @@ jobs:
 
     env:
       NODE_ENV: test
-      AUTH_MODE: header
+      AUTH_MODE: real
       TEST_BASE_URL: http://localhost:3000
       TEST_DATABASE_URL: postgresql://bike_epos_test:bike_epos_test_pw@localhost:5432/bike_epos_test
       DATABASE_URL: postgresql://bike_epos_test:bike_epos_test_pw@localhost:5432/bike_epos_test

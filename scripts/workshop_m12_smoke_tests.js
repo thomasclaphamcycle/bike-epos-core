@@ -73,6 +73,11 @@ const MANAGER_HEADERS = {
   "X-Staff-Id": "m12-smoke-manager",
 };
 
+const STAFF_HEADERS = {
+  "X-Staff-Role": "STAFF",
+  "X-Staff-Id": "m12-smoke-staff",
+};
+
 const serverIsHealthy = async () => {
   try {
     const response = await fetch(HEALTH_URL);
@@ -130,6 +135,7 @@ const payDeposit = async (token, providerRef) => {
 const checkoutWorkshopJob = async (workshopJobId, payload) => {
   return fetchJson(`/api/workshop/jobs/${workshopJobId}/checkout`, {
     method: "POST",
+    headers: STAFF_HEADERS,
     body: JSON.stringify(payload),
   });
 };

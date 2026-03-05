@@ -3,12 +3,22 @@ require("dotenv").config({ path: ".env.test" });
 
 const { spawnSync } = require("node:child_process");
 
-const baselineSteps = ["test:m11", "test:m12", "test:m13", "test:m28", "test:m32", "test:m34"];
+const baselineSteps = [
+  "test:m11",
+  "test:m12",
+  "test:m13",
+  "test:m28",
+  "test:m32",
+  "test:m34",
+  "test:m35",
+  "test:m36",
+  "test:m37",
+];
 
 const env = {
   ...process.env,
   NODE_ENV: process.env.NODE_ENV || "test",
-  AUTH_MODE: process.env.AUTH_MODE || "header",
+  AUTH_MODE: process.env.AUTH_MODE || "real",
   ALLOW_EXISTING_SERVER: process.env.ALLOW_EXISTING_SERVER || "1",
 };
 

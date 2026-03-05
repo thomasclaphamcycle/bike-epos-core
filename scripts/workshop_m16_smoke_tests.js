@@ -42,7 +42,7 @@ const RUN_REF = uniqueRef();
 const STAFF_USER_ID = `m16-staff-${RUN_REF}`;
 
 const STAFF_HEADERS = {
-  "X-Staff-Role": "STAFF",
+  "X-Staff-Role": "MANAGER",
   "X-Staff-Id": STAFF_USER_ID,
 };
 
@@ -212,7 +212,7 @@ const run = async () => {
         username: `m16_staff_${RUN_REF}`,
         name: "M16 Staff",
         passwordHash: "test",
-        role: "STAFF",
+        role: "MANAGER",
       },
     });
     state.userIds.add(staffUser.id);
@@ -226,6 +226,7 @@ const run = async () => {
 
         const createProductResponse = await fetchJson("/api/products", {
           method: "POST",
+          headers: STAFF_HEADERS,
           body: JSON.stringify({
             name: `M16 Product ${uniqueRef()}`,
             brand: "M16",
@@ -237,6 +238,7 @@ const run = async () => {
 
         const createVariantResponse = await fetchJson("/api/variants", {
           method: "POST",
+          headers: STAFF_HEADERS,
           body: JSON.stringify({
             productId,
             sku: `M16-SKU-${uniqueRef()}`,
@@ -278,6 +280,7 @@ const run = async () => {
 
         const stockAfterUse = await fetchJson(
           `/api/stock/variants/${variantId}?locationId=${encodeURIComponent(locationId)}`,
+          { headers: STAFF_HEADERS },
         );
         assert.equal(stockAfterUse.status, 200, JSON.stringify(stockAfterUse.json));
         assert.equal(stockAfterUse.json.onHand, 8);
@@ -295,6 +298,7 @@ const run = async () => {
 
         const stockAfterReturn = await fetchJson(
           `/api/stock/variants/${variantId}?locationId=${encodeURIComponent(locationId)}`,
+          { headers: STAFF_HEADERS },
         );
         assert.equal(stockAfterReturn.status, 200, JSON.stringify(stockAfterReturn.json));
         assert.equal(stockAfterReturn.json.onHand, 10);
@@ -309,6 +313,7 @@ const run = async () => {
 
         const createProductResponse = await fetchJson("/api/products", {
           method: "POST",
+          headers: STAFF_HEADERS,
           body: JSON.stringify({
             name: `M16 Checkout Product ${uniqueRef()}`,
           }),
@@ -319,6 +324,7 @@ const run = async () => {
 
         const createVariantResponse = await fetchJson("/api/variants", {
           method: "POST",
+          headers: STAFF_HEADERS,
           body: JSON.stringify({
             productId,
             sku: `M16-CHK-SKU-${uniqueRef()}`,
@@ -364,6 +370,7 @@ const run = async () => {
 
         const createProductResponse = await fetchJson("/api/products", {
           method: "POST",
+          headers: STAFF_HEADERS,
           body: JSON.stringify({
             name: `M16 Delete Product ${uniqueRef()}`,
           }),
@@ -374,6 +381,7 @@ const run = async () => {
 
         const createVariantResponse = await fetchJson("/api/variants", {
           method: "POST",
+          headers: STAFF_HEADERS,
           body: JSON.stringify({
             productId,
             sku: `M16-DEL-SKU-${uniqueRef()}`,
@@ -411,6 +419,7 @@ const run = async () => {
 
         const stockAfterUse = await fetchJson(
           `/api/stock/variants/${variantId}?locationId=${encodeURIComponent(locationId)}`,
+          { headers: STAFF_HEADERS },
         );
         assert.equal(stockAfterUse.status, 200);
         assert.equal(stockAfterUse.json.onHand, 3);
@@ -426,6 +435,7 @@ const run = async () => {
 
         const stockAfterRemove = await fetchJson(
           `/api/stock/variants/${variantId}?locationId=${encodeURIComponent(locationId)}`,
+          { headers: STAFF_HEADERS },
         );
         assert.equal(stockAfterRemove.status, 200);
         assert.equal(stockAfterRemove.json.onHand, 4);

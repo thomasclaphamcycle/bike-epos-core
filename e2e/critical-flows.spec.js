@@ -1,5 +1,11 @@
 const { test, expect } = require("@playwright/test");
-const { apiJson, seedCatalogVariant, uniqueToken } = require("./helpers");
+const {
+  apiJson,
+  ensureUserViaAdminBypass,
+  loginViaUi,
+  seedCatalogVariant,
+  uniqueToken,
+} = require("./helpers");
 
 const parseOnHand = (labelText) => {
   const match = labelText.match(/On hand:\s*(-?\d+)/i);
@@ -11,10 +17,14 @@ const parseOnHand = (labelText) => {
 
 test.describe.configure({ mode: "serial" });
 
-test("POS page loads and can search products", async ({ page, request }) => {
+test("Login then POS page loads and can search products", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-login-search",
+  });
   const seeded = await seedCatalogVariant(request, { prefix: "pos-search" });
 
-  await page.goto("/pos");
+  await loginViaUi(page, credentials, "/pos");
   await page.fill("#search-q", seeded.sku);
   await page.click("#search-load");
 
@@ -22,10 +32,14 @@ test("POS page loads and can search products", async ({ page, request }) => {
   await expect(page.locator("#search-table-wrap")).toContainText(seeded.sku);
 });
 
-test("POS add to basket, checkout cash, and open receipt page", async ({ page, request }) => {
+test("Login then POS add to basket, checkout cash, and open receipt page", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-login-checkout",
+  });
   const seeded = await seedCatalogVariant(request, { prefix: "pos-checkout" });
 
-  await page.goto("/pos");
+  await loginViaUi(page, credentials, "/pos");
   await page.fill("#search-q", seeded.sku);
   await page.click("#search-load");
   await expect(page.locator("#search-status")).toContainText("Loaded");
@@ -50,11 +64,15 @@ test("POS add to basket, checkout cash, and open receipt page", async ({ page, r
   await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
 });
 
-test("Workshop page can create a job", async ({ page }) => {
+test("Login then workshop page can create a job", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-create",
+  });
   const token = uniqueToken("workshop-create");
   const customerName = `E2E Customer ${token}`;
 
-  await page.goto("/workshop");
+  await loginViaUi(page, credentials, "/workshop");
   await page.fill("#create-customer", customerName);
   await page.fill("#create-bike", `E2E Bike ${token}`);
   await page.fill("#create-notes", `E2E notes ${token}`);
@@ -65,11 +83,15 @@ test("Workshop page can create a job", async ({ page }) => {
   await expect(page.locator("#jobs-wrap")).toContainText(customerName);
 });
 
-test("Workshop add labour and checkout marks job as collected", async ({ page, request }) => {
+test("Login then workshop add labour and checkout marks job as collected", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-checkout",
+  });
   const token = uniqueToken("workshop-checkout");
   const customerName = `E2E Checkout ${token}`;
 
-  await page.goto("/workshop");
+  await loginViaUi(page, credentials, "/workshop");
   await page.fill("#create-customer", customerName);
   await page.fill("#create-bike", `E2E Bike ${token}`);
   await page.fill("#create-notes", `Checkout notes ${token}`);
@@ -96,8 +118,7 @@ test("Workshop add labour and checkout marks job as collected", async ({ page, r
   await page.click("#add-labour-btn");
   await expect(page.locator("#labour-status")).toContainText("Labour line added.");
 
-  const checkout = await apiJson(request, "POST", `/api/workshop/jobs/${jobId}/checkout`, {
-    role: "STAFF",
+  const checkout = await apiJson(page.request, "POST", `/api/workshop/jobs/${jobId}/checkout`, {
     data: {
       saleTotalPence: 5000,
       paymentMethod: "CASH",
@@ -108,22 +129,24 @@ test("Workshop add labour and checkout marks job as collected", async ({ page, r
 
   expect(checkout.sale.id).toBeTruthy();
 
-  const refreshed = await apiJson(request, "GET", `/api/workshop/jobs/${jobId}`, {
-    role: "STAFF",
-  });
+  const refreshed = await apiJson(page.request, "GET", `/api/workshop/jobs/${jobId}`);
   expect(refreshed.job.status).toBe("COLLECTED");
 
   await page.click("#refresh-jobs");
   await expect(page.locator("#jobs-wrap")).toContainText("COLLECTED");
 });
 
-test("Inventory adjust page can increment on-hand quantity", async ({ page, request }) => {
+test("Login then inventory adjust page can increment on-hand quantity", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "inventory-adjust-login",
+  });
   const seeded = await seedCatalogVariant(request, {
     prefix: "inventory-adjust",
     initialOnHand: 2,
   });
 
-  await page.goto("/inventory/adjust");
+  await loginViaUi(page, credentials, "/inventory/adjust");
   await page.fill("#search-q", seeded.sku);
   await page.click("#search-btn");
 
@@ -140,4 +163,49 @@ test("Inventory adjust page can increment on-hand quantity", async ({ page, requ
 
   await expect(page.locator("#submit-status")).toContainText("Adjustment recorded.");
   await expect(page.locator("#onhand-result")).toContainText(String(beforeOnHand + 1));
+});
+
+test("Admin creates staff and staff cannot access admin endpoints", async ({ page, request }) => {
+  const adminCredentials = await ensureUserViaAdminBypass(request, {
+    role: "ADMIN",
+    prefix: "admin-role-check",
+  });
+
+  await loginViaUi(page, adminCredentials, "/admin");
+  await expect(page.locator("h1")).toContainText("Admin Users");
+
+  const staffCredentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "admin-created-staff",
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, staffCredentials, "/pos");
+
+  const forbidden = await page.request.fetch("/api/admin/users");
+  expect(forbidden.status()).toBe(403);
+});
+
+test("Manager can open till, record paid-in, and close with count", async ({ page, request }) => {
+  const managerCredentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "till-manager",
+  });
+
+  await loginViaUi(page, managerCredentials, "/till");
+
+  await page.fill('[data-testid="till-open-float"]', "1000");
+  await page.click('[data-testid="till-open-submit"]');
+  await expect(page.locator("#open-status")).toContainText("Session opened");
+
+  await page.fill('[data-testid="till-movement-amount"]', "200");
+  await page.click('[data-testid="till-movement-submit"]');
+  await expect(page.locator("#movement-status")).toContainText("Movement recorded");
+
+  await page.fill('[data-testid="till-counted-cash"]', "1200");
+  await page.click("#save-count-btn");
+  await expect(page.locator("#close-status")).toContainText("Count saved");
+
+  await page.click('[data-testid="till-close-submit"]');
+  await expect(page.locator("#close-status")).toContainText("Session closed");
 });

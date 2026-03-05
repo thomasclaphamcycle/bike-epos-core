@@ -73,7 +73,9 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
           <div class="muted">
             <a href="/pos">POS</a> |
             <a href="/inventory">Inventory</a> |
-            <a href="/purchasing">Purchasing</a>
+            <a href="/purchasing">Purchasing</a> |
+            <a href="/till">Till</a> |
+            <a href="/admin">Admin</a>
           </div>
         </div>
       </div>

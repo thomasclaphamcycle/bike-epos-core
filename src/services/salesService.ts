@@ -1,6 +1,10 @@
 import { BasketStatus, PaymentMethod, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import {
+  recordCashRefundMovementForPaymentTx,
+  recordCashSaleMovementForPaymentTx,
+} from "./tillService";
 
 type CheckoutPaymentInput = {
   paymentMethod?: PaymentMethod;
@@ -460,13 +464,22 @@ export const checkoutBasketToSale = async (
     }
 
     if (payment) {
-      await tx.payment.create({
+      const createdPayment = await tx.payment.create({
         data: {
           saleId: sale.id,
           method: payment.method,
           amountPence: payment.amountPence,
           ...(payment.providerRef !== undefined ? { providerRef: payment.providerRef } : {}),
         },
+      });
+
+      await recordCashSaleMovementForPaymentTx(tx, {
+        paymentId: createdPayment.id,
+        paymentMethod: createdPayment.method,
+        amountPence: createdPayment.amountPence,
+        ...(normalizedCreatedByStaffId
+          ? { createdByStaffId: normalizedCreatedByStaffId }
+          : {}),
       });
     }
 
@@ -655,6 +668,13 @@ export const createSaleReturn = async (
           amountPence: -refund.amountPence,
           ...(refund.providerRef !== undefined ? { providerRef: refund.providerRef } : {}),
         },
+      });
+
+      await recordCashRefundMovementForPaymentTx(tx, {
+        paymentId: refundPayment.id,
+        paymentMethod: refundPayment.method,
+        amountPence: refundPayment.amountPence,
+        ref: `SALE_RETURN_REFUND:${refundPayment.id}`,
       });
     }
 

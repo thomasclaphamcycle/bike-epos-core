@@ -1,0 +1,29 @@
+@baseUrl = http://localhost:3000
+
+### Bootstrap initial admin (only works when user table is empty)
+POST {{baseUrl}}/api/auth/bootstrap
+Content-Type: application/json
+
+{
+  "name": "Initial Admin",
+  "email": "admin@example.com",
+  "password": "ChangeMe123!"
+}
+
+### Login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "ChangeMe123!"
+}
+
+### Current user (requires auth cookie)
+GET {{baseUrl}}/api/auth/me
+
+### Logout
+POST {{baseUrl}}/api/auth/logout
+Content-Type: application/json
+
+{}

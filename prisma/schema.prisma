@@ -714,21 +714,98 @@ model AuditEvent {
 
 enum UserRole {
   STAFF
+  MANAGER
   ADMIN
 }
 
 model User {
   id           String   @id @default(cuid())
   username     String   @unique
+  email        String?  @unique
   name         String?
   passwordHash String
   role         UserRole @default(STAFF)
+  isActive     Boolean  @default(true)
 
   assignedWorkshopJobs WorkshopJob[]    @relation("WorkshopJobAssignedStaff")
   workshopJobNotes     WorkshopJobNote[] @relation("WorkshopJobNoteAuthor")
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
   createdSales         Sale[] @relation("SaleCreatedByStaff")
+  openedCashSessions   CashSession[] @relation("CashSessionOpenedBy")
+  closedCashSessions   CashSession[] @relation("CashSessionClosedBy")
+  cashMovements        CashMovement[] @relation("CashMovementCreatedBy")
+  cashCounts           CashCount[] @relation("CashCountCountedBy")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@map("app_user")
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  FLOAT_IN
+  PAID_IN
+  PAID_OUT
+  CASH_SALE
+  CASH_REFUND
+}
+
+model CashSession {
+  id               String            @id @default(uuid()) @db.Uuid
+  businessDate     DateTime
+  openedAt         DateTime          @default(now())
+  closedAt         DateTime?
+  openedByStaffId  String?
+  closedByStaffId  String?
+  openingFloatPence Int
+  status           CashSessionStatus @default(OPEN)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  openedByStaff    User?             @relation("CashSessionOpenedBy", fields: [openedByStaffId], references: [id], onDelete: SetNull)
+  closedByStaff    User?             @relation("CashSessionClosedBy", fields: [closedByStaffId], references: [id], onDelete: SetNull)
+  movements        CashMovement[]
+  cashCount        CashCount?
+
+  @@index([businessDate, status])
+  @@index([openedByStaffId])
+  @@index([closedByStaffId])
+}
+
+model CashMovement {
+  id               String           @id @default(uuid()) @db.Uuid
+  sessionId        String           @db.Uuid
+  type             CashMovementType
+  amountPence      Int
+  ref              String
+  createdAt        DateTime         @default(now())
+  createdByStaffId String?
+
+  session          CashSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdByStaff   User?            @relation("CashMovementCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt])
+  @@index([type, createdAt])
+  @@index([createdByStaffId])
+  @@unique([sessionId, type, ref])
+}
+
+model CashCount {
+  id               String      @id @default(uuid()) @db.Uuid
+  sessionId        String      @unique @db.Uuid
+  countedCashPence Int
+  notes            String?
+  countedAt        DateTime    @default(now())
+  countedByStaffId String?
+
+  session          CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  countedByStaff   User?       @relation("CashCountCountedBy", fields: [countedByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([countedAt])
+  @@index([countedByStaffId])
 }

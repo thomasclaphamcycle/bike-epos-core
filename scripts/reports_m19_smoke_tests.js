@@ -37,6 +37,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
+const RUN_REF = uniqueRef();
+const STAFF_HEADERS = {
+  "X-Staff-Role": "MANAGER",
+  "X-Staff-Id": `m19-smoke-manager-${RUN_REF}`,
+};
 
 const londonDateKey = (date = new Date()) => {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -53,6 +58,7 @@ const fetchJson = async (path, options = {}) => {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...STAFF_HEADERS,
       ...(options.headers ?? {}),
     },
   });

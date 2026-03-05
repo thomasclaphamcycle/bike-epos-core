@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { CashProvider } from "../payments/providers/cashProvider";
 import { completeSaleIfEligibleTx } from "./salesService";
+import { recordCashSaleMovementForPaymentTx } from "./tillService";
 
 type PaymentIntentProvider = "CASH" | "CARD";
 
@@ -146,6 +147,7 @@ const upsertSalePaymentForIntentTx = async (
     saleId: string;
     provider: PaymentIntentProvider;
     amountPence: number;
+    createdByStaffId?: string;
   },
 ) => {
   const providerRef = `intent:${input.intentId}`;
@@ -163,7 +165,7 @@ const upsertSalePaymentForIntentTx = async (
     return;
   }
 
-  await tx.payment.create({
+  const payment = await tx.payment.create({
     data: {
       saleId: input.saleId,
       method: input.provider === "CASH" ? "CASH" : "CARD",
@@ -172,6 +174,13 @@ const upsertSalePaymentForIntentTx = async (
       amountPence: input.amountPence,
       providerRef,
     },
+  });
+
+  await recordCashSaleMovementForPaymentTx(tx, {
+    paymentId: payment.id,
+    paymentMethod: payment.method,
+    amountPence: payment.amountPence,
+    ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
   });
 };
 
@@ -254,6 +263,7 @@ export const createPaymentIntent = async (
         saleId: intent.saleId,
         provider,
         amountPence: intent.amountPence,
+        ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
       await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
@@ -301,6 +311,7 @@ export const capturePaymentIntentById = async (
         saleId: intent.saleId,
         provider: intent.provider === "CASH" ? "CASH" : "CARD",
         amountPence: intent.amountPence,
+        ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
       await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
@@ -343,6 +354,7 @@ export const capturePaymentIntentById = async (
         saleId: updated.saleId,
         provider: updated.provider === "CASH" ? "CASH" : "CARD",
         amountPence: updated.amountPence,
+        ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
       await completeSaleIfEligibleTx(tx, updated.saleId, toCompleteSaleInput(staffActorId));

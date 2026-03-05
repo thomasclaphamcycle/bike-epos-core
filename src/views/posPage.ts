@@ -205,6 +205,8 @@ export const renderPosPage = (input: PosPageInput) => {
             <a href="/catalog">Catalog</a>
             <a href="/purchasing">Purchasing</a>
             <a href="/workshop">Workshop</a>
+            <a href="/till">Till</a>
+            <a href="/admin">Admin</a>
             <a href="/reports">Reports</a>
           </div>
         </div>

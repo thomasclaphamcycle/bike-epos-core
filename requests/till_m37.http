@@ -1,0 +1,46 @@
+@baseUrl = http://localhost:3000
+
+### Open cash session (MANAGER+)
+POST {{baseUrl}}/api/till/sessions/open
+Content-Type: application/json
+
+{
+  "openingFloatPence": 10000
+}
+
+### Add paid in/out movement (MANAGER+)
+POST {{baseUrl}}/api/till/sessions/{{sessionId}}/movements
+Content-Type: application/json
+
+{
+  "type": "PAID_IN",
+  "amountPence": 500,
+  "ref": "safe-drop"
+}
+
+### Record cash count (MANAGER+)
+POST {{baseUrl}}/api/till/sessions/{{sessionId}}/count
+Content-Type: application/json
+
+{
+  "countedCashPence": 10450,
+  "notes": "close count"
+}
+
+### Close session (MANAGER+)
+POST {{baseUrl}}/api/till/sessions/{{sessionId}}/close
+Content-Type: application/json
+
+{}
+
+### Current session (MANAGER+)
+GET {{baseUrl}}/api/till/sessions/current
+
+### List sessions by date range (MANAGER+)
+GET {{baseUrl}}/api/till/sessions?from=2026-03-01&to=2026-03-31
+
+### Summary (MANAGER+)
+GET {{baseUrl}}/api/till/sessions/{{sessionId}}/summary
+
+### Summary CSV export (MANAGER+)
+GET {{baseUrl}}/api/till/sessions/{{sessionId}}/summary.csv

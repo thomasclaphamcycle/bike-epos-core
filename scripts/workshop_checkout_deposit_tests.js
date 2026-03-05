@@ -34,6 +34,11 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 });
 
+const STAFF_HEADERS = {
+  "X-Staff-Role": "STAFF",
+  "X-Staff-Id": "m11-smoke-staff",
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const todayUtc = () => {
@@ -126,6 +131,7 @@ const payDeposit = async (token, providerRef) => {
 const checkoutWorkshopJob = async (workshopJobId, payload) => {
   return fetchJson(`/api/workshop/jobs/${workshopJobId}/checkout`, {
     method: "POST",
+    headers: STAFF_HEADERS,
     body: JSON.stringify(payload),
   });
 };
