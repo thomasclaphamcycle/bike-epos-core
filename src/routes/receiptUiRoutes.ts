@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  getReceiptPageByNumberHandler,
+  getReceiptShortLinkHandler,
   getReceiptPageBySaleIdHandler,
 } from "../controllers/receiptUiController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
@@ -12,4 +12,4 @@ receiptUiRouter.get(
   requireRoleAtLeast("STAFF"),
   getReceiptPageBySaleIdHandler,
 );
-receiptUiRouter.get("/r/:receiptNumber", requireRoleAtLeast("STAFF"), getReceiptPageByNumberHandler);
+receiptUiRouter.get("/r/:saleOrReceiptRef", requireRoleAtLeast("STAFF"), getReceiptShortLinkHandler);

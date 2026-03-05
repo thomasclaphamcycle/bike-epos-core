@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
-import { getReceiptByNumber, issueReceipt } from "../services/receiptService";
+import { getReceiptByNumber, getSaleReceiptPrintById } from "../services/receiptService";
 import { renderReceiptPage } from "../views/receiptPage";
+import { renderSaleReceiptPage } from "../views/saleReceiptPage";
+import { isUuid } from "../utils/http";
 
 const setReceiptPageHeaders = (res: Response) => {
   res.setHeader("Cache-Control", "no-store");
@@ -19,20 +21,21 @@ const setReceiptPageHeaders = (res: Response) => {
 };
 
 export const getReceiptPageBySaleIdHandler = async (req: Request, res: Response) => {
-  const issued = await issueReceipt({
-    saleId: req.params.saleId,
-    issuedByStaffId: getRequestStaffActorId(req),
-  });
-
-  const receipt = await getReceiptByNumber(issued.receipt.receiptNumber);
-  const html = renderReceiptPage({ receipt });
+  const payload = await getSaleReceiptPrintById(req.params.saleId, getRequestStaffActorId(req));
+  const html = renderSaleReceiptPage({ receipt: payload });
 
   setReceiptPageHeaders(res);
   res.type("html").send(html);
 };
 
-export const getReceiptPageByNumberHandler = async (req: Request, res: Response) => {
-  const receipt = await getReceiptByNumber(req.params.receiptNumber);
+export const getReceiptShortLinkHandler = async (req: Request, res: Response) => {
+  const reference = req.params.saleOrReceiptRef;
+  if (isUuid(reference)) {
+    res.redirect(302, `/sales/${encodeURIComponent(reference)}/receipt`);
+    return;
+  }
+
+  const receipt = await getReceiptByNumber(reference);
   const html = renderReceiptPage({ receipt });
 
   setReceiptPageHeaders(res);

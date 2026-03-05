@@ -952,8 +952,17 @@ export const getReceiptByNumber = async (receiptNumber: string): Promise<Detaile
 export type SaleReceipt = {
   saleId: string;
   receiptNumber: string;
+  receiptUrl: string;
+  shortReceiptUrl: string;
+  workshopJobId: string | null;
   completedAt: Date | null;
   createdAt: Date;
+  shop: {
+    name: string;
+    address: string;
+    vatNumber: string | null;
+    footerText: string | null;
+  };
   staff: {
     id: string | null;
     name: string | null;
@@ -987,12 +996,13 @@ export type SaleReceipt = {
   }>;
 };
 
-export const getSaleReceiptById = async (saleId: string): Promise<SaleReceipt> => {
+export const getSaleReceiptById = async (
+  saleId: string,
+  issuedByStaffId?: string,
+): Promise<SaleReceipt> => {
   if (!isUuid(saleId)) {
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
   }
-
-  const issued = await issueReceipt({ saleId });
 
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -1027,6 +1037,28 @@ export const getSaleReceiptById = async (saleId: string): Promise<SaleReceipt> =
   if (!sale) {
     throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
   }
+  if (!sale.completedAt) {
+    throw new HttpError(
+      409,
+      "Sale is not completed; cannot print a draft sale receipt",
+      "SALE_NOT_COMPLETED",
+    );
+  }
+
+  const issued = await issueReceipt({
+    saleId,
+    ...(issuedByStaffId ? { issuedByStaffId } : {}),
+  });
+
+  const settings = await prisma.receiptSettings.findUnique({
+    where: { id: 1 },
+    select: {
+      shopName: true,
+      shopAddress: true,
+      vatNumber: true,
+      footerText: true,
+    },
+  });
 
   const items = sale.items.map((item) => {
     const baseName = item.variant.product.name;
@@ -1077,8 +1109,17 @@ export const getSaleReceiptById = async (saleId: string): Promise<SaleReceipt> =
   return {
     saleId: sale.id,
     receiptNumber: issued.receipt.receiptNumber,
+    receiptUrl: `/sales/${encodeURIComponent(sale.id)}/receipt`,
+    shortReceiptUrl: `/r/${encodeURIComponent(sale.id)}`,
+    workshopJobId: sale.workshopJobId,
     completedAt: sale.completedAt,
     createdAt: sale.createdAt,
+    shop: {
+      name: settings?.shopName ?? "Bike EPOS",
+      address: settings?.shopAddress ?? "123 Service Lane",
+      vatNumber: settings?.vatNumber ?? null,
+      footerText: settings?.footerText ?? null,
+    },
     staff: {
       id: sale.createdByStaff?.id ?? sale.createdByStaffId ?? null,
       name: sale.createdByStaff?.name ?? sale.createdByStaff?.username ?? null,
@@ -1098,5 +1139,90 @@ export const getSaleReceiptById = async (saleId: string): Promise<SaleReceipt> =
       total,
     },
     payments: [...paymentsFromIntents, ...legacyPayments],
+  };
+};
+
+export type SaleReceiptPrint = {
+  shop: {
+    name: string;
+    address: string;
+    vatNumber: string | null;
+    footerText: string | null;
+  };
+  sale: {
+    id: string;
+    receiptNumber: string;
+    receiptUrl: string;
+    shortReceiptUrl: string;
+    completedAt: Date | null;
+    createdAt: Date;
+    subtotalPence: number;
+    taxPence: number;
+    totalPence: number;
+    staff: {
+      id: string | null;
+      name: string | null;
+    };
+    items: Array<{
+      variantId: string;
+      sku: string;
+      name: string;
+      qty: number;
+      unitPricePence: number;
+      lineTotalPence: number;
+    }>;
+    payments: Array<{
+      method: string;
+      amountPence: number;
+    }>;
+  };
+  workshop: {
+    jobId: string;
+    printUrl: string;
+  } | null;
+};
+
+export const getSaleReceiptPrintById = async (
+  saleId: string,
+  issuedByStaffId?: string,
+): Promise<SaleReceiptPrint> => {
+  const saleReceipt = await getSaleReceiptById(saleId, issuedByStaffId);
+
+  const paymentSummary = saleReceipt.payments
+    .filter((payment) => payment.amount > 0)
+    .map((payment) => ({
+      method: payment.method,
+      amountPence: payment.amount,
+    }));
+
+  return {
+    shop: saleReceipt.shop,
+    sale: {
+      id: saleReceipt.saleId,
+      receiptNumber: saleReceipt.receiptNumber,
+      receiptUrl: saleReceipt.receiptUrl,
+      shortReceiptUrl: saleReceipt.shortReceiptUrl,
+      completedAt: saleReceipt.completedAt,
+      createdAt: saleReceipt.createdAt,
+      subtotalPence: saleReceipt.totals.subtotal,
+      taxPence: saleReceipt.totals.tax,
+      totalPence: saleReceipt.totals.total,
+      staff: saleReceipt.staff,
+      items: saleReceipt.items.map((item) => ({
+        variantId: item.variantId,
+        sku: item.sku,
+        name: item.name,
+        qty: item.qty,
+        unitPricePence: item.unitPrice,
+        lineTotalPence: item.lineTotal,
+      })),
+      payments: paymentSummary,
+    },
+    workshop: saleReceipt.workshopJobId
+      ? {
+          jobId: saleReceipt.workshopJobId,
+          printUrl: `/workshop/${encodeURIComponent(saleReceipt.workshopJobId)}/print`,
+        }
+      : null,
   };
 };

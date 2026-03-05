@@ -549,6 +549,7 @@ export const completeSaleIfEligibleTx = async (
       saleId: sale.id,
       completedAt: sale.completedAt,
       changeDuePence: sale.changeDuePence,
+      receiptUrl: `/r/${encodeURIComponent(sale.id)}`,
     };
   }
 
@@ -646,6 +647,7 @@ export const completeSaleIfEligibleTx = async (
     saleId: updatedSale.id,
     completedAt: updatedSale.completedAt,
     changeDuePence: updatedSale.changeDuePence,
+    receiptUrl: `/r/${encodeURIComponent(updatedSale.id)}`,
   };
 };
 

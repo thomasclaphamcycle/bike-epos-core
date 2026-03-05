@@ -8,7 +8,7 @@ import { getRequestStaffActorId } from "../middleware/staffRole";
 import { HttpError } from "../utils/http";
 
 export const getSaleReceiptHandler = async (req: Request, res: Response) => {
-  const receipt = await getSaleReceiptById(req.params.saleId);
+  const receipt = await getSaleReceiptById(req.params.saleId, getRequestStaffActorId(req));
   res.json(receipt);
 };
 

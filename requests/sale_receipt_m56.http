@@ -1,0 +1,31 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@saleId = REPLACE_COMPLETABLE_SALE_ID
+@draftSaleId = REPLACE_DRAFT_SALE_ID
+
+### Complete sale (must already have sufficient tenders)
+POST {{baseUrl}}/api/sales/{{saleId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### Open print-friendly sale receipt page
+GET {{baseUrl}}/sales/{{saleId}}/receipt
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Accept: text/html
+
+### Open short receipt link (302 -> /sales/:saleId/receipt)
+GET {{baseUrl}}/r/{{saleId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Accept: text/html
+
+### Draft sale receipt should fail (409)
+GET {{baseUrl}}/sales/{{draftSaleId}}/receipt
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Accept: application/json
