@@ -435,7 +435,9 @@ const run = async () => {
       assert.equal(refundTooMuch.status, 409, JSON.stringify(refundTooMuch.json));
       assert.equal(refundTooMuch.json.error.code, "REFUND_EXCEEDS_PAYMENT");
 
-      const paymentDetail = await fetchJson(`/api/payments/${checkout.json.payment.id}`);
+      const paymentDetail = await fetchJson(`/api/payments/${checkout.json.payment.id}`, {
+        headers: MANAGER_HEADERS,
+      });
       assert.equal(paymentDetail.status, 200, JSON.stringify(paymentDetail.json));
       assert.equal(paymentDetail.json.payment.id, checkout.json.payment.id);
       assert.ok(Array.isArray(paymentDetail.json.refunds), JSON.stringify(paymentDetail.json));
