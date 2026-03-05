@@ -1,0 +1,54 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@customerId = REPLACE_CUSTOMER_ID
+
+### Create customer (STAFF+)
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "name": "M47 Customer Example",
+  "email": "m47.customer@example.com",
+  "phone": "07000111222",
+  "notes": "Created from M47 request collection"
+}
+
+### Search customers via new query param (STAFF+)
+GET {{baseUrl}}/api/customers?search=m47&take=20
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Search customers via backward-compatible query alias (STAFF+)
+GET {{baseUrl}}/api/customers?query=m47&take=20
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get customer by id (STAFF+)
+GET {{baseUrl}}/api/customers/{{customerId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Patch customer (STAFF+)
+PATCH {{baseUrl}}/api/customers/{{customerId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "name": "M47 Customer Updated",
+  "phone": "07000999888",
+  "notes": "Updated from M47 request collection"
+}
+
+### Customers page (STAFF+)
+GET {{baseUrl}}/customers
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Customer profile page (STAFF+)
+GET {{baseUrl}}/customers/{{customerId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

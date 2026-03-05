@@ -3,6 +3,7 @@ import {
   createCustomer,
   getCustomerById,
   searchCustomers,
+  updateCustomer,
 } from "../services/customerService";
 import { HttpError } from "../utils/http";
 
@@ -74,6 +75,8 @@ export const searchCustomersHandler = async (req: Request, res: Response) => {
   const query =
     typeof req.query.q === "string"
       ? req.query.q
+      : typeof req.query.search === "string"
+        ? req.query.search
       : typeof req.query.query === "string"
         ? req.query.query
         : undefined;
@@ -86,10 +89,49 @@ export const listCustomersHandler = async (req: Request, res: Response) => {
   const query =
     typeof req.query.q === "string"
       ? req.query.q
+      : typeof req.query.search === "string"
+        ? req.query.search
       : typeof req.query.query === "string"
         ? req.query.query
         : undefined;
   const take = parseSearchTake(req.query.take);
   const result = await searchCustomers(query, take);
   res.json(result);
+};
+
+export const patchCustomerHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    name?: unknown;
+    email?: unknown;
+    phone?: unknown;
+    notes?: unknown;
+  };
+
+  if (body.name !== undefined && typeof body.name !== "string") {
+    throw new HttpError(400, "name must be a string", "INVALID_CUSTOMER_UPDATE");
+  }
+  if (body.email !== undefined && body.email !== null && typeof body.email !== "string") {
+    throw new HttpError(400, "email must be a string or null", "INVALID_CUSTOMER_UPDATE");
+  }
+  if (body.phone !== undefined && body.phone !== null && typeof body.phone !== "string") {
+    throw new HttpError(400, "phone must be a string or null", "INVALID_CUSTOMER_UPDATE");
+  }
+  if (body.notes !== undefined && body.notes !== null && typeof body.notes !== "string") {
+    throw new HttpError(400, "notes must be a string or null", "INVALID_CUSTOMER_UPDATE");
+  }
+
+  const customer = await updateCustomer(req.params.id, {
+    ...(Object.prototype.hasOwnProperty.call(body, "name") ? { name: body.name as string } : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, "email")
+      ? { email: body.email as string | null }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, "phone")
+      ? { phone: body.phone as string | null }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, "notes")
+      ? { notes: body.notes as string | null }
+      : {}),
+  });
+
+  res.json(customer);
 };

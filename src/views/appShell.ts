@@ -10,6 +10,7 @@ type AppShellUser = {
 
 type AppNavKey =
   | "pos"
+  | "customers"
   | "workshop"
   | "inventory"
   | "purchasing"
@@ -41,6 +42,7 @@ const navItems: Array<{
   minRole: UserRole;
 }> = [
   { key: "pos", label: "POS", href: "/pos", minRole: "STAFF" },
+  { key: "customers", label: "Customers", href: "/customers", minRole: "STAFF" },
   { key: "workshop", label: "Workshop", href: "/workshop", minRole: "STAFF" },
   { key: "inventory", label: "Inventory", href: "/inventory", minRole: "STAFF" },
   { key: "purchasing", label: "Purchasing", href: "/purchasing", minRole: "MANAGER" },

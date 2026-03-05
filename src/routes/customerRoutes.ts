@@ -3,6 +3,7 @@ import {
   createCustomerHandler,
   getCustomerHandler,
   listCustomersHandler,
+  patchCustomerHandler,
   searchCustomersHandler,
 } from "../controllers/customerController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
@@ -13,3 +14,4 @@ customerRouter.post("/", requireRoleAtLeast("STAFF"), createCustomerHandler);
 customerRouter.get("/", requireRoleAtLeast("STAFF"), listCustomersHandler);
 customerRouter.get("/search", requireRoleAtLeast("STAFF"), searchCustomersHandler);
 customerRouter.get("/:id", requireRoleAtLeast("STAFF"), getCustomerHandler);
+customerRouter.patch("/:id", requireRoleAtLeast("STAFF"), patchCustomerHandler);

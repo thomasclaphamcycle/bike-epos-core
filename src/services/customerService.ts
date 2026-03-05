@@ -10,6 +10,13 @@ type CreateCustomerInput = {
   notes?: string;
 };
 
+type UpdateCustomerInput = {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+};
+
 const normalizeOptionalText = (value: string | undefined): string | undefined => {
   if (value === undefined) {
     return undefined;
@@ -169,4 +176,69 @@ export const searchCustomers = async (query?: string, take = 20) => {
   return {
     customers: customers.map(toCustomerResponse),
   };
+};
+
+export const updateCustomer = async (customerId: string, input: UpdateCustomerInput) => {
+  if (!isUuid(customerId)) {
+    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
+  }
+
+  const hasAnyField =
+    Object.prototype.hasOwnProperty.call(input, "name") ||
+    Object.prototype.hasOwnProperty.call(input, "email") ||
+    Object.prototype.hasOwnProperty.call(input, "phone") ||
+    Object.prototype.hasOwnProperty.call(input, "notes");
+
+  if (!hasAnyField) {
+    throw new HttpError(400, "No fields provided", "INVALID_CUSTOMER_UPDATE");
+  }
+
+  const data: {
+    name?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string | null;
+    phone?: string | null;
+    notes?: string | null;
+  } = {};
+
+  if (Object.prototype.hasOwnProperty.call(input, "name")) {
+    const name = normalizeOptionalText(input.name);
+    if (!name) {
+      throw new HttpError(400, "name cannot be empty", "INVALID_CUSTOMER_UPDATE");
+    }
+    const split = splitNameToParts(name);
+    data.name = name;
+    data.firstName = split.firstName;
+    data.lastName = split.lastName;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "email")) {
+    data.email = normalizeOptionalText(input.email ?? undefined)?.toLowerCase() ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "phone")) {
+    data.phone = normalizeOptionalText(input.phone ?? undefined) ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "notes")) {
+    data.notes = normalizeOptionalText(input.notes ?? undefined) ?? null;
+  }
+
+  try {
+    const customer = await prisma.customer.update({
+      where: { id: customerId },
+      data,
+    });
+    return toCustomerResponse(customer);
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code === "P2002") {
+      throw new HttpError(409, "Customer email already exists", "CUSTOMER_EMAIL_EXISTS");
+    }
+    if (prismaError.code === "P2025") {
+      throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+    }
+    throw error;
+  }
 };
