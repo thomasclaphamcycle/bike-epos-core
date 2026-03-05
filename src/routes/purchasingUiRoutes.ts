@@ -4,4 +4,4 @@ import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const purchasingUiRouter = Router();
 
-purchasingUiRouter.get("/purchasing", requireRoleAtLeast("STAFF"), getPurchasingPageHandler);
+purchasingUiRouter.get("/purchasing", requireRoleAtLeast("MANAGER"), getPurchasingPageHandler);

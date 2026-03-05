@@ -1,12 +1,16 @@
 import { Router } from "express";
 import {
   addPurchaseOrderItemsHandler,
+  cancelPurchaseOrderHandler,
   createPurchaseOrderHandler,
+  deletePurchaseOrderLineHandler,
   getPurchaseOrderHandler,
   listPurchaseOrdersHandler,
   patchPurchaseOrderHandler,
   patchPurchaseOrderItemHandler,
   receivePurchaseOrderHandler,
+  submitPurchaseOrderHandler,
+  upsertPurchaseOrderLineHandler,
 } from "../controllers/purchaseOrderController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
@@ -17,9 +21,17 @@ purchaseOrderRouter.post("/", requireRoleAtLeast("MANAGER"), createPurchaseOrder
 purchaseOrderRouter.get("/:id", requireRoleAtLeast("STAFF"), getPurchaseOrderHandler);
 purchaseOrderRouter.patch("/:id", requireRoleAtLeast("MANAGER"), patchPurchaseOrderHandler);
 purchaseOrderRouter.post("/:id/items", requireRoleAtLeast("MANAGER"), addPurchaseOrderItemsHandler);
+purchaseOrderRouter.post("/:id/lines", requireRoleAtLeast("MANAGER"), upsertPurchaseOrderLineHandler);
 purchaseOrderRouter.patch(
   "/:id/lines/:lineId",
   requireRoleAtLeast("MANAGER"),
   patchPurchaseOrderItemHandler,
 );
+purchaseOrderRouter.delete(
+  "/:id/lines/:lineId",
+  requireRoleAtLeast("MANAGER"),
+  deletePurchaseOrderLineHandler,
+);
+purchaseOrderRouter.post("/:id/submit", requireRoleAtLeast("MANAGER"), submitPurchaseOrderHandler);
+purchaseOrderRouter.post("/:id/cancel", requireRoleAtLeast("MANAGER"), cancelPurchaseOrderHandler);
 purchaseOrderRouter.post("/:id/receive", requireRoleAtLeast("MANAGER"), receivePurchaseOrderHandler);

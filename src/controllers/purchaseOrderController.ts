@@ -2,12 +2,16 @@ import { PurchaseOrderStatus } from "@prisma/client";
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import {
+  cancelPurchaseOrder,
   createPurchaseOrder,
+  deletePurchaseOrderLine,
   getPurchaseOrderById,
   listPurchaseOrders,
   receivePurchaseOrder,
+  submitPurchaseOrder,
   updatePurchaseOrder,
   updatePurchaseOrderItem,
+  upsertPurchaseOrderLineByProduct,
   upsertPurchaseOrderItems,
 } from "../services/purchasingService";
 import { HttpError } from "../utils/http";
@@ -23,6 +27,7 @@ const parsePurchaseOrderStatus = (
   const normalized = value.trim().toUpperCase();
   if (
     normalized !== "DRAFT" &&
+    normalized !== "SUBMITTED" &&
     normalized !== "SENT" &&
     normalized !== "PARTIALLY_RECEIVED" &&
     normalized !== "RECEIVED" &&
@@ -30,7 +35,7 @@ const parsePurchaseOrderStatus = (
   ) {
     throw new HttpError(
       400,
-      "status must be one of DRAFT, SENT, PARTIALLY_RECEIVED, RECEIVED, CANCELLED",
+      "status must be one of DRAFT, SUBMITTED, SENT, PARTIALLY_RECEIVED, RECEIVED, CANCELLED",
       code,
     );
   }
@@ -76,6 +81,7 @@ export const createPurchaseOrderHandler = async (req: Request, res: Response) =>
     supplierId?: string;
     orderedAt?: string;
     expectedAt?: string;
+    currency?: string;
     notes?: string;
   };
 
@@ -88,11 +94,14 @@ export const createPurchaseOrderHandler = async (req: Request, res: Response) =>
   if (body.expectedAt !== undefined && typeof body.expectedAt !== "string") {
     throw new HttpError(400, "expectedAt must be a string", "INVALID_PURCHASE_ORDER");
   }
+  if (body.currency !== undefined && typeof body.currency !== "string") {
+    throw new HttpError(400, "currency must be a string", "INVALID_PURCHASE_ORDER");
+  }
   if (body.notes !== undefined && typeof body.notes !== "string") {
     throw new HttpError(400, "notes must be a string", "INVALID_PURCHASE_ORDER");
   }
 
-  const po = await createPurchaseOrder(body);
+  const po = await createPurchaseOrder(body, getRequestStaffActorId(req));
   res.status(201).json(po);
 };
 
@@ -186,6 +195,46 @@ export const patchPurchaseOrderItemHandler = async (req: Request, res: Response)
     quantityOrdered: body.quantityOrdered,
     unitCostPence: body.unitCostPence,
   });
+  res.json(po);
+};
+
+export const upsertPurchaseOrderLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    productId?: string;
+    quantityOrdered?: number;
+    unitCost?: number;
+    unitCostPence?: number;
+  };
+
+  if (body.productId !== undefined && typeof body.productId !== "string") {
+    throw new HttpError(400, "productId must be a string", "INVALID_PURCHASE_ORDER_LINE");
+  }
+  if (body.quantityOrdered !== undefined && typeof body.quantityOrdered !== "number") {
+    throw new HttpError(400, "quantityOrdered must be a number", "INVALID_PURCHASE_ORDER_LINE");
+  }
+  if (body.unitCost !== undefined && typeof body.unitCost !== "number") {
+    throw new HttpError(400, "unitCost must be a number", "INVALID_PURCHASE_ORDER_LINE");
+  }
+  if (body.unitCostPence !== undefined && typeof body.unitCostPence !== "number") {
+    throw new HttpError(400, "unitCostPence must be a number", "INVALID_PURCHASE_ORDER_LINE");
+  }
+
+  const po = await upsertPurchaseOrderLineByProduct(req.params.id, body);
+  res.json(po);
+};
+
+export const deletePurchaseOrderLineHandler = async (req: Request, res: Response) => {
+  const po = await deletePurchaseOrderLine(req.params.id, req.params.lineId);
+  res.json(po);
+};
+
+export const submitPurchaseOrderHandler = async (req: Request, res: Response) => {
+  const po = await submitPurchaseOrder(req.params.id, getRequestStaffActorId(req));
+  res.json(po);
+};
+
+export const cancelPurchaseOrderHandler = async (req: Request, res: Response) => {
+  const po = await cancelPurchaseOrder(req.params.id);
   res.json(po);
 };
 

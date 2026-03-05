@@ -234,6 +234,7 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
           <select id="po-status">
             <option value="">All</option>
             <option value="DRAFT">DRAFT</option>
+            <option value="SUBMITTED">SUBMITTED</option>
             <option value="SENT">SENT</option>
             <option value="PARTIALLY_RECEIVED">PARTIALLY_RECEIVED</option>
             <option value="RECEIVED">RECEIVED</option>
@@ -613,10 +614,22 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
 
         setStatus("open-po-status", "Updating purchase order...");
         try {
-          await apiRequest("/api/purchase-orders/" + encodeURIComponent(state.openPo.id), {
-            method: "PATCH",
-            body: JSON.stringify({ status }),
-          });
+          if (status === "SUBMITTED") {
+            await apiRequest("/api/purchase-orders/" + encodeURIComponent(state.openPo.id) + "/submit", {
+              method: "POST",
+              body: JSON.stringify({}),
+            });
+          } else if (status === "CANCELLED") {
+            await apiRequest("/api/purchase-orders/" + encodeURIComponent(state.openPo.id) + "/cancel", {
+              method: "POST",
+              body: JSON.stringify({}),
+            });
+          } else {
+            await apiRequest("/api/purchase-orders/" + encodeURIComponent(state.openPo.id), {
+              method: "PATCH",
+              body: JSON.stringify({ status }),
+            });
+          }
           await openPo(state.openPo.id);
           await loadPurchaseOrders();
           setStatus("open-po-status", "Purchase order updated.", "ok");
@@ -818,7 +831,7 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
             : lines
                 .map((line) => {
                   const editable = canManage() && po.status === "DRAFT";
-                  const receivable = canManage() && (po.status === "DRAFT" || po.status === "SENT" || po.status === "PARTIALLY_RECEIVED");
+                  const receivable = canManage() && (po.status === "DRAFT" || po.status === "SUBMITTED" || po.status === "SENT" || po.status === "PARTIALLY_RECEIVED");
 
                   return (
                     '<tr>' +
@@ -867,8 +880,8 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
           '<div><strong>Status:</strong> <span class="pill">' + po.status + '</span></div>' +
           '<div><strong>Notes:</strong> ' + (po.notes || "-") + '</div>' +
           '<div class="controls" style="margin-top: 10px;">' +
-          '<button id="po-set-sent" type="button" ' + (canManage() && po.status === "DRAFT" ? "" : "disabled") + '>Mark SENT</button>' +
-          '<button id="po-set-cancel" type="button" ' + (canManage() && (po.status === "DRAFT" || po.status === "SENT") ? "" : "disabled") + '>Cancel</button>' +
+          '<button id="po-set-submit" type="button" ' + (canManage() && po.status === "DRAFT" ? "" : "disabled") + '>Submit</button>' +
+          '<button id="po-set-cancel" type="button" ' + (canManage() && (po.status === "DRAFT" || po.status === "SUBMITTED" || po.status === "SENT") ? "" : "disabled") + '>Cancel</button>' +
           '<div class="field"><label for="po-receive-location">Receive Location</label><select id="po-receive-location">' + locationOptions + '</select></div>' +
           '</div>' +
           '<div class="controls" style="margin-top: 10px;">' +
@@ -886,8 +899,8 @@ export const renderPurchasingPage = (input: PurchasingPageInput) => {
           '</table>' +
           '</div>';
 
-        qs("#po-set-sent")?.addEventListener("click", () => {
-          updateOpenPoStatus("SENT");
+        qs("#po-set-submit")?.addEventListener("click", () => {
+          updateOpenPoStatus("SUBMITTED");
         });
         qs("#po-set-cancel")?.addEventListener("click", () => {
           updateOpenPoStatus("CANCELLED");

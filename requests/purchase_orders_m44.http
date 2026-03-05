@@ -1,0 +1,67 @@
+@baseUrl = http://localhost:3000
+@staffRole = MANAGER
+@staffId = manager-1
+@supplierId = REPLACE_SUPPLIER_ID
+@productId = REPLACE_PRODUCT_ID
+@poId = REPLACE_PO_ID
+@lineId = REPLACE_LINE_ID
+
+### Create purchase order (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "supplierId": "{{supplierId}}",
+  "currency": "GBP",
+  "notes": "M44 weekly replenishment"
+}
+
+### Upsert a PO line by product (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders/{{poId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "productId": "{{productId}}",
+  "quantityOrdered": 6,
+  "unitCost": 21.5
+}
+
+### Delete a PO line (MANAGER+)
+DELETE {{baseUrl}}/api/purchase-orders/{{poId}}/lines/{{lineId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Submit purchase order (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders/{{poId}}/submit
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### Cancel purchase order (MANAGER+)
+POST {{baseUrl}}/api/purchase-orders/{{poId}}/cancel
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
+### List purchase orders
+GET {{baseUrl}}/api/purchase-orders?status=SUBMITTED&from=2026-03-01&to=2026-03-31
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Get purchase order detail
+GET {{baseUrl}}/api/purchase-orders/{{poId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Purchasing page (MANAGER+)
+GET {{baseUrl}}/purchasing
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

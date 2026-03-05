@@ -1,0 +1,334 @@
+#!/usr/bin/env node
+require("dotenv/config");
+
+const assert = require("node:assert/strict");
+const { spawn } = require("node:child_process");
+const bcrypt = require("bcryptjs");
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
+
+const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
+const HEALTH_URL = `${BASE_URL}/health`;
+const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
+}
+if (process.env.NODE_ENV !== "test") {
+  throw new Error("Refusing to run: NODE_ENV must be 'test'.");
+}
+if (process.env.ALLOW_NON_TEST_DB !== "1" && !DATABASE_URL.toLowerCase().includes("test")) {
+  throw new Error(
+    "Refusing to run against non-test database URL. Set TEST_DATABASE_URL or ALLOW_NON_TEST_DB=1.",
+  );
+}
+
+const safeDbUrl = DATABASE_URL.replace(/(postgres(?:ql)?:\/\/[^:/@]+:)[^@]+@/i, "$1***@");
+console.log(`[m44-smoke] BASE_URL=${BASE_URL}`);
+console.log(`[m44-smoke] DATABASE_URL=${safeDbUrl}`);
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const parseJson = async (response) => {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+};
+
+const serverIsHealthy = async () => {
+  try {
+    const response = await fetch(HEALTH_URL);
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+const waitForServer = async () => {
+  for (let i = 0; i < 60; i++) {
+    if (await serverIsHealthy()) {
+      return;
+    }
+    await sleep(500);
+  }
+  throw new Error("Server did not become healthy on /health");
+};
+
+const apiJson = async ({ path, method = "GET", body, cookie, extraHeaders }) => {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...(extraHeaders || {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throw new Error(`${method} ${path} failed (${response.status}): ${JSON.stringify(payload)}`);
+  }
+
+  return { payload, status: response.status };
+};
+
+const login = async (email, password) => {
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const payload = await parseJson(response);
+  assert.equal(response.status, 200, JSON.stringify(payload));
+
+  const setCookie = response.headers.get("set-cookie");
+  assert.ok(setCookie, "missing set-cookie");
+  return setCookie.split(";")[0];
+};
+
+let sequence = 0;
+const uniqueRef = () => `${Date.now()}_${sequence++}`;
+
+const run = async () => {
+  const token = uniqueRef();
+  const managerEmail = `m44.manager.${token}@example.com`;
+  const managerPassword = `M44Pass!${token}`;
+
+  const created = {
+    userId: null,
+    supplierIds: new Set(),
+    productId: null,
+    variantId: null,
+    purchaseOrderIds: new Set(),
+  };
+
+  let startedServer = false;
+  let serverProcess = null;
+
+  try {
+    const alreadyHealthy = await serverIsHealthy();
+    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
+      throw new Error(
+        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
+      );
+    }
+
+    if (!alreadyHealthy) {
+      serverProcess = spawn("npm", ["run", "dev"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          DATABASE_URL,
+        },
+      });
+      startedServer = true;
+      await waitForServer();
+    }
+
+    const manager = await prisma.user.create({
+      data: {
+        username: `m44-manager-${token}`,
+        name: "M44 Manager",
+        email: managerEmail,
+        passwordHash: await bcrypt.hash(managerPassword, 10),
+        role: "MANAGER",
+        isActive: true,
+      },
+    });
+    created.userId = manager.id;
+
+    const cookie = await login(managerEmail, managerPassword);
+
+    const supplier = await apiJson({
+      path: "/api/suppliers",
+      method: "POST",
+      body: {
+        name: `M44 Supplier ${token}`,
+        email: `m44.${token}@supplier.test`,
+      },
+      cookie,
+    });
+    assert.equal(supplier.status, 201, JSON.stringify(supplier.payload));
+    created.supplierIds.add(supplier.payload.id);
+
+    const product = await apiJson({
+      path: "/api/products",
+      method: "POST",
+      body: {
+        name: `M44 Product ${token}`,
+      },
+      cookie,
+    });
+    created.productId = product.payload.id;
+
+    const variant = await apiJson({
+      path: `/api/products/${encodeURIComponent(product.payload.id)}/variants`,
+      method: "POST",
+      body: {
+        sku: `M44-SKU-${token}`,
+        name: `M44 Variant ${token}`,
+        retailPricePence: 2500,
+        costPricePence: 1600,
+      },
+      cookie,
+    });
+    created.variantId = variant.payload.id;
+
+    const poDraft = await apiJson({
+      path: "/api/purchase-orders",
+      method: "POST",
+      body: {
+        supplierId: supplier.payload.id,
+        notes: "M44 submit flow",
+      },
+      cookie,
+    });
+    assert.equal(poDraft.status, 201, JSON.stringify(poDraft.payload));
+    assert.equal(poDraft.payload.status, "DRAFT");
+    assert.ok(poDraft.payload.referenceCode);
+    created.purchaseOrderIds.add(poDraft.payload.id);
+
+    const withLine = await apiJson({
+      path: `/api/purchase-orders/${encodeURIComponent(poDraft.payload.id)}/lines`,
+      method: "POST",
+      body: {
+        productId: product.payload.id,
+        quantityOrdered: 5,
+        unitCost: 19.75,
+      },
+      cookie,
+    });
+    assert.equal(withLine.status, 200, JSON.stringify(withLine.payload));
+    assert.equal(Array.isArray(withLine.payload.lines), true);
+    assert.equal(withLine.payload.lines.length, 1);
+
+    const submitted = await apiJson({
+      path: `/api/purchase-orders/${encodeURIComponent(poDraft.payload.id)}/submit`,
+      method: "POST",
+      body: {},
+      cookie,
+    });
+    assert.equal(submitted.status, 200, JSON.stringify(submitted.payload));
+    assert.equal(submitted.payload.status, "SUBMITTED");
+    assert.equal(submitted.payload.statusV1, "SUBMITTED");
+    assert.ok(submitted.payload.totalPence > 0);
+
+    const poToCancel = await apiJson({
+      path: "/api/purchase-orders",
+      method: "POST",
+      body: {
+        supplierId: supplier.payload.id,
+        notes: "M44 cancel flow",
+      },
+      cookie,
+    });
+    assert.equal(poToCancel.status, 201, JSON.stringify(poToCancel.payload));
+    created.purchaseOrderIds.add(poToCancel.payload.id);
+
+    await apiJson({
+      path: `/api/purchase-orders/${encodeURIComponent(poToCancel.payload.id)}/lines`,
+      method: "POST",
+      body: {
+        productId: product.payload.id,
+        quantityOrdered: 2,
+      },
+      cookie,
+    });
+
+    const cancelled = await apiJson({
+      path: `/api/purchase-orders/${encodeURIComponent(poToCancel.payload.id)}/cancel`,
+      method: "POST",
+      body: {},
+      cookie,
+    });
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.payload));
+    assert.equal(cancelled.payload.status, "CANCELLED");
+
+    const listed = await apiJson({
+      path: "/api/purchase-orders?status=SUBMITTED&take=20&skip=0",
+      cookie,
+    });
+    assert.equal(Array.isArray(listed.payload.purchaseOrders), true);
+    assert.ok(listed.payload.purchaseOrders.some((po) => po.id === poDraft.payload.id));
+
+    const detail = await apiJson({
+      path: `/api/purchase-orders/${encodeURIComponent(poDraft.payload.id)}`,
+      cookie,
+    });
+    assert.equal(detail.payload.id, poDraft.payload.id);
+    assert.equal(detail.payload.supplier.id, supplier.payload.id);
+    assert.equal(detail.payload.lines.length, 1);
+
+    const purchasingPage = await fetch(`${BASE_URL}/purchasing`, {
+      headers: {
+        Cookie: cookie,
+        Accept: "text/html",
+      },
+    });
+    assert.equal(purchasingPage.status, 200);
+    const html = await purchasingPage.text();
+    assert.ok(html.includes("Purchasing"));
+    assert.ok(html.includes('data-testid="app-nav-purchasing"'));
+
+    console.log("M44 purchase order v1 smoke tests passed.");
+  } finally {
+    if (created.purchaseOrderIds.size > 0) {
+      await prisma.purchaseOrder.deleteMany({
+        where: {
+          id: { in: Array.from(created.purchaseOrderIds) },
+        },
+      });
+    }
+
+    if (created.supplierIds.size > 0) {
+      await prisma.supplier.deleteMany({
+        where: {
+          id: { in: Array.from(created.supplierIds) },
+        },
+      });
+    }
+
+    if (created.variantId) {
+      await prisma.barcode.deleteMany({ where: { variantId: created.variantId } });
+      await prisma.variant.deleteMany({ where: { id: created.variantId } });
+    }
+
+    if (created.productId) {
+      await prisma.product.deleteMany({ where: { id: created.productId } });
+    }
+
+    if (created.userId) {
+      await prisma.user.deleteMany({ where: { id: created.userId } });
+    }
+
+    await prisma.$disconnect();
+
+    if (startedServer && serverProcess) {
+      serverProcess.kill("SIGTERM");
+      await sleep(400);
+      if (!serverProcess.killed) {
+        serverProcess.kill("SIGKILL");
+      }
+    }
+  }
+};
+
+run().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

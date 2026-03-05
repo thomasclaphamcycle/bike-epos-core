@@ -52,6 +52,7 @@ model Supplier {
 
 enum PurchaseOrderStatus {
   DRAFT
+  SUBMITTED
   SENT
   PARTIALLY_RECEIVED
   RECEIVED
@@ -62,17 +63,27 @@ model PurchaseOrder {
   id         String              @id @default(uuid()) @db.Uuid
   supplierId String              @db.Uuid
   status     PurchaseOrderStatus @default(DRAFT)
+  referenceCode String?          @unique
+  currency   String              @default("GBP")
+  subtotalPence Int              @default(0)
+  taxPence   Int                 @default(0)
+  totalPence Int                 @default(0)
   orderedAt  DateTime?
   expectedAt DateTime?
   notes      String?
+  submittedAt DateTime?
+  cancelledAt DateTime?
+  createdByStaffId String?
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
   supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   items      PurchaseOrderItem[]
+  createdByStaff User?           @relation("PurchaseOrderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   @@index([supplierId])
   @@index([status, createdAt])
+  @@index([createdByStaffId])
 }
 
 model PurchaseOrderItem {
@@ -82,6 +93,7 @@ model PurchaseOrderItem {
   quantityOrdered  Int
   quantityReceived Int      @default(0)
   unitCostPence    Int?
+  lineTotalPence   Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -876,6 +888,7 @@ model User {
   closedCashSessions   CashSession[] @relation("CashSessionClosedBy")
   cashMovements        CashMovement[] @relation("CashMovementCreatedBy")
   cashCounts           CashCount[] @relation("CashCountCountedBy")
+  createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedByStaff")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

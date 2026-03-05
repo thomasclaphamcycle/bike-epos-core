@@ -1,11 +1,23 @@
 import { Request, Response } from "express";
+import { HttpError } from "../utils/http";
 import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staffRole";
+import { wrapAuthedPage } from "../views/appShell";
 import { renderPurchasingPage } from "../views/purchasingPage";
 
 export const getPurchasingPageHandler = async (req: Request, res: Response) => {
-  const html = renderPurchasingPage({
+  if (!req.user) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const bodyHtml = renderPurchasingPage({
     staffRole: getRequestStaffRole(req),
     staffId: getRequestStaffActorId(req),
+  });
+  const html = wrapAuthedPage({
+    html: bodyHtml,
+    title: "Purchasing",
+    user: req.user,
+    activeNav: "purchasing",
   });
 
   res.setHeader("Cache-Control", "no-store");

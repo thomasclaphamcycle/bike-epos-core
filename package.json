@@ -44,7 +44,8 @@
     "test:m40": "node scripts/run_smoke_test.js scripts/receipts_m40_smoke_tests.js",
     "test:m41": "node scripts/run_smoke_test.js scripts/refunds_m41_smoke_tests.js",
     "test:m42": "node scripts/run_smoke_test.js scripts/cash_m42_smoke_tests.js",
-    "test:m43": "node scripts/run_smoke_test.js scripts/manager_ui_m43_smoke_tests.js"
+    "test:m43": "node scripts/run_smoke_test.js scripts/manager_ui_m43_smoke_tests.js",
+    "test:m44": "node scripts/run_smoke_test.js scripts/purchase_orders_m44_smoke_tests.js"
   },
   "repository": {
     "type": "git",

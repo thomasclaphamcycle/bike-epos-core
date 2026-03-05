@@ -13,6 +13,7 @@ type CreatePurchaseOrderInput = {
   supplierId?: string;
   orderedAt?: string;
   expectedAt?: string;
+  currency?: string;
   notes?: string;
 };
 
@@ -36,6 +37,13 @@ type UpdatePurchaseOrderInput = {
 type PurchaseOrderItemLineInput = {
   variantId?: string;
   quantityOrdered?: number;
+  unitCostPence?: number;
+};
+
+type PurchaseOrderLineByProductInput = {
+  productId?: string;
+  quantityOrdered?: number;
+  unitCost?: number;
   unitCostPence?: number;
 };
 
@@ -102,6 +110,66 @@ const parseOptionalSkip = (value: number | undefined): number | undefined => {
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+const toPurchaseOrderStatusV1 = (status: PurchaseOrderStatus) => {
+  switch (status) {
+    case "SENT":
+      return "SUBMITTED";
+    case "PARTIALLY_RECEIVED":
+      return "RECEIVED_PARTIAL";
+    case "RECEIVED":
+      return "RECEIVED_COMPLETE";
+    default:
+      return status;
+  }
+};
+
+const computeLineTotalPence = (quantityOrdered: number, unitCostPence: number | null) =>
+  unitCostPence === null ? null : quantityOrdered * unitCostPence;
+
+const computeSnapshotTotals = (
+  items: Array<{ quantityOrdered: number; unitCostPence: number | null; lineTotalPence: number | null }>,
+) => {
+  const subtotalPence = items.reduce((sum, item) => {
+    const resolved =
+      item.lineTotalPence ??
+      computeLineTotalPence(item.quantityOrdered, item.unitCostPence) ??
+      0;
+    return sum + resolved;
+  }, 0);
+
+  const taxPence = 0;
+  return {
+    subtotalPence,
+    taxPence,
+    totalPence: subtotalPence + taxPence,
+  };
+};
+
+const parseOptionalUnitCostPence = (
+  unitCost: number | undefined,
+  unitCostPence: number | undefined,
+) => {
+  if (unitCostPence !== undefined) {
+    if (!Number.isInteger(unitCostPence) || unitCostPence < 0) {
+      throw new HttpError(
+        400,
+        "unitCostPence must be a non-negative integer",
+        "INVALID_PURCHASE_ORDER_LINE",
+      );
+    }
+    return unitCostPence;
+  }
+
+  if (unitCost !== undefined) {
+    if (!Number.isFinite(unitCost) || unitCost < 0) {
+      throw new HttpError(400, "unitCost must be a non-negative number", "INVALID_PURCHASE_ORDER_LINE");
+    }
+    return Math.round(unitCost * 100);
+  }
+
+  return undefined;
+};
+
 const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date | undefined => {
   const normalized = normalizeOptionalText(value);
   if (!normalized) {
@@ -118,6 +186,29 @@ const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date 
     throw new HttpError(400, `${field} is invalid`, "INVALID_PURCHASE_ORDER_QUERY");
   }
   return date;
+};
+
+const buildReferenceCodeCandidate = () => {
+  const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `PO-${stamp}-${suffix}`;
+};
+
+const generateReferenceCode = async (
+  tx: Prisma.TransactionClient | typeof prisma,
+) => {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = buildReferenceCodeCandidate();
+    const existing = await tx.purchaseOrder.findFirst({
+      where: { referenceCode: candidate },
+      select: { id: true },
+    });
+    if (!existing) {
+      return candidate;
+    }
+  }
+
+  throw new HttpError(500, "Failed to generate purchase order reference code", "PO_REFERENCE_GENERATION_FAILED");
 };
 
 const toSupplierResponse = (supplier: {
@@ -145,6 +236,7 @@ const toPurchaseOrderItemResponse = (item: {
   quantityOrdered: number;
   quantityReceived: number;
   unitCostPence: number | null;
+  lineTotalPence: number | null;
   createdAt: Date;
   updatedAt: Date;
   variant: {
@@ -168,6 +260,9 @@ const toPurchaseOrderItemResponse = (item: {
   quantityReceived: item.quantityReceived,
   quantityRemaining: Math.max(0, item.quantityOrdered - item.quantityReceived),
   unitCostPence: item.unitCostPence,
+  lineTotalPence:
+    item.lineTotalPence ??
+    computeLineTotalPence(item.quantityOrdered, item.unitCostPence),
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
 });
@@ -232,9 +327,20 @@ const getNextStatusOrThrow = (
   }
 
   if (current === "DRAFT") {
-    if (requested === "SENT" || requested === "CANCELLED") {
+    if (requested === "SENT" || requested === "SUBMITTED" || requested === "CANCELLED") {
       return requested;
     }
+  }
+
+  if (current === "SUBMITTED") {
+    if (requested === "CANCELLED") {
+      return "CANCELLED";
+    }
+    throw new HttpError(
+      409,
+      "SUBMITTED purchase orders can only transition to CANCELLED",
+      "INVALID_PURCHASE_ORDER_STATUS_TRANSITION",
+    );
   }
 
   if (current === "SENT") {
@@ -263,9 +369,17 @@ const toPurchaseOrderResponse = (po: {
   id: string;
   supplierId: string;
   status: PurchaseOrderStatus;
+  referenceCode: string | null;
+  currency: string;
+  subtotalPence: number;
+  taxPence: number;
+  totalPence: number;
   orderedAt: Date | null;
   expectedAt: Date | null;
   notes: string | null;
+  submittedAt: Date | null;
+  cancelledAt: Date | null;
+  createdByStaffId: string | null;
   createdAt: Date;
   updatedAt: Date;
   supplier: {
@@ -281,6 +395,7 @@ const toPurchaseOrderResponse = (po: {
     quantityOrdered: number;
     quantityReceived: number;
     unitCostPence: number | null;
+    lineTotalPence: number | null;
     createdAt: Date;
     updatedAt: Date;
     variant: {
@@ -314,13 +429,29 @@ const toPurchaseOrderResponse = (po: {
     supplierId: po.supplierId,
     supplier: po.supplier,
     status: po.status,
+    statusV1: toPurchaseOrderStatusV1(po.status),
+    referenceCode: po.referenceCode,
+    currency: po.currency,
+    subtotalPence: po.subtotalPence,
+    taxPence: po.taxPence,
+    totalPence: po.totalPence,
     orderedAt: po.orderedAt,
     expectedAt: po.expectedAt,
     notes: po.notes,
+    submittedAt: po.submittedAt,
+    cancelledAt: po.cancelledAt,
+    createdByStaffId: po.createdByStaffId,
     createdAt: po.createdAt,
     updatedAt: po.updatedAt,
     items,
+    lines: items,
     totals,
+    amountTotals: {
+      currency: po.currency,
+      subtotalPence: po.subtotalPence,
+      taxPence: po.taxPence,
+      totalPence: po.totalPence,
+    },
   };
 };
 
@@ -333,6 +464,27 @@ const ensureSupplierExists = async (
     throw new HttpError(404, "Supplier not found", "SUPPLIER_NOT_FOUND");
   }
   return supplier;
+};
+
+const resolveVariantForProduct = async (
+  tx: Prisma.TransactionClient,
+  productId: string,
+) => {
+  const variant = await tx.variant.findFirst({
+    where: { productId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      productId: true,
+      costPricePence: true,
+    },
+  });
+
+  if (!variant) {
+    throw new HttpError(404, "No variant found for product", "PO_PRODUCT_VARIANT_NOT_FOUND");
+  }
+
+  return variant;
 };
 
 const getPurchaseOrderOrThrow = async (
@@ -425,24 +577,47 @@ export const searchSuppliers = async (query?: string) => {
   };
 };
 
-export const createPurchaseOrder = async (input: CreatePurchaseOrderInput) => {
+export const createPurchaseOrder = async (
+  input: CreatePurchaseOrderInput,
+  createdByStaffId?: string,
+) => {
   const supplierId = normalizeOptionalText(input.supplierId);
   if (!supplierId || !isUuid(supplierId)) {
     throw new HttpError(400, "supplierId must be a valid UUID", "INVALID_SUPPLIER_ID");
   }
 
+  const currency = normalizeOptionalText(input.currency)?.toUpperCase() ?? "GBP";
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new HttpError(400, "currency must be a 3-letter ISO code", "INVALID_PURCHASE_ORDER");
+  }
+
   const orderedAt = toDateOrUndefined(input.orderedAt, "orderedAt");
   const expectedAt = toDateOrUndefined(input.expectedAt, "expectedAt");
+  const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
 
   const po = await prisma.$transaction(async (tx) => {
     await ensureSupplierExists(tx, supplierId);
+    if (normalizedCreatedByStaffId) {
+      const staff = await tx.user.findUnique({
+        where: { id: normalizedCreatedByStaffId },
+        select: { id: true },
+      });
+      if (!staff) {
+        throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
+      }
+    }
+
+    const referenceCode = await generateReferenceCode(tx);
 
     return tx.purchaseOrder.create({
       data: {
         supplierId,
+        referenceCode,
+        currency,
         orderedAt,
         expectedAt,
         notes: normalizeOptionalText(input.notes),
+        createdByStaffId: normalizedCreatedByStaffId ?? null,
       },
       include: {
         supplier: {
@@ -507,6 +682,7 @@ export const listPurchaseOrders = async (filters: ListPurchaseOrderFilters = {})
         ? {
             OR: [
               ...(isUuid(normalizedQuery) ? [{ id: normalizedQuery }] : []),
+              { referenceCode: { contains: normalizedQuery, mode: "insensitive" } },
               { notes: { contains: normalizedQuery, mode: "insensitive" } },
               { supplier: { name: { contains: normalizedQuery, mode: "insensitive" } } },
               { supplier: { email: { contains: normalizedQuery, mode: "insensitive" } } },
@@ -686,6 +862,10 @@ export const upsertPurchaseOrderItems = async (
         line.unitCostPence === undefined ? undefined : line.unitCostPence;
       const effectiveUnitCostPence =
         requestedUnitCostPence ?? existingItem?.unitCostPence ?? variant.costPricePence ?? null;
+      const effectiveLineTotalPence = computeLineTotalPence(
+        line.quantityOrdered,
+        effectiveUnitCostPence,
+      );
 
       if (existingItem) {
         if (line.quantityOrdered < existingItem.quantityReceived) {
@@ -703,6 +883,7 @@ export const upsertPurchaseOrderItems = async (
             ...(requestedUnitCostPence !== undefined
               ? { unitCostPence: requestedUnitCostPence }
               : { unitCostPence: effectiveUnitCostPence }),
+            lineTotalPence: effectiveLineTotalPence,
           },
         });
         continue;
@@ -714,6 +895,7 @@ export const upsertPurchaseOrderItems = async (
           variantId: line.variantId,
           quantityOrdered: line.quantityOrdered,
           unitCostPence: effectiveUnitCostPence,
+          lineTotalPence: effectiveLineTotalPence,
         },
       });
     }
@@ -887,7 +1069,9 @@ export const updatePurchaseOrderItem = async (
       select: {
         id: true,
         purchaseOrderId: true,
+        quantityOrdered: true,
         quantityReceived: true,
+        unitCostPence: true,
       },
     });
 
@@ -911,6 +1095,306 @@ export const updatePurchaseOrderItem = async (
       data: {
         ...(hasQuantityOrdered ? { quantityOrdered: input.quantityOrdered } : {}),
         ...(hasUnitCostPence ? { unitCostPence: input.unitCostPence ?? null } : {}),
+        lineTotalPence: computeLineTotalPence(
+          hasQuantityOrdered ? (input.quantityOrdered as number) : item.quantityOrdered,
+          hasUnitCostPence ? (input.unitCostPence ?? null) : item.unitCostPence,
+        ),
+      },
+    });
+
+    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+  });
+
+  return toPurchaseOrderResponse(updated);
+};
+
+export const upsertPurchaseOrderLineByProduct = async (
+  purchaseOrderId: string,
+  input: PurchaseOrderLineByProductInput,
+) => {
+  if (!isUuid(purchaseOrderId)) {
+    throw new HttpError(400, "Invalid purchase order id", "INVALID_PURCHASE_ORDER_ID");
+  }
+
+  const productId = normalizeOptionalText(input.productId);
+  if (!productId) {
+    throw new HttpError(400, "productId is required", "INVALID_PURCHASE_ORDER_LINE");
+  }
+
+  if (!Number.isInteger(input.quantityOrdered) || (input.quantityOrdered ?? 0) <= 0) {
+    throw new HttpError(400, "quantityOrdered must be a positive integer", "INVALID_PURCHASE_ORDER_LINE");
+  }
+
+  const requestedUnitCostPence = parseOptionalUnitCostPence(input.unitCost, input.unitCostPence);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const po = await tx.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        items: {
+          include: {
+            variant: {
+              select: {
+                id: true,
+                productId: true,
+                costPricePence: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!po) {
+      throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
+    }
+
+    assertDraftForLineEdits(po.status);
+
+    const variant = await resolveVariantForProduct(tx, productId);
+    const existing = po.items.find((item) => item.variant.productId === productId);
+
+    if (existing && input.quantityOrdered! < existing.quantityReceived) {
+      throw new HttpError(
+        409,
+        "quantityOrdered cannot be less than quantity already received",
+        "PURCHASE_ORDER_QUANTITY_BELOW_RECEIVED",
+      );
+    }
+
+    const effectiveUnitCostPence =
+      requestedUnitCostPence ??
+      existing?.unitCostPence ??
+      variant.costPricePence ??
+      null;
+
+    const lineTotalPence = computeLineTotalPence(input.quantityOrdered!, effectiveUnitCostPence);
+
+    if (existing) {
+      await tx.purchaseOrderItem.update({
+        where: { id: existing.id },
+        data: {
+          quantityOrdered: input.quantityOrdered!,
+          unitCostPence: effectiveUnitCostPence,
+          lineTotalPence,
+        },
+      });
+    } else {
+      await tx.purchaseOrderItem.create({
+        data: {
+          purchaseOrderId,
+          variantId: variant.id,
+          quantityOrdered: input.quantityOrdered!,
+          unitCostPence: effectiveUnitCostPence,
+          lineTotalPence,
+        },
+      });
+    }
+
+    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+  });
+
+  return toPurchaseOrderResponse(updated);
+};
+
+export const deletePurchaseOrderLine = async (
+  purchaseOrderId: string,
+  lineId: string,
+) => {
+  if (!isUuid(purchaseOrderId)) {
+    throw new HttpError(400, "Invalid purchase order id", "INVALID_PURCHASE_ORDER_ID");
+  }
+  if (!isUuid(lineId)) {
+    throw new HttpError(400, "Invalid purchase order line id", "INVALID_PURCHASE_ORDER_ITEM_ID");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const po = await tx.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!po) {
+      throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
+    }
+
+    assertDraftForLineEdits(po.status);
+
+    const line = await tx.purchaseOrderItem.findUnique({
+      where: { id: lineId },
+      select: {
+        id: true,
+        purchaseOrderId: true,
+        quantityReceived: true,
+      },
+    });
+
+    if (!line || line.purchaseOrderId !== purchaseOrderId) {
+      throw new HttpError(404, "Purchase order line not found", "PURCHASE_ORDER_ITEM_NOT_FOUND");
+    }
+
+    if (line.quantityReceived > 0) {
+      throw new HttpError(
+        409,
+        "Cannot delete a line with received quantity",
+        "PURCHASE_ORDER_LINE_HAS_RECEIPTS",
+      );
+    }
+
+    await tx.purchaseOrderItem.delete({
+      where: { id: lineId },
+    });
+
+    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+  });
+
+  return toPurchaseOrderResponse(updated);
+};
+
+export const submitPurchaseOrder = async (
+  purchaseOrderId: string,
+  actorStaffId?: string,
+) => {
+  if (!isUuid(purchaseOrderId)) {
+    throw new HttpError(400, "Invalid purchase order id", "INVALID_PURCHASE_ORDER_ID");
+  }
+
+  const normalizedActorStaffId = normalizeOptionalText(actorStaffId);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const po = await tx.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        items: {
+          include: {
+            variant: {
+              select: {
+                costPricePence: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!po) {
+      throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
+    }
+
+    if (po.status !== "DRAFT") {
+      throw new HttpError(
+        409,
+        "Purchase order can only be submitted from DRAFT",
+        "PURCHASE_ORDER_NOT_SUBMITTABLE",
+      );
+    }
+
+    if (po.items.length === 0) {
+      throw new HttpError(400, "Purchase order requires at least one line", "PURCHASE_ORDER_EMPTY");
+    }
+
+    if (normalizedActorStaffId) {
+      const staff = await tx.user.findUnique({
+        where: { id: normalizedActorStaffId },
+        select: { id: true },
+      });
+      if (!staff) {
+        throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
+      }
+    }
+
+    const snapshotLines: Array<{
+      quantityOrdered: number;
+      unitCostPence: number | null;
+      lineTotalPence: number | null;
+    }> = [];
+
+    for (const item of po.items) {
+      if (!Number.isInteger(item.quantityOrdered) || item.quantityOrdered <= 0) {
+        throw new HttpError(
+          400,
+          "All purchase order line quantities must be positive integers",
+          "PURCHASE_ORDER_INVALID_LINE",
+        );
+      }
+
+      const resolvedUnitCostPence = item.unitCostPence ?? item.variant.costPricePence ?? null;
+      const resolvedLineTotalPence = computeLineTotalPence(item.quantityOrdered, resolvedUnitCostPence);
+
+      snapshotLines.push({
+        quantityOrdered: item.quantityOrdered,
+        unitCostPence: resolvedUnitCostPence,
+        lineTotalPence: resolvedLineTotalPence,
+      });
+
+      await tx.purchaseOrderItem.update({
+        where: { id: item.id },
+        data: {
+          unitCostPence: resolvedUnitCostPence,
+          lineTotalPence: resolvedLineTotalPence,
+        },
+      });
+    }
+
+    const referenceCode = po.referenceCode ?? (await generateReferenceCode(tx));
+    const totals = computeSnapshotTotals(snapshotLines);
+
+    await tx.purchaseOrder.update({
+      where: { id: purchaseOrderId },
+      data: {
+        status: "SUBMITTED",
+        referenceCode,
+        subtotalPence: totals.subtotalPence,
+        taxPence: totals.taxPence,
+        totalPence: totals.totalPence,
+        submittedAt: new Date(),
+        cancelledAt: null,
+        createdByStaffId: po.createdByStaffId ?? normalizedActorStaffId ?? null,
+      },
+    });
+
+    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+  });
+
+  return toPurchaseOrderResponse(updated);
+};
+
+export const cancelPurchaseOrder = async (
+  purchaseOrderId: string,
+) => {
+  if (!isUuid(purchaseOrderId)) {
+    throw new HttpError(400, "Invalid purchase order id", "INVALID_PURCHASE_ORDER_ID");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const po = await tx.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!po) {
+      throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
+    }
+
+    if (po.status !== "DRAFT" && po.status !== "SUBMITTED" && po.status !== "SENT") {
+      throw new HttpError(
+        409,
+        "Purchase order can only be cancelled from DRAFT or SUBMITTED",
+        "PURCHASE_ORDER_NOT_CANCELLABLE",
+      );
+    }
+
+    await tx.purchaseOrder.update({
+      where: { id: purchaseOrderId },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
       },
     });
 
