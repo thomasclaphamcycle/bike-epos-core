@@ -23,7 +23,7 @@
     "test:m25": "NODE_ENV=test node scripts/catalog_m25_smoke_tests.js",
     "test:m26": "NODE_ENV=test node scripts/stocktake_m26_smoke_tests.js",
     "test:m27": "NODE_ENV=test node scripts/purchase_orders_m27_smoke_tests.js",
-    "test:m28": "NODE_ENV=test node scripts/pos_m28_smoke_tests.js",
+    "test:m28": "NODE_ENV=test ALLOW_NON_TEST_DB=1 ALLOW_EXISTING_SERVER=1 node scripts/pos_m28_smoke_tests.js",
     "test:m29": "ALLOW_NON_TEST_DB=1 ALLOW_EXISTING_SERVER=1 node scripts/products_m29_smoke_tests.js",
     "test:m30": "ALLOW_NON_TEST_DB=1 ALLOW_EXISTING_SERVER=1 node scripts/workshop_m30_smoke_tests.js",
     "test:m31": "ALLOW_NON_TEST_DB=1 ALLOW_EXISTING_SERVER=1 node scripts/payments_m31_smoke_tests.js",
