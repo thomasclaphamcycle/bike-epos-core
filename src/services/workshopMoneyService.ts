@@ -10,6 +10,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { recordCashRefundMovementForRefundTx } from "./tillService";
+import { releaseReservationsForJobTx } from "./stockReservationService";
 
 type SerializableTx = Prisma.TransactionClient;
 
@@ -554,6 +555,7 @@ const cancelWorkshopJobTx = async (
       cancelledAt: new Date(),
     },
   });
+  await releaseReservationsForJobTx(tx, workshopJob.id);
 
   try {
     const cancellation = await tx.workshopCancellation.create({

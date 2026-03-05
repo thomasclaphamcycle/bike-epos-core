@@ -54,7 +54,8 @@
     "test:m50": "node scripts/run_smoke_test.js scripts/workshop_lines_m50_smoke_tests.js",
     "test:m51": "node scripts/run_smoke_test.js scripts/workshop_convert_sale_m51_smoke_tests.js",
     "test:m52": "node scripts/run_smoke_test.js scripts/workshop_reservations_m52_smoke_tests.js",
-    "test:m53": "node scripts/run_smoke_test.js scripts/workshop_reservation_consume_m53_smoke_tests.js"
+    "test:m53": "node scripts/run_smoke_test.js scripts/workshop_reservation_consume_m53_smoke_tests.js",
+    "test:m54": "node scripts/run_smoke_test.js scripts/workshop_workflow_m54_smoke_tests.js"
   },
   "repository": {
     "type": "git",

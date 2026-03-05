@@ -4,6 +4,7 @@ import { HttpError, isUuid } from "../utils/http";
 import {
   getVariantAvailabilityTx,
   computeWorkshopPartsReconciliationTx,
+  releaseReservationsForJobTx,
 } from "./stockReservationService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
@@ -838,6 +839,7 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     reservations: job.stockReservations.map((reservation) => toReservationResponse(reservation)),
     totals: toWorkshopJobTotals(job.lines),
     partsStatus: reconciliation.partsStatus,
+    statusSuggestion: reconciliation.partsStatus === "SHORT" ? "AWAITING_PARTS" : null,
     partsReconciliation: reconciliation,
   };
 };
@@ -985,6 +987,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
   return prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
     const data: Prisma.WorkshopJobUpdateInput = {};
+    let shouldReleaseReservations = false;
     let customerNameFromCustomer: string | undefined;
 
     if (Object.prototype.hasOwnProperty.call(input, "customerName")) {
@@ -1075,6 +1078,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
       const normalizedRaw = normalizeOptionalText(rawStatus)?.toUpperCase();
       data.status = toWorkshopJobStatus(parsed, rawStatus);
       if (normalizedRaw === "CANCELLED") {
+        shouldReleaseReservations = true;
         data.cancelledAt = job.cancelledAt ?? new Date();
         data.closedAt = null;
       } else if (parsed === "CLOSED") {
@@ -1085,6 +1089,20 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
         data.closedAt = null;
         data.cancelledAt = null;
         if (parsed === "COLLECTED") {
+          const linkedSale = await tx.sale.findUnique({
+            where: { workshopJobId },
+            select: {
+              id: true,
+              completedAt: true,
+            },
+          });
+          if (linkedSale && !linkedSale.completedAt) {
+            throw new HttpError(
+              409,
+              "Linked sale must be completed before collecting this job",
+              "WORKSHOP_JOB_SALE_NOT_COMPLETED",
+            );
+          }
           data.completedAt = job.completedAt ?? new Date();
         }
       }
@@ -1094,6 +1112,10 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
       where: { id: workshopJobId },
       data,
     });
+
+    if (shouldReleaseReservations) {
+      await releaseReservationsForJobTx(tx, workshopJobId);
+    }
 
     return toJobResponse(updated);
   });

@@ -2,6 +2,7 @@ import { Prisma, WorkshopJobNoteVisibility, WorkshopJobStatus } from "@prisma/cl
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { releaseReservationsForJobTx } from "./stockReservationService";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
 type WorkflowStage = "BOOKED" | "IN_PROGRESS" | "READY" | "COMPLETED" | "CANCELLED";
@@ -127,6 +128,14 @@ export const assignWorkshopJob = async (
   return prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
+      include: {
+        sale: {
+          select: {
+            id: true,
+            completedAt: true,
+          },
+        },
+      },
     });
 
     if (!job) {
@@ -397,6 +406,14 @@ export const changeWorkshopJobStatus = async (
       );
     }
 
+    if (targetStage === "COMPLETED" && job.sale && !job.sale.completedAt) {
+      throw new HttpError(
+        409,
+        "Linked sale must be completed before collecting this job",
+        "WORKSHOP_JOB_SALE_NOT_COMPLETED",
+      );
+    }
+
     const data: Prisma.WorkshopJobUpdateInput = {
       status: targetStatus,
     };
@@ -413,6 +430,10 @@ export const changeWorkshopJobStatus = async (
       where: { id: workshopJobId },
       data,
     });
+
+    if (targetStage === "CANCELLED") {
+      await releaseReservationsForJobTx(tx, workshopJobId);
+    }
 
     await createAuditEventTx(
       tx,

@@ -43,6 +43,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
     .status { margin-top: 8px; min-height: 18px; font-size: 13px; color: var(--muted); }
     .status.ok { color: var(--ok); }
     .status.error { color: var(--danger); }
+    .quick-statuses button { min-width: 132px; }
     .meta-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(180px, 1fr)); }
     .meta { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; }
     .meta .label { color: var(--muted); font-size: 12px; }
@@ -106,6 +107,14 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         <button id="save-status-btn" type="button">Save Status</button>
         <button id="save-notes-btn" class="primary" type="button">Save Notes/Title</button>
       </div>
+      <div class="controls quick-statuses" style="margin-top: 8px;">
+        <button type="button" class="quick-status-btn" data-status="IN_PROGRESS">In Progress</button>
+        <button type="button" class="quick-status-btn" data-status="AWAITING_PARTS">Awaiting Parts</button>
+        <button type="button" class="quick-status-btn" data-status="READY">Ready</button>
+        <button type="button" class="quick-status-btn" data-status="COLLECTED">Collected</button>
+        <button type="button" class="quick-status-btn" data-status="CANCELLED">Cancelled</button>
+      </div>
+      <div id="status-hint" class="status"></div>
       <div id="save-status" class="status"></div>
     </div>
 
@@ -259,6 +268,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         const linesWrap = qs("#lines-wrap");
         const lineTotals = qs("#line-totals");
         const partsStatus = qs("#parts-status");
+        const statusHint = qs("#status-hint");
         const reservationsWrap = qs("#reservations-wrap");
         if (!meta || !linesWrap || !reservationsWrap) return;
 
@@ -293,6 +303,7 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         const reservations = Array.isArray(jobPayload?.reservations) ? jobPayload.reservations : [];
         const totals = jobPayload?.totals || { subtotalPence: 0, taxPence: 0, totalPence: 0 };
         const partsStatusValue = jobPayload?.partsStatus || "OK";
+        const statusSuggestion = jobPayload?.statusSuggestion || null;
         setSaleLink(job.saleId || null, job.saleId ? "/pos?saleId=" + encodeURIComponent(job.saleId) : null);
         if (lineTotals) {
           lineTotals.innerHTML =
@@ -304,6 +315,17 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
           partsStatus.textContent = "Parts status: " + partsStatusValue;
           partsStatus.classList.remove("ok", "error");
           partsStatus.classList.add(partsStatusValue === "OK" ? "ok" : "error");
+        }
+        if (statusHint) {
+          if (
+            partsStatusValue === "SHORT" &&
+            statusSuggestion === "AWAITING_PARTS" &&
+            job.statusV1 !== "AWAITING_PARTS"
+          ) {
+            statusHint.textContent = "Parts are short. Use quick action 'Awaiting Parts'.";
+          } else {
+            statusHint.textContent = "";
+          }
         }
         if (lines.length === 0) {
           linesWrap.innerHTML = '<div style="padding: 10px;">No lines.</div>';
@@ -362,9 +384,9 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         }
       };
 
-      const saveStatus = async () => {
-        const status = (qs("#status-select").value || "").trim();
-        if (!status) {
+      const saveStatusValue = async (status, successMessage = "Status saved.") => {
+        const normalizedStatus = String(status || "").trim();
+        if (!normalizedStatus) {
           setStatus("save-status", "Select a status first.", "error");
           return;
         }
@@ -372,13 +394,18 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
         try {
           await apiRequest("/api/workshop/jobs/" + encodeURIComponent(jobId), {
             method: "PATCH",
-            body: JSON.stringify({ status }),
+            body: JSON.stringify({ status: normalizedStatus }),
           });
           await loadJob();
-          setStatus("save-status", "Status saved.", "ok");
+          setStatus("save-status", successMessage, "ok");
         } catch (error) {
           setStatus("save-status", error.message || "Failed to save status", "error");
         }
+      };
+
+      const saveStatus = async () => {
+        const status = (qs("#status-select").value || "").trim();
+        await saveStatusValue(status, "Status saved.");
       };
 
       const saveNotesAndTitle = async () => {
@@ -590,6 +617,15 @@ export const renderWorkshopJobPage = (input: WorkshopJobPageInput) => {
       };
 
       qs("#save-status-btn")?.addEventListener("click", saveStatus);
+      qs(".quick-statuses")?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) return;
+        if (!target.classList.contains("quick-status-btn")) return;
+        const status = target.getAttribute("data-status");
+        if (!status) return;
+        qs("#status-select").value = status;
+        saveStatusValue(status, "Status updated.");
+      });
       qs("#save-notes-btn")?.addEventListener("click", saveNotesAndTitle);
       qs("#line-add-btn")?.addEventListener("click", addLine);
       qs("#reservation-add-btn")?.addEventListener("click", addReservation);

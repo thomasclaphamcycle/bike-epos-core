@@ -1,0 +1,53 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@managerRole = MANAGER
+@managerStaffId = manager-1
+@jobId = REPLACE_WORKSHOP_JOB_ID
+@productId = REPLACE_PRODUCT_ID
+
+### Reserve stock for job
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/reservations
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "productId": "{{productId}}",
+  "quantity": 2
+}
+
+### Set status to AWAITING_PARTS (allowed when parts are short)
+PATCH {{baseUrl}}/api/workshop/jobs/{{jobId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "status": "AWAITING_PARTS"
+}
+
+### Cancel job via PATCH (releases reservations)
+PATCH {{baseUrl}}/api/workshop/jobs/{{jobId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "status": "CANCELLED"
+}
+
+### Verify cancellation + reservations released
+GET {{baseUrl}}/api/workshop/jobs/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Optional collected rule check (expected 409 if linked sale not completed)
+PATCH {{baseUrl}}/api/workshop/jobs/{{jobId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "status": "COLLECTED"
+}
