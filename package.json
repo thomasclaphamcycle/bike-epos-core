@@ -50,6 +50,8 @@
     "test:m77": "node scripts/run_smoke_test.js scripts/refunds_exchanges_m77_smoke_tests.js",
     "test:m78": "node scripts/run_smoke_test.js scripts/daily_close_m78_smoke_tests.js",
     "test:security": "node scripts/run_with_test_env.js node scripts/security_auth_guard_tests.js",
+    "db:seed:dev": "node scripts/seed_demo_data.js --mode=dev",
+    "db:seed:test": "node scripts/seed_demo_data.js --mode=test",
     "db:backup": "bash scripts/db_backup.sh",
     "db:restore": "bash scripts/db_restore.sh"
   },
