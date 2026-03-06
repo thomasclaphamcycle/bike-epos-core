@@ -1,5 +1,7 @@
 import "dotenv/config";
 import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import express from "express";
 import { prisma } from "./lib/prisma";
 import { basketRouter } from "./routes/basketRoutes";
@@ -41,6 +43,7 @@ import { tillRouter } from "./routes/tillRoutes";
 import { refundRouter } from "./routes/refundRoutes";
 import { cashRouter } from "./routes/cashRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
+import { getDailyClosePrintPageHandler } from "./controllers/reportsUiController";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
@@ -63,6 +66,9 @@ const resolveVersion = () => {
 };
 
 const appVersion = resolveVersion();
+const isProduction = process.env.NODE_ENV === "production";
+const frontendDistPath = path.resolve(process.cwd(), "frontend", "dist");
+const frontendIndexPath = path.join(frontendDistPath, "index.html");
 
 const app = express();
 app.use(requestIdMiddleware);
@@ -131,6 +137,18 @@ app.get("/metrics", requireRoleAtLeast("MANAGER"), (req, res) =>
 );
 
 app.get("/", (req, res) => {
+  if (isProduction) {
+    if (!fs.existsSync(frontendIndexPath)) {
+      return res.status(500).json({
+        error: {
+          code: "FRONTEND_BUILD_MISSING",
+          message: "frontend/dist/index.html is missing. Run `npm run build` first.",
+        },
+      });
+    }
+    return res.sendFile(frontendIndexPath);
+  }
+
   if (req.user) {
     return res.redirect("/pos");
   }
@@ -201,20 +219,46 @@ app.use("/api/locations", locationRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/reports/workshop", workshopReportRouter);
 app.use("/api/audit", auditRouter);
-app.use("/", authUiRouter);
-app.use("/", adminUiRouter);
-app.use("/", managerUiRouter);
-app.use("/", reportsUiRouter);
-app.use("/", catalogUiRouter);
-app.use("/", inventoryUiRouter);
-app.use("/", inventoryAdjustUiRouter);
-app.use("/", purchasingUiRouter);
-app.use("/", posUiRouter);
-app.use("/", workshopUiRouter);
 app.use("/", receiptUiRouter);
-app.use("/", tillUiRouter);
+
+if (isProduction) {
+  app.get(
+    "/reports/daily-close/print",
+    requireRoleAtLeast("MANAGER"),
+    getDailyClosePrintPageHandler,
+  );
+  app.use(express.static(frontendDistPath, { index: false }));
+  app.get(/^\/(?!api\/).*/, (req, res, next) => {
+    if (!fs.existsSync(frontendIndexPath)) {
+      return res.status(500).json({
+        error: {
+          code: "FRONTEND_BUILD_MISSING",
+          message: "frontend/dist/index.html is missing. Run `npm run build` first.",
+        },
+      });
+    }
+    res.sendFile(frontendIndexPath, (error) => {
+      if (error) {
+        next(error);
+      }
+    });
+  });
+} else {
+  app.use("/", authUiRouter);
+  app.use("/", adminUiRouter);
+  app.use("/", managerUiRouter);
+  app.use("/", reportsUiRouter);
+  app.use("/", catalogUiRouter);
+  app.use("/", inventoryUiRouter);
+  app.use("/", inventoryAdjustUiRouter);
+  app.use("/", purchasingUiRouter);
+  app.use("/", posUiRouter);
+  app.use("/", workshopUiRouter);
+  app.use("/", tillUiRouter);
+}
 app.use(errorHandler);
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+const port = Number.parseInt(process.env.PORT ?? "3000", 10) || 3000;
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
 });
