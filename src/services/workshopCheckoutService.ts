@@ -153,6 +153,7 @@ export const checkoutWorkshopJobToSale = async (
       data: {
         workshopJobId,
         customerId: workshopJob.customerId,
+        locationId: workshopJob.locationId,
         subtotalPence: saleTotalPence,
         taxPence: 0,
         totalPence: saleTotalPence,

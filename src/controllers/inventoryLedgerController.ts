@@ -10,6 +10,7 @@ import {
   listMovements,
   recordMovement,
 } from "../services/inventoryLedgerService";
+import { resolveRequestLocation } from "../services/locationService";
 import { HttpError } from "../utils/http";
 
 const INVENTORY_MOVEMENT_TYPES = new Set<InventoryMovementType>(
@@ -82,6 +83,7 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
 
   const movementInput: {
     variantId?: string;
+    locationId?: string;
     type: InventoryMovementType;
     quantity?: number;
     unitCost?: string | number | null;
@@ -115,6 +117,8 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
   if (staffActorId) {
     movementInput.createdByStaffId = staffActorId;
   }
+  const location = await resolveRequestLocation(req);
+  movementInput.locationId = location.id;
 
   const movement = await recordMovement(movementInput);
 
@@ -129,6 +133,7 @@ export const listInventoryMovementsHandler = async (req: Request, res: Response)
 
   const filters: {
     variantId?: string;
+    locationId?: string;
     from?: string;
     to?: string;
     type?: InventoryMovementType;
@@ -145,6 +150,8 @@ export const listInventoryMovementsHandler = async (req: Request, res: Response)
   if (typeRaw) {
     filters.type = parseMovementTypeOrThrow(typeRaw, "INVALID_INVENTORY_MOVEMENT_FILTER");
   }
+  const location = await resolveRequestLocation(req);
+  filters.locationId = location.id;
 
   const response = await listMovements(filters);
 
@@ -153,7 +160,8 @@ export const listInventoryMovementsHandler = async (req: Request, res: Response)
 
 export const getInventoryOnHandHandler = async (req: Request, res: Response) => {
   const variantId = typeof req.query.variantId === "string" ? req.query.variantId : undefined;
-  const response = await getOnHand(variantId);
+  const location = await resolveRequestLocation(req);
+  const response = await getOnHand(variantId, location.id);
   res.json(response);
 };
 
@@ -192,6 +200,7 @@ export const listInventoryOnHandHandler = async (req: Request, res: Response) =>
 
   const take = parseOptionalIntQuery(req.query.take);
   const skip = parseOptionalIntQuery(req.query.skip);
-  const result = await listOnHand({ q, isActive, take, skip });
+  const location = await resolveRequestLocation(req);
+  const result = await listOnHand({ q, isActive, take, skip, locationId: location.id });
   res.json(result);
 };

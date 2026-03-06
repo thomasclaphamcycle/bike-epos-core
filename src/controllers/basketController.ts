@@ -10,6 +10,7 @@ import { HttpError } from "../utils/http";
 import { checkoutBasketToSale } from "../services/salesService";
 import { parsePaymentFromBody } from "./salesController";
 import { getRequestStaffActorId } from "../middleware/staffRole";
+import { resolveRequestLocation } from "../services/locationService";
 
 export const createBasketHandler = async (_req: Request, res: Response) => {
   const basket = await createBasket();
@@ -55,7 +56,13 @@ export const deleteBasketItemHandler = async (req: Request, res: Response) => {
 
 export const checkoutBasketHandler = async (req: Request, res: Response) => {
   const payment = parsePaymentFromBody(req.body);
-  const result = await checkoutBasketToSale(req.params.id, payment, getRequestStaffActorId(req));
+  const location = await resolveRequestLocation(req);
+  const result = await checkoutBasketToSale(
+    req.params.id,
+    payment,
+    getRequestStaffActorId(req),
+    location.id,
+  );
   res.status(result.idempotent ? 200 : 201).json({
     sale: result.sale,
     saleItems: result.saleItems,

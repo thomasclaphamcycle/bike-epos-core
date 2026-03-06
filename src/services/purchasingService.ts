@@ -1,6 +1,7 @@
 import { Prisma, PurchaseOrderStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 
 type CreateSupplierInput = {
   name?: string;
@@ -1001,6 +1002,7 @@ export const receivePurchaseOrder = async (
     }
 
     await ensureStockLocationExists(tx, locationId);
+    const inventoryLocation = await ensureDefaultLocationTx(tx);
 
     if (normalizedCreatedByStaffId) {
       const staff = await tx.user.findUnique({ where: { id: normalizedCreatedByStaffId } });
@@ -1061,6 +1063,7 @@ export const receivePurchaseOrder = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: inventoryLocation.id,
           type: "PURCHASE",
           quantity: line.quantity,
           unitCost: unitCost,

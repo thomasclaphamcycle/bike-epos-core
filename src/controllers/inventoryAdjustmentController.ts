@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import { recordAdjustment } from "../services/inventoryLedgerService";
+import { resolveRequestLocation } from "../services/locationService";
 import { HttpError } from "../utils/http";
 
 const VALID_REASONS = new Set([
@@ -40,8 +41,10 @@ export const createInventoryAdjustmentHandler = async (req: Request, res: Respon
     throw new HttpError(400, "note must be a string", "INVALID_INVENTORY_ADJUSTMENT");
   }
 
+  const location = await resolveRequestLocation(req);
   const result = await recordAdjustment({
     variantId: body.variantId,
+    locationId: location.id,
     quantityDelta: body.quantityDelta,
     reason: body.reason,
     note: body.note,

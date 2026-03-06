@@ -1,11 +1,16 @@
 import { Request, Response } from "express";
 import {
+  getDailyCloseReport,
   getInventoryOnHandReport,
   getInventoryValueReport,
   getPaymentsReport,
+  runDailyCloseReport,
   getSalesDailyReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
+import { resolveRequestLocation } from "../services/locationService";
+import { getRequestAuditActor } from "../middleware/staffRole";
+import { HttpError } from "../utils/http";
 import { toCsv } from "../utils/csv";
 
 const getDateRangeQuery = (req: Request) => {
@@ -25,13 +30,15 @@ const sendCsv = (res: Response, filename: string, csv: string) => {
 
 export const getSalesDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const report = await getSalesDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const report = await getSalesDailyReport(from, to, location.id);
   res.json(report);
 };
 
 export const getWorkshopDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const report = await getWorkshopDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const report = await getWorkshopDailyReport(from, to, location.id);
   res.json(report);
 };
 
@@ -47,7 +54,8 @@ export const getInventoryValueReportHandler = async (req: Request, res: Response
 
 export const getSalesDailyReportCsvHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const rows = await getSalesDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const rows = await getSalesDailyReport(from, to, location.id);
 
   const csv = toCsv(rows, [
     { header: "date", value: (row) => row.date },
@@ -62,7 +70,8 @@ export const getSalesDailyReportCsvHandler = async (req: Request, res: Response)
 
 export const getWorkshopDailyReportCsvHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
-  const rows = await getWorkshopDailyReport(from, to);
+  const location = await resolveRequestLocation(req);
+  const rows = await getWorkshopDailyReport(from, to, location.id);
 
   const csv = toCsv(rows, [
     { header: "date", value: (row) => row.date },
@@ -129,4 +138,48 @@ export const getPaymentsReportCsvHandler = async (req: Request, res: Response) =
   ]);
 
   sendCsv(res, "payments.csv", csv);
+};
+
+export const runDailyCloseHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { date?: unknown; locationCode?: unknown };
+
+  if (body.date !== undefined && typeof body.date !== "string") {
+    throw new HttpError(400, "date must be a string", "INVALID_DAILY_CLOSE");
+  }
+  if (body.locationCode !== undefined && typeof body.locationCode !== "string") {
+    throw new HttpError(400, "locationCode must be a string", "INVALID_DAILY_CLOSE");
+  }
+
+  const input: {
+    date?: string;
+    locationCode?: string;
+    auditActor: ReturnType<typeof getRequestAuditActor>;
+  } = {
+    auditActor: getRequestAuditActor(req),
+  };
+  if (body.date !== undefined) {
+    input.date = body.date;
+  }
+  if (body.locationCode !== undefined) {
+    input.locationCode = body.locationCode;
+  }
+
+  const report = await runDailyCloseReport(input);
+
+  res.status(201).json(report);
+};
+
+export const getDailyCloseHandler = async (req: Request, res: Response) => {
+  const date = typeof req.query.date === "string" ? req.query.date : undefined;
+  const locationCode =
+    typeof req.query.locationCode === "string" ? req.query.locationCode : undefined;
+  const input: { date?: string; locationCode?: string } = {};
+  if (date !== undefined) {
+    input.date = date;
+  }
+  if (locationCode !== undefined) {
+    input.locationCode = locationCode;
+  }
+  const report = await getDailyCloseReport(input);
+  res.json(report);
 };

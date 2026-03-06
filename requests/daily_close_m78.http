@@ -1,0 +1,38 @@
+@baseUrl = http://localhost:3000
+@managerRole = MANAGER
+@managerId = manager-1
+@staffRole = STAFF
+@staffId = staff-1
+@date = 2026-03-05
+@locationCode = MAIN
+
+### Run daily close (MANAGER+)
+POST {{baseUrl}}/api/reports/daily-close
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "date": "{{date}}",
+  "locationCode": "{{locationCode}}"
+}
+
+### Read daily close snapshot (MANAGER+)
+GET {{baseUrl}}/api/reports/daily-close?date={{date}}&locationCode={{locationCode}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Print daily close view (MANAGER+)
+GET {{baseUrl}}/reports/daily-close/print?date={{date}}&locationCode={{locationCode}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### STAFF forbidden
+POST {{baseUrl}}/api/reports/daily-close
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "date": "{{date}}"
+}

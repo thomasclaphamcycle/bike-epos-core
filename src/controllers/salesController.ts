@@ -4,6 +4,7 @@ import {
   addSaleTender,
   attachCustomerToSale,
   completeSaleIfEligible,
+  createExchangeSale,
   createSaleReturn,
   deleteSaleTender,
   getSaleById,
@@ -11,7 +12,8 @@ import {
   listSales,
 } from "../services/salesService";
 import { HttpError } from "../utils/http";
-import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
+import { resolveRequestLocation } from "../services/locationService";
 
 export const getSaleHandler = async (req: Request, res: Response) => {
   const result = await getSaleById(req.params.id);
@@ -23,7 +25,8 @@ export const listSalesHandler = async (req: Request, res: Response) => {
     typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-  const result = await listSales({ from, to });
+  const location = await resolveRequestLocation(req);
+  const result = await listSales({ from, to, locationId: location.id });
   res.json(result);
 };
 
@@ -122,6 +125,16 @@ export const createSaleReturnHandler = async (req: Request, res: Response) => {
 
   const result = await createSaleReturn(req.params.saleId, items, refund);
   res.status(201).json(result);
+};
+
+export const createExchangeSaleHandler = async (req: Request, res: Response) => {
+  const location = await resolveRequestLocation(req);
+  const result = await createExchangeSale(req.params.saleId, {
+    staffActorId: getRequestStaffActorId(req),
+    locationId: location.id,
+    auditActor: getRequestAuditActor(req),
+  });
+  res.status(result.idempotent ? 200 : 201).json(result);
 };
 
 export const attachCustomerToSaleHandler = async (req: Request, res: Response) => {

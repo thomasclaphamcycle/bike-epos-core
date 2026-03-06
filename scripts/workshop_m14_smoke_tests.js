@@ -48,6 +48,34 @@ const addDays = (date, days) => {
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
+const ensureMainLocationId = async () => {
+  const existing = await prisma.location.findFirst({
+    where: {
+      code: {
+        equals: "MAIN",
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+  if (existing) {
+    return existing.id;
+  }
+
+  const created = await prisma.location.create({
+    data: {
+      name: "Main",
+      code: "MAIN",
+      isActive: true,
+    },
+    select: {
+      id: true,
+    },
+  });
+  return created.id;
+};
 
 const RUN_REF = uniqueRef();
 const STAFF_USER_ID = `m14-staff-${RUN_REF}`;
@@ -103,6 +131,7 @@ const waitForServer = async () => {
 
 const createCustomerAndJob = async (state, overrides = {}) => {
   const ref = uniqueRef();
+  const locationId = await ensureMainLocationId();
   const customer = await prisma.customer.create({
     data: {
       firstName: "M14",
@@ -115,6 +144,7 @@ const createCustomerAndJob = async (state, overrides = {}) => {
 
   const job = await prisma.workshopJob.create({
     data: {
+      locationId,
       customerId: customer.id,
       status: "BOOKING_MADE",
       source: "IN_STORE",

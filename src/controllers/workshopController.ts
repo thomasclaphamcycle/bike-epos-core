@@ -12,6 +12,7 @@ import {
 } from "../middleware/staffRole";
 import { getWorkshopDashboard } from "../services/workshopDashboardService";
 import { getWorkshopAvailability } from "../services/workshopAvailabilityService";
+import { resolveRequestLocation } from "../services/locationService";
 import {
   createOnlineWorkshopBooking,
   getWorkshopBookingByManageToken,
@@ -37,6 +38,8 @@ import {
   finalizeWorkshopJob,
   getWorkshopJobById,
   listWorkshopJobs,
+  removeWorkshopJobLine,
+  updateWorkshopJobLine,
   updateWorkshopJob,
 } from "../services/workshopService";
 import { HttpError } from "../utils/http";
@@ -134,7 +137,11 @@ export const createWorkshopJobHandler = async (req: Request, res: Response) => {
     throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB");
   }
 
-  const job = await createWorkshopJob(body);
+  const location = await resolveRequestLocation(req);
+  const job = await createWorkshopJob({
+    ...body,
+    locationId: location.id,
+  });
   res.status(201).json(job);
 };
 
@@ -149,9 +156,11 @@ export const listWorkshopJobsHandler = async (req: Request, res: Response) => {
   const take = parseOptionalIntegerQuery(req.query.take, "take");
   const skip = parseOptionalIntegerQuery(req.query.skip, "skip");
 
+  const location = await resolveRequestLocation(req);
   const result = await listWorkshopJobs({
     status,
     q,
+    locationId: location.id,
     take,
     skip,
   });
@@ -247,6 +256,36 @@ export const addWorkshopJobLineHandler = async (req: Request, res: Response) => 
   res.status(201).json(result);
 };
 
+export const patchWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    description?: string;
+    qty?: number;
+    unitPricePence?: number;
+  };
+
+  if (body.description !== undefined && typeof body.description !== "string") {
+    throw new HttpError(400, "description must be a string", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.qty !== undefined && typeof body.qty !== "number") {
+    throw new HttpError(400, "qty must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.unitPricePence !== undefined && typeof body.unitPricePence !== "number") {
+    throw new HttpError(
+      400,
+      "unitPricePence must be a number",
+      "INVALID_WORKSHOP_LINE_UPDATE",
+    );
+  }
+
+  const result = await updateWorkshopJobLine(req.params.id, req.params.lineId, body);
+  res.json(result);
+};
+
+export const deleteWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const result = await removeWorkshopJobLine(req.params.id, req.params.lineId);
+  res.json(result);
+};
+
 export const finalizeWorkshopJobHandler = async (req: Request, res: Response) => {
   const result = await finalizeWorkshopJob(req.params.id);
   res.status(result.idempotent ? 200 : 201).json(result);
@@ -282,7 +321,9 @@ export const getWorkshopDashboardHandler = async (req: Request, res: Response) =
   const hasNotes = typeof req.query.hasNotes === "string" ? req.query.hasNotes : undefined;
   const limit = parseOptionalIntegerQuery(req.query.limit, "limit");
 
+  const location = await resolveRequestLocation(req);
   const result = await getWorkshopDashboard({
+    locationId: location.id,
     status,
     source,
     from,

@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import {
   createProduct,
+  getProductByBarcode,
   getProductById,
   listProducts,
   searchProducts,
   updateProductById,
 } from "../services/productService";
+import { resolveRequestLocation } from "../services/locationService";
 import { HttpError } from "../utils/http";
 
 const parseActiveQuery = (value: unknown): boolean | undefined => {
@@ -69,8 +71,15 @@ export const searchProductsHandler = async (req: Request, res: Response) => {
   const take = parseOptionalIntQuery(req.query.take, "take");
   const skip = parseOptionalIntQuery(req.query.skip, "skip");
 
-  const results = await searchProducts({ q, barcode, sku, take, skip });
+  const location = await resolveRequestLocation(req);
+  const results = await searchProducts({ q, barcode, sku, take, skip, locationId: location.id });
   res.json(results);
+};
+
+export const getProductByBarcodeHandler = async (req: Request, res: Response) => {
+  const location = await resolveRequestLocation(req);
+  const result = await getProductByBarcode(req.params.code, location.id);
+  res.json(result);
 };
 
 export const createProductHandler = async (req: Request, res: Response) => {

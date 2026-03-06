@@ -2,6 +2,7 @@ import { Prisma, WorkshopJobPartStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { ensureDefaultLocationTx } from "./locationService";
 
 type AddWorkshopJobPartInput = {
   variantId?: string;
@@ -132,6 +133,7 @@ const ensureWorkshopJobExistsTx = async (tx: Prisma.TransactionClient, workshopJ
     where: { id: workshopJobId },
     select: {
       id: true,
+      locationId: true,
       status: true,
       updatedAt: true,
     },
@@ -180,6 +182,7 @@ const writeWorkshopStockLedgerDeltaTx = async (
     variantId: string;
     quantityDelta: number;
     locationId?: string;
+    inventoryLocationId?: string;
     note?: string;
     createdByStaffId?: string;
   },
@@ -214,6 +217,7 @@ const writeWorkshopStockLedgerDeltaTx = async (
   await tx.inventoryMovement.create({
     data: {
       variantId: input.variantId,
+      locationId: input.inventoryLocationId ?? (await ensureDefaultLocationTx(tx)).id,
       type: "WORKSHOP_USE",
       quantity: input.quantityDelta,
       referenceType: "WORKSHOP_JOB_PART",
@@ -355,6 +359,7 @@ export const addWorkshopJobPart = async (
         variantId,
         quantityDelta: -created.quantity,
         locationId: input.locationId,
+        inventoryLocationId: job.locationId,
         note: input.note ?? "Workshop part consumed",
         createdByStaffId: input.createdByStaffId,
       });
@@ -521,6 +526,7 @@ export const updateWorkshopJobPart = async (
         variantId: existing.variantId,
         quantityDelta: -consumedDelta,
         locationId: input.locationId,
+        inventoryLocationId: job.locationId,
         note:
           consumedDelta > 0
             ? (input.note ?? "Workshop part consumed")
@@ -621,6 +627,7 @@ export const removeWorkshopJobPart = async (
         variantId: existing.variantId,
         quantityDelta: consumedQuantity,
         locationId: input.locationId,
+        inventoryLocationId: job.locationId,
         note: input.note ?? "Workshop part removed/returned",
         createdByStaffId: input.createdByStaffId,
       });

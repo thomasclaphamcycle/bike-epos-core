@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { execSync } from "node:child_process";
 import express from "express";
 import { prisma } from "./lib/prisma";
 import { basketRouter } from "./routes/basketRoutes";
@@ -42,11 +43,30 @@ import { cashRouter } from "./routes/cashRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
+import { requestIdMiddleware } from "./middleware/requestId";
+import { requestLoggerMiddleware } from "./middleware/requestLogger";
 import { enforceAuthMode, requireRoleAtLeast } from "./middleware/staffRole";
 import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
 
+const resolveVersion = () => {
+  const explicitVersion = process.env.APP_VERSION ?? process.env.GIT_SHA ?? process.env.GITHUB_SHA;
+  if (explicitVersion && explicitVersion.trim().length > 0) {
+    return explicitVersion.trim();
+  }
+
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+};
+
+const appVersion = resolveVersion();
+
 const app = express();
+app.use(requestIdMiddleware);
+app.use(requestLoggerMiddleware);
 app.use(express.json());
 app.use(enforceAuthMode);
 
@@ -100,6 +120,15 @@ app.post("/dev/seed-tube", async (req, res) => {
 });
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/metrics", requireRoleAtLeast("MANAGER"), (req, res) =>
+  res.json({
+    status: "ok",
+    uptime: Number(process.uptime().toFixed(3)),
+    env: process.env.NODE_ENV ?? "development",
+    version: appVersion,
+    time: new Date().toISOString(),
+  }),
+);
 
 app.get("/", (req, res) => {
   if (req.user) {

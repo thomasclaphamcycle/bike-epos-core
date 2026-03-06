@@ -99,6 +99,34 @@ const waitForServer = async () => {
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
+const ensureMainLocationId = async () => {
+  const existing = await prisma.location.findFirst({
+    where: {
+      code: {
+        equals: "MAIN",
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+  if (existing) {
+    return existing.id;
+  }
+
+  const created = await prisma.location.create({
+    data: {
+      name: "Main",
+      code: "MAIN",
+      isActive: true,
+    },
+    select: {
+      id: true,
+    },
+  });
+  return created.id;
+};
 
 const createOnlineBooking = async (scheduledDate) => {
   const ref = uniqueRef();
@@ -482,9 +510,11 @@ const run = async () => {
         },
       });
       state.customerIds.add(customer.id);
+      const locationId = await ensureMainLocationId();
 
       const job = await prisma.workshopJob.create({
         data: {
+          locationId,
           customerId: customer.id,
           status: "BOOKING_MADE",
           source: "IN_STORE",

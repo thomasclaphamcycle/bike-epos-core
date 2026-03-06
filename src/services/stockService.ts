@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
 import { ensureVariantExistsById } from "./productService";
 
 type CreateStockAdjustmentInput = {
@@ -203,6 +204,7 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
     }
 
     const location = await resolveLocationTx(tx, input.locationId);
+    const inventoryLocation = await ensureDefaultLocationTx(tx);
 
     const entry = await tx.stockLedgerEntry.create({
       data: {
@@ -223,6 +225,7 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
     await tx.inventoryMovement.create({
       data: {
         variantId,
+        locationId: inventoryLocation.id,
         type: "ADJUSTMENT",
         quantity: input.quantityDelta,
         referenceType,

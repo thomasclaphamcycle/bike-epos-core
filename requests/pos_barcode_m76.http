@@ -1,0 +1,26 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@managerRole = MANAGER
+@managerId = manager-1
+@barcode = 5012345678901
+
+### Barcode lookup for POS scanners (STAFF+)
+GET {{baseUrl}}/api/products/barcode/{{barcode}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Existing fallback search endpoint still supported
+GET {{baseUrl}}/api/products/search?q={{barcode}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Unknown barcode -> 404
+GET {{baseUrl}}/api/products/barcode/0000000000000
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Manager can still use the endpoint
+GET {{baseUrl}}/api/products/barcode/{{barcode}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}

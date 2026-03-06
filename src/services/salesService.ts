@@ -1,6 +1,8 @@
 import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { ensureDefaultLocationTx } from "./locationService";
+import { createAuditEventTx, type AuditActor } from "./auditService";
 import {
   recordCashRefundMovementForPaymentTx,
   recordCashSaleMovementForSaleTx,
@@ -38,6 +40,12 @@ type CompleteSaleInput = {
 type SaleTenderInput = {
   method?: SaleTenderMethod;
   amountPence?: number;
+};
+
+type CreateExchangeSaleInput = {
+  staffActorId?: string;
+  locationId?: string;
+  auditActor?: AuditActor;
 };
 
 const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
@@ -157,6 +165,8 @@ const toSaleResponse = async (saleId: string) => {
     sale: {
       id: sale.id,
       basketId: sale.basketId,
+      exchangeFromSaleId: sale.exchangeFromSaleId,
+      locationId: sale.locationId,
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
@@ -731,11 +741,13 @@ export const checkoutBasketToSale = async (
   basketId: string,
   paymentInput: CheckoutPaymentInput,
   createdByStaffId?: string,
+  locationId?: string,
 ) => {
   if (!isUuid(basketId)) {
     throw new HttpError(400, "Invalid basket id", "INVALID_BASKET_ID");
   }
   const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
+  const requestedLocationId = normalizeOptionalText(locationId);
 
   const txResult = await prisma.$transaction(async (tx) => {
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
@@ -771,9 +783,17 @@ export const checkoutBasketToSale = async (
 
     const payment = validateCheckoutPayment(paymentInput, totalPence);
 
+    const saleLocation = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!saleLocation) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
     const sale = await tx.sale.create({
       data: {
         basketId: basket.id,
+        locationId: saleLocation.id,
         subtotalPence,
         taxPence,
         totalPence,
@@ -808,6 +828,7 @@ export const checkoutBasketToSale = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: saleLocation.id,
           type: "SALE",
           quantity: -item.quantity,
           referenceType: "SALE_ITEM",
@@ -850,6 +871,179 @@ export const checkoutBasketToSale = async (
     ...response,
     idempotent: !txResult.created,
   };
+};
+
+export const createExchangeSale = async (
+  sourceSaleId: string,
+  input: CreateExchangeSaleInput = {},
+) => {
+  if (!isUuid(sourceSaleId)) {
+    throw new HttpError(400, "Invalid source sale id", "INVALID_SALE_ID");
+  }
+
+  const normalizedStaffActorId = normalizeOptionalText(input.staffActorId);
+  const requestedLocationId = normalizeOptionalText(input.locationId);
+
+  return prisma.$transaction(async (tx) => {
+    const sourceSale = await tx.sale.findUnique({
+      where: { id: sourceSaleId },
+      select: {
+        id: true,
+        locationId: true,
+        completedAt: true,
+        items: {
+          select: {
+            variantId: true,
+            quantity: true,
+            unitPricePence: true,
+          },
+        },
+      },
+    });
+
+    if (!sourceSale) {
+      throw new HttpError(404, "Source sale not found", "SALE_NOT_FOUND");
+    }
+    if (!sourceSale.completedAt) {
+      throw new HttpError(
+        409,
+        "Source sale must be completed before creating an exchange",
+        "EXCHANGE_SOURCE_NOT_COMPLETED",
+      );
+    }
+    if (sourceSale.items.length === 0) {
+      throw new HttpError(
+        409,
+        "Source sale has no lines to exchange",
+        "EXCHANGE_SOURCE_EMPTY",
+      );
+    }
+
+    const existingOpenExchange = await tx.sale.findFirst({
+      where: {
+        exchangeFromSaleId: sourceSale.id,
+        completedAt: null,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingOpenExchange) {
+      return {
+        saleId: existingOpenExchange.id,
+        sourceSaleId: sourceSale.id,
+        saleUrl: `/pos?saleId=${encodeURIComponent(existingOpenExchange.id)}`,
+        idempotent: true,
+      };
+    }
+
+    const saleLocation = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await tx.location.findUnique({ where: { id: sourceSale.locationId } });
+    if (!saleLocation) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
+    const basket = await tx.basket.create({
+      data: {},
+      select: { id: true },
+    });
+
+    await tx.basketItem.createMany({
+      data: sourceSale.items.map((item) => ({
+        basketId: basket.id,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPrice: item.unitPricePence,
+      })),
+    });
+
+    const subtotalPence = sourceSale.items.reduce(
+      (sum, item) => sum + item.quantity * item.unitPricePence,
+      0,
+    );
+    const taxPence = 0;
+    const totalPence = subtotalPence + taxPence;
+
+    const createdSale = await tx.sale.create({
+      data: {
+        basketId: basket.id,
+        exchangeFromSaleId: sourceSale.id,
+        locationId: saleLocation.id,
+        subtotalPence,
+        taxPence,
+        totalPence,
+        ...(normalizedStaffActorId ? { createdByStaffId: normalizedStaffActorId } : {}),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    for (const item of sourceSale.items) {
+      const saleItem = await tx.saleItem.create({
+        data: {
+          saleId: createdSale.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitPricePence: item.unitPricePence,
+          lineTotalPence: item.quantity * item.unitPricePence,
+        },
+      });
+
+      await tx.stockLedgerEntry.create({
+        data: {
+          variantId: item.variantId,
+          locationId: defaultLocation.id,
+          type: "SALE",
+          quantityDelta: -item.quantity,
+          referenceType: "SALE_ITEM",
+          referenceId: saleItem.id,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: item.variantId,
+          locationId: saleLocation.id,
+          type: "SALE",
+          quantity: -item.quantity,
+          referenceType: "SALE_ITEM",
+          referenceId: saleItem.id,
+        },
+      });
+    }
+
+    await tx.basket.update({
+      where: { id: basket.id },
+      data: { status: BasketStatus.CHECKED_OUT },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "EXCHANGE_CREATED",
+        entityType: "SALE",
+        entityId: createdSale.id,
+        metadata: {
+          sourceSaleId: sourceSale.id,
+          saleUrl: `/pos?saleId=${createdSale.id}`,
+          itemCount: sourceSale.items.length,
+        },
+      },
+      input.auditActor,
+    );
+
+    return {
+      saleId: createdSale.id,
+      sourceSaleId: sourceSale.id,
+      saleUrl: `/pos?saleId=${encodeURIComponent(createdSale.id)}`,
+      idempotent: false,
+    };
+  });
 };
 
 export const createSaleReturn = async (
@@ -997,6 +1191,7 @@ export const createSaleReturn = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: sale.locationId,
           type: "RETURN",
           quantity: item.quantity,
           referenceType: "SALE_RETURN_ITEM",
@@ -1114,7 +1309,11 @@ export const attachCustomerToSale = async (
   return toSaleResponse(saleId);
 };
 
-export const listSales = async ({ from, to }: DateRangeInput) => {
+export const listSales = async ({
+  from,
+  to,
+  locationId,
+}: DateRangeInput & { locationId?: string }) => {
   const createdAt: Prisma.DateTimeFilter = {};
 
   if (from) {
@@ -1130,6 +1329,9 @@ export const listSales = async ({ from, to }: DateRangeInput) => {
   const where: Prisma.SaleWhereInput = {};
   if (Object.keys(createdAt).length > 0) {
     where.createdAt = createdAt;
+  }
+  if (locationId) {
+    where.locationId = locationId;
   }
 
   const sales = await prisma.sale.findMany({
@@ -1147,6 +1349,7 @@ export const listSales = async ({ from, to }: DateRangeInput) => {
     sales: sales.map((sale) => ({
       id: sale.id,
       basketId: sale.basketId,
+      exchangeFromSaleId: sale.exchangeFromSaleId,
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
