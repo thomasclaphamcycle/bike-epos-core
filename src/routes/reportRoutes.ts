@@ -1,10 +1,12 @@
 import { Router } from "express";
 import {
+  getDailyCloseHandler,
   getInventoryOnHandReportHandler,
   getInventoryOnHandReportCsvHandler,
   getInventoryValueReportHandler,
   getInventoryValueReportCsvHandler,
   getPaymentsReportCsvHandler,
+  runDailyCloseHandler,
   getSalesDailyReportHandler,
   getSalesDailyReportCsvHandler,
   getWorkshopDailyReportHandler,
@@ -16,6 +18,8 @@ export const reportRouter = Router();
 
 reportRouter.get("/sales/daily", requireRoleAtLeast("MANAGER"), getSalesDailyReportHandler);
 reportRouter.get("/sales/daily.csv", requireRoleAtLeast("MANAGER"), getSalesDailyReportCsvHandler);
+reportRouter.get("/daily-close", requireRoleAtLeast("MANAGER"), getDailyCloseHandler);
+reportRouter.post("/daily-close", requireRoleAtLeast("MANAGER"), runDailyCloseHandler);
 reportRouter.get("/workshop/daily", requireRoleAtLeast("MANAGER"), getWorkshopDailyReportHandler);
 reportRouter.get(
   "/workshop/daily.csv",

@@ -22,6 +22,7 @@ const baselineSteps = [
   "test:m73",
   "test:m76",
   "test:m77",
+  "test:m78",
 ];
 
 const env = {
