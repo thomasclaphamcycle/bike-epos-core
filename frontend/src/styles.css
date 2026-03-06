@@ -256,6 +256,12 @@ th {
   flex-wrap: wrap;
 }
 
+.action-callout button,
+.action-callout .button-link {
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
 .button-link {
   display: inline-flex;
   align-items: center;

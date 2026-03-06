@@ -58,6 +58,14 @@ const statusButtonActions: Array<{ label: string; value: string }> = [
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
+const toStatusBadgeClass = (status: string) => {
+  if (status === "CANCELLED") return "status-badge status-cancelled";
+  if (status === "COMPLETED") return "status-badge status-complete";
+  if (status === "BIKE_READY" || status === "READY") return "status-badge status-ready";
+  if (status === "WAITING_FOR_PARTS") return "status-badge status-warning";
+  return "status-badge";
+};
+
 export const WorkshopJobPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -271,7 +279,7 @@ export const WorkshopJobPage = () => {
       <section className="card">
         <div className="card-header-row">
           <h1>Workshop Job {id.slice(0, 8)}</h1>
-          <div className="actions-inline">
+          <div className="actions-inline action-callout">
             <button type="button" className="primary" onClick={convertToSale}>
               Convert to Sale
             </button>
@@ -286,7 +294,10 @@ export const WorkshopJobPage = () => {
         {payload ? (
           <>
             <div className="job-meta-grid">
-              <div><strong>Status:</strong> {payload.job.status}</div>
+              <div>
+                <strong>Status:</strong>{" "}
+                <span className={toStatusBadgeClass(payload.job.status)}>{payload.job.status}</span>
+              </div>
               <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
               <div><strong>Notes:</strong> {payload.job.notes || "-"}</div>

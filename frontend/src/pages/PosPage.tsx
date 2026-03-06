@@ -602,11 +602,12 @@ export const PosPage = () => {
         <h2>Product Search</h2>
         <label className="grow">
           Search / Barcode
-          <input
-            ref={searchInputRef}
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            onKeyDown={(event) => {
+            <input
+              ref={searchInputRef}
+              autoFocus
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
                 void handleSearchEnter();

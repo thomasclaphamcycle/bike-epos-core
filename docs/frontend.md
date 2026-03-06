@@ -24,6 +24,16 @@ Keyboard and scanner flow:
 - `Ctrl+Enter` opens completion confirmation.
 
 The page keeps search focused after add/remove/qty changes and shows a **Last scanned** indicator.
+Receipt links prefer the server-provided `receiptUrl` and fall back to `/r/:saleId` when missing.
+
+## Workshop (M68 polish)
+
+Routes:
+
+- `/workshop`
+- `/workshop/:id`
+
+The workshop views include status badges, quick status actions, and prominent **Convert to Sale** / **Print Job** actions on job cards.
 
 ## Refunds (M77)
 
