@@ -8,6 +8,7 @@ import { WorkshopJobPage } from "./pages/WorkshopJobPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { CustomerProfilePage } from "./pages/CustomerProfilePage";
 import { RefundsPage } from "./pages/RefundsPage";
+import { DailyClosePage } from "./pages/DailyClosePage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -20,6 +21,7 @@ const AuthedApp = () => (
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/refunds" element={<RefundsPage />} />
+        <Route path="/manager/daily-close" element={<DailyClosePage />} />
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Routes>
     </Layout>

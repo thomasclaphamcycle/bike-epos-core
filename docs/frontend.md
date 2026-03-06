@@ -36,3 +36,14 @@ Flow:
 3. Select tender method.
 4. Toggle **Return items to stock** if needed.
 5. Process refund and open generated receipt.
+
+## Daily Close (M78)
+
+Route: `/manager/daily-close` (MANAGER/ADMIN)
+
+Flow:
+
+1. Choose date and optional location code.
+2. Run daily close.
+3. Review tenders/refunds/cash summary.
+4. Print via `/reports/daily-close/print`.
