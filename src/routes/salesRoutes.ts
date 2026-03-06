@@ -3,6 +3,7 @@ import {
   addSaleTenderHandler,
   attachCustomerToSaleHandler,
   completeSaleHandler,
+  createExchangeSaleHandler,
   createSaleReturnHandler,
   deleteSaleTenderHandler,
   getSaleHandler,
@@ -15,6 +16,7 @@ import { getSaleReceiptHandler } from "../controllers/receiptController";
 export const salesRouter = Router();
 
 salesRouter.get("/", requireRoleAtLeast("STAFF"), listSalesHandler);
+salesRouter.post("/:saleId/exchange", requireRoleAtLeast("MANAGER"), createExchangeSaleHandler);
 salesRouter.post("/:saleId/returns", requireRoleAtLeast("MANAGER"), createSaleReturnHandler);
 salesRouter.patch("/:saleId/customer", requireRoleAtLeast("STAFF"), attachCustomerToSaleHandler);
 salesRouter.get("/:saleId/tenders", requireRoleAtLeast("STAFF"), listSaleTendersHandler);

@@ -1,6 +1,6 @@
 import { RefundTenderType } from "@prisma/client";
 import { Request, Response } from "express";
-import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
 import {
   addRefundTender,
   completeRefund,
@@ -142,6 +142,19 @@ export const deleteRefundTenderHandler = async (req: Request, res: Response) => 
 };
 
 export const completeRefundHandler = async (req: Request, res: Response) => {
-  const result = await completeRefund(req.params.refundId, getRequestStaffActorId(req));
+  const body = (req.body ?? {}) as { returnToStock?: unknown };
+  if (body.returnToStock !== undefined && typeof body.returnToStock !== "boolean") {
+    throw new HttpError(
+      400,
+      "returnToStock must be a boolean",
+      "INVALID_REFUND_COMPLETE",
+    );
+  }
+
+  const result = await completeRefund(req.params.refundId, {
+    completedByStaffId: getRequestStaffActorId(req),
+    returnToStock: body.returnToStock === true,
+    auditActor: getRequestAuditActor(req),
+  });
   res.status(result.idempotent ? 200 : 201).json(result);
 };

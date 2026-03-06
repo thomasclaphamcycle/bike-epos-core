@@ -343,36 +343,40 @@ enum PaymentIntentStatus {
 }
 
 model Sale {
-  id               String    @id @default(uuid()) @db.Uuid
-  basketId         String?   @unique @db.Uuid
-  workshopJobId    String?   @unique @db.Uuid
-  customerId       String?   @db.Uuid
-  locationId       String
-  subtotalPence    Int
-  taxPence         Int
-  totalPence       Int
-  changeDuePence   Int       @default(0)
-  createdAt        DateTime  @default(now())
-  completedAt      DateTime?
-  receiptNumber    String?   @unique
-  createdByStaffId String?
+  id                 String    @id @default(uuid()) @db.Uuid
+  basketId           String?   @unique @db.Uuid
+  workshopJobId      String?   @unique @db.Uuid
+  exchangeFromSaleId String?   @db.Uuid
+  customerId         String?   @db.Uuid
+  locationId         String
+  subtotalPence      Int
+  taxPence           Int
+  totalPence         Int
+  changeDuePence     Int       @default(0)
+  createdAt          DateTime  @default(now())
+  completedAt        DateTime?
+  receiptNumber      String?   @unique
+  createdByStaffId   String?
 
-  basket         Basket?         @relation(fields: [basketId], references: [id], onDelete: SetNull)
-  workshopJob    WorkshopJob?    @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
-  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  location       Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  createdByStaff User?           @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  items          SaleItem[]
-  payments       Payment[]
-  tenders        SaleTender[]
-  receipt        Receipt?
-  paymentIntents PaymentIntent[]
-  returns        SaleReturn[]
-  refunds        Refund[]
-  cashMovements  CashMovement[]  @relation("CashMovementSale")
+  basket           Basket?         @relation(fields: [basketId], references: [id], onDelete: SetNull)
+  workshopJob      WorkshopJob?    @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  exchangeFromSale Sale?           @relation("SaleExchangeSource", fields: [exchangeFromSaleId], references: [id], onDelete: SetNull)
+  exchangeSales    Sale[]          @relation("SaleExchangeSource")
+  customer         Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  location         Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdByStaff   User?           @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  items            SaleItem[]
+  payments         Payment[]
+  tenders          SaleTender[]
+  receipt          Receipt?
+  paymentIntents   PaymentIntent[]
+  returns          SaleReturn[]
+  refunds          Refund[]
+  cashMovements    CashMovement[]  @relation("CashMovementSale")
 
   @@index([customerId])
   @@index([workshopJobId])
+  @@index([exchangeFromSaleId])
   @@index([locationId])
   @@index([completedAt])
   @@index([createdByStaffId])
@@ -445,17 +449,19 @@ model Receipt {
 }
 
 model Refund {
-  id               String             @id @default(uuid()) @db.Uuid
-  saleId           String             @db.Uuid
-  status           RefundRecordStatus @default(DRAFT)
-  currency         String             @default("GBP")
-  subtotalPence    Int                @default(0)
-  taxPence         Int                @default(0)
-  totalPence       Int                @default(0)
-  createdByStaffId String?
-  completedAt      DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id                String             @id @default(uuid()) @db.Uuid
+  saleId            String             @db.Uuid
+  status            RefundRecordStatus @default(DRAFT)
+  currency          String             @default("GBP")
+  subtotalPence     Int                @default(0)
+  taxPence          Int                @default(0)
+  totalPence        Int                @default(0)
+  returnToStock     Boolean            @default(false)
+  returnedToStockAt DateTime?
+  createdByStaffId  String?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   sale           Sale           @relation(fields: [saleId], references: [id], onDelete: Restrict)
   createdByStaff User?          @relation("RefundCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)

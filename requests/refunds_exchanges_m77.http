@@ -1,0 +1,76 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = staff-1
+@managerRole = MANAGER
+@managerId = manager-1
+@saleId = REPLACE_COMPLETED_SALE_ID
+@refundId = REPLACE_REFUND_ID
+@saleLineId = REPLACE_SALE_LINE_ID
+
+### STAFF cannot create refunds
+POST {{baseUrl}}/api/refunds
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "saleId": "{{saleId}}"
+}
+
+### MANAGER creates refund draft
+POST {{baseUrl}}/api/refunds
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "saleId": "{{saleId}}"
+}
+
+### Add refund line
+POST {{baseUrl}}/api/refunds/{{refundId}}/lines
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "saleLineId": "{{saleLineId}}",
+  "quantity": 1
+}
+
+### Add refund tender
+POST {{baseUrl}}/api/refunds/{{refundId}}/tenders
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "tenderType": "CARD",
+  "amountPence": 1000
+}
+
+### Complete refund and return stock
+POST {{baseUrl}}/api/refunds/{{refundId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "returnToStock": true
+}
+
+### Idempotent repeat complete (no duplicate stock movement)
+POST {{baseUrl}}/api/refunds/{{refundId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "returnToStock": true
+}
+
+### Create exchange sale from completed sale
+POST {{baseUrl}}/api/sales/{{saleId}}/exchange
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
