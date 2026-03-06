@@ -7,6 +7,7 @@ import { WorkshopPage } from "./pages/WorkshopPage";
 import { WorkshopJobPage } from "./pages/WorkshopJobPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { CustomerProfilePage } from "./pages/CustomerProfilePage";
+import { RefundsPage } from "./pages/RefundsPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -18,6 +19,7 @@ const AuthedApp = () => (
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
+        <Route path="/refunds" element={<RefundsPage />} />
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Routes>
     </Layout>

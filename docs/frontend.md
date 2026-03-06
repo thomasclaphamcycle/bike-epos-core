@@ -24,3 +24,15 @@ Keyboard and scanner flow:
 - `Ctrl+Enter` opens completion confirmation.
 
 The page keeps search focused after add/remove/qty changes and shows a **Last scanned** indicator.
+
+## Refunds (M77)
+
+Route: `/refunds` (MANAGER/ADMIN)
+
+Flow:
+
+1. Search by sale ID or receipt number.
+2. Choose refund quantities per line.
+3. Select tender method.
+4. Toggle **Return items to stock** if needed.
+5. Process refund and open generated receipt.
