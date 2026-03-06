@@ -5,10 +5,19 @@ import {
   patchWorkshopJobPartHandler,
   removeWorkshopJobPartHandler,
 } from "../controllers/workshopPartController";
+import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const workshopJobPartRouter = Router();
 
-workshopJobPartRouter.get("/:id/parts", listWorkshopJobPartsHandler);
-workshopJobPartRouter.post("/:id/parts", addWorkshopJobPartHandler);
-workshopJobPartRouter.patch("/:id/parts/:partId", patchWorkshopJobPartHandler);
-workshopJobPartRouter.delete("/:id/parts/:partId", removeWorkshopJobPartHandler);
+workshopJobPartRouter.get("/:id/parts", requireRoleAtLeast("STAFF"), listWorkshopJobPartsHandler);
+workshopJobPartRouter.post("/:id/parts", requireRoleAtLeast("STAFF"), addWorkshopJobPartHandler);
+workshopJobPartRouter.patch(
+  "/:id/parts/:partId",
+  requireRoleAtLeast("STAFF"),
+  patchWorkshopJobPartHandler,
+);
+workshopJobPartRouter.delete(
+  "/:id/parts/:partId",
+  requireRoleAtLeast("STAFF"),
+  removeWorkshopJobPartHandler,
+);
