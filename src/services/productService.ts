@@ -755,6 +755,90 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
   };
 };
 
+export const getProductByBarcode = async (barcode: string, locationId?: string) => {
+  const normalizedBarcode = normalizeOptionalText(barcode);
+  if (!normalizedBarcode) {
+    throw new HttpError(400, "barcode is required", "INVALID_BARCODE");
+  }
+
+  const requestedLocationId = normalizeOptionalText(locationId);
+
+  return prisma.$transaction(async (tx) => {
+    const variant = await tx.variant.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          {
+            barcode: {
+              equals: normalizedBarcode,
+              mode: "insensitive",
+            },
+          },
+          {
+            barcodes: {
+              some: {
+                code: {
+                  equals: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        barcodes: {
+          select: {
+            code: true,
+            isPrimary: true,
+          },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    });
+
+    if (!variant) {
+      throw new HttpError(404, "Barcode not found", "BARCODE_NOT_FOUND");
+    }
+
+    const location = requestedLocationId
+      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+      : await ensureDefaultLocationTx(tx);
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
+
+    const aggregate = await tx.inventoryMovement.aggregate({
+      where: {
+        variantId: variant.id,
+        locationId: location.id,
+      },
+      _sum: {
+        quantity: true,
+      },
+    });
+
+    return {
+      row: {
+        id: variant.id,
+        productId: variant.productId,
+        name: variant.name ?? variant.option ?? variant.product.name,
+        sku: variant.sku,
+        barcode: variant.barcode ?? variant.barcodes[0]?.code ?? null,
+        pricePence: variant.retailPricePence,
+        onHandQty: aggregate._sum.quantity ?? 0,
+      },
+    };
+  });
+};
+
 export const createVariant = async (input: CreateVariantInput) => {
   const productId = normalizeOptionalText(input.productId);
   const sku = normalizeOptionalText(input.sku);

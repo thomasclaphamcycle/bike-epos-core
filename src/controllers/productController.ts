@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   createProduct,
+  getProductByBarcode,
   getProductById,
   listProducts,
   searchProducts,
@@ -73,6 +74,12 @@ export const searchProductsHandler = async (req: Request, res: Response) => {
   const location = await resolveRequestLocation(req);
   const results = await searchProducts({ q, barcode, sku, take, skip, locationId: location.id });
   res.json(results);
+};
+
+export const getProductByBarcodeHandler = async (req: Request, res: Response) => {
+  const location = await resolveRequestLocation(req);
+  const result = await getProductByBarcode(req.params.code, location.id);
+  res.json(result);
 };
 
 export const createProductHandler = async (req: Request, res: Response) => {
