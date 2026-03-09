@@ -170,3 +170,78 @@ export const searchCustomers = async (query?: string, take = 20) => {
     customers: customers.map(toCustomerResponse),
   };
 };
+
+export const listCustomerSales = async (customerId: string) => {
+  if (!isUuid(customerId)) {
+    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
+  }
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true },
+  });
+  if (!customer) {
+    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+  }
+
+  const sales = await prisma.sale.findMany({
+    where: {
+      customerId,
+      completedAt: {
+        not: null,
+      },
+    },
+    include: {
+      receipt: {
+        select: {
+          receiptNumber: true,
+        },
+      },
+    },
+    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+    take: 50,
+  });
+
+  return {
+    sales: sales.map((sale) => ({
+      id: sale.id,
+      totalPence: sale.totalPence,
+      createdAt: sale.createdAt,
+      completedAt: sale.completedAt,
+      receiptNumber: sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null,
+    })),
+  };
+};
+
+export const listCustomerWorkshopJobs = async (customerId: string) => {
+  if (!isUuid(customerId)) {
+    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
+  }
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true },
+  });
+  if (!customer) {
+    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+  }
+
+  const jobs = await prisma.workshopJob.findMany({
+    where: { customerId },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    take: 50,
+    select: {
+      id: true,
+      status: true,
+      bikeDescription: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true,
+      completedAt: true,
+    },
+  });
+
+  return {
+    jobs,
+  };
+};

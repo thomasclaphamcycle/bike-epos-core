@@ -34,9 +34,11 @@ import {
   attachCustomerToWorkshopJob,
   closeWorkshopJob,
   createWorkshopJob,
+  deleteWorkshopJobLine,
   finalizeWorkshopJob,
   getWorkshopJobById,
   listWorkshopJobs,
+  updateWorkshopJobLine,
   updateWorkshopJob,
 } from "../services/workshopService";
 import { HttpError } from "../utils/http";
@@ -245,6 +247,40 @@ export const addWorkshopJobLineHandler = async (req: Request, res: Response) => 
 
   const result = await addWorkshopJobLine(req.params.id, body);
   res.status(201).json(result);
+};
+
+export const patchWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    description?: string;
+    qty?: number;
+    unitPricePence?: number;
+    productId?: string | null;
+    variantId?: string | null;
+  };
+
+  if (body.description !== undefined && typeof body.description !== "string") {
+    throw new HttpError(400, "description must be a string", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.qty !== undefined && typeof body.qty !== "number") {
+    throw new HttpError(400, "qty must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.unitPricePence !== undefined && typeof body.unitPricePence !== "number") {
+    throw new HttpError(400, "unitPricePence must be a number", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.productId !== undefined && body.productId !== null && typeof body.productId !== "string") {
+    throw new HttpError(400, "productId must be a string or null", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+  if (body.variantId !== undefined && body.variantId !== null && typeof body.variantId !== "string") {
+    throw new HttpError(400, "variantId must be a string or null", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+
+  const result = await updateWorkshopJobLine(req.params.id, req.params.lineId, body);
+  res.json(result);
+};
+
+export const deleteWorkshopJobLineHandler = async (req: Request, res: Response) => {
+  const result = await deleteWorkshopJobLine(req.params.id, req.params.lineId);
+  res.json(result);
 };
 
 export const finalizeWorkshopJobHandler = async (req: Request, res: Response) => {

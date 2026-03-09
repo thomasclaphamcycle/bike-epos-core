@@ -13,14 +13,41 @@ npm ci
 2. Create local env files:
 
 ```bash
+cp .env.example .env
 cp .env.test.example .env.test
-# keep your existing .env for dev DATABASE_URL
+```
+
+Set `DATABASE_URL` in `.env` to a real local Postgres role and database. On macOS that is often your local username:
+
+```bash
+DATABASE_URL=postgresql://$(whoami)@localhost:5432/bike_epos
+```
+
+If the role or database does not exist yet:
+
+```bash
+createuser -s "$(whoami)"
+createdb bike_epos
+```
+
+If `prisma migrate dev` reports drift against an old local dev database, reset only the local development DB and recreate it:
+
+```bash
+node scripts/reset_local_dev_db.js
 ```
 
 3. Start dedicated test DB + migrations:
 
 ```bash
 npm run test:db:up
+```
+
+4. Prepare the local development database:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+npm run db:seed:dev
 ```
 
 ## Auth (M35)

@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express from "express";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { prisma } from "./lib/prisma";
 import { basketRouter } from "./routes/basketRoutes";
 import { salesRouter } from "./routes/salesRoutes";
@@ -49,6 +51,17 @@ import { bootstrapHandler } from "./controllers/authController";
 const app = express();
 app.use(express.json());
 app.use(enforceAuthMode);
+
+const projectRoot = process.cwd();
+const frontendDistDir = path.join(projectRoot, "frontend", "dist");
+const frontendIndexFile = path.join(frontendDistDir, "index.html");
+const serveFrontendSpa =
+  process.env.NODE_ENV === "production" && fs.existsSync(frontendIndexFile);
+
+const isLegacyPrintableRoute = (requestPath: string) =>
+  /^\/r\/[^/]+$/.test(requestPath) ||
+  /^\/sales\/[^/]+\/receipt$/.test(requestPath) ||
+  /^\/workshop\/[^/]+\/print$/.test(requestPath);
 
 app.post("/auth/bootstrap", bootstrapHandler);
 
@@ -102,6 +115,9 @@ app.post("/dev/seed-tube", async (req, res) => {
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 app.get("/", (req, res) => {
+  if (serveFrontendSpa) {
+    return res.sendFile(frontendIndexFile);
+  }
   if (req.user) {
     return res.redirect("/pos");
   }
@@ -172,6 +188,23 @@ app.use("/api/locations", locationRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/reports/workshop", workshopReportRouter);
 app.use("/api/audit", auditRouter);
+
+if (serveFrontendSpa) {
+  app.use(
+    express.static(frontendDistDir, {
+      index: false,
+    }),
+  );
+
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/") || req.path === "/health" || isLegacyPrintableRoute(req.path)) {
+      return next();
+    }
+
+    return res.sendFile(frontendIndexFile);
+  });
+}
+
 app.use("/", authUiRouter);
 app.use("/", adminUiRouter);
 app.use("/", managerUiRouter);
@@ -186,6 +219,8 @@ app.use("/", receiptUiRouter);
 app.use("/", tillUiRouter);
 app.use(errorHandler);
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+const port = Number(process.env.PORT || 3000);
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
 });

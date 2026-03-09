@@ -34,6 +34,14 @@ type AddWorkshopJobLineInput = {
   unitPricePence?: number;
 };
 
+type UpdateWorkshopJobLineInput = {
+  description?: string;
+  qty?: number;
+  unitPricePence?: number;
+  productId?: string | null;
+  variantId?: string | null;
+};
+
 const LABOUR_VARIANT_SKU = "WORKSHOP-LABOUR-SERVICE";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -135,6 +143,37 @@ const ensureWorkshopJobExistsTx = async (
     throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
   }
   return job;
+};
+
+const ensureWorkshopJobLineExistsTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+  lineId: string,
+) => {
+  const line = await tx.workshopJobLine.findUnique({
+    where: { id: lineId },
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!line || line.jobId !== workshopJobId) {
+    throw new HttpError(404, "Workshop job line not found", "WORKSHOP_JOB_LINE_NOT_FOUND");
+  }
+
+  return line;
 };
 
 const ensureProductExistsTx = async (tx: Prisma.TransactionClient, productId: string) => {
@@ -732,6 +771,152 @@ export const addWorkshopJobLine = async (
     return {
       line: toLineResponse(line),
     };
+  });
+};
+
+export const updateWorkshopJobLine = async (
+  workshopJobId: string,
+  lineId: string,
+  input: UpdateWorkshopJobLineInput,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+  if (!isUuid(lineId)) {
+    throw new HttpError(400, "Invalid workshop line id", "INVALID_WORKSHOP_LINE_ID");
+  }
+
+  const hasAnyField =
+    Object.prototype.hasOwnProperty.call(input, "description") ||
+    Object.prototype.hasOwnProperty.call(input, "qty") ||
+    Object.prototype.hasOwnProperty.call(input, "unitPricePence") ||
+    Object.prototype.hasOwnProperty.call(input, "productId") ||
+    Object.prototype.hasOwnProperty.call(input, "variantId");
+
+  if (!hasAnyField) {
+    throw new HttpError(400, "No fields provided", "INVALID_WORKSHOP_LINE_UPDATE");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    if (job.closedAt) {
+      throw new HttpError(409, "Closed jobs cannot be edited", "WORKSHOP_JOB_CLOSED");
+    }
+
+    const existingLine = await ensureWorkshopJobLineExistsTx(tx, workshopJobId, lineId);
+    const data: Prisma.WorkshopJobLineUpdateInput = {};
+
+    if (Object.prototype.hasOwnProperty.call(input, "description")) {
+      const description = normalizeOptionalText(input.description);
+      if (!description) {
+        throw new HttpError(400, "description cannot be empty", "INVALID_WORKSHOP_LINE_UPDATE");
+      }
+      data.description = description;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "qty")) {
+      if (!Number.isInteger(input.qty) || (input.qty ?? 0) <= 0) {
+        throw new HttpError(400, "qty must be a positive integer", "INVALID_WORKSHOP_LINE_UPDATE");
+      }
+      data.qty = input.qty;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "unitPricePence")) {
+      if (!Number.isInteger(input.unitPricePence) || (input.unitPricePence ?? -1) < 0) {
+        throw new HttpError(
+          400,
+          "unitPricePence must be a non-negative integer",
+          "INVALID_WORKSHOP_LINE_UPDATE",
+        );
+      }
+      data.unitPricePence = input.unitPricePence;
+    }
+
+    if (existingLine.type === "PART") {
+      const productIdProvided = Object.prototype.hasOwnProperty.call(input, "productId");
+      const variantIdProvided = Object.prototype.hasOwnProperty.call(input, "variantId");
+
+      if (productIdProvided || variantIdProvided) {
+        const nextProductId = productIdProvided
+          ? normalizeOptionalText(input.productId ?? undefined)
+          : normalizeOptionalText(existingLine.productId ?? undefined);
+
+        if (!nextProductId) {
+          throw new HttpError(
+            400,
+            "PART lines require productId",
+            "INVALID_WORKSHOP_LINE_UPDATE",
+          );
+        }
+
+        const product = await ensureProductExistsTx(tx, nextProductId);
+        const variant = await ensureVariantForPartTx(tx, {
+          productId: product.id,
+          variantId: variantIdProvided
+            ? normalizeOptionalText(input.variantId ?? undefined)
+            : normalizeOptionalText(existingLine.variantId ?? undefined),
+        });
+
+        data.productId = product.id;
+        data.variantId = variant.id;
+      }
+    } else if (
+      Object.prototype.hasOwnProperty.call(input, "productId") ||
+      Object.prototype.hasOwnProperty.call(input, "variantId")
+    ) {
+      throw new HttpError(
+        400,
+        "LABOUR lines cannot set productId or variantId",
+        "INVALID_WORKSHOP_LINE_UPDATE",
+      );
+    }
+
+    const updatedLine = await tx.workshopJobLine.update({
+      where: { id: lineId },
+      data,
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        variant: {
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return {
+      line: toLineResponse(updatedLine),
+    };
+  });
+};
+
+export const deleteWorkshopJobLine = async (workshopJobId: string, lineId: string) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+  if (!isUuid(lineId)) {
+    throw new HttpError(400, "Invalid workshop line id", "INVALID_WORKSHOP_LINE_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+    if (job.closedAt) {
+      throw new HttpError(409, "Closed jobs cannot be edited", "WORKSHOP_JOB_CLOSED");
+    }
+
+    await ensureWorkshopJobLineExistsTx(tx, workshopJobId, lineId);
+    await tx.workshopJobLine.delete({
+      where: { id: lineId },
+    });
+
+    return { ok: true };
   });
 };
 

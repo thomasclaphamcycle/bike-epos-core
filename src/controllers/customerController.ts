@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import {
   createCustomer,
   getCustomerById,
+  listCustomerSales,
+  listCustomerWorkshopJobs,
   searchCustomers,
 } from "../services/customerService";
 import { HttpError } from "../utils/http";
@@ -91,5 +93,15 @@ export const listCustomersHandler = async (req: Request, res: Response) => {
         : undefined;
   const take = parseSearchTake(req.query.take);
   const result = await searchCustomers(query, take);
+  res.json(result);
+};
+
+export const listCustomerSalesHandler = async (req: Request, res: Response) => {
+  const result = await listCustomerSales(req.params.id);
+  res.json(result);
+};
+
+export const listCustomerWorkshopJobsHandler = async (req: Request, res: Response) => {
+  const result = await listCustomerWorkshopJobs(req.params.id);
   res.json(result);
 };
