@@ -7,12 +7,14 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
 
 const envLabel = import.meta.env.MODE || "development";
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
+const isAdmin = (role: string | undefined) => role === "ADMIN";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
   const { error, success } = useToasts();
   const navigate = useNavigate();
   const canViewManagement = isManagerPlus(user?.role);
+  const canViewStaffAdmin = isAdmin(user?.role);
 
   const onLogout = async () => {
     try {
@@ -38,6 +40,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/products" className={navClass}>Products</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/inventory" className={navClass}>Inventory Intel</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/suppliers" className={navClass}>Supplier Perf</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/reordering" className={navClass}>Reordering</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/capacity" className={navClass}>Capacity</NavLink> : null}
+            {canViewStaffAdmin ? <NavLink to="/management/staff" className={navClass}>Staff Admin</NavLink> : null}
             <NavLink to="/pos" className={navClass}>POS</NavLink>
             <NavLink to="/workshop" className={navClass}>Workshop</NavLink>
             <NavLink to="/customers" className={navClass}>Customers</NavLink>

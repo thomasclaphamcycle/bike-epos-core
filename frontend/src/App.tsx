@@ -19,6 +19,9 @@ import { WorkshopPerformancePage } from "./pages/WorkshopPerformancePage";
 import { ProductSalesAnalyticsPage } from "./pages/ProductSalesAnalyticsPage";
 import { InventoryVelocityPage } from "./pages/InventoryVelocityPage";
 import { SupplierPerformancePage } from "./pages/SupplierPerformancePage";
+import { ReorderSuggestionsPage } from "./pages/ReorderSuggestionsPage";
+import { WorkshopCapacityPage } from "./pages/WorkshopCapacityPage";
+import { StaffManagementPage } from "./pages/StaffManagementPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -71,6 +74,30 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <SupplierPerformancePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/reordering"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <ReorderSuggestionsPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/capacity"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <WorkshopCapacityPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/staff"
+          element={(
+            <ProtectedRoute minimumRole="ADMIN">
+              <StaffManagementPage />
             </ProtectedRoute>
           )}
         />

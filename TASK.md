@@ -31,6 +31,9 @@
 - `M88` product sales analytics is implemented
 - `M89` inventory velocity is implemented
 - `M90` supplier performance is implemented
+- `M91` reorder suggestions is implemented
+- `M92` workshop capacity analytics is implemented
+- `M93` staff / role management UI is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -43,18 +46,18 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M90`
+- no new active milestone is queued yet after `M93`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M90`
+- not yet defined in the canonical plan after `M93`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M90` milestone batch explicitly before implementation work starts
-2. keep the management, reporting, and business intelligence surfaces aligned with the endpoints they depend on
+1. define the next post-`M93` milestone batch explicitly before implementation work starts
+2. keep the management, reporting, business intelligence, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
 
@@ -77,7 +80,7 @@ Current true gaps from the reconciled missing-milestone set:
 
 ### 1. Management & Reporting Follow-Through
 
-- keep `/management` practical and additive as analytics/reporting and business intelligence grows around it
+- keep `/management` practical and additive as analytics/reporting, planning, and administration grows around it
 
 ### 2. React Coverage And Parity
 
@@ -164,5 +167,6 @@ For repo-history alignment work, also verify that:
 - The current working line now includes `M85` and `M86`.
 - The current working line now includes `M87`.
 - The current working line now includes `M88`, `M89`, and `M90`.
-- No post-`M90` milestone is defined yet in this canonical plan.
+- The current working line now includes `M91`, `M92`, and `M93`.
+- No post-`M93` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

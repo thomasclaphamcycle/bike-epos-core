@@ -636,6 +636,7 @@ Current state:
   - `M89` inventory velocity
   - `M90` supplier performance
 - this first business intelligence batch is now complete through `M90`
+- the next operational planning and administration batch is now complete through `M93`
 
 ### Next Milestones
 
@@ -708,3 +709,92 @@ Notes:
 - adds a dedicated manager-only route at `/management/suppliers`
 - uses a focused additive backend report endpoint under `/api/reports/suppliers/performance`
 - intentionally omits supplier revenue contribution and lead-time analytics because the current branch does not support those honestly enough yet
+
+## Next Development Phase - Operations Planning & Administration
+
+Current state:
+
+- the current working line now also includes:
+  - `M91` reorder suggestions
+  - `M92` workshop capacity analytics
+  - `M93` staff / role management UI
+- this batch is now complete through `M93`
+
+### Next Milestones
+
+#### `M91` - Reorder Suggestions
+
+Goal:
+
+- add manager-facing reorder suggestions based on current stock and recent sales signals
+
+Implemented scope on the current working line:
+
+- suggested reorder candidates
+- current on-hand
+- recent sales over selected range
+- simple suggested reorder quantity
+- practical reorder urgency flags
+
+Frontend entry:
+
+- `frontend/src/pages/ReorderSuggestionsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/reordering`
+- reuses the existing inventory velocity report endpoint without widening backend scope
+- uses a simple 30-day coverage heuristic and does not pretend to model supplier lead time or automated purchasing
+
+#### `M92` - Workshop Capacity Analytics
+
+Goal:
+
+- add manager-facing workshop capacity visibility
+
+Implemented scope on the current working line:
+
+- jobs per day
+- current open queue
+- waiting for approval count
+- waiting for parts count
+- average jobs completed per day
+- estimated queue pressure / backlog days
+- assignment workload summary where existing data supports it
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCapacityPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/capacity`
+- reuses `/api/reports/workshop/daily` and `/api/workshop/dashboard` only
+- keeps backlog pressure estimates honest by deriving them directly from open queue and average daily completions, with a clear no-data fallback
+
+#### `M93` - Staff / Role Management UI
+
+Goal:
+
+- expose staff and role management in the React UI for admins according to the current backend rules
+
+Implemented scope on the current working line:
+
+- list staff users
+- create staff users
+- edit staff details
+- activate/deactivate users
+- assign roles
+
+Frontend entry:
+
+- `frontend/src/pages/StaffManagementPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds an admin-only route at `/management/staff`
+- reuses the existing `/api/admin/users` endpoints and preserves the current admin-only backend permission model
+- keeps the UI operational and does not redesign authentication or user lifecycle beyond the existing admin surface
