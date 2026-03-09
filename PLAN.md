@@ -591,7 +591,7 @@ Goal:
 
 - add manager-facing workshop performance reporting
 
-Planned scope:
+Implemented scope on the current working line:
 
 - jobs completed per day
 - average completion time
@@ -599,9 +599,17 @@ Planned scope:
 - waiting-for-parts count
 - technician / staff workload where current data supports it
 
+Frontend entry:
+
+- `frontend/src/pages/WorkshopPerformancePage.tsx`
+
 Notes:
 
-- reuse existing workshop dashboard, notes, approval, and assignment data wherever it is already present
+- implemented on the current working line via code evidence
+- keeps this manager-only and separate from `/management` and `/management/sales`
+- reuses `/api/reports/workshop/daily` and `/api/workshop/dashboard` only
+- keeps the page summary-first with compact cards and tables rather than charts
+- shows staff workload from existing assignment data and groups missing assignments under `Unassigned`
 
 ## Long-Term Direction
 

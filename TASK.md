@@ -27,6 +27,7 @@
 - `M84` workshop parts allocation workflow is implemented
 - `M85` management dashboard is implemented
 - `M86` sales analytics is implemented
+- `M87` workshop performance metrics is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -39,18 +40,18 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- `M87` - Workshop Performance Metrics
+- no new active milestone is queued yet after `M87`
 
 ## Next Milestones Queue
 
-- no additional milestone is queued yet in this working plan beyond `M87`
+- not yet defined in the canonical plan after `M87`
 
 ## What Is Next
 
 Highest priority:
 
-1. implement `M87`
-2. keep the new management dashboard and sales analytics surfaces aligned with the reporting endpoints they depend on
+1. define the next post-`M87` milestone batch explicitly before implementation work starts
+2. keep the management and reporting surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
 
@@ -71,15 +72,11 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Recommended Sequencing
 
-### 1. `M87` Workshop Performance Metrics
-
-- add manager reporting for completion speed, approval backlog, parts backlog, and workload
-
-### 2. Management & Reporting Follow-Through
+### 1. Management & Reporting Follow-Through
 
 - keep `/management` practical and additive as analytics/reporting grows around it
 
-### 3. React Coverage And Parity
+### 2. React Coverage And Parity
 
 - add or expand E2E coverage for:
   - dashboard loading
@@ -87,7 +84,7 @@ Current true gaps from the reconciled missing-milestone set:
   - purchasing flows
   - workshop board flows
 
-### 4. Maintenance Track
+### 3. Maintenance Track
 
 - continue branch consolidation work in parallel
 - keep docs aligned with the actual milestone state
@@ -162,5 +159,6 @@ For repo-history alignment work, also verify that:
 - The current working line now includes `M79`, `M80`, and `M81`.
 - The current working line now includes `M82`, `M83`, and `M84`.
 - The current working line now includes `M85` and `M86`.
-- The active next milestone is `M87`.
+- The current working line now includes `M87`.
+- No post-`M87` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

@@ -15,6 +15,7 @@ import { PurchasingPage } from "./pages/PurchasingPage";
 import { PurchaseOrderPage } from "./pages/PurchaseOrderPage";
 import { ManagementDashboardPage } from "./pages/ManagementDashboardPage";
 import { SalesAnalyticsPage } from "./pages/SalesAnalyticsPage";
+import { WorkshopPerformancePage } from "./pages/WorkshopPerformancePage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -35,6 +36,14 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <SalesAnalyticsPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/workshop"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <WorkshopPerformancePage />
             </ProtectedRoute>
           )}
         />

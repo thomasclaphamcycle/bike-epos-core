@@ -34,6 +34,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>
             {canViewManagement ? <NavLink to="/management" className={navClass}>Management</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/sales" className={navClass}>Sales</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/workshop" className={navClass}>Workshop Metrics</NavLink> : null}
             <NavLink to="/pos" className={navClass}>POS</NavLink>
             <NavLink to="/workshop" className={navClass}>Workshop</NavLink>
             <NavLink to="/customers" className={navClass}>Customers</NavLink>
