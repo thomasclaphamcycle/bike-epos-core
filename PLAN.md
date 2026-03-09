@@ -237,6 +237,12 @@ Confirmed milestones:
   - confirmed in code
 - `M66` React customers UI
   - confirmed in code
+- `M79` React staff dashboard
+  - confirmed in code on the current working line
+- `M80` React inventory management tools
+  - confirmed in code on the current working line
+- `M81` React supplier and purchasing UI
+  - confirmed in code on the current working line
 - `M67` demo seed system
 - `M68` demo UX polish
 - `M69` production packaging with backend-served React build
@@ -251,6 +257,10 @@ Confirmed evidence:
 - `frontend/src/pages/InventoryItemPage.tsx`
 - `frontend/src/pages/CustomersPage.tsx`
 - `frontend/src/pages/CustomerProfilePage.tsx`
+- `frontend/src/pages/DashboardPage.tsx`
+- `frontend/src/pages/SuppliersPage.tsx`
+- `frontend/src/pages/PurchasingPage.tsx`
+- `frontend/src/pages/PurchaseOrderPage.tsx`
 - `scripts/seed_demo_data.ts`
 - `origin/main` / `origin/react-ui` commits:
   - `c6e014d` `M67`
@@ -266,6 +276,9 @@ Confirmed but branch-specific:
 Confirmed on current working line without a historical milestone-labeled commit:
 
 - `M65` React inventory UI is now present on the current working line via code evidence, though it is not backed by a historical milestone-labeled commit
+- `M79` React staff dashboard is present on the current working line via code evidence
+- `M80` React inventory management tools are present on the current working line via code evidence
+- `M81` React supplier and purchasing UI is present on the current working line via code evidence
 
 ### Phase 6 - Security / Infrastructure
 
@@ -366,10 +379,13 @@ Current state:
   - Workshop
   - Inventory
   - Customers
+  - Suppliers
+  - Purchasing
 - the current working line now includes:
   - `M79` staff dashboard
   - `M80` inventory management tools
-- the next planned step is to expose purchasing workflows in React
+  - `M81` supplier and purchasing UI
+- the next planned step is to define the post-`M81` milestone batch explicitly before further implementation work begins
 
 ### Next Milestones
 
@@ -433,6 +449,8 @@ Notes:
 
 - reuse the existing supplier, purchase-order, and receiving endpoints already present in repo history/current backend where available
 - keep the initial UI operational and additive rather than redesign-heavy
+- implemented on the current working line via code evidence
+- keeps receiving inside `/purchasing/:id` for v1
 
 ## Long-Term Direction
 

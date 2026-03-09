@@ -319,6 +319,56 @@ th {
   font-size: 0.82rem;
 }
 
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.detail-id {
+  font-size: 1.1rem;
+}
+
+.detail-metric-text {
+  font-size: 1rem;
+}
+
+.purchase-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.purchase-form-grid label {
+  display: grid;
+  gap: 4px;
+}
+
+.purchase-form-wide {
+  grid-column: span 2;
+}
+
+.restricted-panel {
+  border: 1px solid #d8e1ec;
+  background: #f5f8fc;
+  color: #475569;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.compact-input {
+  min-width: 92px;
+  width: 100%;
+}
+
+.status-info {
+  background: #e9f4ff;
+  border-color: #bfd9f3;
+  color: #175377;
+}
+
 .stock-badge {
   display: inline-flex;
   border-radius: 999px;
@@ -513,6 +563,14 @@ th {
   }
 
   .inventory-adjustment-note {
+    grid-column: span 1;
+  }
+
+  .purchase-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-form-wide {
     grid-column: span 1;
   }
 }

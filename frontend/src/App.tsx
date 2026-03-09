@@ -10,6 +10,9 @@ import { CustomerProfilePage } from "./pages/CustomerProfilePage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { InventoryItemPage } from "./pages/InventoryItemPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { SuppliersPage } from "./pages/SuppliersPage";
+import { PurchasingPage } from "./pages/PurchasingPage";
+import { PurchaseOrderPage } from "./pages/PurchaseOrderPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -24,6 +27,9 @@ const AuthedApp = () => (
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
+        <Route path="/suppliers" element={<SuppliersPage />} />
+        <Route path="/purchasing" element={<PurchasingPage />} />
+        <Route path="/purchasing/:id" element={<PurchaseOrderPage />} />
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Routes>
     </Layout>

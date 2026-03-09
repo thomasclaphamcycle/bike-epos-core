@@ -56,6 +56,9 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/customers/:id`
   - `/inventory`
   - `/inventory/:variantId`
+  - `/suppliers`
+  - `/purchasing`
+  - `/purchasing/:id`
 
 ### Database
 
