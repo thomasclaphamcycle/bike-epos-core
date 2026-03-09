@@ -1,6 +1,7 @@
 import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getOrCreateDefaultLocationTx } from "./locationService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 
@@ -352,6 +353,7 @@ const toLineResponse = (line: {
 const toJobResponse = (job: {
   id: string;
   customerId: string | null;
+  locationId: string;
   customerName: string | null;
   bikeDescription: string | null;
   status: WorkshopJobStatus;
@@ -363,6 +365,7 @@ const toJobResponse = (job: {
 }) => ({
   id: job.id,
   customerId: job.customerId,
+  locationId: job.locationId,
   customerName: job.customerName,
   bikeDescription: job.bikeDescription,
   status: toWorkflowStatus(job),
@@ -439,29 +442,34 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
     ? parseWorkflowStatus(input.status)
     : ("BOOKED" as WorkflowStatus);
 
-  const job = await prisma.workshopJob.create({
-    data: {
-      customerName,
-      bikeDescription,
-      notes,
-      status: toWorkshopJobStatus(targetStatus),
-      source: "IN_STORE",
-      depositStatus: "NOT_REQUIRED",
-      depositRequiredPence: 0,
-      ...(targetStatus === "CLOSED"
-        ? {
-            closedAt: new Date(),
-            completedAt: new Date(),
-          }
-        : targetStatus === "COLLECTED"
+  return prisma.$transaction(async (tx) => {
+    const location = await getOrCreateDefaultLocationTx(tx);
+
+    const job = await tx.workshopJob.create({
+      data: {
+        customerName,
+        bikeDescription,
+        notes,
+        status: toWorkshopJobStatus(targetStatus),
+        source: "IN_STORE",
+        depositStatus: "NOT_REQUIRED",
+        depositRequiredPence: 0,
+        locationId: location.id,
+        ...(targetStatus === "CLOSED"
           ? {
+              closedAt: new Date(),
               completedAt: new Date(),
             }
-          : {}),
-    },
-  });
+          : targetStatus === "COLLECTED"
+            ? {
+                completedAt: new Date(),
+              }
+            : {}),
+      },
+    });
 
-  return toJobResponse(job);
+    return toJobResponse(job);
+  });
 };
 
 export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {

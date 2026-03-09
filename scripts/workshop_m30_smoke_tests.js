@@ -10,6 +10,11 @@ const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
+const portFromBaseUrl = () => {
+  const url = new URL(BASE_URL);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
+
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
 }
@@ -193,6 +198,7 @@ const run = async () => {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
+          PORT: portFromBaseUrl(),
         },
       });
       serverProcess.stdout.on("data", () => {});
@@ -358,4 +364,3 @@ run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-

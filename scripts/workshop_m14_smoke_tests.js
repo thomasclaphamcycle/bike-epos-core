@@ -5,10 +5,16 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
+const portFromBaseUrl = () => {
+  const url = new URL(BASE_URL);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -103,6 +109,7 @@ const waitForServer = async () => {
 
 const createCustomerAndJob = async (state, overrides = {}) => {
   const ref = uniqueRef();
+  const locationId = await ensureMainLocationId(prisma);
   const customer = await prisma.customer.create({
     data: {
       firstName: "M14",
@@ -118,6 +125,7 @@ const createCustomerAndJob = async (state, overrides = {}) => {
       customerId: customer.id,
       status: "BOOKING_MADE",
       source: "IN_STORE",
+      locationId,
       scheduledDate: addDays(todayUtc(), 20),
       depositStatus: "NOT_REQUIRED",
       depositRequiredPence: 0,
@@ -201,6 +209,7 @@ const run = async () => {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
+          PORT: portFromBaseUrl(),
         },
       });
       serverProcess.stdout.on("data", () => {});

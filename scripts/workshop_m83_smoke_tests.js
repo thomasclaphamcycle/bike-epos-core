@@ -3,7 +3,6 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
-const { randomUUID } = require("node:crypto");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 
@@ -120,40 +119,28 @@ const waitForServer = async () => {
 
 const createJob = async (state, overrides = {}) => {
   const ref = uniqueRef();
-  const locations = await prisma.$queryRawUnsafe(
-    'select id from "Location" order by "createdAt" asc limit 1',
-  );
-  const locationId = locations[0]?.id;
-  if (!locationId) {
-    throw new Error("No Location row found for workshop smoke setup.");
-  }
+  const response = await fetchJson("/api/workshop/jobs", {
+    method: "POST",
+    headers: STAFF_HEADERS,
+    body: JSON.stringify({
+      customerName: `M83 Customer ${ref}`,
+      bikeDescription: overrides.bikeDescription || "Road bike service",
+      notes: overrides.notes || `m83 job ${ref}`,
+      status: overrides.status || "BOOKED",
+    }),
+  });
 
-  const jobId = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `insert into "WorkshopJob" (
-      "id",
-      "customerName",
-      "bikeDescription",
-      "status",
-      "scheduledDate",
-      "source",
-      "notes",
-      "depositRequiredPence",
-      "depositStatus",
-      "locationId",
-      "createdAt",
-      "updatedAt"
-    ) values ($1, $2, $3, 'BOOKING_MADE', $4, 'IN_STORE', $5, 0, 'NOT_REQUIRED', $6, now(), now())`,
-    jobId,
-    `M83 Customer ${ref}`,
-    overrides.bikeDescription || "Road bike service",
-    addDays(todayUtc(), 14),
-    overrides.notes || `m83 job ${ref}`,
-    locationId,
-  );
+  assert.equal(response.status, 201, JSON.stringify(response.json));
+  state.workshopJobIds.add(response.json.id);
 
-  state.workshopJobIds.add(jobId);
-  return { job: { id: jobId } };
+  await prisma.workshopJob.update({
+    where: { id: response.json.id },
+    data: {
+      scheduledDate: addDays(todayUtc(), 14),
+    },
+  });
+
+  return { job: { id: response.json.id } };
 };
 
 const cleanup = async (state) => {

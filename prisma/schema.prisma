@@ -18,6 +18,7 @@ model Location {
   stockBalances StockBalance[]
   stockMovesFrom StockMovement[] @relation("StockFrom")
   stockMovesTo   StockMovement[] @relation("StockTo")
+  workshopJobs   WorkshopJob[]
 }
 
 model Product {
@@ -661,6 +662,7 @@ enum CancellationOutcome {
 model WorkshopJob {
   id            String            @id @default(uuid()) @db.Uuid
   customerId    String?           @db.Uuid
+  locationId    String
   customerName  String?
   bikeDescription String?
   assignedStaffId String?
@@ -681,6 +683,7 @@ model WorkshopJob {
   updatedAt     DateTime          @updatedAt
 
   customer      Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  location      Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
   assignedStaff User?             @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
   sale          Sale?
   payments      Payment[]
@@ -690,6 +693,7 @@ model WorkshopJob {
   lines         WorkshopJobLine[]
 
   @@index([scheduledDate])
+  @@index([locationId])
   @@index([status])
   @@index([status, completedAt])
   @@index([assignedStaffId])

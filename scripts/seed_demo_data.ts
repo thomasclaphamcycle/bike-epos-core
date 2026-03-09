@@ -15,6 +15,21 @@ const prisma = new PrismaClient({
   }),
 });
 
+const ensureMainLocation = async () =>
+  prisma.location.upsert({
+    where: { code: "MAIN" },
+    update: {
+      name: "Main",
+      isActive: true,
+    },
+    create: {
+      name: "Main",
+      code: "MAIN",
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
 type DemoProduct = {
   name: string;
   brand: string;
@@ -748,11 +763,14 @@ const seedDemoCustomers = async () => {
 const seedDemoWorkshopJobs = async (
   variantBySku: Map<string, { id: string; productId: string; retailPricePence: number }>,
 ) => {
+  const location = await ensureMainLocation();
+
   for (const job of DEMO_WORKSHOP_JOBS) {
     await prisma.workshopJob.upsert({
       where: { id: job.id },
       update: {
         customerId: job.customerId,
+        locationId: location.id,
         customerName: job.customerName,
         bikeDescription: job.bikeDescription,
         status: job.status,
@@ -762,6 +780,7 @@ const seedDemoWorkshopJobs = async (
       create: {
         id: job.id,
         customerId: job.customerId,
+        locationId: location.id,
         customerName: job.customerName,
         bikeDescription: job.bikeDescription,
         status: job.status,
