@@ -245,6 +245,8 @@ Confirmed milestones:
   - confirmed in code on the current working line
 - `M82` React workshop board
   - confirmed in code on the current working line
+- `M83` React workshop estimates and approvals
+  - confirmed in code on the current working line
 - `M67` demo seed system
 - `M68` demo UX polish
 - `M69` production packaging with backend-served React build
@@ -283,6 +285,7 @@ Confirmed on current working line without a historical milestone-labeled commit:
 - `M80` React inventory management tools are present on the current working line via code evidence
 - `M81` React supplier and purchasing UI is present on the current working line via code evidence
 - `M82` React workshop board is present on the current working line via code evidence
+- `M83` React workshop estimates and approvals are present on the current working line via code evidence
 
 ### Phase 6 - Security / Infrastructure
 
@@ -390,8 +393,8 @@ Current state:
   - `M80` inventory management tools
   - `M81` supplier and purchasing UI
   - `M82` workshop board
-- the next planned step is the workshop operations follow-on batch:
   - `M83` estimates and approvals
+- the next planned step is the workshop operations follow-on batch:
   - `M84` parts allocation workflow
 
 ### Next Milestones
@@ -490,7 +493,7 @@ Goal:
 
 - add estimate and approval workflow to workshop jobs
 
-Planned scope:
+Implemented scope on the current working line:
 
 - estimate creation
 - labour + parts preview
@@ -499,8 +502,13 @@ Planned scope:
 
 Notes:
 
-- prefer extending the existing workshop job detail flow over introducing a parallel workflow
-- only add backend support if the current job/line model cannot represent estimate state cleanly
+- implemented on the current working line via code evidence
+- estimate contents reuse existing workshop job lines
+- quote messaging reuses existing internal and customer-visible workshop notes
+- waiting-for-approval visibility is now surfaced in workshop board/list and job detail views
+- the only backend extension added is the explicit additive approval endpoint:
+  - `POST /api/workshop/jobs/:id/approval`
+- approval state is persisted on the existing raw workshop job status, not a separate estimate entity
 
 #### `M84` - Parts Allocation Workflow
 

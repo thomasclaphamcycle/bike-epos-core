@@ -366,6 +366,7 @@ const toJobResponse = (job: {
   customerName: job.customerName,
   bikeDescription: job.bikeDescription,
   status: toWorkflowStatus(job),
+  rawStatus: job.status,
   notes: job.notes,
   finalizedBasketId: job.finalizedBasketId,
   closedAt: job.closedAt,

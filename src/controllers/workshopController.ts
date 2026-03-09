@@ -28,6 +28,7 @@ import {
   assignWorkshopJob,
   changeWorkshopJobStatus,
   getWorkshopJobNotes,
+  setWorkshopJobApprovalStatus,
 } from "../services/workshopWorkflowService";
 import {
   addWorkshopJobLine,
@@ -591,6 +592,26 @@ export const changeWorkshopJobStatusHandler = async (req: Request, res: Response
   }
 
   const result = await changeWorkshopJobStatus(
+    req.params.id,
+    {
+      status: body.status ?? "",
+    },
+    getRequestAuditActor(req),
+  );
+
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const setWorkshopJobApprovalStatusHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    status?: string;
+  };
+
+  if (body.status !== undefined && typeof body.status !== "string") {
+    throw new HttpError(400, "status must be a string", "INVALID_APPROVAL_STATUS");
+  }
+
+  const result = await setWorkshopJobApprovalStatus(
     req.params.id,
     {
       status: body.status ?? "",

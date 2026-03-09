@@ -25,6 +25,7 @@
     "test:m14": "node scripts/run_smoke_test.js scripts/workshop_m14_smoke_tests.js",
     "test:m16": "node scripts/run_smoke_test.js scripts/workshop_m16_smoke_tests.js",
     "test:m17": "node scripts/run_smoke_test.js scripts/purchasing_m17_smoke_tests.js",
+    "test:m83": "node scripts/run_smoke_test.js scripts/workshop_m83_smoke_tests.js",
     "test:m18": "node scripts/run_smoke_test.js scripts/stocktake_m18_smoke_tests.js",
     "test:m19": "node scripts/run_smoke_test.js scripts/reports_m19_smoke_tests.js",
     "test:m19_1": "node scripts/run_smoke_test.js scripts/workshop_completedAt_regression_test.js",

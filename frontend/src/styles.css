@@ -386,6 +386,13 @@ th {
   align-items: flex-start;
 }
 
+.status-stack {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .workshop-job-meta {
   display: grid;
   gap: 4px;
@@ -534,6 +541,55 @@ th {
   margin-bottom: 12px;
 }
 
+.note-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.note-form-grid label {
+  display: grid;
+  gap: 4px;
+}
+
+.note-form-wide {
+  grid-column: span 2;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.notes-panel {
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.note-card {
+  border: 1px solid #dfe7f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.note-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .totals-row {
   margin-top: 8px;
   margin-bottom: 12px;
@@ -650,6 +706,18 @@ th {
 
   .purchase-form-wide {
     grid-column: span 1;
+  }
+
+  .note-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .note-form-wide {
+    grid-column: span 1;
+  }
+
+  .notes-grid {
+    grid-template-columns: 1fr;
   }
 
   .workshop-board {

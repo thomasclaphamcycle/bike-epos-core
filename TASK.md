@@ -23,6 +23,7 @@
 - `M80` inventory management tools are implemented
 - `M81` supplier and purchasing UI is implemented
 - `M82` workshop board is implemented
+- `M83` workshop estimates and approvals are implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -35,28 +36,27 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-### `M83` - Estimates & Approvals
+### `M84` - Parts Allocation Workflow
 
 Active goal:
 
-- add estimate and approval workflow to workshop jobs with:
-  - estimate creation
-  - labour + parts preview
-  - approval status
-  - quote notes
+- connect workshop jobs to stock allocation with:
+  - reserve parts to job
+  - consume parts to job
+  - missing-parts visibility
+  - waiting-for-parts state support
 
 ## Next Milestones Queue
 
-1. `M84` - Parts Allocation Workflow
+- no further numbered milestone is queued yet beyond `M84` on this working line
 
 ## What Is Next
 
 Highest priority:
 
-1. prepare and implement `M83` cleanly
-2. follow with `M84`
-3. expand regression coverage for the React line already in use
-4. keep branch consolidation and repo hygiene as parallel maintenance work
+1. prepare and implement `M84` cleanly
+2. expand regression coverage for the React line already in use
+3. keep branch consolidation and repo hygiene as parallel maintenance work
 
 ## Missing Milestone Reconciliation
 
@@ -75,12 +75,7 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Recommended Sequencing
 
-### 1. `M83` Estimates And Approvals
-
-- add estimate and approval workflow to workshop jobs after the board
-- keep line-item pricing and quote notes aligned with existing workshop line structures
-
-### 2. `M84` Parts Allocation Workflow
+### 1. `M84` Parts Allocation Workflow
 
 - connect workshop jobs to reservations/consumption with explicit stock visibility
 - align waiting-for-parts behavior with existing workshop and stock logic
@@ -101,7 +96,6 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Blocked / Dependent
 
-- `M83` depends on whether the current workshop job model already supports approval state cleanly or needs additive backend support
 - `M84` depends on aligning the active branch with the existing reservation/history behavior already confirmed elsewhere in repo history
 - Any schema-heavy work is dependent on keeping:
   - `prisma/schema.prisma`
@@ -118,7 +112,7 @@ Current true gaps from the reconciled missing-milestone set:
 - React and server-rendered UI layers coexist without a fully consolidated ownership model
 - branch history after `M43` is fragmented across `origin/main`, `origin/react-ui`, `origin/backend-v1`, and milestone refs
 - React purchasing flows now exist but do not yet have dedicated frontend automation
-- React workshop board now exists, but workshop estimates/approvals and allocation flows are not yet implemented on this working line
+- React workshop estimates/approvals now exist, but parts allocation workflow is not yet implemented on this working line
 
 ## Practical Resume Instructions
 
@@ -131,7 +125,7 @@ For the next session:
    - `origin/react-ui`
    - `origin/backend-v1`
 4. confirm which branch is intended to become the canonical post-`M81` line
-5. inspect the current workshop route/controller/service surface before starting `M83`
+5. inspect the current workshop route/controller/service surface before starting `M84`
 6. only then start new feature work
 
 For local setup:
@@ -168,6 +162,6 @@ For repo-history alignment work, also verify that:
 - Do not reopen `M1` to `M10`, `M61` to `M62`, or `M74` to `M75` as implementation gaps unless new archival evidence appears.
 - Treat the previously missing-milestone set as reconciled; do not reopen `M65` unless the new inventory UI is removed or proven incomplete.
 - The current working line now includes `M79`, `M80`, and `M81`.
-- The current working line now includes `M82`.
-- The active next milestone is `M83`.
+- The current working line now includes `M82` and `M83`.
+- The active next milestone is `M84`.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

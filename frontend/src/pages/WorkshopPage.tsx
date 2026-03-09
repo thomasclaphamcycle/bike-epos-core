@@ -19,6 +19,11 @@ const statusOptions = [
 
 type ViewMode = "board" | "list";
 type DisplayBucket = "booked" | "inProgress" | "waitingParts" | "ready" | "completed";
+type QuickAction = {
+  label: string;
+  kind: "status" | "approval";
+  value: string;
+};
 
 type DashboardJob = {
   id: string;
@@ -71,6 +76,27 @@ const formatMoney = (pence: number | null) => {
   return `£${(pence / 100).toFixed(2)}`;
 };
 
+const toBucketLabel = (bucket: DisplayBucket | null) => {
+  if (!bucket) {
+    return "-";
+  }
+
+  switch (bucket) {
+    case "booked":
+      return "Booked";
+    case "inProgress":
+      return "In Progress";
+    case "waitingParts":
+      return "Waiting Parts";
+    case "ready":
+      return "Ready";
+    case "completed":
+      return "Completed";
+    default:
+      return bucket;
+  }
+};
+
 const toStatusBadgeClass = (status: string) => {
   if (status === "CANCELLED") return "status-badge status-cancelled";
   if (status === "COMPLETED") return "status-badge status-complete";
@@ -84,9 +110,20 @@ const toStatusBadgeClass = (status: string) => {
 
 const toPartsStatus = (job: DashboardJob) => (job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK");
 
+const getApprovalLabel = (status: string) => {
+  if (status === "WAITING_FOR_APPROVAL") {
+    return "Awaiting Approval";
+  }
+  if (status === "APPROVED") {
+    return "Approved Estimate";
+  }
+  return null;
+};
+
 const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
   switch (job.status) {
     case "BOOKING_MADE":
+    case "WAITING_FOR_APPROVAL":
       return "booked";
     case "WAITING_FOR_PARTS":
       return "waitingParts";
@@ -101,32 +138,42 @@ const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
   }
 };
 
-const getQuickActions = (job: DashboardJob): Array<{ label: string; value: string }> => {
-  const bucket = toDisplayBucket(job);
-
-  switch (bucket) {
-    case "booked":
+const getQuickActions = (job: DashboardJob): QuickAction[] => {
+  switch (job.status) {
+    case "BOOKING_MADE":
       return [
-        { label: "Start Work", value: "IN_PROGRESS" },
-        { label: "Cancel", value: "CANCELLED" },
+        { label: "Request Approval", kind: "approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Start Work", kind: "status", value: "IN_PROGRESS" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "inProgress":
+    case "WAITING_FOR_APPROVAL":
       return [
-        { label: "Ready", value: "READY" },
-        { label: "Cancel", value: "CANCELLED" },
+        { label: "Approve Estimate", kind: "approval", value: "APPROVED" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "waitingParts":
+    case "BIKE_ARRIVED":
+    case "ON_HOLD":
       return [
-        { label: "Resume", value: "IN_PROGRESS" },
-        { label: "Ready", value: "READY" },
-        { label: "Cancel", value: "CANCELLED" },
+        { label: "Request Approval", kind: "approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "ready":
+    case "APPROVED":
       return [
-        { label: "Complete", value: "COMPLETED" },
-        { label: "Cancel", value: "CANCELLED" },
+        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "completed":
+    case "WAITING_FOR_PARTS":
+      return [
+        { label: "Resume", kind: "status", value: "IN_PROGRESS" },
+        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
+      ];
+    case "BIKE_READY":
+      return [
+        { label: "Complete", kind: "status", value: "COMPLETED" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
+      ];
     default:
       return [];
   }
@@ -186,6 +233,31 @@ export const WorkshopPage = () => {
       const message = statusError instanceof Error ? statusError.message : "Failed to update status";
       error(message);
     }
+  };
+
+  const updateApprovalStatus = async (
+    jobId: string,
+    nextStatus: "WAITING_FOR_APPROVAL" | "APPROVED",
+  ) => {
+    try {
+      await apiPost(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
+        status: nextStatus,
+      });
+      success(nextStatus === "APPROVED" ? "Estimate approved" : "Estimate marked awaiting approval");
+      await loadJobs();
+    } catch (statusError) {
+      const message = statusError instanceof Error ? statusError.message : "Failed to update approval";
+      error(message);
+    }
+  };
+
+  const runQuickAction = async (jobId: string, action: QuickAction) => {
+    if (action.kind === "approval") {
+      await updateApprovalStatus(jobId, action.value as "WAITING_FOR_APPROVAL" | "APPROVED");
+      return;
+    }
+
+    await updateStatus(jobId, action.value);
   };
 
   const bucketedJobs = useMemo(
@@ -296,7 +368,12 @@ export const WorkshopPage = () => {
                                 <strong>{job.bikeDescription || "Workshop job"}</strong>
                                 <div className="table-secondary mono-text">{job.id.slice(0, 8)}</div>
                               </div>
-                              <span className={toStatusBadgeClass(job.status)}>{job.status}</span>
+                              <div className="status-stack">
+                                <span className={toStatusBadgeClass(job.status)}>{job.status}</span>
+                                {getApprovalLabel(job.status) ? (
+                                  <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
+                                ) : null}
+                              </div>
                             </div>
 
                             <div className="workshop-job-meta">
@@ -321,10 +398,10 @@ export const WorkshopPage = () => {
                               ) : (
                                 getQuickActions(job).map((action) => (
                                   <button
-                                    key={action.value}
+                                    key={`${action.kind}:${action.value}`}
                                     type="button"
                                     onClick={() => {
-                                      void updateStatus(job.id, action.value);
+                                      void runQuickAction(job.id, action);
                                     }}
                                   >
                                     {action.label}
@@ -367,9 +444,14 @@ export const WorkshopPage = () => {
                     <tr key={job.id} className="clickable-row" onClick={() => navigate(`/workshop/${job.id}`)}>
                       <td>{job.id.slice(0, 8)}</td>
                       <td>{job.bikeDescription || "-"}</td>
-                      <td>{toDisplayBucket(job)?.replace(/([A-Z])/g, " $1").replace(/^./, (value) => value.toUpperCase()) || "-"}</td>
+                      <td>{toBucketLabel(toDisplayBucket(job))}</td>
                       <td>
-                        <span className={toStatusBadgeClass(job.status)}>{job.status}</span>
+                        <div className="status-stack">
+                          <span className={toStatusBadgeClass(job.status)}>{job.status}</span>
+                          {getApprovalLabel(job.status) ? (
+                            <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
+                          ) : null}
+                        </div>
                       </td>
                       <td>{job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}</td>
                       <td>{getCustomerName(job)}</td>
@@ -386,10 +468,10 @@ export const WorkshopPage = () => {
                           ) : (
                             getQuickActions(job).map((action) => (
                               <button
-                                key={action.value}
+                                key={`${action.kind}:${action.value}`}
                                 type="button"
                                 onClick={() => {
-                                  void updateStatus(job.id, action.value);
+                                  void runQuickAction(job.id, action);
                                 }}
                               >
                                 {action.label}

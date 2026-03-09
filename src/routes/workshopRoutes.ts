@@ -18,6 +18,7 @@ import {
   listWorkshopJobsHandler,
   patchWorkshopJobLineHandler,
   patchWorkshopJobHandler,
+  setWorkshopJobApprovalStatusHandler,
 } from "../controllers/workshopController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
@@ -37,6 +38,7 @@ workshopRouter.post("/jobs/:id/finalize", requireRoleAtLeast("STAFF"), finalizeW
 workshopRouter.post("/jobs/:id/close", requireRoleAtLeast("STAFF"), closeWorkshopJobHandler);
 workshopRouter.post("/jobs/:id/assign", requireRoleAtLeast("STAFF"), assignWorkshopJobHandler);
 workshopRouter.post("/jobs/:id/status", requireRoleAtLeast("STAFF"), changeWorkshopJobStatusHandler);
+workshopRouter.post("/jobs/:id/approval", requireRoleAtLeast("STAFF"), setWorkshopJobApprovalStatusHandler);
 workshopRouter.post("/jobs/:id/notes", requireRoleAtLeast("STAFF"), addWorkshopJobNoteHandler);
 workshopRouter.get("/jobs/:id/notes", requireRoleAtLeast("STAFF"), getWorkshopJobNotesHandler);
 workshopRouter.post("/jobs/:id/checkout", requireRoleAtLeast("STAFF"), checkoutWorkshopJobHandler);

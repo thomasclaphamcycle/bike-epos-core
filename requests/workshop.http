@@ -255,6 +255,26 @@ X-Staff-Id: demo-staff
   "status": "READY"
 }
 
+### Mark estimate as waiting for approval (M83)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "WAITING_FOR_APPROVAL"
+}
+
+### Mark estimate approved (M83)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "APPROVED"
+}
+
 ### Refund any payment by id
 ### Response: 201 created, 200 idempotent replay, 409 REFUND_EXCEEDS_PAYMENT
 ### Permissions: MANAGER+
