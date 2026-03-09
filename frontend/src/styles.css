@@ -333,6 +333,24 @@ th {
   color: #155f39;
 }
 
+.stock-state-positive {
+  background: #ebf8f0;
+  border-color: #b8e3c8;
+  color: #155f39;
+}
+
+.stock-state-zero {
+  background: #fff6e6;
+  border-color: #f0d8a1;
+  color: #7c5a00;
+}
+
+.stock-state-negative {
+  background: #fff0f0;
+  border-color: #efc3c3;
+  color: #8b1f1f;
+}
+
 .stock-muted {
   background: #f1f5f9;
   border-color: #d6dee8;
@@ -345,6 +363,22 @@ th {
 
 .movement-negative {
   color: #8b1f1f;
+}
+
+.inventory-adjustment-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.inventory-adjustment-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.inventory-adjustment-note {
+  grid-column: span 2;
 }
 
 .actions-inline,
@@ -472,5 +506,13 @@ th {
 
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .inventory-adjustment-form {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-adjustment-note {
+    grid-column: span 1;
   }
 }

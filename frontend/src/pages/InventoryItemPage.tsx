@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError, apiGet } from "../api/client";
+import { ApiError, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 
@@ -49,6 +49,19 @@ type MovementResponse = {
   }>;
 };
 
+type StockAdjustmentResponse = {
+  entry: {
+    id: string;
+    quantityDelta: number;
+    referenceId: string;
+    createdAt: string;
+  };
+  stock: {
+    totalOnHand: number;
+    onHandAtLocation: number;
+  };
+};
+
 const formatMoney = (pence: number | null) =>
   pence === null ? "-" : `£${(pence / 100).toFixed(2)}`;
 
@@ -56,90 +69,176 @@ const formatSignedQuantity = (quantity: number) => (quantity > 0 ? `+${quantity}
 
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
+const ADJUSTMENT_REASONS = [
+  "COUNT_CORRECTION",
+  "DAMAGED",
+  "SUPPLIER_ERROR",
+  "THEFT",
+  "OTHER",
+] as const;
+
+const MOVEMENT_TYPE_OPTIONS = [
+  "",
+  "PURCHASE",
+  "SALE",
+  "ADJUSTMENT",
+  "WORKSHOP_USE",
+  "RETURN",
+] as const;
+
+const getStockStateLabel = (onHand: number) => {
+  if (onHand < 0) {
+    return "Negative";
+  }
+  if (onHand === 0) {
+    return "Zero";
+  }
+  return "Positive";
+};
+
+const getStockStateClass = (onHand: number) => {
+  if (onHand < 0) {
+    return "stock-badge stock-state-negative";
+  }
+  if (onHand === 0) {
+    return "stock-badge stock-state-zero";
+  }
+  return "stock-badge stock-state-positive";
+};
+
 export const InventoryItemPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
   const { user } = useAuth();
-  const { error } = useToasts();
+  const { error, success } = useToasts();
 
   const [variant, setVariant] = useState<VariantDetail | null>(null);
   const [stock, setStock] = useState<StockResponse | null>(null);
   const [movements, setMovements] = useState<MovementResponse["movements"]>([]);
   const [loading, setLoading] = useState(false);
+  const [movementLoading, setMovementLoading] = useState(false);
   const [movementNotice, setMovementNotice] = useState<string | null>(null);
+  const [movementType, setMovementType] = useState<(typeof MOVEMENT_TYPE_OPTIONS)[number]>("");
+  const [movementFrom, setMovementFrom] = useState("");
+  const [movementTo, setMovementTo] = useState("");
+  const [adjustmentDelta, setAdjustmentDelta] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState<(typeof ADJUSTMENT_REASONS)[number]>("COUNT_CORRECTION");
+  const [adjustmentNote, setAdjustmentNote] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
 
   const canViewMovements = useMemo(() => isManagerPlus(user?.role), [user?.role]);
+  const canAdjustStock = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
-  useEffect(() => {
+  const loadInventoryDetail = async () => {
     if (!variantId) {
       return;
     }
 
-    let cancelled = false;
+    setLoading(true);
+    try {
+      const [variantPayload, stockPayload] = await Promise.all([
+        apiGet<VariantDetail>(`/api/variants/${encodeURIComponent(variantId)}`),
+        apiGet<StockResponse>(`/api/stock/variants/${encodeURIComponent(variantId)}`),
+      ]);
 
-    const load = async () => {
-      setLoading(true);
-      setVariant(null);
-      setStock(null);
+      setVariant(variantPayload);
+      setStock(stockPayload);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Failed to load inventory item";
+      error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMovements = async () => {
+    if (!variantId) {
+      return;
+    }
+
+    setMovementNotice(null);
+
+    if (!canViewMovements) {
       setMovements([]);
-      setMovementNotice(null);
+      setMovementLoading(false);
+      setMovementNotice("Movement history is available to MANAGER+ only.");
+      return;
+    }
 
-      try {
-        const [variantPayload, stockPayload] = await Promise.all([
-          apiGet<VariantDetail>(`/api/variants/${encodeURIComponent(variantId)}`),
-          apiGet<StockResponse>(`/api/stock/variants/${encodeURIComponent(variantId)}`),
-        ]);
+    const params = new URLSearchParams();
+    params.set("variantId", variantId);
+    if (movementType) {
+      params.set("type", movementType);
+    }
+    if (movementFrom) {
+      params.set("from", movementFrom);
+    }
+    if (movementTo) {
+      params.set("to", movementTo);
+    }
 
-        if (cancelled) {
-          return;
-        }
+    setMovementLoading(true);
 
-        setVariant(variantPayload);
-        setStock(stockPayload);
-
-        if (!canViewMovements) {
-          setMovements([]);
-          setMovementNotice("Movement history is available to MANAGER+ only.");
-          return;
-        }
-
-        try {
-          const movementPayload = await apiGet<MovementResponse>(
-            `/api/inventory/movements?variantId=${encodeURIComponent(variantId)}`,
-          );
-          if (!cancelled) {
-            setMovements(movementPayload.movements || []);
-          }
-        } catch (movementError) {
-          if (cancelled) {
-            return;
-          }
-          if (movementError instanceof ApiError && movementError.status === 403) {
-            setMovements([]);
-            setMovementNotice("Movement history is available to MANAGER+ only.");
-          } else {
-            const message =
-              movementError instanceof Error ? movementError.message : "Failed to load movement history";
-            error(message);
-          }
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          const message = loadError instanceof Error ? loadError.message : "Failed to load inventory item";
-          error(message);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+    try {
+      const movementPayload = await apiGet<MovementResponse>(`/api/inventory/movements?${params.toString()}`);
+      setMovements(movementPayload.movements || []);
+    } catch (movementError) {
+      if (movementError instanceof ApiError && movementError.status === 403) {
+        setMovements([]);
+        setMovementNotice("Movement history is available to MANAGER+ only.");
+      } else {
+        const message =
+          movementError instanceof Error ? movementError.message : "Failed to load movement history";
+        error(message);
       }
-    };
+    } finally {
+      setMovementLoading(false);
+    }
+  };
 
-    void load();
+  useEffect(() => {
+    void loadInventoryDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variantId]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [canViewMovements, error, variantId]);
+  useEffect(() => {
+    void loadMovements();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canViewMovements, movementFrom, movementTo, movementType, variantId]);
+
+  const submitAdjustment = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!variantId) {
+      return;
+    }
+
+    const parsedDelta = Number.parseInt(adjustmentDelta, 10);
+    if (!Number.isInteger(parsedDelta) || parsedDelta === 0) {
+      error("Quantity delta must be a non-zero integer.");
+      return;
+    }
+
+    setAdjusting(true);
+    try {
+      await apiPost<StockAdjustmentResponse>("/api/stock/adjustments", {
+        variantId,
+        quantityDelta: parsedDelta,
+        note: adjustmentNote || undefined,
+        referenceType: "STOCK_ADJUSTMENT",
+        referenceId: adjustmentReason,
+      });
+
+      setAdjustmentDelta("");
+      setAdjustmentNote("");
+      success(`Stock adjusted by ${formatSignedQuantity(parsedDelta)}.`);
+      await Promise.all([loadInventoryDetail(), loadMovements()]);
+    } catch (adjustmentError) {
+      const message = adjustmentError instanceof Error ? adjustmentError.message : "Failed to adjust stock";
+      error(message);
+    } finally {
+      setAdjusting(false);
+    }
+  };
 
   if (!variantId) {
     return <div className="page-shell"><p>Missing inventory item id.</p></div>;
@@ -182,12 +281,75 @@ export const InventoryItemPage = () => {
                 <strong className="metric-value">{stock?.onHand ?? 0}</strong>
               </div>
               <div className="metric-card">
+                <span className="metric-label">Stock State</span>
+                <strong className="metric-value">
+                  <span className={getStockStateClass(stock?.onHand ?? 0)}>
+                    {getStockStateLabel(stock?.onHand ?? 0)}
+                  </span>
+                </strong>
+              </div>
+              <div className="metric-card">
                 <span className="metric-label">Tracked Locations</span>
                 <strong className="metric-value">{stock?.locations.length ?? 0}</strong>
               </div>
             </div>
           </>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Stock Adjustment</h2>
+            <p className="muted-text">Records a stock adjustment against the current variant.</p>
+          </div>
+          {!canAdjustStock ? <span className="muted-text">MANAGER+ only</span> : null}
+        </div>
+
+        {canAdjustStock ? (
+          <form className="inventory-adjustment-form" onSubmit={submitAdjustment}>
+            <label>
+              Quantity Delta
+              <input
+                type="number"
+                step="1"
+                value={adjustmentDelta}
+                onChange={(event) => setAdjustmentDelta(event.target.value)}
+                placeholder="Use negative values to reduce stock"
+                required
+              />
+            </label>
+
+            <label>
+              Reason
+              <select
+                value={adjustmentReason}
+                onChange={(event) => setAdjustmentReason(event.target.value as (typeof ADJUSTMENT_REASONS)[number])}
+              >
+                {ADJUSTMENT_REASONS.map((reason) => (
+                  <option key={reason} value={reason}>
+                    {reason}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="inventory-adjustment-note">
+              Note
+              <input
+                value={adjustmentNote}
+                onChange={(event) => setAdjustmentNote(event.target.value)}
+                placeholder="Optional note for the adjustment"
+              />
+            </label>
+
+            <button type="submit" className="primary" disabled={adjusting}>
+              {adjusting ? "Adjusting..." : "Apply Adjustment"}
+            </button>
+          </form>
+        ) : (
+          <p className="muted-text">Stock adjustments are available to MANAGER+ only.</p>
+        )}
       </section>
 
       <section className="card">
@@ -226,6 +388,39 @@ export const InventoryItemPage = () => {
           {movementNotice ? <span className="muted-text">{movementNotice}</span> : null}
         </div>
 
+        {canViewMovements ? (
+          <div className="filter-row">
+            <label>
+              Type
+              <select
+                value={movementType}
+                onChange={(event) => setMovementType(event.target.value as (typeof MOVEMENT_TYPE_OPTIONS)[number])}
+              >
+                <option value="">All</option>
+                {MOVEMENT_TYPE_OPTIONS.filter((option) => option).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              From
+              <input type="date" value={movementFrom} onChange={(event) => setMovementFrom(event.target.value)} />
+            </label>
+
+            <label>
+              To
+              <input type="date" value={movementTo} onChange={(event) => setMovementTo(event.target.value)} />
+            </label>
+
+            <button type="button" onClick={() => void loadMovements()} disabled={movementLoading}>
+              {movementLoading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+        ) : null}
+
         <div className="table-wrap">
           <table>
             <thead>
@@ -242,7 +437,11 @@ export const InventoryItemPage = () => {
               {movements.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
-                    {canViewMovements ? "No movements found." : "Movement history hidden for STAFF users."}
+                    {canViewMovements
+                      ? movementLoading
+                        ? "Loading movement history..."
+                        : "No movements found."
+                      : "Movement history hidden for STAFF users."}
                   </td>
                 </tr>
               ) : (

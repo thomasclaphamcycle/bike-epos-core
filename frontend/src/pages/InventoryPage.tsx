@@ -24,6 +24,39 @@ type InventorySearchResponse = {
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
+type StockStateFilter = "" | "negative" | "zero" | "positive";
+type SortOption = "productAsc" | "onHandAsc" | "onHandDesc" | "skuAsc";
+
+const getStockState = (onHand: number): StockStateFilter => {
+  if (onHand < 0) {
+    return "negative";
+  }
+  if (onHand === 0) {
+    return "zero";
+  }
+  return "positive";
+};
+
+const getStockStateLabel = (onHand: number) => {
+  if (onHand < 0) {
+    return "Negative";
+  }
+  if (onHand === 0) {
+    return "Zero";
+  }
+  return "Positive";
+};
+
+const getStockStateClass = (onHand: number) => {
+  if (onHand < 0) {
+    return "stock-badge stock-state-negative";
+  }
+  if (onHand === 0) {
+    return "stock-badge stock-state-zero";
+  }
+  return "stock-badge stock-state-positive";
+};
+
 export const InventoryPage = () => {
   const navigate = useNavigate();
   const { error } = useToasts();
@@ -31,6 +64,8 @@ export const InventoryPage = () => {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
   const [active, setActive] = useState("1");
+  const [stockState, setStockState] = useState<StockStateFilter>("");
+  const [sort, setSort] = useState<SortOption>("productAsc");
   const [pageSize, setPageSize] = useState("100");
 
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -67,9 +102,46 @@ export const InventoryPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter((row) => {
+      if (!stockState) {
+        return true;
+      }
+      return getStockState(row.onHand) === stockState;
+    });
+
+    const sorted = [...filtered];
+
+    sorted.sort((left, right) => {
+      switch (sort) {
+        case "onHandAsc":
+          return left.onHand - right.onHand || left.productName.localeCompare(right.productName);
+        case "onHandDesc":
+          return right.onHand - left.onHand || left.productName.localeCompare(right.productName);
+        case "skuAsc":
+          return left.sku.localeCompare(right.sku);
+        case "productAsc":
+        default: {
+          const productCompare = left.productName.localeCompare(right.productName);
+          if (productCompare !== 0) {
+            return productCompare;
+          }
+          return (left.variantName || left.option || "").localeCompare(right.variantName || right.option || "");
+        }
+      }
+    });
+
+    return sorted;
+  }, [rows, sort, stockState]);
+
   const totalUnits = useMemo(
-    () => rows.reduce((sum, row) => sum + row.onHand, 0),
-    [rows],
+    () => visibleRows.reduce((sum, row) => sum + row.onHand, 0),
+    [visibleRows],
+  );
+
+  const zeroOrNegativeCount = useMemo(
+    () => visibleRows.filter((row) => row.onHand <= 0).length,
+    [visibleRows],
   );
 
   return (
@@ -105,6 +177,26 @@ export const InventoryPage = () => {
           </label>
 
           <label>
+            Stock State
+            <select value={stockState} onChange={(event) => setStockState(event.target.value as StockStateFilter)}>
+              <option value="">All</option>
+              <option value="negative">Negative</option>
+              <option value="zero">Zero</option>
+              <option value="positive">Positive</option>
+            </select>
+          </label>
+
+          <label>
+            Sort
+            <select value={sort} onChange={(event) => setSort(event.target.value as SortOption)}>
+              <option value="productAsc">Product A-Z</option>
+              <option value="onHandAsc">On Hand: Low to High</option>
+              <option value="onHandDesc">On Hand: High to Low</option>
+              <option value="skuAsc">SKU A-Z</option>
+            </select>
+          </label>
+
+          <label>
             Page Size
             <select value={pageSize} onChange={(event) => setPageSize(event.target.value)}>
               <option value="25">25</option>
@@ -118,13 +210,21 @@ export const InventoryPage = () => {
         <div className="metric-grid">
           <div className="metric-card">
             <span className="metric-label">Visible Variants</span>
-            <strong className="metric-value">{rows.length}</strong>
+            <strong className="metric-value">{visibleRows.length}</strong>
           </div>
           <div className="metric-card">
             <span className="metric-label">Visible Units On Hand</span>
             <strong className="metric-value">{totalUnits}</strong>
           </div>
+          <div className="metric-card">
+            <span className="metric-label">Zero Or Negative Rows</span>
+            <strong className="metric-value">{zeroOrNegativeCount}</strong>
+          </div>
         </div>
+
+        <p className="muted-text">
+          Stock-state indicators use raw on-hand values only. No reorder-threshold logic is applied in v1.
+        </p>
 
         <div className="table-wrap">
           <table>
@@ -136,16 +236,17 @@ export const InventoryPage = () => {
                 <th>Barcode</th>
                 <th>Retail</th>
                 <th>On Hand</th>
+                <th>Stock State</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{loading ? "Loading inventory..." : "No inventory rows found."}</td>
+                  <td colSpan={8}>{loading ? "Loading inventory..." : "No inventory rows found."}</td>
                 </tr>
               ) : (
-                rows.map((row) => (
+                visibleRows.map((row) => (
                   <tr
                     key={row.variantId}
                     className="clickable-row"
@@ -160,6 +261,11 @@ export const InventoryPage = () => {
                     <td className="mono-text">{row.barcode || "-"}</td>
                     <td>{formatMoney(row.retailPricePence)}</td>
                     <td className="numeric-cell">{row.onHand}</td>
+                    <td>
+                      <span className={getStockStateClass(row.onHand)}>
+                        {getStockStateLabel(row.onHand)}
+                      </span>
+                    </td>
                     <td>
                       <span className={row.isActive ? "stock-badge stock-good" : "stock-badge stock-muted"}>
                         {row.isActive ? (row.onHand > 0 ? "In Stock" : "Out Of Stock") : "Inactive"}

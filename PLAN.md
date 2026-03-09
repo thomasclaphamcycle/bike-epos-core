@@ -357,6 +357,83 @@ Confirmed evidence:
 4. Expand automated coverage for the React frontend flows already present.
 5. Do a dedicated hygiene pass for tracked junk files and stale docs.
 
+## Next Development Phase - Staff Platform Completion
+
+Current state:
+
+- the React staff platform now includes:
+  - POS
+  - Workshop
+  - Inventory
+  - Customers
+- the current working line now includes:
+  - `M79` staff dashboard
+  - `M80` inventory management tools
+- the next planned step is to expose purchasing workflows in React
+
+### Next Milestones
+
+#### `M79` - Staff Dashboard
+
+Goal:
+
+- create a central React dashboard page for staff
+
+Planned scope:
+
+- today's sales summary
+- open workshop jobs
+- low stock alerts
+- quick navigation to POS, Workshop, Inventory, and Customers
+- recent system activity
+
+Planned frontend entry:
+
+- `frontend/src/pages/DashboardPage.tsx`
+
+Notes:
+
+- reuse existing report, workshop, inventory, and audit endpoints where practical
+- if recent activity or low-stock alert data is not exposed cleanly enough for the dashboard, add the smallest additive backend endpoint needed
+- implemented on the current working line via code evidence
+
+#### `M80` - Inventory Management Tools
+
+Goal:
+
+- extend the React inventory surface from browse/detail into practical stock operations
+
+Planned scope:
+
+- stock adjustments
+- inventory movement history improvements
+- reorder alerts
+- better filtering and sorting
+
+Notes:
+
+- build on top of the new React inventory pages from `M65`
+- prefer the existing inventory adjustment and movement APIs over new parallel contracts
+- implemented on the current working line via code evidence
+- uses raw on-hand stock-state indicators only; no reorder-threshold model has been introduced
+
+#### `M81` - Supplier And Purchasing UI
+
+Goal:
+
+- expose existing purchasing and receiving backend capabilities through the React UI
+
+Planned scope:
+
+- suppliers list
+- purchase orders
+- goods receiving
+
+Notes:
+
+- reuse the existing supplier, purchase-order, and receiving endpoints already present in repo history/current backend where available
+- keep the initial UI operational and additive rather than redesign-heavy
+
 ## Long-Term Direction
 
 CorePOS is clearly evolving toward a unified staff platform with:

@@ -3,7 +3,7 @@
 ## Current Snapshot
 
 - Working branch: `dev-next`
-- Current HEAD: `62cb82c`
+- Current HEAD: `3944af6`
 - Stable local restore point:
   - tag `v1.2-demo-running`
   - branch `stable-demo`
@@ -16,9 +16,12 @@
 ### On Current Working Line
 
 - local PostgreSQL, Prisma migrate, demo seed, backend, frontend, and login all work together
-- React login, POS, workshop, and customers pages exist
+- React login, POS, workshop, inventory, and customers pages exist
 - canonical project guidance pack now exists
 - local dev restore point exists and is pushed
+- `M65` React inventory UI is implemented and committed
+- `M79` staff dashboard is implemented
+- `M80` inventory management tools are implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -29,16 +32,28 @@
 
 These milestones are confirmed in branch history and/or remote refs, even where `dev-next` has not absorbed them as a single linear branch.
 
-## What Is Next
+## Current Milestone
 
-The next tasks should start after the currently implemented milestone range, but only after branch reality is cleaned up.
+### `M81` - Supplier & Purchasing UI
+
+Active goal:
+
+- expose supplier and purchasing workflows in React:
+  - suppliers list
+  - purchase orders
+  - goods receiving
+
+## Next Milestones Queue
+
+1. `M81` - Supplier & Purchasing UI
+
+## What Is Next
 
 Highest priority:
 
-1. Consolidate the repo after `M78`
-2. Expand regression coverage for the React line already in use
-3. Decide the post-`M78` roadmap rather than continuing to accumulate disconnected milestone branches
-4. Consolidate branch history so the current working line reflects the real implemented milestone set
+1. prepare and implement `M81` cleanly
+2. expand regression coverage for the React line already in use
+3. keep branch consolidation and repo hygiene as parallel maintenance work
 
 ## Missing Milestone Reconciliation
 
@@ -57,38 +72,30 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Recommended Sequencing
 
-### 1. Branch Consolidation
+### 1. `M81` Supplier & Purchasing UI
 
-- reconcile `dev-next` with confirmed repo-wide milestone history
-- decide whether `dev-next` should become the new integration branch or whether `origin/main` should remain canonical
-- ensure one branch clearly represents the true project state through `M78`
+- expose:
+  - suppliers
+  - purchase orders
+  - goods receiving
+- keep the UI thin and aligned with the existing backend model
 
 ### 2. React Coverage And Parity
 
 - add or expand E2E coverage for:
-  - React login
-  - React POS sale completion and receipt opening
-  - React workshop convert-to-sale flow
-  - React customers attach-to-sale flow
-  - manager refunds and daily close if those pages are merged into the active line
+  - dashboard loading
+  - inventory search/detail flows
+  - purchasing flows once added
 
-### 3. Strengthen The React Staff Surface
+### 3. Maintenance Track
 
-- add or expand coverage for:
-  - React inventory search and detail flows
-  - role-sensitive inventory detail behavior for STAFF vs MANAGER+
-  - React navigation parity across POS, workshop, customers, and inventory
-
-### 4. Start Post-M78 Planning
-
-Only after the above:
-
-- define the next milestone batch after the actual implemented range
-- avoid inventing `M79+` work until the branch story is coherent
+- continue branch consolidation work in parallel
+- keep docs aligned with the actual milestone state
+- address tracked junk files and other hygiene issues in dedicated maintenance work
 
 ## Blocked / Dependent
 
-- Post-`M78` planning is blocked on branch consolidation.
+- `M81` depends on confirming which purchasing/supplier endpoints are present on the active working line versus only in broader repo history.
 - Any schema-heavy work is dependent on keeping:
   - `prisma/schema.prisma`
   - `prisma/migrations/`
@@ -146,8 +153,9 @@ For repo-history alignment work, also verify that:
 ## Notes For The Next Agent
 
 - Start from `AGENTS.md`, then `PLAN.md`, then this file.
-- Treat repo-wide confirmed history as reaching roughly `M78`.
+- Treat repo-wide confirmed history as reaching `M78`.
 - Do not assume `dev-next` already contains every later milestone merge.
 - Do not reopen `M1` to `M10`, `M61` to `M62`, or `M74` to `M75` as implementation gaps unless new archival evidence appears.
 - Treat the previously missing-milestone set as reconciled; do not reopen `M65` unless the new inventory UI is removed or proven incomplete.
+- The active roadmap now starts at `M79` for new work on the staff platform completion phase.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.
