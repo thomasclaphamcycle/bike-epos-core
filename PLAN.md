@@ -710,7 +710,7 @@ Notes:
 - uses a focused additive backend report endpoint under `/api/reports/suppliers/performance`
 - intentionally omits supplier revenue contribution and lead-time analytics because the current branch does not support those honestly enough yet
 
-## Next Development Phase - Operations Planning & Administration
+## Next Development Phase - Operations Oversight & Customer Intelligence
 
 Current state:
 
@@ -718,7 +718,10 @@ Current state:
   - `M91` reorder suggestions
   - `M92` workshop capacity analytics
   - `M93` staff / role management UI
-- this batch is now complete through `M93`
+  - `M94` audit and activity UI
+- this batch is now complete through `M94`
+- the next planned follow-on milestones are:
+- this batch is now complete through `M96`
 
 ### Next Milestones
 
@@ -798,3 +801,78 @@ Notes:
 - adds an admin-only route at `/management/staff`
 - reuses the existing `/api/admin/users` endpoints and preserves the current admin-only backend permission model
 - keeps the UI operational and does not redesign authentication or user lifecycle beyond the existing admin surface
+
+#### `M94` - Audit & Activity UI
+
+Goal:
+
+- add a manager-facing audit and recent activity surface in React
+
+Implemented scope on the current working line:
+
+- recent system activity list
+- date, entity, entity-id, and action filters using the existing audit API
+- local actor filtering over the returned rows
+- practical operational visibility rather than forensic audit tooling
+
+Frontend entry:
+
+- `frontend/src/pages/ActivityPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/activity`
+- reuses the existing `/api/audit` endpoint without widening backend scope
+- keeps actor filtering honest by applying it client-side because the current backend filter surface does not expose actor filtering
+
+#### `M95` - Customer Insights / CRM Summary
+
+Goal:
+
+- add manager-facing customer insights using existing customer, sales, workshop, and credit data
+
+Implemented scope on the current working line:
+
+- customer summary metrics
+- repeat customers
+- high-value customers
+- recent customer activity
+- workshop-active customers
+- credit / balance context
+
+Frontend entry:
+
+- `frontend/src/pages/CustomerInsightsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/customers`
+- uses a focused additive backend report endpoint under `/api/reports/customers/insights`
+- keeps the metrics practical and avoids speculative CRM scoring or marketing segmentation
+
+#### `M96` - Purchase Order Action Centre
+
+Goal:
+
+- add a manager-facing purchasing operations page focused on actionability, not just reporting
+
+Implemented scope on the current working line:
+
+- open purchase orders needing action
+- overdue purchase orders
+- partially received purchase orders
+- supplier, status, created date, and expected date visibility
+- prioritised operational queue rather than a replacement for the detailed purchasing UI
+
+Frontend entry:
+
+- `frontend/src/pages/PurchaseOrderActionPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/purchasing`
+- reuses the existing `/api/purchase-orders` endpoint without widening backend scope
+- complements the detailed purchasing workspace instead of replacing it

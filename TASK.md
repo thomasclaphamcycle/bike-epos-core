@@ -34,6 +34,9 @@
 - `M91` reorder suggestions is implemented
 - `M92` workshop capacity analytics is implemented
 - `M93` staff / role management UI is implemented
+- `M94` audit and activity UI is implemented
+- `M95` customer insights / CRM summary is implemented
+- `M96` purchase order action centre is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -46,20 +49,20 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M93`
+- no new active milestone is queued yet after `M96`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M93`
+- not yet defined in the canonical plan after `M96`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M93` milestone batch explicitly before implementation work starts
-2. keep the management, reporting, business intelligence, and admin surfaces aligned with the endpoints they depend on
-3. continue regression coverage in parallel
-4. continue repo hygiene and branch consolidation in parallel
+1. define the next post-`M96` milestone batch explicitly before implementation work starts
+3. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
+4. continue regression coverage in parallel
+5. continue repo hygiene and branch consolidation in parallel
 
 ## Missing Milestone Reconciliation
 
@@ -168,5 +171,8 @@ For repo-history alignment work, also verify that:
 - The current working line now includes `M87`.
 - The current working line now includes `M88`, `M89`, and `M90`.
 - The current working line now includes `M91`, `M92`, and `M93`.
-- No post-`M93` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M94`.
+- The current working line now also includes `M95`.
+- The current working line now also includes `M96`.
+- No post-`M96` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

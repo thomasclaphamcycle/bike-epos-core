@@ -811,3 +811,244 @@ export const getSupplierPerformanceReport = async (from?: string, to?: string, t
     leadTimeSupported: false,
   };
 };
+
+const toCustomerDisplayName = (customer: {
+  name: string;
+  firstName: string;
+  lastName: string;
+}) => {
+  const explicitName = customer.name.trim();
+  if (explicitName.length > 0) {
+    return explicitName;
+  }
+
+  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() || "Unknown customer";
+};
+
+const OPEN_WORKSHOP_STATUSES = new Set([
+  "BOOKING_MADE",
+  "BIKE_ARRIVED",
+  "WAITING_FOR_APPROVAL",
+  "APPROVED",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
+  "BIKE_READY",
+]);
+
+export const getCustomerInsightsReport = async (from?: string, to?: string, take?: number) => {
+  const range = getDateRangeWithTakeOrThrow(from, to, take);
+  const fromDate = parseDateOnlyOrThrow(range.from, "from");
+  const toDate = new Date(`${range.to}T23:59:59.999Z`);
+
+  const [customers, sales, workshopJobs, creditAccounts] = await Promise.all([
+    prisma.customer.findMany({
+      select: {
+        id: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        createdAt: true,
+      },
+    }),
+    prisma.sale.findMany({
+      where: {
+        customerId: { not: null },
+        completedAt: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      },
+      select: {
+        id: true,
+        customerId: true,
+        totalPence: true,
+        completedAt: true,
+      },
+    }),
+    prisma.workshopJob.findMany({
+      where: {
+        customerId: { not: null },
+      },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        completedAt: true,
+      },
+    }),
+    prisma.creditAccount.findMany({
+      where: {
+        customerId: { not: null },
+      },
+      select: {
+        customerId: true,
+        entries: {
+          select: {
+            amountPence: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const salesByCustomer = new Map<string, {
+    saleCount: number;
+    totalSpendPence: number;
+    lastSaleAt: Date | null;
+  }>();
+  for (const sale of sales) {
+    if (!sale.customerId) {
+      continue;
+    }
+    const current = salesByCustomer.get(sale.customerId) ?? {
+      saleCount: 0,
+      totalSpendPence: 0,
+      lastSaleAt: null,
+    };
+    current.saleCount += 1;
+    current.totalSpendPence += sale.totalPence;
+    if (sale.completedAt && (!current.lastSaleAt || sale.completedAt > current.lastSaleAt)) {
+      current.lastSaleAt = sale.completedAt;
+    }
+    salesByCustomer.set(sale.customerId, current);
+  }
+
+  const workshopByCustomer = new Map<string, {
+    totalWorkshopJobs: number;
+    activeWorkshopJobs: number;
+    recentWorkshopJobs: number;
+    lastWorkshopAt: Date | null;
+  }>();
+  for (const job of workshopJobs) {
+    if (!job.customerId) {
+      continue;
+    }
+    const current = workshopByCustomer.get(job.customerId) ?? {
+      totalWorkshopJobs: 0,
+      activeWorkshopJobs: 0,
+      recentWorkshopJobs: 0,
+      lastWorkshopAt: null,
+    };
+    current.totalWorkshopJobs += 1;
+    if (OPEN_WORKSHOP_STATUSES.has(job.status)) {
+      current.activeWorkshopJobs += 1;
+    }
+    if (job.updatedAt >= fromDate && job.updatedAt <= toDate) {
+      current.recentWorkshopJobs += 1;
+    }
+    if (!current.lastWorkshopAt || job.updatedAt > current.lastWorkshopAt) {
+      current.lastWorkshopAt = job.updatedAt;
+    }
+    workshopByCustomer.set(job.customerId, current);
+  }
+
+  const creditByCustomer = new Map<string, number>();
+  for (const account of creditAccounts) {
+    if (!account.customerId) {
+      continue;
+    }
+    const balance = account.entries.reduce((sum, entry) => sum + entry.amountPence, 0);
+    creditByCustomer.set(account.customerId, balance);
+  }
+
+  const baseRows = customers.map((customer) => {
+    const salesRow = salesByCustomer.get(customer.id);
+    const workshopRow = workshopByCustomer.get(customer.id);
+    const creditBalancePence = creditByCustomer.get(customer.id) ?? 0;
+    const lastActivityAtCandidates = [salesRow?.lastSaleAt, workshopRow?.lastWorkshopAt].filter(
+      (value): value is Date => Boolean(value),
+    );
+    const lastActivityAt = lastActivityAtCandidates.length > 0
+      ? [...lastActivityAtCandidates].sort((left, right) => right.getTime() - left.getTime())[0]
+      : null;
+
+    return {
+      customerId: customer.id,
+      customerName: toCustomerDisplayName(customer),
+      email: customer.email,
+      phone: customer.phone,
+      saleCount: salesRow?.saleCount ?? 0,
+      totalSpendPence: salesRow?.totalSpendPence ?? 0,
+      averageOrderValuePence:
+        salesRow && salesRow.saleCount > 0 ? Math.round(salesRow.totalSpendPence / salesRow.saleCount) : 0,
+      totalWorkshopJobs: workshopRow?.totalWorkshopJobs ?? 0,
+      activeWorkshopJobs: workshopRow?.activeWorkshopJobs ?? 0,
+      recentWorkshopJobs: workshopRow?.recentWorkshopJobs ?? 0,
+      creditBalancePence,
+      lastSaleAt: salesRow?.lastSaleAt ?? null,
+      lastWorkshopAt: workshopRow?.lastWorkshopAt ?? null,
+      lastActivityAt,
+      createdAt: customer.createdAt,
+    };
+  });
+
+  const customersWithSales = baseRows.filter((row) => row.saleCount > 0);
+  const averageSpendPence = customersWithSales.length > 0
+    ? Math.round(customersWithSales.reduce((sum, row) => sum + row.totalSpendPence, 0) / customersWithSales.length)
+    : 0;
+
+  const customersWithFlags = baseRows.map((row) => ({
+    ...row,
+    isRepeatCustomer: row.saleCount >= 2,
+    isHighValueCustomer: row.totalSpendPence > 0 && row.totalSpendPence >= averageSpendPence,
+  }));
+
+  const topCustomers = [...customersWithFlags]
+    .filter((row) => row.totalSpendPence > 0)
+    .sort((left, right) => (
+      right.totalSpendPence - left.totalSpendPence
+      || right.saleCount - left.saleCount
+      || left.customerName.localeCompare(right.customerName)
+    ))
+    .slice(0, range.take);
+
+  const repeatCustomers = [...customersWithFlags]
+    .filter((row) => row.isRepeatCustomer)
+    .sort((left, right) => (
+      right.saleCount - left.saleCount
+      || right.totalSpendPence - left.totalSpendPence
+      || left.customerName.localeCompare(right.customerName)
+    ))
+    .slice(0, range.take);
+
+  const recentActivityCustomers = [...customersWithFlags]
+    .filter((row) => row.lastActivityAt)
+    .sort((left, right) => (
+      (right.lastActivityAt?.getTime() ?? 0) - (left.lastActivityAt?.getTime() ?? 0)
+      || left.customerName.localeCompare(right.customerName)
+    ))
+    .slice(0, range.take);
+
+  const workshopActiveCustomers = [...customersWithFlags]
+    .filter((row) => row.activeWorkshopJobs > 0)
+    .sort((left, right) => (
+      right.activeWorkshopJobs - left.activeWorkshopJobs
+      || (right.lastWorkshopAt?.getTime() ?? 0) - (left.lastWorkshopAt?.getTime() ?? 0)
+      || left.customerName.localeCompare(right.customerName)
+    ))
+    .slice(0, range.take);
+
+  return {
+    filters: range,
+    summary: {
+      customerCount: baseRows.length,
+      activeCustomerCount: customersWithFlags.filter((row) => row.saleCount > 0 || row.activeWorkshopJobs > 0).length,
+      repeatCustomerCount: customersWithFlags.filter((row) => row.isRepeatCustomer).length,
+      highValueCustomerCount: customersWithFlags.filter((row) => row.isHighValueCustomer).length,
+      workshopActiveCustomerCount: customersWithFlags.filter((row) => row.activeWorkshopJobs > 0).length,
+      customersWithCreditCount: customersWithFlags.filter((row) => row.creditBalancePence !== 0).length,
+      totalCreditBalancePence: customersWithFlags.reduce((sum, row) => sum + row.creditBalancePence, 0),
+      averageSpendPence,
+    },
+    topCustomers,
+    repeatCustomers,
+    recentActivityCustomers,
+    workshopActiveCustomers,
+    customers: customersWithFlags,
+    creditSupported: true,
+  };
+};

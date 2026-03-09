@@ -4,6 +4,7 @@ import {
   getInventoryVelocityReport,
   getInventoryValueReport,
   getPaymentsReport,
+  getCustomerInsightsReport,
   getProductSalesReport,
   getSalesDailyReport,
   getSupplierPerformanceReport,
@@ -158,5 +159,11 @@ export const getInventoryVelocityReportHandler = async (req: Request, res: Respo
 export const getSupplierPerformanceReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const report = await getSupplierPerformanceReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getCustomerInsightsReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getCustomerInsightsReport(from, to, getTakeQuery(req));
   res.json(report);
 };
