@@ -9,6 +9,10 @@ type DateRange = {
   to: string;
 };
 
+type TakeRange = DateRange & {
+  take: number;
+};
+
 type DailyMoneyRow = {
   date: string;
   amountPence: number;
@@ -40,6 +44,20 @@ const getDateRangeOrThrow = (from?: string, to?: string): DateRange => {
   }
 
   return { from, to };
+};
+
+const getDateRangeWithTakeOrThrow = (from?: string, to?: string, take?: number): TakeRange => {
+  const range = getDateRangeOrThrow(from, to);
+
+  const normalizedTake = take ?? 20;
+  if (!Number.isInteger(normalizedTake) || normalizedTake < 1 || normalizedTake > 100) {
+    throw new HttpError(400, "take must be an integer between 1 and 100", "INVALID_TAKE");
+  }
+
+  return {
+    ...range,
+    take: normalizedTake,
+  };
 };
 
 const toNumber = (value: unknown): number => {
@@ -361,4 +379,435 @@ export const getPaymentsReport = async (filters: {
   to?: string;
 } = {}) => {
   return getPaymentsReportRows(filters);
+};
+
+export const getProductSalesReport = async (from?: string, to?: string, take?: number) => {
+  const range = getDateRangeWithTakeOrThrow(from, to, take);
+
+  const saleItems = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        completedAt: {
+          gte: parseDateOnlyOrThrow(range.from, "from"),
+          lte: new Date(`${range.to}T23:59:59.999Z`),
+        },
+      },
+    },
+    select: {
+      quantity: true,
+      lineTotalPence: true,
+      saleId: true,
+      sale: {
+        select: {
+          completedAt: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const byProduct = new Map<string, {
+    productId: string;
+    productName: string;
+    quantitySold: number;
+    grossRevenuePence: number;
+    saleIds: Set<string>;
+    variantIds: Set<string>;
+    lastSoldAt: Date | null;
+  }>();
+
+  for (const item of saleItems) {
+    const productId = item.variant.product.id;
+    const existing = byProduct.get(productId) ?? {
+      productId,
+      productName: item.variant.product.name,
+      quantitySold: 0,
+      grossRevenuePence: 0,
+      saleIds: new Set<string>(),
+      variantIds: new Set<string>(),
+      lastSoldAt: null,
+    };
+
+    existing.quantitySold += item.quantity;
+    existing.grossRevenuePence += item.lineTotalPence;
+    existing.saleIds.add(item.saleId);
+    existing.variantIds.add(item.variant.id);
+    if (item.sale.completedAt && (!existing.lastSoldAt || item.sale.completedAt > existing.lastSoldAt)) {
+      existing.lastSoldAt = item.sale.completedAt;
+    }
+
+    byProduct.set(productId, existing);
+  }
+
+  const products = Array.from(byProduct.values())
+    .map((row) => ({
+      productId: row.productId,
+      productName: row.productName,
+      quantitySold: row.quantitySold,
+      grossRevenuePence: row.grossRevenuePence,
+      saleCount: row.saleIds.size,
+      variantCountSold: row.variantIds.size,
+      averageUnitPricePence: row.quantitySold > 0 ? Math.round(row.grossRevenuePence / row.quantitySold) : 0,
+      lastSoldAt: row.lastSoldAt,
+    }))
+    .sort((left, right) => (
+      right.quantitySold - left.quantitySold
+      || right.grossRevenuePence - left.grossRevenuePence
+      || left.productName.localeCompare(right.productName)
+    ));
+
+  return {
+    filters: range,
+    summary: {
+      productCount: products.length,
+      totalQuantitySold: products.reduce((sum, row) => sum + row.quantitySold, 0),
+      totalRevenuePence: products.reduce((sum, row) => sum + row.grossRevenuePence, 0),
+    },
+    topSellingProducts: products.slice(0, range.take),
+    lowestSellingProducts: [...products]
+      .sort((left, right) => (
+        left.quantitySold - right.quantitySold
+        || left.grossRevenuePence - right.grossRevenuePence
+        || left.productName.localeCompare(right.productName)
+      ))
+      .slice(0, range.take),
+    products,
+    categoryBreakdownSupported: false,
+  };
+};
+
+export const getInventoryVelocityReport = async (from?: string, to?: string, take?: number) => {
+  const range = getDateRangeWithTakeOrThrow(from, to, take);
+  const fromDate = parseDateOnlyOrThrow(range.from, "from");
+  const toDate = new Date(`${range.to}T23:59:59.999Z`);
+  const rangeDays = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1);
+
+  const saleItems = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        completedAt: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      },
+    },
+    select: {
+      quantity: true,
+      lineTotalPence: true,
+      sale: {
+        select: {
+          completedAt: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const stockRows = await prisma.inventoryMovement.groupBy({
+    by: ["variantId"],
+    _sum: {
+      quantity: true,
+    },
+  });
+
+  const variantIds = stockRows.map((row) => row.variantId);
+  const variants = variantIds.length > 0
+    ? await prisma.variant.findMany({
+        where: {
+          id: {
+            in: variantIds,
+          },
+        },
+        select: {
+          id: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      })
+    : [];
+
+  const byProduct = new Map<string, {
+    productId: string;
+    productName: string;
+    currentOnHand: number;
+    quantitySold: number;
+    grossRevenuePence: number;
+    lastSoldAt: Date | null;
+  }>();
+
+  for (const row of stockRows) {
+    const variant = variants.find((entry) => entry.id === row.variantId);
+    if (!variant) {
+      continue;
+    }
+
+    const productId = variant.product.id;
+    const existing = byProduct.get(productId) ?? {
+      productId,
+      productName: variant.product.name,
+      currentOnHand: 0,
+      quantitySold: 0,
+      grossRevenuePence: 0,
+      lastSoldAt: null,
+    };
+
+    existing.currentOnHand += toInteger(row._sum.quantity);
+    byProduct.set(productId, existing);
+  }
+
+  for (const item of saleItems) {
+    const productId = item.variant.product.id;
+    const existing = byProduct.get(productId) ?? {
+      productId,
+      productName: item.variant.product.name,
+      currentOnHand: 0,
+      quantitySold: 0,
+      grossRevenuePence: 0,
+      lastSoldAt: null,
+    };
+
+    existing.quantitySold += item.quantity;
+    existing.grossRevenuePence += item.lineTotalPence;
+    if (item.sale.completedAt && (!existing.lastSoldAt || item.sale.completedAt > existing.lastSoldAt)) {
+      existing.lastSoldAt = item.sale.completedAt;
+    }
+    byProduct.set(productId, existing);
+  }
+
+  const products = Array.from(byProduct.values())
+    .map((row) => {
+      const baseStock = Math.max(0, row.currentOnHand) + row.quantitySold;
+      const sellThroughRate = baseStock > 0 ? Number((row.quantitySold / baseStock).toFixed(3)) : 0;
+      const velocityPer30Days = Number(((row.quantitySold / rangeDays) * 30).toFixed(1));
+
+      return {
+        productId: row.productId,
+        productName: row.productName,
+        currentOnHand: row.currentOnHand,
+        quantitySold: row.quantitySold,
+        grossRevenuePence: row.grossRevenuePence,
+        velocityPer30Days,
+        sellThroughRate,
+        lastSoldAt: row.lastSoldAt,
+      };
+    })
+    .sort((left, right) => (
+      right.quantitySold - left.quantitySold
+      || right.grossRevenuePence - left.grossRevenuePence
+      || left.productName.localeCompare(right.productName)
+    ));
+
+  const fastMovingProducts = products
+    .filter((row) => row.quantitySold > 0)
+    .slice(0, range.take);
+
+  const slowMovingProducts = [...products]
+    .filter((row) => row.quantitySold > 0 && row.currentOnHand > 0)
+    .sort((left, right) => (
+      left.quantitySold - right.quantitySold
+      || right.currentOnHand - left.currentOnHand
+      || left.productName.localeCompare(right.productName)
+    ))
+    .slice(0, range.take);
+
+  const deadStockCandidates = [...products]
+    .filter((row) => row.currentOnHand > 0 && row.quantitySold === 0)
+    .sort((left, right) => (
+      right.currentOnHand - left.currentOnHand
+      || left.productName.localeCompare(right.productName)
+    ))
+    .slice(0, range.take);
+
+  return {
+    filters: {
+      ...range,
+      rangeDays,
+    },
+    summary: {
+      trackedProductCount: products.length,
+      productsWithSales: products.filter((row) => row.quantitySold > 0).length,
+      deadStockCount: products.filter((row) => row.currentOnHand > 0 && row.quantitySold === 0).length,
+      totalOnHand: products.reduce((sum, row) => sum + row.currentOnHand, 0),
+    },
+    fastMovingProducts,
+    slowMovingProducts,
+    deadStockCandidates,
+    products,
+  };
+};
+
+export const getSupplierPerformanceReport = async (from?: string, to?: string, take?: number) => {
+  const range = getDateRangeWithTakeOrThrow(from, to, take);
+  const fromDate = parseDateOnlyOrThrow(range.from, "from");
+  const toDate = new Date(`${range.to}T23:59:59.999Z`);
+
+  const purchaseOrders = await prisma.purchaseOrder.findMany({
+    where: {
+      createdAt: {
+        gte: fromDate,
+        lte: toDate,
+      },
+    },
+    include: {
+      supplier: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+      items: {
+        select: {
+          quantityOrdered: true,
+          quantityReceived: true,
+          unitCostPence: true,
+        },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }],
+  });
+
+  const bySupplier = new Map<string, {
+    supplierId: string;
+    supplierName: string;
+    purchaseOrderCount: number;
+    quantityOrdered: number;
+    quantityReceived: number;
+    quantityRemaining: number;
+    orderedValuePence: number;
+    receivedValuePence: number;
+    draftCount: number;
+    sentCount: number;
+    partiallyReceivedCount: number;
+    receivedCount: number;
+    cancelledCount: number;
+    overdueOpenCount: number;
+    latestPurchaseOrderAt: Date | null;
+  }>();
+
+  for (const po of purchaseOrders) {
+    const existing = bySupplier.get(po.supplierId) ?? {
+      supplierId: po.supplierId,
+      supplierName: po.supplier.name,
+      purchaseOrderCount: 0,
+      quantityOrdered: 0,
+      quantityReceived: 0,
+      quantityRemaining: 0,
+      orderedValuePence: 0,
+      receivedValuePence: 0,
+      draftCount: 0,
+      sentCount: 0,
+      partiallyReceivedCount: 0,
+      receivedCount: 0,
+      cancelledCount: 0,
+      overdueOpenCount: 0,
+      latestPurchaseOrderAt: null,
+    };
+
+    existing.purchaseOrderCount += 1;
+    if (!existing.latestPurchaseOrderAt || po.createdAt > existing.latestPurchaseOrderAt) {
+      existing.latestPurchaseOrderAt = po.createdAt;
+    }
+
+    switch (po.status) {
+      case "DRAFT":
+        existing.draftCount += 1;
+        break;
+      case "SENT":
+        existing.sentCount += 1;
+        break;
+      case "PARTIALLY_RECEIVED":
+        existing.partiallyReceivedCount += 1;
+        break;
+      case "RECEIVED":
+        existing.receivedCount += 1;
+        break;
+      case "CANCELLED":
+        existing.cancelledCount += 1;
+        break;
+      default:
+        break;
+    }
+
+    if (po.expectedAt && po.expectedAt < new Date() && po.status !== "RECEIVED" && po.status !== "CANCELLED") {
+      existing.overdueOpenCount += 1;
+    }
+
+    for (const item of po.items) {
+      existing.quantityOrdered += item.quantityOrdered;
+      existing.quantityReceived += item.quantityReceived;
+      existing.quantityRemaining += Math.max(0, item.quantityOrdered - item.quantityReceived);
+      if (item.unitCostPence !== null) {
+        existing.orderedValuePence += item.quantityOrdered * item.unitCostPence;
+        existing.receivedValuePence += item.quantityReceived * item.unitCostPence;
+      }
+    }
+
+    bySupplier.set(po.supplierId, existing);
+  }
+
+  const suppliers = Array.from(bySupplier.values())
+    .map((row) => ({
+      supplierId: row.supplierId,
+      supplierName: row.supplierName,
+      purchaseOrderCount: row.purchaseOrderCount,
+      quantityOrdered: row.quantityOrdered,
+      quantityReceived: row.quantityReceived,
+      quantityRemaining: row.quantityRemaining,
+      orderedValuePence: row.orderedValuePence,
+      receivedValuePence: row.receivedValuePence,
+      fillRate: row.quantityOrdered > 0 ? Number((row.quantityReceived / row.quantityOrdered).toFixed(3)) : 0,
+      draftCount: row.draftCount,
+      sentCount: row.sentCount,
+      partiallyReceivedCount: row.partiallyReceivedCount,
+      receivedCount: row.receivedCount,
+      cancelledCount: row.cancelledCount,
+      overdueOpenCount: row.overdueOpenCount,
+      latestPurchaseOrderAt: row.latestPurchaseOrderAt,
+    }))
+    .sort((left, right) => (
+      right.orderedValuePence - left.orderedValuePence
+      || right.purchaseOrderCount - left.purchaseOrderCount
+      || left.supplierName.localeCompare(right.supplierName)
+    ));
+
+  return {
+    filters: range,
+    summary: {
+      supplierCount: suppliers.length,
+      purchaseOrderCount: suppliers.reduce((sum, row) => sum + row.purchaseOrderCount, 0),
+      orderedValuePence: suppliers.reduce((sum, row) => sum + row.orderedValuePence, 0),
+      receivedValuePence: suppliers.reduce((sum, row) => sum + row.receivedValuePence, 0),
+      overdueOpenCount: suppliers.reduce((sum, row) => sum + row.overdueOpenCount, 0),
+    },
+    topSuppliers: suppliers.slice(0, range.take),
+    suppliers,
+    revenueContributionSupported: false,
+    leadTimeSupported: false,
+  };
 };

@@ -622,3 +622,89 @@ CorePOS is clearly evolving toward a unified staff platform with:
 - a React frontend backed by stable Express/Prisma services
 
 The next architectural goal should not be random feature addition. It should be consolidation: one coherent branch story, one up-to-date roadmap, and one clearly supported UI strategy.
+
+## Next Development Phase - Business Intelligence
+
+Current state:
+
+- the management and reporting platform now includes:
+  - `M85` management dashboard
+  - `M86` sales analytics
+  - `M87` workshop performance metrics
+- the current working line now also includes:
+  - `M88` product sales analytics
+  - `M89` inventory velocity
+  - `M90` supplier performance
+- this first business intelligence batch is now complete through `M90`
+
+### Next Milestones
+
+#### `M88` - Product Sales Analytics
+
+Goal:
+
+- add a manager-facing product sales analytics surface
+
+Implemented scope on the current working line:
+
+- top selling products
+- lowest selling products
+- product sales totals over selected range
+
+Frontend entry:
+
+- `frontend/src/pages/ProductSalesAnalyticsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/products`
+- uses a focused additive backend report endpoint under `/api/reports/sales/products`
+- intentionally omits category-level product sales because the current branch does not expose a clean category model
+
+#### `M89` - Inventory Velocity
+
+Goal:
+
+- add manager-facing inventory intelligence
+
+Implemented scope on the current working line:
+
+- fast-moving products
+- slow-moving products
+- dead stock candidates
+- stock velocity / sell-through style signals
+
+Frontend entry:
+
+- `frontend/src/pages/InventoryVelocityPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/inventory`
+- uses a focused additive backend report endpoint under `/api/reports/inventory/velocity`
+- keeps the first version practical and table-based without forecasting or speculative replenishment logic
+
+#### `M90` - Supplier Performance
+
+Goal:
+
+- add manager-facing supplier performance reporting
+
+Implemented scope on the current working line:
+
+- supplier-linked purchasing summary
+- purchase order counts / receiving activity
+- honest overdue-open purchase order visibility
+
+Frontend entry:
+
+- `frontend/src/pages/SupplierPerformancePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/suppliers`
+- uses a focused additive backend report endpoint under `/api/reports/suppliers/performance`
+- intentionally omits supplier revenue contribution and lead-time analytics because the current branch does not support those honestly enough yet

@@ -52,6 +52,9 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management`
   - `/management/sales`
   - `/management/workshop`
+  - `/management/products`
+  - `/management/inventory`
+  - `/management/suppliers`
   - `/pos`
   - `/workshop`
   - `/workshop/:id`

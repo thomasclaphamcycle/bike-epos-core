@@ -2,11 +2,14 @@ import { Router } from "express";
 import {
   getInventoryOnHandReportHandler,
   getInventoryOnHandReportCsvHandler,
+  getInventoryVelocityReportHandler,
   getInventoryValueReportHandler,
   getInventoryValueReportCsvHandler,
   getPaymentsReportCsvHandler,
+  getProductSalesReportHandler,
   getSalesDailyReportHandler,
   getSalesDailyReportCsvHandler,
+  getSupplierPerformanceReportHandler,
   getWorkshopDailyReportHandler,
   getWorkshopDailyReportCsvHandler,
 } from "../controllers/reportController";
@@ -35,3 +38,6 @@ reportRouter.get(
   getInventoryValueReportCsvHandler,
 );
 reportRouter.get("/payments", requireRoleAtLeast("MANAGER"), getPaymentsReportCsvHandler);
+reportRouter.get("/sales/products", requireRoleAtLeast("MANAGER"), getProductSalesReportHandler);
+reportRouter.get("/inventory/velocity", requireRoleAtLeast("MANAGER"), getInventoryVelocityReportHandler);
+reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSupplierPerformanceReportHandler);

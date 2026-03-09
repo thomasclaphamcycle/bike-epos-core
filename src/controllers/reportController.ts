@@ -1,9 +1,12 @@
 import { Request, Response } from "express";
 import {
   getInventoryOnHandReport,
+  getInventoryVelocityReport,
   getInventoryValueReport,
   getPaymentsReport,
+  getProductSalesReport,
   getSalesDailyReport,
+  getSupplierPerformanceReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
 import { toCsv } from "../utils/csv";
@@ -16,6 +19,15 @@ const getDateRangeQuery = (req: Request) => {
 
 const getLocationIdQuery = (req: Request) =>
   (typeof req.query.locationId === "string" ? req.query.locationId : undefined);
+
+const getTakeQuery = (req: Request) => {
+  if (req.query.take === undefined) {
+    return undefined;
+  }
+
+  const value = Number(req.query.take);
+  return Number.isNaN(value) ? undefined : value;
+};
 
 const sendCsv = (res: Response, filename: string, csv: string) => {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -129,4 +141,22 @@ export const getPaymentsReportCsvHandler = async (req: Request, res: Response) =
   ]);
 
   sendCsv(res, "payments.csv", csv);
+};
+
+export const getProductSalesReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getProductSalesReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getInventoryVelocityReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getInventoryVelocityReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getSupplierPerformanceReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getSupplierPerformanceReport(from, to, getTakeQuery(req));
+  res.json(report);
 };

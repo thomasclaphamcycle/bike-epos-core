@@ -28,6 +28,9 @@
 - `M85` management dashboard is implemented
 - `M86` sales analytics is implemented
 - `M87` workshop performance metrics is implemented
+- `M88` product sales analytics is implemented
+- `M89` inventory velocity is implemented
+- `M90` supplier performance is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -40,18 +43,18 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M87`
+- no new active milestone is queued yet after `M90`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M87`
+- not yet defined in the canonical plan after `M90`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M87` milestone batch explicitly before implementation work starts
-2. keep the management and reporting surfaces aligned with the endpoints they depend on
+1. define the next post-`M90` milestone batch explicitly before implementation work starts
+2. keep the management, reporting, and business intelligence surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
 
@@ -74,7 +77,7 @@ Current true gaps from the reconciled missing-milestone set:
 
 ### 1. Management & Reporting Follow-Through
 
-- keep `/management` practical and additive as analytics/reporting grows around it
+- keep `/management` practical and additive as analytics/reporting and business intelligence grows around it
 
 ### 2. React Coverage And Parity
 
@@ -160,5 +163,6 @@ For repo-history alignment work, also verify that:
 - The current working line now includes `M82`, `M83`, and `M84`.
 - The current working line now includes `M85` and `M86`.
 - The current working line now includes `M87`.
-- No post-`M87` milestone is defined yet in this canonical plan.
+- The current working line now includes `M88`, `M89`, and `M90`.
+- No post-`M90` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.
