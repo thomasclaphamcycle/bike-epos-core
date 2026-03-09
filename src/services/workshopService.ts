@@ -2,6 +2,7 @@ import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@p
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getOrCreateDefaultLocationTx } from "./locationService";
+import { getWorkshopJobPartsOverview } from "./workshopPartService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 
@@ -551,9 +552,12 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
   }
 
+  const partsOverview = await getWorkshopJobPartsOverview(workshopJobId);
+
   return {
     job: toJobResponse(job),
     lines: job.lines.map((line) => toLineResponse(line)),
+    partsOverview,
   };
 };
 

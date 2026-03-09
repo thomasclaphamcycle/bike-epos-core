@@ -190,6 +190,7 @@ model StockLocation {
 
   stockLedgerEntries StockLedgerEntry[]
   stocktakes         Stocktake[]
+  workshopParts      WorkshopJobPart[]
 
   @@index([name])
 }
@@ -710,6 +711,7 @@ model WorkshopJobPart {
   id               String                @id @default(uuid()) @db.Uuid
   workshopJobId    String                @db.Uuid
   variantId        String
+  stockLocationId  String                @db.Uuid
   quantity         Int
   unitPriceAtTime  Int
   costPriceAtTime  Int?
@@ -719,9 +721,12 @@ model WorkshopJobPart {
 
   workshopJob      WorkshopJob           @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
   variant          Variant               @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  stockLocation    StockLocation         @relation(fields: [stockLocationId], references: [id], onDelete: Restrict)
 
   @@index([workshopJobId, createdAt])
   @@index([variantId])
+  @@index([stockLocationId])
+  @@index([variantId, stockLocationId, status])
 }
 
 enum WorkshopJobLineType {

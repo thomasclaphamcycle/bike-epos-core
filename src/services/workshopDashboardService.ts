@@ -1,6 +1,7 @@
 import { Prisma, WorkshopJobSource, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import { getWorkshopJobPartsOverview } from "./workshopPartService";
 
 type WorkshopDashboardInput = {
   status?: string;
@@ -350,6 +351,15 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
     sourceSummary[row.source] = row._count._all;
   });
 
+  const partsOverviewEntries = await Promise.all(
+    jobs.map(async (job) => [
+      job.id,
+      await getWorkshopJobPartsOverview(job.id),
+    ] as const),
+  );
+
+  const partsOverviewByJobId = new Map(partsOverviewEntries);
+
   return {
     filters: {
       status: statuses,
@@ -376,7 +386,9 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
         unpaidCount: Math.max(0, depositRequired._count._all - depositPaidCount),
       },
     },
-    jobs: jobs.map((job) => ({
+    jobs: jobs.map((job) => {
+      const partsOverview = partsOverviewByJobId.get(job.id);
+      return {
       id: job.id,
       status: job.status,
       source: job.source,
@@ -401,6 +413,9 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
           }
         : null,
       sale: job.sale,
-    })),
+      partsStatus: partsOverview?.summary.partsStatus ?? "OK",
+      partsSummary: partsOverview?.summary ?? null,
+      };
+    }),
   };
 };

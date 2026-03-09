@@ -20,6 +20,74 @@ type WorkshopLine = {
   lineTotalPence: number;
 };
 
+type WorkshopPartsStatus = "OK" | "UNALLOCATED" | "SHORT";
+
+type JobPartRequirement = {
+  variantId: string;
+  sku: string;
+  variantName: string | null;
+  productId: string;
+  productName: string;
+  requiredQty: number;
+  allocatedQty: number;
+  consumedQty: number;
+  returnedQty: number;
+  outstandingQty: number;
+  availableToAllocate: number;
+  missingQty: number;
+  stockOnHand: number;
+  estimateValuePence: number;
+  partsStatus: WorkshopPartsStatus;
+};
+
+type PartsOverview = {
+  stockLocation: {
+    id: string;
+    name: string;
+    isDefault: boolean;
+    source: string;
+  };
+  requirements: JobPartRequirement[];
+  summary: {
+    requiredQty: number;
+    allocatedQty: number;
+    consumedQty: number;
+    returnedQty: number;
+    outstandingQty: number;
+    missingQty: number;
+    partsStatus: WorkshopPartsStatus;
+  };
+};
+
+type WorkshopPartRecord = {
+  id: string;
+  workshopJobId: string;
+  variantId: string;
+  stockLocationId: string;
+  stockLocationName: string;
+  sku: string;
+  variantName: string | null;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPriceAtTime: number;
+  costPriceAtTime: number | null;
+  lineTotalPence: number;
+  status: "PLANNED" | "USED" | "RETURNED";
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WorkshopPartsResponse = PartsOverview & {
+  workshopJobId: string;
+  parts: WorkshopPartRecord[];
+  totals: {
+    partsUsedTotalPence: number;
+    partsPlannedTotalPence: number;
+    partsReturnedTotalPence: number;
+  };
+};
+
 type WorkshopJobResponse = {
   job: {
     id: string;
@@ -33,6 +101,7 @@ type WorkshopJobResponse = {
     updatedAt: string;
   };
   lines: WorkshopLine[];
+  partsOverview: PartsOverview;
 };
 
 type WorkshopNote = {
@@ -104,6 +173,16 @@ const approvalLabel = (state: ApprovalState) => {
   return "Not Requested";
 };
 
+const partsStatusClass = (status: WorkshopPartsStatus | undefined) => {
+  if (status === "SHORT") {
+    return "status-badge status-warning";
+  }
+  if (status === "UNALLOCATED") {
+    return "status-badge";
+  }
+  return "status-badge status-complete";
+};
+
 const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
   if (!job) {
     return "";
@@ -162,8 +241,10 @@ export const WorkshopJobPage = () => {
 
   const [payload, setPayload] = useState<WorkshopJobResponse | null>(null);
   const [notes, setNotes] = useState<WorkshopNote[]>([]);
+  const [partsPayload, setPartsPayload] = useState<WorkshopPartsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [partsLoading, setPartsLoading] = useState(false);
 
   const [editableByLineId, setEditableByLineId] = useState<Record<string, EditableLine>>({});
 
@@ -229,8 +310,25 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const loadParts = async () => {
+    if (!id) {
+      return;
+    }
+
+    setPartsLoading(true);
+    try {
+      const response = await apiGet<WorkshopPartsResponse>(`/api/workshop-jobs/${encodeURIComponent(id)}/parts`);
+      setPartsPayload(response);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Failed to load workshop parts";
+      error(message);
+    } finally {
+      setPartsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void Promise.all([loadJob(), loadNotes()]);
+    void Promise.all([loadJob(), loadNotes(), loadParts()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -308,7 +406,7 @@ export const WorkshopJobPage = () => {
         unitPricePence: labourPrice,
       });
       success("Labour line added");
-      await loadJob();
+      await Promise.all([loadJob(), loadParts()]);
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Unable to add labour line";
       error(message);
@@ -332,7 +430,7 @@ export const WorkshopJobPage = () => {
       success("Part line added");
       setPartSearch("");
       setPartResults([]);
-      await loadJob();
+      await Promise.all([loadJob(), loadParts()]);
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Unable to add part line";
       error(message);
@@ -356,7 +454,7 @@ export const WorkshopJobPage = () => {
         unitPricePence: editable.unitPricePence,
       });
       success("Line updated");
-      await loadJob();
+      await Promise.all([loadJob(), loadParts()]);
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save line";
       error(message);
@@ -371,7 +469,7 @@ export const WorkshopJobPage = () => {
     try {
       await apiDelete(`/api/workshop/jobs/${encodeURIComponent(id)}/lines/${encodeURIComponent(lineId)}`);
       success("Line removed");
-      await loadJob();
+      await Promise.all([loadJob(), loadParts()]);
     } catch (removeError) {
       const message = removeError instanceof Error ? removeError.message : "Unable to remove line";
       error(message);
@@ -430,6 +528,67 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const reserveRequiredParts = async (requirement: JobPartRequirement) => {
+    if (!id) {
+      return;
+    }
+
+    const reserveQty = Math.min(requirement.outstandingQty, requirement.availableToAllocate);
+    if (reserveQty <= 0) {
+      error("No available stock to reserve for this requirement.");
+      return;
+    }
+
+    try {
+      await apiPost(`/api/workshop-jobs/${encodeURIComponent(id)}/parts`, {
+        variantId: requirement.variantId,
+        quantity: reserveQty,
+        status: "PLANNED",
+        note: "Reserved from workshop parts allocation",
+      });
+      success(`Reserved ${reserveQty} part${reserveQty === 1 ? "" : "s"}.`);
+      await Promise.all([loadJob(), loadParts()]);
+    } catch (reserveError) {
+      const message = reserveError instanceof Error ? reserveError.message : "Unable to reserve parts";
+      error(message);
+    }
+  };
+
+  const markPartStatus = async (partId: string, status: "USED" | "RETURNED") => {
+    if (!id) {
+      return;
+    }
+
+    try {
+      await apiPatch(`/api/workshop-jobs/${encodeURIComponent(id)}/parts/${encodeURIComponent(partId)}`, {
+        status,
+        note: status === "USED" ? "Consumed from workshop job" : "Returned from workshop job",
+      });
+      success(status === "USED" ? "Part consumed" : "Part returned");
+      await Promise.all([loadJob(), loadParts()]);
+    } catch (partError) {
+      const message = partError instanceof Error ? partError.message : "Unable to update part status";
+      error(message);
+    }
+  };
+
+  const removeReservedPart = async (partId: string) => {
+    if (!id) {
+      return;
+    }
+
+    try {
+      await apiDelete(`/api/workshop-jobs/${encodeURIComponent(id)}/parts/${encodeURIComponent(partId)}`, {
+        note: "Reservation removed from workshop job",
+      });
+      success("Reservation removed");
+      await Promise.all([loadJob(), loadParts()]);
+    } catch (partError) {
+      const message = partError instanceof Error ? partError.message : "Unable to remove reservation";
+      error(message);
+    }
+  };
+
   const labourLines = useMemo(
     () => payload?.lines.filter((line) => line.type === "LABOUR") ?? [],
     [payload],
@@ -449,6 +608,18 @@ export const WorkshopJobPage = () => {
   );
   const subtotalPence = labourSubtotalPence + partsSubtotalPence;
   const rawStatus = useMemo(() => toRawStatus(payload?.job), [payload?.job]);
+  const partsOverview = useMemo<PartsOverview | null>(
+    () => partsPayload ?? payload?.partsOverview ?? null,
+    [partsPayload, payload?.partsOverview],
+  );
+  const plannedPartRecords = useMemo(
+    () => (partsPayload?.parts ?? []).filter((part) => part.status === "PLANNED"),
+    [partsPayload?.parts],
+  );
+  const usedPartRecords = useMemo(
+    () => (partsPayload?.parts ?? []).filter((part) => part.status === "USED"),
+    [partsPayload?.parts],
+  );
 
   const approvalState = useMemo(
     () => toApprovalState(rawStatus),
@@ -503,10 +674,19 @@ export const WorkshopJobPage = () => {
               <div>
                 <strong>Raw Status:</strong> {rawStatus || "-"}
               </div>
+              <div>
+                <strong>Parts State:</strong>{" "}
+                <span className={partsStatusClass(partsOverview?.summary.partsStatus)}>
+                  {partsOverview?.summary.partsStatus ?? "OK"}
+                </span>
+              </div>
               <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
               <div><strong>Job Notes:</strong> {payload.job.notes || "-"}</div>
               <div><strong>Updated:</strong> {new Date(payload.job.updatedAt).toLocaleString()}</div>
+              <div>
+                <strong>Parts Location:</strong> {partsOverview?.stockLocation.name ?? "-"}
+              </div>
             </div>
 
             <div className="action-wrap" style={{ marginBottom: "10px" }}>
@@ -668,6 +848,191 @@ export const WorkshopJobPage = () => {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Parts Allocation</h2>
+            <p className="muted-text">
+              Reserve parts against estimate lines, then consume them when they are fitted.
+            </p>
+          </div>
+          <div className="table-secondary">
+            {partsLoading ? "Refreshing parts..." : partsOverview?.stockLocation.name ?? "-"}
+          </div>
+        </div>
+
+        {partsOverview ? (
+          <>
+            <div className="metric-grid">
+              <div className="metric-card">
+                <span className="metric-label">Required</span>
+                <strong className="metric-value">{partsOverview.summary.requiredQty}</strong>
+                <span className="table-secondary">Estimate part quantity</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Allocated</span>
+                <strong className="metric-value">{partsOverview.summary.allocatedQty}</strong>
+                <span className="table-secondary">{plannedPartRecords.length} planned records</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Consumed</span>
+                <strong className="metric-value">{partsOverview.summary.consumedQty}</strong>
+                <span className="table-secondary">{usedPartRecords.length} used records</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Parts Status</span>
+                <strong className="metric-value">
+                  <span className={partsStatusClass(partsOverview.summary.partsStatus)}>
+                    {partsOverview.summary.partsStatus}
+                  </span>
+                </strong>
+                <span className="table-secondary">
+                  Missing {partsOverview.summary.missingQty}, outstanding {partsOverview.summary.outstandingQty}
+                </span>
+              </div>
+            </div>
+
+            {partsOverview.summary.partsStatus === "SHORT" ? (
+              <div className="restricted-panel warning-panel">
+                Parts are short for this job. The workshop board will surface this job in the Waiting Parts bucket,
+                even if the raw workshop status has not been manually changed.
+              </div>
+            ) : partsOverview.summary.partsStatus === "UNALLOCATED" ? (
+              <div className="restricted-panel info-panel">
+                Parts are still unallocated for this job, but current stock suggests they can be reserved now.
+              </div>
+            ) : (
+              <div className="success-panel">Required workshop parts are fully allocated or consumed.</div>
+            )}
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Part Requirement</th>
+                    <th>Required</th>
+                    <th>Allocated</th>
+                    <th>Consumed</th>
+                    <th>Outstanding</th>
+                    <th>Missing</th>
+                    <th>On Hand</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {partsOverview.requirements.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>No part estimate lines yet.</td>
+                    </tr>
+                  ) : (
+                    partsOverview.requirements.map((requirement) => {
+                      const reserveQty = Math.min(
+                        requirement.outstandingQty,
+                        requirement.availableToAllocate,
+                      );
+
+                      return (
+                        <tr key={requirement.variantId}>
+                          <td>
+                            <strong>{requirement.productName}</strong>
+                            <div className="table-secondary">
+                              {requirement.variantName || requirement.sku} · {requirement.sku}
+                            </div>
+                          </td>
+                          <td>{requirement.requiredQty}</td>
+                          <td>{requirement.allocatedQty}</td>
+                          <td>{requirement.consumedQty}</td>
+                          <td>{requirement.outstandingQty}</td>
+                          <td>
+                            <span className={partsStatusClass(requirement.partsStatus)}>
+                              {requirement.missingQty}
+                            </span>
+                          </td>
+                          <td>{requirement.stockOnHand}</td>
+                          <td>
+                            {reserveQty > 0 ? (
+                              <button type="button" onClick={() => void reserveRequiredParts(requirement)}>
+                                Reserve {reserveQty}
+                              </button>
+                            ) : (
+                              <span className="muted-text">
+                                {requirement.partsStatus === "SHORT" ? "No stock to reserve" : "Covered"}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Allocated Record</th>
+                    <th>Status</th>
+                    <th>Qty</th>
+                    <th>Location</th>
+                    <th>Value</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {!partsPayload || partsPayload.parts.length === 0 ? (
+                    <tr>
+                      <td colSpan={6}>No workshop part allocations yet.</td>
+                    </tr>
+                  ) : (
+                    partsPayload.parts.map((part) => (
+                      <tr key={part.id}>
+                        <td>
+                          <strong>{part.productName}</strong>
+                          <div className="table-secondary">
+                            {part.variantName || part.sku} · {part.sku}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={part.status === "USED" ? "status-badge status-complete" : part.status === "PLANNED" ? "status-badge" : "status-badge status-info"}>
+                            {part.status}
+                          </span>
+                        </td>
+                        <td>{part.quantity}</td>
+                        <td>{part.stockLocationName}</td>
+                        <td>{formatMoney(part.lineTotalPence)}</td>
+                        <td>
+                          <div className="actions-inline">
+                            {part.status === "PLANNED" ? (
+                              <>
+                                <button type="button" onClick={() => void markPartStatus(part.id, "USED")}>
+                                  Consume
+                                </button>
+                                <button type="button" onClick={() => void removeReservedPart(part.id)}>
+                                  Unreserve
+                                </button>
+                              </>
+                            ) : null}
+                            {part.status === "USED" ? (
+                              <button type="button" onClick={() => void markPartStatus(part.id, "RETURNED")}>
+                                Return
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p>Loading parts allocation...</p>
+        )}
       </section>
 
       <section className="card">

@@ -394,8 +394,8 @@ Current state:
   - `M81` supplier and purchasing UI
   - `M82` workshop board
   - `M83` estimates and approvals
-- the next planned step is the workshop operations follow-on batch:
   - `M84` parts allocation workflow
+- the current workshop operations follow-on batch is now complete through `M84`
 
 ### Next Milestones
 
@@ -516,7 +516,7 @@ Goal:
 
 - connect workshop jobs to stock allocation
 
-Planned scope:
+Implemented scope on the current working line:
 
 - reserve parts to job
 - consume parts to job
@@ -525,8 +525,11 @@ Planned scope:
 
 Notes:
 
-- align this work with the existing reservation and workshop status model already present in repo history
-- keep availability and reservation invariants explicit to avoid POS/workshop stock drift
+- implemented on the current working line via code evidence
+- reuses the existing `WorkshopJobPart` + stock ledger + inventory movement primitives
+- adds location-aware reservation accounting by persisting `stockLocationId` on workshop parts
+- prevents over-reserving beyond available stock at the selected stock location
+- keeps waiting-for-parts workflow honest by surfacing shortage state in job detail and the workshop board without inventing new raw workshop statuses
 
 ## Long-Term Direction
 

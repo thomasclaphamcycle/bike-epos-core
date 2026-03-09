@@ -44,6 +44,16 @@ type DashboardJob = {
     id: string;
     totalPence: number;
   } | null;
+  partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
+  partsSummary?: {
+    requiredQty: number;
+    allocatedQty: number;
+    consumedQty: number;
+    returnedQty: number;
+    outstandingQty: number;
+    missingQty: number;
+    partsStatus: "OK" | "UNALLOCATED" | "SHORT";
+  } | null;
 };
 
 type DashboardResponse = {
@@ -108,7 +118,12 @@ const toStatusBadgeClass = (status: string) => {
   return "status-badge";
 };
 
-const toPartsStatus = (job: DashboardJob) => (job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK");
+const toPartsStatus = (job: DashboardJob) => {
+  if (job.partsStatus) {
+    return job.partsStatus;
+  }
+  return job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
+};
 
 const getApprovalLabel = (status: string) => {
   if (status === "WAITING_FOR_APPROVAL") {
@@ -121,6 +136,7 @@ const getApprovalLabel = (status: string) => {
 };
 
 const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
+  const partsStatus = toPartsStatus(job);
   switch (job.status) {
     case "BOOKING_MADE":
     case "WAITING_FOR_APPROVAL":
@@ -134,7 +150,7 @@ const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
     case "CANCELLED":
       return null;
     default:
-      return "inProgress";
+      return partsStatus === "SHORT" ? "waitingParts" : "inProgress";
   }
 };
 
@@ -382,12 +398,25 @@ export const WorkshopPage = () => {
                                 Promised: {job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}
                               </span>
                               <span>Value: {formatMoney(job.sale?.totalPence ?? null)}</span>
-                              <span className={toPartsStatus(job) === "SHORT" ? "parts-short" : "parts-ok"}>
+                              <span
+                                className={
+                                  toPartsStatus(job) === "SHORT"
+                                    ? "parts-short"
+                                    : toPartsStatus(job) === "UNALLOCATED"
+                                      ? "parts-attention"
+                                      : "parts-ok"
+                                }
+                              >
                                 Parts: {toPartsStatus(job)}
                               </span>
                             </div>
 
                             {job.notes ? <p className="muted-text workshop-note-preview">{job.notes}</p> : null}
+                            {job.partsSummary?.missingQty ? (
+                              <p className="muted-text workshop-note-preview">
+                                Missing parts: {job.partsSummary.missingQty}
+                              </p>
+                            ) : null}
 
                             <div
                               className="action-wrap"
@@ -457,9 +486,20 @@ export const WorkshopPage = () => {
                       <td>{getCustomerName(job)}</td>
                       <td>{formatMoney(job.sale?.totalPence ?? null)}</td>
                       <td>
-                        <span className={toPartsStatus(job) === "SHORT" ? "parts-short" : "parts-ok"}>
+                        <span
+                          className={
+                            toPartsStatus(job) === "SHORT"
+                              ? "parts-short"
+                              : toPartsStatus(job) === "UNALLOCATED"
+                                ? "parts-attention"
+                                : "parts-ok"
+                          }
+                        >
                           {toPartsStatus(job)}
                         </span>
+                        {job.partsSummary?.missingQty ? (
+                          <div className="table-secondary">Missing {job.partsSummary.missingQty}</div>
+                        ) : null}
                       </td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <div className="action-wrap">

@@ -398,3 +398,44 @@ X-Staff-Id: demo-staff
 {
   "saleTotalPence": 5000
 }
+
+### M84: workshop job detail now includes partsOverview summary
+GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### M84: parts list includes requirement summary, stock scope, and job parts status
+GET {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### M84: reserve stock to the workshop job without consuming it yet
+POST {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "variantId": "{{variantId}}",
+  "quantity": 1,
+  "status": "PLANNED",
+  "locationId": "{{locationId}}",
+  "note": "Reserve one item for the job"
+}
+
+### M84: consume a reserved workshop part
+PATCH {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts/{{partId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "USED",
+  "locationId": "{{locationId}}",
+  "note": "Part fitted"
+}
+
+### M84: workshop dashboard exposes job-level partsStatus / partsSummary
+GET {{baseUrl}}/api/workshop/dashboard?limit=20
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
