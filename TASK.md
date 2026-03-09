@@ -37,6 +37,9 @@
 - `M94` audit and activity UI is implemented
 - `M95` customer insights / CRM summary is implemented
 - `M96` purchase order action centre is implemented
+- `M97` refunds / exceptions oversight is implemented
+- `M98` cash / till oversight dashboard is implemented
+- `M99` end-of-day / ops summary is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -49,17 +52,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M96`
+- no new active milestone is queued yet after `M99`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M96`
+- not yet defined in the canonical plan after `M99`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M96` milestone batch explicitly before implementation work starts
+1. define the next post-`M99` milestone batch explicitly before implementation work starts
 3. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 4. continue regression coverage in parallel
 5. continue repo hygiene and branch consolidation in parallel
@@ -174,5 +177,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M94`.
 - The current working line now also includes `M95`.
 - The current working line now also includes `M96`.
-- No post-`M96` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M97`.
+- The current working line now also includes `M98`.
+- The current working line now also includes `M99`.
+- No post-`M99` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

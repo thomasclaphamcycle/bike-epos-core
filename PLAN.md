@@ -710,7 +710,7 @@ Notes:
 - uses a focused additive backend report endpoint under `/api/reports/suppliers/performance`
 - intentionally omits supplier revenue contribution and lead-time analytics because the current branch does not support those honestly enough yet
 
-## Next Development Phase - Operations Oversight & Customer Intelligence
+## Next Development Phase - Finance & Daily Operations Oversight
 
 Current state:
 
@@ -719,9 +719,12 @@ Current state:
   - `M92` workshop capacity analytics
   - `M93` staff / role management UI
   - `M94` audit and activity UI
-- this batch is now complete through `M94`
-- the next planned follow-on milestones are:
-- this batch is now complete through `M96`
+  - `M95` customer insights / CRM summary
+  - `M96` purchase order action centre
+  - `M97` refunds / exceptions oversight
+  - `M98` cash / till oversight dashboard
+  - `M99` end-of-day / ops summary
+- this batch is now complete through `M99`
 
 ### Next Milestones
 
@@ -876,3 +879,78 @@ Notes:
 - adds a dedicated manager-only route at `/management/purchasing`
 - reuses the existing `/api/purchase-orders` endpoint without widening backend scope
 - complements the detailed purchasing workspace instead of replacing it
+
+#### `M97` - Refunds / Exceptions Oversight
+
+Goal:
+
+- add a manager-facing oversight page for refunds and exception-style refund activity
+
+Implemented scope on the current working line:
+
+- recent refunds
+- refund totals over selected range
+- refund count
+- large refund visibility derived from current totals
+- cash refund visibility using current tender mix
+
+Frontend entry:
+
+- `frontend/src/pages/RefundOversightPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/refunds`
+- reuses the existing `/api/refunds` endpoint without widening backend scope
+- keeps exception visibility honest by using current refund size and cash mix only, not unsupported anomaly scoring
+
+#### `M98` - Cash / Till Oversight Dashboard
+
+Goal:
+
+- add a manager-facing cash and till oversight dashboard
+
+Implemented scope on the current working line:
+
+- till sessions / cash-ups summary
+- open tills
+- recent cash movements
+- cash variance visibility where current data supports it
+
+Frontend entry:
+
+- `frontend/src/pages/CashOversightPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/cash`
+- reuses the existing `/api/till/sessions`, `/api/till/sessions/current`, `/api/till/sessions/:id/summary`, `/api/cash/summary`, and `/api/cash/movements` endpoints only
+- keeps this as an oversight surface and does not replace the operational till workflows
+
+#### `M99` - End-of-Day / Ops Summary
+
+Goal:
+
+- add a manager-facing end-of-day operational summary page
+
+Implemented scope on the current working line:
+
+- today sales summary
+- refund summary
+- workshop summary
+- purchasing summary
+- low stock / reorder attention items
+- open action items carried into tomorrow
+
+Frontend entry:
+
+- `frontend/src/pages/OperationsSummaryPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/summary`
+- reuses the existing sales, refunds, workshop dashboard, purchasing, and inventory endpoints without widening backend scope
+- keeps this as a readable daily control-centre page and does not introduce scheduling, notifications, or export logic

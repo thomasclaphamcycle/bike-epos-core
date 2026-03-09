@@ -25,6 +25,9 @@ import { StaffManagementPage } from "./pages/StaffManagementPage";
 import { ActivityPage } from "./pages/ActivityPage";
 import { CustomerInsightsPage } from "./pages/CustomerInsightsPage";
 import { PurchaseOrderActionPage } from "./pages/PurchaseOrderActionPage";
+import { RefundOversightPage } from "./pages/RefundOversightPage";
+import { CashOversightPage } from "./pages/CashOversightPage";
+import { OperationsSummaryPage } from "./pages/OperationsSummaryPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -101,6 +104,30 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <ActivityPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/refunds"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <RefundOversightPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/cash"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <CashOversightPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/summary"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <OperationsSummaryPage />
             </ProtectedRoute>
           )}
         />
