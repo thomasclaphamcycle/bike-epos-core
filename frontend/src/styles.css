@@ -245,6 +245,78 @@ th {
   font-weight: 600;
 }
 
+.table-primary {
+  font-weight: 600;
+}
+
+.table-secondary {
+  color: #6b7280;
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.mono-text {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.numeric-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.metric-card {
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff, #f2f7fb);
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.metric-label {
+  color: #526071;
+  font-size: 0.82rem;
+}
+
+.metric-value {
+  font-size: 1.4rem;
+}
+
+.stock-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.78rem;
+  border: 1px solid #d3d9e2;
+}
+
+.stock-good {
+  background: #ebf8f0;
+  border-color: #b8e3c8;
+  color: #155f39;
+}
+
+.stock-muted {
+  background: #f1f5f9;
+  border-color: #d6dee8;
+  color: #4b5563;
+}
+
+.movement-positive {
+  color: #155f39;
+}
+
+.movement-negative {
+  color: #8b1f1f;
+}
+
 .actions-inline,
 .action-wrap {
   display: flex;

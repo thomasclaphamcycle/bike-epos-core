@@ -7,6 +7,8 @@ import { WorkshopPage } from "./pages/WorkshopPage";
 import { WorkshopJobPage } from "./pages/WorkshopJobPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { CustomerProfilePage } from "./pages/CustomerProfilePage";
+import { InventoryPage } from "./pages/InventoryPage";
+import { InventoryItemPage } from "./pages/InventoryItemPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -18,6 +20,8 @@ const AuthedApp = () => (
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Routes>
     </Layout>

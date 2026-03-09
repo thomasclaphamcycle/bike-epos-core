@@ -2,124 +2,152 @@
 
 ## Current Snapshot
 
-- Branch: `dev-next`
-- Current HEAD: `c1fbf7c`
-- Stable restore point:
+- Working branch: `dev-next`
+- Current HEAD: `62cb82c`
+- Stable local restore point:
   - tag `v1.2-demo-running`
   - branch `stable-demo`
-- Local dev is working:
-  - backend runs
-  - frontend runs
-  - Prisma generate and migrate work
-  - demo seed works
-  - login works
+  - commit `c1fbf7c`
+- Repo-wide milestone history reaches `M78`
+- Current branch does not yet consolidate all post-`M43` milestone commits
 
-## Done
+## Confirmed Done
 
-- local PostgreSQL setup is documented and working
-- `.env.example` exists and reflects the intended local setup
-- demo seed and reset helper exist
-- React frontend exists for login, POS, workshop, and customers
-- backend baseline smoke coverage is established through `m43`
-- checkpoint commit, branch, and tag have already been created
-- canonical project guidance pack now exists:
-  - `AGENTS.md`
-  - `PLAN.md`
-  - `TASK.md`
+### On Current Working Line
 
-## Next
+- local PostgreSQL, Prisma migrate, demo seed, backend, frontend, and login all work together
+- React login, POS, workshop, and customers pages exist
+- canonical project guidance pack now exists
+- local dev restore point exists and is pushed
 
-Highest-priority next work, in recommended order:
+### Confirmed Elsewhere In Repo History
 
-1. Expand automated coverage for the React pages already present on this branch.
-2. Decide whether the next product work should happen on `dev-next` or be merged from other milestone branches first.
-3. Bring the next operational area to React parity without breaking SSR or print routes.
-4. Do a focused repo hygiene pass for tracked junk files and stale docs.
+- `M44` to `M60`
+- `M67` to `M69`
+- `M70` to `M73`
+- `M76` to `M78`
+
+These milestones are confirmed in branch history and/or remote refs, even where `dev-next` has not absorbed them as a single linear branch.
+
+## What Is Next
+
+The next tasks should start after the currently implemented milestone range, but only after branch reality is cleaned up.
+
+Highest priority:
+
+1. Consolidate the repo after `M78`
+2. Expand regression coverage for the React line already in use
+3. Decide the post-`M78` roadmap rather than continuing to accumulate disconnected milestone branches
+4. Consolidate branch history so the current working line reflects the real implemented milestone set
+
+## Missing Milestone Reconciliation
+
+Not active gaps:
+
+- `M1` to `M10`
+  - historical foundation numbering with no surviving per-milestone artifacts
+- `M61` to `M62`
+  - appear to be dropped numbering slots between `M60` and the later React milestone line
+- `M74` to `M75`
+  - best treated as scope absorbed into neighboring infra/admin/security milestones
+
+Current true gaps from the reconciled missing-milestone set:
+
+- none
 
 ## Recommended Sequencing
 
-### 1. Protect What Already Exists
+### 1. Branch Consolidation
 
-- add or extend E2E coverage for:
+- reconcile `dev-next` with confirmed repo-wide milestone history
+- decide whether `dev-next` should become the new integration branch or whether `origin/main` should remain canonical
+- ensure one branch clearly represents the true project state through `M78`
+
+### 2. React Coverage And Parity
+
+- add or expand E2E coverage for:
   - React login
-  - React POS happy path
+  - React POS sale completion and receipt opening
   - React workshop convert-to-sale flow
   - React customers attach-to-sale flow
+  - manager refunds and daily close if those pages are merged into the active line
 
-### 2. Choose The Next UI Surface
+### 3. Strengthen The React Staff Surface
 
-Preferred next UI targets:
+- add or expand coverage for:
+  - React inventory search and detail flows
+  - role-sensitive inventory detail behavior for STAFF vs MANAGER+
+  - React navigation parity across POS, workshop, customers, and inventory
 
-- inventory
-- manager ops
-- reports
-- till
-- admin
+### 4. Start Post-M78 Planning
 
-Choose one domain, complete it end-to-end, then update smoke/E2E/docs before starting another.
+Only after the above:
 
-### 3. Consolidate Architecture Intent
+- define the next milestone batch after the actual implemented range
+- avoid inventing `M79+` work until the branch story is coherent
 
-- decide whether SSR remains a permanent admin/print surface
-- or whether React becomes the main shell and SSR is reduced to printable/special-purpose pages
+## Blocked / Dependent
 
-Do not let both UI layers drift independently.
-
-## Blocked Or Dependent Work
-
-- Any future milestone plan beyond what is visible in this branch is partially dependent on reconciling work that may exist in other branches or tags.
-- Schema-heavy work is dependent on keeping `prisma/schema.prisma`, `prisma/migrations/`, and `scripts/seed_demo_data.ts` in sync.
-- Local DB drift must be resolved before meaningful schema work. Use `node scripts/reset_local_dev_db.js` only for local development databases.
+- Post-`M78` planning is blocked on branch consolidation.
+- Any schema-heavy work is dependent on keeping:
+  - `prisma/schema.prisma`
+  - `prisma/migrations/`
+  - `scripts/seed_demo_data.ts`
+  in sync.
+- Local database drift must still be resolved using `node scripts/reset_local_dev_db.js` only for local development databases.
 
 ## Known Technical Debt
 
-- The repo still tracks junk files such as `.DS_Store` in some locations.
-- Older docs such as `PROJECT_CONTEXT.md` are historically useful but no longer complete.
-- The smoke suite baseline does not yet cover all existing React flows.
-- The branch currently mixes:
-  - legacy/server-rendered UI
-  - newer React UI
-  - milestone-era backend surfaces
-
-This is workable, but it needs deliberate consolidation.
+- tracked junk files such as `.DS_Store` still exist
+- old narrative docs understate milestone progress relative to repo history
+- smoke coverage on `dev-next` still centers on `M43` era scripts
+- React and server-rendered UI layers coexist without a fully consolidated ownership model
+- branch history after `M43` is fragmented across `origin/main`, `origin/react-ui`, `origin/backend-v1`, and milestone refs
 
 ## Practical Resume Instructions
 
-For the next coding session:
+For the next session:
 
 1. `git fetch --all --tags`
-2. `git checkout dev-next`
-3. `npm ci`
-4. `npm --prefix frontend install`
-5. `cp .env.example .env` if needed and confirm `DATABASE_URL`
-6. `cp .env.test.example .env.test` if needed
-7. `npx prisma generate`
-8. `npx prisma migrate dev`
-9. `npm run db:seed:dev`
-10. `npm run dev`
-11. `npm --prefix frontend run dev`
+2. review `AGENTS.md`, `PLAN.md`, and this file first
+3. inspect:
+   - `origin/main`
+   - `origin/react-ui`
+   - `origin/backend-v1`
+4. confirm which branch is intended to become the canonical post-`M78` line
+5. only then start new feature work
 
-If local Prisma drift appears:
+For local setup:
 
-1. stop the app
-2. run `node scripts/reset_local_dev_db.js`
-3. rerun migrate + seed
+1. `npm ci`
+2. `npm --prefix frontend install`
+3. `cp .env.example .env` if needed
+4. `cp .env.test.example .env.test` if needed
+5. `npx prisma generate`
+6. `npx prisma migrate dev`
+7. `npm run db:seed:dev`
+8. `npm run dev`
+9. `npm --prefix frontend run dev`
 
-## Validation Baseline For New Work
+## Validation Baseline
 
-Use this as the normal minimum before closing a task:
+For consolidation or major cross-cutting work:
 
-- backend changes:
-  - relevant `npm run test:mXX`
-  - `npm test` if shared flows changed
-- frontend changes:
-  - `npm --prefix frontend run build`
-- auth/routing/workshop/POS changes:
-  - `npm run e2e`
+- `npm test`
+- `npm run e2e`
+- `npm --prefix frontend run build`
+
+For repo-history alignment work, also verify that:
+
+- migrations still apply cleanly on a fresh local DB
+- demo seed still runs
+- restore point guidance remains accurate
 
 ## Notes For The Next Agent
 
 - Start from `AGENTS.md`, then `PLAN.md`, then this file.
-- Trust code and smoke coverage over older narrative docs.
-- Treat `v1.2-demo-running` as the safe rollback point.
-- If you introduce a new milestone, update all three canonical guidance files as part of the same change.
+- Treat repo-wide confirmed history as reaching roughly `M78`.
+- Do not assume `dev-next` already contains every later milestone merge.
+- Do not reopen `M1` to `M10`, `M61` to `M62`, or `M74` to `M75` as implementation gaps unless new archival evidence appears.
+- Treat the previously missing-milestone set as reconciled; do not reopen `M65` unless the new inventory UI is removed or proven incomplete.
+- If you add or merge milestone work, update all three canonical guidance files in the same change.

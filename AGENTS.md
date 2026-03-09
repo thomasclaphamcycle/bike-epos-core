@@ -11,6 +11,12 @@ CorePOS is a bike shop EPOS platform covering retail sales, workshop jobs, stock
 
 The current branch also retains server-rendered HTML pages in `src/views/`, so both UI layers coexist.
 
+Important repo-state caveat:
+
+- the broader repository history reaches approximately `M78`
+- the current `dev-next` branch is a working local line, but it is not the single fully consolidated ancestry for every post-`M43` milestone commit
+- when assessing milestone state, inspect repo history and active remote branches, not just the current working tree
+
 ## Source Of Truth Order
 
 When repo notes conflict, trust sources in this order:
@@ -47,6 +53,8 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/workshop/:id`
   - `/customers`
   - `/customers/:id`
+  - `/inventory`
+  - `/inventory/:variantId`
 
 ### Database
 
@@ -187,6 +195,11 @@ Current baseline smoke steps:
   - branch `stable-demo`
   - commit `c1fbf7c`
 - Do not retag or rewrite stable restore points without explicit instruction.
+- If milestone progress appears missing on the current branch, check:
+  - `origin/main`
+  - `origin/react-ui`
+  - `origin/backend-v1`
+  before concluding the work does not exist in the repo.
 
 ## Definition Of Done
 
