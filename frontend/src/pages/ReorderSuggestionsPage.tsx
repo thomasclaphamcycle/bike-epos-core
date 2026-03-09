@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { SavedViewControls } from "../components/SavedViewControls";
 import { useToasts } from "../components/ToastProvider";
+import { ReorderSuggestionRow, reorderUrgencyRank, toReorderSuggestionRow } from "../utils/reordering";
 
 type RangePreset = "30" | "90" | "365";
 
@@ -31,15 +33,6 @@ type VelocityResponse = {
   products: VelocityRow[];
 };
 
-type Urgency = "Low" | "Reorder Soon" | "Reorder Now";
-
-type SuggestionRow = VelocityRow & {
-  targetStockQty: number;
-  suggestedReorderQty: number;
-  daysOfCover: number | null;
-  urgency: Urgency;
-};
-
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
   const month = `${value.getMonth() + 1}`.padStart(2, "0");
@@ -53,41 +46,18 @@ const shiftDays = (date: Date, days: number) => {
   return next;
 };
 
-const toSuggestionRow = (row: VelocityRow, rangeDays: number): SuggestionRow => {
-  const dailyDemand = rangeDays > 0 ? row.quantitySold / rangeDays : 0;
-  const targetCoverageDays = 30;
-  const targetStockQty = Math.max(0, Math.ceil(dailyDemand * targetCoverageDays));
-  const suggestedReorderQty = Math.max(0, targetStockQty - Math.max(0, row.currentOnHand));
-  const daysOfCover = dailyDemand > 0 ? Number((row.currentOnHand / dailyDemand).toFixed(1)) : null;
-
-  let urgency: Urgency = "Low";
-  if (suggestedReorderQty > 0 && (row.currentOnHand <= 0 || (daysOfCover !== null && daysOfCover <= 7))) {
-    urgency = "Reorder Now";
-  } else if (suggestedReorderQty > 0 || (daysOfCover !== null && daysOfCover <= 14)) {
-    urgency = "Reorder Soon";
-  }
-
-  return {
-    ...row,
-    targetStockQty,
-    suggestedReorderQty,
-    daysOfCover,
-    urgency,
-  };
-};
-
-const urgencyRank: Record<Urgency, number> = {
-  "Reorder Now": 3,
-  "Reorder Soon": 2,
-  Low: 1,
-};
-
 export const ReorderSuggestionsPage = () => {
   const { error } = useToasts();
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("90");
   const [report, setReport] = useState<VelocityResponse | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const applySavedFilters = (filters: Record<string, string>) => {
+    if (filters.rangePreset === "30" || filters.rangePreset === "90" || filters.rangePreset === "365") {
+      setRangePreset(filters.rangePreset);
+    }
+  };
 
   const loadReport = async () => {
     setLoading(true);
@@ -112,14 +82,14 @@ export const ReorderSuggestionsPage = () => {
 
   const suggestionRows = useMemo(() => {
     if (!report) {
-      return [] as SuggestionRow[];
+      return [] as ReorderSuggestionRow[];
     }
 
     return report.products
-      .map((row) => toSuggestionRow(row, report.filters.rangeDays))
+      .map((row) => toReorderSuggestionRow(row, report.filters.rangeDays))
       .filter((row) => row.quantitySold > 0 || row.currentOnHand <= 0)
       .sort((left, right) => (
-        urgencyRank[right.urgency] - urgencyRank[left.urgency]
+        reorderUrgencyRank[right.urgency] - reorderUrgencyRank[left.urgency]
         || right.suggestedReorderQty - left.suggestedReorderQty
         || right.quantitySold - left.quantitySold
         || left.productName.localeCompare(right.productName)
@@ -177,6 +147,13 @@ export const ReorderSuggestionsPage = () => {
           </div>
         </div>
       </section>
+
+      <SavedViewControls
+        pageKey="reordering"
+        currentFilters={{ rangePreset }}
+        onApplyFilters={applySavedFilters}
+        defaultName={`Reordering ${rangePreset}d`}
+      />
 
       <div className="dashboard-grid analytics-grid">
         <section className="card">

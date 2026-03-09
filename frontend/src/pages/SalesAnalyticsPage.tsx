@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { SavedViewControls } from "../components/SavedViewControls";
 import { useToasts } from "../components/ToastProvider";
 
 type SalesDailyRow = {
@@ -97,6 +98,12 @@ export const SalesAnalyticsPage = () => {
   const [rows, setRows] = useState<SalesDailyRow[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const applySavedFilters = (filters: Record<string, string>) => {
+    if (filters.rangePreset === "30" || filters.rangePreset === "90" || filters.rangePreset === "365") {
+      setRangePreset(filters.rangePreset);
+    }
+  };
+
   const loadAnalytics = async () => {
     setLoading(true);
     try {
@@ -192,6 +199,13 @@ export const SalesAnalyticsPage = () => {
           </div>
         </div>
       </section>
+
+      <SavedViewControls
+        pageKey="sales"
+        currentFilters={{ rangePreset }}
+        onApplyFilters={applySavedFilters}
+        defaultName={`Sales ${rangePreset}d`}
+      />
 
       <div className="dashboard-grid analytics-grid">
         <section className="card">

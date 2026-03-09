@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { SavedViewControls } from "../components/SavedViewControls";
 import { useToasts } from "../components/ToastProvider";
 
 type AuditEvent = {
@@ -58,27 +59,59 @@ export const ActivityPage = () => {
   const [limit, setLimit] = useState("100");
   const [actorFilter, setActorFilter] = useState("");
 
-  const loadActivity = async () => {
+  const applySavedFilters = (filters: Record<string, string>) => {
+    setFromDate(filters.fromDate ?? "");
+    setToDate(filters.toDate ?? "");
+    setAction(filters.action ?? "");
+    setEntityType(filters.entityType ?? "");
+    setEntityId(filters.entityId ?? "");
+    setLimit(filters.limit ?? "100");
+    setActorFilter(filters.actorFilter ?? "");
+    void loadActivity({
+      fromDate: filters.fromDate ?? "",
+      toDate: filters.toDate ?? "",
+      action: filters.action ?? "",
+      entityType: filters.entityType ?? "",
+      entityId: filters.entityId ?? "",
+      limit: filters.limit ?? "100",
+    });
+  };
+
+  const loadActivity = async (nextFilters?: {
+    fromDate?: string;
+    toDate?: string;
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    limit?: string;
+  }) => {
     setLoading(true);
     try {
+      const resolvedFromDate = nextFilters?.fromDate ?? fromDate;
+      const resolvedToDate = nextFilters?.toDate ?? toDate;
+      const resolvedAction = nextFilters?.action ?? action;
+      const resolvedEntityType = nextFilters?.entityType ?? entityType;
+      const resolvedEntityId = nextFilters?.entityId ?? entityId;
+      const resolvedLimit = nextFilters?.limit ?? limit;
+
       const params = new URLSearchParams();
-      if (fromDate) {
-        params.set("from", fromDate);
+      if (resolvedFromDate) {
+        params.set("from", resolvedFromDate);
       }
-      if (toDate) {
-        params.set("to", toDate);
+      if (resolvedToDate) {
+        params.set("to", resolvedToDate);
       }
-      if (action) {
-        params.set("action", action);
+      if (resolvedAction) {
+        params.set("action", resolvedAction);
       }
-      if (entityType) {
-        params.set("entityType", entityType);
+      if (resolvedEntityType) {
+        params.set("entityType", resolvedEntityType);
       }
-      if (entityId.trim()) {
-        params.set("entityId", entityId.trim());
+      if (resolvedEntityId.trim()) {
+        params.set("entityId", resolvedEntityId.trim());
       }
-      if (limit.trim()) {
-        params.set("limit", limit.trim());
+      if (resolvedLimit.trim()) {
+        params.set("limit", resolvedLimit.trim());
       }
 
       const query = params.toString();
@@ -179,6 +212,21 @@ export const ActivityPage = () => {
           </label>
         </div>
       </section>
+
+      <SavedViewControls
+        pageKey="activity"
+        currentFilters={{
+          fromDate,
+          toDate,
+          action,
+          entityType,
+          entityId,
+          limit,
+          actorFilter,
+        }}
+        onApplyFilters={applySavedFilters}
+        defaultName="Activity view"
+      />
 
       <section className="card">
         <div className="table-wrap">

@@ -51,6 +51,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/dashboard`
   - `/management`
   - `/management/summary`
+  - `/management/alerts`
   - `/management/activity`
   - `/management/cash`
   - `/management/refunds`
@@ -63,6 +64,8 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/reordering`
   - `/management/capacity`
   - `/management/purchasing`
+  - `/management/views`
+  - `/management/exports`
   - `/management/staff`
   - `/pos`
   - `/workshop`

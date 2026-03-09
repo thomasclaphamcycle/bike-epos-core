@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { SavedViewControls } from "../components/SavedViewControls";
 import { useToasts } from "../components/ToastProvider";
 
 type WorkshopDailyRow = {
@@ -74,6 +75,12 @@ export const WorkshopPerformancePage = () => {
   const [dailyRows, setDailyRows] = useState<WorkshopDailyRow[]>([]);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const applySavedFilters = (filters: Record<string, string>) => {
+    if (filters.rangePreset === "30" || filters.rangePreset === "90" || filters.rangePreset === "365") {
+      setRangePreset(filters.rangePreset);
+    }
+  };
 
   const loadMetrics = async () => {
     setLoading(true);
@@ -240,6 +247,13 @@ export const WorkshopPerformancePage = () => {
           </div>
         </div>
       </section>
+
+      <SavedViewControls
+        pageKey="workshop"
+        currentFilters={{ rangePreset }}
+        onApplyFilters={applySavedFilters}
+        defaultName={`Workshop ${rangePreset}d`}
+      />
 
       <div className="dashboard-grid analytics-grid">
         <section className="card">

@@ -954,3 +954,83 @@ Notes:
 - adds a dedicated manager-only route at `/management/summary`
 - reuses the existing sales, refunds, workshop dashboard, purchasing, and inventory endpoints without widening backend scope
 - keeps this as a readable daily control-centre page and does not introduce scheduling, notifications, or export logic
+
+#### `M100` - Notifications & Alerts Centre
+
+Goal:
+
+- add a manager-facing alerts and notifications centre that consolidates operational attention items already detectable from current data
+
+Implemented scope on the current working line:
+
+- low stock alerts
+- reorder-now candidates
+- jobs waiting for approval
+- jobs waiting for parts
+- overdue purchase orders
+- refund attention items derived from current refund totals
+
+Frontend entry:
+
+- `frontend/src/pages/AlertsCentrePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/alerts`
+- composes existing inventory velocity, workshop dashboard, purchasing, and refunds endpoints without widening backend scope
+- keeps the page operational and grouped by attention type rather than pretending to be a push-notification system
+
+#### `M101` - Saved Views / Manager Filters
+
+Goal:
+
+- add reusable saved filters and views for manager reporting and oversight pages
+
+Implemented scope on the current working line:
+
+- save current filter state for selected management pages
+- reload saved views
+- basic rename and delete support
+- manager-only scope
+- local per-user persistence without backend schema or auth changes
+
+Frontend entry:
+
+- `frontend/src/pages/SavedViewsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/views`
+- integrates saved-view controls into:
+  - `/management/sales`
+  - `/management/workshop`
+  - `/management/reordering`
+  - `/management/activity`
+  - `/management/purchasing`
+- uses browser-local persistence per signed-in user and does not introduce a backend personalization system in v1
+
+#### `M102` - Export Hub / Management Downloads
+
+Goal:
+
+- add a manager-facing export and download hub for operational and reporting outputs already supported by the system
+
+Implemented scope on the current working line:
+
+- central place to access available CSV/report exports
+- clear descriptions of each export
+- direct links to existing export endpoints
+- simple date-range and filter inputs where the existing endpoints already support them
+
+Frontend entry:
+
+- `frontend/src/pages/ExportHubPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/exports`
+- reuses the existing sales, workshop, inventory, payments, and till CSV endpoints only
+- keeps the first version practical and synchronous, with no export job queue or new export engine

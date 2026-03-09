@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { SavedViewControls } from "../components/SavedViewControls";
 import { useToasts } from "../components/ToastProvider";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
@@ -65,6 +66,10 @@ export const PurchaseOrderActionPage = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
+
+  const applySavedFilters = (filters: Record<string, string>) => {
+    setSearch(filters.search ?? "");
+  };
 
   const loadPurchaseOrders = async () => {
     setLoading(true);
@@ -189,6 +194,13 @@ export const PurchaseOrderActionPage = () => {
           </div>
         </div>
       </section>
+
+      <SavedViewControls
+        pageKey="purchasing"
+        currentFilters={{ search }}
+        onApplyFilters={applySavedFilters}
+        defaultName={search.trim() ? `POs ${search.trim()}` : "Open PO queue"}
+      />
 
       <div className="dashboard-grid analytics-grid">
         <section className="card">
