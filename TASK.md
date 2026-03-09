@@ -22,6 +22,7 @@
 - `M79` staff dashboard is implemented
 - `M80` inventory management tools are implemented
 - `M81` supplier and purchasing UI is implemented
+- `M82` workshop board is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -34,22 +35,26 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-### `M81` - Supplier & Purchasing UI
+### `M83` - Estimates & Approvals
 
-Status:
+Active goal:
 
-- completed on the current working line
+- add estimate and approval workflow to workshop jobs with:
+  - estimate creation
+  - labour + parts preview
+  - approval status
+  - quote notes
 
 ## Next Milestones Queue
 
-- post-`M81` milestones are not yet defined in the canonical roadmap
+1. `M84` - Parts Allocation Workflow
 
 ## What Is Next
 
 Highest priority:
 
-1. validate and commit `M81` cleanly
-2. define the next post-`M81` milestone batch before starting implementation work
+1. prepare and implement `M83` cleanly
+2. follow with `M84`
 3. expand regression coverage for the React line already in use
 4. keep branch consolidation and repo hygiene as parallel maintenance work
 
@@ -70,20 +75,25 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Recommended Sequencing
 
-### 1. Post-`M81` Roadmap Definition
+### 1. `M83` Estimates And Approvals
 
-- define the next exact milestone batch before coding further
-- keep the historical `M1` to `M78` ledger unchanged
-- add new milestones explicitly instead of extending "roughly" phrasing
+- add estimate and approval workflow to workshop jobs after the board
+- keep line-item pricing and quote notes aligned with existing workshop line structures
 
-### 2. React Coverage And Parity
+### 2. `M84` Parts Allocation Workflow
+
+- connect workshop jobs to reservations/consumption with explicit stock visibility
+- align waiting-for-parts behavior with existing workshop and stock logic
+
+### 3. React Coverage And Parity
 
 - add or expand E2E coverage for:
   - dashboard loading
   - inventory search/detail flows
-  - purchasing flows once added
+  - purchasing flows
+  - workshop board flows
 
-### 3. Maintenance Track
+### 4. Maintenance Track
 
 - continue branch consolidation work in parallel
 - keep docs aligned with the actual milestone state
@@ -91,7 +101,8 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Blocked / Dependent
 
-- no implementation blocker is currently known for `M81`; the remaining dependency is roadmap definition for the next milestone batch
+- `M83` depends on whether the current workshop job model already supports approval state cleanly or needs additive backend support
+- `M84` depends on aligning the active branch with the existing reservation/history behavior already confirmed elsewhere in repo history
 - Any schema-heavy work is dependent on keeping:
   - `prisma/schema.prisma`
   - `prisma/migrations/`
@@ -107,6 +118,7 @@ Current true gaps from the reconciled missing-milestone set:
 - React and server-rendered UI layers coexist without a fully consolidated ownership model
 - branch history after `M43` is fragmented across `origin/main`, `origin/react-ui`, `origin/backend-v1`, and milestone refs
 - React purchasing flows now exist but do not yet have dedicated frontend automation
+- React workshop board now exists, but workshop estimates/approvals and allocation flows are not yet implemented on this working line
 
 ## Practical Resume Instructions
 
@@ -119,7 +131,7 @@ For the next session:
    - `origin/react-ui`
    - `origin/backend-v1`
 4. confirm which branch is intended to become the canonical post-`M81` line
-5. define the next explicit milestone batch
+5. inspect the current workshop route/controller/service surface before starting `M83`
 6. only then start new feature work
 
 For local setup:
@@ -156,4 +168,6 @@ For repo-history alignment work, also verify that:
 - Do not reopen `M1` to `M10`, `M61` to `M62`, or `M74` to `M75` as implementation gaps unless new archival evidence appears.
 - Treat the previously missing-milestone set as reconciled; do not reopen `M65` unless the new inventory UI is removed or proven incomplete.
 - The current working line now includes `M79`, `M80`, and `M81`.
+- The current working line now includes `M82`.
+- The active next milestone is `M83`.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

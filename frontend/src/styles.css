@@ -319,6 +319,84 @@ th {
   font-size: 0.82rem;
 }
 
+.view-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.workshop-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-column {
+  border: 1px solid #d7e0ea;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fcfdff, #f4f8fc);
+  min-height: 320px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.workshop-column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #dfe7f0;
+}
+
+.workshop-column-header h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.workshop-column-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.workshop-job-card,
+.workshop-empty-card {
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+}
+
+.workshop-job-card {
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 8px 16px rgba(13, 31, 47, 0.05);
+}
+
+.workshop-job-card:hover {
+  background: #f8fbff;
+}
+
+.workshop-job-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.workshop-job-meta {
+  display: grid;
+  gap: 4px;
+  color: #4b5563;
+  font-size: 0.85rem;
+}
+
+.workshop-note-preview {
+  margin: 0;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -572,5 +650,9 @@ th {
 
   .purchase-form-wide {
     grid-column: span 1;
+  }
+
+  .workshop-board {
+    grid-template-columns: 1fr;
   }
 }

@@ -243,6 +243,8 @@ Confirmed milestones:
   - confirmed in code on the current working line
 - `M81` React supplier and purchasing UI
   - confirmed in code on the current working line
+- `M82` React workshop board
+  - confirmed in code on the current working line
 - `M67` demo seed system
 - `M68` demo UX polish
 - `M69` production packaging with backend-served React build
@@ -261,6 +263,7 @@ Confirmed evidence:
 - `frontend/src/pages/SuppliersPage.tsx`
 - `frontend/src/pages/PurchasingPage.tsx`
 - `frontend/src/pages/PurchaseOrderPage.tsx`
+- `frontend/src/pages/WorkshopPage.tsx` board presentation
 - `scripts/seed_demo_data.ts`
 - `origin/main` / `origin/react-ui` commits:
   - `c6e014d` `M67`
@@ -279,6 +282,7 @@ Confirmed on current working line without a historical milestone-labeled commit:
 - `M79` React staff dashboard is present on the current working line via code evidence
 - `M80` React inventory management tools are present on the current working line via code evidence
 - `M81` React supplier and purchasing UI is present on the current working line via code evidence
+- `M82` React workshop board is present on the current working line via code evidence
 
 ### Phase 6 - Security / Infrastructure
 
@@ -385,7 +389,10 @@ Current state:
   - `M79` staff dashboard
   - `M80` inventory management tools
   - `M81` supplier and purchasing UI
-- the next planned step is to define the post-`M81` milestone batch explicitly before further implementation work begins
+  - `M82` workshop board
+- the next planned step is the workshop operations follow-on batch:
+  - `M83` estimates and approvals
+  - `M84` parts allocation workflow
 
 ### Next Milestones
 
@@ -451,6 +458,67 @@ Notes:
 - keep the initial UI operational and additive rather than redesign-heavy
 - implemented on the current working line via code evidence
 - keeps receiving inside `/purchasing/:id` for v1
+
+#### `M82` - Workshop Board
+
+Goal:
+
+- create a React workshop board view for operational workflow
+
+Planned scope:
+
+- columns for booked / in progress / waiting parts / ready / completed
+- quick movement between states
+- quick job visibility
+- links into workshop job detail
+
+Planned frontend entry:
+
+- `frontend/src/pages/WorkshopBoardPage.tsx` or a board mode within `frontend/src/pages/WorkshopPage.tsx`
+
+Notes:
+
+- reuse the existing workshop dashboard and job status endpoints where possible
+- keep the first version operational rather than highly animated or Kanban-heavy
+- preserve the current workshop list/detail flows as a fallback, even if the board becomes the preferred view
+- implemented on the current working line via code evidence
+- uses frontend display buckets only and does not introduce new backend workshop statuses
+
+#### `M83` - Estimates And Approvals
+
+Goal:
+
+- add estimate and approval workflow to workshop jobs
+
+Planned scope:
+
+- estimate creation
+- labour + parts preview
+- approval status
+- quote notes
+
+Notes:
+
+- prefer extending the existing workshop job detail flow over introducing a parallel workflow
+- only add backend support if the current job/line model cannot represent estimate state cleanly
+
+#### `M84` - Parts Allocation Workflow
+
+Goal:
+
+- connect workshop jobs to stock allocation
+
+Planned scope:
+
+- reserve parts to job
+- consume parts to job
+- missing-parts visibility
+- waiting-for-parts state support
+
+Notes:
+
+- align this work with the existing reservation and workshop status model already present in repo history
+- keep availability and reservation invariants explicit to avoid POS/workshop stock drift
 
 ## Long-Term Direction
 
