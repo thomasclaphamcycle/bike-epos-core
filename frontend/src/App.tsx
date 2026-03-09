@@ -9,12 +9,14 @@ import { CustomersPage } from "./pages/CustomersPage";
 import { CustomerProfilePage } from "./pages/CustomerProfilePage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { InventoryItemPage } from "./pages/InventoryItemPage";
+import { DashboardPage } from "./pages/DashboardPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
     <Layout>
       <Routes>
         <Route path="/" element={<Navigate to="/pos" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/pos" element={<PosPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />

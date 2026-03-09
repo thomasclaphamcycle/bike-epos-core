@@ -48,6 +48,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
 - Shared API wrapper: `frontend/src/api/client.ts`
 - Current React pages on this branch:
   - `/login`
+  - `/dashboard`
   - `/pos`
   - `/workshop`
   - `/workshop/:id`

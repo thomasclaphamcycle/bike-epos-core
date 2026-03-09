@@ -29,6 +29,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <div className="header-left">
           <Link to="/pos" className="brand">CorePOS</Link>
           <nav className="nav-links">
+            <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>
             <NavLink to="/pos" className={navClass}>POS</NavLink>
             <NavLink to="/workshop" className={navClass}>Workshop</NavLink>
             <NavLink to="/customers" className={navClass}>Customers</NavLink>
