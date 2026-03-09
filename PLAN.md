@@ -568,17 +568,22 @@ Goal:
 
 - add manager-facing sales reporting and trend analysis
 
-Planned scope:
+Implemented scope on the current working line:
 
 - daily / weekly / monthly revenue
-- revenue by category
-- revenue by product
-- revenue by service
 - average basket size
+
+Frontend entry:
+
+- `frontend/src/pages/SalesAnalyticsPage.tsx`
 
 Notes:
 
-- prefer extending existing report data sources over introducing a new analytics subsystem
+- implemented on the current working line via code evidence
+- keeps this manager-only and separate from `/management`
+- reuses `/api/reports/sales/daily` as the primary data source
+- derives weekly rollups, monthly rollups, and average basket size client-side
+- intentionally does not include revenue by category, product, or service in v1 because the current branch does not expose those breakdowns cleanly without widening backend scope
 
 #### `M87` - Workshop Performance Metrics
 

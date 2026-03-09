@@ -50,6 +50,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/login`
   - `/dashboard`
   - `/management`
+  - `/management/sales`
   - `/pos`
   - `/workshop`
   - `/workshop/:id`
