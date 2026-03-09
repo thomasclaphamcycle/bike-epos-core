@@ -25,6 +25,7 @@
 - `M82` workshop board is implemented
 - `M83` workshop estimates and approvals are implemented
 - `M84` workshop parts allocation workflow is implemented
+- `M85` management dashboard is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -37,19 +38,20 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new numbered milestone is active yet beyond `M84` on this working line
+- `M86` - Sales Analytics
 
 ## Next Milestones Queue
 
-- no further numbered milestone is queued yet beyond `M84` on this working line
+- `M87` - Workshop Performance Metrics
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next numbered milestone after `M84`
-2. expand regression coverage for the React line already in use
-3. keep branch consolidation and repo hygiene as parallel maintenance work
+1. implement `M86`
+2. then `M87`
+3. keep the new management dashboard aligned with the reporting surface it depends on
+4. continue regression coverage and repo hygiene in parallel
 
 ## Missing Milestone Reconciliation
 
@@ -68,10 +70,17 @@ Current true gaps from the reconciled missing-milestone set:
 
 ## Recommended Sequencing
 
-### 1. Post-`M84` Planning
+### 1. `M86` Sales Analytics
 
-- define the next workshop or operations milestone after parts allocation
-- keep new scope additive and aligned with the current workshop + stock model
+- extend manager reporting beyond dashboard summaries into trend and breakdown views
+
+### 2. `M87` Workshop Performance Metrics
+
+- add manager reporting for completion speed, approval backlog, parts backlog, and workload
+
+### 3. Management & Reporting Follow-Through
+
+- keep `/management` practical and additive as analytics/reporting grows around it
 
 ### 3. React Coverage And Parity
 
@@ -155,5 +164,5 @@ For repo-history alignment work, also verify that:
 - Treat the previously missing-milestone set as reconciled; do not reopen `M65` unless the new inventory UI is removed or proven incomplete.
 - The current working line now includes `M79`, `M80`, and `M81`.
 - The current working line now includes `M82`, `M83`, and `M84`.
-- The next numbered milestone after `M84` has not yet been defined on this branch.
+- The active next milestone is `M86`.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

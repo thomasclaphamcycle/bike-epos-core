@@ -49,6 +49,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
 - Current React pages on this branch:
   - `/login`
   - `/dashboard`
+  - `/management`
   - `/pos`
   - `/workshop`
   - `/workshop/:id`

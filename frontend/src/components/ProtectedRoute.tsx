@@ -1,7 +1,21 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
-export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
+
+const roleRank: Record<StaffRole, number> = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
+};
+
+export const ProtectedRoute = ({
+  children,
+  minimumRole,
+}: {
+  children: React.ReactNode;
+  minimumRole?: StaffRole;
+}) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -11,6 +25,10 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  }
+
+  if (minimumRole && roleRank[user.role] < roleRank[minimumRole]) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

@@ -377,7 +377,7 @@ Confirmed evidence:
 4. Expand automated coverage for the React frontend flows already present.
 5. Do a dedicated hygiene pass for tracked junk files and stale docs.
 
-## Next Development Phase - Staff Platform Completion
+## Next Development Phase - Management & Reporting Platform
 
 Current state:
 
@@ -395,7 +395,11 @@ Current state:
   - `M82` workshop board
   - `M83` estimates and approvals
   - `M84` parts allocation workflow
-- the current workshop operations follow-on batch is now complete through `M84`
+  - `M85` management dashboard
+- the workshop operations expansion batch is now complete through `M84`
+- the next planned phase is management-facing reporting and oversight:
+  - `M86` sales analytics
+  - `M87` workshop performance metrics
 
 ### Next Milestones
 
@@ -530,6 +534,69 @@ Notes:
 - adds location-aware reservation accounting by persisting `stockLocationId` on workshop parts
 - prevents over-reserving beyond available stock at the selected stock location
 - keeps waiting-for-parts workflow honest by surfacing shortage state in job detail and the workshop board without inventing new raw workshop statuses
+
+#### `M85` - Management Dashboard
+
+Goal:
+
+- create a high-level management dashboard for managers
+
+Implemented scope on the current working line:
+
+- daily revenue
+- workshop workload
+- open estimates awaiting approval
+- jobs waiting for parts
+- low stock alerts
+- today’s sales count
+- quick links to key operational pages
+
+Frontend entry:
+
+- `frontend/src/pages/ManagementDashboardPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- keeps this manager-focused and practical rather than presentation-heavy
+- reuses the existing sales daily report, workshop dashboard, and inventory on-hand search endpoints
+- preserves the current staff dashboard at `/dashboard` and introduces a separate manager-only route at `/management`
+
+#### `M86` - Sales Analytics
+
+Goal:
+
+- add manager-facing sales reporting and trend analysis
+
+Planned scope:
+
+- daily / weekly / monthly revenue
+- revenue by category
+- revenue by product
+- revenue by service
+- average basket size
+
+Notes:
+
+- prefer extending existing report data sources over introducing a new analytics subsystem
+
+#### `M87` - Workshop Performance Metrics
+
+Goal:
+
+- add manager-facing workshop performance reporting
+
+Planned scope:
+
+- jobs completed per day
+- average completion time
+- waiting-for-approval count
+- waiting-for-parts count
+- technician / staff workload where current data supports it
+
+Notes:
+
+- reuse existing workshop dashboard, notes, approval, and assignment data wherever it is already present
 
 ## Long-Term Direction
 

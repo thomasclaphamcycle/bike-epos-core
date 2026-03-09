@@ -6,11 +6,13 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? "nav-link nav-link-active" : "nav-link";
 
 const envLabel = import.meta.env.MODE || "development";
+const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
   const { error, success } = useToasts();
   const navigate = useNavigate();
+  const canViewManagement = isManagerPlus(user?.role);
 
   const onLogout = async () => {
     try {
@@ -30,6 +32,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <Link to="/pos" className="brand">CorePOS</Link>
           <nav className="nav-links">
             <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>
+            {canViewManagement ? <NavLink to="/management" className={navClass}>Management</NavLink> : null}
             <NavLink to="/pos" className={navClass}>POS</NavLink>
             <NavLink to="/workshop" className={navClass}>Workshop</NavLink>
             <NavLink to="/customers" className={navClass}>Customers</NavLink>
