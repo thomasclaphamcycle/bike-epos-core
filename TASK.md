@@ -52,6 +52,9 @@
 - `M109` multi-step workshop check-in / intake form is implemented
 - `M110` collection / handover workflow is implemented
 - `M111` warranty / return tracking is implemented
+- `M112` workshop documents / print centre is implemented
+- `M113` internal tasks / follow-up actions is implemented
+- `M114` stock exceptions / investigation queue is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -64,17 +67,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M111`
+- no new active milestone is queued yet after `M114`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M111`
+- not yet defined in the canonical plan after `M114`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M111` milestone batch explicitly before implementation work starts
+1. define the next post-`M114` milestone batch explicitly before implementation work starts
 2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
@@ -204,5 +207,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M109`.
 - The current working line now also includes `M110`.
 - The current working line now also includes `M111`.
-- No post-`M111` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M112`.
+- The current working line now also includes `M113`.
+- The current working line now also includes `M114`.
+- No post-`M114` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

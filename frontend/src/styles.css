@@ -652,6 +652,12 @@ th {
   margin-bottom: 12px;
 }
 
+.document-link-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .note-form-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

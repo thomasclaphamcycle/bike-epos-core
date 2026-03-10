@@ -40,6 +40,9 @@ import { CustomerCommunicationQueuePage } from "./pages/CustomerCommunicationQue
 import { WorkshopCheckInPage } from "./pages/WorkshopCheckInPage";
 import { WorkshopCollectionPage } from "./pages/WorkshopCollectionPage";
 import { WarrantyTrackingPage } from "./pages/WarrantyTrackingPage";
+import { WorkshopPrintCentrePage } from "./pages/WorkshopPrintCentrePage";
+import { InternalTasksPage } from "./pages/InternalTasksPage";
+import { StockExceptionsPage } from "./pages/StockExceptionsPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -212,6 +215,7 @@ const AuthedApp = () => (
         <Route path="/workshop/check-in" element={<WorkshopCheckInPage />} />
         <Route path="/workshop/bookings" element={<WorkshopBookingsPage />} />
         <Route path="/workshop/collection" element={<WorkshopCollectionPage />} />
+        <Route path="/workshop/print" element={<WorkshopPrintCentrePage />} />
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />
         <Route
           path="/management/calendar"
@@ -237,6 +241,15 @@ const AuthedApp = () => (
             </ProtectedRoute>
           )}
         />
+        <Route
+          path="/management/stock-exceptions"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <StockExceptionsPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route path="/tasks" element={<InternalTasksPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/customers/:id/timeline" element={<CustomerTimelinePage />} />

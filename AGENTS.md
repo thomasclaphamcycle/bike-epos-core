@@ -58,6 +58,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/reminders`
   - `/management/communications`
   - `/management/warranty`
+  - `/management/stock-exceptions`
   - `/management/sales`
   - `/management/workshop`
   - `/management/calendar`
@@ -77,7 +78,9 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/workshop/check-in`
   - `/workshop/bookings`
   - `/workshop/collection`
+  - `/workshop/print`
   - `/workshop/:id`
+  - `/tasks`
   - `/customers`
   - `/customers/:id`
   - `/customers/:id/timeline`

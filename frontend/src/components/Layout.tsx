@@ -43,6 +43,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/reminders" className={navClass}>Reminders</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/communications" className={navClass}>Comms Queue</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/warranty" className={navClass}>Warranty</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/stock-exceptions" className={navClass}>Stock Exceptions</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/sales" className={navClass}>Sales</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/workshop" className={navClass}>Workshop Metrics</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/calendar" className={navClass}>Calendar</NavLink> : null}
@@ -62,6 +63,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <NavLink to="/workshop/check-in" className={navClass}>Check-In</NavLink>
             <NavLink to="/workshop/bookings" className={navClass}>Bookings</NavLink>
             <NavLink to="/workshop/collection" className={navClass}>Collection</NavLink>
+            <NavLink to="/workshop/print" className={navClass}>Print Centre</NavLink>
+            <NavLink to="/tasks" className={navClass}>Tasks</NavLink>
             <NavLink to="/customers" className={navClass}>Customers</NavLink>
             <NavLink to="/inventory" className={navClass}>Inventory</NavLink>
             <NavLink to="/suppliers" className={navClass}>Suppliers</NavLink>

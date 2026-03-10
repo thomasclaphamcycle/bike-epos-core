@@ -1260,3 +1260,84 @@ Notes:
 - adds a manager-only route at `/management/warranty`
 - adds a small additive backend endpoint at `/api/reports/workshop/warranty`
 - avoids schema changes by building warranty tracking from tagged internal workshop notes rather than inventing a larger RMA subsystem
+
+#### `M112` - Workshop Documents / Print Centre
+
+Goal:
+
+- add an internal workshop documents and print centre for staff
+
+Implemented scope on the current working line:
+
+- central workshop print hub for existing print/document outputs
+- workshop job lookup and status filtering
+- direct print/view links for:
+  - workshop job card print
+  - linked sale receipt print where a sale is visible
+- quick route back into workshop detail, check-in, and collection flows
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopPrintCentrePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/workshop/print`
+- stays frontend-only by reusing the existing workshop dashboard payload plus current workshop and receipt print routes
+- keeps this as a workflow aid and access hub, not a new document engine
+
+#### `M113` - Internal Tasks / Follow-up Actions
+
+Goal:
+
+- add an internal task and follow-up queue for staff and managers
+
+Implemented scope on the current working line:
+
+- grouped operational tasks derived from:
+  - waiting-for-approval jobs
+  - waiting-for-parts jobs
+  - ready-for-collection jobs
+  - overdue purchase orders
+  - service reminders for manager-plus users
+- quick drill-down into workshop, customer, and purchasing records
+- local-only reviewed markers per signed-in user
+
+Frontend entry:
+
+- `frontend/src/pages/InternalTasksPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/tasks`
+- stays frontend-only by composing workshop dashboard, purchase-order, and manager reminder endpoints
+- keeps reminder follow-up manager-only where the underlying reminder report is manager-only
+
+#### `M114` - Stock Exceptions / Investigation Queue
+
+Goal:
+
+- add a manager-facing stock exceptions and investigation queue
+
+Implemented scope on the current working line:
+
+- grouped exception sections for:
+  - negative stock
+  - zero stock with recent sales
+  - low stock with reorder pressure
+  - under-received or overdue PO-linked attention
+- quick drill-down into inventory and purchasing follow-up pages
+- practical investigation view without anomaly or ML-style detection
+
+Frontend entry:
+
+- `frontend/src/pages/StockExceptionsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a manager-only route at `/management/stock-exceptions`
+- stays frontend-only by reusing inventory velocity, reorder, and purchase-order data already present on the branch
+- avoids schema and backend changes by using honest existing stock and purchasing signals only
