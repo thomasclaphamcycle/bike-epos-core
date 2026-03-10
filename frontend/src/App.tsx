@@ -34,6 +34,9 @@ import { SavedViewsPage } from "./pages/SavedViewsPage";
 import { ExportHubPage } from "./pages/ExportHubPage";
 import { ServiceRemindersPage } from "./pages/ServiceRemindersPage";
 import { SupplierCataloguePage } from "./pages/SupplierCataloguePage";
+import { WorkshopBookingsPage } from "./pages/WorkshopBookingsPage";
+import { WorkshopCalendarPage } from "./pages/WorkshopCalendarPage";
+import { CustomerCommunicationQueuePage } from "./pages/CustomerCommunicationQueuePage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -203,7 +206,24 @@ const AuthedApp = () => (
         />
         <Route path="/pos" element={<PosPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/workshop/bookings" element={<WorkshopBookingsPage />} />
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />
+        <Route
+          path="/management/calendar"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <WorkshopCalendarPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/communications"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <CustomerCommunicationQueuePage />
+            </ProtectedRoute>
+          )}
+        />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/customers/:id/timeline" element={<CustomerTimelinePage />} />

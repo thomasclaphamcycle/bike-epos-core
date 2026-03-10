@@ -46,6 +46,9 @@
 - `M103` service reminders / follow-up queue is implemented
 - `M104` customer contact timeline is implemented
 - `M105` supplier catalogue / intake tools is implemented
+- `M106` booking / appointment board is implemented
+- `M107` workshop calendar and capacity scheduling is implemented
+- `M108` customer communication queue is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -58,17 +61,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M105`
+- no new active milestone is queued yet after `M108`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M105`
+- not yet defined in the canonical plan after `M108`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M105` milestone batch explicitly before implementation work starts
+1. define the next post-`M108` milestone batch explicitly before implementation work starts
 2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
@@ -192,5 +195,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M103`.
 - The current working line now also includes `M104`.
 - The current working line now also includes `M105`.
-- No post-`M105` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M106`.
+- The current working line now also includes `M107`.
+- The current working line now also includes `M108`.
+- No post-`M108` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

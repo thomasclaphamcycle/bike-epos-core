@@ -1107,3 +1107,78 @@ Notes:
 - adds a dedicated manager-only route at `/management/catalogue`
 - stays frontend-only by reusing existing suppliers and purchase-order APIs
 - keeps this as an operational intake aid rather than inventing supplier feeds, EDI, or external sync
+
+#### `M106` - Booking / Appointment Board
+
+Goal:
+
+- add a practical booking and appointment board for workshop intake and upcoming service slots
+
+Implemented scope on the current working line:
+
+- upcoming workshop bookings and scheduled intake grouped into operational date buckets
+- overdue and unactioned booking visibility
+- booking status and deposit-status visibility
+- quick drill-down into related workshop job detail
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopBookingsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds an internal staff-facing route at `/workshop/bookings`
+- stays frontend-only by reusing `GET /api/workshop/dashboard`
+- keeps the first version as an internal intake board, not a public booking portal
+
+#### `M107` - Workshop Calendar & Capacity Scheduling
+
+Goal:
+
+- add a workshop calendar and capacity view for operational planning
+
+Implemented scope on the current working line:
+
+- rolling 7-day, 14-day, and 30-day planning view
+- bookings and jobs per day
+- simple capacity pressure indicators derived from recent throughput
+- per-day visibility into awaiting approval, waiting parts, and unassigned work
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCalendarPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/calendar`
+- stays frontend-only by reusing `GET /api/reports/workshop/daily` and `GET /api/workshop/dashboard`
+- keeps backlog and capacity logic explicitly derived and explainable rather than pretending to be a scheduling engine
+
+#### `M108` - Customer Communication Queue
+
+Goal:
+
+- add an internal communication queue for customer-contact tasks implied by workshop and reminder data
+
+Implemented scope on the current working line:
+
+- grouped communication reasons for:
+  - service reminders
+  - waiting-for-approval jobs
+  - ready-for-collection jobs
+- due and overdue visibility
+- quick links into customer timeline and workshop detail
+- local-only reviewed markers per signed-in user
+
+Frontend entry:
+
+- `frontend/src/pages/CustomerCommunicationQueuePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/communications`
+- stays frontend-only by reusing reminders and workshop dashboard endpoints
+- keeps this as an internal operations queue only, without adding email, SMS, or two-way messaging
