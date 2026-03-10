@@ -70,7 +70,9 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/suppliers`
   - `/management/catalogue`
   - `/management/reordering`
+  - `/management/transfers`
   - `/management/capacity`
+  - `/management/workshop-ageing`
   - `/management/purchasing`
   - `/management/views`
   - `/management/exports`
@@ -87,6 +89,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/customers/:id`
   - `/customers/:id/timeline`
   - `/inventory`
+  - `/inventory/locations`
   - `/inventory/:variantId`
   - `/suppliers`
   - `/purchasing`

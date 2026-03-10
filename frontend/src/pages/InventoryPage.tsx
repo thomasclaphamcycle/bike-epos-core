@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
@@ -152,9 +152,12 @@ export const InventoryPage = () => {
             <h1>Inventory</h1>
             <p className="muted-text">Search live stock by product, variant, SKU, or barcode.</p>
           </div>
-          <button type="button" onClick={() => void loadRows()} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className="actions-inline">
+            <Link to="/inventory/locations">Inventory by location</Link>
+            <button type="button" onClick={() => void loadRows()} disabled={loading}>
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </div>
 
         <div className="filter-row">

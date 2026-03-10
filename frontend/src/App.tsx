@@ -11,6 +11,7 @@ import { CustomerProfilePage } from "./pages/CustomerProfilePage";
 import { CustomerTimelinePage } from "./pages/CustomerTimelinePage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { InventoryItemPage } from "./pages/InventoryItemPage";
+import { InventoryLocationsPage } from "./pages/InventoryLocationsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { PurchasingPage } from "./pages/PurchasingPage";
@@ -45,6 +46,8 @@ import { WarrantyTrackingPage } from "./pages/WarrantyTrackingPage";
 import { WorkshopPrintCentrePage } from "./pages/WorkshopPrintCentrePage";
 import { InternalTasksPage } from "./pages/InternalTasksPage";
 import { StockExceptionsPage } from "./pages/StockExceptionsPage";
+import { TransferQueuePage } from "./pages/TransferQueuePage";
+import { WorkshopAgeingPage } from "./pages/WorkshopAgeingPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -260,11 +263,28 @@ const AuthedApp = () => (
             </ProtectedRoute>
           )}
         />
+        <Route
+          path="/management/transfers"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <TransferQueuePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/workshop-ageing"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <WorkshopAgeingPage />
+            </ProtectedRoute>
+          )}
+        />
         <Route path="/tasks" element={<InternalTasksPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/customers/:id/timeline" element={<CustomerTimelinePage />} />
         <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/inventory/locations" element={<InventoryLocationsPage />} />
         <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
         <Route path="/purchasing" element={<PurchasingPage />} />

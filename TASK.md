@@ -58,6 +58,9 @@
 - `M115` role-tailored home screens are implemented
 - `M116` KPI widgets / dashboard customization is implemented
 - `M117` operational search / global command bar is implemented
+- `M118` multi-location inventory views are implemented
+- `M119` transfer / replenishment queue is implemented
+- `M120` advanced workshop SLA / ageing views are implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -70,17 +73,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M117`
+- no new active milestone is queued yet after `M120`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M117`
+- not yet defined in the canonical plan after `M120`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M117` milestone batch explicitly before implementation work starts
+1. define the next post-`M120` milestone batch explicitly before implementation work starts
 2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
@@ -216,5 +219,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M115`.
 - The current working line now also includes `M116`.
 - The current working line now also includes `M117`.
-- No post-`M117` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M118`.
+- The current working line now also includes `M119`.
+- The current working line now also includes `M120`.
+- No post-`M120` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

@@ -1428,3 +1428,77 @@ Notes:
 - implemented on the current working line via code evidence
 - stays frontend-only by composing existing search APIs and existing page routes
 - uses `Ctrl/Cmd+K` and a header trigger button for access
+
+## Next Development Phase - Multi-location Operations & Workshop Attention
+
+Current state:
+
+- the current working line now includes:
+  - `M118` multi-location inventory views
+  - `M119` transfer / replenishment queue
+  - `M120` advanced workshop SLA / ageing views
+- the current working line now exposes location-aware inventory visibility, replenishment attention, and workshop bottleneck ageing views
+- no post-`M120` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M118` - Multi-location Inventory Views
+
+Goal:
+
+- expose clearer multi-location stock visibility in the React UI
+
+Implemented scope on the current working line:
+
+- staff-facing route `/inventory/locations`
+- location-aware stock summary built from the stock ledger
+- per-location stock split per tracked variant
+- location filter and stock-state visibility
+- links back into existing inventory detail pages
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a small additive backend endpoint:
+  - `GET /api/reports/inventory/location-summary`
+- avoids schema changes by using existing `StockLocation` and `StockLedgerEntry` data
+
+#### `M119` - Transfer / Replenishment Queue
+
+Goal:
+
+- add an internal transfer and replenishment attention queue
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/transfers`
+- location-imbalance queue showing donor and target locations
+- replenishment queue derived from current reorder pressure
+- overdue open purchase order support section
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays queue-first and read-only rather than inventing transfer execution workflows
+- reuses the `M118` location summary endpoint plus existing inventory velocity and purchasing data
+
+#### `M120` - Advanced Workshop SLA / Ageing Views
+
+Goal:
+
+- add manager-facing workshop ageing and SLA visibility
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/workshop-ageing`
+- open-job ageing buckets
+- oldest open jobs view
+- waiting-for-approval attention view
+- waiting-for-parts attention view
+- explicit status-age proxy based on last update where exact stage-entry timestamps are unavailable
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing workshop dashboard payload
+- labels proxy-based stage ageing honestly rather than inventing unsupported SLA timestamps

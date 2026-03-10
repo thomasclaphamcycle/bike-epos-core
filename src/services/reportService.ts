@@ -134,6 +134,30 @@ const assertLocationIdOrThrow = async (locationId?: string) => {
   return locationId;
 };
 
+const parseActiveFilterOrThrow = (value?: string) => {
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "1" || normalized === "true") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false") {
+    return false;
+  }
+
+  throw new HttpError(400, "active must be 1, 0, true, or false", "INVALID_FILTER");
+};
+
+const normalizeOptionalSearch = (value?: string) => {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 export const getSalesDailyReport = async (from?: string, to?: string) => {
   const range = getDateRangeOrThrow(from, to);
   const days = listDateKeys(range.from, range.to);
@@ -658,6 +682,139 @@ export const getInventoryVelocityReport = async (from?: string, to?: string, tak
     slowMovingProducts,
     deadStockCandidates,
     products,
+  };
+};
+
+export const getInventoryLocationSummaryReport = async (filters: {
+  q?: string;
+  active?: string;
+  locationId?: string;
+  take?: number;
+} = {}) => {
+  const take = filters.take ?? 100;
+  if (!Number.isInteger(take) || take < 1 || take > 200) {
+    throw new HttpError(400, "take must be an integer between 1 and 200", "INVALID_TAKE");
+  }
+
+  const q = normalizeOptionalSearch(filters.q);
+  const active = parseActiveFilterOrThrow(filters.active);
+  const selectedLocationId = filters.locationId ? await assertLocationIdOrThrow(filters.locationId) : undefined;
+
+  const locations = await prisma.stockLocation.findMany({
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  });
+
+  const visibleLocations = selectedLocationId
+    ? locations.filter((location) => location.id === selectedLocationId)
+    : locations;
+
+  const variants = await prisma.variant.findMany({
+    where: {
+      stockLedgerEntries: { some: {} },
+      ...(active === undefined ? {} : { isActive: active }),
+      ...(q
+        ? {
+            OR: [
+              { sku: { contains: q, mode: "insensitive" } },
+              { barcode: { contains: q, mode: "insensitive" } },
+              { name: { contains: q, mode: "insensitive" } },
+              { option: { contains: q, mode: "insensitive" } },
+              { product: { name: { contains: q, mode: "insensitive" } } },
+              { product: { brand: { contains: q, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    },
+    take,
+    select: {
+      id: true,
+      sku: true,
+      barcode: true,
+      name: true,
+      option: true,
+      isActive: true,
+      product: {
+        select: {
+          id: true,
+          name: true,
+          brand: true,
+        },
+      },
+    },
+    orderBy: [{ sku: "asc" }],
+  });
+
+  const variantIds = variants.map((variant) => variant.id);
+
+  const grouped = variantIds.length > 0
+    ? await prisma.stockLedgerEntry.groupBy({
+        by: ["variantId", "locationId"],
+        where: {
+          variantId: { in: variantIds },
+          ...(selectedLocationId ? { locationId: selectedLocationId } : {}),
+        },
+        _sum: {
+          quantityDelta: true,
+        },
+      })
+    : [];
+
+  const byVariant = new Map<string, Map<string, number>>();
+  for (const row of grouped) {
+    const current = byVariant.get(row.variantId) ?? new Map<string, number>();
+    current.set(row.locationId, toInteger(row._sum.quantityDelta));
+    byVariant.set(row.variantId, current);
+  }
+
+  const rows = variants.map((variant) => {
+    const locationMap = byVariant.get(variant.id) ?? new Map<string, number>();
+    const locationRows = visibleLocations.map((location) => ({
+      id: location.id,
+      name: location.name,
+      isDefault: location.isDefault,
+      onHand: locationMap.get(location.id) ?? 0,
+    }));
+    const totalOnHand = locationRows.reduce((sum, row) => sum + row.onHand, 0);
+
+    return {
+      variantId: variant.id,
+      productId: variant.product.id,
+      productName: variant.product.name,
+      brand: variant.product.brand,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      variantName: variant.name ?? variant.option ?? null,
+      isActive: variant.isActive,
+      totalOnHand,
+      locations: locationRows,
+    };
+  }).sort((left, right) => (
+    left.productName.localeCompare(right.productName)
+    || (left.variantName ?? "").localeCompare(right.variantName ?? "")
+    || left.sku.localeCompare(right.sku)
+  ));
+
+  return {
+    filters: {
+      q: q ?? null,
+      active: active === undefined ? null : active,
+      locationId: selectedLocationId ?? null,
+      take,
+    },
+    summary: {
+      variantCount: rows.length,
+      locationCount: visibleLocations.length,
+      totalOnHand: rows.reduce((sum, row) => sum + row.totalOnHand, 0),
+      zeroStockVariants: rows.filter((row) => row.totalOnHand === 0).length,
+      negativeStockVariants: rows.filter((row) => row.totalOnHand < 0).length,
+    },
+    locations: visibleLocations,
+    rows,
   };
 };
 

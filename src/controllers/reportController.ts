@@ -6,6 +6,7 @@ import {
   getInventoryValueReport,
   getPaymentsReport,
   getCustomerInsightsReport,
+  getInventoryLocationSummaryReport,
   getProductSalesReport,
   getSalesDailyReport,
   getSupplierPerformanceReport,
@@ -165,6 +166,20 @@ export const getProductSalesReportHandler = async (req: Request, res: Response) 
 export const getInventoryVelocityReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const report = await getInventoryVelocityReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getInventoryLocationSummaryReportHandler = async (req: Request, res: Response) => {
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const active = typeof req.query.active === "string" ? req.query.active : undefined;
+  const locationId = getLocationIdQuery(req);
+  const take = getTakeQuery(req);
+  const report = await getInventoryLocationSummaryReport({
+    ...(q === undefined ? {} : { q }),
+    ...(active === undefined ? {} : { active }),
+    ...(locationId === undefined ? {} : { locationId }),
+    ...(take === undefined ? {} : { take }),
+  });
   res.json(report);
 };
 

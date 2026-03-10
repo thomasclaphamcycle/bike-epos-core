@@ -1,0 +1,19 @@
+@baseUrl = http://localhost:3000
+@staffRole = STAFF
+@staffId = demo-staff
+@locationId = REPLACE_STOCK_LOCATION_ID
+
+### Inventory location summary (all locations)
+GET {{baseUrl}}/api/reports/inventory/location-summary?take=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Inventory location summary (search)
+GET {{baseUrl}}/api/reports/inventory/location-summary?q=tube&active=1&take=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Inventory location summary (single location)
+GET {{baseUrl}}/api/reports/inventory/location-summary?locationId={{locationId}}&take=50
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
