@@ -28,6 +28,7 @@ export type ActiveLoginUser = {
   id: string;
   displayName: string;
   role: UserRole;
+  hasPin: boolean;
 };
 
 export const authenticateWithEmailPassword = async (
@@ -69,6 +70,7 @@ export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
       username: true,
       name: true,
       role: true,
+      pinHash: true,
     },
   });
 
@@ -76,6 +78,7 @@ export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
     id: user.id,
     displayName: user.name?.trim() || user.username,
     role: user.role,
+    hasPin: Boolean(user.pinHash),
   }));
 };
 

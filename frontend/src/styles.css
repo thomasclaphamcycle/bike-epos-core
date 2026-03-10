@@ -1135,6 +1135,13 @@ th {
   background: #f9fbfd;
 }
 
+.login-pin-help {
+  margin-top: 10px;
+  border-style: solid;
+  background: rgba(46, 124, 246, 0.08);
+  color: #36537a;
+}
+
 .login-card label {
   margin-top: 2px;
   font-weight: 700;

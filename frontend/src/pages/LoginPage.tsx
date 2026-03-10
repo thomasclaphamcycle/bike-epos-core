@@ -9,6 +9,7 @@ type ActiveLoginUser = {
   id: string;
   displayName: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
+  hasPin: boolean;
 };
 
 export const LoginPage = () => {
@@ -30,6 +31,12 @@ export const LoginPage = () => {
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const selectedUser = useMemo(
+    () => users.find((candidate) => candidate.id === selectedUserId) || null,
+    [users, selectedUserId],
+  );
+  const noPinSelected = Boolean(selectedUser && !selectedUser.hasPin);
+  const noPinMessage = "No PIN has been set for this user yet. Please ask a manager to set or reset the PIN.";
 
   useEffect(() => {
     if (user) {
@@ -57,13 +64,13 @@ export const LoginPage = () => {
   }, []);
 
   const canSubmit = useMemo(
-    () => Boolean(selectedUserId) && /^\d{4}$/.test(pin) && !submitting && !usersLoading,
-    [selectedUserId, pin, submitting, usersLoading],
+    () => Boolean(selectedUserId) && !noPinSelected && /^\d{4}$/.test(pin) && !submitting && !usersLoading,
+    [selectedUserId, noPinSelected, pin, submitting, usersLoading],
   );
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedUserId || !/^\d{4}$/.test(pin)) {
+    if (!selectedUserId || noPinSelected || !/^\d{4}$/.test(pin)) {
       return;
     }
 
@@ -134,6 +141,12 @@ export const LoginPage = () => {
             autoComplete="one-time-code"
             required
           />
+
+          {noPinSelected ? (
+            <p className="login-inline-status login-pin-help" data-testid="login-no-pin-message">
+              {noPinMessage}
+            </p>
+          ) : null}
 
           {errorMessage ? <p className="error-banner">{errorMessage}</p> : null}
 
