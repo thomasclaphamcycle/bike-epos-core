@@ -10,6 +10,7 @@
 - Historically evidenced milestone history reaches `M78`
 - The current working line implements the roadmap through `M135`
 - Earlier branch ancestry is still fragmented, but the present branch state is roadmap-complete and in stabilization mode
+- Current working mode is trial-use readiness, not milestone expansion
 - Roadmap implementation on the current working line is complete through `M135`
 - Current focus is stabilization, verification, release readiness, and operational polish
 
@@ -92,7 +93,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 ## Current Milestone
 
 - no new feature milestone is active
-- current phase: stabilization and release readiness
+- current phase: stabilization, release readiness, and real-world trial preparation
 
 ## Next Milestones Queue
 
@@ -103,7 +104,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 Highest priority:
 
 1. keep the branch buildable and smoke-stable
-2. fix release-readiness defects and consistency issues with small, high-confidence changes
+2. fix trial-use friction and consistency issues with small, high-confidence changes
 3. improve regression coverage where current gaps block confident verification
 4. continue repo hygiene and branch consolidation in parallel
 

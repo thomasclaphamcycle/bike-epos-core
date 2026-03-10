@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
@@ -59,9 +59,10 @@ const getStockStateClass = (onHand: number) => {
 
 export const InventoryPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { error } = useToasts();
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const debouncedSearch = useDebouncedValue(search, 250);
   const [active, setActive] = useState("1");
   const [stockState, setStockState] = useState<StockStateFilter>("");
@@ -101,6 +102,30 @@ export const InventoryPage = () => {
     void loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  useEffect(() => {
+    const incoming = searchParams.get("q") ?? "";
+    if (incoming !== search) {
+      setSearch(incoming);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
+    const current = searchParams.get("q") ?? "";
+    const next = debouncedSearch.trim();
+    if (current === next) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams);
+    if (next) {
+      params.set("q", next);
+    } else {
+      params.delete("q");
+    }
+    setSearchParams(params, { replace: true });
+  }, [debouncedSearch, searchParams, setSearchParams]);
 
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {

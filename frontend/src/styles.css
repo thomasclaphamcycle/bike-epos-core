@@ -93,6 +93,7 @@ textarea {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .nav-link {
@@ -104,6 +105,49 @@ textarea {
 
 .nav-link-active {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.nav-menu {
+  position: relative;
+}
+
+.nav-menu-trigger {
+  list-style: none;
+  color: #e8f3ff;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nav-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.nav-menu[open] .nav-menu-trigger,
+.nav-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.nav-menu-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 280px;
+  max-width: min(520px, calc(100vw - 32px));
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #2b587a;
+  border-radius: 12px;
+  background: #12324b;
+  box-shadow: 0 16px 36px rgba(4, 22, 41, 0.3);
+}
+
+.nav-menu-list .nav-link {
+  display: block;
 }
 
 .header-right {
@@ -951,6 +995,11 @@ th {
   .nav-links {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .nav-menu-list {
+    position: static;
+    max-width: 100%;
   }
 
   .app-main {

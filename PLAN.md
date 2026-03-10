@@ -13,6 +13,7 @@ Roadmap status:
 
 - the implemented roadmap on the current working line now runs through `M135`
 - the project is now in stabilization and release-readiness mode rather than roadmap expansion mode
+- the next phase is trial usage, verification, and operational hardening rather than new core roadmap delivery
 
 ## Evidence Legend
 

@@ -193,7 +193,7 @@ export const GlobalCommandBar = () => {
             group: "Products",
             title: row.name,
             subtitle: `${row.sku} | on hand ${row.onHandQty}`,
-            path: `/inventory`,
+            path: `/inventory?q=${encodeURIComponent(row.sku || row.barcode || row.name)}`,
           }))
         : []);
 
@@ -263,7 +263,16 @@ export const GlobalCommandBar = () => {
       </button>
 
       {open ? (
-        <div className="command-overlay" role="dialog" aria-modal="true">
+        <div
+          className="command-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setOpen(false);
+            }
+          }}
+        >
           <div className="command-shell">
             <div className="card-header-row">
               <div>

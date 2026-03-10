@@ -20,7 +20,7 @@ Important repo-state caveat:
 Current delivery mode:
 
 - roadmap feature buildout is complete through `M135`
-- current work should default to stabilization, release-readiness, verification, and operational polish unless a new post-roadmap batch is explicitly defined
+- current work should default to stabilization, release-readiness, verification, operational polish, and trial-use readiness unless a new post-roadmap batch is explicitly defined
 
 ## Source Of Truth Order
 
@@ -180,6 +180,7 @@ If adding or changing an API endpoint:
 - Maintain SPA behavior in development and backend-served SPA behavior in production
 - Prefer compatibility with existing backend contracts over frontend-only assumptions
 - Prefer `/home` as the role-aware landing route instead of hardcoding `/pos` when a generic post-login home is needed
+- In trial-readiness work, prefer discoverability and consistency improvements over adding new surfaces
 
 If a frontend change depends on a missing backend endpoint:
 
