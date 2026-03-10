@@ -93,7 +93,7 @@ export const LoginPage = () => {
       <div className="login-stage">
         <form className="login-card" onSubmit={onSubmit}>
           <div className="login-logo-wrap">
-            <CorePosLogo variant="stacked" size={200} />
+            <CorePosLogo variant="stacked" size={228} />
           </div>
 
           <div className="login-user-list" data-testid="login-user-list">
