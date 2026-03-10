@@ -51,10 +51,6 @@ export const LoginPage = () => {
             <CorePosLogo variant="stacked" size={200} />
           </div>
 
-          <div className="login-form-header">
-            <p className="muted-text">Sign in to continue.</p>
-          </div>
-
           <label htmlFor="identifier">Username or email</label>
           <input
             id="identifier"

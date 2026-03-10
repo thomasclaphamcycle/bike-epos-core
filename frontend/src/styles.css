@@ -1066,57 +1066,19 @@ th {
   border: 1px solid rgba(214, 224, 235, 0.95);
   border-radius: 24px;
   box-shadow: 0 16px 44px rgba(15, 34, 52, 0.11);
-  padding: 30px 28px 28px;
+  padding: 26px 28px 28px;
   display: grid;
   align-content: center;
   gap: 10px;
 }
 
-.login-form-header {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 10px;
-  text-align: center;
-}
-
 .login-logo-wrap {
   display: flex;
   justify-content: center;
-  margin-bottom: 4px;
-}
-
-.login-form-header h2 {
-  margin: 0;
-  font-size: 1.7rem;
-  letter-spacing: -0.03em;
-  color: #0f2234;
-}
-
-.login-form-eyebrow {
-  margin: 0;
-  color: var(--cp-blue);
-  font-size: 0.82rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.login-demo-chip {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  margin: 0 auto 8px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  background: rgba(46, 124, 246, 0.08);
-  border: 1px solid rgba(46, 124, 246, 0.14);
-  color: var(--cp-navy);
-  font-size: 0.85rem;
-  font-weight: 600;
+  margin-bottom: 16px;
 }
 
 .login-card label {
-  margin-top: 2px;
   font-weight: 700;
   color: #243746;
 }
@@ -1146,12 +1108,6 @@ th {
   box-shadow: 0 12px 24px rgba(10, 95, 149, 0.18);
 }
 
-.login-card .muted-text {
-  margin: 0;
-  color: #5d6c7c;
-  line-height: 1.45;
-}
-
 @media (max-width: 640px) {
   .login-shell {
     padding: 14px;
@@ -1162,12 +1118,8 @@ th {
   }
 
   .login-card {
-    padding: 24px 20px 22px;
+    padding: 22px 20px 22px;
     border-radius: 20px;
-  }
-
-  .login-form-header h2 {
-    font-size: 1.55rem;
   }
 }
 
