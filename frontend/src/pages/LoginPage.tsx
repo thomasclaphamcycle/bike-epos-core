@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { toRoleHomeRoute } from "../utils/homeRoute";
+import { CorePosLogo } from "../components/branding/CorePosLogo";
 
 export const LoginPage = () => {
   const { user, login } = useAuth();
@@ -46,14 +47,11 @@ export const LoginPage = () => {
     <div className="login-shell">
       <div className="login-stage">
         <section className="login-brand-panel" aria-label="CorePOS product summary">
-          <div className="login-wordmark-lockup">
-            <div className="login-wordmark-badge" aria-hidden="true">
-              CP
-            </div>
-            <div>
-              <p className="login-brand-kicker">CorePOS</p>
-              <h1 className="login-brand-title">Retail and workshop operations</h1>
-            </div>
+          <CorePosLogo variant="stacked" theme="dark" className="login-brand-logo" />
+
+          <div>
+            <p className="login-brand-kicker">CorePOS</p>
+            <h1 className="login-brand-title">Retail and workshop operations</h1>
           </div>
 
           <p className="login-brand-copy">
