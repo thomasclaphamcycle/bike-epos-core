@@ -870,6 +870,7 @@ model User {
   email        String?  @unique
   name         String?
   passwordHash String
+  pinHash      String?
   role         UserRole @default(STAFF)
   isActive     Boolean  @default(true)
 

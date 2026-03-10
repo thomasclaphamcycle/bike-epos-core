@@ -3,6 +3,7 @@ import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
   adminCreateUserHandler,
   adminListUsersHandler,
+  adminResetUserPinHandler,
   adminResetUserPasswordHandler,
   adminUpdateUserHandler,
 } from "../controllers/adminUserController";
@@ -16,4 +17,9 @@ adminRouter.post(
   "/users/:id/reset-password",
   requireRoleAtLeast("ADMIN"),
   adminResetUserPasswordHandler,
+);
+adminRouter.post(
+  "/users/:id/reset-pin",
+  requireRoleAtLeast("MANAGER"),
+  adminResetUserPinHandler,
 );

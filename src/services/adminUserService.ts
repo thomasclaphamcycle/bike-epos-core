@@ -27,6 +27,12 @@ type AdminResetPasswordInput = {
   tempPassword?: string;
 };
 
+const roleRank: Record<UserRole, number> = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
+};
+
 const parseRoleOrThrow = (value: string | undefined, code: string): UserRole => {
   const normalized = value?.trim().toUpperCase();
   if (normalized !== "STAFF" && normalized !== "MANAGER" && normalized !== "ADMIN") {
@@ -215,6 +221,53 @@ export const adminResetUserPassword = async (
       tx,
       {
         action: "ADMIN_USER_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: updated.id,
+        metadata: {
+          email: updated.email,
+          byActorId: actorId ?? null,
+        },
+      },
+      auditActor,
+    );
+
+    return toPublicUser(updated);
+  });
+};
+
+export const adminResetUserPin = async (
+  userId: string,
+  actorId: string | undefined,
+  actorRole: UserRole,
+  auditActor?: AuditActor,
+) => {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+    });
+    if (!existing) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+
+    if (existing.id === actorId) {
+      throw new HttpError(409, "Use self-service PIN change for your own account", "SELF_PIN_RESET_FORBIDDEN");
+    }
+
+    if (roleRank[actorRole] < roleRank[existing.role]) {
+      throw new HttpError(403, "Cannot reset PIN for a higher-privileged user", "INSUFFICIENT_ROLE");
+    }
+
+    const updated = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        pinHash: null,
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "ADMIN_USER_PIN_RESET",
         entityType: "USER",
         entityId: updated.id,
         metadata: {

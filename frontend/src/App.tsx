@@ -62,6 +62,7 @@ import { BackupToolkitPage } from "./pages/BackupToolkitPage";
 import { SystemSettingsPage } from "./pages/SystemSettingsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { DocumentationHubPage } from "./pages/DocumentationHubPage";
+import { PinSettingsPage } from "./pages/PinSettingsPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -69,6 +70,7 @@ const AuthedApp = () => (
       <Routes>
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/home" element={<HomeRedirectPage />} />
+        <Route path="/account/pin" element={<PinSettingsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route
           path="/management"
