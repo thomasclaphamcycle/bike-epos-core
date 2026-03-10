@@ -158,23 +158,6 @@ textarea {
   min-width: 0;
 }
 
-.header-brand-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  min-height: 42px;
-  padding: 6px 10px;
-  border-radius: 14px;
-  background: rgba(11, 31, 51, 0.06);
-  border: 1px solid rgba(11, 31, 51, 0.08);
-}
-
-.header-brand-logo {
-  display: block;
-  max-width: min(168px, 28vw);
-}
-
 .header-context {
   display: grid;
   gap: 3px;
@@ -1202,6 +1185,13 @@ th {
   border-radius: 10px;
   padding: 8px 12px;
   text-decoration: none;
+}
+
+.logout-button {
+  font-weight: 600;
+  background: #eef3f8;
+  border-color: #b9c6d5;
+  color: var(--cp-navy);
 }
 
 .note-pre {

@@ -2,7 +2,6 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
-import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "./branding/CorePosLogo";
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -71,23 +70,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <div className="app-shell">
         <header className="app-header">
           <div className="header-left">
-            <Link to="/home" className="header-brand-link" aria-label="CorePOS home">
-              <CorePosLogo variant="full" size={34} className="header-brand-logo" />
-            </Link>
             <div className="header-context">
               <span className="header-eyebrow">Current Area</span>
               <strong className="header-area">{activeArea}</strong>
             </div>
             <div className="header-quick-actions">
-              <Link to="/pos" className="button-link">Open POS</Link>
               <Link to="/workshop/check-in" className="button-link">New Check-In</Link>
             </div>
           </div>
           <div className="header-right">
             <GlobalCommandBar />
-            <Link to="/account/pin" className="button-link">My PIN</Link>
             <span className="user-chip">{user?.username} ({user?.role})</span>
-            <button type="button" onClick={onLogout}>Logout</button>
+            <button type="button" className="logout-button" onClick={onLogout}>Logout</button>
           </div>
         </header>
 
