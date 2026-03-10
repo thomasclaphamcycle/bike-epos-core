@@ -5,6 +5,7 @@ import {
   adminListUsersHandler,
   adminResetUserPinHandler,
   adminResetUserPasswordHandler,
+  adminSetUserPinHandler,
   adminUpdateUserHandler,
 } from "../controllers/adminUserController";
 
@@ -22,4 +23,9 @@ adminRouter.post(
   "/users/:id/reset-pin",
   requireRoleAtLeast("MANAGER"),
   adminResetUserPinHandler,
+);
+adminRouter.post(
+  "/users/:id/set-pin",
+  requireRoleAtLeast("MANAGER"),
+  adminSetUserPinHandler,
 );

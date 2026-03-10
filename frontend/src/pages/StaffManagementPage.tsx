@@ -34,6 +34,7 @@ export const StaffManagementPage = () => {
   const [createPassword, setCreatePassword] = useState("temp-pass-123");
 
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
+  const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
   const [userEdits, setUserEdits] = useState<Record<string, { name: string; role: UserRole }>>({});
 
   const loadUsers = async () => {
@@ -107,11 +108,20 @@ export const StaffManagementPage = () => {
   };
 
   const resetPin = async (userId: string) => {
+    const pin = pinInputs[userId]?.trim() ?? "";
+    if (!/^\d{4}$/.test(pin)) {
+      error("PIN must be exactly 4 digits");
+      return;
+    }
+
     try {
-      await apiPost(`/api/admin/users/${encodeURIComponent(userId)}/reset-pin`);
-      success("PIN reset");
+      await apiPost(`/api/admin/users/${encodeURIComponent(userId)}/set-pin`, {
+        pin,
+      });
+      success("PIN updated");
+      setPinInputs((current) => ({ ...current, [userId]: "" }));
     } catch (resetError) {
-      error(resetError instanceof Error ? resetError.message : "Failed to reset PIN");
+      error(resetError instanceof Error ? resetError.message : "Failed to set PIN");
     }
   };
 
@@ -252,8 +262,25 @@ export const StaffManagementPage = () => {
                       <button type="button" onClick={() => void resetPassword(user.id)}>
                         Reset Password
                       </button>
-                      <button type="button" onClick={() => void resetPin(user.id)}>
-                        Reset PIN
+                      <input
+                        className="compact-input"
+                        value={pinInputs[user.id] ?? ""}
+                        onChange={(event) =>
+                          setPinInputs((current) => ({
+                            ...current,
+                            [user.id]: event.target.value.replace(/\D/g, "").slice(0, 4),
+                          }))}
+                        placeholder="1234"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={4}
+                      />
+                      <button
+                        type="button"
+                        disabled={!/^\d{4}$/.test(pinInputs[user.id] ?? "")}
+                        onClick={() => void resetPin(user.id)}
+                      >
+                        Set PIN
                       </button>
                     </div>
                   </td>

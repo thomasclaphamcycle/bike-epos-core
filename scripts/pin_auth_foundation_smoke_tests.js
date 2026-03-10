@@ -113,11 +113,15 @@ const main = async () => {
     assert.equal(meResult.status, 200);
     assert.equal(meResult.json.user.id, user.id);
 
-    const resetResult = await fetchJson(`/api/admin/users/${user.id}/reset-pin`, {
+    const setByManagerResult = await fetchJson(`/api/admin/users/${user.id}/set-pin`, {
       method: "POST",
-      headers: MANAGER_HEADERS,
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ pin: "9999" }),
     });
-    assert.equal(resetResult.status, 200);
+    assert.equal(setByManagerResult.status, 200);
 
     const oldPinResult = await fetchJson("/api/auth/pin-login", {
       method: "POST",
@@ -126,11 +130,18 @@ const main = async () => {
     });
     assert.equal(oldPinResult.status, 401);
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    const managerSetPinLogin = await fetchJson("/api/auth/pin-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, pin: "9999" }),
+    });
+    assert.equal(managerSetPinLogin.status, 200);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const retry = await fetchJson("/api/auth/pin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, pin: "9999" }),
+        body: JSON.stringify({ userId: user.id, pin: "0000" }),
       });
       assert.equal(retry.status, 401);
     }
@@ -138,7 +149,7 @@ const main = async () => {
     const limitedResult = await fetchJson("/api/auth/pin-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, pin: "9999" }),
+      body: JSON.stringify({ userId: user.id, pin: "0000" }),
     });
     assert.equal(limitedResult.status, 429);
 

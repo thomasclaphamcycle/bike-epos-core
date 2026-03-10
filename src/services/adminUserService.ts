@@ -2,7 +2,7 @@ import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
-import { hashPassword } from "./passwordService";
+import { hashPassword, hashPin, normalizePinOrThrow } from "./passwordService";
 import {
   createUserAccountTx,
   normalizeEmailOrThrow,
@@ -268,6 +268,53 @@ export const adminResetUserPin = async (
       tx,
       {
         action: "ADMIN_USER_PIN_RESET",
+        entityType: "USER",
+        entityId: updated.id,
+        metadata: {
+          email: updated.email,
+          byActorId: actorId ?? null,
+        },
+      },
+      auditActor,
+    );
+
+    return toPublicUser(updated);
+  });
+};
+
+export const adminSetUserPin = async (
+  userId: string,
+  pin: string | undefined,
+  actorId: string | undefined,
+  actorRole: UserRole,
+  auditActor?: AuditActor,
+) => {
+  const normalizedPin = normalizePinOrThrow(pin, "INVALID_ADMIN_PIN_SET");
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+    });
+    if (!existing) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+
+    if (roleRank[actorRole] < roleRank[existing.role]) {
+      throw new HttpError(403, "Cannot set PIN for a higher-privileged user", "INSUFFICIENT_ROLE");
+    }
+
+    const pinHash = await hashPin(normalizedPin);
+    const updated = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        pinHash,
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "ADMIN_USER_PIN_SET",
         entityType: "USER",
         entityId: updated.id,
         metadata: {
