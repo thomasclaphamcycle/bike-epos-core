@@ -1341,3 +1341,90 @@ Notes:
 - adds a manager-only route at `/management/stock-exceptions`
 - stays frontend-only by reusing inventory velocity, reorder, and purchase-order data already present on the branch
 - avoids schema and backend changes by using honest existing stock and purchasing signals only
+
+## Next Development Phase - Shell Personalization & Navigation
+
+Current state:
+
+- the current working line now includes:
+  - `M115` role-tailored home screens
+  - `M116` KPI widgets / dashboard customization
+  - `M117` operational search / global command bar
+- the app shell now supports role-aware landing behavior, manager-local dashboard preferences, and global operational navigation shortcuts
+- no post-`M117` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M115` - Role-tailored Home Screens
+
+Goal:
+
+- improve the starting experience by routing users to role-appropriate home screens
+
+Implemented scope on the current working line:
+
+- lightweight `/home` route for role-aware landing
+- role-aware home mapping:
+  - staff -> `/dashboard`
+  - manager -> `/management`
+  - admin -> `/management/staff`
+- login redirect and unauthorized-role redirect alignment
+- preservation of existing deep links and bookmarked routes
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only and additive
+- keeps direct routes such as `/pos`, `/dashboard`, and `/management` intact
+
+#### `M116` - KPI Widgets / Dashboard Customization
+
+Goal:
+
+- add lightweight dashboard customization so managers can choose which KPI widgets matter most
+
+Implemented scope on the current working line:
+
+- manager dashboard widget visibility toggles
+- local ordering controls for management dashboard sections
+- local per-user persistence using browser storage
+- reset-to-default behavior
+
+Frontend entries:
+
+- `frontend/src/pages/ManagementDashboardPage.tsx`
+- `frontend/src/pages/DashboardSettingsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds manager route `/management/dashboard-settings`
+- stays frontend-only with browser-local persistence in v1
+
+#### `M117` - Operational Search / Global Command Bar
+
+Goal:
+
+- add a fast operational search and command bar for staff and managers
+
+Implemented scope on the current working line:
+
+- shell-level command bar with keyboard access
+- grouped shortcuts and search results for:
+  - customers
+  - workshop jobs
+  - products
+  - suppliers
+  - purchase orders
+  - common operational routes
+- direct navigation into existing pages and records
+
+Frontend entry:
+
+- `frontend/src/components/GlobalCommandBar.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing search APIs and existing page routes
+- uses `Ctrl/Cmd+K` and a header trigger button for access

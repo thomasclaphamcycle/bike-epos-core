@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
+import { HomeRedirectPage } from "./pages/HomeRedirectPage";
 import { PosPage } from "./pages/PosPage";
 import { WorkshopPage } from "./pages/WorkshopPage";
 import { WorkshopJobPage } from "./pages/WorkshopJobPage";
@@ -15,6 +16,7 @@ import { SuppliersPage } from "./pages/SuppliersPage";
 import { PurchasingPage } from "./pages/PurchasingPage";
 import { PurchaseOrderPage } from "./pages/PurchaseOrderPage";
 import { ManagementDashboardPage } from "./pages/ManagementDashboardPage";
+import { DashboardSettingsPage } from "./pages/DashboardSettingsPage";
 import { SalesAnalyticsPage } from "./pages/SalesAnalyticsPage";
 import { WorkshopPerformancePage } from "./pages/WorkshopPerformancePage";
 import { ProductSalesAnalyticsPage } from "./pages/ProductSalesAnalyticsPage";
@@ -48,13 +50,22 @@ const AuthedApp = () => (
   <ProtectedRoute>
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/pos" replace />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
+        <Route path="/home" element={<HomeRedirectPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route
           path="/management"
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <ManagementDashboardPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/dashboard-settings"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <DashboardSettingsPage />
             </ProtectedRoute>
           )}
         />

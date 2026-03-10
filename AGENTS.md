@@ -48,8 +48,10 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
 - Shared API wrapper: `frontend/src/api/client.ts`
 - Current React pages on this branch:
   - `/login`
+  - `/home`
   - `/dashboard`
   - `/management`
+  - `/management/dashboard-settings`
   - `/management/summary`
   - `/management/alerts`
   - `/management/activity`
@@ -155,6 +157,7 @@ If adding or changing an API endpoint:
 - Keep `/api` traffic backend-compatible
 - Maintain SPA behavior in development and backend-served SPA behavior in production
 - Prefer compatibility with existing backend contracts over frontend-only assumptions
+- Prefer `/home` as the role-aware landing route instead of hardcoding `/pos` when a generic post-login home is needed
 
 If a frontend change depends on a missing backend endpoint:
 

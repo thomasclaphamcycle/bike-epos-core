@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
+import { GlobalCommandBar } from "./GlobalCommandBar";
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? "nav-link nav-link-active" : "nav-link";
@@ -31,7 +32,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="layout-root">
       <header className="app-header">
         <div className="header-left">
-          <Link to="/pos" className="brand">CorePOS</Link>
+          <Link to="/home" className="brand">CorePOS</Link>
           <nav className="nav-links">
             <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>
             {canViewManagement ? <NavLink to="/management" className={navClass}>Management</NavLink> : null}
@@ -72,6 +73,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </nav>
         </div>
         <div className="header-right">
+          <GlobalCommandBar />
           <span className="user-chip">{user?.username} ({user?.role})</span>
           <button type="button" onClick={onLogout}>Logout</button>
         </div>

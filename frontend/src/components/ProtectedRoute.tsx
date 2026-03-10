@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { toRoleHomeRoute } from "../utils/homeRoute";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
 
@@ -28,7 +29,7 @@ export const ProtectedRoute = ({
   }
 
   if (minimumRole && roleRank[user.role] < roleRank[minimumRole]) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={toRoleHomeRoute(user.role)} replace />;
   }
 
   return <>{children}</>;

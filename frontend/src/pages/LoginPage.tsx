@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
+import { toRoleHomeRoute } from "../utils/homeRoute";
 
 export const LoginPage = () => {
   const { user, login } = useAuth();
@@ -15,7 +16,7 @@ export const LoginPage = () => {
 
   useEffect(() => {
     if (user) {
-      navigate("/pos", { replace: true });
+      navigate(toRoleHomeRoute(user.role), { replace: true });
     }
   }, [user, navigate]);
 
@@ -27,7 +28,7 @@ export const LoginPage = () => {
     try {
       await login(identifier, password);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from || "/pos", { replace: true });
+      navigate(from || "/home", { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setErrorMessage("Invalid username/email or password.");
