@@ -953,18 +953,175 @@ th {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 14px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(10, 95, 149, 0.18), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(23, 50, 74, 0.16), transparent 28%),
+    linear-gradient(180deg, #edf3f8 0%, #e8eef5 46%, #dfe7f0 100%);
+}
+
+.login-stage {
+  width: min(980px, 100%);
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 420px);
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(214, 224, 235, 0.95);
+  border-radius: 28px;
+  box-shadow: 0 28px 80px rgba(15, 34, 52, 0.18);
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+}
+
+.login-brand-panel {
+  padding: 42px 38px;
+  background:
+    radial-gradient(circle at top left, rgba(58, 151, 201, 0.22), transparent 34%),
+    linear-gradient(160deg, #0f2234 0%, #17324a 52%, #153146 100%);
+  color: #edf5fb;
+  display: grid;
+  align-content: start;
+  gap: 22px;
+}
+
+.login-wordmark-lockup {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.login-wordmark-badge {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #0a5f95, #43a1d4);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.login-brand-kicker {
+  margin: 0 0 4px;
+  color: #9fd0ea;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-brand-title {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.login-brand-copy {
+  margin: 0;
+  max-width: 42ch;
+  color: #d3e4f0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.login-brand-points {
+  display: grid;
+  gap: 12px;
+}
+
+.login-brand-point {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(159, 208, 234, 0.16);
+}
+
+.login-brand-point strong {
+  font-size: 0.96rem;
+}
+
+.login-brand-point span {
+  color: #cae0ee;
+  font-size: 0.92rem;
+  line-height: 1.5;
 }
 
 .login-card {
-  width: min(430px, 100%);
-  background: #fff;
-  border: 1px solid #d9e2ec;
-  border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(15, 34, 52, 0.15);
-  padding: 20px;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 253, 0.98));
+  padding: 38px 34px;
   display: grid;
-  gap: 9px;
+  align-content: center;
+  gap: 11px;
+}
+
+.login-form-header {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.login-form-header h2 {
+  margin: 0;
+  font-size: 1.8rem;
+  letter-spacing: -0.03em;
+  color: #0f2234;
+}
+
+.login-form-eyebrow {
+  margin: 0;
+  color: #0a5f95;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-demo-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 6px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #edf4fa;
+  border: 1px solid #d6e5f1;
+  color: #30536c;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.login-card label {
+  font-weight: 700;
+  color: #243746;
+}
+
+.login-card input {
+  min-height: 44px;
+  border-radius: 12px;
+  border-color: #c6d6e3;
+  background: #fbfdff;
+  padding: 10px 12px;
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: #0a5f95;
+  box-shadow: 0 0 0 4px rgba(10, 95, 149, 0.12);
+  background: #fff;
+}
+
+.login-submit-button {
+  min-height: 46px;
+  margin-top: 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 12px 24px rgba(10, 95, 149, 0.18);
 }
 
 .error-banner {
@@ -1018,6 +1175,40 @@ th {
   padding: 12px;
   display: grid;
   gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .login-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .login-brand-panel {
+    padding: 28px 24px 22px;
+  }
+
+  .login-card {
+    padding: 26px 22px 24px;
+  }
+}
+
+@media (max-width: 540px) {
+  .login-shell {
+    padding: 14px;
+  }
+
+  .login-brand-panel {
+    gap: 18px;
+  }
+
+  .login-wordmark-lockup {
+    align-items: flex-start;
+  }
+
+  .login-wordmark-badge {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+  }
 }
 
 @media (max-width: 900px) {
