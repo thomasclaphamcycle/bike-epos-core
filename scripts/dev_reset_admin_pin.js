@@ -23,7 +23,7 @@ const prisma = new PrismaClient({
 const DEFAULT_BCRYPT_ROUNDS = 12;
 const TARGET_PIN = "1234";
 const TARGET_EMAIL = "admin@local";
-const TARGET_NAME = "Demo Admin";
+const TARGET_NAME = "Thomas";
 
 const toBcryptRounds = () => {
   const raw = process.env.AUTH_BCRYPT_ROUNDS;
@@ -44,7 +44,7 @@ async function main() {
     where: {
       role: UserRole.ADMIN,
       isActive: true,
-      OR: [{ email: TARGET_EMAIL }, { name: TARGET_NAME }],
+      email: TARGET_EMAIL,
     },
     select: {
       id: true,
@@ -55,13 +55,11 @@ async function main() {
     },
   });
 
-  const exactUser = adminUsers.find(
-    (user) => user.email === TARGET_EMAIL && user.name === TARGET_NAME,
-  );
+  const exactUser = adminUsers.find((user) => user.email === TARGET_EMAIL);
 
   if (!exactUser) {
     throw new Error(
-      `Could not find the expected active admin user (${TARGET_NAME} / ${TARGET_EMAIL}).`,
+      `Could not find the expected active admin user (${TARGET_EMAIL}).`,
     );
   }
 
