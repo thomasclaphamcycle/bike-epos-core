@@ -86,9 +86,7 @@ textarea {
 
 .app-sidebar {
   border-right: 1px solid #d6e0eb;
-  background:
-    radial-gradient(circle at top left, rgba(46, 124, 246, 0.18), transparent 28%),
-    linear-gradient(180deg, var(--cp-shell-deep), var(--cp-navy) 42%, var(--cp-shell-soft));
+  background: #041334;
   color: #edf5fb;
   padding: 18px 14px;
   display: grid;
