@@ -19,10 +19,10 @@ Roadmap status:
   - single centered login card
   - simplified copy
   - spacing and hierarchy polish
-- current PIN work is not UX-only work:
+- completed PIN work is not UX-only work:
   - it is auth/product infrastructure
   - it includes backend/API/schema/security changes
-  - it is the prerequisite for any future replacement of the login screen with staff buttons plus 4-digit PIN
+  - it is the completed prerequisite for the new button-based 4-digit PIN login UI
 
 ## Evidence Legend
 
@@ -57,11 +57,16 @@ The repo has diverged milestone lines:
 - `ux-saledock-alignment`
   - post-roadmap UX refinement branch
   - completed login/shell usability cleanup remains UX work
-  - now also has auth-focused follow-on work on descendant branch `feat/pin-auth-foundation`
+  - remains the upstream UX branch for post-roadmap shell/login polish
 - `feat/pin-auth-foundation`
-  - current auth feature branch
+  - auth feature branch
   - adds PIN auth infrastructure on top of the post-roadmap UX line
   - should be tracked as backend/product-auth work, not as pure UX polish
+  - preserved password login while adding PIN auth support
+- `feat/pin-login-ui`
+  - current auth migration branch
+  - completes the main login-screen transition to active-user buttons plus always-visible 4-digit PIN
+  - keeps password auth available in backend as fallback while the UI migrates to PIN-first login
 
 Implication:
 
@@ -85,9 +90,9 @@ Completed login-page cleanup on the UX branch includes:
 
 This work remains classified as UX refinement.
 
-### Current auth feature work
+### Completed auth feature work
 
-Current PIN-auth foundation work is classified as auth/product infrastructure, not UX:
+Completed PIN-auth foundation work is classified as auth/product infrastructure, not UX:
 
 - `pinHash` support on `User`
 - PIN hashing and verification utilities
@@ -98,12 +103,31 @@ Current PIN-auth foundation work is classified as auth/product infrastructure, n
 - route-specific PIN login rate limiting
 - supporting migration, request examples, and smoke coverage
 
-This work is the backend-supported prerequisite for a future controlled login-screen transition to:
+This work is the backend-supported prerequisite that enabled the controlled login-screen transition to:
 
 - active staff buttons
 - always-visible 4-digit PIN entry
 
 Password login remains intentionally preserved during the foundation pass.
+
+### Completed login migration work
+
+Completed login migration work on `feat/pin-login-ui` includes:
+
+- main login page now uses active-user buttons plus 4-digit PIN
+- active users include admins
+- PIN field is always visible
+- PIN login preserves the normal session/authenticated app flow
+- password auth remains available in the backend as fallback
+- Playwright and supporting tests were updated and pass against the new login surface
+
+### Next / Future
+
+Post-migration follow-on work is now future auth/security hardening rather than migration work:
+
+- decide whether a manager-facing PIN reset UI is still needed beyond the existing endpoint/admin surface
+- add register lock / quick user switch if trial usage shows the need
+- refine long-term admin/security policy around PIN vs password usage
 
 ## Exact Milestone Ledger
 

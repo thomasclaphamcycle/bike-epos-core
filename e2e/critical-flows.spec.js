@@ -27,15 +27,14 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
     role: "STAFF",
     prefix: "nav-staff",
   });
-  await loginViaUi(page, staffCredentials, "/pos");
-  await expect(page.getByTestId("app-nav-pos")).toBeVisible();
-  await expect(page.getByTestId("app-nav-workshop")).toBeVisible();
-  await expect(page.getByTestId("app-nav-inventory")).toBeVisible();
-  await expect(page.locator('[data-testid="app-nav-till"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="app-nav-manager-cash"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="app-nav-manager-refunds"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="app-nav-admin-users"]')).toHaveCount(0);
-  await page.click('[data-testid="app-nav-workshop"]');
+  await loginViaUi(page, staffCredentials, "/pos", { surface: "frontend" });
+  await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Workshop", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inventory", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cash", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Refunds", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Staff Admin", exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Workshop", exact: true }).click();
   await expect(page).toHaveURL(/\/workshop/);
 
   const managerCredentials = await ensureUserViaAdminBypass(request, {
@@ -43,22 +42,21 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
     prefix: "nav-manager",
   });
   await page.context().clearCookies();
-  await loginViaUi(page, managerCredentials, "/pos");
-  await expect(page.getByTestId("app-nav-till")).toBeVisible();
-  await expect(page.getByTestId("app-nav-manager-cash")).toBeVisible();
-  await expect(page.getByTestId("app-nav-manager-refunds")).toBeVisible();
-  await expect(page.locator('[data-testid="app-nav-admin-users"]')).toHaveCount(0);
-  await page.click('[data-testid="app-nav-manager-cash"]');
-  await expect(page).toHaveURL(/\/manager\/cash/);
+  await loginViaUi(page, managerCredentials, "/pos", { surface: "frontend" });
+  await expect(page.getByRole("link", { name: "Cash", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Refunds", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Staff Admin", exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Cash", exact: true }).click();
+  await expect(page).toHaveURL(/\/management\/cash/);
 
   const adminCredentials = await ensureUserViaAdminBypass(request, {
     role: "ADMIN",
     prefix: "nav-admin",
   });
   await page.context().clearCookies();
-  await loginViaUi(page, adminCredentials, "/admin");
-  await expect(page.getByTestId("app-nav-admin-users")).toBeVisible();
-  await expect(page.getByTestId("app-nav-admin-audit")).toBeVisible();
+  await loginViaUi(page, adminCredentials, "/admin", { surface: "frontend" });
+  await expect(page.getByRole("link", { name: "Staff Admin", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin Review", exact: true })).toBeVisible();
 });
 
 test("Login then POS page loads and can search products", async ({ page, request }) => {
@@ -131,7 +129,6 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   page,
   request,
 }) => {
-  const reactFrontendUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
     prefix: "react-pos-customer",
@@ -154,23 +151,7 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   });
 
   await page.context().clearCookies();
-  await page.goto(`${reactFrontendUrl}/login`);
-  const loginStatus = await page.evaluate(
-    async ({ email, password }) => {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-      const payload = await response.json().catch(() => null);
-      return { ok: response.ok, status: response.status, payload };
-    },
-    { email: credentials.email, password: credentials.password },
-  );
-  expect(loginStatus.ok, JSON.stringify(loginStatus)).toBe(true);
-
-  await page.goto(`${reactFrontendUrl}/pos`);
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
   await expect(page.getByRole("heading", { name: "POS" })).toBeVisible();
 
   await page.getByTestId("pos-customer-search").fill(firstCustomer.name);

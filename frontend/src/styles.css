@@ -1075,7 +1075,64 @@ th {
 .login-logo-wrap {
   display: flex;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
+}
+
+.login-user-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.login-user-button {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid #c6d6e3;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  color: #183041;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.login-user-button:hover:not(:disabled) {
+  border-color: #8fb6dd;
+  background: #ffffff;
+}
+
+.login-user-button-active {
+  border-color: var(--cp-orange);
+  background: rgba(255, 122, 24, 0.08);
+  box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.12);
+}
+
+.login-user-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.login-user-name {
+  font-weight: 700;
+}
+
+.login-user-role {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #5e7184;
+}
+
+.login-inline-status {
+  border: 1px dashed #c6d6e3;
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  color: #516477;
+  background: #f9fbfd;
 }
 
 .login-card label {
@@ -1102,7 +1159,7 @@ th {
 .login-submit-button {
   min-height: 48px;
   width: 100%;
-  margin-top: 14px;
+  margin-top: 12px;
   border-radius: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;

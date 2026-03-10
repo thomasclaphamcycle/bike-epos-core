@@ -1,38 +1,83 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ApiError } from "../api/client";
+import { apiGet, ApiError } from "../api/client";
 import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "../components/branding/CorePosLogo";
 
+type ActiveLoginUser = {
+  id: string;
+  displayName: string;
+  role: "STAFF" | "MANAGER" | "ADMIN";
+};
+
 export const LoginPage = () => {
-  const { user, login } = useAuth();
+  const { user, loginWithPin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectTarget = useMemo(() => {
+    const fromState = (location.state as { from?: string } | null)?.from;
+    if (fromState) {
+      return fromState;
+    }
+    const next = new URLSearchParams(location.search).get("next");
+    return next || null;
+  }, [location.search, location.state]);
 
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
+  const [users, setUsers] = useState<ActiveLoginUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
-      navigate(toRoleHomeRoute(user.role), { replace: true });
+      navigate(redirectTarget || toRoleHomeRoute(user.role), { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, redirectTarget]);
+
+  useEffect(() => {
+    void (async () => {
+      setUsersLoading(true);
+      setErrorMessage(null);
+      try {
+        const payload = await apiGet<{ users: ActiveLoginUser[] }>("/api/auth/active-users");
+        setUsers(payload.users || []);
+      } catch (error) {
+        if (error instanceof Error) {
+          setErrorMessage(error.message);
+        } else {
+          setErrorMessage("Failed to load active users.");
+        }
+      } finally {
+        setUsersLoading(false);
+      }
+    })();
+  }, []);
+
+  const canSubmit = useMemo(
+    () => Boolean(selectedUserId) && /^\d{4}$/.test(pin) && !submitting && !usersLoading,
+    [selectedUserId, pin, submitting, usersLoading],
+  );
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!selectedUserId || !/^\d{4}$/.test(pin)) {
+      return;
+    }
+
     setSubmitting(true);
     setErrorMessage(null);
 
     try {
-      await login(identifier, password);
-      const from = (location.state as { from?: string } | null)?.from;
-      navigate(from || "/home", { replace: true });
+      await loginWithPin(selectedUserId, pin);
+      navigate(redirectTarget || "/home", { replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        setErrorMessage("Invalid username/email or password.");
+        setErrorMessage("Incorrect PIN");
+      } else if (error instanceof ApiError && error.status === 429) {
+        setErrorMessage(error.message);
       } else if (error instanceof Error) {
         setErrorMessage(error.message);
       } else {
@@ -51,24 +96,42 @@ export const LoginPage = () => {
             <CorePosLogo variant="stacked" size={200} />
           </div>
 
-          <label htmlFor="identifier">Username</label>
-          <input
-            id="identifier"
-            data-testid="login-email"
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
-            autoComplete="username"
-            required
-          />
+          <div className="login-user-list" data-testid="login-user-list">
+            {usersLoading ? (
+              <div className="login-inline-status">Loading staff...</div>
+            ) : users.length ? (
+              users.map((loginUser) => (
+                <button
+                  key={loginUser.id}
+                  type="button"
+                  className={selectedUserId === loginUser.id ? "login-user-button login-user-button-active" : "login-user-button"}
+                  data-testid={`login-user-${loginUser.id}`}
+                  onClick={() => {
+                    setSelectedUserId(loginUser.id);
+                    setErrorMessage(null);
+                  }}
+                  disabled={submitting}
+                >
+                  <span className="login-user-name">{loginUser.displayName}</span>
+                  <span className="login-user-role">{loginUser.role}</span>
+                </button>
+              ))
+            ) : (
+              <div className="login-inline-status">No active users available.</div>
+            )}
+          </div>
 
-          <label htmlFor="password">Password</label>
+          <label htmlFor="pin">PIN</label>
           <input
-            id="password"
-            data-testid="login-password"
+            id="pin"
+            data-testid="login-pin"
             type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
+            inputMode="numeric"
+            pattern="\d{4}"
+            maxLength={4}
+            value={pin}
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
+            autoComplete="one-time-code"
             required
           />
 
@@ -78,7 +141,7 @@ export const LoginPage = () => {
             className="primary login-submit-button"
             data-testid="login-submit"
             type="submit"
-            disabled={submitting}
+            disabled={!canSubmit}
           >
             {submitting ? "Signing in..." : "Sign in"}
           </button>
