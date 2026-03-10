@@ -108,8 +108,9 @@ const loginViaUi = async (page, credentials, nextPath = "/pos", options = {}) =>
     await page.goto(`${frontendBaseUrl}/login?next=${encodeURIComponent(nextPath)}`);
     await page.click(`[data-testid="login-user-${credentials.user.id}"]`);
     await page.fill('[data-testid="login-pin"]', credentials.pin);
-    await page.click('[data-testid="login-submit"]');
-    await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), {
+      timeout: 6000,
+    });
     return;
   }
   await page.goto(`${backendBaseUrl}/login?next=${encodeURIComponent(nextPath)}`);
