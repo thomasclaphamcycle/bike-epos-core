@@ -52,15 +52,7 @@ export const LoginPage = () => {
           </div>
 
           <div className="login-form-header">
-            <p className="login-form-eyebrow">Staff sign in</p>
-            <h2>Welcome back</h2>
-            <p className="muted-text">
-              Sign in with your CorePOS username or email to continue with retail and workshop operations.
-            </p>
-          </div>
-
-          <div className="login-demo-chip" aria-label="Demo credentials hint">
-            Demo users: admin / manager / staff
+            <p className="muted-text">Sign in to continue.</p>
           </div>
 
           <label htmlFor="identifier">Username or email</label>
