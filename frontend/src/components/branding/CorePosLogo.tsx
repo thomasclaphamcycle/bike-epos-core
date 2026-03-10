@@ -1,3 +1,7 @@
+import corePosLogoDark from "../../assets/branding/corepos-logo-dark.png";
+import corePosLogoHorizontal from "../../assets/branding/corepos-logo-horizontal.png";
+import corePosLogoLight from "../../assets/branding/corepos-logo-light.png";
+
 type CorePosLogoProps = {
   variant?: "full" | "stacked" | "icon";
   size?: number | string;
@@ -5,22 +9,22 @@ type CorePosLogoProps = {
 };
 
 const assetByVariant = {
-  full: "/branding/corepos-logo.svg",
-  stacked: "/branding/corepos-logo-stacked.svg",
-  icon: "/branding/corepos-icon.svg",
+  full: corePosLogoHorizontal,
+  stacked: corePosLogoLight,
+  icon: corePosLogoDark,
 } as const;
 
 const CorePosLogo = ({
   variant = "full",
   size = 32,
   className,
-}: CorePosLogoProps) => (
-  <img
-    src={assetByVariant[variant]}
-    alt="CorePOS"
-    className={className}
-    style={{ height: size, width: "auto" }}
-  />
-);
+}: CorePosLogoProps) => {
+  const style =
+    variant === "stacked"
+      ? { width: size, height: "auto" }
+      : { height: size, width: "auto" };
+
+  return <img src={assetByVariant[variant]} alt="CorePOS" className={className} style={style} />;
+};
 
 export default CorePosLogo;

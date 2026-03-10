@@ -202,7 +202,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <header className="app-header">
           <div className="header-left">
             <Link to="/home" className="header-brand-link" aria-label="CorePOS home">
-              <CorePosLogo variant="icon" size={28} className="header-brand-logo" />
+              <CorePosLogo variant="full" size={34} className="header-brand-logo" />
             </Link>
             <div className="header-context">
               <span className="header-eyebrow">Current Area</span>

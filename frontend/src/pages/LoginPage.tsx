@@ -71,7 +71,7 @@ export const LoginPage = () => {
 
         <form className="login-card" onSubmit={onSubmit}>
           <div className="mb-6 flex justify-center login-logo-wrap">
-            <CorePosLogo variant="stacked" size={72} />
+            <CorePosLogo variant="stacked" size={200} />
           </div>
 
           <div className="login-form-header">

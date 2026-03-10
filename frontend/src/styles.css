@@ -171,8 +171,9 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: auto;
+  min-height: 42px;
+  padding: 6px 10px;
   border-radius: 14px;
   background: rgba(11, 31, 51, 0.06);
   border: 1px solid rgba(11, 31, 51, 0.08);
@@ -180,6 +181,7 @@ textarea {
 
 .header-brand-logo {
   display: block;
+  max-width: min(168px, 28vw);
 }
 
 .header-context {
