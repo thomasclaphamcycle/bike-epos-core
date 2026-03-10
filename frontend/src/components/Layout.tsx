@@ -6,7 +6,7 @@ import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "./branding/CorePosLogo";
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
-  isActive ? "nav-link nav-link-active" : "nav-link";
+  isActive ? "sidebar-link sidebar-link--active" : "sidebar-link";
 
 const envLabel = import.meta.env.MODE || "development";
 
@@ -28,6 +28,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
+  const sidebarNavItems = [{ to: "/pos", label: "POS" }] as const;
   const activeArea = currentPath.startsWith("/management")
     ? "Management"
     : currentPath.startsWith("/workshop")
@@ -54,9 +55,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <section className="sidebar-section">
             <div className="sidebar-link-list">
-              <NavLink to="/pos" end className={navClass}>
-                POS
-              </NavLink>
+              {sidebarNavItems.map((item) => (
+                <NavLink key={item.to} to={item.to} end className={navClass}>
+                  {item.label}
+                </NavLink>
+              ))}
             </div>
           </section>
         </nav>

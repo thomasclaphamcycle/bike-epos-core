@@ -109,7 +109,8 @@ textarea {
 }
 
 .sidebar-nav {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
 }
 
@@ -127,12 +128,9 @@ textarea {
 }
 
 .sidebar-link-list {
-  display: grid;
-  gap: 6px;
-}
-
-.sidebar-link-list-compact {
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .app-shell {
@@ -207,17 +205,27 @@ textarea {
   align-items: center;
 }
 
-.nav-link {
-  color: #dbeaf7;
+.sidebar-link {
+  color: #ffffff;
   text-decoration: none;
-  padding: 8px 10px;
-  border-radius: 8px;
-  display: block;
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  flex: 0 0 auto;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
-.nav-link-active {
-  background: rgba(46, 124, 246, 0.18);
-  color: #ffffff;
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-link--active {
+  background: #ff7a00;
+  color: #041334;
 }
 
 .header-right {
