@@ -102,17 +102,12 @@ textarea {
 
 .sidebar-brand-block {
   display: grid;
-  gap: 6px;
+  gap: 0;
+  margin-bottom: 14px;
 }
 
 .sidebar-brand-logo {
   display: block;
-}
-
-.sidebar-subtitle {
-  font-size: 0.82rem;
-  color: var(--cp-text-light);
-  max-width: 22ch;
 }
 
 .sidebar-nav {

@@ -146,7 +146,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <Link to="/home" className="brand" aria-label="CorePOS home">
             <CorePosLogo variant="full" size={36} className="sidebar-brand-logo" />
           </Link>
-          <span className="sidebar-subtitle">Retail, workshop, stock, and operations</span>
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
