@@ -36,6 +36,18 @@ type BasketResponse = {
   };
 };
 
+type CustomerSearchRow = {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type SaleResponse = {
   sale: {
     id: string;
@@ -43,6 +55,7 @@ type SaleResponse = {
     taxPence: number;
     totalPence: number;
     completedAt: string | null;
+    customer: CustomerSearchRow | null;
   };
   saleItems: Array<{
     id: string;
@@ -82,6 +95,16 @@ export const PosPage = () => {
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [searchRows, setSearchRows] = useState<ProductSearchRow[]>([]);
+  const [customerSearchText, setCustomerSearchText] = useState("");
+  const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
+  const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
@@ -123,6 +146,7 @@ export const PosPage = () => {
   const loadSale = async (id: string) => {
     const payload = await apiGet<SaleResponse>(`/api/sales/${encodeURIComponent(id)}`);
     setSale(payload);
+    setSelectedCustomer(payload.sale.customer ?? null);
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
   };
 
@@ -205,6 +229,118 @@ export const PosPage = () => {
     };
   }, [debouncedSearch, error]);
 
+  useEffect(() => {
+    if (!debouncedCustomerSearch.trim()) {
+      setCustomerResults([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const searchCustomers = async () => {
+      setCustomerLoading(true);
+      try {
+        const payload = await apiGet<{ customers: CustomerSearchRow[] }>(
+          `/api/customers/search?q=${encodeURIComponent(debouncedCustomerSearch.trim())}&take=12`,
+        );
+        if (!cancelled) {
+          setCustomerResults(payload.customers || []);
+        }
+      } catch (searchError) {
+        if (!cancelled) {
+          const message = searchError instanceof Error ? searchError.message : "Customer search failed";
+          error(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setCustomerLoading(false);
+        }
+      }
+    };
+
+    void searchCustomers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedCustomerSearch, error]);
+
+  const attachCustomerToSale = async (targetSaleId: string, customerId: string | null) => {
+    const payload = await apiPatch<SaleResponse>(`/api/sales/${encodeURIComponent(targetSaleId)}/customer`, {
+      customerId,
+    });
+    setSale(payload);
+    setSelectedCustomer(payload.sale.customer ?? null);
+    localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
+    return payload;
+  };
+
+  const selectCustomer = async (customer: CustomerSearchRow) => {
+    setSelectedCustomer(customer);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setShowCreateCustomer(false);
+
+    if (sale?.sale.id) {
+      try {
+        await attachCustomerToSale(sale.sale.id, customer.id);
+        success("Customer attached to sale");
+      } catch (attachError) {
+        const message = attachError instanceof Error ? attachError.message : "Failed to attach customer";
+        error(message);
+      }
+      return;
+    }
+
+    success("Customer selected. It will attach after checkout.");
+  };
+
+  const clearSelectedCustomer = async () => {
+    if (sale?.sale.id) {
+      try {
+        await attachCustomerToSale(sale.sale.id, null);
+        success("Customer removed from sale");
+      } catch (detachError) {
+        const message = detachError instanceof Error ? detachError.message : "Failed to remove customer";
+        error(message);
+        return;
+      }
+    } else {
+      setSelectedCustomer(null);
+    }
+
+    setSelectedCustomer(null);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setShowCreateCustomer(false);
+  };
+
+  const createCustomerAndSelect = async () => {
+    if (!newCustomerName.trim()) {
+      error("Customer name is required.");
+      return;
+    }
+
+    setCreatingCustomer(true);
+    try {
+      const created = await apiPost<CustomerSearchRow>("/api/customers", {
+        name: newCustomerName.trim(),
+        email: newCustomerEmail.trim() || undefined,
+        phone: newCustomerPhone.trim() || undefined,
+      });
+
+      setNewCustomerName("");
+      setNewCustomerEmail("");
+      setNewCustomerPhone("");
+      await selectCustomer(created);
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : "Failed to create customer";
+      error(message);
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
+
   const addItem = async (variantId: string) => {
     if (!basketId) {
       error("No active basket.");
@@ -275,8 +411,13 @@ export const PosPage = () => {
       );
       const nextSaleId = payload.sale.id;
       syncQuery({ basketId, saleId: nextSaleId });
-      await loadSale(nextSaleId);
-      success("Sale created.");
+      if (selectedCustomer?.id) {
+        await attachCustomerToSale(nextSaleId, selectedCustomer.id);
+        success("Sale created and customer attached.");
+      } else {
+        await loadSale(nextSaleId);
+        success("Sale created.");
+      }
     } catch (checkoutError) {
       const message = checkoutError instanceof Error ? checkoutError.message : "Checkout failed";
       error(message);
@@ -346,6 +487,126 @@ export const PosPage = () => {
         </p>
 
         {loading ? <p>Loading...</p> : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Customer</h2>
+            <p className="muted-text">
+              Search and attach a customer to the current sale. If a sale has not been started
+              yet, the selected customer will attach after checkout.
+            </p>
+          </div>
+          {selectedCustomer ? (
+            <button type="button" onClick={() => void clearSelectedCustomer()}>
+              {sale?.sale.customer ? "Remove Customer" : "Clear Selection"}
+            </button>
+          ) : null}
+        </div>
+
+        {selectedCustomer ? (
+          <div className="selected-customer-panel">
+            <div>
+              <div className="table-primary">{selectedCustomer.name}</div>
+              <div className="muted-text">
+                {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
+              </div>
+            </div>
+            <div className="customer-status-chip">
+              {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
+            </div>
+          </div>
+        ) : (
+          <p className="muted-text">No customer selected.</p>
+        )}
+
+        <div className="customer-search-panel">
+          <label className="grow">
+            Search customers
+            <input
+              value={customerSearchText}
+              onChange={(event) => setCustomerSearchText(event.target.value)}
+              placeholder="name, phone, email"
+            />
+          </label>
+          <button type="button" onClick={() => setShowCreateCustomer((value) => !value)}>
+            {showCreateCustomer ? "Hide Quick Create" : "Quick Create Customer"}
+          </button>
+        </div>
+
+        {customerLoading ? <p className="muted-text">Searching customers...</p> : null}
+
+        {customerSearchText.trim() ? (
+          <div className="table-wrap" style={{ marginTop: "10px" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {customerResults.length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>No customers found.</td>
+                  </tr>
+                ) : (
+                  customerResults.map((customer) => (
+                    <tr key={customer.id}>
+                      <td>{customer.name}</td>
+                      <td>{customer.email || "-"}</td>
+                      <td>{customer.phone || "-"}</td>
+                      <td>
+                        <button type="button" onClick={() => void selectCustomer(customer)}>
+                          {sale ? "Attach" : "Select"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {showCreateCustomer ? (
+          <div className="quick-create-panel">
+            <div className="quick-create-grid">
+              <label>
+                Name
+                <input
+                  value={newCustomerName}
+                  onChange={(event) => setNewCustomerName(event.target.value)}
+                  placeholder="Customer name"
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  value={newCustomerEmail}
+                  onChange={(event) => setNewCustomerEmail(event.target.value)}
+                  placeholder="name@example.com"
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={newCustomerPhone}
+                  onChange={(event) => setNewCustomerPhone(event.target.value)}
+                  placeholder="Phone number"
+                />
+              </label>
+            </div>
+            <div className="actions-inline">
+              <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
+                {creatingCustomer ? "Creating..." : "Create and Select"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="card">
