@@ -221,6 +221,7 @@ textarea {
 
 .sidebar-link:hover {
   background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 
 .sidebar-link--active {
