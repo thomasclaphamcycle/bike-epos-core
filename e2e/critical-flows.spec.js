@@ -1,6 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const {
   apiJson,
+  apiJsonWithHeaderBypass,
   ensureUserViaAdminBypass,
   loginViaUi,
   seedCatalogVariant,
@@ -124,6 +125,90 @@ test("Login then POS add to basket, checkout cash, and open receipt page", async
   await page.goto(`/r/${encodeURIComponent(receiptNumber)}`);
   await expect(page.locator("body")).toContainText(receiptNumber);
   await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
+});
+
+test("React POS customer search, attach, change, and checkout preserves final customer linkage", async ({
+  page,
+  request,
+}) => {
+  const reactFrontendUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-customer",
+  });
+  const seeded = await seedCatalogVariant(request, { prefix: "react-pos-customer" });
+  const token = uniqueToken("react-pos-customer");
+  const firstCustomer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: `React POS First ${token}`,
+      email: `react-pos-first-${token}@example.com`,
+      phone: "07111111111",
+    },
+  });
+  const secondCustomer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: `React POS Second ${token}`,
+      email: `react-pos-second-${token}@example.com`,
+      phone: "07222222222",
+    },
+  });
+
+  await page.context().clearCookies();
+  await page.goto(`${reactFrontendUrl}/login`);
+  const loginStatus = await page.evaluate(
+    async ({ email, password }) => {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = await response.json().catch(() => null);
+      return { ok: response.ok, status: response.status, payload };
+    },
+    { email: credentials.email, password: credentials.password },
+  );
+  expect(loginStatus.ok, JSON.stringify(loginStatus)).toBe(true);
+
+  await page.goto(`${reactFrontendUrl}/pos`);
+  await expect(page.getByRole("heading", { name: "POS" })).toBeVisible();
+
+  await page.getByTestId("pos-customer-search").fill(firstCustomer.name);
+  await expect(page.getByTestId(`pos-customer-select-${firstCustomer.id}`)).toBeVisible();
+  await page.getByTestId(`pos-customer-select-${firstCustomer.id}`).click();
+  await expect(page.getByTestId("pos-selected-customer")).toContainText(firstCustomer.name);
+  await expect(page.getByTestId("pos-selected-customer")).toContainText("Selected for checkout");
+
+  await page.getByTestId("pos-product-search").fill(seeded.sku);
+  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to sale");
+
+  const saleIdAfterCheckout = new URL(page.url()).searchParams.get("saleId");
+  expect(saleIdAfterCheckout).toBeTruthy();
+
+  await page.getByTestId("pos-customer-clear").click();
+  await expect(page.getByText("No customer selected.")).toBeVisible();
+
+  await page.getByTestId("pos-customer-search").fill(secondCustomer.email);
+  await expect(page.getByTestId(`pos-customer-select-${secondCustomer.id}`)).toBeVisible();
+  await page.getByTestId(`pos-customer-select-${secondCustomer.id}`).click();
+  await expect(page.getByTestId("pos-selected-customer")).toContainText(secondCustomer.name);
+  await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to sale");
+
+  await page.getByTestId("pos-complete-sale").click();
+  await expect(page.getByText("Sale complete.")).toBeVisible();
+
+  const completedSale = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/sales/${encodeURIComponent(saleIdAfterCheckout)}`,
+    "MANAGER",
+  );
+  expect(completedSale.sale.customer?.id).toBe(secondCustomer.id);
+  expect(completedSale.sale.customer?.name).toBe(secondCustomer.name);
 });
 
 test("POS tender checkout supports split tenders and cash overpay change due", async ({

@@ -476,6 +476,7 @@ export const PosPage = () => {
             <button
               type="button"
               className="primary"
+              data-testid="pos-checkout-basket"
               onClick={checkoutBasket}
               disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
             >
@@ -504,14 +505,18 @@ export const PosPage = () => {
             </p>
           </div>
           {selectedCustomer ? (
-            <button type="button" onClick={() => void clearSelectedCustomer()}>
+            <button
+              type="button"
+              data-testid="pos-customer-clear"
+              onClick={() => void clearSelectedCustomer()}
+            >
               {sale?.sale.customer ? "Remove Customer" : "Clear Selection"}
             </button>
           ) : null}
         </div>
 
         {selectedCustomer ? (
-          <div className="selected-customer-panel">
+          <div className="selected-customer-panel" data-testid="pos-selected-customer">
             <div>
               <div className="table-primary">{selectedCustomer.name}</div>
               <div className="muted-text">
@@ -530,6 +535,7 @@ export const PosPage = () => {
           <label className="grow">
             Search customers
             <input
+              data-testid="pos-customer-search"
               value={customerSearchText}
               onChange={(event) => setCustomerSearchText(event.target.value)}
               placeholder="name, phone, email"
@@ -565,7 +571,11 @@ export const PosPage = () => {
                       <td>{customer.email || "-"}</td>
                       <td>{customer.phone || "-"}</td>
                       <td>
-                        <button type="button" onClick={() => void selectCustomer(customer)}>
+                        <button
+                          type="button"
+                          data-testid={`pos-customer-select-${customer.id}`}
+                          onClick={() => void selectCustomer(customer)}
+                        >
                           {sale ? "Attach" : "Select"}
                         </button>
                       </td>
@@ -620,6 +630,7 @@ export const PosPage = () => {
           Search / Barcode
           <input
             ref={searchInputRef}
+            data-testid="pos-product-search"
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="sku, barcode, name"
@@ -650,7 +661,12 @@ export const PosPage = () => {
                     <td>{formatMoney(row.pricePence)}</td>
                     <td>{row.onHandQty}</td>
                     <td>
-                      <button type="button" onClick={() => void addItem(row.id)} disabled={!basketId || Boolean(saleId)}>
+                      <button
+                        type="button"
+                        data-testid={`pos-product-add-${row.id}`}
+                        onClick={() => void addItem(row.id)}
+                        disabled={!basketId || Boolean(saleId)}
+                      >
                         Add
                       </button>
                     </td>
@@ -718,7 +734,13 @@ export const PosPage = () => {
           </p>
 
           <div className="actions-inline">
-            <button type="button" className="primary" onClick={completeSale} disabled={completing}>
+            <button
+              type="button"
+              className="primary"
+              data-testid="pos-complete-sale"
+              onClick={completeSale}
+              disabled={completing}
+            >
               {completing ? "Completing..." : "Complete Sale"}
             </button>
           </div>
