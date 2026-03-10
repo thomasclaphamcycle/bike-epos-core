@@ -17,6 +17,11 @@ Important repo-state caveat:
 - the current `dev-next` branch is a working local line, but it is not the single fully consolidated ancestry for every post-`M43` milestone commit
 - when assessing milestone state, inspect repo history and active remote branches, not just the current working tree
 
+Current delivery mode:
+
+- roadmap feature buildout is complete through `M135`
+- current work should default to stabilization, release-readiness, verification, and operational polish unless a new post-roadmap batch is explicitly defined
+
 ## Source Of Truth Order
 
 When repo notes conflict, trust sources in this order:
@@ -221,6 +226,12 @@ Minimum expectations depend on the surface changed:
 - Schema change: `npx prisma generate`, `npx prisma migrate dev`, seed validation
 
 Current baseline smoke runner: `scripts/run_smoke_suite.js`
+
+Smoke runner expectations:
+
+- smoke tests should run against their own test-mode server and should not silently reuse a live local dev server
+- default smoke base URL is `http://localhost:3100` unless explicitly overridden
+- if an existing server must be reused intentionally, set `ALLOW_EXISTING_SERVER=1`
 
 Current baseline smoke steps:
 

@@ -4,7 +4,15 @@
 
 CorePOS is a bike-shop staff platform spanning EPOS, workshop operations, stock control, receipts, refunds, till cash-up, reporting, and admin/auth workflows. The repo also contains a React frontend for key staff journeys while retaining server-rendered pages and printable HTML flows.
 
-This file now reflects the exact repo-wide milestone ledger from `M1` to `M78`, not just the current `dev-next` working tree.
+This file tracks:
+
+- the exact historically evidenced milestone ledger through `M78`
+- the current `dev-next` working line through roadmap completion at `M135`
+
+Roadmap status:
+
+- the implemented roadmap on the current working line now runs through `M135`
+- the project is now in stabilization and release-readiness mode rather than roadmap expansion mode
 
 ## Evidence Legend
 
@@ -15,6 +23,7 @@ This file now reflects the exact repo-wide milestone ledger from `M1` to `M78`, 
 
 - Current local-working checkpoint: `v1.2-demo-running` / `stable-demo` / `c1fbf7c`
 - Repo-wide deploy/demo checkpoint visible in remote history: `v1.2-demo-ready` / `5e8fa54`
+- Current roadmap-complete checkpoint on `dev-next`: `v3.0-roadmap-complete` / `8c80fb1`
 
 ## Branch Reality
 
@@ -23,7 +32,7 @@ The repo has diverged milestone lines:
 - `dev-next`
   - current local working line
   - confirmed local dev setup, React app, demo seed, and working migrations
-  - does not contain every later milestone commit as direct ancestry
+  - current roadmap-complete working line through `M135`
 - `origin/main`
   - confirmed merged line through `M69`, `M70` to `M73`, and `M76` to `M78`
 - `origin/react-ui`
@@ -36,7 +45,8 @@ The repo has diverged milestone lines:
 Implication:
 
 - the repo history has confirmed milestone evidence through `M78`
-- the current `dev-next` branch is not yet the single consolidated branch containing every one of those milestone commits
+- the current `dev-next` branch continues the implemented product line through `M135`
+- earlier milestone ancestry is still fragmented, so historical provenance before the later roadmap-complete working line is not a single clean branch
 
 ## Exact Milestone Ledger
 

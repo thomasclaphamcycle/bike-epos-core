@@ -7,8 +7,11 @@
   - tag `v1.2-demo-running`
   - branch `stable-demo`
   - commit `c1fbf7c`
-- Repo-wide milestone history reaches `M78`
-- Current branch does not yet consolidate all post-`M43` milestone commits
+- Historically evidenced milestone history reaches `M78`
+- The current working line implements the roadmap through `M135`
+- Earlier branch ancestry is still fragmented, but the present branch state is roadmap-complete and in stabilization mode
+- Roadmap implementation on the current working line is complete through `M135`
+- Current focus is stabilization, verification, release readiness, and operational polish
 
 ## Confirmed Done
 
@@ -84,11 +87,12 @@
 - `M70` to `M73`
 - `M76` to `M78`
 
-These milestones are confirmed in branch history and/or remote refs, even where `dev-next` has not absorbed them as a single linear branch.
+These milestones are confirmed in branch history and/or remote refs. The current `dev-next` line now carries the later roadmap continuation through `M135`, but the long-term ancestry remains historically fragmented.
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M135`
+- no new feature milestone is active
+- current phase: stabilization and release readiness
 
 ## Next Milestones Queue
 
@@ -98,9 +102,9 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 Highest priority:
 
-1. define the next post-`M135` milestone batch explicitly before implementation work starts
-2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
-3. continue regression coverage in parallel
+1. keep the branch buildable and smoke-stable
+2. fix release-readiness defects and consistency issues with small, high-confidence changes
+3. improve regression coverage where current gaps block confident verification
 4. continue repo hygiene and branch consolidation in parallel
 
 ## Missing Milestone Reconciliation
