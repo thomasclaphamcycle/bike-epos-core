@@ -144,7 +144,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <aside className="app-sidebar">
         <div className="sidebar-brand-block">
           <Link to="/home" className="brand" aria-label="CorePOS home">
-            <CorePosLogo variant="full" size={40} className="sidebar-brand-logo" />
+            <CorePosLogo variant="full" size={52} className="sidebar-brand-logo" />
           </Link>
         </div>
 
