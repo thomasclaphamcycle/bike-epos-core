@@ -43,7 +43,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/refunds" className={navClass}>Refunds</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/reminders" className={navClass}>Reminders</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/communications" className={navClass}>Comms Queue</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/health" className={navClass}>Ops Health</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/warranty" className={navClass}>Warranty</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/supplier-returns" className={navClass}>Supplier Returns</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/stock-exceptions" className={navClass}>Stock Exceptions</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/transfers" className={navClass}>Transfers</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/sales" className={navClass}>Sales</NavLink> : null}
@@ -51,6 +53,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/workshop-ageing" className={navClass}>Workshop Ageing</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/calendar" className={navClass}>Calendar</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/products" className={navClass}>Products</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/pricing" className={navClass}>Pricing</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/customers" className={navClass}>Customer Insights</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/inventory" className={navClass}>Inventory Intel</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/suppliers" className={navClass}>Supplier Perf</NavLink> : null}

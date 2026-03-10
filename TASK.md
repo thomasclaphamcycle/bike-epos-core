@@ -64,6 +64,9 @@
 - `M121` supplier receiving workspace is implemented
 - `M122` product data completion queue is implemented
 - `M123` admin audit / permissions review is implemented
+- `M124` pricing review / margin exceptions is implemented
+- `M125` returns-to-supplier queue is implemented
+- `M126` ops health / system readiness dashboard is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -76,17 +79,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M123`
+- no new active milestone is queued yet after `M126`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M123`
+- not yet defined in the canonical plan after `M126`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M123` milestone batch explicitly before implementation work starts
+1. define the next post-`M126` milestone batch explicitly before implementation work starts
 2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
@@ -228,5 +231,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M121`.
 - The current working line now also includes `M122`.
 - The current working line now also includes `M123`.
-- No post-`M123` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M124`.
+- The current working line now also includes `M125`.
+- The current working line now also includes `M126`.
+- No post-`M126` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

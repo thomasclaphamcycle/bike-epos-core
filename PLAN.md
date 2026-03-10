@@ -1503,6 +1503,151 @@ Notes:
 - stays frontend-only by reusing the existing workshop dashboard payload
 - labels proxy-based stage ageing honestly rather than inventing unsupported SLA timestamps
 
+## Next Development Phase - Receiving Governance And Operational Readiness
+
+Current state:
+
+- the current working line now includes:
+  - `M121` supplier receiving workspace
+  - `M122` product data completion queue
+  - `M123` admin audit / permissions review
+  - `M124` pricing review / margin exceptions
+  - `M125` returns-to-supplier queue
+  - `M126` ops health / system readiness dashboard
+- the current working line now exposes receiving triage, master-data cleanup, admin review, pricing exception visibility, supplier return attention, and operational readiness oversight
+- no post-`M126` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M121` - Supplier Receiving Workspace
+
+Goal:
+
+- add a practical receiving workspace for supplier deliveries
+
+Implemented scope on the current working line:
+
+- staff-facing route `/purchasing/receiving`
+- grouped receiving workspace sections for:
+  - ready to receive
+  - partially received
+  - overdue awaiting delivery
+- quick drill-down into existing PO detail and receiving flows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the current purchase-order list endpoint
+- keeps direct receiving actions inside existing PO detail rather than replacing M81 purchasing flows
+
+#### `M122` - Product Data Completion Queue
+
+Goal:
+
+- add a manager-facing queue for products and variants with incomplete sell/purchase data
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/product-data`
+- grouped queues for:
+  - missing barcode
+  - missing cost
+  - missing retail price
+  - weak variant naming
+- links into existing inventory and purchasing workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing variant listing endpoint
+- intentionally omits supplier-linkage checks because the current branch does not model supplier linkage directly on variants
+
+#### `M123` - Admin Audit / Permissions Review
+
+Goal:
+
+- add an admin-facing review page for roles, sensitive areas, and recent admin activity
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/admin-review`
+- user and role overview
+- sensitive area checklist linked to current privileged routes
+- recent admin activity feed built from current audit events
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing admin-user and audit endpoints
+- complements rather than replaces the existing admin staff-management page
+
+#### `M124` - Pricing Review / Margin Exceptions
+
+Goal:
+
+- add a manager-facing pricing and margin review page for operational exceptions
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/pricing`
+- grouped sections for:
+  - missing retail price
+  - retail at or below cost
+  - very low apparent margin
+- visible cost, retail, and simple margin estimate
+- links into existing inventory detail and product-data workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing variant listing endpoint
+- keeps margin logic simple and explicit rather than inventing promotion or tax pricing engines
+
+#### `M125` - Returns-to-Supplier Queue
+
+Goal:
+
+- add an internal queue for supplier-facing returns and send-backs
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/supplier-returns`
+- grouped queue sections for:
+  - warranty return candidates
+  - warranty follow-up
+  - supplier receiving problems
+- local reviewed markers and drill-down links into warranty and purchasing workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing warranty and purchase-order data
+- intentionally remains a visibility tool rather than a full supplier RMA workflow
+
+#### `M126` - Ops Health / System Readiness Dashboard
+
+Goal:
+
+- add a manager/admin-facing operational readiness dashboard
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/health`
+- grouped readiness cards and tables for:
+  - open tills
+  - overdue purchase orders
+  - waiting-for-approval jobs
+  - waiting-for-parts jobs
+  - stock exception counts
+  - data-quality attention counts
+  - recent critical activity
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing current till, purchasing, workshop, stock, variant, and audit endpoints
+- intentionally focuses on shop-operability signals rather than infrastructure monitoring
+
 ## Next Development Phase - Receiving, Data Quality, And Governance Review
 
 Current state:

@@ -85,8 +85,11 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
   if (isManagerPlus(role)) {
     base.push(
       { key: "cmd-management", group: "Shortcut", title: "Management dashboard", subtitle: "Manager home", path: "/management" },
+      { key: "cmd-health", group: "Shortcut", title: "Ops health", subtitle: "Operational readiness view", path: "/management/health" },
       { key: "cmd-alerts", group: "Shortcut", title: "Alerts centre", subtitle: "Operational alerts", path: "/management/alerts" },
       { key: "cmd-product-data", group: "Shortcut", title: "Product data queue", subtitle: "Variants needing data cleanup", path: "/management/product-data" },
+      { key: "cmd-pricing", group: "Shortcut", title: "Pricing review", subtitle: "Margin and pricing exceptions", path: "/management/pricing" },
+      { key: "cmd-supplier-returns", group: "Shortcut", title: "Supplier returns", subtitle: "Warranty and receiving send-backs", path: "/management/supplier-returns" },
       { key: "cmd-purchasing", group: "Shortcut", title: "PO action centre", subtitle: "Open purchase order priorities", path: "/management/purchasing" },
       { key: "cmd-transfers", group: "Shortcut", title: "Transfer queue", subtitle: "Location imbalance and replenishment", path: "/management/transfers" },
       { key: "cmd-ageing", group: "Shortcut", title: "Workshop ageing", subtitle: "Open-job SLA attention", path: "/management/workshop-ageing" },

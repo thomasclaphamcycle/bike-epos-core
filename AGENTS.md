@@ -65,15 +65,18 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/workshop`
   - `/management/calendar`
   - `/management/products`
+  - `/management/pricing`
   - `/management/customers`
   - `/management/inventory`
   - `/management/suppliers`
+  - `/management/supplier-returns`
   - `/management/catalogue`
   - `/management/product-data`
   - `/management/reordering`
   - `/management/transfers`
   - `/management/capacity`
   - `/management/workshop-ageing`
+  - `/management/health`
   - `/management/purchasing`
   - `/management/views`
   - `/management/exports`
