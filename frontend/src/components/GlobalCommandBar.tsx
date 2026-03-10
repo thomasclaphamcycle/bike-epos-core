@@ -97,12 +97,14 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
       { key: "cmd-staff-performance", group: "Shortcut", title: "Staff performance", subtitle: "Workshop throughput and visible sales by staff", path: "/management/staff-performance" },
       { key: "cmd-transfers", group: "Shortcut", title: "Transfer queue", subtitle: "Location imbalance and replenishment", path: "/management/transfers" },
       { key: "cmd-ageing", group: "Shortcut", title: "Workshop ageing", subtitle: "Open-job SLA attention", path: "/management/workshop-ageing" },
+      { key: "cmd-docs", group: "Shortcut", title: "Documentation hub", subtitle: "Operational guidance and help centre", path: "/management/docs" },
     );
   }
 
   if (role === "ADMIN") {
     base.push(
       { key: "cmd-admin-review", group: "Shortcut", title: "Admin review", subtitle: "Roles and admin activity", path: "/management/admin-review" },
+      { key: "cmd-onboarding", group: "Shortcut", title: "First run onboarding", subtitle: "Operational setup checklist for new admins", path: "/management/onboarding" },
       { key: "cmd-backups", group: "Shortcut", title: "Backup toolkit", subtitle: "Exports and recovery guidance", path: "/management/backups" },
       { key: "cmd-settings", group: "Shortcut", title: "System settings", subtitle: "Current defaults and admin control points", path: "/management/settings" },
     );
@@ -256,7 +258,7 @@ export const GlobalCommandBar = () => {
   return (
     <>
       <button type="button" className="command-trigger" onClick={() => setOpen(true)}>
-        Search
+        Command Bar
         <span className="command-hint">Ctrl/Cmd+K</span>
       </button>
 
@@ -266,7 +268,7 @@ export const GlobalCommandBar = () => {
             <div className="card-header-row">
               <div>
                 <h2>Command Bar</h2>
-                <p className="muted-text">Jump to key records and actions using current search surfaces.</p>
+                <p className="muted-text">Jump to key records, admin tools, and operational shortcuts using the current search surfaces.</p>
               </div>
               <button type="button" onClick={() => setOpen(false)}>Close</button>
             </div>
@@ -276,7 +278,7 @@ export const GlobalCommandBar = () => {
               autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search customers, jobs, products, suppliers, purchase orders"
+              placeholder="Search customers, jobs, products, suppliers, purchase orders, and shortcuts"
             />
 
             <div className="command-results">

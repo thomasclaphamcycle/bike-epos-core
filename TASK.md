@@ -73,6 +73,9 @@
 - `M130` data integrity checks are implemented
 - `M131` backup / export toolkit is implemented
 - `M132` system configuration panel is implemented
+- `M133` onboarding / first run setup is implemented
+- `M134` UI polish / navigation consistency pass is implemented
+- `M135` admin / operations documentation hub is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -85,17 +88,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M132`
+- no new active milestone is queued yet after `M135`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M132`
+- not yet defined in the canonical plan after `M135`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M132` milestone batch explicitly before implementation work starts
+1. define the next post-`M135` milestone batch explicitly before implementation work starts
 2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
@@ -246,5 +249,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M130`.
 - The current working line now also includes `M131`.
 - The current working line now also includes `M132`.
-- No post-`M132` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M133`.
+- The current working line now also includes `M134`.
+- The current working line now also includes `M135`.
+- No post-`M135` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.

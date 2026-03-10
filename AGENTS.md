@@ -87,7 +87,9 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/backups`
   - `/management/staff`
   - `/management/admin-review`
+  - `/management/onboarding`
   - `/management/settings`
+  - `/management/docs`
   - `/pos`
   - `/workshop`
   - `/workshop/check-in`

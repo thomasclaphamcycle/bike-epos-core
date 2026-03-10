@@ -1589,8 +1589,15 @@ Current state:
   - `M127` daily trade close pack
   - `M128` outstanding liabilities / deposits review
   - `M129` staff activity & throughput views
+- the current working line now also includes:
+  - `M130` data integrity checks
+  - `M131` backup / export toolkit
+  - `M132` system configuration panel
+  - `M133` onboarding / first run setup
+  - `M134` UI polish / navigation consistency pass
+  - `M135` admin / operations documentation hub
 - the current working line now exposes manager-facing daily trade close, liabilities visibility, and staff throughput oversight
-- no post-`M129` milestone batch is yet defined in the canonical plan
+- no post-`M135` milestone batch is yet defined in the canonical plan
 
 ### Next Milestones
 
@@ -1723,6 +1730,72 @@ Notes:
 - implemented on the current working line via code evidence
 - stays frontend-only by surfacing the configuration and control points that already exist on this branch
 - intentionally avoids inventing a broad persisted settings model where one does not yet exist
+
+#### `M133` - Onboarding / First Run Setup
+
+Goal:
+
+- add a practical first-run and onboarding flow so a new admin can understand how to get the system operational
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/onboarding`
+- structured checklist for:
+  - staff and users
+  - suppliers
+  - products and pricing
+  - inventory readiness
+  - workshop readiness
+  - till and cash readiness
+- quick links into the existing operational pages needed to complete setup
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing current users, suppliers, variants, inventory, workshop, and till signals
+- intentionally remains a guidance and checklist surface, not a provisioning wizard
+
+#### `M134` - UI Polish / Navigation Consistency Pass
+
+Goal:
+
+- improve UI consistency and polish across the app without changing the underlying architecture
+
+Implemented scope on the current working line:
+
+- management and operational navigation labels made more consistent and explicit
+- command bar wording aligned with the broader shell navigation
+- onboarding and documentation routes integrated into the existing shell cleanly
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only and intentionally avoids a broad UI refactor
+- focuses on navigation clarity and consistency rather than redesigning established workflows
+
+#### `M135` - Admin / Operations Documentation Hub
+
+Goal:
+
+- add an in-app documentation hub linking admins and managers to operational guidance already created across the system
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/docs`
+- categorized internal help hub for:
+  - retail and POS operations
+  - workshop operations
+  - purchasing and receiving
+  - reporting and exports
+  - backup, reset, and recovery guidance
+  - admin and governance tools
+- curated notes and quick links to the relevant in-app pages
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by summarizing the real workflows and guidance already present on this branch
+- intentionally acts as a structured internal help centre rather than a documentation engine or CMS
 
 #### `M124` - Pricing Review / Margin Exceptions
 

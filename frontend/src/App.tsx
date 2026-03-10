@@ -60,6 +60,8 @@ import { StaffPerformancePage } from "./pages/StaffPerformancePage";
 import { DataIntegrityPage } from "./pages/DataIntegrityPage";
 import { BackupToolkitPage } from "./pages/BackupToolkitPage";
 import { SystemSettingsPage } from "./pages/SystemSettingsPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
+import { DocumentationHubPage } from "./pages/DocumentationHubPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -301,6 +303,14 @@ const AuthedApp = () => (
           )}
         />
         <Route
+          path="/management/onboarding"
+          element={(
+            <ProtectedRoute minimumRole="ADMIN">
+              <OnboardingPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
           path="/management/backups"
           element={(
             <ProtectedRoute minimumRole="ADMIN">
@@ -313,6 +323,14 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="ADMIN">
               <SystemSettingsPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/docs"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <DocumentationHubPage />
             </ProtectedRoute>
           )}
         />
