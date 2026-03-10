@@ -13,6 +13,7 @@
 - Current working mode is trial-use readiness, not milestone expansion
 - Roadmap implementation on the current working line is complete through `M135`
 - Current focus is stabilization, verification, release readiness, and operational polish
+- Current branch purpose: Saledock-aligned UX refinement focused on navigation clarity, grouping, discoverability, and lower cognitive load
 
 ## Confirmed Done
 
@@ -93,7 +94,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 ## Current Milestone
 
 - no new feature milestone is active
-- current phase: stabilization, release readiness, and real-world trial preparation
+- current phase: UX refinement, release readiness, and real-world trial preparation
 
 ## Next Milestones Queue
 
@@ -104,7 +105,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 Highest priority:
 
 1. keep the branch buildable and smoke-stable
-2. fix trial-use friction and consistency issues with small, high-confidence changes
+2. simplify navigation and improve discoverability with small, reversible shell changes
 3. improve regression coverage where current gaps block confident verification
 4. continue repo hygiene and branch consolidation in parallel
 

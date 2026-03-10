@@ -1,8 +1,14 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useMemo } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
 import { toRoleHomeRoute } from "../utils/homeRoute";
+
+type NavEntry = {
+  label: string;
+  to: string;
+};
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? "nav-link nav-link-active" : "nav-link";
@@ -15,9 +21,86 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
   const { error, success } = useToasts();
   const navigate = useNavigate();
+  const location = useLocation();
   const canViewManagement = isManagerPlus(user?.role);
   const canViewStaffAdmin = isAdmin(user?.role);
   const homePath = toRoleHomeRoute(user?.role);
+
+  const primaryNav = useMemo<NavEntry[]>(() => [
+    { label: "Home", to: homePath },
+    { label: "POS", to: "/pos" },
+    { label: "Workshop", to: "/workshop" },
+    { label: "Inventory", to: "/inventory" },
+    { label: "Purchasing", to: "/purchasing" },
+    { label: "Customers", to: "/customers" },
+    { label: "Tasks", to: "/tasks" },
+  ], [homePath]);
+
+  const workshopNav: NavEntry[] = [
+    { label: "Check-In", to: "/workshop/check-in" },
+    { label: "Bookings", to: "/workshop/bookings" },
+    { label: "Collection", to: "/workshop/collection" },
+    { label: "Print Centre", to: "/workshop/print" },
+  ];
+
+  const inventoryNav: NavEntry[] = [
+    { label: "Stock by Location", to: "/inventory/locations" },
+    { label: "Receiving", to: "/purchasing/receiving" },
+    { label: "Suppliers", to: "/suppliers" },
+  ];
+
+  const managementCore: NavEntry[] = [
+    { label: "Overview", to: "/management" },
+    { label: "Alerts", to: "/management/alerts" },
+    { label: "Trade Close", to: "/management/trade-close" },
+    { label: "Operations Summary", to: "/management/summary" },
+    { label: "Ops Health", to: "/management/health" },
+  ];
+
+  const managementReports: NavEntry[] = [
+    { label: "Sales", to: "/management/sales" },
+    { label: "Workshop", to: "/management/workshop" },
+    { label: "Customers", to: "/management/customers" },
+    { label: "Products", to: "/management/products" },
+    { label: "Inventory", to: "/management/inventory" },
+    { label: "Suppliers", to: "/management/suppliers" },
+    { label: "Staff Activity", to: "/management/staff-performance" },
+    { label: "Cash", to: "/management/cash" },
+    { label: "Refunds", to: "/management/refunds" },
+    { label: "Liabilities", to: "/management/liabilities" },
+  ];
+
+  const managementQueues: NavEntry[] = [
+    { label: "Purchase Orders", to: "/management/purchasing" },
+    { label: "Reordering", to: "/management/reordering" },
+    { label: "Transfers", to: "/management/transfers" },
+    { label: "Capacity", to: "/management/capacity" },
+    { label: "Calendar", to: "/management/calendar" },
+    { label: "Workshop Ageing", to: "/management/workshop-ageing" },
+    { label: "Reminders", to: "/management/reminders" },
+    { label: "Communications", to: "/management/communications" },
+    { label: "Warranty", to: "/management/warranty" },
+    { label: "Pricing", to: "/management/pricing" },
+    { label: "Product Data", to: "/management/product-data" },
+    { label: "Catalogue", to: "/management/catalogue" },
+    { label: "Stock Exceptions", to: "/management/stock-exceptions" },
+    { label: "Supplier Returns", to: "/management/supplier-returns" },
+    { label: "Integrity", to: "/management/integrity" },
+  ];
+
+  const managementTools: NavEntry[] = [
+    { label: "Saved Views", to: "/management/views" },
+    { label: "Exports", to: "/management/exports" },
+    { label: "Docs", to: "/management/docs" },
+  ];
+
+  const adminNav: NavEntry[] = [
+    { label: "Staff Admin", to: "/management/staff" },
+    { label: "Admin Review", to: "/management/admin-review" },
+    { label: "Onboarding", to: "/management/onboarding" },
+    { label: "Backups", to: "/management/backups" },
+    { label: "Settings", to: "/management/settings" },
+  ];
 
   const onLogout = async () => {
     try {
@@ -30,94 +113,113 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const renderNavList = (items: NavEntry[], compact = false) => (
+    <div className={compact ? "sidebar-link-list sidebar-link-list-compact" : "sidebar-link-list"}>
+      {items.map((item) => (
+        <NavLink key={item.to} to={item.to} className={navClass}>
+          {item.label}
+        </NavLink>
+      ))}
+    </div>
+  );
+
+  const currentPath = location.pathname;
+  const activeArea = currentPath.startsWith("/management")
+    ? "Management"
+    : currentPath.startsWith("/workshop")
+      ? "Workshop"
+      : currentPath.startsWith("/inventory")
+        ? "Inventory"
+        : currentPath.startsWith("/purchasing") || currentPath.startsWith("/suppliers")
+          ? "Purchasing"
+          : currentPath.startsWith("/customers")
+            ? "Customers"
+            : currentPath.startsWith("/pos")
+              ? "POS"
+              : "Home";
+
   return (
     <div className="layout-root">
-      <header className="app-header">
-        <div className="header-left">
+      <aside className="app-sidebar">
+        <div className="sidebar-brand-block">
           <Link to="/home" className="brand">CorePOS</Link>
-          <nav className="nav-links">
-            <NavLink to={homePath} className={navClass}>Home</NavLink>
-            <NavLink to="/dashboard" className={navClass}>Dashboard</NavLink>
-            {canViewManagement ? <NavLink to="/management" className={navClass}>Management</NavLink> : null}
-            {canViewManagement ? <NavLink to="/management/alerts" className={navClass}>Alerts</NavLink> : null}
-            {canViewManagement ? <NavLink to="/management/summary" className={navClass}>Operations Summary</NavLink> : null}
-            {canViewManagement ? <NavLink to="/management/trade-close" className={navClass}>Trade Close</NavLink> : null}
-            <NavLink to="/pos" className={navClass}>POS</NavLink>
-            <NavLink to="/workshop" className={navClass}>Workshop</NavLink>
-            <NavLink to="/workshop/check-in" className={navClass}>Check-In</NavLink>
-            <NavLink to="/workshop/bookings" className={navClass}>Bookings</NavLink>
-            <NavLink to="/workshop/collection" className={navClass}>Collection</NavLink>
-            <NavLink to="/workshop/print" className={navClass}>Workshop Print</NavLink>
-            <NavLink to="/tasks" className={navClass}>Tasks</NavLink>
-            <NavLink to="/customers" className={navClass}>Customers</NavLink>
-            <NavLink to="/inventory" className={navClass}>Inventory</NavLink>
-            <NavLink to="/inventory/locations" className={navClass}>Inventory Locations</NavLink>
-            <NavLink to="/suppliers" className={navClass}>Suppliers</NavLink>
-            <NavLink to="/purchasing" className={navClass}>Purchasing</NavLink>
-            <NavLink to="/purchasing/receiving" className={navClass}>Receiving</NavLink>
-            {canViewManagement ? (
-              <details className="nav-menu">
-                <summary className="nav-menu-trigger">Management Tools</summary>
-                <div className="nav-menu-list">
-                  <NavLink to="/management/liabilities" className={navClass}>Liabilities</NavLink>
-                  <NavLink to="/management/activity" className={navClass}>Activity</NavLink>
-                  <NavLink to="/management/cash" className={navClass}>Cash</NavLink>
-                  <NavLink to="/management/refunds" className={navClass}>Refunds</NavLink>
-                  <NavLink to="/management/reminders" className={navClass}>Reminders</NavLink>
-                  <NavLink to="/management/communications" className={navClass}>Communications</NavLink>
-                  <NavLink to="/management/health" className={navClass}>Ops Health</NavLink>
-                  <NavLink to="/management/integrity" className={navClass}>Integrity</NavLink>
-                  <NavLink to="/management/warranty" className={navClass}>Warranty</NavLink>
-                  <NavLink to="/management/supplier-returns" className={navClass}>Supplier Returns</NavLink>
-                  <NavLink to="/management/stock-exceptions" className={navClass}>Stock Exceptions</NavLink>
-                  <NavLink to="/management/transfers" className={navClass}>Transfers</NavLink>
-                  <NavLink to="/management/sales" className={navClass}>Sales</NavLink>
-                  <NavLink to="/management/workshop" className={navClass}>Workshop Metrics</NavLink>
-                  <NavLink to="/management/staff-performance" className={navClass}>Staff Throughput</NavLink>
-                  <NavLink to="/management/workshop-ageing" className={navClass}>Workshop Ageing</NavLink>
-                  <NavLink to="/management/calendar" className={navClass}>Calendar</NavLink>
-                  <NavLink to="/management/products" className={navClass}>Products</NavLink>
-                  <NavLink to="/management/pricing" className={navClass}>Pricing</NavLink>
-                  <NavLink to="/management/customers" className={navClass}>Customer Insights</NavLink>
-                  <NavLink to="/management/inventory" className={navClass}>Inventory Velocity</NavLink>
-                  <NavLink to="/management/suppliers" className={navClass}>Supplier Performance</NavLink>
-                  <NavLink to="/management/catalogue" className={navClass}>Catalogue</NavLink>
-                  <NavLink to="/management/product-data" className={navClass}>Product Data</NavLink>
-                  <NavLink to="/management/reordering" className={navClass}>Reordering</NavLink>
-                  <NavLink to="/management/capacity" className={navClass}>Capacity</NavLink>
-                  <NavLink to="/management/purchasing" className={navClass}>PO Action Centre</NavLink>
-                  <NavLink to="/management/views" className={navClass}>Saved Views</NavLink>
-                  <NavLink to="/management/exports" className={navClass}>Exports</NavLink>
-                  <NavLink to="/management/docs" className={navClass}>Docs</NavLink>
-                </div>
-              </details>
-            ) : null}
-            {canViewStaffAdmin ? (
-              <details className="nav-menu">
-                <summary className="nav-menu-trigger">Admin Tools</summary>
-                <div className="nav-menu-list">
-                  <NavLink to="/management/staff" className={navClass}>Staff Admin</NavLink>
-                  <NavLink to="/management/admin-review" className={navClass}>Admin Review</NavLink>
-                  <NavLink to="/management/onboarding" className={navClass}>Onboarding</NavLink>
-                  <NavLink to="/management/backups" className={navClass}>Backups</NavLink>
-                  <NavLink to="/management/settings" className={navClass}>Settings</NavLink>
-                </div>
-              </details>
-            ) : null}
-          </nav>
+          <span className="sidebar-subtitle">Retail, workshop, stock, and operations</span>
         </div>
-        <div className="header-right">
-          <GlobalCommandBar />
-          <span className="user-chip">{user?.username} ({user?.role})</span>
-          <button type="button" onClick={onLogout}>Logout</button>
-        </div>
-      </header>
 
-      <main className="app-main">{children}</main>
+        <nav className="sidebar-nav" aria-label="Primary navigation">
+          <section className="sidebar-section">
+            <span className="sidebar-section-label">Daily Work</span>
+            {renderNavList(primaryNav)}
+          </section>
 
-      <footer className="app-footer">
-        <span>Environment: {envLabel}</span>
-      </footer>
+          <section className="sidebar-section">
+            <span className="sidebar-section-label">Workshop</span>
+            {renderNavList(workshopNav, true)}
+          </section>
+
+          <section className="sidebar-section">
+            <span className="sidebar-section-label">Inventory & Buying</span>
+            {renderNavList(inventoryNav, true)}
+          </section>
+
+          {canViewManagement ? (
+            <>
+              <section className="sidebar-section">
+                <span className="sidebar-section-label">Management</span>
+                {renderNavList(managementCore)}
+              </section>
+
+              <section className="sidebar-section">
+                <span className="sidebar-section-label">Reports</span>
+                {renderNavList(managementReports, true)}
+              </section>
+
+              <section className="sidebar-section">
+                <span className="sidebar-section-label">Queues & Control</span>
+                {renderNavList(managementQueues, true)}
+              </section>
+
+              <section className="sidebar-section">
+                <span className="sidebar-section-label">Management Tools</span>
+                {renderNavList(managementTools, true)}
+              </section>
+            </>
+          ) : null}
+
+          {canViewStaffAdmin ? (
+            <section className="sidebar-section">
+              <span className="sidebar-section-label">Admin</span>
+              {renderNavList(adminNav, true)}
+            </section>
+          ) : null}
+        </nav>
+      </aside>
+
+      <div className="app-shell">
+        <header className="app-header">
+          <div className="header-left">
+            <div className="header-context">
+              <span className="header-eyebrow">Current Area</span>
+              <strong className="header-area">{activeArea}</strong>
+            </div>
+            <div className="header-quick-actions">
+              <Link to="/pos" className="button-link">Open POS</Link>
+              <Link to="/workshop/check-in" className="button-link">New Check-In</Link>
+            </div>
+          </div>
+          <div className="header-right">
+            <GlobalCommandBar />
+            <span className="user-chip">{user?.username} ({user?.role})</span>
+            <button type="button" onClick={onLogout}>Logout</button>
+          </div>
+        </header>
+
+        <main className="app-main">{children}</main>
+
+        <footer className="app-footer">
+          <span>Environment: {envLabel}</span>
+        </footer>
+      </div>
     </div>
   );
 };

@@ -21,6 +21,7 @@ Current delivery mode:
 
 - roadmap feature buildout is complete through `M135`
 - current work should default to stabilization, release-readiness, verification, operational polish, and trial-use readiness unless a new post-roadmap batch is explicitly defined
+- current branch `ux-saledock-alignment` is for shell/navigation refinement inspired by simpler Saledock-style grouping, not for new product surface area
 
 ## Source Of Truth Order
 

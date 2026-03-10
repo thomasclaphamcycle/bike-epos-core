@@ -258,7 +258,7 @@ export const GlobalCommandBar = () => {
   return (
     <>
       <button type="button" className="command-trigger" onClick={() => setOpen(true)}>
-        Command Bar
+        Search or Jump
         <span className="command-hint">Ctrl/Cmd+K</span>
       </button>
 
@@ -276,8 +276,8 @@ export const GlobalCommandBar = () => {
           <div className="command-shell">
             <div className="card-header-row">
               <div>
-                <h2>Command Bar</h2>
-                <p className="muted-text">Jump to key records, admin tools, and operational shortcuts using the current search surfaces.</p>
+                <h2>Search or Jump</h2>
+                <p className="muted-text">Find records fast or jump straight into the most-used areas of the system.</p>
               </div>
               <button type="button" onClick={() => setOpen(false)}>Close</button>
             </div>

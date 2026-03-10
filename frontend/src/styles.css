@@ -62,17 +62,77 @@ textarea {
 .layout-root {
   min-height: 100vh;
   display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  background: radial-gradient(circle at 12% 8%, #f7fafc 0%, #eef2f7 45%, #e4eaf2 100%);
+}
+
+.app-sidebar {
+  border-right: 1px solid #d6e0eb;
+  background: linear-gradient(180deg, #0f2234, #17324a 45%, #132b40);
+  color: #edf5fb;
+  padding: 18px 14px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+}
+
+.sidebar-brand-block {
+  display: grid;
+  gap: 6px;
+}
+
+.sidebar-subtitle {
+  font-size: 0.82rem;
+  color: #b9cadd;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 18px;
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9db4c9;
+}
+
+.sidebar-link-list {
+  display: grid;
+  gap: 6px;
+}
+
+.sidebar-link-list-compact {
+  gap: 4px;
+}
+
+.app-shell {
+  min-width: 0;
+  display: grid;
   grid-template-rows: auto 1fr auto;
 }
 
 .app-header {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 20px;
-  background: linear-gradient(120deg, #0b2238, #123e5f);
-  color: #f8fbff;
+  gap: 16px;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #111827;
   align-items: center;
+  border-bottom: 1px solid #d6e0eb;
+  backdrop-filter: blur(14px);
 }
 
 .header-left {
@@ -82,6 +142,29 @@ textarea {
   min-width: 0;
 }
 
+.header-context {
+  display: grid;
+  gap: 3px;
+}
+
+.header-eyebrow {
+  color: #6b7280;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.header-area {
+  font-size: 1.05rem;
+  color: #0f2234;
+}
+
+.header-quick-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .brand {
   color: #fff;
   text-decoration: none;
@@ -89,65 +172,17 @@ textarea {
   letter-spacing: 0.03em;
 }
 
-.nav-links {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
 .nav-link {
-  color: #e8f3ff;
+  color: #dbeaf7;
   text-decoration: none;
-  padding: 6px 10px;
+  padding: 8px 10px;
   border-radius: 8px;
+  display: block;
 }
 
 .nav-link-active {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.nav-menu {
-  position: relative;
-}
-
-.nav-menu-trigger {
-  list-style: none;
-  color: #e8f3ff;
-  text-decoration: none;
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.nav-menu-trigger::-webkit-details-marker {
-  display: none;
-}
-
-.nav-menu[open] .nav-menu-trigger,
-.nav-menu-trigger:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.nav-menu-list {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 20;
-  min-width: 280px;
-  max-width: min(520px, calc(100vw - 32px));
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid #2b587a;
-  border-radius: 12px;
-  background: #12324b;
-  box-shadow: 0 16px 36px rgba(4, 22, 41, 0.3);
-}
-
-.nav-menu-list .nav-link {
-  display: block;
+  background: rgba(130, 199, 255, 0.18);
+  color: #ffffff;
 }
 
 .header-right {
@@ -160,15 +195,15 @@ textarea {
 
 .user-chip {
   font-size: 0.9rem;
-  background: rgba(255, 255, 255, 0.15);
+  background: #eef3f8;
   padding: 5px 8px;
   border-radius: 8px;
 }
 
 .command-trigger {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.24);
-  color: #f8fbff;
+  background: #fff;
+  border-color: #cfd8e3;
+  color: #1f2937;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -986,20 +1021,21 @@ th {
 }
 
 @media (max-width: 900px) {
+  .layout-root {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #d6e0eb;
+  }
+
   .header-left,
   .header-right {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .nav-links {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .nav-menu-list {
-    position: static;
-    max-width: 100%;
   }
 
   .app-main {
