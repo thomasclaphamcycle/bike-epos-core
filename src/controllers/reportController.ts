@@ -9,6 +9,7 @@ import {
   getProductSalesReport,
   getSalesDailyReport,
   getSupplierPerformanceReport,
+  getWorkshopWarrantyReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
 import { toCsv } from "../utils/csv";
@@ -186,5 +187,12 @@ export const getCustomerServiceRemindersReportHandler = async (req: Request, res
     getIntQuery(req, "lookbackDays"),
     getTakeQuery(req),
   );
+  res.json(report);
+};
+
+export const getWorkshopWarrantyReportHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const report = await getWorkshopWarrantyReport(status, search, getTakeQuery(req));
   res.json(report);
 };

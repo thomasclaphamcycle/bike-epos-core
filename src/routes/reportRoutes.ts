@@ -14,6 +14,7 @@ import {
   getSupplierPerformanceReportHandler,
   getWorkshopDailyReportHandler,
   getWorkshopDailyReportCsvHandler,
+  getWorkshopWarrantyReportHandler,
 } from "../controllers/reportController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
@@ -45,3 +46,4 @@ reportRouter.get("/inventory/velocity", requireRoleAtLeast("MANAGER"), getInvent
 reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSupplierPerformanceReportHandler);
 reportRouter.get("/customers/insights", requireRoleAtLeast("MANAGER"), getCustomerInsightsReportHandler);
 reportRouter.get("/customers/reminders", requireRoleAtLeast("MANAGER"), getCustomerServiceRemindersReportHandler);
+reportRouter.get("/workshop/warranty", requireRoleAtLeast("MANAGER"), getWorkshopWarrantyReportHandler);

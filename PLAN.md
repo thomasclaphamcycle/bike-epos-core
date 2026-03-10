@@ -1182,3 +1182,81 @@ Notes:
 - adds a dedicated manager-only route at `/management/communications`
 - stays frontend-only by reusing reminders and workshop dashboard endpoints
 - keeps this as an internal operations queue only, without adding email, SMS, or two-way messaging
+
+#### `M109` - Multi-step Job Check-in / Intake Form
+
+Goal:
+
+- add a practical multi-step workshop intake and check-in flow for creating workshop jobs consistently
+
+Implemented scope on the current working line:
+
+- step-based intake flow for:
+  - customer lookup or inline customer creation
+  - bike and requested-work capture
+  - review and confirmation
+- workshop job creation with optional customer attach after create
+- practical internal form for intake consistency rather than a public self-service flow
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCheckInPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/workshop/check-in`
+- stays frontend-only by reusing existing customer APIs and workshop job creation/attach flows
+- stores structured intake detail in existing workshop job notes rather than redesigning the workshop schema
+
+#### `M110` - Collection / Handover Workflow
+
+Goal:
+
+- add an internal collection and handover flow for completed workshop jobs
+
+Implemented scope on the current working line:
+
+- ready-for-collection queue for `BIKE_READY` jobs
+- linked sale visibility where already present
+- deposit and readiness visibility from existing workshop data
+- basic internal collection confirmation action
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCollectionPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/workshop/collection`
+- stays frontend-only by reusing workshop dashboard data and the existing workshop status-change endpoint
+- keeps this as an internal handover queue, not a customer-facing collection portal
+
+#### `M111` - Warranty / Return Tracking
+
+Goal:
+
+- add internal tracking for warranty-related workshop and product return follow-up
+
+Implemented scope on the current working line:
+
+- internal warranty tracking queue
+- tagged warranty statuses:
+  - `OPEN`
+  - `FOLLOW_UP`
+  - `RETURNED`
+  - `RESOLVED`
+- drill-down into related customer, workshop, and sale context
+- manager-side form to add tagged internal warranty notes
+
+Frontend entry:
+
+- `frontend/src/pages/WarrantyTrackingPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a manager-only route at `/management/warranty`
+- adds a small additive backend endpoint at `/api/reports/workshop/warranty`
+- avoids schema changes by building warranty tracking from tagged internal workshop notes rather than inventing a larger RMA subsystem

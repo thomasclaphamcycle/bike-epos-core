@@ -37,6 +37,9 @@ import { SupplierCataloguePage } from "./pages/SupplierCataloguePage";
 import { WorkshopBookingsPage } from "./pages/WorkshopBookingsPage";
 import { WorkshopCalendarPage } from "./pages/WorkshopCalendarPage";
 import { CustomerCommunicationQueuePage } from "./pages/CustomerCommunicationQueuePage";
+import { WorkshopCheckInPage } from "./pages/WorkshopCheckInPage";
+import { WorkshopCollectionPage } from "./pages/WorkshopCollectionPage";
+import { WarrantyTrackingPage } from "./pages/WarrantyTrackingPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -206,7 +209,9 @@ const AuthedApp = () => (
         />
         <Route path="/pos" element={<PosPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/workshop/check-in" element={<WorkshopCheckInPage />} />
         <Route path="/workshop/bookings" element={<WorkshopBookingsPage />} />
+        <Route path="/workshop/collection" element={<WorkshopCollectionPage />} />
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />
         <Route
           path="/management/calendar"
@@ -221,6 +226,14 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <CustomerCommunicationQueuePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/warranty"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <WarrantyTrackingPage />
             </ProtectedRoute>
           )}
         />

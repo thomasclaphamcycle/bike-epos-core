@@ -1249,3 +1249,212 @@ export const getCustomerServiceRemindersReport = async (
     customers: customers.slice(0, resolvedTake),
   };
 };
+
+type WarrantyTrackingStatus = "OPEN" | "FOLLOW_UP" | "RETURNED" | "RESOLVED";
+
+const WARRANTY_STATUS_VALUES: WarrantyTrackingStatus[] = [
+  "OPEN",
+  "FOLLOW_UP",
+  "RETURNED",
+  "RESOLVED",
+];
+
+const parseWarrantyStatusFilterOrThrow = (status?: string) => {
+  if (!status) {
+    return undefined;
+  }
+
+  const normalized = status.trim().toUpperCase();
+  if (!WARRANTY_STATUS_VALUES.includes(normalized as WarrantyTrackingStatus)) {
+    throw new HttpError(400, "status must be OPEN, FOLLOW_UP, RETURNED, or RESOLVED", "INVALID_REPORT_FILTER");
+  }
+
+  return normalized as WarrantyTrackingStatus;
+};
+
+const parseWarrantyTaggedNote = (note: string) => {
+  const match = note.match(/^\[WARRANTY:(OPEN|FOLLOW_UP|RETURNED|RESOLVED)\]\s*(.*)$/is);
+  if (!match) {
+    return null;
+  }
+
+  const [, rawStatus = "", rawDetail = ""] = match;
+  return {
+    status: rawStatus.toUpperCase() as WarrantyTrackingStatus,
+    detail: rawDetail.trim(),
+  };
+};
+
+export const getWorkshopWarrantyReport = async (
+  status?: string,
+  search?: string,
+  take?: number,
+) => {
+  const resolvedStatus = parseWarrantyStatusFilterOrThrow(status);
+  const resolvedTake = toPositiveIntWithinRangeOrThrow(take, "take", 1, 200, 100);
+  const normalizedSearch = search?.trim().toLowerCase() || undefined;
+
+  const taggedNotes = await prisma.workshopJobNote.findMany({
+    where: {
+      visibility: "INTERNAL",
+      note: {
+        contains: "[WARRANTY:",
+        mode: "insensitive",
+      },
+    },
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      workshopJob: {
+        select: {
+          id: true,
+          status: true,
+          customerId: true,
+          customerName: true,
+          bikeDescription: true,
+          scheduledDate: true,
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true,
+            },
+          },
+          sale: {
+            select: {
+              id: true,
+              totalPence: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const latestByJobId = new Map<string, {
+    workshopJobId: string;
+    status: WarrantyTrackingStatus;
+    detail: string;
+    noteId: string;
+    noteCreatedAt: Date;
+    noteCount: number;
+    job: {
+      id: string;
+      status: WorkshopJobStatus;
+      customerId: string | null;
+      customerName: string | null;
+      bikeDescription: string | null;
+      scheduledDate: Date | null;
+      customer: {
+        id: string;
+        name: string | null;
+        firstName: string;
+        lastName: string;
+        email: string | null;
+        phone: string | null;
+      } | null;
+      sale: {
+        id: string;
+        totalPence: number;
+      } | null;
+    };
+  }>();
+
+  for (const note of taggedNotes) {
+    const parsed = parseWarrantyTaggedNote(note.note);
+    if (!parsed) {
+      continue;
+    }
+
+    const existing = latestByJobId.get(note.workshopJobId);
+    if (!existing) {
+      latestByJobId.set(note.workshopJobId, {
+        workshopJobId: note.workshopJobId,
+        status: parsed.status,
+        detail: parsed.detail,
+        noteId: note.id,
+        noteCreatedAt: note.createdAt,
+        noteCount: 1,
+        job: note.workshopJob,
+      });
+      continue;
+    }
+
+    existing.noteCount += 1;
+  }
+
+  const filteredItems = Array.from(latestByJobId.values())
+    .map((row) => {
+      const customerName =
+        row.job.customerName
+        || (row.job.customer
+          ? [row.job.customer.name, row.job.customer.firstName, row.job.customer.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim()
+          : null)
+        || "-";
+
+      return {
+        workshopJobId: row.workshopJobId,
+        rawStatus: row.job.status,
+        customerId: row.job.customerId,
+        customerName,
+        customerEmail: row.job.customer?.email ?? null,
+        customerPhone: row.job.customer?.phone ?? null,
+        bikeDescription: row.job.bikeDescription,
+        scheduledDate: row.job.scheduledDate,
+        sale: row.job.sale,
+        warrantyStatus: row.status,
+        latestWarrantyNote: row.detail,
+        latestWarrantyNoteId: row.noteId,
+        latestWarrantyNoteAt: row.noteCreatedAt,
+        noteCount: row.noteCount,
+      };
+    })
+    .filter((row) => (resolvedStatus ? row.warrantyStatus === resolvedStatus : true))
+    .filter((row) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [
+        row.workshopJobId,
+        row.customerName,
+        row.customerEmail,
+        row.customerPhone,
+        row.bikeDescription,
+        row.latestWarrantyNote,
+        row.warrantyStatus,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    })
+    .sort((left, right) => (
+      new Date(right.latestWarrantyNoteAt).getTime() - new Date(left.latestWarrantyNoteAt).getTime()
+      || left.customerName.localeCompare(right.customerName)
+    ));
+
+  const items = filteredItems.slice(0, resolvedTake);
+
+  return {
+    filters: {
+      status: resolvedStatus ?? null,
+      search: normalizedSearch ?? null,
+      take: resolvedTake,
+    },
+    summary: {
+      trackedJobCount: filteredItems.length,
+      openCount: filteredItems.filter((row) => row.warrantyStatus === "OPEN").length,
+      followUpCount: filteredItems.filter((row) => row.warrantyStatus === "FOLLOW_UP").length,
+      returnedCount: filteredItems.filter((row) => row.warrantyStatus === "RETURNED").length,
+      resolvedCount: filteredItems.filter((row) => row.warrantyStatus === "RESOLVED").length,
+    },
+    items,
+  };
+};

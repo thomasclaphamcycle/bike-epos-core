@@ -19,7 +19,8 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -44,13 +45,18 @@ button:disabled {
 }
 
 input,
-select {
+select,
+textarea {
   border: 1px solid #cfd8e3;
   border-radius: 10px;
   padding: 8px 10px;
   min-height: 38px;
   width: 100%;
   background: #fff;
+}
+
+textarea {
+  resize: vertical;
 }
 
 .layout-root {
@@ -305,6 +311,47 @@ th {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.step-indicator-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.step-indicator {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #d7e0ea;
+  border-radius: 999px;
+  background: #f7fafc;
+  color: #4b5563;
+}
+
+.step-indicator-active {
+  background: #e9f4fb;
+  border-color: #93c7e6;
+  color: #0a5f95;
+}
+
+.step-indicator-complete {
+  background: #e8f7ef;
+  border-color: #b2e4c8;
+  color: #1d7948;
+}
+
+.step-number {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(11, 34, 56, 0.08);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .calendar-grid {
@@ -590,6 +637,12 @@ th {
   border-radius: 10px;
   padding: 8px 12px;
   text-decoration: none;
+}
+
+.note-pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font: inherit;
 }
 
 .job-meta-grid {

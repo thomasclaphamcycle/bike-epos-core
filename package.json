@@ -57,7 +57,8 @@
     "test:m90": "node scripts/run_smoke_test.js scripts/supplier_performance_m90_smoke_tests.js",
     "test:m95": "node scripts/run_smoke_test.js scripts/customer_insights_m95_smoke_tests.js",
     "test:m103": "node scripts/run_smoke_test.js scripts/service_reminders_m103_smoke_tests.js",
-    "test:m104": "node scripts/run_smoke_test.js scripts/customer_timeline_m104_smoke_tests.js"
+    "test:m104": "node scripts/run_smoke_test.js scripts/customer_timeline_m104_smoke_tests.js",
+    "test:m111": "node scripts/run_smoke_test.js scripts/warranty_tracking_m111_smoke_tests.js"
   },
   "repository": {
     "type": "git",
