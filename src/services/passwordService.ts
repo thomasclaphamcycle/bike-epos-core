@@ -1,4 +1,5 @@
 import * as bcrypt from "bcryptjs";
+import { HttpError } from "../utils/http";
 
 const DEFAULT_BCRYPT_ROUNDS = 12;
 
@@ -22,3 +23,17 @@ export const verifyPassword = async (
   plainPassword: string,
   passwordHash: string,
 ) => bcrypt.compare(plainPassword, passwordHash);
+
+const PIN_REGEX = /^\d{4}$/;
+
+export const normalizePinOrThrow = (pin: string | undefined, code: string) => {
+  const normalized = typeof pin === "string" ? pin.trim() : "";
+  if (!PIN_REGEX.test(normalized)) {
+    throw new HttpError(400, "PIN must be exactly 4 digits", code);
+  }
+  return normalized;
+};
+
+export const hashPin = async (plainPin: string) => bcrypt.hash(plainPin, BCRYPT_ROUNDS);
+
+export const verifyPin = async (plainPin: string, pinHash: string) => bcrypt.compare(plainPin, pinHash);

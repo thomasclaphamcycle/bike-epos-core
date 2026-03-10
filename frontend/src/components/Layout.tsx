@@ -215,6 +215,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
           <div className="header-right">
             <GlobalCommandBar />
+            <Link to="/account/pin" className="button-link">My PIN</Link>
             <span className="user-chip">{user?.username} ({user?.role})</span>
             <button type="button" onClick={onLogout}>Logout</button>
           </div>

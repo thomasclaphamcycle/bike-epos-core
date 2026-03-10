@@ -105,6 +105,15 @@ export const StaffManagementPage = () => {
     }
   };
 
+  const resetPin = async (userId: string) => {
+    try {
+      await apiPost(`/api/admin/users/${encodeURIComponent(userId)}/reset-pin`);
+      success("PIN reset");
+    } catch (resetError) {
+      error(resetError instanceof Error ? resetError.message : "Failed to reset PIN");
+    }
+  };
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -226,6 +235,9 @@ export const StaffManagementPage = () => {
                       />
                       <button type="button" onClick={() => void resetPassword(user.id)}>
                         Reset Password
+                      </button>
+                      <button type="button" onClick={() => void resetPin(user.id)}>
+                        Reset PIN
                       </button>
                     </div>
                   </td>

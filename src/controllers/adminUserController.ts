@@ -1,8 +1,13 @@
 import { Request, Response } from "express";
-import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
+import {
+  getRequestAuditActor,
+  getRequestStaffActorId,
+  getRequestStaffRole,
+} from "../middleware/staffRole";
 import {
   adminCreateUser,
   adminListUsers,
+  adminResetUserPin,
   adminResetUserPassword,
   adminUpdateUser,
 } from "../services/adminUserService";
@@ -94,6 +99,17 @@ export const adminResetUserPasswordHandler = async (req: Request, res: Response)
       tempPassword: body.tempPassword,
     },
     getRequestStaffActorId(req),
+    getRequestAuditActor(req),
+  );
+
+  res.json({ user });
+};
+
+export const adminResetUserPinHandler = async (req: Request, res: Response) => {
+  const user = await adminResetUserPin(
+    req.params.id,
+    getRequestStaffActorId(req),
+    getRequestStaffRole(req),
     getRequestAuditActor(req),
   );
 
