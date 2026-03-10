@@ -806,6 +806,24 @@ th {
   width: 100%;
 }
 
+.staff-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  font-size: 0.92rem;
+}
+
+.staff-toggle input {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
+.staff-row-inactive {
+  opacity: 0.68;
+}
+
 .status-info {
   background: #e9f4ff;
   border-color: #bfd9f3;
