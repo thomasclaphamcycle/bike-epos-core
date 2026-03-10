@@ -1034,3 +1034,76 @@ Notes:
 - adds a dedicated manager-only route at `/management/exports`
 - reuses the existing sales, workshop, inventory, payments, and till CSV endpoints only
 - keeps the first version practical and synchronous, with no export job queue or new export engine
+
+#### `M103` - Service Reminders / Follow-up Queue
+
+Goal:
+
+- add a manager-facing service reminders and follow-up queue using existing customer, sales, and workshop signals
+
+Implemented scope on the current working line:
+
+- customers who may be due a service follow-up
+- workshop customers with recent completed jobs
+- configurable time windows for due soon and overdue
+- practical follow-up queue with contact context and quick links
+
+Frontend entry:
+
+- `frontend/src/pages/ServiceRemindersPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/reminders`
+- adds a small additive backend reporting endpoint at `/api/reports/customers/reminders`
+- derives reminder candidates honestly from completed workshop jobs and current customer data only
+
+#### `M104` - Customer Contact Timeline
+
+Goal:
+
+- add a manager/staff-facing customer timeline view aggregating existing customer-related activity
+
+Implemented scope on the current working line:
+
+- chronological timeline for a selected customer
+- sales activity
+- workshop activity
+- workshop notes
+- credit activity where present
+
+Frontend entry:
+
+- `frontend/src/pages/CustomerTimelinePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/customers/:id/timeline`
+- adds a small additive backend endpoint at `/api/customers/:id/timeline`
+- keeps the timeline practical and internal, without inventing unsupported communication history
+
+#### `M105` - Supplier Catalogue / Intake Tools
+
+Goal:
+
+- add practical supplier-side intake tools to help managers prepare products for purchasing and catalogue workflows
+
+Implemented scope on the current working line:
+
+- simple supplier catalogue / intake page
+- supplier-linked purchasing history summary
+- frequently ordered supplier item view
+- intake attention rows for missing cost data and under-received items
+
+Frontend entry:
+
+- `frontend/src/pages/SupplierCataloguePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/catalogue`
+- stays frontend-only by reusing existing suppliers and purchase-order APIs
+- keeps this as an operational intake aid rather than inventing supplier feeds, EDI, or external sync

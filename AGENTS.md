@@ -55,12 +55,14 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/activity`
   - `/management/cash`
   - `/management/refunds`
+  - `/management/reminders`
   - `/management/sales`
   - `/management/workshop`
   - `/management/products`
   - `/management/customers`
   - `/management/inventory`
   - `/management/suppliers`
+  - `/management/catalogue`
   - `/management/reordering`
   - `/management/capacity`
   - `/management/purchasing`
@@ -72,6 +74,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/workshop/:id`
   - `/customers`
   - `/customers/:id`
+  - `/customers/:id/timeline`
   - `/inventory`
   - `/inventory/:variantId`
   - `/suppliers`

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getCustomerServiceRemindersReportHandler,
   getInventoryOnHandReportHandler,
   getInventoryOnHandReportCsvHandler,
   getInventoryVelocityReportHandler,
@@ -43,3 +44,4 @@ reportRouter.get("/sales/products", requireRoleAtLeast("MANAGER"), getProductSal
 reportRouter.get("/inventory/velocity", requireRoleAtLeast("MANAGER"), getInventoryVelocityReportHandler);
 reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSupplierPerformanceReportHandler);
 reportRouter.get("/customers/insights", requireRoleAtLeast("MANAGER"), getCustomerInsightsReportHandler);
+reportRouter.get("/customers/reminders", requireRoleAtLeast("MANAGER"), getCustomerServiceRemindersReportHandler);

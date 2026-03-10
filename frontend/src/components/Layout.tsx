@@ -40,12 +40,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/activity" className={navClass}>Activity</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/cash" className={navClass}>Cash</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/refunds" className={navClass}>Refunds</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/reminders" className={navClass}>Reminders</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/sales" className={navClass}>Sales</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/workshop" className={navClass}>Workshop Metrics</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/products" className={navClass}>Products</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/customers" className={navClass}>Customer Insights</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/inventory" className={navClass}>Inventory Intel</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/suppliers" className={navClass}>Supplier Perf</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/catalogue" className={navClass}>Catalogue</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/reordering" className={navClass}>Reordering</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/capacity" className={navClass}>Capacity</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/purchasing" className={navClass}>PO Action</NavLink> : null}

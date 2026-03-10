@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createCustomerHandler,
   getCustomerHandler,
+  getCustomerTimelineHandler,
   listCustomersHandler,
   listCustomerSalesHandler,
   listCustomerWorkshopJobsHandler,
@@ -16,4 +17,5 @@ customerRouter.get("/", requireRoleAtLeast("STAFF"), listCustomersHandler);
 customerRouter.get("/search", requireRoleAtLeast("STAFF"), searchCustomersHandler);
 customerRouter.get("/:id/sales", requireRoleAtLeast("STAFF"), listCustomerSalesHandler);
 customerRouter.get("/:id/workshop-jobs", requireRoleAtLeast("STAFF"), listCustomerWorkshopJobsHandler);
+customerRouter.get("/:id/timeline", requireRoleAtLeast("STAFF"), getCustomerTimelineHandler);
 customerRouter.get("/:id", requireRoleAtLeast("STAFF"), getCustomerHandler);

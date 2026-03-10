@@ -1,3 +1,4 @@
+import { WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getPaymentsReportRows } from "./paymentIntentService";
@@ -1050,5 +1051,201 @@ export const getCustomerInsightsReport = async (from?: string, to?: string, take
     workshopActiveCustomers,
     customers: customersWithFlags,
     creditSupported: true,
+  };
+};
+
+const toPositiveIntWithinRangeOrThrow = (
+  value: number | undefined,
+  field: string,
+  min: number,
+  max: number,
+  fallback: number,
+) => {
+  const resolved = value ?? fallback;
+  if (!Number.isInteger(resolved) || resolved < min || resolved > max) {
+    throw new HttpError(400, `${field} must be an integer between ${min} and ${max}`, "INVALID_REPORT_FILTER");
+  }
+  return resolved;
+};
+
+const REMINDER_OPEN_STATUSES: WorkshopJobStatus[] = [
+  "BOOKING_MADE",
+  "BIKE_ARRIVED",
+  "WAITING_FOR_APPROVAL",
+  "APPROVED",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
+  "BIKE_READY",
+];
+
+export const getCustomerServiceRemindersReport = async (
+  dueSoonDays?: number,
+  overdueDays?: number,
+  lookbackDays?: number,
+  take?: number,
+) => {
+  const resolvedDueSoonDays = toPositiveIntWithinRangeOrThrow(dueSoonDays, "dueSoonDays", 1, 3650, 90);
+  const resolvedOverdueDays = toPositiveIntWithinRangeOrThrow(overdueDays, "overdueDays", 1, 3650, 180);
+  const resolvedLookbackDays = toPositiveIntWithinRangeOrThrow(lookbackDays, "lookbackDays", 30, 3650, 365);
+  const resolvedTake = toPositiveIntWithinRangeOrThrow(take, "take", 1, 200, 100);
+
+  if (resolvedOverdueDays < resolvedDueSoonDays) {
+    throw new HttpError(400, "overdueDays must be greater than or equal to dueSoonDays", "INVALID_REPORT_FILTER");
+  }
+  if (resolvedLookbackDays < resolvedOverdueDays) {
+    throw new HttpError(400, "lookbackDays must be greater than or equal to overdueDays", "INVALID_REPORT_FILTER");
+  }
+
+  const now = new Date();
+  const lookbackStart = addDaysUtc(now, -resolvedLookbackDays);
+
+  const [completedWorkshopJobs, recentSales, openWorkshopJobs] = await Promise.all([
+    prisma.workshopJob.findMany({
+      where: {
+        customerId: { not: null },
+        completedAt: { not: null, gte: lookbackStart },
+      },
+      select: {
+        id: true,
+        customerId: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        bikeDescription: true,
+        completedAt: true,
+      },
+      orderBy: [{ completedAt: "desc" }],
+    }),
+    prisma.sale.findMany({
+      where: {
+        customerId: { not: null },
+        completedAt: { not: null, gte: lookbackStart },
+      },
+      select: {
+        customerId: true,
+        completedAt: true,
+      },
+      orderBy: [{ completedAt: "desc" }],
+    }),
+    prisma.workshopJob.findMany({
+      where: {
+        customerId: { not: null },
+        status: {
+          in: REMINDER_OPEN_STATUSES,
+        },
+      },
+      select: {
+        customerId: true,
+      },
+    }),
+  ]);
+
+  const latestSaleByCustomer = new Map<string, Date>();
+  for (const sale of recentSales) {
+    if (!sale.customerId || !sale.completedAt || latestSaleByCustomer.has(sale.customerId)) {
+      continue;
+    }
+    latestSaleByCustomer.set(sale.customerId, sale.completedAt);
+  }
+
+  const openJobsByCustomer = new Map<string, number>();
+  for (const job of openWorkshopJobs) {
+    if (!job.customerId) {
+      continue;
+    }
+    openJobsByCustomer.set(job.customerId, (openJobsByCustomer.get(job.customerId) ?? 0) + 1);
+  }
+
+  const remindersByCustomer = new Map<string, {
+    customerId: string;
+    customerName: string;
+    email: string | null;
+    phone: string | null;
+    lastCompletedWorkshopAt: Date;
+    latestWorkshopJobId: string;
+    latestBikeDescription: string | null;
+    completedWorkshopJobsInWindow: number;
+    activeWorkshopJobs: number;
+    lastSaleAt: Date | null;
+  }>();
+
+  for (const job of completedWorkshopJobs) {
+    if (!job.customerId || !job.customer || !job.completedAt) {
+      continue;
+    }
+
+    const existing = remindersByCustomer.get(job.customerId);
+    if (!existing) {
+      remindersByCustomer.set(job.customerId, {
+        customerId: job.customerId,
+        customerName: toCustomerDisplayName(job.customer),
+        email: job.customer.email,
+        phone: job.customer.phone,
+        lastCompletedWorkshopAt: job.completedAt,
+        latestWorkshopJobId: job.id,
+        latestBikeDescription: job.bikeDescription,
+        completedWorkshopJobsInWindow: 1,
+        activeWorkshopJobs: openJobsByCustomer.get(job.customerId) ?? 0,
+        lastSaleAt: latestSaleByCustomer.get(job.customerId) ?? null,
+      });
+      continue;
+    }
+
+    existing.completedWorkshopJobsInWindow += 1;
+  }
+
+  const customers = Array.from(remindersByCustomer.values())
+    .map((row) => {
+      const daysSinceLastCompletedWorkshop = Math.max(
+        0,
+        Math.floor((now.getTime() - row.lastCompletedWorkshopAt.getTime()) / 86_400_000),
+      );
+
+      let reminderStatus: "RECENT_COMPLETION" | "DUE_SOON" | "OVERDUE" = "RECENT_COMPLETION";
+      if (daysSinceLastCompletedWorkshop >= resolvedOverdueDays) {
+        reminderStatus = "OVERDUE";
+      } else if (daysSinceLastCompletedWorkshop >= resolvedDueSoonDays) {
+        reminderStatus = "DUE_SOON";
+      }
+
+      return {
+        ...row,
+        daysSinceLastCompletedWorkshop,
+        reminderStatus,
+      };
+    })
+    .sort((left, right) => {
+      const statusRank = { OVERDUE: 3, DUE_SOON: 2, RECENT_COMPLETION: 1 } as const;
+      return (
+        statusRank[right.reminderStatus] - statusRank[left.reminderStatus]
+        || right.daysSinceLastCompletedWorkshop - left.daysSinceLastCompletedWorkshop
+        || left.customerName.localeCompare(right.customerName)
+      );
+    });
+
+  return {
+    filters: {
+      dueSoonDays: resolvedDueSoonDays,
+      overdueDays: resolvedOverdueDays,
+      lookbackDays: resolvedLookbackDays,
+      take: resolvedTake,
+    },
+    summary: {
+      customerCount: customers.length,
+      overdueCount: customers.filter((row) => row.reminderStatus === "OVERDUE").length,
+      dueSoonCount: customers.filter((row) => row.reminderStatus === "DUE_SOON").length,
+      recentCompletionCount: customers.filter((row) => row.reminderStatus === "RECENT_COMPLETION").length,
+    },
+    overdueCustomers: customers.filter((row) => row.reminderStatus === "OVERDUE").slice(0, resolvedTake),
+    dueSoonCustomers: customers.filter((row) => row.reminderStatus === "DUE_SOON").slice(0, resolvedTake),
+    recentCompletedCustomers: customers.filter((row) => row.reminderStatus === "RECENT_COMPLETION").slice(0, resolvedTake),
+    customers: customers.slice(0, resolvedTake),
   };
 };

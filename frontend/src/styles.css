@@ -713,6 +713,20 @@ th {
   color: #8b1f1f;
 }
 
+.timeline-list {
+  display: grid;
+  gap: 12px;
+}
+
+.timeline-card {
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
 @media (max-width: 900px) {
   .header-left,
   .header-right {

@@ -1,0 +1,7 @@
+### M103 Service Reminders
+# @baseUrl http://localhost:3000
+
+GET {{baseUrl}}/api/reports/customers/reminders?dueSoonDays=30&overdueDays=60&lookbackDays=365&take=25
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+Accept: application/json

@@ -7,6 +7,7 @@ import { WorkshopPage } from "./pages/WorkshopPage";
 import { WorkshopJobPage } from "./pages/WorkshopJobPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { CustomerProfilePage } from "./pages/CustomerProfilePage";
+import { CustomerTimelinePage } from "./pages/CustomerTimelinePage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { InventoryItemPage } from "./pages/InventoryItemPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -31,6 +32,8 @@ import { OperationsSummaryPage } from "./pages/OperationsSummaryPage";
 import { AlertsCentrePage } from "./pages/AlertsCentrePage";
 import { SavedViewsPage } from "./pages/SavedViewsPage";
 import { ExportHubPage } from "./pages/ExportHubPage";
+import { ServiceRemindersPage } from "./pages/ServiceRemindersPage";
+import { SupplierCataloguePage } from "./pages/SupplierCataloguePage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -143,10 +146,26 @@ const AuthedApp = () => (
           )}
         />
         <Route
+          path="/management/reminders"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <ServiceRemindersPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
           path="/management/views"
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <SavedViewsPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/catalogue"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <SupplierCataloguePage />
             </ProtectedRoute>
           )}
         />
@@ -187,6 +206,7 @@ const AuthedApp = () => (
         <Route path="/workshop/:id" element={<WorkshopJobPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
+        <Route path="/customers/:id/timeline" element={<CustomerTimelinePage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />

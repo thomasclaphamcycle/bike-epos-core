@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   createCustomer,
   getCustomerById,
+  getCustomerTimeline,
   listCustomerSales,
   listCustomerWorkshopJobs,
   searchCustomers,
@@ -103,5 +104,10 @@ export const listCustomerSalesHandler = async (req: Request, res: Response) => {
 
 export const listCustomerWorkshopJobsHandler = async (req: Request, res: Response) => {
   const result = await listCustomerWorkshopJobs(req.params.id);
+  res.json(result);
+};
+
+export const getCustomerTimelineHandler = async (req: Request, res: Response) => {
+  const result = await getCustomerTimeline(req.params.id);
   res.json(result);
 };

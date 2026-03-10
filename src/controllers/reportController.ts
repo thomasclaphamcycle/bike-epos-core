@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  getCustomerServiceRemindersReport,
   getInventoryOnHandReport,
   getInventoryVelocityReport,
   getInventoryValueReport,
@@ -27,6 +28,16 @@ const getTakeQuery = (req: Request) => {
   }
 
   const value = Number(req.query.take);
+  return Number.isNaN(value) ? undefined : value;
+};
+
+const getIntQuery = (req: Request, key: string) => {
+  if (req.query[key] === undefined) {
+    return undefined;
+  }
+
+  const raw = req.query[key];
+  const value = typeof raw === "string" ? Number(raw) : Number.NaN;
   return Number.isNaN(value) ? undefined : value;
 };
 
@@ -165,5 +176,15 @@ export const getSupplierPerformanceReportHandler = async (req: Request, res: Res
 export const getCustomerInsightsReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const report = await getCustomerInsightsReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getCustomerServiceRemindersReportHandler = async (req: Request, res: Response) => {
+  const report = await getCustomerServiceRemindersReport(
+    getIntQuery(req, "dueSoonDays"),
+    getIntQuery(req, "overdueDays"),
+    getIntQuery(req, "lookbackDays"),
+    getTakeQuery(req),
+  );
   res.json(report);
 };
