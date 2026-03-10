@@ -77,6 +77,7 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
     { key: "cmd-checkin", group: "Shortcut", title: "New check-in", subtitle: "Workshop intake form", path: "/workshop/check-in" },
     { key: "cmd-tasks", group: "Shortcut", title: "Open tasks", subtitle: "Internal follow-up queue", path: "/tasks" },
     { key: "cmd-bookings", group: "Shortcut", title: "Workshop bookings", subtitle: "Upcoming workshop intake", path: "/workshop/bookings" },
+    { key: "cmd-receiving", group: "Shortcut", title: "Supplier receiving", subtitle: "Goods-in workspace", path: "/purchasing/receiving" },
     { key: "cmd-inventory-locations", group: "Shortcut", title: "Inventory by location", subtitle: "Stock split by location", path: "/inventory/locations" },
     { key: "cmd-dashboard", group: "Shortcut", title: "Staff dashboard", subtitle: "Operational overview", path: "/dashboard" },
   ];
@@ -85,9 +86,16 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
     base.push(
       { key: "cmd-management", group: "Shortcut", title: "Management dashboard", subtitle: "Manager home", path: "/management" },
       { key: "cmd-alerts", group: "Shortcut", title: "Alerts centre", subtitle: "Operational alerts", path: "/management/alerts" },
+      { key: "cmd-product-data", group: "Shortcut", title: "Product data queue", subtitle: "Variants needing data cleanup", path: "/management/product-data" },
       { key: "cmd-purchasing", group: "Shortcut", title: "PO action centre", subtitle: "Open purchase order priorities", path: "/management/purchasing" },
       { key: "cmd-transfers", group: "Shortcut", title: "Transfer queue", subtitle: "Location imbalance and replenishment", path: "/management/transfers" },
       { key: "cmd-ageing", group: "Shortcut", title: "Workshop ageing", subtitle: "Open-job SLA attention", path: "/management/workshop-ageing" },
+    );
+  }
+
+  if (role === "ADMIN") {
+    base.push(
+      { key: "cmd-admin-review", group: "Shortcut", title: "Admin review", subtitle: "Roles and admin activity", path: "/management/admin-review" },
     );
   }
 

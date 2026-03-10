@@ -69,6 +69,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/inventory`
   - `/management/suppliers`
   - `/management/catalogue`
+  - `/management/product-data`
   - `/management/reordering`
   - `/management/transfers`
   - `/management/capacity`
@@ -77,6 +78,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/views`
   - `/management/exports`
   - `/management/staff`
+  - `/management/admin-review`
   - `/pos`
   - `/workshop`
   - `/workshop/check-in`
@@ -93,6 +95,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/inventory/:variantId`
   - `/suppliers`
   - `/purchasing`
+  - `/purchasing/receiving`
   - `/purchasing/:id`
 
 ### Database

@@ -16,6 +16,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { PurchasingPage } from "./pages/PurchasingPage";
 import { PurchaseOrderPage } from "./pages/PurchaseOrderPage";
+import { SupplierReceivingPage } from "./pages/SupplierReceivingPage";
 import { ManagementDashboardPage } from "./pages/ManagementDashboardPage";
 import { DashboardSettingsPage } from "./pages/DashboardSettingsPage";
 import { SalesAnalyticsPage } from "./pages/SalesAnalyticsPage";
@@ -48,6 +49,8 @@ import { InternalTasksPage } from "./pages/InternalTasksPage";
 import { StockExceptionsPage } from "./pages/StockExceptionsPage";
 import { TransferQueuePage } from "./pages/TransferQueuePage";
 import { WorkshopAgeingPage } from "./pages/WorkshopAgeingPage";
+import { ProductDataQueuePage } from "./pages/ProductDataQueuePage";
+import { AdminReviewPage } from "./pages/AdminReviewPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -217,10 +220,26 @@ const AuthedApp = () => (
           )}
         />
         <Route
+          path="/management/product-data"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <ProductDataQueuePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
           path="/management/staff"
           element={(
             <ProtectedRoute minimumRole="ADMIN">
               <StaffManagementPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/admin-review"
+          element={(
+            <ProtectedRoute minimumRole="ADMIN">
+              <AdminReviewPage />
             </ProtectedRoute>
           )}
         />
@@ -288,6 +307,7 @@ const AuthedApp = () => (
         <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
         <Route path="/purchasing" element={<PurchasingPage />} />
+        <Route path="/purchasing/receiving" element={<SupplierReceivingPage />} />
         <Route path="/purchasing/:id" element={<PurchaseOrderPage />} />
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Routes>

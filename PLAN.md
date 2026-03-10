@@ -1502,3 +1502,78 @@ Notes:
 - implemented on the current working line via code evidence
 - stays frontend-only by reusing the existing workshop dashboard payload
 - labels proxy-based stage ageing honestly rather than inventing unsupported SLA timestamps
+
+## Next Development Phase - Receiving, Data Quality, And Governance Review
+
+Current state:
+
+- the current working line now includes:
+  - `M121` supplier receiving workspace
+  - `M122` product data completion queue
+  - `M123` admin audit / permissions review
+- the current working line now exposes dedicated receiving triage, product-data cleanup visibility, and admin governance review surfaces
+- no post-`M123` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M121` - Supplier Receiving Workspace
+
+Goal:
+
+- add a practical receiving workspace for supplier deliveries
+
+Implemented scope on the current working line:
+
+- staff-facing route `/purchasing/receiving`
+- grouped receiving workspace sections for:
+  - ready to receive
+  - partially received
+  - overdue awaiting delivery
+- quick drill-down into existing purchase order detail and receiving flows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the current purchase-order list endpoint
+- keeps direct receiving actions inside existing PO detail instead of replacing M81 purchasing flows
+
+#### `M122` - Product Data Completion Queue
+
+Goal:
+
+- add a manager-facing queue for products and variants with incomplete sell/purchase data
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/product-data`
+- grouped queues for:
+  - missing barcode
+  - missing cost
+  - missing retail price
+  - weak variant naming
+- links into existing inventory and purchasing workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing variant listing endpoint
+- intentionally omits supplier-linkage checks because the current branch does not model supplier linkage directly on variants
+
+#### `M123` - Admin Audit / Permissions Review
+
+Goal:
+
+- add an admin-facing review page for roles, sensitive areas, and recent admin activity
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/admin-review`
+- user and role overview
+- sensitive area checklist linked to current privileged routes
+- recent admin activity feed built from current audit events
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing admin-user and audit endpoints
+- complements rather than replaces the existing admin staff-management page

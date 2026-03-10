@@ -55,12 +55,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/inventory" className={navClass}>Inventory Intel</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/suppliers" className={navClass}>Supplier Perf</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/catalogue" className={navClass}>Catalogue</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/product-data" className={navClass}>Product Data</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/reordering" className={navClass}>Reordering</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/capacity" className={navClass}>Capacity</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/purchasing" className={navClass}>PO Action</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/views" className={navClass}>Saved Views</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/exports" className={navClass}>Exports</NavLink> : null}
             {canViewStaffAdmin ? <NavLink to="/management/staff" className={navClass}>Staff Admin</NavLink> : null}
+            {canViewStaffAdmin ? <NavLink to="/management/admin-review" className={navClass}>Admin Review</NavLink> : null}
             <NavLink to="/pos" className={navClass}>POS</NavLink>
             <NavLink to="/workshop" className={navClass}>Workshop</NavLink>
             <NavLink to="/workshop/check-in" className={navClass}>Check-In</NavLink>
@@ -73,6 +75,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <NavLink to="/inventory/locations" className={navClass}>Inv. Locations</NavLink>
             <NavLink to="/suppliers" className={navClass}>Suppliers</NavLink>
             <NavLink to="/purchasing" className={navClass}>Purchasing</NavLink>
+            <NavLink to="/purchasing/receiving" className={navClass}>Receiving</NavLink>
           </nav>
         </div>
         <div className="header-right">

@@ -61,6 +61,9 @@
 - `M118` multi-location inventory views are implemented
 - `M119` transfer / replenishment queue is implemented
 - `M120` advanced workshop SLA / ageing views are implemented
+- `M121` supplier receiving workspace is implemented
+- `M122` product data completion queue is implemented
+- `M123` admin audit / permissions review is implemented
 
 ### Confirmed Elsewhere In Repo History
 
@@ -73,17 +76,17 @@ These milestones are confirmed in branch history and/or remote refs, even where 
 
 ## Current Milestone
 
-- no new active milestone is queued yet after `M120`
+- no new active milestone is queued yet after `M123`
 
 ## Next Milestones Queue
 
-- not yet defined in the canonical plan after `M120`
+- not yet defined in the canonical plan after `M123`
 
 ## What Is Next
 
 Highest priority:
 
-1. define the next post-`M120` milestone batch explicitly before implementation work starts
+1. define the next post-`M123` milestone batch explicitly before implementation work starts
 2. keep the management, reporting, and admin surfaces aligned with the endpoints they depend on
 3. continue regression coverage in parallel
 4. continue repo hygiene and branch consolidation in parallel
@@ -222,5 +225,8 @@ For repo-history alignment work, also verify that:
 - The current working line now also includes `M118`.
 - The current working line now also includes `M119`.
 - The current working line now also includes `M120`.
-- No post-`M120` milestone is defined yet in this canonical plan.
+- The current working line now also includes `M121`.
+- The current working line now also includes `M122`.
+- The current working line now also includes `M123`.
+- No post-`M123` milestone is defined yet in this canonical plan.
 - If you add or merge milestone work, update all three canonical guidance files in the same change.
