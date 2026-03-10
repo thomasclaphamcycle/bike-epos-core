@@ -5,8 +5,10 @@ The app uses real authentication by default (`AUTH_MODE=real`) with cookie-based
 ## Real Auth (default)
 
 - `POST /api/auth/login` with `{ email, password }` sets an HTTP-only auth cookie.
+- `POST /api/auth/pin-login` with `{ userId, pin }` sets the same HTTP-only auth cookie for the current PIN-first login UI.
 - `POST /api/auth/logout` clears the cookie.
 - `GET /api/auth/me` returns the authenticated user.
+- `GET /api/auth/active-users` returns the active login-button list for the React login screen.
 - Protected routes use `requireRoleAtLeast("STAFF" | "MANAGER" | "ADMIN")`.
 
 Roles are stored in DB (`User.role`) and enforced from the authenticated user, not from headers.
@@ -62,21 +64,20 @@ POST /api/auth/bootstrap
 
 1. Start app (`npm run dev`).
 2. Open `/login`.
-3. Login with staff credentials.
-4. Navigate to `/pos`, `/workshop`, `/admin`, `/till` based on role.
+3. Select an active user button and enter a 4-digit PIN.
+4. On successful PIN login, navigate to the authorized area based on role.
+5. Password login remains preserved in the backend as a controlled fallback path.
 
 ## Default Routes and Navigation
 
 - `/` redirects to `/pos` when authenticated, otherwise `/login`.
 - Protected HTML pages redirect to `/login?next=...` if unauthenticated.
 - If authenticated but role is insufficient, HTML pages redirect to `/not-authorized`.
-- App shell nav visibility:
-  - `STAFF+`: POS, Workshop, Inventory
-  - `MANAGER+`: Till / Cash Up
-  - `ADMIN`: Admin Users, Admin Audit
+- Current UX branch shell visibility is intentionally reduced while navigation is being refined.
+- Protected routes still enforce role-based access for management and admin pages even when the sidebar does not expose every destination.
 
 ## Smoke Tests and Auth
 
 Smoke scripts run with `NODE_ENV=test`, so header fallback remains available for existing milestone scripts.
 
-New auth/admin/till smoke tests also validate real login flows via `/api/auth/login`.
+New auth/admin/till smoke tests validate backend auth behavior, while the current React login UI uses `GET /api/auth/active-users` plus `POST /api/auth/pin-login`.

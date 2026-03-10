@@ -4,6 +4,12 @@ import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
 import CorePosLogo from "./branding/CorePosLogo";
 
+const roleRank = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
+} as const;
+
 const navClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? "sidebar-link sidebar-link--active" : "sidebar-link";
 
@@ -28,9 +34,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const currentPath = location.pathname;
   const sidebarNavItems = [
-    { to: "/pos", label: "POS" },
-    { to: "/management/products", label: "Products" },
+    { to: "/pos", label: "POS", minimumRole: "STAFF" },
+    { to: "/management/products", label: "Products", minimumRole: "MANAGER" },
   ] as const;
+  const visibleSidebarNavItems = sidebarNavItems.filter(
+    (item) => user && roleRank[user.role] >= roleRank[item.minimumRole],
+  );
   const activeArea = currentPath.startsWith("/management")
     ? "Management"
     : currentPath.startsWith("/workshop")
@@ -57,7 +66,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <section className="sidebar-section">
             <div className="sidebar-link-list">
-              {sidebarNavItems.map((item) => (
+              {visibleSidebarNavItems.map((item) => (
                 <NavLink key={item.to} to={item.to} end={item.to === "/pos"} className={navClass}>
                   {item.label}
                 </NavLink>

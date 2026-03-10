@@ -29,12 +29,8 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   });
   await loginViaUi(page, staffCredentials, "/pos", { surface: "frontend" });
   await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Workshop", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Inventory", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Cash", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Refunds", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Staff Admin", exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "Workshop", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Products", exact: true })).toHaveCount(0);
+  await page.goto("/workshop");
   await expect(page).toHaveURL(/\/workshop/);
 
   const managerCredentials = await ensureUserViaAdminBypass(request, {
@@ -43,10 +39,9 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   });
   await page.context().clearCookies();
   await loginViaUi(page, managerCredentials, "/pos", { surface: "frontend" });
-  await expect(page.getByRole("link", { name: "Cash", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Refunds", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Staff Admin", exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "Cash", exact: true }).click();
+  await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+  await page.goto("/management/cash");
   await expect(page).toHaveURL(/\/management\/cash/);
 
   const adminCredentials = await ensureUserViaAdminBypass(request, {
@@ -55,8 +50,10 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   });
   await page.context().clearCookies();
   await loginViaUi(page, adminCredentials, "/admin", { surface: "frontend" });
-  await expect(page.getByRole("link", { name: "Staff Admin", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Admin Review", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+  await page.goto("/management/staff");
+  await expect(page).toHaveURL(/\/management\/staff/);
 });
 
 test("Login then POS page loads and can search products", async ({ page, request }) => {

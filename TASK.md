@@ -2,7 +2,7 @@
 
 ## Current Snapshot
 
-- Working branch: `feat/pin-login-ui`
+- Working branch: `ux/staff-management-scan-pass`
 - Stable local restore point:
   - tag `v1.2-demo-running`
   - branch `stable-demo`
@@ -12,10 +12,10 @@
 - Earlier branch ancestry is still fragmented, but the present branch state is roadmap-complete and in stabilization mode
 - Current working mode is trial-use readiness, not milestone expansion
 - Roadmap implementation on the current working line is complete through `M135`
-- Current focus is post-roadmap hardening and controlled auth evolution
+- Current focus is post-roadmap hardening plus local UX refinement on top of the PIN-login-capable product line
 - Completed login visual cleanup remains UX work from `ux-saledock-alignment`
 - PIN auth foundation and the main PIN login UI migration are now complete
-- Current branch purpose: finish auth migration tracking cleanly and define the real next post-migration follow-on work
+- Current branch purpose: local UX iteration on sidebar/top-bar/admin surfaces while preserving the completed PIN-login backend and UI migration
 
 ## Confirmed Done
 
@@ -143,6 +143,7 @@ Highest priority:
 
 ## Next
 
+- reconcile current UX branch docs/tests with the intentionally reduced sidebar navigation
 - decide whether admins remain on the same button/PIN flow permanently or later move to a stricter policy
 - add manager-facing UI for PIN reset if needed beyond the existing API/admin surface
 - evaluate register lock / quick user switch flow for trial environments

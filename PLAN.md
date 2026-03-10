@@ -37,6 +37,7 @@ Roadmap status:
 - Current post-roadmap stabilization checkpoint on `dev-next`: `v3.1-stabilization-pass` / `5b817b6`
 - Current trial-readiness checkpoint on `dev-next`: `v3.2-trial-readiness` / `f7b974b`
 - Current UX shell/login checkpoint on `ux-saledock-alignment`: `v3.3-login-polish` / `9211c49`
+- Current UX admin/sidebar working line on `ux/staff-management-scan-pass`: local-only branch carrying sidebar/top-bar cleanup and staff-management UX refinement
 
 ## Branch Reality
 
@@ -58,6 +59,10 @@ The repo has diverged milestone lines:
   - post-roadmap UX refinement branch
   - completed login/shell usability cleanup remains UX work
   - remains the upstream UX branch for post-roadmap shell/login polish
+- `ux/staff-management-scan-pass`
+  - current local UX branch
+  - carries follow-on sidebar, top-bar, login polish, and users-page refinement work on top of the upstream UX branch
+  - currently narrows visible sidebar navigation for iterative redesign while leaving protected routes intact
 - `feat/pin-auth-foundation`
   - auth feature branch
   - adds PIN auth infrastructure on top of the post-roadmap UX line

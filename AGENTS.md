@@ -21,7 +21,7 @@ Current delivery mode:
 
 - roadmap feature buildout is complete through `M135`
 - current work should default to stabilization, release-readiness, verification, operational polish, and trial-use readiness unless a new post-roadmap batch is explicitly defined
-- current branch `ux-saledock-alignment` is for shell/navigation refinement inspired by simpler Saledock-style grouping, not for new product surface area
+- current UX branch `ux/staff-management-scan-pass` is for shell/navigation and admin-surface refinement inspired by simpler Saledock-style grouping, not for new product surface area
 - PIN login is now implemented on the auth migration branches as product/auth infrastructure work
 - password login remains preserved in the backend unless it is intentionally removed in a later controlled migration
 - once work adds auth, schema, API, or security behavior, classify it as feature/backend infrastructure work rather than pure UX polish

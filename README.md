@@ -55,9 +55,11 @@ npm run db:seed:dev
 Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 
 - Login API: `POST /api/auth/login`
+- PIN Login API: `POST /api/auth/pin-login`
 - Logout API: `POST /api/auth/logout`
 - Current user: `GET /api/auth/me`
-- Login UI: `/login`
+- Active login users: `GET /api/auth/active-users`
+- Login UI: `/login` (current React UI uses active-user buttons plus 4-digit PIN; password login remains preserved in the backend)
 
 ### Create initial admin
 
@@ -82,11 +84,11 @@ Authenticated pages now use a shared app shell with role-aware navigation.
 - Unauthenticated access to protected pages redirects to `/login?next=...`.
 - Role-based page access redirects to `/not-authorized` for HTML requests.
 
-Navigation visibility:
+Current UX-branch shell visibility:
 
-- `STAFF+`: POS, Workshop, Inventory
-- `MANAGER+`: Till / Cash Up
-- `ADMIN`: Admin Users, Admin Audit
+- sidebar currently shows a reduced navigation set for redesign work
+- route access is still enforced by `ProtectedRoute` role checks
+- management/admin pages remain directly routable for authorized users
 
 ## POS Tenders (M39)
 
