@@ -88,6 +88,7 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
       { key: "cmd-trade-close", group: "Shortcut", title: "Daily trade close", subtitle: "Daily financial and operational close pack", path: "/management/trade-close" },
       { key: "cmd-liabilities", group: "Shortcut", title: "Liabilities review", subtitle: "Deposits, balances, and unpaid workshop work", path: "/management/liabilities" },
       { key: "cmd-health", group: "Shortcut", title: "Ops health", subtitle: "Operational readiness view", path: "/management/health" },
+      { key: "cmd-integrity", group: "Shortcut", title: "Data integrity", subtitle: "Operational data problems and investigation queues", path: "/management/integrity" },
       { key: "cmd-alerts", group: "Shortcut", title: "Alerts centre", subtitle: "Operational alerts", path: "/management/alerts" },
       { key: "cmd-product-data", group: "Shortcut", title: "Product data queue", subtitle: "Variants needing data cleanup", path: "/management/product-data" },
       { key: "cmd-pricing", group: "Shortcut", title: "Pricing review", subtitle: "Margin and pricing exceptions", path: "/management/pricing" },
@@ -102,6 +103,8 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
   if (role === "ADMIN") {
     base.push(
       { key: "cmd-admin-review", group: "Shortcut", title: "Admin review", subtitle: "Roles and admin activity", path: "/management/admin-review" },
+      { key: "cmd-backups", group: "Shortcut", title: "Backup toolkit", subtitle: "Exports and recovery guidance", path: "/management/backups" },
+      { key: "cmd-settings", group: "Shortcut", title: "System settings", subtitle: "Current defaults and admin control points", path: "/management/settings" },
     );
   }
 

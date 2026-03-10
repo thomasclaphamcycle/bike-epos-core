@@ -1661,6 +1661,69 @@ Notes:
 - stays frontend-only by composing workshop dashboard plus existing sales list/detail endpoints
 - remains observational and operational, not an evaluative scoring system
 
+#### `M130` - Data Integrity Checks
+
+Goal:
+
+- add a manager/admin-facing data integrity page surfacing operational data problems already detectable from current data
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/integrity`
+- grouped sections for:
+  - stock problems
+  - pricing problems
+  - data quality problems
+  - workflow consistency problems
+- counts and drill-down links into existing stock, pricing, product-data, workshop, and purchasing queues
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing the existing exception, pricing, product-data, workshop, and purchasing signals
+- remains an operational investigation hub rather than a database validator or a new integrity engine
+
+#### `M131` - Backup / Export Toolkit
+
+Goal:
+
+- add an admin-facing toolkit for backup/export related operations already supported by the system
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/backups`
+- direct links to the existing CSV/export endpoints already used by the export hub
+- clear recovery and reset commands for the repo scripts currently present on this branch
+- links into export hub, admin review, staff management, and system settings
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only and guidance-driven; this branch still does not add a backup engine or backup API
+- intentionally presents the real tooling available on this branch instead of overstating in-app backup support
+
+#### `M132` - System Configuration Panel
+
+Goal:
+
+- add an admin-facing settings/configuration page for current defaults and operational settings where cleanly supported
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/settings`
+- overview of:
+  - role-aware home defaults
+  - visible location/store context
+  - operational control points
+  - admin and governance tools
+- explicit visibility into which controls are persisted in-app versus browser-local or documentation-driven
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by surfacing the configuration and control points that already exist on this branch
+- intentionally avoids inventing a broad persisted settings model where one does not yet exist
+
 #### `M124` - Pricing Review / Margin Exceptions
 
 Goal:

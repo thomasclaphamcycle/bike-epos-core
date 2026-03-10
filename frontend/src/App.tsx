@@ -57,6 +57,9 @@ import { OpsHealthPage } from "./pages/OpsHealthPage";
 import { DailyTradeClosePage } from "./pages/DailyTradeClosePage";
 import { LiabilitiesReviewPage } from "./pages/LiabilitiesReviewPage";
 import { StaffPerformancePage } from "./pages/StaffPerformancePage";
+import { DataIntegrityPage } from "./pages/DataIntegrityPage";
+import { BackupToolkitPage } from "./pages/BackupToolkitPage";
+import { SystemSettingsPage } from "./pages/SystemSettingsPage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -274,6 +277,14 @@ const AuthedApp = () => (
           )}
         />
         <Route
+          path="/management/integrity"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <DataIntegrityPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
           path="/management/staff"
           element={(
             <ProtectedRoute minimumRole="ADMIN">
@@ -286,6 +297,22 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="ADMIN">
               <AdminReviewPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/backups"
+          element={(
+            <ProtectedRoute minimumRole="ADMIN">
+              <BackupToolkitPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/settings"
+          element={(
+            <ProtectedRoute minimumRole="ADMIN">
+              <SystemSettingsPage />
             </ProtectedRoute>
           )}
         />
