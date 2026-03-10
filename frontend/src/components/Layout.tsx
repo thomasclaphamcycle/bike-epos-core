@@ -28,7 +28,10 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
-  const sidebarNavItems = [{ to: "/pos", label: "POS" }] as const;
+  const sidebarNavItems = [
+    { to: "/pos", label: "POS" },
+    { to: "/management/products", label: "Products" },
+  ] as const;
   const activeArea = currentPath.startsWith("/management")
     ? "Management"
     : currentPath.startsWith("/workshop")
@@ -56,7 +59,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <section className="sidebar-section">
             <div className="sidebar-link-list">
               {sidebarNavItems.map((item) => (
-                <NavLink key={item.to} to={item.to} end className={navClass}>
+                <NavLink key={item.to} to={item.to} end={item.to === "/pos"} className={navClass}>
                   {item.label}
                 </NavLink>
               ))}
