@@ -30,6 +30,12 @@ export type ActiveLoginUser = {
   role: UserRole;
 };
 
+const ACTIVE_LOGIN_ROLE_PRIORITY: Record<UserRole, number> = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
+};
+
 export const authenticateWithEmailPassword = async (
   email: string | undefined,
   password: string | undefined,
@@ -63,7 +69,6 @@ export const getPublicUserById = async (userId: string): Promise<PublicUser | nu
 export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
   const users = await prisma.user.findMany({
     where: { isActive: true },
-    orderBy: [{ role: "asc" }, { name: "asc" }, { username: "asc" }],
     select: {
       id: true,
       username: true,
@@ -72,11 +77,19 @@ export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
     },
   });
 
-  return users.map((user) => ({
+  return users
+    .map((user) => ({
     id: user.id,
     displayName: user.name?.trim() || user.username,
     role: user.role,
-  }));
+    }))
+    .sort((left, right) => {
+      const roleOrder = ACTIVE_LOGIN_ROLE_PRIORITY[left.role] - ACTIVE_LOGIN_ROLE_PRIORITY[right.role];
+      if (roleOrder !== 0) {
+        return roleOrder;
+      }
+      return left.displayName.localeCompare(right.displayName, undefined, { sensitivity: "base" });
+    });
 };
 
 export const authenticateWithPin = async (
