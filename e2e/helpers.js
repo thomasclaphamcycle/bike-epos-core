@@ -62,6 +62,8 @@ const apiJsonWithHeaderBypass = async (
 
 let sequence = 0;
 const uniqueToken = (prefix = "e2e") => `${prefix}-${Date.now()}-${++sequence}`;
+const frontendBaseUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
+const backendBaseUrl = process.env.TEST_BASE_URL || "http://localhost:3100";
 
 const ensureUserViaAdminBypass = async (
   request,
@@ -71,6 +73,7 @@ const ensureUserViaAdminBypass = async (
   const role = options.role || "MANAGER";
   const email = `${token}@example.com`;
   const password = options.password || `Playwright!${token}`;
+  const pin = options.pin || "1234";
   const name = options.name || `${role} ${token}`;
 
   const payload = await apiJsonWithHeaderBypass(request, "POST", "/api/admin/users", "ADMIN", {
@@ -82,18 +85,37 @@ const ensureUserViaAdminBypass = async (
     },
   });
 
+  await apiJsonWithHeaderBypass(request, "POST", "/api/auth/pin", role, {
+    headers: {
+      "X-Staff-Id": payload.user.id,
+    },
+    data: {
+      pin,
+    },
+  });
+
   return {
     user: payload.user,
     email,
     password,
+    pin,
   };
 };
 
-const loginViaUi = async (page, credentials, nextPath = "/pos") => {
-  await page.goto(`/login?next=${encodeURIComponent(nextPath)}`);
-  await page.fill('[data-testid="login-email"]', credentials.email);
-  await page.fill('[data-testid="login-password"]', credentials.password);
-  await page.click('[data-testid="login-submit"]');
+const loginViaUi = async (page, credentials, nextPath = "/pos", options = {}) => {
+  const surface = options.surface || "legacy";
+  if (surface === "frontend") {
+    await page.goto(`${frontendBaseUrl}/login?next=${encodeURIComponent(nextPath)}`);
+    await page.click(`[data-testid="login-user-${credentials.user.id}"]`);
+    await page.fill('[data-testid="login-pin"]', credentials.pin);
+    await page.click('[data-testid="login-submit"]');
+    await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    return;
+  }
+  await page.goto(`${backendBaseUrl}/login?next=${encodeURIComponent(nextPath)}`);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password").fill(credentials.password);
+  await page.getByRole("button", { name: "Login" }).click();
   await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 };
 

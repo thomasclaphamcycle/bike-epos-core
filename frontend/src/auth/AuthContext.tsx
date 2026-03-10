@@ -21,6 +21,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
+  loginWithPin: (userId: string, pin: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -79,6 +80,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await refresh();
   }, [refresh]);
 
+  const loginWithPin = useCallback(async (userId: string, pin: string) => {
+    await apiPost<{ user: AuthUser }>("/api/auth/pin-login", { userId, pin });
+    await refresh();
+  }, [refresh]);
+
   const logout = useCallback(async () => {
     await apiPost<unknown>("/api/auth/logout", {});
     setUser(null);
@@ -89,10 +95,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       user,
       loading,
       login,
+      loginWithPin,
       logout,
       refresh,
     }),
-    [user, loading, login, logout, refresh],
+    [user, loading, login, loginWithPin, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
