@@ -911,6 +911,36 @@ th {
   align-content: start;
 }
 
+.staff-status-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.staff-status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.staff-status-badge-active {
+  background: #15803d;
+  border-color: #15803d;
+  color: #ffffff;
+}
+
+.staff-status-badge-inactive {
+  background: #f8fafc;
+  border-color: #d6dee8;
+  color: #64748b;
+}
+
 .staff-field-label {
   font-size: 0.92rem;
   color: #475569;

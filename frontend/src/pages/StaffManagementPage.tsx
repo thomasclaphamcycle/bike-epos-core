@@ -212,9 +212,6 @@ export const StaffManagementPage = () => {
                 </div>
                 <div className="staff-user-meta">
                   <span className="stock-badge stock-muted">{user.role}</span>
-                  <span className={`stock-badge ${user.isActive ? "stock-good" : "stock-state-zero"}`}>
-                    {user.isActive ? "Active" : "Inactive"}
-                  </span>
                   <span className="muted-text">Created {new Date(user.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
@@ -266,9 +263,14 @@ export const StaffManagementPage = () => {
                     </label>
                     <div className="staff-status-control">
                       <span className="staff-field-label">Status</span>
-                      <button type="button" onClick={() => void updateUser(user.id, { isActive: !user.isActive })}>
-                        {user.isActive ? "Set Inactive" : "Set Active"}
-                      </button>
+                      <div className="staff-status-action">
+                        <span className={`staff-status-badge ${user.isActive ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
+                          {user.isActive ? "ACTIVE" : "INACTIVE"}
+                        </span>
+                        <button type="button" onClick={() => void updateUser(user.id, { isActive: !user.isActive })}>
+                          {user.isActive ? "Deactivate" : "Activate"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </section>
