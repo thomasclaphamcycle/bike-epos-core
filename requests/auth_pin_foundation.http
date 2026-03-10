@@ -42,3 +42,10 @@ Content-Type: application/json
 ### Manager/admin reset another user's PIN
 POST http://localhost:3000/api/admin/users/replace-with-user-id/reset-pin
 
+### Manager/admin set another user's PIN directly
+POST http://localhost:3000/api/admin/users/replace-with-user-id/set-pin
+Content-Type: application/json
+
+{
+  "pin": "2468"
+}

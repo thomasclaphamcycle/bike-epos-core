@@ -9,6 +9,7 @@ import {
   adminListUsers,
   adminResetUserPin,
   adminResetUserPassword,
+  adminSetUserPin,
   adminUpdateUser,
 } from "../services/adminUserService";
 import { HttpError } from "../utils/http";
@@ -19,6 +20,7 @@ export const adminCreateUserHandler = async (req: Request, res: Response) => {
     email?: unknown;
     role?: unknown;
     tempPassword?: unknown;
+    pin?: unknown;
   };
 
   if (body.name !== undefined && typeof body.name !== "string") {
@@ -33,6 +35,9 @@ export const adminCreateUserHandler = async (req: Request, res: Response) => {
   if (body.tempPassword !== undefined && typeof body.tempPassword !== "string") {
     throw new HttpError(400, "tempPassword must be a string", "INVALID_ADMIN_USER_CREATE");
   }
+  if (body.pin !== undefined && typeof body.pin !== "string") {
+    throw new HttpError(400, "pin must be a string", "INVALID_ADMIN_USER_CREATE");
+  }
 
   const user = await adminCreateUser(
     {
@@ -40,6 +45,7 @@ export const adminCreateUserHandler = async (req: Request, res: Response) => {
       email: body.email,
       role: body.role,
       tempPassword: body.tempPassword,
+      pin: body.pin,
     },
     getRequestAuditActor(req),
   );
@@ -108,6 +114,23 @@ export const adminResetUserPasswordHandler = async (req: Request, res: Response)
 export const adminResetUserPinHandler = async (req: Request, res: Response) => {
   const user = await adminResetUserPin(
     req.params.id,
+    getRequestStaffActorId(req),
+    getRequestStaffRole(req),
+    getRequestAuditActor(req),
+  );
+
+  res.json({ user });
+};
+
+export const adminSetUserPinHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { pin?: unknown };
+  if (body.pin !== undefined && typeof body.pin !== "string") {
+    throw new HttpError(400, "pin must be a string", "INVALID_ADMIN_PIN_SET");
+  }
+
+  const user = await adminSetUserPin(
+    req.params.id,
+    body.pin,
     getRequestStaffActorId(req),
     getRequestStaffRole(req),
     getRequestAuditActor(req),

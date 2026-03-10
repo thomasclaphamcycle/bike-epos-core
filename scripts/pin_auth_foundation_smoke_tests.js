@@ -126,7 +126,21 @@ const main = async () => {
     });
     assert.equal(oldPinResult.status, 401);
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    const setPinResultByManager = await fetchJson(`/api/admin/users/${user.id}/set-pin`, {
+      method: "POST",
+      headers: { ...MANAGER_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: "2468" }),
+    });
+    assert.equal(setPinResultByManager.status, 200);
+
+    const reloginResult = await fetchJson("/api/auth/pin-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, pin: "2468" }),
+    });
+    assert.equal(reloginResult.status, 200);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const retry = await fetchJson("/api/auth/pin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
