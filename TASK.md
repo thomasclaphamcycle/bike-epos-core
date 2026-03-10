@@ -2,7 +2,7 @@
 
 ## Current Snapshot
 
-- Working branch: `feat/pin-auth-foundation`
+- Working branch: `feat/pin-login-ui`
 - Stable local restore point:
   - tag `v1.2-demo-running`
   - branch `stable-demo`
@@ -14,7 +14,8 @@
 - Roadmap implementation on the current working line is complete through `M135`
 - Current focus is post-roadmap hardening and controlled auth evolution
 - Completed login visual cleanup remains UX work from `ux-saledock-alignment`
-- Current branch purpose: PIN auth foundation and safe migration preparation, which is auth/backend feature work rather than pure UX refinement
+- PIN auth foundation and the main PIN login UI migration are now complete
+- Current branch purpose: finish auth migration tracking cleanly and define the real next post-migration follow-on work
 
 ## Confirmed Done
 
@@ -95,7 +96,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 ## Current Milestone
 
 - no new feature milestone is active
-- current phase: post-roadmap auth foundation, release readiness, and controlled login migration planning
+- current phase: post-roadmap auth stabilization, controlled rollout, and follow-on hardening
 
 ## Next Milestones Queue
 
@@ -106,12 +107,11 @@ These milestones are confirmed in branch history and/or remote refs. The current
 Highest priority:
 
 1. keep the branch buildable and smoke-stable
-2. keep password login functional while PIN login foundation is verified
-3. replace the login screen with active staff buttons + always-visible 4 digit PIN in a controlled follow-on pass
-4. decide and document the admin policy for button-based PIN login
-5. add manager-facing PIN reset UI if product policy still requires it
-6. update Playwright coverage for the future button-based PIN login screen
-7. continue repo hygiene and branch consolidation in parallel
+2. keep password login functional in the backend while PIN login rolls out in the UI
+3. decide and document the admin policy for button-based PIN login long term
+4. add manager-facing PIN reset UI if product policy still requires it
+5. consider register lock / quick user switch flow if trial usage requires it
+6. continue repo hygiene and branch consolidation in parallel
 
 ## Completed
 
@@ -129,6 +129,13 @@ Highest priority:
   - PIN login endpoint
   - PIN login rate limiting
   - supporting migration, request examples, and smoke coverage
+- PIN login UI migration on `feat/pin-login-ui`
+  - main login screen now uses active user buttons
+  - PIN field is always visible
+  - active users include admins
+  - frontend auth flow now uses `POST /api/auth/pin-login`
+  - existing password auth remains preserved in the backend
+  - build, smoke tests, and Playwright coverage updated and passing
 
 ## In Progress
 
@@ -136,10 +143,14 @@ Highest priority:
 
 ## Next
 
-- replace the login screen with active staff buttons + always-visible 4 digit PIN
-- decide whether admins remain password-only or also use the button/PIN flow
-- add manager-facing UI for PIN reset if needed beyond the API/admin surface
-- add Playwright coverage for the new PIN login screen once the UI changes
+- decide whether admins remain on the same button/PIN flow permanently or later move to a stricter policy
+- add manager-facing UI for PIN reset if needed beyond the existing API/admin surface
+- evaluate register lock / quick user switch flow for trial environments
+
+## Future
+
+- refine admin/security policy if PIN rollout exposes new operational risks
+- expand auth-specific regression coverage beyond the current login and PIN foundation checks
 
 ## Missing Milestone Reconciliation
 
