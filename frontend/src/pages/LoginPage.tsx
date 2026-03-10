@@ -9,8 +9,8 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [identifier, setIdentifier] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

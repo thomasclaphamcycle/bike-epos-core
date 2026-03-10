@@ -147,14 +147,18 @@ export const GlobalCommandBar = () => {
       return;
     }
 
+    let cancelled = false;
+
     const run = async () => {
       const needle = debouncedQuery.trim();
       if (!needle) {
-        setCustomers([]);
-        setJobs([]);
-        setProducts([]);
-        setSuppliers([]);
-        setPurchaseOrders([]);
+        if (!cancelled) {
+          setCustomers([]);
+          setJobs([]);
+          setProducts([]);
+          setSuppliers([]);
+          setPurchaseOrders([]);
+        }
         return;
       }
 
@@ -167,61 +171,67 @@ export const GlobalCommandBar = () => {
         manager ? apiGet<PurchaseOrderResponse>("/api/purchase-orders?take=50&skip=0") : Promise.resolve({ purchaseOrders: [] }),
       ]);
 
-      setCustomers(customerResult.status === "fulfilled"
-        ? (customerResult.value.customers || []).slice(0, 6).map((row) => ({
-            key: `customer-${row.id}`,
-            group: "Customers",
-            title: row.name,
-            subtitle: row.email || row.phone || "Customer",
-            path: `/customers/${row.id}`,
-          }))
-        : []);
-
-      setJobs(workshopResult.status === "fulfilled"
-        ? (workshopResult.value.jobs || []).slice(0, 6).map((row) => ({
-            key: `job-${row.id}`,
-            group: "Workshop",
-            title: `Job ${row.id.slice(0, 8)}`,
-            subtitle: `${row.status} | ${customerName(row.customer)}${row.bikeDescription ? ` | ${row.bikeDescription}` : ""}`,
-            path: `/workshop/${row.id}`,
-          }))
-        : []);
-
-      setProducts(productResult.status === "fulfilled"
-        ? productResult.value.slice(0, 6).map((row) => ({
-            key: `product-${row.id}`,
-            group: "Products",
-            title: row.name,
-            subtitle: `${row.sku} | on hand ${row.onHandQty}`,
-            path: `/inventory?q=${encodeURIComponent(row.sku || row.barcode || row.name)}`,
-          }))
-        : []);
-
-      setSuppliers(supplierResult.status === "fulfilled"
-        ? (supplierResult.value.suppliers || []).slice(0, 6).map((row) => ({
-            key: `supplier-${row.id}`,
-            group: "Suppliers",
-            title: row.name,
-            subtitle: row.email || row.phone || "Supplier",
-            path: "/suppliers",
-          }))
-        : []);
-
-      setPurchaseOrders(poResult.status === "fulfilled"
-        ? (poResult.value.purchaseOrders || [])
-            .filter((row) => [row.id, row.status, row.supplier.name].join(" ").toLowerCase().includes(needle.toLowerCase()))
-            .slice(0, 6)
-            .map((row) => ({
-              key: `po-${row.id}`,
-              group: "Purchase Orders",
-              title: `PO ${row.id.slice(0, 8)}`,
-              subtitle: `${row.supplier.name} | ${row.status}`,
-              path: `/purchasing/${row.id}`,
+      if (!cancelled) {
+        setCustomers(customerResult.status === "fulfilled"
+          ? (customerResult.value.customers || []).slice(0, 6).map((row) => ({
+              key: `customer-${row.id}`,
+              group: "Customers",
+              title: row.name,
+              subtitle: row.email || row.phone || "Customer",
+              path: `/customers/${row.id}`,
             }))
-        : []);
+          : []);
+
+        setJobs(workshopResult.status === "fulfilled"
+          ? (workshopResult.value.jobs || []).slice(0, 6).map((row) => ({
+              key: `job-${row.id}`,
+              group: "Workshop",
+              title: `Job ${row.id.slice(0, 8)}`,
+              subtitle: `${row.status} | ${customerName(row.customer)}${row.bikeDescription ? ` | ${row.bikeDescription}` : ""}`,
+              path: `/workshop/${row.id}`,
+            }))
+          : []);
+
+        setProducts(productResult.status === "fulfilled"
+          ? productResult.value.slice(0, 6).map((row) => ({
+              key: `product-${row.id}`,
+              group: "Products",
+              title: row.name,
+              subtitle: `${row.sku} | on hand ${row.onHandQty}`,
+              path: `/inventory?q=${encodeURIComponent(row.sku || row.barcode || row.name)}`,
+            }))
+          : []);
+
+        setSuppliers(supplierResult.status === "fulfilled"
+          ? (supplierResult.value.suppliers || []).slice(0, 6).map((row) => ({
+              key: `supplier-${row.id}`,
+              group: "Suppliers",
+              title: row.name,
+              subtitle: row.email || row.phone || "Supplier",
+              path: "/suppliers",
+            }))
+          : []);
+
+        setPurchaseOrders(poResult.status === "fulfilled"
+          ? (poResult.value.purchaseOrders || [])
+              .filter((row) => [row.id, row.status, row.supplier.name].join(" ").toLowerCase().includes(needle.toLowerCase()))
+              .slice(0, 6)
+              .map((row) => ({
+                key: `po-${row.id}`,
+                group: "Purchase Orders",
+                title: `PO ${row.id.slice(0, 8)}`,
+                subtitle: `${row.supplier.name} | ${row.status}`,
+                path: `/purchasing/${row.id}`,
+              }))
+          : []);
+      }
     };
 
     void run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedQuery, open, user?.role]);
 
   const staticItems = useMemo(() => staticCommands(user?.role), [user?.role]);

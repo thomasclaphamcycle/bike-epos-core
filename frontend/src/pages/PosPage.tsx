@@ -155,6 +155,10 @@ export const PosPage = () => {
     setBasket(created);
     setSale(null);
     setReceiptUrl(null);
+    setSelectedCustomer(null);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setShowCreateCustomer(false);
     syncQuery({ basketId: created.id, saleId: null });
     success("New sale created");
     window.requestAnimationFrame(() => {
@@ -232,6 +236,7 @@ export const PosPage = () => {
   useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
       setCustomerResults([]);
+      setCustomerLoading(false);
       return;
     }
 
