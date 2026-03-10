@@ -77,7 +77,7 @@ textarea {
 .layout-root {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   background:
     radial-gradient(circle at 12% 8%, var(--cp-page-glow) 0%, transparent 26%),
     radial-gradient(circle at 88% 12%, var(--cp-page-warm) 0%, transparent 20%),
