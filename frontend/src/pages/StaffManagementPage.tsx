@@ -26,6 +26,7 @@ export const StaffManagementPage = () => {
 
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
@@ -114,6 +115,8 @@ export const StaffManagementPage = () => {
     }
   };
 
+  const visibleUsers = showInactive ? users : users.filter((user) => user.isActive);
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -160,7 +163,20 @@ export const StaffManagementPage = () => {
 
       <section className="card">
         <div className="card-header-row">
-          <h2>Existing Staff Users</h2>
+          <div>
+            <h2>Existing Staff Users</h2>
+            <p className="muted-text">
+              Active users are shown by default to keep the operational list focused.
+            </p>
+          </div>
+          <label className="staff-toggle">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(event) => setShowInactive(event.target.checked)}
+            />
+            <span>Show inactive</span>
+          </label>
         </div>
         <div className="table-wrap">
           <table>
@@ -177,8 +193,8 @@ export const StaffManagementPage = () => {
               </tr>
             </thead>
             <tbody>
-              {users.length ? users.map((user) => (
-                <tr key={user.id}>
+              {visibleUsers.length ? visibleUsers.map((user) => (
+                <tr key={user.id} className={user.isActive ? "" : "staff-row-inactive"}>
                   <td>{user.name ?? "-"}</td>
                   <td>
                     <input
@@ -244,7 +260,9 @@ export const StaffManagementPage = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8}>No staff users found.</td>
+                  <td colSpan={8}>
+                    {showInactive ? "No staff users found." : "No active staff users found."}
+                  </td>
                 </tr>
               )}
             </tbody>
