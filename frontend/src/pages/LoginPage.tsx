@@ -51,7 +51,7 @@ export const LoginPage = () => {
             <CorePosLogo variant="stacked" size={200} />
           </div>
 
-          <label htmlFor="identifier">Username or email</label>
+          <label htmlFor="identifier">Username</label>
           <input
             id="identifier"
             data-testid="login-email"
