@@ -1228,7 +1228,7 @@ th {
 }
 
 .login-stage {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
 }
 
 .login-card {
@@ -1240,46 +1240,49 @@ th {
   padding: 26px 28px 28px;
   display: grid;
   align-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .login-logo-wrap {
   display: flex;
   justify-content: center;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .login-user-list {
   display: grid;
-  gap: 8px;
-  margin-bottom: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .login-user-button {
   width: 100%;
-  min-height: 52px;
-  border: 1px solid #c6d6e3;
-  border-radius: 12px;
-  background: #f8fbff;
-  padding: 10px 12px;
+  min-height: 64px;
+  border: 1px solid #d7e2ec;
+  border-radius: 14px;
+  background: #f9fbfd;
+  padding: 11px 12px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
   text-align: left;
   color: #183041;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .login-user-button:hover:not(:disabled) {
-  border-color: #8fb6dd;
+  border-color: #9eb9d4;
   background: #ffffff;
+  transform: translateY(-1px);
 }
 
 .login-user-button-active {
   border-color: var(--cp-orange);
-  background: rgba(255, 122, 24, 0.08);
-  box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.12);
+  background: rgba(255, 122, 24, 0.09);
+  box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.12), 0 10px 18px rgba(11, 31, 51, 0.08);
 }
 
 .login-user-button:disabled {
@@ -1289,12 +1292,14 @@ th {
 
 .login-user-name {
   font-weight: 700;
+  line-height: 1.15;
 }
 
 .login-user-role {
   font-size: 0.8rem;
-  font-weight: 700;
-  color: #5e7184;
+  font-weight: 600;
+  color: #607286;
+  letter-spacing: 0.02em;
 }
 
 .login-inline-status {
@@ -1349,6 +1354,16 @@ th {
   .login-card {
     padding: 22px 20px 22px;
     border-radius: 20px;
+  }
+
+  .login-user-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .login-user-list {
+    grid-template-columns: 1fr;
   }
 }
 
