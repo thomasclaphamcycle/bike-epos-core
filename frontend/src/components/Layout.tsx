@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
 import { toRoleHomeRoute } from "../utils/homeRoute";
-import { CorePosLogo } from "./branding/CorePosLogo";
+import CorePosLogo from "./branding/CorePosLogo";
 
 type NavEntry = {
   label: string;
@@ -144,7 +144,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <aside className="app-sidebar">
         <div className="sidebar-brand-block">
           <Link to="/home" className="brand" aria-label="CorePOS home">
-            <CorePosLogo variant="full" theme="dark" className="sidebar-brand-logo" />
+            <CorePosLogo variant="full" size={36} className="sidebar-brand-logo" />
           </Link>
           <span className="sidebar-subtitle">Retail, workshop, stock, and operations</span>
         </div>
@@ -202,7 +202,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <header className="app-header">
           <div className="header-left">
             <Link to="/home" className="header-brand-link" aria-label="CorePOS home">
-              <CorePosLogo variant="icon" theme="light" className="header-brand-logo" />
+              <CorePosLogo variant="icon" size={28} className="header-brand-logo" />
             </Link>
             <div className="header-context">
               <span className="header-eyebrow">Current Area</span>

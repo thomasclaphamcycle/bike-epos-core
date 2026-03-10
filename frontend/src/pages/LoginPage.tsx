@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 import { toRoleHomeRoute } from "../utils/homeRoute";
-import { CorePosLogo } from "../components/branding/CorePosLogo";
+import CorePosLogo from "../components/branding/CorePosLogo";
 
 export const LoginPage = () => {
   const { user, login } = useAuth();
@@ -47,8 +47,6 @@ export const LoginPage = () => {
     <div className="login-shell">
       <div className="login-stage">
         <section className="login-brand-panel" aria-label="CorePOS product summary">
-          <CorePosLogo variant="stacked" theme="dark" className="login-brand-logo" />
-
           <div>
             <p className="login-brand-kicker">CorePOS</p>
             <h1 className="login-brand-title">Retail and workshop operations</h1>
@@ -72,6 +70,10 @@ export const LoginPage = () => {
         </section>
 
         <form className="login-card" onSubmit={onSubmit}>
+          <div className="mb-6 flex justify-center login-logo-wrap">
+            <CorePosLogo variant="stacked" size={72} />
+          </div>
+
           <div className="login-form-header">
             <p className="login-form-eyebrow">Staff sign in</p>
             <h2>Welcome back</h2>

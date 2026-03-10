@@ -1146,6 +1146,12 @@ th {
   margin-bottom: 8px;
 }
 
+.login-logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
 .login-form-header h2 {
   margin: 0;
   font-size: 1.8rem;
