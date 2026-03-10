@@ -824,91 +824,162 @@ th {
   opacity: 0.68;
 }
 
+.staff-create-card,
+.staff-list-card {
+  gap: 18px;
+}
+
+.staff-create-shell {
+  border: 1px solid rgba(255, 122, 24, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff7ef 0%, #fffaf4 58%, #f8fbff 100%);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+  padding: 22px;
+  display: grid;
+  gap: 18px;
+}
+
+.staff-section-heading {
+  align-items: center;
+}
+
+.staff-section-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .staff-create-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1.2fr 1.3fr 160px minmax(220px, 1fr) 140px auto;
+  gap: 14px;
   align-items: end;
 }
 
-.staff-create-grid label,
-.staff-user-grid label {
+.staff-create-grid label {
   display: grid;
   gap: 6px;
 }
 
 .staff-create-actions {
   align-self: end;
+  justify-self: start;
+}
+
+.staff-create-actions .primary {
+  min-width: 172px;
+}
+
+.staff-list-header {
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .staff-user-list {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .staff-user-card {
   border: 1px solid #dbe5ef;
-  border-radius: 14px;
+  border-radius: 16px;
   background: #fff;
-  padding: 16px;
+  padding: 0;
   display: grid;
-  gap: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
 }
 
-.staff-user-card-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
+.staff-summary-row {
+  border: 0;
+  background: #ffffff;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  width: 100%;
+  padding: 16px 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
-.staff-user-card-header h3 {
+.staff-summary-row:hover {
+  background: #fbfdff;
+}
+
+.staff-summary-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(46, 124, 246, 0.22);
+}
+
+.staff-summary-primary h3 {
   margin: 0 0 4px;
+  font-size: 1rem;
 }
 
-.staff-user-meta {
+.staff-summary-primary .muted-text {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.staff-summary-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  gap: 10px;
+}
+
+.staff-expand-affordance {
+  color: #2e7cf6;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.staff-editor-panel {
+  border-top: 1px solid #e6edf5;
+  background: #fbfdff;
+  padding: 18px;
+}
+
+.staff-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) 180px minmax(240px, auto) auto;
+  gap: 18px 18px;
+  align-items: end;
+}
+
+.staff-form-field {
+  display: grid;
   gap: 8px;
 }
 
-.staff-user-sections {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 16px;
+.staff-form-field > span {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #475569;
 }
 
-.staff-user-section {
-  border: 1px solid #e6edf5;
-  border-radius: 12px;
-  padding: 14px;
-  display: grid;
-  gap: 12px;
-  background: #fbfdff;
+.staff-field-name {
+  min-width: 0;
 }
 
-.staff-user-section-header {
+.staff-field-role select {
+  max-width: 180px;
+}
+
+.staff-field-status {
+  min-width: 0;
+}
+
+.staff-profile-actions {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  align-items: end;
 }
 
-.staff-user-section-header h4 {
-  margin: 0;
-}
-
-.staff-user-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.staff-status-control {
-  display: grid;
-  gap: 6px;
-  align-content: start;
+.staff-profile-actions button {
+  min-width: 144px;
 }
 
 .staff-status-action {
@@ -916,6 +987,35 @@ th {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+
+.staff-role-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.staff-role-badge-admin {
+  background: rgba(11, 31, 51, 0.12);
+  border-color: rgba(11, 31, 51, 0.18);
+  color: #0b1f33;
+}
+
+.staff-role-badge-manager {
+  background: rgba(46, 124, 246, 0.12);
+  border-color: rgba(46, 124, 246, 0.18);
+  color: #1d4ed8;
+}
+
+.staff-role-badge-staff {
+  background: #f8fafc;
+  border-color: #d6dee8;
+  color: #475569;
 }
 
 .staff-status-badge {
@@ -941,39 +1041,72 @@ th {
   color: #64748b;
 }
 
-.staff-field-label {
-  font-size: 0.92rem;
-  color: #475569;
-}
-
-.staff-credential-action {
+.staff-credential-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 320px) auto;
+  gap: 14px;
   align-items: end;
+  min-width: 0;
 }
 
-@media (max-width: 1200px) {
+.staff-credential-row button {
+  min-width: 132px;
+}
+
+.staff-credential-row-pin {
+  grid-template-columns: 148px auto;
+  justify-content: start;
+}
+
+.staff-password-input {
+  max-width: 320px;
+}
+
+.staff-pin-input {
+  width: 148px;
+  max-width: 148px;
+  text-align: center;
+  letter-spacing: 0.18em;
+}
+
+@media (max-width: 1280px) {
   .staff-create-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .staff-user-sections {
-    grid-template-columns: 1fr;
+  .staff-editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
   .staff-create-grid,
-  .staff-credential-action,
-  .staff-user-card-header,
-  .staff-user-section-header {
+  .staff-credential-row,
+  .staff-summary-row,
+  .staff-editor-grid {
     grid-template-columns: 1fr;
     display: grid;
   }
 
-  .staff-user-meta {
+  .staff-summary-meta,
+  .staff-profile-actions {
     justify-content: flex-start;
+  }
+
+  .staff-create-actions,
+  .staff-credential-row button {
+    justify-self: stretch;
+  }
+
+  .staff-list-header {
+    justify-content: flex-start;
+  }
+
+  .staff-field-role select,
+  .staff-password-input,
+  .staff-pin-input {
+    max-width: none;
+    width: 100%;
   }
 }
 

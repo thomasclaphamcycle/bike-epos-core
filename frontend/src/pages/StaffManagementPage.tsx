@@ -37,6 +37,7 @@ export const StaffManagementPage = () => {
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
   const [userEdits, setUserEdits] = useState<Record<string, { name: string; role: UserRole }>>({});
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -87,6 +88,7 @@ export const StaffManagementPage = () => {
       setCreateRole("STAFF");
       setCreatePassword("temp-pass-123");
       setCreatePin("");
+      setExpandedUserId(null);
       await loadUsers();
     } catch (createError) {
       error(createError instanceof Error ? createError.message : "Failed to create user");
@@ -133,63 +135,61 @@ export const StaffManagementPage = () => {
   };
 
   const visibleUsers = showInactive ? users : users.filter((user) => user.isActive);
+  const formatDate = (value: string) => new Date(value).toLocaleDateString();
 
   return (
     <div className="page-shell">
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h1>Staff Management</h1>
-          </div>
-          <button type="button" onClick={() => void loadUsers()} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-
-        <div className="staff-create-grid">
-          <label>
-            Name
-            <input value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="New staff member" />
-          </label>
-          <label>
-            Email
-            <input value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} placeholder="staff@example.com" />
-          </label>
-          <label>
-            Role
-            <select value={createRole} onChange={(event) => setCreateRole(event.target.value as UserRole)}>
-              {roleOptions.map((role) => (
-                <option key={role} value={role}>{role}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            New Password
-            <input value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} placeholder="At least 8 characters" />
-          </label>
-          <label>
-            PIN
-            <input
-              value={createPin}
-              onChange={(event) => setCreatePin(event.target.value.replace(/\D/g, "").slice(0, 4))}
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="Optional 4-digit PIN"
-            />
-          </label>
-          <div className="actions-inline staff-create-actions">
-            <button type="button" className="primary" onClick={() => void createUser()}>
-              Create User
+      <section className="card staff-create-card">
+        <div className="staff-create-shell">
+          <div className="card-header-row staff-section-heading">
+            <h2>Create User</h2>
+            <button type="button" className="secondary" onClick={() => void loadUsers()} disabled={loading}>
+              {loading ? "Refreshing..." : "Refresh"}
             </button>
+          </div>
+          <div className="staff-create-grid">
+            <label>
+              Name
+              <input value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="New user" />
+            </label>
+            <label>
+              Email
+              <input value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} placeholder="staff@example.com" />
+            </label>
+            <label>
+              Role
+              <select value={createRole} onChange={(event) => setCreateRole(event.target.value as UserRole)}>
+                {roleOptions.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              New Password
+              <input value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} placeholder="At least 8 characters" />
+            </label>
+            <label>
+              PIN
+              <input
+                value={createPin}
+                onChange={(event) => setCreatePin(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="Optional 4-digit PIN"
+              />
+            </label>
+            <div className="actions-inline staff-create-actions">
+              <button type="button" className="primary" onClick={() => void createUser()}>
+                Create User
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Existing Staff Users</h2>
-          </div>
+      <section className="card staff-list-card">
+        <div className="card-header-row staff-list-header">
+          <div />
           <label className="staff-toggle">
             <input
               type="checkbox"
@@ -202,37 +202,31 @@ export const StaffManagementPage = () => {
         <div className="staff-user-list">
           {visibleUsers.length ? visibleUsers.map((user) => (
             <article key={user.id} className={`staff-user-card${user.isActive ? "" : " staff-row-inactive"}`}>
-              <div className="staff-user-card-header">
-                <div>
+              <button
+                type="button"
+                className="staff-summary-row"
+                aria-expanded={expandedUserId === user.id}
+                onClick={() => setExpandedUserId((current) => (current === user.id ? null : user.id))}
+              >
+                <div className="staff-summary-primary">
                   <h3>{user.name ?? user.username}</h3>
-                  <p className="muted-text">
-                    {user.username}
-                    {user.email ? ` · ${user.email}` : ""}
-                  </p>
+                  <p className="muted-text">{user.email ?? user.username}</p>
                 </div>
-                <div className="staff-user-meta">
-                  <span className="stock-badge stock-muted">{user.role}</span>
-                  <span className="muted-text">Created {new Date(user.createdAt).toLocaleDateString()}</span>
+                <div className="staff-summary-meta">
+                  <span className={`staff-role-badge staff-role-badge-${user.role.toLowerCase()}`}>{user.role}</span>
+                  <span className={`staff-status-badge ${user.isActive ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
+                    {user.isActive ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                  <span className="muted-text">Created {formatDate(user.createdAt)}</span>
+                  <span className="staff-expand-affordance">{expandedUserId === user.id ? "Collapse" : "Edit"}</span>
                 </div>
-              </div>
+              </button>
 
-              <div className="staff-user-sections">
-                <section className="staff-user-section">
-                  <div className="staff-user-section-header">
-                    <h4>Profile</h4>
-                    <button
-                      type="button"
-                      onClick={() => void updateUser(user.id, {
-                        name: userEdits[user.id]?.name ?? user.name ?? "",
-                        role: userEdits[user.id]?.role ?? user.role,
-                      })}
-                    >
-                      Save Profile
-                    </button>
-                  </div>
-                  <div className="staff-user-grid">
-                    <label>
-                      Name
+              {expandedUserId === user.id ? (
+                <div className="staff-editor-panel">
+                  <div className="staff-editor-grid">
+                    <label className="staff-form-field staff-field-name">
+                      <span>Name</span>
                       <input
                         value={userEdits[user.id]?.name ?? ""}
                         onChange={(event) => setUserEdits((current) => ({
@@ -244,8 +238,9 @@ export const StaffManagementPage = () => {
                         }))}
                       />
                     </label>
-                    <label>
-                      Role
+
+                    <label className="staff-form-field staff-field-role">
+                      <span>Role</span>
                       <select
                         value={userEdits[user.id]?.role ?? user.role}
                         onChange={(event) => setUserEdits((current) => ({
@@ -261,30 +256,36 @@ export const StaffManagementPage = () => {
                         ))}
                       </select>
                     </label>
-                    <div className="staff-status-control">
-                      <span className="staff-field-label">Status</span>
+
+                    <div className="staff-form-field staff-field-status">
+                      <span>Status</span>
                       <div className="staff-status-action">
                         <span className={`staff-status-badge ${user.isActive ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
                           {user.isActive ? "ACTIVE" : "INACTIVE"}
                         </span>
-                        <button type="button" onClick={() => void updateUser(user.id, { isActive: !user.isActive })}>
+                        <button type="button" className="secondary" onClick={() => void updateUser(user.id, { isActive: !user.isActive })}>
                           {user.isActive ? "Deactivate" : "Activate"}
                         </button>
                       </div>
                     </div>
-                  </div>
-                </section>
 
-                <section className="staff-user-section">
-                  <div className="staff-user-section-header">
-                    <h4>Credentials</h4>
-                  </div>
-                  <div className="staff-user-grid">
-                    <div className="staff-credential-action">
-                      <label>
-                        New Password
+                    <div className="staff-profile-actions">
+                      <button
+                        type="button"
+                        onClick={() => void updateUser(user.id, {
+                          name: userEdits[user.id]?.name ?? user.name ?? "",
+                          role: userEdits[user.id]?.role ?? user.role,
+                        })}
+                      >
+                        Save Profile
+                      </button>
+                    </div>
+
+                    <div className="staff-credential-row staff-credential-row-password">
+                      <label className="staff-form-field">
+                        <span>New Password</span>
                         <input
-                          className="compact-input"
+                          className="staff-password-input"
                           value={resetPasswords[user.id] ?? ""}
                           onChange={(event) => setResetPasswords((current) => ({ ...current, [user.id]: event.target.value }))}
                           placeholder="At least 8 characters"
@@ -295,11 +296,11 @@ export const StaffManagementPage = () => {
                       </button>
                     </div>
 
-                    <div className="staff-credential-action">
-                      <label>
-                        PIN
+                    <div className="staff-credential-row staff-credential-row-pin">
+                      <label className="staff-form-field">
+                        <span>PIN</span>
                         <input
-                          className="compact-input"
+                          className="staff-pin-input"
                           value={pinInputs[user.id] ?? ""}
                           onChange={(event) => setPinInputs((current) => ({
                             ...current,
@@ -319,12 +320,12 @@ export const StaffManagementPage = () => {
                       </button>
                     </div>
                   </div>
-                </section>
-              </div>
+                </div>
+              ) : null}
             </article>
           )) : (
             <div className="restricted-panel">
-              {showInactive ? "No staff users found." : "No active staff users found."}
+              {showInactive ? "No users found." : "No active users found."}
             </div>
           )}
         </div>
