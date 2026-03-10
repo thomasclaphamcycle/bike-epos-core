@@ -2,7 +2,7 @@
 
 ## Current Snapshot
 
-- Working branch: `dev-next`
+- Working branch: `feat/pin-auth-foundation`
 - Stable local restore point:
   - tag `v1.2-demo-running`
   - branch `stable-demo`
@@ -12,8 +12,9 @@
 - Earlier branch ancestry is still fragmented, but the present branch state is roadmap-complete and in stabilization mode
 - Current working mode is trial-use readiness, not milestone expansion
 - Roadmap implementation on the current working line is complete through `M135`
-- Current focus is stabilization, verification, release readiness, and operational polish
-- Current branch purpose: Saledock-aligned UX refinement focused on navigation clarity, grouping, discoverability, and lower cognitive load
+- Current focus is post-roadmap hardening and controlled auth evolution
+- Completed login visual cleanup remains UX work from `ux-saledock-alignment`
+- Current branch purpose: PIN auth foundation and safe migration preparation, which is auth/backend feature work rather than pure UX refinement
 
 ## Confirmed Done
 
@@ -94,7 +95,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 ## Current Milestone
 
 - no new feature milestone is active
-- current phase: UX refinement, release readiness, and real-world trial preparation
+- current phase: post-roadmap auth foundation, release readiness, and controlled login migration planning
 
 ## Next Milestones Queue
 
@@ -105,9 +106,40 @@ These milestones are confirmed in branch history and/or remote refs. The current
 Highest priority:
 
 1. keep the branch buildable and smoke-stable
-2. simplify navigation and improve discoverability with small, reversible shell changes
-3. improve regression coverage where current gaps block confident verification
-4. continue repo hygiene and branch consolidation in parallel
+2. keep password login functional while PIN login foundation is verified
+3. replace the login screen with active staff buttons + always-visible 4 digit PIN in a controlled follow-on pass
+4. decide and document the admin policy for button-based PIN login
+5. add manager-facing PIN reset UI if product policy still requires it
+6. update Playwright coverage for the future button-based PIN login screen
+7. continue repo hygiene and branch consolidation in parallel
+
+## Completed
+
+- login page visual cleanup/polish on `ux-saledock-alignment`
+  - single centered card
+  - simplified copy
+  - spacing polish
+  - CorePOS branding asset integration
+- PIN auth foundation on `feat/pin-auth-foundation`
+  - `pinHash` storage
+  - PIN hashing/verification
+  - self-service set/change PIN
+  - manager/admin PIN reset endpoint
+  - active user pre-login listing endpoint
+  - PIN login endpoint
+  - PIN login rate limiting
+  - supporting migration, request examples, and smoke coverage
+
+## In Progress
+
+- none
+
+## Next
+
+- replace the login screen with active staff buttons + always-visible 4 digit PIN
+- decide whether admins remain password-only or also use the button/PIN flow
+- add manager-facing UI for PIN reset if needed beyond the API/admin surface
+- add Playwright coverage for the new PIN login screen once the UI changes
 
 ## Missing Milestone Reconciliation
 

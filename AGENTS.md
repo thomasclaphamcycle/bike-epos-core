@@ -22,6 +22,8 @@ Current delivery mode:
 - roadmap feature buildout is complete through `M135`
 - current work should default to stabilization, release-readiness, verification, operational polish, and trial-use readiness unless a new post-roadmap batch is explicitly defined
 - current branch `ux-saledock-alignment` is for shell/navigation refinement inspired by simpler Saledock-style grouping, not for new product surface area
+- once work adds auth, schema, API, or security behavior, classify it as feature/backend infrastructure work rather than pure UX polish
+- authentication changes should preserve existing login paths unless they are intentionally migrated in a controlled, verified change
 
 ## Source Of Truth Order
 
