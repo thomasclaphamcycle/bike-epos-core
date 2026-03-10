@@ -10,10 +10,14 @@ const roleRank = {
   ADMIN: 3,
 } as const;
 
-const navClass = ({ isActive }: { isActive: boolean }) =>
-  isActive ? "sidebar-link sidebar-link--active" : "sidebar-link";
-
 const envLabel = import.meta.env.MODE || "development";
+
+type SidebarNavItem = {
+  to: string;
+  label: string;
+  minimumRole: keyof typeof roleRank;
+  matches: (path: string) => boolean;
+};
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
@@ -33,10 +37,77 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
-  const sidebarNavItems = [
-    { to: "/pos", label: "POS", minimumRole: "STAFF" },
-    { to: "/management/products", label: "Products", minimumRole: "MANAGER" },
-  ] as const;
+  const sidebarNavItems: SidebarNavItem[] = [
+    {
+      to: "/dashboard",
+      label: "Dashboard",
+      minimumRole: "STAFF",
+      matches: (path) => path === "/dashboard" || path === "/home",
+    },
+    {
+      to: "/pos",
+      label: "POS",
+      minimumRole: "STAFF",
+      matches: (path) => path === "/pos",
+    },
+    {
+      to: "/workshop",
+      label: "Workshop",
+      minimumRole: "STAFF",
+      matches: (path) => path === "/workshop" || path.startsWith("/workshop/"),
+    },
+    {
+      to: "/management/cash",
+      label: "Cash Management",
+      minimumRole: "MANAGER",
+      matches: (path) =>
+        path === "/till" ||
+        path.startsWith("/management/cash") ||
+        path.startsWith("/management/refunds"),
+    },
+    {
+      to: "/inventory",
+      label: "Stock Control",
+      minimumRole: "STAFF",
+      matches: (path) => path === "/inventory" || path.startsWith("/inventory/"),
+    },
+    {
+      to: "/customers",
+      label: "Customers",
+      minimumRole: "STAFF",
+      matches: (path) => path === "/customers" || path.startsWith("/customers/"),
+    },
+    {
+      to: "/management",
+      label: "Back Office",
+      minimumRole: "MANAGER",
+      matches: (path) =>
+        path === "/reports" ||
+        path === "/suppliers" ||
+        path.startsWith("/purchasing") ||
+        path.startsWith("/management")
+          && !path.startsWith("/management/cash")
+          && !path.startsWith("/management/refunds")
+          && !path.startsWith("/management/settings")
+          && !path.startsWith("/management/staff")
+          && !path.startsWith("/management/admin-review")
+          && !path.startsWith("/management/backups")
+          && !path.startsWith("/management/onboarding")
+          && !path.startsWith("/management/docs"),
+    },
+    {
+      to: "/management/settings",
+      label: "Settings",
+      minimumRole: "ADMIN",
+      matches: (path) =>
+        path.startsWith("/management/settings") ||
+        path.startsWith("/management/staff") ||
+        path.startsWith("/management/admin-review") ||
+        path.startsWith("/management/backups") ||
+        path.startsWith("/management/onboarding") ||
+        path.startsWith("/management/docs"),
+    },
+  ];
   const visibleSidebarNavItems = sidebarNavItems.filter(
     (item) => user && roleRank[user.role] >= roleRank[item.minimumRole],
   );
@@ -67,7 +138,16 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <section className="sidebar-section">
             <div className="sidebar-link-list">
               {visibleSidebarNavItems.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.to === "/pos"} className={navClass}>
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/dashboard" || item.to === "/pos"}
+                  className={() =>
+                    item.matches(currentPath)
+                      ? "sidebar-link sidebar-link--active"
+                      : "sidebar-link"
+                  }
+                >
                   {item.label}
                 </NavLink>
               ))}
