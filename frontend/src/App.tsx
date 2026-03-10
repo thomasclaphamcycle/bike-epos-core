@@ -54,6 +54,9 @@ import { AdminReviewPage } from "./pages/AdminReviewPage";
 import { PricingReviewPage } from "./pages/PricingReviewPage";
 import { SupplierReturnsPage } from "./pages/SupplierReturnsPage";
 import { OpsHealthPage } from "./pages/OpsHealthPage";
+import { DailyTradeClosePage } from "./pages/DailyTradeClosePage";
+import { LiabilitiesReviewPage } from "./pages/LiabilitiesReviewPage";
+import { StaffPerformancePage } from "./pages/StaffPerformancePage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -163,6 +166,22 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <OperationsSummaryPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/trade-close"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <DailyTradeClosePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/liabilities"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <LiabilitiesReviewPage />
             </ProtectedRoute>
           )}
         />
@@ -322,6 +341,14 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <WorkshopAgeingPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/staff-performance"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <StaffPerformancePage />
             </ProtectedRoute>
           )}
         />

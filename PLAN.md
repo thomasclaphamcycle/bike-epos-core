@@ -1581,6 +1581,86 @@ Notes:
 - stays frontend-only by composing existing admin-user and audit endpoints
 - complements rather than replaces the existing admin staff-management page
 
+## Next Development Phase - Trade Close, Liabilities, And Staff Throughput
+
+Current state:
+
+- the current working line now includes:
+  - `M127` daily trade close pack
+  - `M128` outstanding liabilities / deposits review
+  - `M129` staff activity & throughput views
+- the current working line now exposes manager-facing daily trade close, liabilities visibility, and staff throughput oversight
+- no post-`M129` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M127` - Daily Trade Close Pack
+
+Goal:
+
+- provide a manager-facing page summarizing the financial and operational results of the current day
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/trade-close`
+- daily close summary composed from:
+  - sales daily report
+  - refunds
+  - visible tender mix from sales records
+  - till sessions and visible variance
+  - workshop daily report and ready-for-collection count
+  - purchase-order receiving and overdue-delivery attention
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing sales, refunds, till, workshop, and purchasing endpoints
+- keeps receiving visibility honest by surfacing visible receiving activity rather than inventing a new close subsystem
+
+#### `M128` - Outstanding Liabilities / Deposits Review
+
+Goal:
+
+- give managers visibility into money owed or operational liabilities
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/liabilities`
+- visibility for:
+  - jobs ready for collection with visible remaining balance
+  - deposit exposure
+  - customer credit balances
+  - jobs awaiting approval with estimated cost
+- links into workshop, customer, collection, and POS flows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing workshop dashboard, workshop job detail, sales detail, and customer insights data
+- keeps liability visibility operational rather than introducing accounting features
+
+#### `M129` - Staff Activity & Throughput Views
+
+Goal:
+
+- provide manager insight into operational staff throughput
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/staff-performance`
+- visibility for:
+  - workshop throughput by staff
+  - current assigned jobs
+  - waiting-for-approval and waiting-for-parts ownership
+  - visible sales handled per staff where creator data exists
+  - unassigned workload
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing workshop dashboard plus existing sales list/detail endpoints
+- remains observational and operational, not an evaluative scoring system
+
 #### `M124` - Pricing Review / Margin Exceptions
 
 Goal:

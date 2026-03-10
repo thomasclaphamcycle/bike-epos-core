@@ -53,6 +53,8 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management`
   - `/management/dashboard-settings`
   - `/management/summary`
+  - `/management/trade-close`
+  - `/management/liabilities`
   - `/management/alerts`
   - `/management/activity`
   - `/management/cash`
@@ -63,6 +65,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/stock-exceptions`
   - `/management/sales`
   - `/management/workshop`
+  - `/management/staff-performance`
   - `/management/calendar`
   - `/management/products`
   - `/management/pricing`

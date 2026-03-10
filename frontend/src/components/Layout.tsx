@@ -38,6 +38,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management" className={navClass}>Management</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/alerts" className={navClass}>Alerts</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/summary" className={navClass}>Ops Summary</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/trade-close" className={navClass}>Trade Close</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/liabilities" className={navClass}>Liabilities</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/activity" className={navClass}>Activity</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/cash" className={navClass}>Cash</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/refunds" className={navClass}>Refunds</NavLink> : null}
@@ -50,6 +52,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             {canViewManagement ? <NavLink to="/management/transfers" className={navClass}>Transfers</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/sales" className={navClass}>Sales</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/workshop" className={navClass}>Workshop Metrics</NavLink> : null}
+            {canViewManagement ? <NavLink to="/management/staff-performance" className={navClass}>Staff Perf</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/workshop-ageing" className={navClass}>Workshop Ageing</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/calendar" className={navClass}>Calendar</NavLink> : null}
             {canViewManagement ? <NavLink to="/management/products" className={navClass}>Products</NavLink> : null}
