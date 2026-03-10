@@ -46,31 +46,8 @@ export const LoginPage = () => {
   return (
     <div className="login-shell">
       <div className="login-stage">
-        <section className="login-brand-panel" aria-label="CorePOS product summary">
-          <div>
-            <p className="login-brand-kicker">CorePOS</p>
-            <h1 className="login-brand-title">Retail and workshop operations</h1>
-          </div>
-
-          <p className="login-brand-copy">
-            One workspace for point of sale, workshop jobs, stock control, purchasing,
-            and day-to-day management.
-          </p>
-
-          <div className="login-brand-points">
-            <div className="login-brand-point">
-              <strong>Retail ready</strong>
-              <span>Fast POS, receipts, refunds, tills, and daily trade control.</span>
-            </div>
-            <div className="login-brand-point">
-              <strong>Workshop ready</strong>
-              <span>Jobs, approvals, parts, collection, and planning in one flow.</span>
-            </div>
-          </div>
-        </section>
-
         <form className="login-card" onSubmit={onSubmit}>
-          <div className="mb-6 flex justify-center login-logo-wrap">
+          <div className="login-logo-wrap">
             <CorePosLogo variant="stacked" size={200} />
           </div>
 
@@ -78,7 +55,7 @@ export const LoginPage = () => {
             <p className="login-form-eyebrow">Staff sign in</p>
             <h2>Welcome back</h2>
             <p className="muted-text">
-              Sign in with your CorePOS username or email to continue.
+              Sign in with your CorePOS username or email to continue with retail and workshop operations.
             </p>
           </div>
 
