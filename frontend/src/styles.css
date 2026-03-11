@@ -90,7 +90,7 @@ textarea {
   color: #edf5fb;
   padding: 18px 14px;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto 1fr auto;
   gap: 18px;
   position: sticky;
   top: 0;
@@ -112,6 +112,13 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.sidebar-build-info {
+  margin-top: 8px;
+  font-size: 0.76rem;
+  color: rgba(237, 245, 251, 0.68);
+  letter-spacing: 0.02em;
 }
 
 .sidebar-section {
@@ -1713,6 +1720,13 @@ th {
 .login-pin-section {
   display: grid;
   gap: 8px;
+}
+
+.login-build-info {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #66788c;
 }
 
 .login-pin-labels {

@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { apiGet, ApiError } from "../api/client";
 import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "../components/branding/CorePosLogo";
+import { appBuildLabel } from "../utils/buildInfo";
 
 type ActiveLoginUser = {
   id: string;
@@ -196,6 +197,7 @@ export const LoginPage = () => {
           </div>
 
           {errorMessage ? <p className="error-banner">{errorMessage}</p> : null}
+          <p className="login-build-info">{appBuildLabel}</p>
         </form>
       </div>
     </div>
