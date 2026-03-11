@@ -73,6 +73,11 @@ type ReceiptTokenResponse = {
   uploadPagePath: string;
 };
 
+type ReceiptPreview = {
+  url: string;
+  label: string;
+};
+
 const CASH_OUT_REASON_OPTIONS: Array<{ value: CashMovementReason; label: string }> = [
   { value: "BANK_DEPOSIT", label: "Bank deposit" },
   { value: "SAFE_DROP", label: "Safe drop" },
@@ -184,6 +189,7 @@ export const CashOversightPage = () => {
   const [receiptToken, setReceiptToken] = useState<ReceiptTokenResponse | null>(null);
   const [receiptQrImage, setReceiptQrImage] = useState<string | null>(null);
   const [receiptQrBusy, setReceiptQrBusy] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState<ReceiptPreview | null>(null);
 
   const publicAppOrigin = getPublicAppOrigin();
   const backendAssetOrigin = getBackendAssetOrigin();
@@ -279,6 +285,23 @@ export const CashOversightPage = () => {
       cancelled = true;
     };
   }, [receiptUploadUrl]);
+
+  useEffect(() => {
+    if (!receiptPreview) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setReceiptPreview(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [receiptPreview]);
 
   const currentSessionId = currentSession?.session?.id ?? null;
   const currentSessionOpen = Boolean(currentSession?.session);
@@ -739,31 +762,46 @@ export const CashOversightPage = () => {
                   </tr>
                 ) : (
                   movements.map((movement) => (
-                    <tr key={movement.id}>
-                      <td>{new Date(movement.createdAt).toLocaleString()}</td>
-                      <td>{movement.dbType}</td>
-                      <td>{movement.reason ?? "-"}</td>
-                      <td>{formatMoney(movement.amountPence)}</td>
-                      <td>{movement.note ?? "-"}</td>
-                      <td>
-                        {toPublicAssetUrl(movement.receiptImageUrl, backendAssetOrigin) ? (
-                          <a
-                            href={toPublicAssetUrl(movement.receiptImageUrl, backendAssetOrigin) ?? undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            View receipt
-                          </a>
-                        ) : movement.dbType === "PAID_OUT" && movement.reason === "PETTY_EXPENSE" ? (
-                          <button type="button" onClick={() => void handleCreateReceiptToken(movement.id)}>
-                            Add receipt
-                          </button>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                    </tr>
+                    (() => {
+                      const resolvedReceiptUrl = toPublicAssetUrl(movement.receiptImageUrl, backendAssetOrigin);
+                      const receiptLabel = `Receipt ${new Date(movement.createdAt).toLocaleString()}`;
+
+                      return (
+                        <tr key={movement.id}>
+                          <td>{new Date(movement.createdAt).toLocaleString()}</td>
+                          <td>{movement.dbType}</td>
+                          <td>{movement.reason ?? "-"}</td>
+                          <td>{formatMoney(movement.amountPence)}</td>
+                          <td>{movement.note ?? "-"}</td>
+                          <td>
+                            {resolvedReceiptUrl ? (
+                              <div className="cash-receipt-cell">
+                                <button
+                                  type="button"
+                                  className="cash-receipt-trigger"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setReceiptPreview({
+                                      url: resolvedReceiptUrl,
+                                      label: receiptLabel,
+                                    });
+                                  }}
+                                >
+                                  Receipt
+                                </button>
+                                <span className="cash-receipt-badge">Attached</span>
+                              </div>
+                            ) : movement.dbType === "PAID_OUT" && movement.reason === "PETTY_EXPENSE" ? (
+                              <button type="button" onClick={() => void handleCreateReceiptToken(movement.id)}>
+                                Add receipt
+                              </button>
+                            ) : (
+                              <span className="cash-receipt-empty">No receipt</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })()
                   ))
                 )}
               </tbody>
@@ -771,6 +809,40 @@ export const CashOversightPage = () => {
           </div>
         </section>
       </div>
+
+      {receiptPreview ? (
+        <div
+          className="cash-receipt-overlay"
+          role="presentation"
+          onClick={() => setReceiptPreview(null)}
+        >
+          <div
+            className="cash-receipt-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={receiptPreview.label}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="card-header-row">
+              <div>
+                <h2>Receipt Preview</h2>
+                <p className="muted-text">{receiptPreview.label}</p>
+              </div>
+              <button type="button" onClick={() => setReceiptPreview(null)}>
+                Close
+              </button>
+            </div>
+            <div className="cash-receipt-preview">
+              <img src={receiptPreview.url} alt={receiptPreview.label} />
+            </div>
+            <div className="cash-receipt-actions">
+              <a href={receiptPreview.url} target="_blank" rel="noopener noreferrer">
+                Open in new tab
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
