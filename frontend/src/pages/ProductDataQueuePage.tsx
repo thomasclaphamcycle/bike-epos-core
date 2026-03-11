@@ -51,6 +51,8 @@ type ProductResponse = {
   variantCount?: number;
 };
 
+const LOW_STOCK_THRESHOLD = 3;
+
 type CatalogueForm = {
   productId?: string;
   variantId?: string;
@@ -87,13 +89,15 @@ const formatDate = (value: string) => new Date(value).toLocaleDateString();
 
 const getStockStateLabel = (onHand: number) => {
   if (onHand < 0) return "Negative";
-  if (onHand === 0) return "Zero";
-  return "Positive";
+  if (onHand === 0) return "Zero Stock";
+  if (onHand <= LOW_STOCK_THRESHOLD) return "Low Stock";
+  return "In Stock";
 };
 
 const getStockStateClass = (onHand: number) => {
   if (onHand < 0) return "stock-badge stock-state-negative";
   if (onHand === 0) return "stock-badge stock-state-zero";
+  if (onHand <= LOW_STOCK_THRESHOLD) return "stock-badge stock-state-low";
   return "stock-badge stock-state-positive";
 };
 
@@ -153,7 +157,11 @@ export const ProductDataQueuePage = () => {
   }), [variants]);
 
   const stockSummary = useMemo(() => ({
-    positive: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) > 0).length,
+    inStock: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) > LOW_STOCK_THRESHOLD).length,
+    low: variants.filter((variant) => {
+      const onHand = stockByVariantId[variant.id] ?? 0;
+      return onHand > 0 && onHand <= LOW_STOCK_THRESHOLD;
+    }).length,
     zero: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) === 0).length,
     negative: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) < 0).length,
   }), [stockByVariantId, variants]);
@@ -519,8 +527,13 @@ export const ProductDataQueuePage = () => {
           </div>
           <div className="metric-card">
             <span className="metric-label">In stock</span>
-            <strong className="metric-value">{stockSummary.positive}</strong>
-            <span className="dashboard-metric-detail">Variants with positive on-hand stock</span>
+            <strong className="metric-value">{stockSummary.inStock}</strong>
+            <span className="dashboard-metric-detail">Variants above the low-stock threshold</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Low stock</span>
+            <strong className="metric-value">{stockSummary.low}</strong>
+            <span className="dashboard-metric-detail">On hand greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Zero stock</span>

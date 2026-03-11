@@ -23,8 +23,9 @@ type InventorySearchResponse = {
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+const LOW_STOCK_THRESHOLD = 3;
 
-type StockStateFilter = "" | "negative" | "zero" | "positive";
+type StockStateFilter = "" | "negative" | "zero" | "low" | "in_stock";
 type SortOption = "productAsc" | "onHandAsc" | "onHandDesc" | "skuAsc";
 
 const getStockState = (onHand: number): StockStateFilter => {
@@ -34,7 +35,10 @@ const getStockState = (onHand: number): StockStateFilter => {
   if (onHand === 0) {
     return "zero";
   }
-  return "positive";
+  if (onHand <= LOW_STOCK_THRESHOLD) {
+    return "low";
+  }
+  return "in_stock";
 };
 
 const getStockStateLabel = (onHand: number) => {
@@ -42,9 +46,12 @@ const getStockStateLabel = (onHand: number) => {
     return "Negative";
   }
   if (onHand === 0) {
-    return "Zero";
+    return "Zero Stock";
   }
-  return "Positive";
+  if (onHand <= LOW_STOCK_THRESHOLD) {
+    return "Low Stock";
+  }
+  return "In Stock";
 };
 
 const getStockStateClass = (onHand: number) => {
@@ -53,6 +60,9 @@ const getStockStateClass = (onHand: number) => {
   }
   if (onHand === 0) {
     return "stock-badge stock-state-zero";
+  }
+  if (onHand <= LOW_STOCK_THRESHOLD) {
+    return "stock-badge stock-state-low";
   }
   return "stock-badge stock-state-positive";
 };
@@ -164,8 +174,13 @@ export const InventoryPage = () => {
     [visibleRows],
   );
 
-  const zeroOrNegativeCount = useMemo(
-    () => visibleRows.filter((row) => row.onHand <= 0).length,
+  const stockSummary = useMemo(
+    () => ({
+      inStock: visibleRows.filter((row) => row.onHand > LOW_STOCK_THRESHOLD).length,
+      low: visibleRows.filter((row) => row.onHand > 0 && row.onHand <= LOW_STOCK_THRESHOLD).length,
+      zero: visibleRows.filter((row) => row.onHand === 0).length,
+      negative: visibleRows.filter((row) => row.onHand < 0).length,
+    }),
     [visibleRows],
   );
 
@@ -208,9 +223,10 @@ export const InventoryPage = () => {
             Stock State
             <select value={stockState} onChange={(event) => setStockState(event.target.value as StockStateFilter)}>
               <option value="">All</option>
+              <option value="low">Low stock</option>
+              <option value="in_stock">In stock</option>
               <option value="negative">Negative</option>
-              <option value="zero">Zero</option>
-              <option value="positive">Positive</option>
+              <option value="zero">Zero stock</option>
             </select>
           </label>
 
@@ -241,17 +257,29 @@ export const InventoryPage = () => {
             <strong className="metric-value">{visibleRows.length}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Visible Units On Hand</span>
-            <strong className="metric-value">{totalUnits}</strong>
+            <span className="metric-label">In Stock</span>
+            <strong className="metric-value">{stockSummary.inStock}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Zero Or Negative Rows</span>
-            <strong className="metric-value">{zeroOrNegativeCount}</strong>
+            <span className="metric-label">Low Stock</span>
+            <strong className="metric-value">{stockSummary.low}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Zero Stock</span>
+            <strong className="metric-value">{stockSummary.zero}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Negative Stock</span>
+            <strong className="metric-value">{stockSummary.negative}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Visible Units On Hand</span>
+            <strong className="metric-value">{totalUnits}</strong>
           </div>
         </div>
 
         <p className="muted-text">
-          Stock-state indicators use raw on-hand values only. No reorder-threshold logic is applied in v1.
+          Low stock currently means on-hand stock greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}. No per-product reorder threshold is applied in v1.
         </p>
 
         <div className="table-wrap">
