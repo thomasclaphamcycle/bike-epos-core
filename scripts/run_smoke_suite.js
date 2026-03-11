@@ -4,6 +4,7 @@ require("dotenv").config({ path: ".env.test" });
 const { spawnSync } = require("node:child_process");
 
 const baselineSteps = [
+  // Core historical baseline
   "test:m11",
   "test:m12",
   "test:m13",
@@ -19,6 +20,7 @@ const baselineSteps = [
   "test:m41",
   "test:m42",
   "test:m43",
+  // Current management-reporting surfaces
   "test:m119",
   "test:m120",
   "test:m121",

@@ -1,16 +1,15 @@
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
-
-type Severity = "CRITICAL" | "WARNING" | "INFO";
+import { ReportSeverity, reportSeverityBadgeClass, reportSeverityRowAccent } from "../utils/reportSeverity";
 
 type ExceptionRow = {
   type: string;
   entityId: string;
   title: string;
   description: string;
-  severity: Severity;
+  severity: ReportSeverity;
   link: string;
 };
 
@@ -25,23 +24,11 @@ type OperationsExceptionsResponse = {
   items: ExceptionRow[];
 };
 
-const rowAccent: Record<Severity, CSSProperties> = {
-  CRITICAL: { backgroundColor: "rgba(194, 58, 58, 0.14)" },
-  WARNING: { backgroundColor: "rgba(214, 148, 34, 0.14)" },
-  INFO: {},
-};
-
-const badgeClass: Record<Severity, string> = {
-  CRITICAL: "status-badge status-cancelled",
-  WARNING: "status-badge status-warning",
-  INFO: "status-badge",
-};
-
 export const OperationsExceptionsPage = () => {
   const { error } = useToasts();
   const [report, setReport] = useState<OperationsExceptionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [severityFilter, setSeverityFilter] = useState<Severity | "">("");
+  const [severityFilter, setSeverityFilter] = useState<ReportSeverity | "">("");
 
   const loadReport = async () => {
     setLoading(true);
@@ -119,11 +106,11 @@ export const OperationsExceptionsPage = () => {
           <div className="actions-inline">
             <label>
               Severity
-              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as Severity | "")}>
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as ReportSeverity | "")}>
                 <option value="">All severities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="WARNING">Warning</option>
-                <option value="INFO">Info</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO">INFO</option>
               </select>
             </label>
             <Link to="/management/alerts">Alerts</Link>
@@ -142,11 +129,11 @@ export const OperationsExceptionsPage = () => {
             </thead>
             <tbody>
               {visibleItems.length ? visibleItems.map((row) => (
-                <tr key={`${row.type}-${row.entityId}`} style={rowAccent[row.severity]}>
+                <tr key={`${row.type}-${row.entityId}`} style={reportSeverityRowAccent[row.severity]}>
                   <td>{row.type}</td>
                   <td>{row.title}</td>
                   <td>{row.description}</td>
-                  <td><span className={badgeClass[row.severity]}>{row.severity}</span></td>
+                  <td><span className={reportSeverityBadgeClass[row.severity]}>{row.severity}</span></td>
                   <td><Link to={row.link}>Open</Link></td>
                 </tr>
               )) : (

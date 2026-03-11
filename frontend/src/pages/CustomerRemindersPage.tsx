@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
 
 type ReminderStatus = "DUE_SOON" | "OVERDUE" | "RECENT_ACTIVITY";
 
@@ -37,6 +38,16 @@ const reminderBadgeClass: Record<ReminderStatus, string> = {
   OVERDUE: "status-badge status-cancelled",
   DUE_SOON: "status-badge status-warning",
   RECENT_ACTIVITY: "status-badge status-info",
+};
+
+const reminderSeverity = (status: ReminderStatus): ReportSeverity => {
+  if (status === "OVERDUE") {
+    return "CRITICAL";
+  }
+  if (status === "DUE_SOON") {
+    return "WARNING";
+  }
+  return "INFO";
 };
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
@@ -150,6 +161,7 @@ export const CustomerRemindersPage = () => {
                 <th>Last Workshop Date</th>
                 <th>Days Since Last Job</th>
                 <th>Reminder Status</th>
+                <th>Severity</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -171,6 +183,7 @@ export const CustomerRemindersPage = () => {
                   <td>{formatDate(row.lastWorkshopJobDate)}</td>
                   <td>{row.daysSinceLastWorkshopJob}</td>
                   <td><span className={reminderBadgeClass[row.reminderStatus]}>{row.reminderStatus}</span></td>
+                  <td><span className={reportSeverityBadgeClass[reminderSeverity(row.reminderStatus)]}>{reminderSeverity(row.reminderStatus)}</span></td>
                   <td>
                     <div className="table-actions">
                       <Link to={`/customers/${row.customerId}`}>Profile</Link>
@@ -180,7 +193,7 @@ export const CustomerRemindersPage = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6}>{loading ? "Loading customer reminders..." : "No customer reminders available."}</td>
+                  <td colSpan={7}>{loading ? "Loading customer reminders..." : "No customer reminders available."}</td>
                 </tr>
               )}
             </tbody>

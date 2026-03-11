@@ -17,13 +17,14 @@ This file tracks:
 
 - the exact historically evidenced milestone ledger through `M78`
 - the current `dev-next` working line through roadmap completion at `M135`
-- the forward-looking product direction documented in [docs/ROADMAP.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ROADMAP.md) and [docs/ARCHITECTURE.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ARCHITECTURE.md)
+- the forward-looking product direction documented in [docs/ROADMAP.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ROADMAP.md) and [docs/architecture.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/architecture.md)
 
 Roadmap status:
 
 - the implemented roadmap on the current working line now runs through `M135`
 - the project is now in stabilization and release-readiness mode rather than roadmap expansion mode
 - the next phase is trial usage, verification, and operational hardening rather than new core roadmap delivery
+- the current `phase3-inventory-control` release line is focused on reporting cleanup, management-surface consistency, and low-risk structural housekeeping after `v0.9.0`
 - current UX branch focus: simplify the shell, reduce top-level nav clutter, and improve discoverability without changing the underlying feature set
 - completed login cleanup work remains classified as UX refinement:
   - single centered login card

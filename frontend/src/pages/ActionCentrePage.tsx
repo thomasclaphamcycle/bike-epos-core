@@ -1,16 +1,15 @@
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
-
-type Severity = "CRITICAL" | "WARNING" | "INFO";
+import { ReportSeverity, reportSeverityBadgeClass, reportSeverityRowAccent } from "../utils/reportSeverity";
 
 type ActionItem = {
   type: string;
   entityId: string;
   title: string;
   reason: string;
-  severity: Severity;
+  severity: ReportSeverity;
   link: string;
 };
 
@@ -38,23 +37,11 @@ type ActionCentreResponse = {
   sections: ActionSection[];
 };
 
-const rowAccent: Record<Severity, CSSProperties> = {
-  CRITICAL: { backgroundColor: "rgba(194, 58, 58, 0.14)" },
-  WARNING: { backgroundColor: "rgba(214, 148, 34, 0.14)" },
-  INFO: {},
-};
-
-const badgeClass: Record<Severity, string> = {
-  CRITICAL: "status-badge status-cancelled",
-  WARNING: "status-badge status-warning",
-  INFO: "status-badge",
-};
-
 export const ActionCentrePage = () => {
   const { error } = useToasts();
   const [report, setReport] = useState<ActionCentreResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [severityFilter, setSeverityFilter] = useState<Severity | "">("");
+  const [severityFilter, setSeverityFilter] = useState<ReportSeverity | "">("");
 
   const loadReport = async () => {
     setLoading(true);
@@ -138,11 +125,11 @@ export const ActionCentrePage = () => {
           <div className="actions-inline">
             <label>
               Severity
-              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as Severity | "")}>
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as ReportSeverity | "")}>
                 <option value="">All severities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="WARNING">Warning</option>
-                <option value="INFO">Info</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO">INFO</option>
               </select>
             </label>
             <Link to="/management/investigations">Investigations</Link>
@@ -177,10 +164,10 @@ export const ActionCentrePage = () => {
               </thead>
               <tbody>
                 {section.items.length ? section.items.map((item) => (
-                  <tr key={`${item.type}-${item.entityId}`} style={rowAccent[item.severity]}>
+                  <tr key={`${item.type}-${item.entityId}`} style={reportSeverityRowAccent[item.severity]}>
                     <td>{item.title}</td>
                     <td>{item.reason}</td>
-                    <td><span className={badgeClass[item.severity]}>{item.severity}</span></td>
+                    <td><span className={reportSeverityBadgeClass[item.severity]}>{item.severity}</span></td>
                     <td><Link to={item.link}>Open</Link></td>
                   </tr>
                 )) : (

@@ -2,7 +2,7 @@
 
 ## Current Snapshot
 
-- Working branch: `ux/staff-management-scan-pass`
+- Working branch: `phase3-inventory-control`
 - `PLAN.md` is the authoritative roadmap and phase-order document
 - this file tracks the current assignment and immediate next work only
 - Stable local restore point:
@@ -12,12 +12,12 @@
 - Historically evidenced milestone history reaches `M78`
 - The current working line implements the roadmap through `M135`
 - Earlier branch ancestry is still fragmented, but the present branch state is roadmap-complete and in stabilization mode
-- Current working mode is trial-use readiness, not milestone expansion
+- Current working mode is stabilization and housekeeping after the `v0.9.0` release
 - Roadmap implementation on the current working line is complete through `M135`
-- Current focus is post-roadmap hardening plus local UX refinement on top of the PIN-login-capable product line
+- Current focus is structural cleanup, reporting consistency, documentation alignment, and release-readiness
 - Completed login visual cleanup remains UX work from `ux-saledock-alignment`
 - PIN auth foundation and the main PIN login UI migration are now complete
-- Current branch purpose: local UX iteration on sidebar/top-bar/admin surfaces while preserving the completed PIN-login backend and UI migration
+- Current branch purpose: maintain and harden the reporting-heavy management line without changing released feature behavior
 
 ## Confirmed Done
 
@@ -98,7 +98,7 @@ These milestones are confirmed in branch history and/or remote refs. The current
 ## Current Milestone
 
 - no new feature milestone is active
-- current phase: post-roadmap auth stabilization, controlled rollout, and follow-on hardening
+- current phase: post-`v0.9.0` housekeeping, documentation, and low-risk internal cleanup
 
 ## Next Milestones Queue
 
@@ -110,11 +110,10 @@ Highest priority:
 
 1. keep current work aligned with the active phase and sequencing defined in `PLAN.md`
 2. keep the branch buildable and smoke-stable
-3. keep password login functional in the backend while PIN login rolls out in the UI
-4. decide and document the admin policy for button-based PIN login long term
-5. add manager-facing PIN reset UI if product policy still requires it
-6. consider register lock / quick user switch flow if trial usage requires it
-7. continue repo hygiene and branch consolidation in parallel
+3. keep manager reporting surfaces consistent and low-risk as they expand
+4. keep docs aligned with the modular reporting structure and current management pages
+5. improve internal extensibility foundations without changing feature behavior
+6. continue repo hygiene and branch consolidation in parallel
 
 ## Completed
 

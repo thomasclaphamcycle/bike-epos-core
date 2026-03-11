@@ -21,6 +21,7 @@ Current delivery mode:
 
 - roadmap feature buildout is complete through `M135`
 - current work should default to stabilization, release-readiness, verification, operational polish, and trial-use readiness unless a new post-roadmap batch is explicitly defined
+- `phase3-inventory-control` is currently in housekeeping and release-readiness mode after the `v0.9.0` reporting milestone line
 - current UX branch `ux/staff-management-scan-pass` is for shell/navigation and admin-surface refinement inspired by simpler Saledock-style grouping, not for new product surface area
 - PIN login is now implemented on the auth migration branches as product/auth infrastructure work
 - password login remains preserved in the backend unless it is intentionally removed in a later controlled migration
@@ -52,6 +53,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
 
 - Express app entrypoint: `src/server.ts`
 - Route/controller/service split is the standard pattern
+- Modular reporting services: `src/services/reports/`
 - Prisma client wrapper: `src/lib/prisma.ts`
 - Auth and role enforcement: `src/middleware/staffRole.ts`
 - Error shape: `src/middleware/errorHandler.ts`
@@ -73,10 +75,12 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/management/trade-close`
   - `/management/liabilities`
   - `/management/alerts`
+  - `/management/actions`
   - `/management/activity`
   - `/management/cash`
   - `/management/refunds`
   - `/management/reminders`
+  - `/management/investigations`
   - `/management/communications`
   - `/management/warranty`
   - `/management/stock-exceptions`

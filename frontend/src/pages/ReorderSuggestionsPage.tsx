@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
 
 type ReorderSuggestionUrgency = "Reorder Now" | "Reorder Soon" | "On Order";
 
@@ -53,6 +54,16 @@ const urgencyBadgeClass: Record<ReorderSuggestionUrgency, string> = {
   "Reorder Now": "status-badge status-warning",
   "Reorder Soon": "status-badge status-info",
   "On Order": "status-badge",
+};
+
+const reorderSeverity = (urgency: ReorderSuggestionUrgency): ReportSeverity => {
+  if (urgency === "Reorder Now") {
+    return "CRITICAL";
+  }
+  if (urgency === "Reorder Soon") {
+    return "WARNING";
+  }
+  return "INFO";
 };
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
@@ -149,6 +160,7 @@ export const ReorderSuggestionsPage = () => {
                 <th>Open PO</th>
                 <th>Suggested</th>
                 <th>Status</th>
+                <th>Severity</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -178,6 +190,9 @@ export const ReorderSuggestionsPage = () => {
                       <span className={urgencyBadgeClass[row.urgency]}>{row.urgency}</span>
                     </td>
                     <td>
+                      <span className={reportSeverityBadgeClass[reorderSeverity(row.urgency)]}>{reorderSeverity(row.urgency)}</span>
+                    </td>
+                    <td>
                       <div className="table-actions">
                         <Link to={`/inventory/${row.variantId}`}>Inventory</Link>
                         {firstOpenPo ? <Link to={`/purchasing/${firstOpenPo.id}`}>Open PO</Link> : <Link to="/purchasing">Purchasing</Link>}
@@ -187,7 +202,7 @@ export const ReorderSuggestionsPage = () => {
                 );
               }) : (
                 <tr>
-                  <td colSpan={8}>{loading ? "Loading reorder suggestions..." : "No reorder suggestions right now."}</td>
+                  <td colSpan={9}>{loading ? "Loading reorder suggestions..." : "No reorder suggestions right now."}</td>
                 </tr>
               )}
             </tbody>

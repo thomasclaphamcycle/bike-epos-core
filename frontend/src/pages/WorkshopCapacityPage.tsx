@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
 
 type WorkshopCapacityResponse = {
   generatedAt: string;
@@ -23,21 +24,26 @@ type WorkshopCapacityResponse = {
 type AgeingRow = {
   label: string;
   count: number;
+  severity: ReportSeverity;
   actionPath: string;
   actionLabel: string;
 };
 
+const backlogSeverity = (backlogDays: number | null): ReportSeverity => {
+  if (backlogDays !== null && backlogDays >= 10) {
+    return "CRITICAL";
+  }
+  if (backlogDays !== null && backlogDays >= 5) {
+    return "WARNING";
+  }
+  return "INFO";
+};
+
 const backlogBadgeClass = (backlogDays: number | null) => {
   if (backlogDays === null) {
-    return "status-badge";
+    return reportSeverityBadgeClass.INFO;
   }
-  if (backlogDays >= 10) {
-    return "status-badge status-cancelled";
-  }
-  if (backlogDays >= 5) {
-    return "status-badge status-warning";
-  }
-  return "status-badge status-complete";
+  return reportSeverityBadgeClass[backlogSeverity(backlogDays)];
 };
 
 const backlogLabel = (backlogDays: number | null) => {
@@ -80,24 +86,28 @@ export const WorkshopCapacityPage = () => {
     {
       label: "0 to 2 days",
       count: report?.ageingBuckets.zeroToTwoDays ?? 0,
+      severity: "INFO",
       actionPath: "/workshop",
       actionLabel: "Open workshop",
     },
     {
       label: "3 to 7 days",
       count: report?.ageingBuckets.threeToSevenDays ?? 0,
+      severity: "INFO",
       actionPath: "/management/workshop-ageing",
       actionLabel: "Review ageing",
     },
     {
       label: "8 to 14 days",
       count: report?.ageingBuckets.eightToFourteenDays ?? 0,
+      severity: "WARNING",
       actionPath: "/management/workshop-ageing",
       actionLabel: "Review ageing",
     },
     {
       label: "15+ days",
       count: report?.ageingBuckets.fifteenPlusDays ?? 0,
+      severity: "CRITICAL",
       actionPath: "/management/workshop-ageing",
       actionLabel: "Escalate backlog",
     },
@@ -152,8 +162,9 @@ export const WorkshopCapacityPage = () => {
             <strong className="metric-value">{report?.estimatedBacklogDays === null ? "-" : report?.estimatedBacklogDays.toFixed(1)}</strong>
             <span className="dashboard-metric-detail">
               <span className={backlogBadgeClass(report?.estimatedBacklogDays ?? null)}>
-                {backlogLabel(report?.estimatedBacklogDays ?? null)}
+                {backlogSeverity(report?.estimatedBacklogDays ?? null)}
               </span>
+              {` ${backlogLabel(report?.estimatedBacklogDays ?? null)}`}
             </span>
           </div>
         </div>
@@ -221,6 +232,7 @@ export const WorkshopCapacityPage = () => {
                 <tr>
                   <th>Age Bucket</th>
                   <th>Open Jobs</th>
+                  <th>Severity</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -229,6 +241,7 @@ export const WorkshopCapacityPage = () => {
                   <tr key={row.label}>
                     <td>{row.label}</td>
                     <td>{row.count}</td>
+                    <td><span className={reportSeverityBadgeClass[row.severity]}>{row.severity}</span></td>
                     <td><Link to={row.actionPath}>{row.actionLabel}</Link></td>
                   </tr>
                 ))}

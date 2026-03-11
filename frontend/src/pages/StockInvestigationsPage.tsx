@@ -1,9 +1,9 @@
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { ReportSeverity, reportSeverityBadgeClass, reportSeverityRowAccent } from "../utils/reportSeverity";
 
-type Severity = "CRITICAL" | "WARNING" | "INFO";
 type IssueType = "NEGATIVE_STOCK" | "DEAD_STOCK" | "RETAIL_AT_OR_BELOW_COST" | "MISSING_RETAIL_PRICE";
 
 type InvestigationItem = {
@@ -12,7 +12,7 @@ type InvestigationItem = {
   sku: string;
   issueType: IssueType;
   description: string;
-  severity: Severity;
+  severity: ReportSeverity;
   link: string;
 };
 
@@ -32,18 +32,6 @@ type InvestigationsResponse = {
   items: InvestigationItem[];
 };
 
-const rowAccent: Record<Severity, CSSProperties> = {
-  CRITICAL: { backgroundColor: "rgba(194, 58, 58, 0.14)" },
-  WARNING: { backgroundColor: "rgba(214, 148, 34, 0.14)" },
-  INFO: {},
-};
-
-const badgeClass: Record<Severity, string> = {
-  CRITICAL: "status-badge status-cancelled",
-  WARNING: "status-badge status-warning",
-  INFO: "status-badge",
-};
-
 const issueLabels: Record<IssueType, string> = {
   NEGATIVE_STOCK: "Negative Stock",
   DEAD_STOCK: "Dead Stock",
@@ -55,7 +43,7 @@ export const StockInvestigationsPage = () => {
   const { error } = useToasts();
   const [report, setReport] = useState<InvestigationsResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [severityFilter, setSeverityFilter] = useState<Severity | "">("");
+  const [severityFilter, setSeverityFilter] = useState<ReportSeverity | "">("");
 
   const loadReport = async () => {
     setLoading(true);
@@ -133,11 +121,11 @@ export const StockInvestigationsPage = () => {
           <div className="actions-inline">
             <label>
               Severity
-              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as Severity | "")}>
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as ReportSeverity | "")}>
                 <option value="">All severities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="WARNING">Warning</option>
-                <option value="INFO">Info</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO">INFO</option>
               </select>
             </label>
             <Link to="/management/pricing">Pricing Review</Link>
@@ -158,14 +146,14 @@ export const StockInvestigationsPage = () => {
             </thead>
             <tbody>
               {visibleItems.length ? visibleItems.map((item) => (
-                <tr key={`${item.variantId}-${item.issueType}`} style={rowAccent[item.severity]}>
+                <tr key={`${item.variantId}-${item.issueType}`} style={reportSeverityRowAccent[item.severity]}>
                   <td>{item.productName}</td>
                   <td className="mono-text">{item.sku}</td>
                   <td>
                     <strong>{issueLabels[item.issueType]}</strong>
                     <div className="muted-text">{item.description}</div>
                   </td>
-                  <td><span className={badgeClass[item.severity]}>{item.severity}</span></td>
+                  <td><span className={reportSeverityBadgeClass[item.severity]}>{item.severity}</span></td>
                   <td><Link to={item.link}>Open</Link></td>
                 </tr>
               )) : (

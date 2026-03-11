@@ -2,6 +2,7 @@ import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
 
 type PricingExceptionType = "MISSING_RETAIL_PRICE" | "RETAIL_AT_OR_BELOW_COST" | "LOW_MARGIN";
 
@@ -45,6 +46,13 @@ const exceptionLabel: Record<PricingExceptionType, string> = {
   MISSING_RETAIL_PRICE: "Missing retail price",
   RETAIL_AT_OR_BELOW_COST: "Retail at or below cost",
   LOW_MARGIN: "Low margin",
+};
+
+const pricingExceptionSeverity = (type: PricingExceptionType): ReportSeverity => {
+  if (type === "LOW_MARGIN") {
+    return "WARNING";
+  }
+  return "CRITICAL";
 };
 
 const formatMoney = (pence: number | null) => (pence === null ? "-" : `GBP ${(pence / 100).toFixed(2)}`);
@@ -155,6 +163,7 @@ export const PricingExceptionsPage = () => {
                 <th>Retail</th>
                 <th>Margin</th>
                 <th>Exception Type</th>
+                <th>Severity</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -170,6 +179,7 @@ export const PricingExceptionsPage = () => {
                   <td>{formatMoney(row.retailPrice)}</td>
                   <td>{formatMargin(row.apparentMarginPence, row.apparentMarginPercent)}</td>
                   <td><span className={badgeClass[row.exceptionType]}>{exceptionLabel[row.exceptionType]}</span></td>
+                  <td><span className={reportSeverityBadgeClass[pricingExceptionSeverity(row.exceptionType)]}>{pricingExceptionSeverity(row.exceptionType)}</span></td>
                   <td>
                     <div className="table-actions">
                       <Link to={`/inventory/${row.variantId}`}>Inventory</Link>
@@ -179,7 +189,7 @@ export const PricingExceptionsPage = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7}>{loading ? "Loading pricing exceptions..." : "No pricing exceptions right now."}</td>
+                  <td colSpan={8}>{loading ? "Loading pricing exceptions..." : "No pricing exceptions right now."}</td>
                 </tr>
               )}
             </tbody>

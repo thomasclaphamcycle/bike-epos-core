@@ -6,7 +6,7 @@ It must remain the master 11-phase planning structure for the project.
 It should remain the master planning structure for the project and should be read alongside:
 
 - [PLAN.md](/Users/thomaswitherspoon/Development/bike-epos-core/PLAN.md) for repo-history and milestone evidence
-- [docs/ARCHITECTURE.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ARCHITECTURE.md) for domain and system structure
+- [docs/architecture.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/architecture.md) for domain and system structure
 
 CorePOS is evolving from a simple POS into a full bike shop operating system.
 
