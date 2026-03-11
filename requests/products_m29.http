@@ -1,5 +1,6 @@
 @baseUrl = http://localhost:3000
 @staffRole = STAFF
+@managerRole = MANAGER
 
 ### Product search by text query (STAFF+)
 GET {{baseUrl}}/api/products/search?q=tube&take=20&skip=0
@@ -11,3 +12,20 @@ GET {{baseUrl}}/api/products/search?barcode=1234567890123&take=20&skip=0
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
+### Create product with default sellable variant (MANAGER+)
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "name": "Shimano Resin Pads B05S",
+  "category": "Brakes",
+  "isActive": true,
+  "defaultVariant": {
+    "sku": "SHIM-B05S",
+    "barcode": "1234567890123",
+    "retailPrice": "14.99",
+    "isActive": true
+  }
+}

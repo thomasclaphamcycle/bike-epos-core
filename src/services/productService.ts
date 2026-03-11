@@ -4,13 +4,22 @@ import { HttpError } from "../utils/http";
 
 type CreateProductInput = {
   name?: string;
+  category?: string;
   brand?: string;
   description?: string;
   isActive?: boolean;
+  defaultVariant?: {
+    sku?: string;
+    barcode?: string;
+    retailPrice?: string | number;
+    retailPricePence?: number;
+    isActive?: boolean;
+  };
 };
 
 type UpdateProductInput = {
   name?: string;
+  category?: string;
   brand?: string;
   description?: string;
   isActive?: boolean;
@@ -194,6 +203,7 @@ const parseRetailPricePatch = (
 const toProductResponse = (product: {
   id: string;
   name: string;
+  category: string | null;
   brand: string | null;
   description: string | null;
   isActive: boolean;
@@ -206,6 +216,7 @@ const toProductResponse = (product: {
   return {
     id: product.id,
     name: product.name,
+    category: product.category,
     brand: product.brand,
     description: product.description,
     isActive: product.isActive,
@@ -229,11 +240,12 @@ const toVariantResponse = (variant: {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  product?: {
-    id: string;
-    name: string;
-    brand: string | null;
-  };
+    product?: {
+      id: string;
+      name: string;
+      category: string | null;
+      brand: string | null;
+    };
 }) => {
   return {
     id: variant.id,
@@ -251,6 +263,7 @@ const toVariantResponse = (variant: {
       ? {
           id: variant.product.id,
           name: variant.product.name,
+          category: variant.product.category,
           brand: variant.product.brand,
         }
       : undefined,
@@ -403,6 +416,7 @@ export const listProducts = async (filters: ListProductsInput = {}) => {
         ? {
             OR: [
               { name: { contains: normalizedQuery, mode: "insensitive" } },
+              { category: { contains: normalizedQuery, mode: "insensitive" } },
               { brand: { contains: normalizedQuery, mode: "insensitive" } },
               { description: { contains: normalizedQuery, mode: "insensitive" } },
             ],
@@ -437,16 +451,63 @@ export const createProduct = async (input: CreateProductInput) => {
     throw new HttpError(400, "isActive must be a boolean", "INVALID_PRODUCT");
   }
 
-  const product = await prisma.product.create({
-    data: {
-      name,
-      brand: normalizeOptionalText(input.brand),
-      description: normalizeOptionalText(input.description),
-      isActive: input.isActive ?? true,
-    },
-  });
+  const category = normalizeOptionalText(input.category);
+  const hasDefaultVariant =
+    input.defaultVariant !== undefined
+    && Object.values(input.defaultVariant).some((value) => value !== undefined);
 
-  return toProductResponse(product);
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
+        name,
+        category,
+        brand: normalizeOptionalText(input.brand),
+        description: normalizeOptionalText(input.description),
+        isActive: input.isActive ?? true,
+      },
+    });
+
+    if (hasDefaultVariant) {
+      const sku = normalizeOptionalText(input.defaultVariant?.sku);
+      const barcode = normalizeOptionalText(input.defaultVariant?.barcode);
+
+      if (!sku) {
+        throw new HttpError(400, "defaultVariant.sku is required", "INVALID_PRODUCT");
+      }
+      if (sku.length < 2) {
+        throw new HttpError(400, "defaultVariant.sku must be at least 2 characters", "INVALID_PRODUCT");
+      }
+
+      const parsedRetailPrice = parseRetailPriceInput(
+        input.defaultVariant?.retailPrice,
+        input.defaultVariant?.retailPricePence,
+        "INVALID_PRODUCT",
+      );
+
+      await ensureSkuAvailable(tx, sku);
+
+      if (barcode) {
+        await ensureBarcodeAvailable(tx, barcode);
+      }
+
+      const variant = await tx.variant.create({
+        data: {
+          productId: product.id,
+          sku,
+          barcode,
+          retailPrice: parsedRetailPrice.retailPrice,
+          retailPricePence: parsedRetailPrice.retailPricePence,
+          isActive: input.defaultVariant?.isActive ?? input.isActive ?? true,
+        },
+      });
+
+      if (barcode) {
+        await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
+      }
+    }
+
+    return toProductResponse(product);
+  });
 };
 
 export const getProductById = async (productId: string) => {
@@ -477,6 +538,7 @@ export const updateProductById = async (productId: string, input: UpdateProductI
 
   const hasAnyField =
     Object.prototype.hasOwnProperty.call(input, "name") ||
+    Object.prototype.hasOwnProperty.call(input, "category") ||
     Object.prototype.hasOwnProperty.call(input, "brand") ||
     Object.prototype.hasOwnProperty.call(input, "description") ||
     Object.prototype.hasOwnProperty.call(input, "isActive");
@@ -493,6 +555,10 @@ export const updateProductById = async (productId: string, input: UpdateProductI
       throw new HttpError(400, "name cannot be empty", "INVALID_PRODUCT_UPDATE");
     }
     data.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "category")) {
+    data.category = normalizeOptionalNullableText(input.category);
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "brand")) {
@@ -549,6 +615,11 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
               { option: { contains: normalizedQuery, mode: "insensitive" } },
               {
                 product: {
+                  category: { contains: normalizedQuery, mode: "insensitive" },
+                },
+              },
+              {
+                product: {
                   name: { contains: normalizedQuery, mode: "insensitive" },
                 },
               },
@@ -569,6 +640,7 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
         select: {
           id: true,
           name: true,
+          category: true,
           brand: true,
         },
       },
@@ -662,6 +734,14 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
               },
               {
                 product: {
+                  category: {
+                    contains: normalizedQ,
+                    mode: "insensitive",
+                  },
+                },
+              },
+              {
+                product: {
                   name: {
                     contains: normalizedQ,
                     mode: "insensitive",
@@ -694,6 +774,7 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
       product: {
         select: {
           name: true,
+          category: true,
         },
       },
       barcodes: {
@@ -829,6 +910,7 @@ export const getVariantById = async (variantId: string) => {
         select: {
           id: true,
           name: true,
+          category: true,
           brand: true,
         },
       },

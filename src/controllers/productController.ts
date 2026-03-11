@@ -76,13 +76,24 @@ export const searchProductsHandler = async (req: Request, res: Response) => {
 export const createProductHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     name?: string;
+    category?: string;
     brand?: string;
     description?: string;
     isActive?: boolean;
+    defaultVariant?: {
+      sku?: string;
+      barcode?: string;
+      retailPrice?: string | number;
+      retailPricePence?: number;
+      isActive?: boolean;
+    };
   };
 
   if (body.name !== undefined && typeof body.name !== "string") {
     throw new HttpError(400, "name must be a string", "INVALID_PRODUCT");
+  }
+  if (body.category !== undefined && typeof body.category !== "string") {
+    throw new HttpError(400, "category must be a string", "INVALID_PRODUCT");
   }
   if (body.brand !== undefined && typeof body.brand !== "string") {
     throw new HttpError(400, "brand must be a string", "INVALID_PRODUCT");
@@ -92,6 +103,31 @@ export const createProductHandler = async (req: Request, res: Response) => {
   }
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     throw new HttpError(400, "isActive must be a boolean", "INVALID_PRODUCT");
+  }
+  if (body.defaultVariant !== undefined && (typeof body.defaultVariant !== "object" || body.defaultVariant === null)) {
+    throw new HttpError(400, "defaultVariant must be an object", "INVALID_PRODUCT");
+  }
+  if (body.defaultVariant?.sku !== undefined && typeof body.defaultVariant.sku !== "string") {
+    throw new HttpError(400, "defaultVariant.sku must be a string", "INVALID_PRODUCT");
+  }
+  if (body.defaultVariant?.barcode !== undefined && typeof body.defaultVariant.barcode !== "string") {
+    throw new HttpError(400, "defaultVariant.barcode must be a string", "INVALID_PRODUCT");
+  }
+  if (
+    body.defaultVariant?.retailPrice !== undefined &&
+    typeof body.defaultVariant.retailPrice !== "number" &&
+    typeof body.defaultVariant.retailPrice !== "string"
+  ) {
+    throw new HttpError(400, "defaultVariant.retailPrice must be a number or string", "INVALID_PRODUCT");
+  }
+  if (
+    body.defaultVariant?.retailPricePence !== undefined &&
+    typeof body.defaultVariant.retailPricePence !== "number"
+  ) {
+    throw new HttpError(400, "defaultVariant.retailPricePence must be a number", "INVALID_PRODUCT");
+  }
+  if (body.defaultVariant?.isActive !== undefined && typeof body.defaultVariant.isActive !== "boolean") {
+    throw new HttpError(400, "defaultVariant.isActive must be a boolean", "INVALID_PRODUCT");
   }
 
   const product = await createProduct(body);
@@ -106,6 +142,7 @@ export const getProductHandler = async (req: Request, res: Response) => {
 export const patchProductHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     name?: string;
+    category?: string;
     brand?: string;
     description?: string;
     isActive?: boolean;
@@ -113,6 +150,9 @@ export const patchProductHandler = async (req: Request, res: Response) => {
 
   if (body.name !== undefined && typeof body.name !== "string") {
     throw new HttpError(400, "name must be a string", "INVALID_PRODUCT_UPDATE");
+  }
+  if (body.category !== undefined && typeof body.category !== "string") {
+    throw new HttpError(400, "category must be a string", "INVALID_PRODUCT_UPDATE");
   }
   if (body.brand !== undefined && typeof body.brand !== "string") {
     throw new HttpError(400, "brand must be a string", "INVALID_PRODUCT_UPDATE");

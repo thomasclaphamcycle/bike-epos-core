@@ -214,30 +214,38 @@ const run = async () => {
       headers: managerHeaders,
       body: JSON.stringify({
         name: `M29 Product ${uniqueRef()}`,
+        category: "Components",
+        defaultVariant: {
+          sku: `M29-SKU-${uniqueRef()}`,
+          barcode: `29${Date.now().toString().slice(-11)}`,
+          retailPricePence: 1599,
+          isActive: true,
+        },
       }),
     });
     assert.equal(productRes.status, 201, JSON.stringify(productRes.json));
     state.productIds.add(productRes.json.id);
+    assert.equal(productRes.json.category, "Components");
 
-    const barcode = `29${Date.now().toString().slice(-11)}`;
-    const variantRes = await fetchJson("/api/variants", {
-      method: "POST",
-      headers: managerHeaders,
-      body: JSON.stringify({
-        productId: productRes.json.id,
-        sku: `M29-SKU-${uniqueRef()}`,
-        barcode,
-        retailPricePence: 1599,
-      }),
-    });
-    assert.equal(variantRes.status, 201, JSON.stringify(variantRes.json));
-    state.variantIds.add(variantRes.json.id);
+    const createdVariantsRes = await fetchJson(
+      `/api/variants?productId=${encodeURIComponent(productRes.json.id)}&take=10&skip=0`,
+      {
+        method: "GET",
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(createdVariantsRes.status, 200, JSON.stringify(createdVariantsRes.json));
+    assert.equal(createdVariantsRes.json.variants.length, 1, JSON.stringify(createdVariantsRes.json));
+    const [variantRes] = createdVariantsRes.json.variants;
+    state.variantIds.add(variantRes.id);
+    assert.equal(variantRes.product.category, "Components");
+    const barcode = variantRes.barcode;
 
     const seedRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
       headers: staffHeaders,
       body: JSON.stringify({
-        variantId: variantRes.json.id,
+        variantId: variantRes.id,
         type: "PURCHASE",
         quantity: 7,
         unitCost: 800,
@@ -263,7 +271,7 @@ const run = async () => {
       },
     );
     assert.equal(searchByQRes.status, 200, JSON.stringify(searchByQRes.json));
-    const rowByQ = searchByQRes.json.rows.find((row) => row.id === variantRes.json.id);
+    const rowByQ = searchByQRes.json.rows.find((row) => row.id === variantRes.id);
     assert.ok(rowByQ, "Expected query search row");
     assert.equal(rowByQ.pricePence, 1599);
     assert.equal(rowByQ.onHandQty, 7);
@@ -276,7 +284,7 @@ const run = async () => {
     );
     assert.equal(searchByBarcodeRes.status, 200, JSON.stringify(searchByBarcodeRes.json));
     const rowByBarcode = searchByBarcodeRes.json.rows.find(
-      (row) => row.id === variantRes.json.id,
+      (row) => row.id === variantRes.id,
     );
     assert.ok(rowByBarcode, "Expected barcode search row");
 
@@ -290,7 +298,7 @@ const run = async () => {
     });
     assert.equal(addToBasketRes.status, 201, JSON.stringify(addToBasketRes.json));
     assert.equal(addToBasketRes.json.items.length, 1);
-    assert.equal(addToBasketRes.json.items[0].variantId, variantRes.json.id);
+    assert.equal(addToBasketRes.json.items[0].variantId, variantRes.id);
     assert.equal(addToBasketRes.json.items[0].quantity, 2);
 
     console.log("M29 smoke tests passed.");

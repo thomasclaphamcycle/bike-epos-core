@@ -790,6 +790,54 @@ th {
   font-size: 0.88rem;
 }
 
+.product-catalogue-page {
+  display: grid;
+  gap: 14px;
+}
+
+.product-catalogue-create-card {
+  background: linear-gradient(180deg, #fffdf8, #fff6ea);
+  border-color: #f1d4b5;
+}
+
+.product-catalogue-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.product-catalogue-form-grid label {
+  display: grid;
+  gap: 4px;
+}
+
+.product-catalogue-status-field {
+  max-width: 180px;
+}
+
+.product-status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.78rem;
+  border: 1px solid #d3d9e2;
+  background: #f2f5f9;
+}
+
+.product-status-badge-active {
+  background: #e8f7ef;
+  border-color: #b2e4c8;
+  color: #1d7948;
+}
+
+.product-status-badge-inactive {
+  background: #f5f6f8;
+  border-color: #d7dde6;
+  color: #5f6b7a;
+}
+
 .cash-receipt-overlay {
   position: fixed;
   inset: 0;
