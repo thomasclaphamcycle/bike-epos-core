@@ -8,6 +8,7 @@ This file tracks:
 
 - the exact historically evidenced milestone ledger through `M78`
 - the current `dev-next` working line through roadmap completion at `M135`
+- the forward-looking product direction documented in [docs/ROADMAP.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ROADMAP.md) and [docs/ARCHITECTURE.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ARCHITECTURE.md)
 
 Roadmap status:
 
