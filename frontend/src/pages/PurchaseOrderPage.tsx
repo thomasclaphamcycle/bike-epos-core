@@ -8,6 +8,7 @@ import { useAuth } from "../auth/AuthContext";
 type Supplier = {
   id: string;
   name: string;
+  contactName: string | null;
   email: string | null;
   phone: string | null;
 };
@@ -30,6 +31,7 @@ type PurchaseOrderItem = {
 
 type PurchaseOrder = {
   id: string;
+  poNumber: string;
   supplierId: string;
   supplier: Supplier;
   status: "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
@@ -105,6 +107,17 @@ const toStatusBadgeClass = (status: PurchaseOrder["status"]) => {
     case "DRAFT":
     default:
       return "status-badge";
+  }
+};
+
+const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
+  switch (status) {
+    case "PARTIALLY_RECEIVED":
+      return "Part Received";
+    case "SENT":
+      return "Ordered";
+    default:
+      return status.charAt(0) + status.slice(1).toLowerCase();
   }
 };
 
@@ -441,18 +454,20 @@ export const PurchaseOrderPage = () => {
             <div className="detail-grid">
               <div className="metric-card">
                 <span className="metric-label">PO</span>
-                <strong className="metric-value detail-id">{purchaseOrder.id.slice(0, 8)}</strong>
+                <strong className="metric-value detail-id">{purchaseOrder.poNumber}</strong>
                 <span className="table-secondary mono-text">{purchaseOrder.id}</span>
               </div>
               <div className="metric-card">
                 <span className="metric-label">Supplier</span>
                 <strong className="metric-value detail-metric-text">{purchaseOrder.supplier.name}</strong>
-                <span className="table-secondary">{purchaseOrder.supplier.email || purchaseOrder.supplier.phone || "-"}</span>
+                <span className="table-secondary">
+                  {purchaseOrder.supplier.contactName || purchaseOrder.supplier.email || purchaseOrder.supplier.phone || "-"}
+                </span>
               </div>
               <div className="metric-card">
                 <span className="metric-label">Status</span>
                 <strong className="metric-value detail-metric-text">
-                  <span className={toStatusBadgeClass(purchaseOrder.status)}>{purchaseOrder.status}</span>
+                  <span className={toStatusBadgeClass(purchaseOrder.status)}>{formatPurchaseOrderStatus(purchaseOrder.status)}</span>
                 </strong>
                 <span className="table-secondary">Remaining units: {purchaseOrder.totals.quantityRemaining}</span>
               </div>
@@ -698,7 +713,7 @@ export const PurchaseOrderPage = () => {
         <div className="card-header-row">
           <div>
             <h2>Goods Receiving</h2>
-            <p className="muted-text">Receive stock directly from the purchase order detail page.</p>
+            <p className="muted-text">Receive stock directly from this PO. Stock does not increase until receiving is posted.</p>
           </div>
         </div>
 

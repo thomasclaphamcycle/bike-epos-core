@@ -260,11 +260,24 @@ const run = async () => {
       headers: managerHeaders,
       body: JSON.stringify({
         name: `M27 Supplier ${uniqueRef()}`,
+        contactName: "Jamie Buyer",
         email: `m27.${uniqueRef()}@supplier.test`,
       }),
     });
     assert.equal(supplierRes.status, 201, JSON.stringify(supplierRes.json));
     state.supplierIds.add(supplierRes.json.id);
+    assert.equal(supplierRes.json.contactName, "Jamie Buyer");
+
+    const patchSupplierRes = await fetchJson(`/api/suppliers/${supplierRes.json.id}`, {
+      method: "PATCH",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        contactName: "Jamie Procurement",
+        notes: "Updated supplier note",
+      }),
+    });
+    assert.equal(patchSupplierRes.status, 200, JSON.stringify(patchSupplierRes.json));
+    assert.equal(patchSupplierRes.json.contactName, "Jamie Procurement");
 
     const productRes = await fetchJson("/api/products", {
       method: "POST",
@@ -299,6 +312,7 @@ const run = async () => {
     });
     assert.equal(poRes.status, 201, JSON.stringify(poRes.json));
     assert.equal(poRes.json.status, "DRAFT");
+    assert.match(poRes.json.poNumber, /^COREPOS-PO-\d{4}-\d{6}$/);
     state.purchaseOrderIds.add(poRes.json.id);
 
     const addItemsRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}/items`, {
@@ -318,6 +332,15 @@ const run = async () => {
     assert.equal(addItemsRes.json.items.length, 1);
     const purchaseOrderItemId = addItemsRes.json.items[0].id;
     state.purchaseOrderItemIds.add(purchaseOrderItemId);
+
+    const stockBeforeReceiveRes = await fetchJson(
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(stockBeforeReceiveRes.status, 200, JSON.stringify(stockBeforeReceiveRes.json));
+    assert.equal(stockBeforeReceiveRes.json.onHand, 0);
 
     const patchLineRes = await fetchJson(
       `/api/purchase-orders/${poRes.json.id}/lines/${purchaseOrderItemId}`,
@@ -343,6 +366,7 @@ const run = async () => {
     assert.equal(listRes.status, 200, JSON.stringify(listRes.json));
     assert.ok(Array.isArray(listRes.json.purchaseOrders));
     assert.ok(listRes.json.purchaseOrders.some((po) => po.id === poRes.json.id));
+    assert.ok(listRes.json.purchaseOrders.some((po) => po.poNumber === poRes.json.poNumber));
 
     const patchPoRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}`, {
       method: "PATCH",
@@ -428,6 +452,7 @@ const run = async () => {
       headers: staffHeaders,
     });
     assert.equal(getPoRes.status, 200, JSON.stringify(getPoRes.json));
+    assert.equal(getPoRes.json.poNumber, poRes.json.poNumber);
     assert.equal(getPoRes.json.status, "RECEIVED");
 
     console.log("PASS m27 purchase order workflow smoke tests");

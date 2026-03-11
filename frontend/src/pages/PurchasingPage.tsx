@@ -8,12 +8,14 @@ import { useAuth } from "../auth/AuthContext";
 type Supplier = {
   id: string;
   name: string;
+  contactName: string | null;
   email: string | null;
   phone: string | null;
 };
 
 type PurchaseOrder = {
   id: string;
+  poNumber: string;
   supplierId: string;
   supplier: Supplier;
   status: "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
@@ -54,6 +56,17 @@ const toStatusBadgeClass = (status: PurchaseOrder["status"]) => {
     case "DRAFT":
     default:
       return "status-badge";
+  }
+};
+
+const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
+  switch (status) {
+    case "PARTIALLY_RECEIVED":
+      return "Part Received";
+    case "SENT":
+      return "Ordered";
+    default:
+      return status.charAt(0) + status.slice(1).toLowerCase();
   }
 };
 
@@ -202,7 +215,7 @@ export const PurchasingPage = () => {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="PO id, supplier, SKU, product"
+              placeholder="PO number, supplier, SKU, product"
             />
           </label>
           <label>
@@ -282,12 +295,17 @@ export const PurchasingPage = () => {
                     onClick={() => navigate(`/purchasing/${purchaseOrder.id}`)}
                   >
                     <td>
-                      <div className="table-primary">{purchaseOrder.id.slice(0, 8)}</div>
-                      <div className="table-secondary mono-text">{purchaseOrder.id}</div>
+                      <div className="table-primary">{purchaseOrder.poNumber}</div>
+                      <div className="table-secondary mono-text">{purchaseOrder.id.slice(0, 8)}</div>
                     </td>
-                    <td>{purchaseOrder.supplier?.name || "-"}</td>
                     <td>
-                      <span className={toStatusBadgeClass(purchaseOrder.status)}>{purchaseOrder.status}</span>
+                      <div className="table-primary">{purchaseOrder.supplier?.name || "-"}</div>
+                      <div className="table-secondary">
+                        {purchaseOrder.supplier?.contactName || purchaseOrder.supplier?.email || purchaseOrder.supplier?.phone || "-"}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={toStatusBadgeClass(purchaseOrder.status)}>{formatPurchaseOrderStatus(purchaseOrder.status)}</span>
                     </td>
                     <td className="numeric-cell">{purchaseOrder.totals.quantityOrdered}</td>
                     <td className="numeric-cell">{purchaseOrder.totals.quantityReceived}</td>
@@ -306,7 +324,7 @@ export const PurchasingPage = () => {
         <div className="card-header-row">
           <div>
             <h2>Create Purchase Order</h2>
-            <p className="muted-text">Available to MANAGER+ only.</p>
+            <p className="muted-text">Creating an order does not affect stock. Stock increases only when goods are received.</p>
           </div>
         </div>
 

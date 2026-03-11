@@ -19,9 +19,21 @@ X-Staff-Id: manager-1
 
 {
   "name": "M27 Supplier",
+  "contactName": "Jamie Buyer",
   "email": "m27@supplier.test",
   "phone": "02070000000",
   "notes": "Primary distributor"
+}
+
+### Update supplier (MANAGER+)
+PATCH {{baseUrl}}/api/suppliers/{{supplierId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "contactName": "Jamie Procurement",
+  "notes": "Updated supplier note"
 }
 
 ### Create purchase order (MANAGER+)

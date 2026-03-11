@@ -10,6 +10,7 @@ X-Staff-Id: manager-1
 
 {
   "name": "Madison",
+  "contactName": "Trade Desk",
   "email": "trade@madison.co.uk",
   "phone": "02071234567",
   "notes": "Main UK distributor"
@@ -18,6 +19,17 @@ X-Staff-Id: manager-1
 ### Search suppliers (STAFF+)
 GET {{baseUrl}}/api/suppliers?query=mad
 X-Staff-Role: {{staffRole}}
+
+### Update supplier (MANAGER+)
+PATCH {{baseUrl}}/api/suppliers/{{supplierId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "contactName": "Procurement Team",
+  "notes": "Prefers weekly orders"
+}
 
 ### Create purchase order (MANAGER+)
 POST {{baseUrl}}/api/purchase-orders

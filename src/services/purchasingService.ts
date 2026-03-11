@@ -4,9 +4,18 @@ import { HttpError, isUuid } from "../utils/http";
 
 type CreateSupplierInput = {
   name?: string;
+  contactName?: string;
   email?: string;
   phone?: string;
   notes?: string;
+};
+
+type UpdateSupplierInput = {
+  name?: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
 };
 
 type CreatePurchaseOrderInput = {
@@ -101,6 +110,7 @@ const parseOptionalSkip = (value: number | undefined): number | undefined => {
 };
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const PURCHASE_ORDER_NUMBER_PREFIX = normalizeOptionalText(process.env.PURCHASE_ORDER_NUMBER_PREFIX) || "COREPOS";
 
 const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date | undefined => {
   const normalized = normalizeOptionalText(value);
@@ -123,6 +133,7 @@ const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date 
 const toSupplierResponse = (supplier: {
   id: string;
   name: string;
+  contactName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -131,6 +142,7 @@ const toSupplierResponse = (supplier: {
 }) => ({
   id: supplier.id,
   name: supplier.name,
+  contactName: supplier.contactName,
   email: supplier.email,
   phone: supplier.phone,
   notes: supplier.notes,
@@ -261,6 +273,7 @@ const getNextStatusOrThrow = (
 
 const toPurchaseOrderResponse = (po: {
   id: string;
+  poNumber: string;
   supplierId: string;
   status: PurchaseOrderStatus;
   orderedAt: Date | null;
@@ -311,6 +324,7 @@ const toPurchaseOrderResponse = (po: {
 
   return {
     id: po.id,
+    poNumber: po.poNumber,
     supplierId: po.supplierId,
     supplier: po.supplier,
     status: po.status,
@@ -322,6 +336,36 @@ const toPurchaseOrderResponse = (po: {
     items,
     totals,
   };
+};
+
+const getPurchaseOrderNumberPrefixForYear = (year: number) => `${PURCHASE_ORDER_NUMBER_PREFIX}-PO-${year}-`;
+
+const buildPurchaseOrderNumber = (year: number, sequenceNumber: number) =>
+  `${getPurchaseOrderNumberPrefixForYear(year)}${String(sequenceNumber).padStart(6, "0")}`;
+
+const getNextPurchaseOrderNumber = async (
+  tx: Prisma.TransactionClient,
+  createdAt: Date,
+) => {
+  const year = createdAt.getUTCFullYear();
+  const prefix = getPurchaseOrderNumberPrefixForYear(year);
+
+  const latest = await tx.purchaseOrder.findFirst({
+    where: {
+      poNumber: {
+        startsWith: prefix,
+      },
+    },
+    orderBy: {
+      poNumber: "desc",
+    },
+    select: {
+      poNumber: true,
+    },
+  });
+
+  const nextSequence = latest ? Number.parseInt(latest.poNumber.slice(-6), 10) + 1 : 1;
+  return buildPurchaseOrderNumber(year, nextSequence);
 };
 
 const ensureSupplierExists = async (
@@ -346,6 +390,7 @@ const getPurchaseOrderOrThrow = async (
         select: {
           id: true,
           name: true,
+          contactName: true,
           email: true,
           phone: true,
         },
@@ -395,9 +440,49 @@ export const createSupplier = async (input: CreateSupplierInput) => {
   const supplier = await prisma.supplier.create({
     data: {
       name,
+      contactName: normalizeOptionalText(input.contactName),
       email: normalizeOptionalText(input.email),
       phone: normalizeOptionalText(input.phone),
       notes: normalizeOptionalText(input.notes),
+    },
+  });
+
+  return toSupplierResponse(supplier);
+};
+
+export const updateSupplier = async (supplierId: string, input: UpdateSupplierInput) => {
+  if (!isUuid(supplierId)) {
+    throw new HttpError(400, "Invalid supplier id", "INVALID_SUPPLIER_ID");
+  }
+
+  const hasName = Object.prototype.hasOwnProperty.call(input, "name");
+  const hasContactName = Object.prototype.hasOwnProperty.call(input, "contactName");
+  const hasEmail = Object.prototype.hasOwnProperty.call(input, "email");
+  const hasPhone = Object.prototype.hasOwnProperty.call(input, "phone");
+  const hasNotes = Object.prototype.hasOwnProperty.call(input, "notes");
+
+  if (!hasName && !hasContactName && !hasEmail && !hasPhone && !hasNotes) {
+    throw new HttpError(400, "No fields supplied for update", "INVALID_SUPPLIER_UPDATE");
+  }
+
+  const current = await prisma.supplier.findUnique({ where: { id: supplierId } });
+  if (!current) {
+    throw new HttpError(404, "Supplier not found", "SUPPLIER_NOT_FOUND");
+  }
+
+  const nextName = hasName ? normalizeOptionalText(input.name ?? undefined) : current.name;
+  if (!nextName) {
+    throw new HttpError(400, "name is required", "INVALID_SUPPLIER_UPDATE");
+  }
+
+  const supplier = await prisma.supplier.update({
+    where: { id: supplierId },
+    data: {
+      name: nextName,
+      ...(hasContactName ? { contactName: normalizeOptionalText(input.contactName ?? undefined) ?? null } : {}),
+      ...(hasEmail ? { email: normalizeOptionalText(input.email ?? undefined) ?? null } : {}),
+      ...(hasPhone ? { phone: normalizeOptionalText(input.phone ?? undefined) ?? null } : {}),
+      ...(hasNotes ? { notes: normalizeOptionalText(input.notes ?? undefined) ?? null } : {}),
     },
   });
 
@@ -412,6 +497,7 @@ export const searchSuppliers = async (query?: string) => {
       ? {
           OR: [
             { name: { contains: normalizedQuery, mode: "insensitive" } },
+            { contactName: { contains: normalizedQuery, mode: "insensitive" } },
             { email: { contains: normalizedQuery, mode: "insensitive" } },
             { phone: { contains: normalizedQuery, mode: "insensitive" } },
           ],
@@ -434,43 +520,67 @@ export const createPurchaseOrder = async (input: CreatePurchaseOrderInput) => {
   const orderedAt = toDateOrUndefined(input.orderedAt, "orderedAt");
   const expectedAt = toDateOrUndefined(input.expectedAt, "expectedAt");
 
-  const po = await prisma.$transaction(async (tx) => {
-    await ensureSupplierExists(tx, supplierId);
+  let po;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      po = await prisma.$transaction(async (tx) => {
+        await ensureSupplierExists(tx, supplierId);
+        const createdAt = new Date();
+        const poNumber = await getNextPurchaseOrderNumber(tx, createdAt);
 
-    return tx.purchaseOrder.create({
-      data: {
-        supplierId,
-        orderedAt,
-        expectedAt,
-        notes: normalizeOptionalText(input.notes),
-      },
-      include: {
-        supplier: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
+        return tx.purchaseOrder.create({
+          data: {
+            poNumber,
+            supplierId,
+            orderedAt,
+            expectedAt,
+            notes: normalizeOptionalText(input.notes),
+            createdAt,
           },
-        },
-        items: {
-          orderBy: { createdAt: "asc" },
           include: {
-            variant: {
+            supplier: {
+              select: {
+                id: true,
+                name: true,
+                contactName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            items: {
+              orderBy: { createdAt: "asc" },
               include: {
-                product: {
-                  select: {
-                    id: true,
-                    name: true,
+                variant: {
+                  include: {
+                    product: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
                   },
                 },
               },
             },
           },
-        },
-      },
-    });
-  });
+        });
+      });
+      break;
+    } catch (createError) {
+      if (
+        createError instanceof Prisma.PrismaClientKnownRequestError &&
+        createError.code === "P2002" &&
+        attempt < 2
+      ) {
+        continue;
+      }
+      throw createError;
+    }
+  }
+
+  if (!po) {
+    throw new HttpError(500, "Failed to create purchase order", "PURCHASE_ORDER_CREATE_FAILED");
+  }
 
   return toPurchaseOrderResponse(po);
 };
@@ -507,6 +617,7 @@ export const listPurchaseOrders = async (filters: ListPurchaseOrderFilters = {})
         ? {
             OR: [
               ...(isUuid(normalizedQuery) ? [{ id: normalizedQuery }] : []),
+              { poNumber: { contains: normalizedQuery, mode: "insensitive" } },
               { notes: { contains: normalizedQuery, mode: "insensitive" } },
               { supplier: { name: { contains: normalizedQuery, mode: "insensitive" } } },
               { supplier: { email: { contains: normalizedQuery, mode: "insensitive" } } },
@@ -542,6 +653,7 @@ export const listPurchaseOrders = async (filters: ListPurchaseOrderFilters = {})
         select: {
           id: true,
           name: true,
+          contactName: true,
           email: true,
           phone: true,
         },
