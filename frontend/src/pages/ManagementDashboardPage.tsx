@@ -303,6 +303,7 @@ export const ManagementDashboardPage = () => {
           <Link to="/management/dashboard-settings">Dashboard settings</Link>
         </div>
         <div className="dashboard-link-grid">
+          <Link className="button-link dashboard-link-card" to="/management/actions">Action Centre</Link>
           <Link className="button-link dashboard-link-card" to="/pos">POS</Link>
           <Link className="button-link dashboard-link-card" to="/workshop">Workshop</Link>
           <Link className="button-link dashboard-link-card" to="/inventory">Inventory</Link>

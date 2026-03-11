@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  getActionCentreReport,
   getCustomerServiceRemindersReport,
   getInventoryOnHandReport,
   getInventoryVelocityReport,
@@ -196,6 +197,11 @@ export const getPricingExceptionsReportHandler = async (_req: Request, res: Resp
 
 export const getOperationsExceptionsHandler = async (_req: Request, res: Response) => {
   const report = await getOperationsExceptions();
+  res.json(report);
+};
+
+export const getActionCentreReportHandler = async (_req: Request, res: Response) => {
+  const report = await getActionCentreReport();
   res.json(report);
 };
 

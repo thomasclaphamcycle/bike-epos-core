@@ -6,6 +6,45 @@ import { getPricingExceptionsReport } from "./pricingReports";
 import { getWorkshopCapacityReport } from "./workshopReports";
 
 type OperationsExceptionSeverity = "CRITICAL" | "WARNING" | "INFO";
+type ActionCentreSectionKey = "purchasing" | "customerFollowUp" | "workshop" | "pricing" | "inventory";
+
+const actionCentreSections: Array<{
+  key: ActionCentreSectionKey;
+  title: string;
+  description: string;
+  types: string[];
+}> = [
+  {
+    key: "purchasing",
+    title: "Purchasing",
+    description: "Overdue purchase orders that need supplier follow-up or receiving attention.",
+    types: ["OVERDUE_PURCHASE_ORDER"],
+  },
+  {
+    key: "customerFollowUp",
+    title: "Customer Follow-Up",
+    description: "Customers overdue for service reminders after workshop activity.",
+    types: ["CUSTOMER_OVERDUE_REMINDER"],
+  },
+  {
+    key: "workshop",
+    title: "Workshop",
+    description: "Backlog pressure and ageing jobs that need active workshop triage.",
+    types: ["WORKSHOP_BACKLOG", "WORKSHOP_OLD_JOB"],
+  },
+  {
+    key: "pricing",
+    title: "Pricing",
+    description: "Products with missing prices, price-to-cost issues, or weak apparent margin.",
+    types: ["MISSING_RETAIL_PRICE", "RETAIL_AT_OR_BELOW_COST", "LOW_MARGIN"],
+  },
+  {
+    key: "inventory",
+    title: "Inventory",
+    description: "Dead stock and slow-moving inventory attention items.",
+    types: ["DEAD_STOCK"],
+  },
+];
 
 export const getOperationsExceptions = async () => {
   const now = new Date();
@@ -138,5 +177,43 @@ export const getOperationsExceptions = async () => {
       info: items.filter((row) => row.severity === "INFO").length,
     },
     items,
+  };
+};
+
+export const getActionCentreReport = async () => {
+  const report = await getOperationsExceptions();
+
+  const sections = actionCentreSections.map((section) => {
+    const items = report.items
+      .filter((item) => section.types.includes(item.type))
+      .map((item) => ({
+        type: item.type,
+        entityId: item.entityId,
+        title: item.title,
+        reason: item.description,
+        severity: item.severity,
+        link: item.link,
+      }));
+
+    return {
+      key: section.key,
+      title: section.title,
+      description: section.description,
+      itemCount: items.length,
+      criticalCount: items.filter((item) => item.severity === "CRITICAL").length,
+      warningCount: items.filter((item) => item.severity === "WARNING").length,
+      infoCount: items.filter((item) => item.severity === "INFO").length,
+      items,
+    };
+  });
+
+  return {
+    generatedAt: report.generatedAt,
+    summary: {
+      ...report.summary,
+      sectionCount: sections.length,
+      sectionsWithItems: sections.filter((section) => section.itemCount > 0).length,
+    },
+    sections,
   };
 };
