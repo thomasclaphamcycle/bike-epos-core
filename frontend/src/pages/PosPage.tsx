@@ -403,6 +403,36 @@ export const PosPage = () => {
     }
   };
 
+  const adjustLineQty = async (itemId: string, currentQuantity: number, delta: number) => {
+    const nextQuantity = currentQuantity + delta;
+    if (nextQuantity < 1) {
+      await removeLine(itemId);
+      return;
+    }
+
+    await updateLineQty(itemId, nextQuantity);
+  };
+
+  const clearBasket = async () => {
+    if (!basketId || !basket || basket.items.length === 0) {
+      return;
+    }
+
+    try {
+      let latestBasket = basket;
+      for (const item of basket.items) {
+        latestBasket = await apiDelete<BasketResponse>(
+          `/api/baskets/${encodeURIComponent(basketId)}/items/${encodeURIComponent(item.id)}`,
+        );
+      }
+      setBasket(latestBasket);
+      success("Basket cleared");
+    } catch (clearError) {
+      const message = clearError instanceof Error ? clearError.message : "Failed to clear basket";
+      error(message);
+    }
+  };
+
   const checkoutBasket = async () => {
     if (!basketId) {
       error("No active basket.");
@@ -704,7 +734,18 @@ export const PosPage = () => {
       </section>
 
       <section className="card">
-        <h2>Basket Lines</h2>
+        <div className="card-header-row">
+          <h2>Basket Lines</h2>
+          <div className="actions-inline">
+            <button
+              type="button"
+              onClick={() => void clearBasket()}
+              disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+            >
+              Clear basket
+            </button>
+          </div>
+        </div>
 
         {basket && basket.items.length > 0 ? (
           <div className="table-wrap">
@@ -712,6 +753,7 @@ export const PosPage = () => {
               <thead>
                 <tr>
                   <th>Item</th>
+                  <th>SKU</th>
                   <th>Qty</th>
                   <th>Unit</th>
                   <th>Total</th>
@@ -723,16 +765,28 @@ export const PosPage = () => {
                   <tr key={item.id}>
                     <td>{item.productName}{item.variantName ? ` (${item.variantName})` : ""}</td>
                     <td>
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.quantity}
-                        onChange={(event) => {
-                          const next = Number(event.target.value) || 1;
-                          void updateLineQty(item.id, next);
-                        }}
-                        disabled={Boolean(saleId)}
-                      />
+                      {item.sku}
+                    </td>
+                    <td>
+                      <div className="actions-inline">
+                        <button
+                          type="button"
+                          onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
+                          disabled={Boolean(saleId)}
+                          aria-label={`Decrease quantity for ${item.productName}`}
+                        >
+                          -
+                        </button>
+                        <strong>{item.quantity}</strong>
+                        <button
+                          type="button"
+                          onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
+                          disabled={Boolean(saleId)}
+                          aria-label={`Increase quantity for ${item.productName}`}
+                        >
+                          +
+                        </button>
+                      </div>
                     </td>
                     <td>{formatMoney(item.unitPricePence)}</td>
                     <td>{formatMoney(item.lineTotalPence)}</td>
