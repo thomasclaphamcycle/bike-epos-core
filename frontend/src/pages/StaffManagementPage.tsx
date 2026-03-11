@@ -19,7 +19,26 @@ type UserListResponse = {
   users: StaffUser[];
 };
 
+type UserEditState = {
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+};
+
 const roleOptions: UserRole[] = ["STAFF", "MANAGER", "ADMIN"];
+
+const normalizeIsActive = (value: boolean | string | null | undefined, fallback: boolean) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return fallback;
+};
 
 export const StaffManagementPage = () => {
   const { success, error } = useToasts();
@@ -36,7 +55,7 @@ export const StaffManagementPage = () => {
 
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
-  const [userEdits, setUserEdits] = useState<Record<string, { name: string; role: UserRole }>>({});
+  const [userEdits, setUserEdits] = useState<Record<string, UserEditState>>({});
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   const loadUsers = async () => {
@@ -51,6 +70,7 @@ export const StaffManagementPage = () => {
             {
               name: user.name ?? "",
               role: user.role,
+              isActive: user.isActive,
             },
           ]),
         ),
@@ -96,8 +116,26 @@ export const StaffManagementPage = () => {
   };
 
   const updateUser = async (userId: string, body: { name?: string; role?: UserRole; isActive?: boolean }) => {
+    const existingUser = users.find((user) => user.id === userId);
+    if (!existingUser) {
+      error("User not found");
+      return;
+    }
+
+    const normalizedBody = {
+      ...body,
+      ...(Object.prototype.hasOwnProperty.call(body, "isActive")
+        ? {
+            isActive: normalizeIsActive(
+              body.isActive as boolean | string | null | undefined,
+              existingUser.isActive,
+            ),
+          }
+        : {}),
+    };
+
     try {
-      await apiPatch(`/api/admin/users/${encodeURIComponent(userId)}`, body);
+      await apiPatch(`/api/admin/users/${encodeURIComponent(userId)}`, normalizedBody);
       success("User updated");
       await loadUsers();
     } catch (updateError) {
@@ -234,6 +272,7 @@ export const StaffManagementPage = () => {
                           [user.id]: {
                             name: event.target.value,
                             role: current[user.id]?.role ?? user.role,
+                            isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
                           },
                         }))}
                       />
@@ -248,6 +287,7 @@ export const StaffManagementPage = () => {
                           [user.id]: {
                             name: current[user.id]?.name ?? user.name ?? "",
                             role: event.target.value as UserRole,
+                            isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
                           },
                         }))}
                       >
@@ -260,11 +300,32 @@ export const StaffManagementPage = () => {
                     <div className="staff-form-field staff-field-status">
                       <span>Status</span>
                       <div className="staff-status-action">
-                        <span className={`staff-status-badge ${user.isActive ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
-                          {user.isActive ? "ACTIVE" : "INACTIVE"}
+                        <span
+                          className={`staff-status-badge ${
+                            normalizeIsActive(userEdits[user.id]?.isActive, user.isActive)
+                              ? "staff-status-badge-active"
+                              : "staff-status-badge-inactive"
+                          }`}
+                        >
+                          {normalizeIsActive(userEdits[user.id]?.isActive, user.isActive) ? "ACTIVE" : "INACTIVE"}
                         </span>
-                        <button type="button" className="secondary" onClick={() => void updateUser(user.id, { isActive: !user.isActive })}>
-                          {user.isActive ? "Deactivate" : "Activate"}
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => {
+                            const nextIsActive = !normalizeIsActive(userEdits[user.id]?.isActive, user.isActive);
+                            setUserEdits((current) => ({
+                              ...current,
+                              [user.id]: {
+                                name: current[user.id]?.name ?? user.name ?? "",
+                                role: current[user.id]?.role ?? user.role,
+                                isActive: nextIsActive,
+                              },
+                            }));
+                            void updateUser(user.id, { isActive: nextIsActive });
+                          }}
+                        >
+                          {normalizeIsActive(userEdits[user.id]?.isActive, user.isActive) ? "Deactivate" : "Activate"}
                         </button>
                       </div>
                     </div>
@@ -275,6 +336,7 @@ export const StaffManagementPage = () => {
                         onClick={() => void updateUser(user.id, {
                           name: userEdits[user.id]?.name ?? user.name ?? "",
                           role: userEdits[user.id]?.role ?? user.role,
+                          isActive: normalizeIsActive(userEdits[user.id]?.isActive, user.isActive),
                         })}
                       >
                         Save Profile

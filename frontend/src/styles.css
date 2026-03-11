@@ -212,6 +212,11 @@ textarea {
   color: #041334;
 }
 
+.sidebar-link--active:hover {
+  background: #ff7a00;
+  color: #041334;
+}
+
 .header-right {
   display: flex;
   align-items: center;
@@ -1543,6 +1548,15 @@ th {
   box-shadow:
     0 0 0 3px rgba(255, 122, 24, 0.18),
     0 12px 24px rgba(15, 23, 42, 0.13);
+}
+
+.login-user-button-active:hover:not(:disabled) {
+  border-color: var(--cp-orange);
+  background: linear-gradient(180deg, rgba(255, 122, 24, 0.14) 0%, rgba(255, 122, 24, 0.08) 100%);
+  box-shadow:
+    0 0 0 3px rgba(255, 122, 24, 0.18),
+    0 12px 24px rgba(15, 23, 42, 0.13);
+  transform: none;
 }
 
 .login-user-button:disabled {
