@@ -1748,6 +1748,8 @@ const REMINDER_OPEN_STATUSES: WorkshopJobStatus[] = [
   "BIKE_READY",
 ];
 
+type CustomerReminderQueueStatus = "DUE_SOON" | "OVERDUE" | "RECENT_ACTIVITY";
+
 export const getCustomerServiceRemindersReport = async (
   dueSoonDays?: number,
   overdueDays?: number,
@@ -1900,6 +1902,22 @@ export const getCustomerServiceRemindersReport = async (
       );
     });
 
+  const items = customers
+    .map((row) => ({
+      customerId: row.customerId,
+      customerName: row.customerName,
+      email: row.email,
+      phone: row.phone,
+      contact: row.phone?.trim() || row.email?.trim() || null,
+      lastWorkshopJobDate: row.lastCompletedWorkshopAt,
+      daysSinceLastWorkshopJob: row.daysSinceLastCompletedWorkshop,
+      reminderStatus: (row.reminderStatus === "RECENT_COMPLETION"
+        ? "RECENT_ACTIVITY"
+        : row.reminderStatus) as CustomerReminderQueueStatus,
+      latestWorkshopJobId: row.latestWorkshopJobId,
+    }))
+    .slice(0, resolvedTake);
+
   return {
     filters: {
       dueSoonDays: resolvedDueSoonDays,
@@ -1912,11 +1930,14 @@ export const getCustomerServiceRemindersReport = async (
       overdueCount: customers.filter((row) => row.reminderStatus === "OVERDUE").length,
       dueSoonCount: customers.filter((row) => row.reminderStatus === "DUE_SOON").length,
       recentCompletionCount: customers.filter((row) => row.reminderStatus === "RECENT_COMPLETION").length,
+      recentActivityCount: items.filter((row) => row.reminderStatus === "RECENT_ACTIVITY").length,
     },
     overdueCustomers: customers.filter((row) => row.reminderStatus === "OVERDUE").slice(0, resolvedTake),
     dueSoonCustomers: customers.filter((row) => row.reminderStatus === "DUE_SOON").slice(0, resolvedTake),
     recentCompletedCustomers: customers.filter((row) => row.reminderStatus === "RECENT_COMPLETION").slice(0, resolvedTake),
+    recentActivityCustomers: items.filter((row) => row.reminderStatus === "RECENT_ACTIVITY"),
     customers: customers.slice(0, resolvedTake),
+    items,
   };
 };
 
