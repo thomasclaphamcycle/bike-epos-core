@@ -1208,32 +1208,20 @@ export const getInventoryLocationSummaryReport = async (filters: {
   };
 };
 
-export const getSupplierPerformanceReport = async (from?: string, to?: string, take?: number) => {
-  const range = getDateRangeWithTakeOrThrow(from, to, take);
-  const fromDate = parseDateOnlyOrThrow(range.from, "from");
-  const toDate = new Date(`${range.to}T23:59:59.999Z`);
-
+export const getSupplierPerformanceReport = async () => {
+  const now = new Date();
   const purchaseOrders = await prisma.purchaseOrder.findMany({
-    where: {
-      createdAt: {
-        gte: fromDate,
-        lte: toDate,
-      },
-    },
     include: {
       supplier: {
         select: {
           id: true,
           name: true,
-          email: true,
-          phone: true,
         },
       },
       items: {
         select: {
           quantityOrdered: true,
           quantityReceived: true,
-          unitCostPence: true,
         },
       },
     },
@@ -1244,18 +1232,12 @@ export const getSupplierPerformanceReport = async (from?: string, to?: string, t
     supplierId: string;
     supplierName: string;
     purchaseOrderCount: number;
-    quantityOrdered: number;
-    quantityReceived: number;
-    quantityRemaining: number;
-    orderedValuePence: number;
-    receivedValuePence: number;
-    draftCount: number;
-    sentCount: number;
+    openPurchaseOrderCount: number;
     partiallyReceivedCount: number;
-    receivedCount: number;
-    cancelledCount: number;
-    overdueOpenCount: number;
-    latestPurchaseOrderAt: Date | null;
+    receivedPurchaseOrderCount: number;
+    overdueOpenPurchaseOrderCount: number;
+    totalOrderedQuantity: number;
+    totalReceivedQuantity: number;
   }>();
 
   for (const po of purchaseOrders) {
@@ -1263,100 +1245,59 @@ export const getSupplierPerformanceReport = async (from?: string, to?: string, t
       supplierId: po.supplierId,
       supplierName: po.supplier.name,
       purchaseOrderCount: 0,
-      quantityOrdered: 0,
-      quantityReceived: 0,
-      quantityRemaining: 0,
-      orderedValuePence: 0,
-      receivedValuePence: 0,
-      draftCount: 0,
-      sentCount: 0,
+      openPurchaseOrderCount: 0,
       partiallyReceivedCount: 0,
-      receivedCount: 0,
-      cancelledCount: 0,
-      overdueOpenCount: 0,
-      latestPurchaseOrderAt: null,
+      receivedPurchaseOrderCount: 0,
+      overdueOpenPurchaseOrderCount: 0,
+      totalOrderedQuantity: 0,
+      totalReceivedQuantity: 0,
     };
 
     existing.purchaseOrderCount += 1;
-    if (!existing.latestPurchaseOrderAt || po.createdAt > existing.latestPurchaseOrderAt) {
-      existing.latestPurchaseOrderAt = po.createdAt;
+    if (po.status === "SENT" || po.status === "PARTIALLY_RECEIVED") {
+      existing.openPurchaseOrderCount += 1;
     }
-
-    switch (po.status) {
-      case "DRAFT":
-        existing.draftCount += 1;
-        break;
-      case "SENT":
-        existing.sentCount += 1;
-        break;
-      case "PARTIALLY_RECEIVED":
-        existing.partiallyReceivedCount += 1;
-        break;
-      case "RECEIVED":
-        existing.receivedCount += 1;
-        break;
-      case "CANCELLED":
-        existing.cancelledCount += 1;
-        break;
-      default:
-        break;
+    if (po.status === "PARTIALLY_RECEIVED") {
+      existing.partiallyReceivedCount += 1;
     }
-
-    if (po.expectedAt && po.expectedAt < new Date() && po.status !== "RECEIVED" && po.status !== "CANCELLED") {
-      existing.overdueOpenCount += 1;
+    if (po.status === "RECEIVED") {
+      existing.receivedPurchaseOrderCount += 1;
+    }
+    if (
+      (po.status === "SENT" || po.status === "PARTIALLY_RECEIVED")
+      && po.expectedAt
+      && po.expectedAt < now
+    ) {
+      existing.overdueOpenPurchaseOrderCount += 1;
     }
 
     for (const item of po.items) {
-      existing.quantityOrdered += item.quantityOrdered;
-      existing.quantityReceived += item.quantityReceived;
-      existing.quantityRemaining += Math.max(0, item.quantityOrdered - item.quantityReceived);
-      if (item.unitCostPence !== null) {
-        existing.orderedValuePence += item.quantityOrdered * item.unitCostPence;
-        existing.receivedValuePence += item.quantityReceived * item.unitCostPence;
-      }
+      existing.totalOrderedQuantity += item.quantityOrdered;
+      existing.totalReceivedQuantity += item.quantityReceived;
     }
 
     bySupplier.set(po.supplierId, existing);
   }
 
   const suppliers = Array.from(bySupplier.values())
-    .map((row) => ({
-      supplierId: row.supplierId,
-      supplierName: row.supplierName,
-      purchaseOrderCount: row.purchaseOrderCount,
-      quantityOrdered: row.quantityOrdered,
-      quantityReceived: row.quantityReceived,
-      quantityRemaining: row.quantityRemaining,
-      orderedValuePence: row.orderedValuePence,
-      receivedValuePence: row.receivedValuePence,
-      fillRate: row.quantityOrdered > 0 ? Number((row.quantityReceived / row.quantityOrdered).toFixed(3)) : 0,
-      draftCount: row.draftCount,
-      sentCount: row.sentCount,
-      partiallyReceivedCount: row.partiallyReceivedCount,
-      receivedCount: row.receivedCount,
-      cancelledCount: row.cancelledCount,
-      overdueOpenCount: row.overdueOpenCount,
-      latestPurchaseOrderAt: row.latestPurchaseOrderAt,
-    }))
     .sort((left, right) => (
-      right.orderedValuePence - left.orderedValuePence
+      right.overdueOpenPurchaseOrderCount - left.overdueOpenPurchaseOrderCount
+      || right.openPurchaseOrderCount - left.openPurchaseOrderCount
       || right.purchaseOrderCount - left.purchaseOrderCount
       || left.supplierName.localeCompare(right.supplierName)
     ));
 
   return {
-    filters: range,
+    generatedAt: now.toISOString(),
     summary: {
       supplierCount: suppliers.length,
       purchaseOrderCount: suppliers.reduce((sum, row) => sum + row.purchaseOrderCount, 0),
-      orderedValuePence: suppliers.reduce((sum, row) => sum + row.orderedValuePence, 0),
-      receivedValuePence: suppliers.reduce((sum, row) => sum + row.receivedValuePence, 0),
-      overdueOpenCount: suppliers.reduce((sum, row) => sum + row.overdueOpenCount, 0),
+      openPurchaseOrderCount: suppliers.reduce((sum, row) => sum + row.openPurchaseOrderCount, 0),
+      overdueOpenPurchaseOrderCount: suppliers.reduce((sum, row) => sum + row.overdueOpenPurchaseOrderCount, 0),
+      totalOrderedQuantity: suppliers.reduce((sum, row) => sum + row.totalOrderedQuantity, 0),
+      totalReceivedQuantity: suppliers.reduce((sum, row) => sum + row.totalReceivedQuantity, 0),
     },
-    topSuppliers: suppliers.slice(0, range.take),
     suppliers,
-    revenueContributionSupported: false,
-    leadTimeSupported: false,
   };
 };
 

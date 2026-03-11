@@ -3,72 +3,40 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
-type RangePreset = "30" | "90" | "365";
-
 type SupplierRow = {
   supplierId: string;
   supplierName: string;
   purchaseOrderCount: number;
-  quantityOrdered: number;
-  quantityReceived: number;
-  quantityRemaining: number;
-  orderedValuePence: number;
-  receivedValuePence: number;
-  fillRate: number;
-  draftCount: number;
-  sentCount: number;
+  openPurchaseOrderCount: number;
   partiallyReceivedCount: number;
-  receivedCount: number;
-  cancelledCount: number;
-  overdueOpenCount: number;
-  latestPurchaseOrderAt: string | null;
+  receivedPurchaseOrderCount: number;
+  overdueOpenPurchaseOrderCount: number;
+  totalOrderedQuantity: number;
+  totalReceivedQuantity: number;
 };
 
 type SupplierPerformanceResponse = {
+  generatedAt: string;
   summary: {
     supplierCount: number;
     purchaseOrderCount: number;
-    orderedValuePence: number;
-    receivedValuePence: number;
-    overdueOpenCount: number;
+    openPurchaseOrderCount: number;
+    overdueOpenPurchaseOrderCount: number;
+    totalOrderedQuantity: number;
+    totalReceivedQuantity: number;
   };
-  topSuppliers: SupplierRow[];
   suppliers: SupplierRow[];
-  revenueContributionSupported: boolean;
-  leadTimeSupported: boolean;
 };
-
-const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-
-const formatDateKey = (value: Date) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, "0");
-  const day = `${value.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const shiftDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
-const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 export const SupplierPerformancePage = () => {
   const { error } = useToasts();
-
-  const [rangePreset, setRangePreset] = useState<RangePreset>("90");
   const [report, setReport] = useState<SupplierPerformanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      const today = new Date();
-      const to = formatDateKey(today);
-      const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
-      const payload = await apiGet<SupplierPerformanceResponse>(`/api/reports/suppliers/performance?from=${from}&to=${to}&take=10`);
+      const payload = await apiGet<SupplierPerformanceResponse>("/api/reports/suppliers/performance");
       setReport(payload);
     } catch (loadError) {
       setReport(null);
@@ -81,9 +49,12 @@ export const SupplierPerformancePage = () => {
   useEffect(() => {
     void loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangePreset]);
+  }, []);
 
-  const bestSupplier = useMemo(() => report?.topSuppliers[0] ?? null, [report]);
+  const topOverdueSupplier = useMemo(
+    () => report?.suppliers.find((row) => row.overdueOpenPurchaseOrderCount > 0) ?? report?.suppliers[0] ?? null,
+    [report],
+  );
 
   return (
     <div className="page-shell">
@@ -92,169 +63,96 @@ export const SupplierPerformancePage = () => {
           <div>
             <h1>Supplier Performance</h1>
             <p className="muted-text">
-              Manager-facing supplier and purchasing summary built from existing suppliers, purchase orders, and receiving totals.
+              Practical manager view of supplier activity using current purchase order and receiving totals only.
             </p>
           </div>
           <div className="actions-inline">
-            <label>
-              Range
-              <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as RangePreset)}>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="365">Last 365 days</option>
-              </select>
-            </label>
             <button type="button" onClick={() => void loadReport()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+            <Link to="/purchasing">Purchasing</Link>
           </div>
         </div>
 
         <div className="dashboard-summary-grid">
           <div className="metric-card">
-            <span className="metric-label">Suppliers Active In Range</span>
+            <span className="metric-label">Suppliers</span>
             <strong className="metric-value">{report?.summary.supplierCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Suppliers with purchase order activity</span>
+            <span className="dashboard-metric-detail">With purchase order history</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Purchase Orders</span>
-            <strong className="metric-value">{report?.summary.purchaseOrderCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Created in the selected range</span>
+            <span className="metric-label">Open POs</span>
+            <strong className="metric-value">{report?.summary.openPurchaseOrderCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Sent or partially received</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Ordered Value</span>
-            <strong className="metric-value">{formatMoney(report?.summary.orderedValuePence ?? 0)}</strong>
-            <span className="dashboard-metric-detail">Based on unit costs where present</span>
+            <span className="metric-label">Overdue Open</span>
+            <strong className="metric-value">{report?.summary.overdueOpenPurchaseOrderCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Expected date has passed</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Top Supplier</span>
-            <strong className="metric-value">{bestSupplier?.supplierName ?? "-"}</strong>
+            <span className="metric-label">Priority Supplier</span>
+            <strong className="metric-value">{topOverdueSupplier?.supplierName ?? "-"}</strong>
             <span className="dashboard-metric-detail">
-              {bestSupplier ? `${bestSupplier.purchaseOrderCount} POs | ${formatMoney(bestSupplier.orderedValuePence)}` : "No data"}
+              {topOverdueSupplier
+                ? `${topOverdueSupplier.overdueOpenPurchaseOrderCount} overdue | ${topOverdueSupplier.openPurchaseOrderCount} open`
+                : "No supplier activity"}
             </span>
           </div>
         </div>
       </section>
 
-      <div className="dashboard-grid analytics-grid">
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Top Suppliers</h2>
-            <Link to="/management">Back to management</Link>
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Supplier Operations</h2>
+            <p className="muted-text">
+              Use this to decide who needs chasing, who is still receiving against open orders, and who is actively supplying stock.
+            </p>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Supplier</th>
-                  <th>POs</th>
-                  <th>Ordered</th>
-                  <th>Received</th>
-                  <th>Fill Rate</th>
-                  <th>Overdue Open</th>
+          <div className="actions-inline">
+            <Link to="/suppliers">Suppliers</Link>
+            <Link to="/management">Management</Link>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Open POs</th>
+                <th>Partially Received</th>
+                <th>Received</th>
+                <th>Overdue</th>
+                <th>Total Ordered</th>
+                <th>Total Received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report?.suppliers.length ? report.suppliers.map((row) => (
+                <tr key={row.supplierId}>
+                  <td>
+                    <div className="table-primary">{row.supplierName}</div>
+                    <div className="table-secondary">
+                      {row.purchaseOrderCount} total POs | <Link to="/purchasing">Open purchasing</Link>
+                    </div>
+                  </td>
+                  <td>{row.openPurchaseOrderCount}</td>
+                  <td>{row.partiallyReceivedCount}</td>
+                  <td>{row.receivedPurchaseOrderCount}</td>
+                  <td>{row.overdueOpenPurchaseOrderCount}</td>
+                  <td>{row.totalOrderedQuantity}</td>
+                  <td>{row.totalReceivedQuantity}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {report?.topSuppliers.length ? report.topSuppliers.map((row) => (
-                  <tr key={row.supplierId}>
-                    <td>{row.supplierName}</td>
-                    <td>{row.purchaseOrderCount}</td>
-                    <td>{formatMoney(row.orderedValuePence)}</td>
-                    <td>{formatMoney(row.receivedValuePence)}</td>
-                    <td>{formatPercent(row.fillRate)}</td>
-                    <td>{row.overdueOpenCount}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6}>No supplier activity for this range.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Supplier Summary</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
+              )) : (
                 <tr>
-                  <th>Supplier</th>
-                  <th>POs</th>
-                  <th>Qty Ordered</th>
-                  <th>Qty Received</th>
-                  <th>Qty Remaining</th>
-                  <th>Latest PO</th>
+                  <td colSpan={7}>{loading ? "Loading supplier performance..." : "No supplier performance rows available."}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {report?.suppliers.length ? report.suppliers.map((row) => (
-                  <tr key={row.supplierId}>
-                    <td>{row.supplierName}</td>
-                    <td>{row.purchaseOrderCount}</td>
-                    <td>{row.quantityOrdered}</td>
-                    <td>{row.quantityReceived}</td>
-                    <td>{row.quantityRemaining}</td>
-                    <td>{row.latestPurchaseOrderAt ? new Date(row.latestPurchaseOrderAt).toLocaleString() : "-"}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6}>No supplier summary available.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Receiving Activity Snapshot</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Supplier</th>
-                  <th>Draft</th>
-                  <th>Sent</th>
-                  <th>Part Received</th>
-                  <th>Received</th>
-                  <th>Cancelled</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report?.suppliers.length ? report.suppliers.map((row) => (
-                  <tr key={row.supplierId}>
-                    <td>{row.supplierName}</td>
-                    <td>{row.draftCount}</td>
-                    <td>{row.sentCount}</td>
-                    <td>{row.partiallyReceivedCount}</td>
-                    <td>{row.receivedCount}</td>
-                    <td>{row.cancelledCount}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6}>No receiving activity available.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Scope Notes</h2>
-          </div>
-          <div className="restricted-panel info-panel">
-            Supplier revenue contribution and lead-time analytics are intentionally omitted in M90 v1 because the current branch does not link suppliers directly to sales revenue and does not store receipt timestamps robustly enough for honest lead-time metrics.
-          </div>
-        </section>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 };

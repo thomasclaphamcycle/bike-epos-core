@@ -8,6 +8,7 @@ import {
   getCustomerInsightsReport,
   getInventoryLocationSummaryReport,
   getInventoryReorderSuggestionsReport,
+  getInventoryVelocity,
   getProductSalesReport,
   getSalesDailyReport,
   getSupplierPerformanceReport,
@@ -170,6 +171,11 @@ export const getInventoryVelocityReportHandler = async (req: Request, res: Respo
   res.json(report);
 };
 
+export const getInventoryVelocityHandler = async (_req: Request, res: Response) => {
+  const report = await getInventoryVelocity();
+  res.json(report);
+};
+
 export const getInventoryReorderSuggestionsReportHandler = async (req: Request, res: Response) => {
   const report = await getInventoryReorderSuggestionsReport(getTakeQuery(req));
   res.json(report);
@@ -190,8 +196,7 @@ export const getInventoryLocationSummaryReportHandler = async (req: Request, res
 };
 
 export const getSupplierPerformanceReportHandler = async (req: Request, res: Response) => {
-  const { from, to } = getDateRangeQuery(req);
-  const report = await getSupplierPerformanceReport(from, to, getTakeQuery(req));
+  const report = await getSupplierPerformanceReport();
   res.json(report);
 };
 

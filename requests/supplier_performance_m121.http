@@ -1,0 +1,5 @@
+### M121 Supplier Performance
+
+GET http://localhost:3000/api/reports/suppliers/performance
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
