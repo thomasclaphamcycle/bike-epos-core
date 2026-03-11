@@ -86,6 +86,22 @@ const MOVEMENT_TYPE_OPTIONS = [
   "RETURN",
 ] as const;
 
+const formatReasonLabel = (value: string | null) =>
+  value
+    ? value
+        .toLowerCase()
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ")
+    : "-";
+
+const formatMovementTypeLabel = (value: string) =>
+  value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
 const getStockStateLabel = (onHand: number) => {
   if (onHand < 0) {
     return "Negative";
@@ -205,6 +221,42 @@ export const InventoryItemPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canViewMovements, movementFrom, movementTo, movementType, variantId]);
 
+  const parsedAdjustmentDelta = useMemo(() => {
+    if (!adjustmentDelta.trim()) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(adjustmentDelta, 10);
+    return Number.isInteger(parsed) ? parsed : Number.NaN;
+  }, [adjustmentDelta]);
+
+  const projectedOnHand = useMemo(() => {
+    if (parsedAdjustmentDelta === null || Number.isNaN(parsedAdjustmentDelta) || !stock) {
+      return null;
+    }
+    return stock.onHand + parsedAdjustmentDelta;
+  }, [parsedAdjustmentDelta, stock]);
+
+  const adjustmentDirection = useMemo(() => {
+    if (parsedAdjustmentDelta === null || Number.isNaN(parsedAdjustmentDelta) || parsedAdjustmentDelta === 0) {
+      return null;
+    }
+    return parsedAdjustmentDelta > 0 ? "Increase" : "Decrease";
+  }, [parsedAdjustmentDelta]);
+
+  const adjustmentValidationMessage = useMemo(() => {
+    if (adjustmentDelta.trim() === "") {
+      return null;
+    }
+    if (parsedAdjustmentDelta === null || Number.isNaN(parsedAdjustmentDelta)) {
+      return "Enter a whole-number stock change.";
+    }
+    if (parsedAdjustmentDelta === 0) {
+      return "Quantity delta must be a non-zero integer.";
+    }
+    return null;
+  }, [adjustmentDelta, parsedAdjustmentDelta]);
+
   const submitAdjustment = async (event: FormEvent) => {
     event.preventDefault();
 
@@ -230,7 +282,9 @@ export const InventoryItemPage = () => {
 
       setAdjustmentDelta("");
       setAdjustmentNote("");
-      success(`Stock adjusted by ${formatSignedQuantity(parsedDelta)}.`);
+      success(
+        `Stock adjusted by ${formatSignedQuantity(parsedDelta)}. New on-hand stock: ${stock?.onHand !== undefined ? stock.onHand + parsedDelta : "updated"}.`,
+      );
       await Promise.all([loadInventoryDetail(), loadMovements()]);
     } catch (adjustmentError) {
       const message = adjustmentError instanceof Error ? adjustmentError.message : "Failed to adjust stock";
@@ -307,46 +361,85 @@ export const InventoryItemPage = () => {
         </div>
 
         {canAdjustStock ? (
-          <form className="inventory-adjustment-form" onSubmit={submitAdjustment}>
-            <label>
-              Quantity Delta
-              <input
-                type="number"
-                step="1"
-                value={adjustmentDelta}
-                onChange={(event) => setAdjustmentDelta(event.target.value)}
-                placeholder="Use negative values to reduce stock"
-                required
-              />
-            </label>
+          <>
+            <div className="inventory-adjustment-summary">
+              <div className="metric-card">
+                <span className="metric-label">Current On Hand</span>
+                <strong className="metric-value">{stock?.onHand ?? 0}</strong>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Adjustment Direction</span>
+                <strong className="metric-value">
+                  {adjustmentDirection ? (
+                    <span className={adjustmentDirection === "Increase" ? "stock-badge stock-good" : "stock-badge stock-state-zero"}>
+                      {adjustmentDirection}
+                    </span>
+                  ) : (
+                    "-"
+                  )}
+                </strong>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Resulting On Hand</span>
+                <strong className="metric-value">
+                  {projectedOnHand === null ? "-" : (
+                    <span className={getStockStateClass(projectedOnHand)}>
+                      {projectedOnHand}
+                    </span>
+                  )}
+                </strong>
+              </div>
+            </div>
 
-            <label>
-              Reason
-              <select
-                value={adjustmentReason}
-                onChange={(event) => setAdjustmentReason(event.target.value as (typeof ADJUSTMENT_REASONS)[number])}
+            <form className="inventory-adjustment-form" onSubmit={submitAdjustment}>
+              <label>
+                Quantity Delta
+                <input
+                  type="number"
+                  step="1"
+                  value={adjustmentDelta}
+                  onChange={(event) => setAdjustmentDelta(event.target.value)}
+                  placeholder="Use negative values to reduce stock"
+                  required
+                />
+              </label>
+
+              <label>
+                Reason
+                <select
+                  value={adjustmentReason}
+                  onChange={(event) => setAdjustmentReason(event.target.value as (typeof ADJUSTMENT_REASONS)[number])}
+                >
+                  {ADJUSTMENT_REASONS.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {formatReasonLabel(reason)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="inventory-adjustment-note">
+                Note
+                <input
+                  value={adjustmentNote}
+                  onChange={(event) => setAdjustmentNote(event.target.value)}
+                  placeholder="Optional note for the adjustment"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="primary"
+                disabled={adjusting || adjustmentValidationMessage !== null}
               >
-                {ADJUSTMENT_REASONS.map((reason) => (
-                  <option key={reason} value={reason}>
-                    {reason}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {adjusting ? "Adjusting..." : "Apply Adjustment"}
+              </button>
+            </form>
 
-            <label className="inventory-adjustment-note">
-              Note
-              <input
-                value={adjustmentNote}
-                onChange={(event) => setAdjustmentNote(event.target.value)}
-                placeholder="Optional note for the adjustment"
-              />
-            </label>
-
-            <button type="submit" className="primary" disabled={adjusting}>
-              {adjusting ? "Adjusting..." : "Apply Adjustment"}
-            </button>
-          </form>
+            {adjustmentValidationMessage ? (
+              <p className="inventory-adjustment-validation">{adjustmentValidationMessage}</p>
+            ) : null}
+          </>
         ) : (
           <p className="muted-text">Stock adjustments are available to MANAGER+ only.</p>
         )}
@@ -427,8 +520,8 @@ export const InventoryItemPage = () => {
               <tr>
                 <th>When</th>
                 <th>Type</th>
-                <th>Qty</th>
-                <th>Reference</th>
+                <th>Change</th>
+                <th>Reason</th>
                 <th>Unit Cost</th>
                 <th>Note</th>
               </tr>
@@ -447,14 +540,25 @@ export const InventoryItemPage = () => {
               ) : (
                 movements.map((movement) => (
                   <tr key={movement.id}>
-                    <td>{new Date(movement.createdAt).toLocaleString()}</td>
-                    <td>{movement.type}</td>
+                    <td>
+                      <div className="table-primary">{new Date(movement.createdAt).toLocaleString()}</div>
+                      {movement.createdByStaffId ? (
+                        <div className="table-secondary mono-text">{movement.createdByStaffId}</div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <span className="stock-badge stock-muted">{formatMovementTypeLabel(movement.type)}</span>
+                    </td>
                     <td className={movement.quantity < 0 ? "numeric-cell movement-negative" : "numeric-cell movement-positive"}>
                       {formatSignedQuantity(movement.quantity)}
                     </td>
                     <td>
-                      {movement.referenceType || "-"}
-                      {movement.referenceId ? (
+                      <div className="table-primary">
+                        {movement.referenceType === "STOCK_ADJUSTMENT"
+                          ? formatReasonLabel(movement.referenceId)
+                          : (movement.referenceType ? formatMovementTypeLabel(movement.referenceType) : "-")}
+                      </div>
+                      {movement.referenceId && movement.referenceType !== "STOCK_ADJUSTMENT" ? (
                         <div className="table-secondary mono-text">{movement.referenceId}</div>
                       ) : null}
                     </td>
