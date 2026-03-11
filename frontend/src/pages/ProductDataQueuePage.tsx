@@ -29,6 +29,16 @@ type VariantListResponse = {
   variants: VariantRow[];
 };
 
+type InventoryOnHandRow = {
+  variantId: string;
+  onHand: number;
+  isActive: boolean;
+};
+
+type InventorySearchResponse = {
+  rows: InventoryOnHandRow[];
+};
+
 type ProductResponse = {
   id: string;
   name: string;
@@ -75,9 +85,22 @@ const normalizeRetailPrice = (value: string) => {
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 const formatDate = (value: string) => new Date(value).toLocaleDateString();
 
+const getStockStateLabel = (onHand: number) => {
+  if (onHand < 0) return "Negative";
+  if (onHand === 0) return "Zero";
+  return "Positive";
+};
+
+const getStockStateClass = (onHand: number) => {
+  if (onHand < 0) return "stock-badge stock-state-negative";
+  if (onHand === 0) return "stock-badge stock-state-zero";
+  return "stock-badge stock-state-positive";
+};
+
 export const ProductDataQueuePage = () => {
   const { error, success } = useToasts();
   const [variants, setVariants] = useState<VariantRow[]>([]);
+  const [stockByVariantId, setStockByVariantId] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [catalogScope, setCatalogScope] = useState<"active" | "all">("active");
@@ -99,10 +122,18 @@ export const ProductDataQueuePage = () => {
       if (debouncedSearch.trim()) {
         query.set("q", debouncedSearch.trim());
       }
-      const payload = await apiGet<VariantListResponse>(`/api/variants?${query.toString()}`);
-      setVariants(payload.variants || []);
+      const inventoryQuery = new URLSearchParams(query);
+      const [variantPayload, inventoryPayload] = await Promise.all([
+        apiGet<VariantListResponse>(`/api/variants?${query.toString()}`),
+        apiGet<InventorySearchResponse>(`/api/inventory/on-hand/search?${inventoryQuery.toString()}`),
+      ]);
+      setVariants(variantPayload.variants || []);
+      setStockByVariantId(
+        Object.fromEntries((inventoryPayload.rows || []).map((row) => [row.variantId, row.onHand])),
+      );
     } catch (loadError) {
       setVariants([]);
+      setStockByVariantId({});
       error(loadError instanceof Error ? loadError.message : "Failed to load product catalogue");
     } finally {
       setLoading(false);
@@ -120,6 +151,12 @@ export const ProductDataQueuePage = () => {
     missingPrice: variants.filter((variant) => variant.retailPricePence <= 0).length,
     inactive: variants.filter((variant) => !variant.isActive).length,
   }), [variants]);
+
+  const stockSummary = useMemo(() => ({
+    positive: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) > 0).length,
+    zero: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) === 0).length,
+    negative: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) < 0).length,
+  }), [stockByVariantId, variants]);
 
   const startEdit = (variant: VariantRow) => {
     setEditForm({
@@ -480,6 +517,78 @@ export const ProductDataQueuePage = () => {
             <strong className="metric-value">{issueSummary.inactive}</strong>
             <span className="dashboard-metric-detail">Review before relying on POS search</span>
           </div>
+          <div className="metric-card">
+            <span className="metric-label">In stock</span>
+            <strong className="metric-value">{stockSummary.positive}</strong>
+            <span className="dashboard-metric-detail">Variants with positive on-hand stock</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Zero stock</span>
+            <strong className="metric-value">{stockSummary.zero}</strong>
+            <span className="dashboard-metric-detail">Variants needing replenishment review</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Negative stock</span>
+            <strong className="metric-value">{stockSummary.negative}</strong>
+            <span className="dashboard-metric-detail">Variants needing investigation</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Stock Visibility</h2>
+            <p className="muted-text">View on-hand state from the catalogue and jump directly into stock adjustment or movement history.</p>
+          </div>
+          <div className="actions-inline">
+            <Link to="/inventory">Inventory overview</Link>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>SKU</th>
+                <th>On Hand</th>
+                <th>Stock State</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>{loading ? "Loading stock visibility..." : "No products match the current search."}</td>
+                </tr>
+              ) : variants.map((variant) => {
+                const onHand = stockByVariantId[variant.id] ?? 0;
+                return (
+                  <tr key={`stock-${variant.id}`}>
+                    <td>
+                      <div className="table-primary">{variant.product?.name ?? "Unknown product"}</div>
+                      <div className="table-secondary">{variant.product?.brand ?? variant.option ?? "Default variant"}</div>
+                    </td>
+                    <td>{variant.product?.category ?? "-"}</td>
+                    <td className="mono-text">{variant.sku}</td>
+                    <td className="numeric-cell">{onHand}</td>
+                    <td>
+                      <span className={getStockStateClass(onHand)}>{getStockStateLabel(onHand)}</span>
+                    </td>
+                    <td>
+                      <div className="actions-inline">
+                        <Link className="button-link button-link-compact" to={`/inventory/${variant.id}`}>
+                          Adjust stock
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>

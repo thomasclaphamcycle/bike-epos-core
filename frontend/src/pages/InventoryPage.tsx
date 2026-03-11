@@ -266,12 +266,13 @@ export const InventoryPage = () => {
                 <th>On Hand</th>
                 <th>Stock State</th>
                 <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>{loading ? "Loading inventory..." : "No inventory rows found."}</td>
+                  <td colSpan={9}>{loading ? "Loading inventory..." : "No inventory rows found."}</td>
                 </tr>
               ) : (
                 visibleRows.map((row) => (
@@ -298,6 +299,20 @@ export const InventoryPage = () => {
                       <span className={row.isActive ? "stock-badge stock-good" : "stock-badge stock-muted"}>
                         {row.isActive ? (row.onHand > 0 ? "In Stock" : "Out Of Stock") : "Inactive"}
                       </span>
+                    </td>
+                    <td>
+                      <div className="actions-inline">
+                        <button
+                          type="button"
+                          className="button-link button-link-compact"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/inventory/${row.variantId}`);
+                          }}
+                        >
+                          Adjust stock
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
