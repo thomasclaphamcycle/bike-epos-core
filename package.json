@@ -64,6 +64,7 @@
     "test:m119": "node scripts/run_smoke_test.js scripts/reorder_suggestions_m119_smoke_tests.js",
     "test:m120": "node scripts/run_smoke_test.js scripts/inventory_velocity_m120_smoke_tests.js",
     "test:m121": "node scripts/run_smoke_test.js scripts/supplier_performance_m121_smoke_tests.js",
+    "test:m122": "node scripts/run_smoke_test.js scripts/pricing_exceptions_m122_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js"
   },
   "repository": {

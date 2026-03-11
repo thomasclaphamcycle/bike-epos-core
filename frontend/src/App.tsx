@@ -51,7 +51,7 @@ import { TransferQueuePage } from "./pages/TransferQueuePage";
 import { WorkshopAgeingPage } from "./pages/WorkshopAgeingPage";
 import { ProductDataQueuePage } from "./pages/ProductDataQueuePage";
 import { AdminReviewPage } from "./pages/AdminReviewPage";
-import { PricingReviewPage } from "./pages/PricingReviewPage";
+import { PricingExceptionsPage } from "./pages/PricingExceptionsPage";
 import { SupplierReturnsPage } from "./pages/SupplierReturnsPage";
 import { OpsHealthPage } from "./pages/OpsHealthPage";
 import { DailyTradeClosePage } from "./pages/DailyTradeClosePage";
@@ -261,7 +261,7 @@ const AuthedApp = () => (
           path="/management/pricing"
           element={(
             <ProtectedRoute minimumRole="MANAGER">
-              <PricingReviewPage />
+              <PricingExceptionsPage />
             </ProtectedRoute>
           )}
         />
