@@ -93,9 +93,24 @@ type CompletedSaleState = {
   changeDuePence: number;
   tenderMethod: TenderMethod;
   customerName: string | null;
+  cashTenderedPence: number | null;
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const parseCurrencyInputToPence = (value: string): number | null => {
+  const normalized = value.trim().replace(/[^0-9.]/g, "");
+  if (!normalized) {
+    return null;
+  }
+
+  if (!/^\d+(\.\d{0,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const [pounds, decimal = ""] = normalized.split(".");
+  return Number(pounds) * 100 + Number((decimal + "00").slice(0, 2));
+};
 
 export const PosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -120,6 +135,7 @@ export const PosPage = () => {
   const [sale, setSale] = useState<SaleResponse | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
+  const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -167,6 +183,7 @@ export const PosPage = () => {
     setBasket(created);
     setSale(null);
     setReceiptUrl(null);
+    setCashTenderedAmount("");
     setSelectedCustomer(null);
     setCustomerSearchText("");
     setCustomerResults([]);
@@ -481,10 +498,23 @@ export const PosPage = () => {
     setCompleting(true);
     try {
       const remaining = sale.tenderSummary.remainingPence;
+      const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
       if (remaining > 0) {
+        if (selectedTenderMethod === "CASH") {
+          if (cashTenderedPence === null) {
+            error("Enter the amount tendered.");
+            return;
+          }
+
+          if (cashTenderedPence < remaining) {
+            error("Cash tendered must cover the total due.");
+            return;
+          }
+        }
+
         await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
           method: selectedTenderMethod,
-          amountPence: remaining,
+          amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : remaining,
         });
       }
 
@@ -498,10 +528,12 @@ export const PosPage = () => {
         changeDuePence: result.changeDuePence,
         tenderMethod: selectedTenderMethod,
         customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
+        cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
       });
       setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
       await createBasket();
       setSelectedTenderMethod("CARD");
+      setCashTenderedAmount("");
       success("Sale completed.");
     } catch (completeError) {
       const message = completeError instanceof Error ? completeError.message : "Completion failed";
@@ -519,6 +551,23 @@ export const PosPage = () => {
   }, [sale, basket]);
 
   const basketLineCount = basket?.items.length ?? 0;
+  const remainingDuePence = sale?.tenderSummary.remainingPence ?? 0;
+  const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
+  const cashChangeDuePence =
+    selectedTenderMethod === "CASH" && cashTenderedPence !== null
+      ? Math.max(cashTenderedPence - remainingDuePence, 0)
+      : 0;
+  const cashValidationMessage =
+    selectedTenderMethod !== "CASH" || remainingDuePence === 0
+      ? null
+      : cashTenderedAmount.trim() === ""
+        ? "Enter the cash received."
+        : cashTenderedPence === null
+          ? "Enter a valid amount in pounds."
+          : cashTenderedPence < remainingDuePence
+            ? `Cash tendered is short by ${formatMoney(remainingDuePence - cashTenderedPence)}.`
+            : null;
+  const quickCashAmounts = [500, 1000, 2000, 5000];
 
   return (
     <div className="page-shell">
@@ -540,6 +589,7 @@ export const PosPage = () => {
               onClick={() => {
                 setCompletedSale(null);
                 setSelectedTenderMethod("CARD");
+                setCashTenderedAmount("");
                 void createBasket();
               }}
             >
@@ -560,6 +610,9 @@ export const PosPage = () => {
             <div className="muted-text">
               Tender: {completedSale.tenderMethod} | Customer: {completedSale.customerName || "Walk-in"} | Change: {formatMoney(completedSale.changeDuePence)}
             </div>
+            {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
+              <div className="muted-text">Cash received: {formatMoney(completedSale.cashTenderedPence)}</div>
+            ) : null}
             <div className="success-links">
               <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
                 Open receipt
@@ -883,13 +936,57 @@ export const PosPage = () => {
             </button>
           </div>
 
+          {selectedTenderMethod === "CASH" ? (
+            <div className="quick-create-panel" style={{ marginTop: "12px" }}>
+              <div className="quick-create-grid">
+                <label style={{ maxWidth: "180px" }}>
+                  Amount tendered
+                  <input
+                    data-testid="pos-cash-tendered"
+                    inputMode="decimal"
+                    value={cashTenderedAmount}
+                    onChange={(event) => setCashTenderedAmount(event.target.value)}
+                    placeholder="0.00"
+                    disabled={completing}
+                  />
+                </label>
+              </div>
+
+              <div className="actions-inline" role="group" aria-label="Quick cash amounts">
+                <button
+                  type="button"
+                  onClick={() => setCashTenderedAmount((remainingDuePence / 100).toFixed(2))}
+                  disabled={remainingDuePence === 0 || completing}
+                >
+                  Exact
+                </button>
+                {quickCashAmounts.map((amountPence) => (
+                  <button
+                    key={amountPence}
+                    type="button"
+                    onClick={() => setCashTenderedAmount((amountPence / 100).toFixed(2))}
+                    disabled={completing}
+                  >
+                    {formatMoney(amountPence)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="muted-text">
+                Due: {formatMoney(remainingDuePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
+              </div>
+
+              {cashValidationMessage ? <p className="muted-text">{cashValidationMessage}</p> : null}
+            </div>
+          ) : null}
+
           <div className="actions-inline">
             <button
               type="button"
               className="primary"
               data-testid="pos-complete-sale"
               onClick={completeSale}
-              disabled={completing}
+              disabled={completing || Boolean(cashValidationMessage)}
             >
               {completing ? "Completing..." : "Complete Sale"}
             </button>
