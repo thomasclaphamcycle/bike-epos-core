@@ -1,39 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
 import { Link } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
 type RangePreset = "7" | "30" | "90";
-
-type CashSummaryResponse = {
-  totals: {
-    floatPence: number;
-    paidInPence: number;
-    paidOutPence: number;
-    cashSalesPence: number;
-    cashRefundsPence: number;
-    expectedCashOnHandPence: number;
-  };
-};
-
-type CashMovement = {
-  id: string;
-  sessionId: string | null;
-  locationId: string;
-  type: string;
-  dbType: string;
-  amountPence: number;
-  note: string | null;
-  ref: string;
-  relatedSaleId: string | null;
-  relatedRefundId: string | null;
-  createdAt: string;
-  createdByStaffId: string | null;
-};
-
-type CashMovementListResponse = {
-  movements: CashMovement[];
-};
+type MovementType = "CASH_IN" | "CASH_OUT";
+type CashMovementReason = "BANK_DEPOSIT" | "SAFE_DROP" | "SUPPLIER_PAYMENT" | "PETTY_EXPENSE" | "OTHER";
 
 type CashSession = {
   id: string;
@@ -46,10 +19,6 @@ type CashSession = {
   status: "OPEN" | "CLOSED";
   createdAt: string;
   updatedAt: string;
-};
-
-type CashSessionListResponse = {
-  sessions: CashSession[];
 };
 
 type CashSessionSummaryResponse = {
@@ -65,6 +34,52 @@ type CashSessionSummaryResponse = {
     variancePence: number | null;
   };
 };
+
+type CashSessionListResponse = {
+  sessions: CashSession[];
+};
+
+type CashMovement = {
+  id: string;
+  sessionId: string | null;
+  locationId: string;
+  type: string;
+  dbType: string;
+  reason: CashMovementReason | null;
+  amountPence: number;
+  note: string | null;
+  ref: string;
+  receiptImageUrl?: string | null;
+  relatedSaleId: string | null;
+  relatedRefundId: string | null;
+  createdAt: string;
+  createdByStaffId: string | null;
+};
+
+type CashMovementListResponse = {
+  movements: CashMovement[];
+};
+
+type CashMovementCreateResponse = {
+  movement: CashMovement;
+  summary: CashSessionSummaryResponse;
+};
+
+type ReceiptTokenResponse = {
+  token: string;
+  expiresAt: string;
+  cashMovementId: string;
+  uploadApiPath: string;
+  uploadPagePath: string;
+};
+
+const CASH_OUT_REASON_OPTIONS: Array<{ value: CashMovementReason; label: string }> = [
+  { value: "BANK_DEPOSIT", label: "Bank deposit" },
+  { value: "SAFE_DROP", label: "Safe drop" },
+  { value: "SUPPLIER_PAYMENT", label: "Supplier payment" },
+  { value: "PETTY_EXPENSE", label: "Petty expense" },
+  { value: "OTHER", label: "Other" },
+];
 
 const formatMoney = (pence: number | null | undefined) =>
   pence === null || pence === undefined ? "-" : `£${(pence / 100).toFixed(2)}`;
@@ -82,115 +97,280 @@ const shiftDays = (date: Date, days: number) => {
   return next;
 };
 
+const toPence = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.replace(/,/g, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+  return Math.round(Number(normalized) * 100);
+};
+
 export const CashOversightPage = () => {
-  const { error } = useToasts();
+  const { error, success } = useToasts();
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("30");
-  const [cashSummary, setCashSummary] = useState<CashSummaryResponse | null>(null);
-  const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [sessions, setSessions] = useState<CashSession[]>([]);
   const [currentSession, setCurrentSession] = useState<CashSessionSummaryResponse | null>(null);
-  const [recentSessionSummaries, setRecentSessionSummaries] = useState<CashSessionSummaryResponse[]>([]);
+  const [sessions, setSessions] = useState<CashSession[]>([]);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const loadCashOversight = async () => {
+  const [openingFloat, setOpeningFloat] = useState("0.00");
+  const [openingRegister, setOpeningRegister] = useState(false);
+
+  const [movementType, setMovementType] = useState<MovementType>("CASH_OUT");
+  const [movementAmount, setMovementAmount] = useState("");
+  const [movementReason, setMovementReason] = useState<CashMovementReason>("PETTY_EXPENSE");
+  const [movementNotes, setMovementNotes] = useState("");
+  const [creatingMovement, setCreatingMovement] = useState(false);
+
+  const [countedAmount, setCountedAmount] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
+  const [closingRegister, setClosingRegister] = useState(false);
+  const [closeSummary, setCloseSummary] = useState<CashSessionSummaryResponse | null>(null);
+
+  const [receiptToken, setReceiptToken] = useState<ReceiptTokenResponse | null>(null);
+  const [receiptQrImage, setReceiptQrImage] = useState<string | null>(null);
+  const [receiptQrBusy, setReceiptQrBusy] = useState(false);
+
+  const loadCashManagement = async () => {
     setLoading(true);
     try {
       const today = new Date();
       const to = formatDateKey(today);
       const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
 
-      const [summaryResult, movementResult, sessionResult, currentResult] = await Promise.allSettled([
-        apiGet<CashSummaryResponse>(`/api/cash/summary?from=${from}&to=${to}`),
-        apiGet<CashMovementListResponse>(`/api/cash/movements?from=${from}&to=${to}`),
-        apiGet<CashSessionListResponse>(`/api/till/sessions?from=${from}&to=${to}`),
-        apiGet<CashSessionSummaryResponse>("/api/till/sessions/current"),
+      const [current, history, movementList] = await Promise.all([
+        apiGet<CashSessionSummaryResponse>("/api/management/cash/register/current"),
+        apiGet<CashSessionListResponse>(`/api/management/cash/register/history?from=${from}&to=${to}`),
+        apiGet<CashMovementListResponse>(`/api/management/cash/movements?from=${from}&to=${to}`),
       ]);
 
-      let nextSessions: CashSession[] = [];
-
-      if (summaryResult.status === "fulfilled") {
-        setCashSummary(summaryResult.value);
-      } else {
-        setCashSummary(null);
-        error(summaryResult.reason instanceof Error ? summaryResult.reason.message : "Failed to load cash summary");
-      }
-
-      if (movementResult.status === "fulfilled") {
-        setMovements(movementResult.value.movements || []);
-      } else {
-        setMovements([]);
-        error(movementResult.reason instanceof Error ? movementResult.reason.message : "Failed to load cash movements");
-      }
-
-      if (sessionResult.status === "fulfilled") {
-        nextSessions = sessionResult.value.sessions || [];
-        setSessions(nextSessions);
-      } else {
-        setSessions([]);
-        error(sessionResult.reason instanceof Error ? sessionResult.reason.message : "Failed to load cash sessions");
-      }
-
-      if (currentResult.status === "fulfilled") {
-        setCurrentSession(currentResult.value);
-      } else {
-        setCurrentSession(null);
-        error(currentResult.reason instanceof Error ? currentResult.reason.message : "Failed to load current till session");
-      }
-
-      if (nextSessions.length > 0) {
-        const summaryPayloads = await Promise.allSettled(
-          nextSessions.slice(0, 5).map((session) =>
-            apiGet<CashSessionSummaryResponse>(`/api/till/sessions/${encodeURIComponent(session.id)}/summary`),
-          ),
-        );
-
-        setRecentSessionSummaries(
-          summaryPayloads
-            .filter((result): result is PromiseFulfilledResult<CashSessionSummaryResponse> => result.status === "fulfilled")
-            .map((result) => result.value)
-            .filter((result) => Boolean(result.session)),
-        );
-      } else {
-        setRecentSessionSummaries([]);
-      }
+      setCurrentSession(current);
+      setSessions(history.sessions ?? []);
+      setMovements(movementList.movements ?? []);
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load cash management");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadCashOversight();
+    void loadCashManagement();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangePreset]);
 
-  const openSessions = useMemo(
-    () => sessions.filter((session) => session.status === "OPEN"),
-    [sessions],
-  );
-
-  const varianceSessions = useMemo(
-    () => recentSessionSummaries.filter((summary) => summary.totals?.variancePence !== null),
-    [recentSessionSummaries],
-  );
-
-  const strongestVariance = useMemo(() => {
-    if (varianceSessions.length === 0) {
-      return null;
+  useEffect(() => {
+    const nextUrl = receiptToken ? `${window.location.origin}${receiptToken.uploadPagePath}` : null;
+    if (!nextUrl) {
+      setReceiptQrImage(null);
+      return;
     }
-    return [...varianceSessions].sort((left, right) => (
-      Math.abs(right.totals?.variancePence ?? 0) - Math.abs(left.totals?.variancePence ?? 0)
-    ))[0];
-  }, [varianceSessions]);
+
+    let cancelled = false;
+    setReceiptQrBusy(true);
+    QRCode.toDataURL(nextUrl, {
+      width: 220,
+      margin: 1,
+      color: {
+        dark: "#041334",
+        light: "#ffffff",
+      },
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setReceiptQrImage(result);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReceiptQrImage(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setReceiptQrBusy(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [receiptToken]);
+
+  const currentSessionId = currentSession?.session?.id ?? null;
+  const currentSessionOpen = Boolean(currentSession?.session);
+
+  const pettyExpenseWithoutReceipt = useMemo(
+    () =>
+      movements.filter(
+        (movement) =>
+          movement.dbType === "PAID_OUT" &&
+          movement.reason === "PETTY_EXPENSE" &&
+          !movement.receiptImageUrl,
+      ),
+    [movements],
+  );
+
+  const registerSummary = useMemo(
+    () => [
+      {
+        label: "Register",
+        value: currentSessionId ? currentSessionId.slice(0, 8) : "Closed",
+        detail: currentSession?.session
+          ? new Date(currentSession.session.businessDate).toLocaleDateString()
+          : "Start till to take cash",
+      },
+      {
+        label: "Expected cash",
+        value: formatMoney(currentSession?.totals?.expectedCashPence),
+        detail: "Computed by backend from float, movements, sales, and refunds",
+      },
+      {
+        label: "Paid in / out",
+        value: currentSession?.totals
+          ? `${formatMoney(currentSession.totals.paidInPence)} / ${formatMoney(currentSession.totals.paidOutPence)}`
+          : "-",
+        detail: "Manual register movements",
+      },
+      {
+        label: "Cash sales / refunds",
+        value: currentSession?.totals
+          ? `${formatMoney(currentSession.totals.cashSalesPence)} / ${formatMoney(currentSession.totals.cashRefundsPence)}`
+          : "-",
+        detail: "Linked to the current open register session",
+      },
+    ],
+    [currentSession, currentSessionId],
+  );
+
+  const handleOpenRegister = async () => {
+    const openingFloatPence = toPence(openingFloat);
+    if (openingFloatPence === null) {
+      error("Opening float must be a valid amount");
+      return;
+    }
+
+    setOpeningRegister(true);
+    try {
+      const result = await apiPost<CashSessionSummaryResponse>("/api/management/cash/register/open", {
+        openingFloatPence,
+      });
+      setCurrentSession(result);
+      setCloseSummary(null);
+      success("Register opened");
+      await loadCashManagement();
+    } catch (requestError) {
+      error(requestError instanceof Error ? requestError.message : "Failed to open register");
+    } finally {
+      setOpeningRegister(false);
+    }
+  };
+
+  const handleCreateMovement = async () => {
+    if (!currentSessionOpen) {
+      error("Start the till before recording cash movements");
+      return;
+    }
+
+    const amountPence = toPence(movementAmount);
+    if (amountPence === null || amountPence <= 0) {
+      error("Amount must be a valid positive value");
+      return;
+    }
+    if (movementType === "CASH_OUT" && !movementReason) {
+      error("Reason is required for cash out");
+      return;
+    }
+    if (movementReason === "OTHER" && !movementNotes.trim()) {
+      error("Notes are required when reason is Other");
+      return;
+    }
+
+    setCreatingMovement(true);
+    try {
+      const result = await apiPost<CashMovementCreateResponse>("/api/management/cash/movements", {
+        type: movementType,
+        amountPence,
+        ...(movementType === "CASH_OUT" ? { reason: movementReason } : {}),
+        ...(movementNotes.trim() ? { notes: movementNotes.trim() } : {}),
+      });
+
+      setCurrentSession(result.summary);
+      setMovementAmount("");
+      setMovementNotes("");
+      success(movementType === "CASH_IN" ? "Cash in recorded" : "Cash out recorded");
+
+      if (movementType === "CASH_OUT" && movementReason === "PETTY_EXPENSE") {
+        const token = await apiPost<ReceiptTokenResponse>(
+          `/api/management/cash/movements/${encodeURIComponent(result.movement.id)}/receipt-token`,
+        );
+        setReceiptToken(token);
+      }
+
+      await loadCashManagement();
+    } catch (requestError) {
+      error(requestError instanceof Error ? requestError.message : "Failed to record cash movement");
+    } finally {
+      setCreatingMovement(false);
+    }
+  };
+
+  const handleCloseRegister = async () => {
+    if (!currentSessionOpen) {
+      error("No register is currently open");
+      return;
+    }
+
+    const countedAmountPence = toPence(countedAmount);
+    if (countedAmountPence === null || countedAmountPence < 0) {
+      error("Counted amount must be a valid value");
+      return;
+    }
+
+    setClosingRegister(true);
+    try {
+      const result = await apiPost<CashSessionSummaryResponse>("/api/management/cash/register/close", {
+        countedAmountPence,
+        ...(closeNotes.trim() ? { notes: closeNotes.trim() } : {}),
+      });
+      setCloseSummary(result);
+      setCurrentSession({ session: null });
+      setCountedAmount("");
+      setCloseNotes("");
+      success("Register closed");
+      await loadCashManagement();
+    } catch (requestError) {
+      error(requestError instanceof Error ? requestError.message : "Failed to close register");
+    } finally {
+      setClosingRegister(false);
+    }
+  };
+
+  const handleCreateReceiptToken = async (movementId: string) => {
+    try {
+      const token = await apiPost<ReceiptTokenResponse>(
+        `/api/management/cash/movements/${encodeURIComponent(movementId)}/receipt-token`,
+      );
+      setReceiptToken(token);
+      success("Receipt QR created");
+    } catch (requestError) {
+      error(requestError instanceof Error ? requestError.message : "Failed to create receipt QR");
+    }
+  };
 
   return (
     <div className="page-shell">
       <section className="card">
         <div className="card-header-row">
           <div>
-            <h1>Cash & Till Oversight</h1>
+            <h1>Cash Management</h1>
             <p className="muted-text">
-              Manager-facing till and cash movement visibility built from the existing till session and cash movement endpoints.
+              Start tills, record manual cash movement, blind close registers, and attach petty cash receipts.
             </p>
           </div>
           <div className="actions-inline">
@@ -203,100 +383,233 @@ export const CashOversightPage = () => {
               </select>
             </label>
             <Link to="/management">Back to management</Link>
-            <button type="button" onClick={() => void loadCashOversight()} disabled={loading}>
+            <button type="button" onClick={() => void loadCashManagement()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
 
         <div className="dashboard-summary-grid">
-          <div className="metric-card">
-            <span className="metric-label">Open Tills</span>
-            <strong className="metric-value">{openSessions.length}</strong>
-            <span className="dashboard-metric-detail">
-              Current session {currentSession?.session ? currentSession.session.id.slice(0, 8) : "none"}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Expected Cash On Hand</span>
-            <strong className="metric-value">{formatMoney(cashSummary?.totals.expectedCashOnHandPence)}</strong>
-            <span className="dashboard-metric-detail">Across selected range</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Cash Sales / Refunds</span>
-            <strong className="metric-value">
-              {formatMoney((cashSummary?.totals.cashSalesPence ?? 0) - (cashSummary?.totals.cashRefundsPence ?? 0))}
-            </strong>
-            <span className="dashboard-metric-detail">
-              Sales {formatMoney(cashSummary?.totals.cashSalesPence)} | Refunds {formatMoney(cashSummary?.totals.cashRefundsPence)}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Largest Visible Variance</span>
-            <strong className="metric-value">{formatMoney(strongestVariance?.totals?.variancePence)}</strong>
-            <span className="dashboard-metric-detail">
-              {strongestVariance?.session ? `Session ${strongestVariance.session.id.slice(0, 8)}` : "No counted session variance"}
-            </span>
-          </div>
+          {registerSummary.map((item) => (
+            <div key={item.label} className="metric-card">
+              <span className="metric-label">{item.label}</span>
+              <strong className="metric-value">{item.value}</strong>
+              <span className="dashboard-metric-detail">{item.detail}</span>
+            </div>
+          ))}
         </div>
       </section>
 
       <div className="dashboard-grid analytics-grid">
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Current Till</h2>
-            <Link to="/management">Back to management</Link>
-          </div>
-          <div className="management-stat-grid">
-            <div className="management-stat-card">
-              <span className="metric-label">Session</span>
-              <strong className="metric-value">{currentSession?.session ? currentSession.session.id.slice(0, 8) : "-"}</strong>
+        {!currentSessionOpen ? (
+          <section className="card cash-action-card">
+            <div className="card-header-row">
+              <h2>Start Till</h2>
             </div>
-            <div className="management-stat-card">
-              <span className="metric-label">Expected Cash</span>
-              <strong className="metric-value">{formatMoney(currentSession?.totals?.expectedCashPence)}</strong>
+            <div className="cash-form-grid">
+              <label>
+                Opening float (£)
+                <input
+                  value={openingFloat}
+                  onChange={(event) => setOpeningFloat(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                />
+              </label>
+              <button type="button" onClick={() => void handleOpenRegister()} disabled={openingRegister}>
+                {openingRegister ? "Starting..." : "Start Till"}
+              </button>
             </div>
-            <div className="management-stat-card">
-              <span className="metric-label">Counted Cash</span>
-              <strong className="metric-value">{formatMoney(currentSession?.totals?.countedCashPence)}</strong>
+          </section>
+        ) : (
+          <>
+            <section className="card cash-action-card">
+              <div className="card-header-row">
+                <h2>Cash In / Cash Out</h2>
+              </div>
+              <div className="cash-form-grid cash-form-grid-wide">
+                <label>
+                  Type
+                  <select value={movementType} onChange={(event) => setMovementType(event.target.value as MovementType)}>
+                    <option value="CASH_IN">Cash in</option>
+                    <option value="CASH_OUT">Cash out</option>
+                  </select>
+                </label>
+                <label>
+                  Amount (£)
+                  <input
+                    value={movementAmount}
+                    onChange={(event) => setMovementAmount(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="0.00"
+                  />
+                </label>
+                {movementType === "CASH_OUT" ? (
+                  <label>
+                    Reason
+                    <select
+                      value={movementReason}
+                      onChange={(event) => setMovementReason(event.target.value as CashMovementReason)}
+                    >
+                      {CASH_OUT_REASON_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="cash-notes-field">
+                  Notes
+                  <input
+                    value={movementNotes}
+                    onChange={(event) => setMovementNotes(event.target.value)}
+                    placeholder={movementReason === "OTHER" ? "Required for Other" : "Optional"}
+                  />
+                </label>
+                <button type="button" onClick={() => void handleCreateMovement()} disabled={creatingMovement}>
+                  {creatingMovement ? "Saving..." : movementType === "CASH_IN" ? "Record Cash In" : "Record Cash Out"}
+                </button>
+              </div>
+            </section>
+
+            <section className="card cash-action-card">
+              <div className="card-header-row">
+                <h2>Blind Close</h2>
+              </div>
+              <div className="cash-form-grid cash-form-grid-wide">
+                <label>
+                  Counted amount (£)
+                  <input
+                    value={countedAmount}
+                    onChange={(event) => setCountedAmount(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="0.00"
+                  />
+                </label>
+                <label className="cash-notes-field">
+                  Close notes
+                  <input
+                    value={closeNotes}
+                    onChange={(event) => setCloseNotes(event.target.value)}
+                    placeholder="Optional"
+                  />
+                </label>
+                <button type="button" onClick={() => void handleCloseRegister()} disabled={closingRegister}>
+                  {closingRegister ? "Closing..." : "Close Till"}
+                </button>
+              </div>
+
+              {closeSummary?.session ? (
+                <div className="cash-close-summary">
+                  <div className="metric-card">
+                    <span className="metric-label">Expected</span>
+                    <strong className="metric-value">{formatMoney(closeSummary.totals?.expectedCashPence)}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-label">Counted</span>
+                    <strong className="metric-value">{formatMoney(closeSummary.totals?.countedCashPence)}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-label">Difference</span>
+                    <strong className="metric-value">{formatMoney(closeSummary.totals?.variancePence)}</strong>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          </>
+        )}
+
+        {receiptToken ? (
+          <section className="card cash-qr-card">
+            <div className="card-header-row">
+              <h2>Scan QR to upload receipt</h2>
+              <button type="button" onClick={() => setReceiptToken(null)}>
+                Clear
+              </button>
             </div>
-            <div className="management-stat-card">
-              <span className="metric-label">Variance</span>
-              <strong className="metric-value">{formatMoney(currentSession?.totals?.variancePence)}</strong>
+            <p className="muted-text">
+              Use a phone to upload the petty cash receipt. The token expires at{" "}
+              {new Date(receiptToken.expiresAt).toLocaleTimeString()}.
+            </p>
+            <div className="cash-qr-layout">
+              <div className="cash-qr-box">
+                {receiptQrBusy ? <span>Generating QR...</span> : receiptQrImage ? <img src={receiptQrImage} alt="Receipt upload QR code" /> : <span>QR unavailable</span>}
+              </div>
+              <div className="cash-qr-copy">
+                <code>{`${window.location.origin}${receiptToken.uploadPagePath}`}</code>
+                <a href={receiptToken.uploadPagePath} target="_blank" rel="noreferrer">
+                  Open upload page
+                </a>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
+
+        {pettyExpenseWithoutReceipt.length > 0 ? (
+          <section className="card">
+            <div className="card-header-row">
+              <h2>Petty Expenses Awaiting Receipt</h2>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Amount</th>
+                    <th>Notes</th>
+                    <th>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pettyExpenseWithoutReceipt.map((movement) => (
+                    <tr key={movement.id}>
+                      <td>{new Date(movement.createdAt).toLocaleString()}</td>
+                      <td>{formatMoney(movement.amountPence)}</td>
+                      <td>{movement.note ?? "-"}</td>
+                      <td>
+                        <button type="button" onClick={() => void handleCreateReceiptToken(movement.id)}>
+                          Generate QR
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
         <section className="card">
           <div className="card-header-row">
-            <h2>Recent Session Summaries</h2>
+            <h2>Register History</h2>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Session</th>
                   <th>Business Date</th>
+                  <th>Session</th>
                   <th>Status</th>
-                  <th>Expected</th>
-                  <th>Counted</th>
-                  <th>Variance</th>
+                  <th>Opened</th>
+                  <th>Closed</th>
+                  <th>Float</th>
                 </tr>
               </thead>
               <tbody>
-                {recentSessionSummaries.length === 0 ? (
+                {sessions.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No till session summaries available for this range.</td>
+                    <td colSpan={6}>No register sessions found in this range.</td>
                   </tr>
                 ) : (
-                  recentSessionSummaries.map((summary) => (
-                    <tr key={summary.session?.id}>
-                      <td className="mono-text">{summary.session?.id.slice(0, 8)}</td>
-                      <td>{summary.session?.businessDate ? new Date(summary.session.businessDate).toLocaleDateString() : "-"}</td>
-                      <td>{summary.session?.status ?? "-"}</td>
-                      <td>{formatMoney(summary.totals?.expectedCashPence)}</td>
-                      <td>{formatMoney(summary.totals?.countedCashPence)}</td>
-                      <td>{formatMoney(summary.totals?.variancePence)}</td>
+                  sessions.map((session) => (
+                    <tr key={session.id}>
+                      <td>{new Date(session.businessDate).toLocaleDateString()}</td>
+                      <td className="mono-text">{session.id.slice(0, 8)}</td>
+                      <td>{session.status}</td>
+                      <td>{new Date(session.openedAt).toLocaleString()}</td>
+                      <td>{session.closedAt ? new Date(session.closedAt).toLocaleString() : "-"}</td>
+                      <td>{formatMoney(session.openingFloatPence)}</td>
                     </tr>
                   ))
                 )}
@@ -307,7 +620,7 @@ export const CashOversightPage = () => {
 
         <section className="card">
           <div className="card-header-row">
-            <h2>Recent Cash Movements</h2>
+            <h2>Cash Movements</h2>
           </div>
           <div className="table-wrap">
             <table>
@@ -315,24 +628,38 @@ export const CashOversightPage = () => {
                 <tr>
                   <th>When</th>
                   <th>Type</th>
+                  <th>Reason</th>
                   <th>Amount</th>
-                  <th>Reference</th>
-                  <th>Staff</th>
+                  <th>Notes</th>
+                  <th>Receipt</th>
                 </tr>
               </thead>
               <tbody>
-                {movements.slice(0, 20).length === 0 ? (
+                {movements.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>No cash movements found in this range.</td>
+                    <td colSpan={6}>No cash movements found in this range.</td>
                   </tr>
                 ) : (
-                  movements.slice(0, 20).map((movement) => (
+                  movements.map((movement) => (
                     <tr key={movement.id}>
                       <td>{new Date(movement.createdAt).toLocaleString()}</td>
-                      <td>{movement.type}</td>
+                      <td>{movement.dbType}</td>
+                      <td>{movement.reason ?? "-"}</td>
                       <td>{formatMoney(movement.amountPence)}</td>
-                      <td className="mono-text">{movement.ref}</td>
-                      <td>{movement.createdByStaffId ?? "-"}</td>
+                      <td>{movement.note ?? "-"}</td>
+                      <td>
+                        {movement.receiptImageUrl ? (
+                          <a href={movement.receiptImageUrl} target="_blank" rel="noreferrer">
+                            View receipt
+                          </a>
+                        ) : movement.dbType === "PAID_OUT" && movement.reason === "PETTY_EXPENSE" ? (
+                          <button type="button" onClick={() => void handleCreateReceiptToken(movement.id)}>
+                            Add receipt
+                          </button>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}

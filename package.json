@@ -52,6 +52,7 @@
     "test:m41": "node scripts/run_smoke_test.js scripts/refunds_m41_smoke_tests.js",
     "test:m42": "node scripts/run_smoke_test.js scripts/cash_m42_smoke_tests.js",
     "test:m43": "node scripts/run_smoke_test.js scripts/manager_ui_m43_smoke_tests.js",
+    "test:cash-foundation": "node scripts/run_smoke_test.js scripts/cash_management_foundation_smoke_tests.js",
     "test:m88": "node scripts/run_smoke_test.js scripts/product_sales_m88_smoke_tests.js",
     "test:m118": "node scripts/run_smoke_test.js scripts/inventory_locations_m118_smoke_tests.js",
     "test:m89": "node scripts/run_smoke_test.js scripts/inventory_velocity_m89_smoke_tests.js",

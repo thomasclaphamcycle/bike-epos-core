@@ -89,6 +89,9 @@ Database
 POS
 Handles sales, checkout, quotes, and customer attachment.
 
+Cash Management
+Handles register sessions, blind close, manual cash in/out movements, and petty cash receipt attachment.
+
 Inventory
 Tracks stock levels, movements, stock take, and locations.
 

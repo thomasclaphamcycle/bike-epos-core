@@ -8,6 +8,10 @@ Features:
 - Basket management
 - Checkout
 - Payment methods
+- Register sessions
+- Blind till close
+- Cash in / cash out
+- Petty cash receipt capture
 - Customer attach
 - Email capture
 - Quick product buttons

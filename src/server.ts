@@ -41,6 +41,8 @@ import { purchaseOrderRouter } from "./routes/purchaseOrderRoutes";
 import { tillRouter } from "./routes/tillRoutes";
 import { refundRouter } from "./routes/refundRoutes";
 import { cashRouter } from "./routes/cashRoutes";
+import { managementCashRouter } from "./routes/managementCashRoutes";
+import { publicReceiptUploadRouter } from "./routes/publicReceiptUploadRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
@@ -49,12 +51,13 @@ import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
 app.use(enforceAuthMode);
 
 const projectRoot = process.cwd();
 const frontendDistDir = path.join(projectRoot, "frontend", "dist");
 const frontendIndexFile = path.join(frontendDistDir, "index.html");
+const uploadsDir = path.join(projectRoot, "uploads");
 const serveFrontendSpa =
   process.env.NODE_ENV === "production" && fs.existsSync(frontendIndexFile);
 
@@ -179,6 +182,8 @@ app.use("/api/purchase-orders", purchaseOrderRouter);
 app.use("/api/till", tillRouter);
 app.use("/api/refunds", refundRouter);
 app.use("/api/cash", cashRouter);
+app.use("/api/management/cash", managementCashRouter);
+app.use("/api/public", publicReceiptUploadRouter);
 app.use("/api/workshop", workshopRouter);
 app.use("/api/workshop-jobs", workshopJobPartRouter);
 app.use("/api/workshop-bookings", workshopBookingRouter);
@@ -188,6 +193,7 @@ app.use("/api/locations", locationRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/reports/workshop", workshopReportRouter);
 app.use("/api/audit", auditRouter);
+app.use("/uploads", express.static(uploadsDir));
 
 if (serveFrontendSpa) {
   app.use(
