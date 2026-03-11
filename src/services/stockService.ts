@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { ensureVariantExistsById } from "./productService";
@@ -192,7 +193,7 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
   const referenceId = normalizeOptionalText(input.referenceId) ?? randomUUID();
   const createdByStaffId = normalizeOptionalText(input.createdByStaffId);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await ensureVariantExistsById(tx, variantId);
 
     if (createdByStaffId) {
@@ -257,4 +258,18 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
       },
     };
   });
+
+  emit("stock.adjusted", {
+    id: result.entry.id,
+    type: "stock.adjusted",
+    timestamp: result.entry.createdAt.toISOString(),
+    variantId: result.entry.variantId,
+    locationId: result.entry.locationId,
+    quantityDelta: result.entry.quantityDelta,
+    totalOnHand: result.stock.totalOnHand,
+    referenceType: result.entry.referenceType,
+    referenceId: result.entry.referenceId,
+  });
+
+  return result;
 };

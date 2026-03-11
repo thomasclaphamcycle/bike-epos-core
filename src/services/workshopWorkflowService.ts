@@ -1,4 +1,5 @@
 import { Prisma, WorkshopJobNoteVisibility, WorkshopJobStatus } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -145,7 +146,7 @@ export const assignWorkshopJob = async (
     throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
     });
@@ -399,8 +400,10 @@ export const changeWorkshopJobStatus = async (
           status: job.status,
           cancelledAt: job.cancelledAt,
           updatedAt: job.updatedAt,
+          completedAt: job.completedAt,
         },
         idempotent: true,
+        emittedStage: targetStage,
       };
     }
 
@@ -458,10 +461,33 @@ export const changeWorkshopJobStatus = async (
         status: updated.status,
         cancelledAt: updated.cancelledAt,
         updatedAt: updated.updatedAt,
+        completedAt: updated.completedAt,
       },
       idempotent: false,
+      emittedStage: targetStage,
     };
   });
+
+  if (!result.idempotent && (result.emittedStage === "READY" || result.emittedStage === "COMPLETED")) {
+    emit("workshop.job.completed", {
+      id: result.job.id,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      status: result.job.status,
+      ...(result.job.completedAt ? { completedAt: result.job.completedAt.toISOString() } : {}),
+    });
+  }
+
+  return {
+    job: {
+      id: result.job.id,
+      status: result.job.status,
+      cancelledAt: result.job.cancelledAt,
+      updatedAt: result.job.updatedAt,
+    },
+    idempotent: result.idempotent,
+  };
 };
 
 export const setWorkshopJobApprovalStatus = async (

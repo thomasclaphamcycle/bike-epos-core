@@ -1,4 +1,5 @@
 import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import {
@@ -33,6 +34,23 @@ type CompleteSaleInput = {
   requireCapturedIntent?: boolean;
   requireTenders?: boolean;
   staffActorId?: string;
+};
+
+const emitSaleCompletedEvent = (payload: {
+  saleId: string;
+  completedAt: Date;
+  totalPence?: number;
+  changeDuePence?: number;
+}) => {
+  emit("sale.completed", {
+    id: payload.saleId,
+    type: "sale.completed",
+    timestamp: new Date().toISOString(),
+    saleId: payload.saleId,
+    completedAt: payload.completedAt.toISOString(),
+    ...(payload.totalPence !== undefined ? { totalPence: payload.totalPence } : {}),
+    ...(payload.changeDuePence !== undefined ? { changeDuePence: payload.changeDuePence } : {}),
+  });
 };
 
 type SaleTenderInput = {
@@ -581,8 +599,10 @@ export const completeSaleIfEligibleTx = async (
 
   return {
     saleId: updatedSale.id,
-    completedAt: updatedSale.completedAt,
+    completedAt,
     changeDuePence: updatedSale.changeDuePence,
+    totalPence: sale.totalPence,
+    didComplete: true,
   };
 };
 
@@ -594,8 +614,20 @@ export const completeSaleIfEligible = async (
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
   }
 
-  return prisma.$transaction((tx) => completeSaleIfEligibleTx(tx, saleId, input));
+  const result = await prisma.$transaction((tx) => completeSaleIfEligibleTx(tx, saleId, input));
+
+  if ("didComplete" in result && result.didComplete) {
+    emitSaleCompletedEvent(result);
+  }
+
+  return {
+    saleId: result.saleId,
+    completedAt: result.completedAt,
+    changeDuePence: result.changeDuePence,
+  };
 };
+
+export { emitSaleCompletedEvent };
 
 const parseSaleTenderMethodOrThrow = (value: SaleTenderMethod | undefined): SaleTenderMethod => {
   if (

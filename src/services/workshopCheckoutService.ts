@@ -1,4 +1,5 @@
 import { PaymentMethod } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -41,7 +42,7 @@ export const checkoutWorkshopJobToSale = async (
     throw new HttpError(400, "amountPence must be a non-negative integer", "INVALID_PAYMENT");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const workshopJob = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
       include: { customer: true },
@@ -99,6 +100,9 @@ export const checkoutWorkshopJobToSale = async (
         outstandingPence,
         payment: null,
         idempotent: true,
+        emittedWorkshopCompletion: workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED",
+        workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
+        workshopCompletedAt: workshopJob.completedAt ?? new Date(),
       };
     }
 
@@ -266,6 +270,33 @@ export const checkoutWorkshopJobToSale = async (
       outstandingPence,
       payment,
       idempotent: false,
+      emittedWorkshopCompletion: workshopJob.status !== "COMPLETED",
+      workshopJobStatus: "COMPLETED",
+      workshopCompletedAt: workshopJob.completedAt ?? new Date(),
     };
   });
+
+  if (result.emittedWorkshopCompletion) {
+    emit("workshop.job.completed", {
+      id: workshopJobId,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId,
+      status: result.workshopJobStatus,
+      completedAt: result.workshopCompletedAt.toISOString(),
+      saleId: result.sale.id,
+    });
+  }
+
+  return {
+    sale: result.sale,
+    serviceTotalPence: result.serviceTotalPence,
+    partsTotalPence: result.partsTotalPence,
+    saleTotalPence: result.saleTotalPence,
+    depositPaidPence: result.depositPaidPence,
+    creditPence: result.creditPence,
+    outstandingPence: result.outstandingPence,
+    payment: result.payment,
+    idempotent: result.idempotent,
+  };
 };

@@ -1,4 +1,5 @@
 import { Prisma, PurchaseOrderStatus } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 
@@ -1042,10 +1043,31 @@ export const updatePurchaseOrderItem = async (
       },
     });
 
-    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+    return {
+      purchaseOrder: await getPurchaseOrderOrThrow(tx, purchaseOrderId),
+      event: {
+        purchaseOrderId,
+        locationId,
+        lineCount: parsedLines.length,
+        quantityReceived: parsedLines.reduce((sum, line) => sum + line.quantity, 0),
+      },
+    };
   });
 
-  return toPurchaseOrderResponse(updated);
+  const response = toPurchaseOrderResponse(updated.purchaseOrder);
+  emit("purchaseOrder.received", {
+    id: response.id,
+    type: "purchaseOrder.received",
+    timestamp: new Date().toISOString(),
+    purchaseOrderId: response.id,
+    poNumber: response.poNumber,
+    locationId: updated.event.locationId,
+    lineCount: updated.event.lineCount,
+    quantityReceived: updated.event.quantityReceived,
+    status: response.status,
+  });
+
+  return response;
 };
 
 export const receivePurchaseOrder = async (

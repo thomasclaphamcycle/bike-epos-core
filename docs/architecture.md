@@ -39,4 +39,11 @@ The reporting layer is intentionally split by domain:
 
 `src/core/events.ts` provides a minimal internal event bus with `emit()` and `on()`.
 
-It exists as a safe extension point for future integrations. It is intentionally not yet wired into critical sale, workshop, purchasing, or stock flows on this branch.
+It exists as a safe extension point for future integrations and internal automation. Current emitted events are:
+
+- `sale.completed`
+- `purchaseOrder.received`
+- `workshop.job.completed`
+- `stock.adjusted`
+
+These emissions are additive only. They do not change route behavior, API contracts, or database writes. Real consumers and third-party integrations are still future work.
