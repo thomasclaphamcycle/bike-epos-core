@@ -116,6 +116,36 @@ const buildHistoryRange = (preset: RangePreset) => {
   return { from, to };
 };
 
+const getPublicAppOrigin = () => {
+  const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN?.trim();
+  return configuredOrigin ? configuredOrigin.replace(/\/$/, "") : window.location.origin;
+};
+
+const getBackendAssetOrigin = () => {
+  const configuredProxyTarget = import.meta.env.VITE_API_PROXY_TARGET?.trim();
+  if (configuredProxyTarget) {
+    return configuredProxyTarget.replace(/\/$/, "");
+  }
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:3000`;
+  }
+  return window.location.origin;
+};
+
+const toPublicAssetUrl = (value: string | null | undefined, origin: string) => {
+  if (!value) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  if (value.startsWith("/")) {
+    return `${origin}${value}`;
+  }
+  return `${origin}/${value.replace(/^\/+/, "")}`;
+};
+
 const toPence = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -154,6 +184,10 @@ export const CashOversightPage = () => {
   const [receiptToken, setReceiptToken] = useState<ReceiptTokenResponse | null>(null);
   const [receiptQrImage, setReceiptQrImage] = useState<string | null>(null);
   const [receiptQrBusy, setReceiptQrBusy] = useState(false);
+
+  const publicAppOrigin = getPublicAppOrigin();
+  const backendAssetOrigin = getBackendAssetOrigin();
+  const receiptUploadUrl = receiptToken ? `${publicAppOrigin}${receiptToken.uploadPagePath}` : null;
 
   const loadCashManagement = async () => {
     setLoading(true);
@@ -210,15 +244,14 @@ export const CashOversightPage = () => {
   }, [rangePreset]);
 
   useEffect(() => {
-    const nextUrl = receiptToken ? `${window.location.origin}${receiptToken.uploadPagePath}` : null;
-    if (!nextUrl) {
+    if (!receiptUploadUrl) {
       setReceiptQrImage(null);
       return;
     }
 
     let cancelled = false;
     setReceiptQrBusy(true);
-    QRCode.toDataURL(nextUrl, {
+    QRCode.toDataURL(receiptUploadUrl, {
       width: 220,
       margin: 1,
       color: {
@@ -245,7 +278,7 @@ export const CashOversightPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [receiptToken]);
+  }, [receiptUploadUrl]);
 
   const currentSessionId = currentSession?.session?.id ?? null;
   const currentSessionOpen = Boolean(currentSession?.session);
@@ -602,8 +635,8 @@ export const CashOversightPage = () => {
                 {receiptQrBusy ? <span>Generating QR...</span> : receiptQrImage ? <img src={receiptQrImage} alt="Receipt upload QR code" /> : <span>QR unavailable</span>}
               </div>
               <div className="cash-qr-copy">
-                <code>{`${window.location.origin}${receiptToken.uploadPagePath}`}</code>
-                <a href={receiptToken.uploadPagePath} target="_blank" rel="noreferrer">
+                <code>{receiptUploadUrl}</code>
+                <a href={receiptUploadUrl ?? receiptToken.uploadPagePath} target="_blank" rel="noreferrer">
                   Open upload page
                 </a>
               </div>
@@ -713,8 +746,13 @@ export const CashOversightPage = () => {
                       <td>{formatMoney(movement.amountPence)}</td>
                       <td>{movement.note ?? "-"}</td>
                       <td>
-                        {movement.receiptImageUrl ? (
-                          <a href={movement.receiptImageUrl} target="_blank" rel="noreferrer">
+                        {toPublicAssetUrl(movement.receiptImageUrl, backendAssetOrigin) ? (
+                          <a
+                            href={toPublicAssetUrl(movement.receiptImageUrl, backendAssetOrigin) ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             View receipt
                           </a>
                         ) : movement.dbType === "PAID_OUT" && movement.reason === "PETTY_EXPENSE" ? (
