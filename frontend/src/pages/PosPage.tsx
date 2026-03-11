@@ -94,6 +94,7 @@ type CompletedSaleState = {
   tenderMethod: TenderMethod;
   customerName: string | null;
   cashTenderedPence: number | null;
+  totalPaidPence: number;
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
@@ -144,6 +145,12 @@ export const PosPage = () => {
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
 
+  const focusProductSearch = () => {
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+  };
+
   const syncQuery = (next: { basketId?: string | null; saleId?: string | null }) => {
     const updated = new URLSearchParams(searchParams);
 
@@ -190,9 +197,7 @@ export const PosPage = () => {
     setShowCreateCustomer(false);
     syncQuery({ basketId: created.id, saleId: null });
     success("New sale created");
-    window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
+    focusProductSearch();
   };
 
   useEffect(() => {
@@ -529,6 +534,7 @@ export const PosPage = () => {
         tenderMethod: selectedTenderMethod,
         customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
         cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
+        totalPaidPence: sale.tenderSummary.totalPence,
       });
       setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
       await createBasket();
@@ -568,6 +574,18 @@ export const PosPage = () => {
             ? `Cash tendered is short by ${formatMoney(remainingDuePence - cashTenderedPence)}.`
             : null;
   const quickCashAmounts = [500, 1000, 2000, 5000];
+  const beginNextSaleFromSuccess = async () => {
+    setCompletedSale(null);
+
+    if (basket?.items.length === 0 && !sale) {
+      focusProductSearch();
+      return;
+    }
+
+    setSelectedTenderMethod("CARD");
+    setCashTenderedAmount("");
+    await createBasket();
+  };
 
   return (
     <div className="page-shell">
@@ -605,15 +623,45 @@ export const PosPage = () => {
         {loading ? <p>Loading...</p> : null}
 
         {completedSale ? (
-          <div className="success-panel">
-            <strong>Sale complete.</strong>
-            <div className="muted-text">
-              Tender: {completedSale.tenderMethod} | Customer: {completedSale.customerName || "Walk-in"} | Change: {formatMoney(completedSale.changeDuePence)}
+          <div className="success-panel success-panel-sale">
+            <div className="success-panel-heading">
+              <strong>Sale complete.</strong>
+              <span className="status-badge status-complete">Ready for next sale</span>
+            </div>
+            <div className="success-summary-grid">
+              <div>
+                <div className="muted-text">Sale reference</div>
+                <div className="table-primary mono-text">{completedSale.saleId}</div>
+              </div>
+              <div>
+                <div className="muted-text">Tender</div>
+                <div className="table-primary">{completedSale.tenderMethod}</div>
+              </div>
+              <div>
+                <div className="muted-text">Total paid</div>
+                <div className="table-primary">{formatMoney(completedSale.totalPaidPence)}</div>
+              </div>
+              <div>
+                <div className="muted-text">Customer</div>
+                <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
+              </div>
             </div>
             {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
-              <div className="muted-text">Cash received: {formatMoney(completedSale.cashTenderedPence)}</div>
+              <div className="success-summary-grid">
+                <div>
+                  <div className="muted-text">Cash received</div>
+                  <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
+                </div>
+                <div>
+                  <div className="muted-text">Change due</div>
+                  <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
+                </div>
+              </div>
             ) : null}
-            <div className="success-links">
+            <div className="success-links success-links-sale">
+              <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
+                New sale
+              </button>
               <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
                 Open receipt
               </a>
