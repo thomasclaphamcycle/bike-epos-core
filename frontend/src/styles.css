@@ -1420,6 +1420,15 @@ th {
   margin-bottom: 12px;
 }
 
+.inventory-count-card-active {
+  border-color: #f2d29b;
+  box-shadow: 0 0 0 1px rgba(242, 210, 155, 0.45);
+}
+
+.inventory-count-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .inventory-adjustment-form label {
   display: grid;
   gap: 4px;
@@ -1427,6 +1436,10 @@ th {
 
 .inventory-adjustment-note {
   grid-column: span 2;
+}
+
+.inventory-count-form {
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) auto;
 }
 
 .inventory-adjustment-validation {
@@ -2103,6 +2116,11 @@ th {
 
   .inventory-adjustment-note {
     grid-column: span 1;
+  }
+
+  .inventory-count-form,
+  .inventory-count-summary {
+    grid-template-columns: 1fr;
   }
 
   .purchase-form-grid {

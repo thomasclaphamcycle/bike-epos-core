@@ -335,6 +335,16 @@ export const InventoryPage = () => {
                           className="button-link button-link-compact"
                           onClick={(event) => {
                             event.stopPropagation();
+                            navigate(`/inventory/${row.variantId}?mode=count`);
+                          }}
+                        >
+                          Stocktake
+                        </button>
+                        <button
+                          type="button"
+                          className="button-link button-link-compact"
+                          onClick={(event) => {
+                            event.stopPropagation();
                             navigate(`/inventory/${row.variantId}`);
                           }}
                         >

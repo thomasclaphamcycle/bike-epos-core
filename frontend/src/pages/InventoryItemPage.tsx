@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
@@ -124,6 +124,7 @@ const getStockStateClass = (onHand: number) => {
 
 export const InventoryItemPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { error, success } = useToasts();
 
@@ -140,9 +141,13 @@ export const InventoryItemPage = () => {
   const [adjustmentReason, setAdjustmentReason] = useState<(typeof ADJUSTMENT_REASONS)[number]>("COUNT_CORRECTION");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [adjusting, setAdjusting] = useState(false);
+  const [countedQuantity, setCountedQuantity] = useState("");
+  const [countNote, setCountNote] = useState("");
+  const [submittingCount, setSubmittingCount] = useState(false);
 
   const canViewMovements = useMemo(() => isManagerPlus(user?.role), [user?.role]);
   const canAdjustStock = useMemo(() => isManagerPlus(user?.role), [user?.role]);
+  const isCountMode = searchParams.get("mode") === "count";
 
   const loadInventoryDetail = async () => {
     if (!variantId) {
@@ -257,6 +262,38 @@ export const InventoryItemPage = () => {
     return null;
   }, [adjustmentDelta, parsedAdjustmentDelta]);
 
+  const parsedCountedQuantity = useMemo(() => {
+    if (!countedQuantity.trim()) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(countedQuantity, 10);
+    return Number.isInteger(parsed) ? parsed : Number.NaN;
+  }, [countedQuantity]);
+
+  const cycleCountDifference = useMemo(() => {
+    if (parsedCountedQuantity === null || Number.isNaN(parsedCountedQuantity) || !stock) {
+      return null;
+    }
+    return parsedCountedQuantity - stock.onHand;
+  }, [parsedCountedQuantity, stock]);
+
+  const cycleCountValidationMessage = useMemo(() => {
+    if (countedQuantity.trim() === "") {
+      return null;
+    }
+    if (parsedCountedQuantity === null || Number.isNaN(parsedCountedQuantity)) {
+      return "Enter a whole-number counted quantity.";
+    }
+    if (parsedCountedQuantity < 0) {
+      return "Counted quantity cannot be negative.";
+    }
+    if (cycleCountDifference === 0) {
+      return "Count matches current stock. No correction is needed.";
+    }
+    return null;
+  }, [countedQuantity, cycleCountDifference, parsedCountedQuantity]);
+
   const submitAdjustment = async (event: FormEvent) => {
     event.preventDefault();
 
@@ -294,6 +331,53 @@ export const InventoryItemPage = () => {
     }
   };
 
+  const submitCycleCount = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!variantId || !stock) {
+      return;
+    }
+
+    if (parsedCountedQuantity === null || Number.isNaN(parsedCountedQuantity) || parsedCountedQuantity < 0) {
+      error("Counted quantity must be a whole number.");
+      return;
+    }
+
+    const quantityDelta = parsedCountedQuantity - stock.onHand;
+    if (quantityDelta === 0) {
+      error("Count matches current stock. No correction is needed.");
+      return;
+    }
+
+    setSubmittingCount(true);
+    try {
+      await apiPost<StockAdjustmentResponse>("/api/stock/adjustments", {
+        variantId,
+        quantityDelta,
+        note: countNote || undefined,
+        referenceType: "STOCK_ADJUSTMENT",
+        referenceId: "COUNT_CORRECTION",
+      });
+
+      setCountedQuantity("");
+      setCountNote("");
+      success(
+        `Cycle count applied. Stock changed by ${formatSignedQuantity(quantityDelta)} and is now ${parsedCountedQuantity}.`,
+      );
+      await Promise.all([loadInventoryDetail(), loadMovements()]);
+      if (isCountMode) {
+        const params = new URLSearchParams(searchParams);
+        params.delete("mode");
+        setSearchParams(params, { replace: true });
+      }
+    } catch (countError) {
+      const message = countError instanceof Error ? countError.message : "Failed to apply cycle count";
+      error(message);
+    } finally {
+      setSubmittingCount(false);
+    }
+  };
+
   if (!variantId) {
     return <div className="page-shell"><p>Missing inventory item id.</p></div>;
   }
@@ -306,7 +390,10 @@ export const InventoryItemPage = () => {
             <h1>Inventory Detail</h1>
             <p className="muted-text">Variant-level stock, locations, and movement history.</p>
           </div>
-          <Link to="/inventory">Back to Inventory</Link>
+          <div className="actions-inline">
+            <Link to={`/inventory/${variantId}?mode=count`}>Stocktake</Link>
+            <Link to="/inventory">Back to Inventory</Link>
+          </div>
         </div>
 
         {loading ? <p>Loading...</p> : null}
@@ -442,6 +529,89 @@ export const InventoryItemPage = () => {
           </>
         ) : (
           <p className="muted-text">Stock adjustments are available to MANAGER+ only.</p>
+        )}
+      </section>
+
+      <section className={`card ${isCountMode ? "inventory-count-card-active" : ""}`}>
+        <div className="card-header-row">
+          <div>
+            <h2>Stocktake / Cycle Count</h2>
+            <p className="muted-text">Enter the physical count and apply a safe count correction using the existing stock adjustment ledger.</p>
+          </div>
+          {!canAdjustStock ? <span className="muted-text">MANAGER+ only</span> : null}
+        </div>
+
+        {canAdjustStock ? (
+          <>
+            <div className="inventory-adjustment-summary inventory-count-summary">
+              <div className="metric-card">
+                <span className="metric-label">Current Stock</span>
+                <strong className="metric-value">{stock?.onHand ?? 0}</strong>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Counted Stock</span>
+                <strong className="metric-value">{parsedCountedQuantity === null || Number.isNaN(parsedCountedQuantity) ? "-" : parsedCountedQuantity}</strong>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Adjustment</span>
+                <strong className="metric-value">
+                  {cycleCountDifference === null ? "-" : (
+                    <span className={cycleCountDifference < 0 ? "movement-negative" : "movement-positive"}>
+                      {formatSignedQuantity(cycleCountDifference)}
+                    </span>
+                  )}
+                </strong>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Resulting Stock</span>
+                <strong className="metric-value">
+                  {parsedCountedQuantity === null || Number.isNaN(parsedCountedQuantity) ? "-" : (
+                    <span className={getStockStateClass(parsedCountedQuantity)}>
+                      {parsedCountedQuantity}
+                    </span>
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <form className="inventory-adjustment-form inventory-count-form" onSubmit={submitCycleCount}>
+              <label>
+                Counted Quantity
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={countedQuantity}
+                  onChange={(event) => setCountedQuantity(event.target.value)}
+                  placeholder="Enter physical count"
+                  required
+                />
+              </label>
+
+              <label className="inventory-adjustment-note">
+                Note
+                <input
+                  value={countNote}
+                  onChange={(event) => setCountNote(event.target.value)}
+                  placeholder="Optional note for this count"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="primary"
+                disabled={submittingCount || cycleCountValidationMessage !== null}
+              >
+                {submittingCount ? "Applying..." : "Apply Count"}
+              </button>
+            </form>
+
+            {cycleCountValidationMessage ? (
+              <p className="inventory-adjustment-validation">{cycleCountValidationMessage}</p>
+            ) : null}
+          </>
+        ) : (
+          <p className="muted-text">Cycle counts are available to MANAGER+ only.</p>
         )}
       </section>
 
