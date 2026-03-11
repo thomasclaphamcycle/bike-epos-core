@@ -61,6 +61,7 @@
     "test:m103": "node scripts/run_smoke_test.js scripts/service_reminders_m103_smoke_tests.js",
     "test:m104": "node scripts/run_smoke_test.js scripts/customer_timeline_m104_smoke_tests.js",
     "test:m111": "node scripts/run_smoke_test.js scripts/warranty_tracking_m111_smoke_tests.js",
+    "test:m119": "node scripts/run_smoke_test.js scripts/reorder_suggestions_m119_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js"
   },
   "repository": {

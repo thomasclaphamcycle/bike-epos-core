@@ -79,6 +79,17 @@ const cleanup = async (state) => {
   const variantIds = Array.from(state.variantIds);
   const productIds = Array.from(state.productIds);
   const userIds = Array.from(state.userIds);
+  const cashSessionIds = Array.from(state.cashSessionIds);
+
+  if (cashSessionIds.length > 0) {
+    await prisma.cashSession.deleteMany({
+      where: {
+        id: {
+          in: cashSessionIds,
+        },
+      },
+    });
+  }
 
   if (saleIds.length > 0) {
     await prisma.paymentIntent.deleteMany({
@@ -212,6 +223,7 @@ const run = async () => {
     variantIds: new Set(),
     productIds: new Set(),
     userIds: new Set(),
+    cashSessionIds: new Set(),
   };
 
   let startedServer = false;
@@ -266,6 +278,14 @@ const run = async () => {
       "X-Staff-Role": "STAFF",
       "X-Staff-Id": staffUser.id,
     };
+
+    const openTillRes = await fetchJson("/api/till/sessions/open", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({ openingFloatPence: 0 }),
+    });
+    assert.equal(openTillRes.status, 201, JSON.stringify(openTillRes.json));
+    state.cashSessionIds.add(openTillRes.json.session.id);
 
     const productRes = await fetchJson("/api/products", {
       method: "POST",

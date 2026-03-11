@@ -230,7 +230,7 @@ const run = async () => {
       path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/tenders`,
       method: "POST",
       body: {
-        method: "CASH",
+        method: "CARD",
         amountPence: tenderSale.sale.totalPence,
       },
       cookie,
@@ -299,7 +299,7 @@ const run = async () => {
     assert.equal(legacySaleReceipt.payload.saleId, tenderSale.sale.id);
 
     const paidSale = await createSaleViaBasket({
-      paymentMethod: "CASH",
+      paymentMethod: "CARD",
       amountPence: 1500,
       providerRef: `m40-refund-source-${token}`,
     });

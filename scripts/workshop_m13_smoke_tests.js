@@ -492,7 +492,7 @@ const run = async () => {
 
       const checkout = await checkoutWorkshopJob(job.id, {
         saleTotalPence: 2000,
-        paymentMethod: "CASH",
+        paymentMethod: "CARD",
         amountPence: 2000,
         providerRef: `m13-cash-${uniqueRef()}`,
       });

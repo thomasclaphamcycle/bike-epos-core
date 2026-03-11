@@ -685,6 +685,258 @@ export const getInventoryVelocityReport = async (from?: string, to?: string, tak
   };
 };
 
+type ReorderSuggestionUrgency = "Reorder Now" | "Reorder Soon" | "On Order";
+
+const REORDER_LOOKBACK_DAYS = 30;
+const REORDER_TARGET_COVERAGE_DAYS = 30;
+const reorderUrgencyRank: Record<ReorderSuggestionUrgency, number> = {
+  "Reorder Now": 3,
+  "Reorder Soon": 2,
+  "On Order": 1,
+};
+
+export const getInventoryReorderSuggestionsReport = async (take?: number) => {
+  const normalizedTake = take ?? 100;
+  if (!Number.isInteger(normalizedTake) || normalizedTake < 1 || normalizedTake > 200) {
+    throw new HttpError(400, "take must be an integer between 1 and 200", "INVALID_TAKE");
+  }
+
+  const toDate = new Date();
+  const fromDate = new Date(toDate);
+  fromDate.setUTCDate(fromDate.getUTCDate() - (REORDER_LOOKBACK_DAYS - 1));
+  fromDate.setUTCHours(0, 0, 0, 0);
+
+  const saleItems = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        completedAt: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      },
+    },
+    select: {
+      quantity: true,
+      sale: {
+        select: {
+          completedAt: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          option: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const stockRows = await prisma.inventoryMovement.groupBy({
+    by: ["variantId"],
+    _sum: {
+      quantity: true,
+    },
+  });
+
+  const openPurchaseOrderItems = await prisma.purchaseOrderItem.findMany({
+    where: {
+      purchaseOrder: {
+        status: {
+          in: ["SENT", "PARTIALLY_RECEIVED"],
+        },
+      },
+    },
+    select: {
+      id: true,
+      variantId: true,
+      quantityOrdered: true,
+      quantityReceived: true,
+      purchaseOrder: {
+        select: {
+          id: true,
+          poNumber: true,
+          status: true,
+          expectedAt: true,
+          supplier: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const variantIds = Array.from(new Set([
+    ...saleItems.map((item) => item.variant.id),
+    ...stockRows.map((row) => row.variantId),
+    ...openPurchaseOrderItems.map((item) => item.variantId),
+  ]));
+
+  const variants = variantIds.length > 0
+    ? await prisma.variant.findMany({
+        where: {
+          id: {
+            in: variantIds,
+          },
+        },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          option: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      })
+    : [];
+
+  const variantMap = new Map(variants.map((variant) => [variant.id, variant]));
+  const onHandMap = new Map(stockRows.map((row) => [row.variantId, toInteger(row._sum.quantity)]));
+  const salesMap = new Map<string, { quantitySold: number; lastSoldAt: Date | null }>();
+  const incomingMap = new Map<string, {
+    onOpenPurchaseOrders: number;
+    openPurchaseOrders: Array<{
+      id: string;
+      poNumber: string;
+      status: string;
+      expectedAt: Date | null;
+      supplierName: string;
+      quantityRemaining: number;
+    }>;
+  }>();
+
+  for (const item of saleItems) {
+    const existing = salesMap.get(item.variant.id) ?? { quantitySold: 0, lastSoldAt: null };
+    existing.quantitySold += item.quantity;
+    if (item.sale.completedAt && (!existing.lastSoldAt || item.sale.completedAt > existing.lastSoldAt)) {
+      existing.lastSoldAt = item.sale.completedAt;
+    }
+    salesMap.set(item.variant.id, existing);
+  }
+
+  for (const item of openPurchaseOrderItems) {
+    const quantityRemaining = Math.max(0, item.quantityOrdered - item.quantityReceived);
+    if (quantityRemaining <= 0) {
+      continue;
+    }
+
+    const existing = incomingMap.get(item.variantId) ?? {
+      onOpenPurchaseOrders: 0,
+      openPurchaseOrders: [],
+    };
+    existing.onOpenPurchaseOrders += quantityRemaining;
+    existing.openPurchaseOrders.push({
+      id: item.purchaseOrder.id,
+      poNumber: item.purchaseOrder.poNumber,
+      status: item.purchaseOrder.status,
+      expectedAt: item.purchaseOrder.expectedAt,
+      supplierName: item.purchaseOrder.supplier.name,
+      quantityRemaining,
+    });
+    incomingMap.set(item.variantId, existing);
+  }
+
+  const allSuggestions = variantIds
+    .map((variantId) => {
+      const variant = variantMap.get(variantId);
+      if (!variant) {
+        return null;
+      }
+
+      const sales = salesMap.get(variantId) ?? { quantitySold: 0, lastSoldAt: null };
+      const purchasing = incomingMap.get(variantId) ?? {
+        onOpenPurchaseOrders: 0,
+        openPurchaseOrders: [],
+      };
+      const currentOnHand = onHandMap.get(variantId) ?? 0;
+      const dailyDemand = sales.quantitySold > 0 ? sales.quantitySold / REORDER_LOOKBACK_DAYS : 0;
+      const targetStockQty = Math.max(0, Math.ceil(dailyDemand * REORDER_TARGET_COVERAGE_DAYS));
+      const suggestedReorderQty = Math.max(
+        0,
+        targetStockQty - Math.max(0, currentOnHand) - purchasing.onOpenPurchaseOrders,
+      );
+      const daysOfCover = dailyDemand > 0 ? Number((Math.max(0, currentOnHand) / dailyDemand).toFixed(1)) : null;
+
+      let urgency: ReorderSuggestionUrgency | null = null;
+      if (suggestedReorderQty > 0 && (currentOnHand <= 0 || (daysOfCover !== null && daysOfCover <= 7))) {
+        urgency = "Reorder Now";
+      } else if (suggestedReorderQty > 0) {
+        urgency = "Reorder Soon";
+      } else if (sales.quantitySold > 0 && purchasing.onOpenPurchaseOrders > 0 && currentOnHand < targetStockQty) {
+        urgency = "On Order";
+      }
+
+      if (!urgency) {
+        return null;
+      }
+
+      const displayName = variant.name?.trim() || variant.option?.trim() || variant.product.name;
+      const openPurchaseOrders = [...purchasing.openPurchaseOrders].sort((left, right) => {
+        const leftTime = left.expectedAt ? new Date(left.expectedAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const rightTime = right.expectedAt ? new Date(right.expectedAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return leftTime - rightTime || left.poNumber.localeCompare(right.poNumber);
+      });
+
+      return {
+        variantId,
+        productId: variant.product.id,
+        productName: variant.product.name,
+        variantName: variant.name,
+        displayName,
+        sku: variant.sku,
+        currentOnHand,
+        recentSalesQty: sales.quantitySold,
+        daysOfCover,
+        targetStockQty,
+        suggestedReorderQty,
+        urgency,
+        onOpenPurchaseOrders: purchasing.onOpenPurchaseOrders,
+        openPurchaseOrders,
+        lastSoldAt: sales.lastSoldAt,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+    .sort((left, right) => (
+      reorderUrgencyRank[right.urgency] - reorderUrgencyRank[left.urgency]
+      || right.suggestedReorderQty - left.suggestedReorderQty
+      || right.recentSalesQty - left.recentSalesQty
+      || left.productName.localeCompare(right.productName)
+      || left.displayName.localeCompare(right.displayName)
+    ));
+
+  const items = allSuggestions.slice(0, normalizedTake);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    heuristic: {
+      lookbackDays: REORDER_LOOKBACK_DAYS,
+      targetCoverageDays: REORDER_TARGET_COVERAGE_DAYS,
+      description: "Suggested reorder = 30-day sales demand minus current on-hand and open incoming PO quantity.",
+    },
+    summary: {
+      candidateCount: allSuggestions.length,
+      reorderNowCount: allSuggestions.filter((row) => row.urgency === "Reorder Now").length,
+      reorderSoonCount: allSuggestions.filter((row) => row.urgency === "Reorder Soon").length,
+      onOrderCount: allSuggestions.filter((row) => row.urgency === "On Order").length,
+      totalSuggestedQty: allSuggestions.reduce((sum, row) => sum + row.suggestedReorderQty, 0),
+    },
+    items,
+  };
+};
+
 export const getInventoryLocationSummaryReport = async (filters: {
   q?: string;
   active?: string;
