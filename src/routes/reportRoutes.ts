@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getActionCentreReportHandler,
   getCustomerServiceRemindersReportHandler,
+  getInventoryInvestigationsReportHandler,
   getInventoryOnHandReportHandler,
   getInventoryOnHandReportCsvHandler,
   getInventoryReorderSuggestionsReportHandler,
@@ -51,6 +52,7 @@ reportRouter.get("/payments", requireRoleAtLeast("MANAGER"), getPaymentsReportCs
 reportRouter.get("/sales/products", requireRoleAtLeast("MANAGER"), getProductSalesReportHandler);
 reportRouter.get("/inventory/location-summary", requireRoleAtLeast("STAFF"), getInventoryLocationSummaryReportHandler);
 reportRouter.get("/inventory-velocity", requireRoleAtLeast("MANAGER"), getInventoryVelocityHandler);
+reportRouter.get("/inventory/investigations", requireRoleAtLeast("MANAGER"), getInventoryInvestigationsReportHandler);
 reportRouter.get("/inventory/velocity", requireRoleAtLeast("MANAGER"), getInventoryVelocityReportHandler);
 reportRouter.get("/inventory/reorder-suggestions", requireRoleAtLeast("MANAGER"), getInventoryReorderSuggestionsReportHandler);
 reportRouter.get("/operations/actions", requireRoleAtLeast("MANAGER"), getActionCentreReportHandler);

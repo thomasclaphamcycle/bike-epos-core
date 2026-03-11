@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { HttpError } from "../../utils/http";
+import { getPricingExceptionsReport } from "./pricingReports";
 import {
   assertLocationIdOrThrow,
   getDateRangeWithTakeOrThrow,
@@ -466,6 +467,20 @@ const reorderUrgencyRank: Record<ReorderSuggestionUrgency, number> = {
   "On Order": 1,
 };
 
+type InventoryInvestigationIssueType =
+  | "NEGATIVE_STOCK"
+  | "DEAD_STOCK"
+  | "RETAIL_AT_OR_BELOW_COST"
+  | "MISSING_RETAIL_PRICE";
+type InventoryInvestigationSeverity = "CRITICAL" | "WARNING" | "INFO";
+
+const INVENTORY_INVESTIGATION_LOOKBACK_DAYS = 180;
+const inventoryInvestigationSeverityRank: Record<InventoryInvestigationSeverity, number> = {
+  CRITICAL: 3,
+  WARNING: 2,
+  INFO: 1,
+};
+
 export const getInventoryReorderSuggestionsReport = async (take?: number) => {
   const normalizedTake = take ?? 100;
   if (!Number.isInteger(normalizedTake) || normalizedTake < 1 || normalizedTake > 200) {
@@ -838,5 +853,161 @@ export const getInventoryLocationSummaryReport = async (filters: {
     },
     locations: visibleLocations,
     rows,
+  };
+};
+
+export const getInventoryInvestigationsReport = async () => {
+  const now = new Date();
+  const from180Days = new Date(now);
+  from180Days.setUTCDate(from180Days.getUTCDate() - (INVENTORY_INVESTIGATION_LOOKBACK_DAYS - 1));
+  from180Days.setUTCHours(0, 0, 0, 0);
+
+  const [stockRows, pricingReport, saleItems] = await Promise.all([
+    prisma.inventoryMovement.groupBy({
+      by: ["variantId"],
+      _sum: {
+        quantity: true,
+      },
+    }),
+    getPricingExceptionsReport(),
+    prisma.saleItem.findMany({
+      where: {
+        sale: {
+          completedAt: {
+            gte: from180Days,
+            lte: now,
+          },
+        },
+      },
+      select: {
+        quantity: true,
+        variant: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const variantIds = Array.from(new Set([
+    ...stockRows.map((row) => row.variantId),
+    ...pricingReport.items.map((row) => row.variantId),
+    ...saleItems.map((item) => item.variant.id),
+  ]));
+
+  const variants = variantIds.length > 0
+    ? await prisma.variant.findMany({
+        where: {
+          id: {
+            in: variantIds,
+          },
+        },
+        select: {
+          id: true,
+          sku: true,
+          product: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      })
+    : [];
+
+  const variantMap = new Map(variants.map((variant) => [variant.id, variant]));
+  const onHandMap = new Map(stockRows.map((row) => [row.variantId, toInteger(row._sum.quantity)]));
+  const sales180Map = new Map<string, number>();
+
+  for (const item of saleItems) {
+    sales180Map.set(item.variant.id, (sales180Map.get(item.variant.id) ?? 0) + item.quantity);
+  }
+
+  const stockItems = variantIds
+    .flatMap((variantId) => {
+      const variant = variantMap.get(variantId);
+      if (!variant) {
+        return [];
+      }
+
+      const onHand = onHandMap.get(variantId) ?? 0;
+      const sales180Days = sales180Map.get(variantId) ?? 0;
+      const items: Array<{
+        variantId: string;
+        productName: string;
+        sku: string;
+        issueType: InventoryInvestigationIssueType;
+        description: string;
+        severity: InventoryInvestigationSeverity;
+        link: string;
+      }> = [];
+
+      if (onHand < 0) {
+        items.push({
+          variantId,
+          productName: variant.product.name,
+          sku: variant.sku,
+          issueType: "NEGATIVE_STOCK",
+          description: `${Math.abs(onHand)} units below zero on hand. Review recent movements and adjustments.`,
+          severity: "CRITICAL",
+          link: `/inventory/${variantId}`,
+        });
+      }
+
+      if (onHand > 0 && sales180Days === 0) {
+        items.push({
+          variantId,
+          productName: variant.product.name,
+          sku: variant.sku,
+          issueType: "DEAD_STOCK",
+          description: `${onHand} on hand with no completed sales in the last ${INVENTORY_INVESTIGATION_LOOKBACK_DAYS} days.`,
+          severity: "WARNING",
+          link: `/inventory/${variantId}`,
+        });
+      }
+
+      return items;
+    });
+
+  const pricingItems = pricingReport.items
+    .filter((row) => (
+      row.exceptionType === "MISSING_RETAIL_PRICE"
+      || row.exceptionType === "RETAIL_AT_OR_BELOW_COST"
+    ))
+    .map((row) => ({
+      variantId: row.variantId,
+      productName: row.productName,
+      sku: row.sku,
+      issueType: row.exceptionType as InventoryInvestigationIssueType,
+      description:
+        row.exceptionType === "MISSING_RETAIL_PRICE"
+          ? `SKU ${row.sku} has no usable retail price.`
+          : `SKU ${row.sku} is priced at or below cost.`,
+      severity: (row.exceptionType === "MISSING_RETAIL_PRICE" ? "WARNING" : "CRITICAL") as InventoryInvestigationSeverity,
+      link: row.exceptionType === "MISSING_RETAIL_PRICE" ? "/management/pricing" : "/management/pricing",
+    }));
+
+  const items = [...stockItems, ...pricingItems]
+    .sort((left, right) => (
+      inventoryInvestigationSeverityRank[right.severity] - inventoryInvestigationSeverityRank[left.severity]
+      || left.productName.localeCompare(right.productName)
+      || left.sku.localeCompare(right.sku)
+      || left.issueType.localeCompare(right.issueType)
+    ));
+
+  return {
+    generatedAt: now.toISOString(),
+    lookbackDays: INVENTORY_INVESTIGATION_LOOKBACK_DAYS,
+    summary: {
+      total: items.length,
+      negativeStockCount: items.filter((row) => row.issueType === "NEGATIVE_STOCK").length,
+      deadStockCount: items.filter((row) => row.issueType === "DEAD_STOCK").length,
+      retailAtOrBelowCostCount: items.filter((row) => row.issueType === "RETAIL_AT_OR_BELOW_COST").length,
+      missingRetailPriceCount: items.filter((row) => row.issueType === "MISSING_RETAIL_PRICE").length,
+      critical: items.filter((row) => row.severity === "CRITICAL").length,
+      warning: items.filter((row) => row.severity === "WARNING").length,
+      info: items.filter((row) => row.severity === "INFO").length,
+    },
+    items,
   };
 };

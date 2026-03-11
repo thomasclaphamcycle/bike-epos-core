@@ -98,6 +98,7 @@ export const ActionCentrePage = () => {
             <button type="button" onClick={() => void loadReport()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+            <Link to="/management/investigations">Stock Investigations</Link>
             <Link to="/management/exceptions">Exceptions</Link>
           </div>
         </div>
@@ -144,6 +145,7 @@ export const ActionCentrePage = () => {
                 <option value="INFO">Info</option>
               </select>
             </label>
+            <Link to="/management/investigations">Investigations</Link>
             <Link to="/management">Management</Link>
           </div>
         </div>

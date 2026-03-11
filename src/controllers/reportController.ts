@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   getActionCentreReport,
   getCustomerServiceRemindersReport,
+  getInventoryInvestigationsReport,
   getInventoryOnHandReport,
   getInventoryVelocityReport,
   getInventoryValueReport,
@@ -187,6 +188,11 @@ export const getInventoryVelocityHandler = async (_req: Request, res: Response) 
 
 export const getInventoryReorderSuggestionsReportHandler = async (req: Request, res: Response) => {
   const report = await getInventoryReorderSuggestionsReport(getTakeQuery(req));
+  res.json(report);
+};
+
+export const getInventoryInvestigationsReportHandler = async (_req: Request, res: Response) => {
+  const report = await getInventoryInvestigationsReport();
   res.json(report);
 };
 
