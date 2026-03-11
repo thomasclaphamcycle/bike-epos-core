@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://localhost:3000";
 const packageJson = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
 const gitCommit = (() => {
