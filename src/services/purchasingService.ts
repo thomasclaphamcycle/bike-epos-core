@@ -110,8 +110,6 @@ const parseOptionalSkip = (value: number | undefined): number | undefined => {
 };
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-const PURCHASE_ORDER_NUMBER_PREFIX = normalizeOptionalText(process.env.PURCHASE_ORDER_NUMBER_PREFIX) || "COREPOS";
-
 const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date | undefined => {
   const normalized = normalizeOptionalText(value);
   if (!normalized) {
@@ -338,33 +336,51 @@ const toPurchaseOrderResponse = (po: {
   };
 };
 
-const getPurchaseOrderNumberPrefixForYear = (year: number) => `${PURCHASE_ORDER_NUMBER_PREFIX}-PO-${year}-`;
+const getLegacyPurchaseOrderNumberPrefixForYear = (year: number) => `COREPOS-PO-${year}-`;
+
+const getCompactPurchaseOrderNumberPrefixForYear = (year: number) =>
+  `PO${year.toString().slice(-2)}`;
 
 const buildPurchaseOrderNumber = (year: number, sequenceNumber: number) =>
-  `${getPurchaseOrderNumberPrefixForYear(year)}${String(sequenceNumber).padStart(6, "0")}`;
+  `${getCompactPurchaseOrderNumberPrefixForYear(year)}${String(sequenceNumber).padStart(6, "0")}`;
 
 const getNextPurchaseOrderNumber = async (
   tx: Prisma.TransactionClient,
   createdAt: Date,
 ) => {
   const year = createdAt.getUTCFullYear();
-  const prefix = getPurchaseOrderNumberPrefixForYear(year);
+  const legacyPrefix = getLegacyPurchaseOrderNumberPrefixForYear(year);
+  const compactPrefix = getCompactPurchaseOrderNumberPrefixForYear(year);
 
-  const latest = await tx.purchaseOrder.findFirst({
+  const purchaseOrders = await tx.purchaseOrder.findMany({
     where: {
-      poNumber: {
-        startsWith: prefix,
-      },
-    },
-    orderBy: {
-      poNumber: "desc",
+      OR: [
+        {
+          poNumber: {
+            startsWith: legacyPrefix,
+          },
+        },
+        {
+          poNumber: {
+            startsWith: compactPrefix,
+          },
+        },
+      ],
     },
     select: {
       poNumber: true,
     },
   });
 
-  const nextSequence = latest ? Number.parseInt(latest.poNumber.slice(-6), 10) + 1 : 1;
+  const nextSequence =
+    purchaseOrders.reduce((maxSequence, purchaseOrder) => {
+      const sequence = Number.parseInt(purchaseOrder.poNumber.slice(-6), 10);
+      if (Number.isNaN(sequence)) {
+        return maxSequence;
+      }
+      return Math.max(maxSequence, sequence);
+    }, 0) + 1;
+
   return buildPurchaseOrderNumber(year, nextSequence);
 };
 

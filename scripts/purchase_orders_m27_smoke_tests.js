@@ -312,7 +312,7 @@ const run = async () => {
     });
     assert.equal(poRes.status, 201, JSON.stringify(poRes.json));
     assert.equal(poRes.json.status, "DRAFT");
-    assert.match(poRes.json.poNumber, /^COREPOS-PO-\d{4}-\d{6}$/);
+    assert.match(poRes.json.poNumber, /^PO\d{8}$/);
     state.purchaseOrderIds.add(poRes.json.id);
 
     const addItemsRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}/items`, {
