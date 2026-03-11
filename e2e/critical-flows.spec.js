@@ -16,6 +16,28 @@ const parseOnHand = (labelText) => {
   return Number.parseInt(match[1], 10);
 };
 
+const ensureOpenRegisterSession = async (request) => {
+  const current = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    "/api/management/cash/register/current",
+    "MANAGER",
+  );
+  if (current?.session?.id) {
+    return current;
+  }
+
+  return apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    "/api/management/cash/register/open",
+    "MANAGER",
+    {
+      data: { openingFloatPence: 0 },
+    },
+  );
+};
+
 test.describe.configure({ mode: "serial" });
 
 test("Auth routing redirects and navigation visibility follows role", async ({ page, request }) => {
@@ -40,7 +62,8 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await page.context().clearCookies();
   await loginViaUi(page, managerCredentials, "/pos", { surface: "frontend" });
   await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cash Management", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back Office", exact: true })).toBeVisible();
   await page.goto("/management/cash");
   await expect(page).toHaveURL(/\/management\/cash/);
 
@@ -51,7 +74,7 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await page.context().clearCookies();
   await loginViaUi(page, adminCredentials, "/admin", { surface: "frontend" });
   await expect(page.getByRole("link", { name: "POS", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Products", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
   await page.goto("/management/staff");
   await expect(page).toHaveURL(/\/management\/staff/);
 });
@@ -77,6 +100,7 @@ test("Login then POS add to basket, checkout cash, and open receipt page", async
     prefix: "pos-login-checkout",
   });
   const seeded = await seedCatalogVariant(request, { prefix: "pos-checkout" });
+  await ensureOpenRegisterSession(request);
 
   await loginViaUi(page, credentials, "/pos");
   await page.fill("#search-q", seeded.sku);

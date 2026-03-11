@@ -467,6 +467,8 @@ export const PosPage = () => {
     return basket?.totals.totalPence ?? 0;
   }, [sale, basket]);
 
+  const basketLineCount = basket?.items.length ?? 0;
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -489,7 +491,7 @@ export const PosPage = () => {
         </div>
 
         <p className="muted-text">
-          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Total: {formatMoney(activeTotal)}
+          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Lines: {basketLineCount} | Total: {formatMoney(activeTotal)}
         </p>
 
         {loading ? <p>Loading...</p> : null}
@@ -654,8 +656,28 @@ export const PosPage = () => {
                   <td colSpan={5}>No results.</td>
                 </tr>
               ) : (
-                searchRows.map((row) => (
-                  <tr key={row.id}>
+                searchRows.map((row) => {
+                  const canAdd = Boolean(basketId) && !saleId;
+
+                  return (
+                  <tr
+                    key={row.id}
+                    className={canAdd ? "clickable-row" : undefined}
+                    onClick={canAdd ? () => void addItem(row.id) : undefined}
+                    onKeyDown={
+                      canAdd
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              void addItem(row.id);
+                            }
+                          }
+                        : undefined
+                    }
+                    role={canAdd ? "button" : undefined}
+                    tabIndex={canAdd ? 0 : undefined}
+                    aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
+                  >
                     <td>{row.name}</td>
                     <td>{row.sku}</td>
                     <td>{formatMoney(row.pricePence)}</td>
@@ -664,14 +686,17 @@ export const PosPage = () => {
                       <button
                         type="button"
                         data-testid={`pos-product-add-${row.id}`}
-                        onClick={() => void addItem(row.id)}
-                        disabled={!basketId || Boolean(saleId)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void addItem(row.id);
+                        }}
+                        disabled={!canAdd}
                       >
                         Add
                       </button>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>
