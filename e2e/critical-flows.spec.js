@@ -388,6 +388,127 @@ test("Login then inventory adjust page can increment on-hand quantity", async ({
   await expect(page.locator("#onhand-result")).toContainText(String(beforeOnHand + 1));
 });
 
+test("Purchase order receiving shortcuts populate remaining quantities without auto-submitting", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "po-receive-shortcuts",
+  });
+  const token = uniqueToken("po-receive-shortcuts");
+  const firstVariant = await seedCatalogVariant(request, {
+    prefix: "po-shortcut-a",
+    initialOnHand: 1,
+  });
+  const secondVariant = await seedCatalogVariant(request, {
+    prefix: "po-shortcut-b",
+    initialOnHand: 0,
+  });
+
+  const supplier = await apiJsonWithHeaderBypass(request, "POST", "/api/suppliers", "MANAGER", {
+    data: {
+      name: `PO Shortcut Supplier ${token}`,
+      email: `${token}@supplier.test`,
+    },
+  });
+
+  const purchaseOrder = await apiJsonWithHeaderBypass(request, "POST", "/api/purchase-orders", "MANAGER", {
+    data: {
+      supplierId: supplier.id,
+      notes: `Shortcut test ${token}`,
+    },
+  });
+
+  const addItems = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/purchase-orders/${encodeURIComponent(purchaseOrder.id)}/items`,
+    "MANAGER",
+    {
+      data: {
+        lines: [
+          {
+            variantId: firstVariant.variant.id,
+            quantityOrdered: 3,
+            unitCostPence: 1200,
+          },
+          {
+            variantId: secondVariant.variant.id,
+            quantityOrdered: 2,
+            unitCostPence: 900,
+          },
+        ],
+      },
+    },
+  );
+
+  const firstLine = addItems.items.find((item) => item.variantId === firstVariant.variant.id);
+  const secondLine = addItems.items.find((item) => item.variantId === secondVariant.variant.id);
+  expect(firstLine?.id).toBeTruthy();
+  expect(secondLine?.id).toBeTruthy();
+
+  await apiJsonWithHeaderBypass(request, "PATCH", `/api/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`, "MANAGER", {
+    data: {
+      status: "SENT",
+    },
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, `/purchasing/${purchaseOrder.id}`, { surface: "frontend" });
+  await expect(page.getByRole("heading", { name: "Purchase Order", exact: true })).toBeVisible();
+  await expect(page.getByTestId("po-receive-location")).not.toHaveValue("");
+
+  await page.getByTestId(`po-receive-fill-${firstLine.id}`).click();
+  await expect(page.getByTestId(`po-receive-qty-${firstLine.id}`)).toHaveValue("3");
+  await expect(page.getByTestId(`po-receive-qty-${secondLine.id}`)).toHaveValue("");
+
+  await Promise.all([
+    page.waitForResponse((response) => (
+      response.url().includes(`/api/purchase-orders/${purchaseOrder.id}/receive`)
+      && response.request().method() === "POST"
+      && response.status() === 200
+    )),
+    page.getByTestId(`po-receive-submit-${firstLine.id}`).click(),
+  ]);
+  await expect(page.locator(".restricted-panel").filter({ hasText: `Received 3 units for ${firstVariant.product.name}.` })).toBeVisible();
+
+  const afterFirstReceive = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`,
+    "MANAGER",
+  );
+  const afterFirstLine = afterFirstReceive.items.find((item) => item.id === firstLine.id);
+  const afterSecondLine = afterFirstReceive.items.find((item) => item.id === secondLine.id);
+  expect(afterFirstReceive.status).toBe("PARTIALLY_RECEIVED");
+  expect(afterFirstLine.quantityRemaining).toBe(0);
+  expect(afterSecondLine.quantityRemaining).toBe(2);
+
+  await page.getByTestId("po-receive-fill-all").click();
+  await expect(page.getByTestId(`po-receive-qty-${firstLine.id}`)).toHaveValue("");
+  await expect(page.getByTestId(`po-receive-qty-${firstLine.id}`)).toBeDisabled();
+  await expect(page.getByTestId(`po-receive-qty-${secondLine.id}`)).toHaveValue("2");
+
+  await Promise.all([
+    page.waitForResponse((response) => (
+      response.url().includes(`/api/purchase-orders/${purchaseOrder.id}/receive`)
+      && response.request().method() === "POST"
+      && response.status() === 200
+    )),
+    page.getByTestId(`po-receive-submit-${secondLine.id}`).click(),
+  ]);
+
+  const finalPurchaseOrder = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`,
+    "MANAGER",
+  );
+  expect(finalPurchaseOrder.status).toBe("RECEIVED");
+  expect(finalPurchaseOrder.totals.quantityRemaining).toBe(0);
+});
+
 test("Admin creates staff and staff cannot access admin endpoints", async ({ page, request }) => {
   const adminCredentials = await ensureUserViaAdminBypass(request, {
     role: "ADMIN",

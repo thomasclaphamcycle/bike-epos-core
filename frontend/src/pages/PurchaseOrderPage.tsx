@@ -89,6 +89,11 @@ type ReceivingLine = {
   unitCostPence: string;
 };
 
+type ReceiveValidationResult = {
+  isValid: boolean;
+  message: string | null;
+};
+
 const formatMoney = (pence: number | null) =>
   pence === null ? "-" : `£${(pence / 100).toFixed(2)}`;
 
@@ -113,7 +118,7 @@ const toStatusBadgeClass = (status: PurchaseOrder["status"]) => {
 const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
   switch (status) {
     case "PARTIALLY_RECEIVED":
-      return "Part Received";
+      return "Partially Received";
     case "SENT":
       return "Ordered";
     default:
@@ -146,6 +151,8 @@ export const PurchaseOrderPage = () => {
   const [lineEdits, setLineEdits] = useState<Record<string, EditableLine>>({});
   const [receivingEdits, setReceivingEdits] = useState<Record<string, ReceivingLine>>({});
   const [locationId, setLocationId] = useState("");
+  const [submittingReceiveItemId, setSubmittingReceiveItemId] = useState<string | null>(null);
+  const [receiveSuccessMessage, setReceiveSuccessMessage] = useState<string | null>(null);
 
   const [variantSearch, setVariantSearch] = useState("");
   const debouncedVariantSearch = useDebouncedValue(variantSearch, 250);
@@ -378,28 +385,23 @@ export const PurchaseOrderPage = () => {
       return;
     }
 
+    const item = purchaseOrder?.items.find((line) => line.id === itemId);
+    if (!item) {
+      return;
+    }
     const receipt = receivingEdits[itemId];
-    if (!receipt) {
+    const validation = validateReceiveLine(item, receipt);
+    if (!validation.isValid) {
+      error(validation.message || "Receive quantity is invalid.");
       return;
     }
 
-    const quantity = Number.parseInt(receipt.quantity, 10);
+    const quantity = Number.parseInt(receipt!.quantity, 10);
     const parsedUnitCost =
-      receipt.unitCostPence.trim().length > 0 ? Number.parseInt(receipt.unitCostPence, 10) : undefined;
+      receipt!.unitCostPence.trim().length > 0 ? Number.parseInt(receipt!.unitCostPence, 10) : undefined;
 
-    if (!locationId) {
-      error("Select a receive location.");
-      return;
-    }
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      error("Receive quantity must be a positive integer.");
-      return;
-    }
-    if (parsedUnitCost !== undefined && (!Number.isInteger(parsedUnitCost) || parsedUnitCost < 0)) {
-      error("Receive unit cost must be a non-negative integer.");
-      return;
-    }
-
+    setSubmittingReceiveItemId(itemId);
+    setReceiveSuccessMessage(null);
     try {
       await apiPost(`/api/purchase-orders/${encodeURIComponent(id)}/receive`, {
         locationId,
@@ -411,12 +413,99 @@ export const PurchaseOrderPage = () => {
           },
         ],
       });
-      success("Receiving posted");
+      const successMessage = `Received ${quantity} unit${quantity === 1 ? "" : "s"} for ${item.productName}.`;
+      success(successMessage);
+      setReceiveSuccessMessage(successMessage);
       await loadPurchaseOrder();
     } catch (receiveError) {
       const message = receiveError instanceof Error ? receiveError.message : "Failed to receive stock";
       error(message);
+    } finally {
+      setSubmittingReceiveItemId(null);
     }
+  };
+
+  const populateReceiveRemaining = (itemId: string, quantityRemaining: number) => {
+    if (quantityRemaining <= 0) {
+      return;
+    }
+
+    setReceivingEdits((current) => ({
+      ...current,
+      [itemId]: {
+        quantity: String(quantityRemaining),
+        unitCostPence: current[itemId]?.unitCostPence ?? "",
+      },
+    }));
+  };
+
+  const populateAllReceiveRemaining = () => {
+    if (!purchaseOrder) {
+      return;
+    }
+
+    setReceivingEdits((current) => {
+      const next = { ...current };
+      for (const item of purchaseOrder.items) {
+        if (item.quantityRemaining <= 0) {
+          continue;
+        }
+
+        next[item.id] = {
+          quantity: String(item.quantityRemaining),
+          unitCostPence: current[item.id]?.unitCostPence ?? "",
+        };
+      }
+      return next;
+    });
+  };
+
+  const validateReceiveLine = (
+    item: PurchaseOrderItem,
+    receipt: ReceivingLine | undefined,
+  ): ReceiveValidationResult => {
+    if (!locationId) {
+      return {
+        isValid: false,
+        message: "Select a receive location.",
+      };
+    }
+
+    if (!receipt || receipt.quantity.trim().length === 0) {
+      return {
+        isValid: false,
+        message: "Enter a receive quantity before submitting.",
+      };
+    }
+
+    const quantity = Number.parseInt(receipt.quantity, 10);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return {
+        isValid: false,
+        message: "Receive quantity must be a positive integer.",
+      };
+    }
+
+    if (quantity > item.quantityRemaining) {
+      return {
+        isValid: false,
+        message: `Receive quantity cannot exceed remaining quantity (${item.quantityRemaining}).`,
+      };
+    }
+
+    const parsedUnitCost =
+      receipt.unitCostPence.trim().length > 0 ? Number.parseInt(receipt.unitCostPence, 10) : undefined;
+    if (parsedUnitCost !== undefined && (!Number.isInteger(parsedUnitCost) || parsedUnitCost < 0)) {
+      return {
+        isValid: false,
+        message: "Receive unit cost must be a non-negative integer.",
+      };
+    }
+
+    return {
+      isValid: true,
+      message: null,
+    };
   };
 
   const totalEstimatedCost = useMemo(() => {
@@ -469,7 +558,9 @@ export const PurchaseOrderPage = () => {
                 <strong className="metric-value detail-metric-text">
                   <span className={toStatusBadgeClass(purchaseOrder.status)}>{formatPurchaseOrderStatus(purchaseOrder.status)}</span>
                 </strong>
-                <span className="table-secondary">Remaining units: {purchaseOrder.totals.quantityRemaining}</span>
+                <span className="table-secondary">
+                  Ordered {purchaseOrder.totals.quantityOrdered} | Received {purchaseOrder.totals.quantityReceived} | Remaining {purchaseOrder.totals.quantityRemaining}
+                </span>
               </div>
               <div className="metric-card">
                 <span className="metric-label">Estimated Cost</span>
@@ -723,10 +814,38 @@ export const PurchaseOrderPage = () => {
           </div>
         ) : (
           <>
+            <div className="detail-grid">
+              <div className="metric-card">
+                <span className="metric-label">Ordered</span>
+                <strong className="metric-value">{purchaseOrder.totals.quantityOrdered}</strong>
+                <span className="table-secondary">Units on this PO</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Received</span>
+                <strong className="metric-value">{purchaseOrder.totals.quantityReceived}</strong>
+                <span className="table-secondary">Booked into stock</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Remaining</span>
+                <strong className="metric-value">{purchaseOrder.totals.quantityRemaining}</strong>
+                <span className="table-secondary">
+                  {purchaseOrder.status === "PARTIALLY_RECEIVED" ? "Awaiting final receipt" : "Still to receive"}
+                </span>
+              </div>
+            </div>
+
+            {receiveSuccessMessage ? (
+              <div className="restricted-panel">{receiveSuccessMessage}</div>
+            ) : null}
+
             <div className="filter-row">
               <label>
                 Receive Location
-                <select value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+                <select
+                  value={locationId}
+                  onChange={(event) => setLocationId(event.target.value)}
+                  data-testid="po-receive-location"
+                >
                   <option value="">Select location</option>
                   {locations.map((location) => (
                     <option key={location.id} value={location.id}>
@@ -735,6 +854,17 @@ export const PurchaseOrderPage = () => {
                   ))}
                 </select>
               </label>
+              <div className="actions-inline">
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={populateAllReceiveRemaining}
+                  disabled={submittingReceiveItemId !== null || purchaseOrder.items.every((item) => item.quantityRemaining <= 0)}
+                  data-testid="po-receive-fill-all"
+                >
+                  Receive All Remaining
+                </button>
+              </div>
             </div>
 
             <div className="table-wrap">
@@ -743,8 +873,10 @@ export const PurchaseOrderPage = () => {
                   <tr>
                     <th>Product</th>
                     <th>Variant</th>
+                    <th>Ordered</th>
+                    <th>Received</th>
                     <th>Remaining</th>
-                    <th>Receive Qty</th>
+                    <th>Receive Now</th>
                     <th>Unit Cost (pence)</th>
                     <th>Action</th>
                   </tr>
@@ -752,23 +884,29 @@ export const PurchaseOrderPage = () => {
                 <tbody>
                   {purchaseOrder.items.length === 0 ? (
                     <tr>
-                      <td colSpan={6}>No lines available for receiving.</td>
+                      <td colSpan={8}>No lines available for receiving.</td>
                     </tr>
                   ) : (
                     purchaseOrder.items.map((item) => {
                       const receipt = receivingEdits[item.id];
+                      const validation = validateReceiveLine(item, receipt);
+                      const isSubmitting = submittingReceiveItemId === item.id;
                       return (
                         <tr key={`${item.id}-receive`}>
                           <td>{item.productName}</td>
                           <td>{item.variantName || item.sku}</td>
+                          <td className="numeric-cell">{item.quantityOrdered}</td>
+                          <td className="numeric-cell">{item.quantityReceived}</td>
                           <td className="numeric-cell">{item.quantityRemaining}</td>
                           <td>
                             <input
                               className="compact-input"
                               type="number"
                               min="1"
+                              max={String(item.quantityRemaining)}
                               step="1"
                               value={receipt?.quantity ?? ""}
+                              data-testid={`po-receive-qty-${item.id}`}
                               onChange={(event) =>
                                 setReceivingEdits((current) => ({
                                   ...current,
@@ -778,7 +916,7 @@ export const PurchaseOrderPage = () => {
                                   },
                                 }))
                               }
-                              disabled={item.quantityRemaining <= 0}
+                              disabled={item.quantityRemaining <= 0 || isSubmitting}
                             />
                           </td>
                           <td>
@@ -797,17 +935,31 @@ export const PurchaseOrderPage = () => {
                                   },
                                 }))
                               }
-                              disabled={item.quantityRemaining <= 0}
+                              disabled={item.quantityRemaining <= 0 || isSubmitting}
                             />
                           </td>
                           <td>
-                            <button
-                              type="button"
-                              onClick={() => void receiveLine(item.id)}
-                              disabled={item.quantityRemaining <= 0}
-                            >
-                              Receive
-                            </button>
+                            <div className="actions-inline">
+                              <button
+                                type="button"
+                                onClick={() => populateReceiveRemaining(item.id, item.quantityRemaining)}
+                                disabled={item.quantityRemaining <= 0 || isSubmitting}
+                                data-testid={`po-receive-fill-${item.id}`}
+                              >
+                                Receive Remaining
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void receiveLine(item.id)}
+                                disabled={item.quantityRemaining <= 0 || isSubmitting || !validation.isValid}
+                                data-testid={`po-receive-submit-${item.id}`}
+                              >
+                                {isSubmitting ? "Receiving..." : "Receive"}
+                              </button>
+                            </div>
+                            {!validation.isValid && item.quantityRemaining > 0 ? (
+                              <div className="table-secondary">{validation.message}</div>
+                            ) : null}
                           </td>
                         </tr>
                       );
