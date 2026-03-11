@@ -16,6 +16,7 @@ import {
   getSalesDailyReportHandler,
   getSalesDailyReportCsvHandler,
   getSupplierPerformanceReportHandler,
+  getWorkshopCapacityReportHandler,
   getWorkshopDailyReportHandler,
   getWorkshopDailyReportCsvHandler,
   getWorkshopWarrantyReportHandler,
@@ -54,4 +55,5 @@ reportRouter.get("/pricing/exceptions", requireRoleAtLeast("MANAGER"), getPricin
 reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSupplierPerformanceReportHandler);
 reportRouter.get("/customers/insights", requireRoleAtLeast("MANAGER"), getCustomerInsightsReportHandler);
 reportRouter.get("/customers/reminders", requireRoleAtLeast("MANAGER"), getCustomerServiceRemindersReportHandler);
+reportRouter.get("/workshop/capacity", requireRoleAtLeast("MANAGER"), getWorkshopCapacityReportHandler);
 reportRouter.get("/workshop/warranty", requireRoleAtLeast("MANAGER"), getWorkshopWarrantyReportHandler);

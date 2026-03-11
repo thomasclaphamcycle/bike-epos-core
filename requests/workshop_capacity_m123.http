@@ -1,0 +1,5 @@
+### M123 Workshop Capacity
+
+GET http://localhost:3000/api/reports/workshop/capacity
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

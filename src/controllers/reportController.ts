@@ -13,6 +13,7 @@ import {
   getProductSalesReport,
   getSalesDailyReport,
   getSupplierPerformanceReport,
+  getWorkshopCapacityReport,
   getWorkshopWarrantyReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
@@ -61,6 +62,11 @@ export const getSalesDailyReportHandler = async (req: Request, res: Response) =>
 export const getWorkshopDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const report = await getWorkshopDailyReport(from, to);
+  res.json(report);
+};
+
+export const getWorkshopCapacityReportHandler = async (_req: Request, res: Response) => {
+  const report = await getWorkshopCapacityReport();
   res.json(report);
 };
 

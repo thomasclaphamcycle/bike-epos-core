@@ -3,162 +3,105 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
-type RangePreset = "30" | "90" | "365";
-
-type WorkshopDailyRow = {
-  date: string;
-  jobCount: number;
-  revenuePence: number;
-};
-
-type DashboardJob = {
-  id: string;
-  status: string;
-  assignedStaffId: string | null;
-  assignedStaffName: string | null;
-  partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
-};
-
-type WorkshopDashboardResponse = {
-  summary: {
-    totalJobs: number;
-    dueToday: number;
-    overdue: number;
-    byStatus: Record<string, number>;
+type WorkshopCapacityResponse = {
+  generatedAt: string;
+  lookbackDays: number;
+  openJobCount: number;
+  waitingForApprovalCount: number;
+  waitingForPartsCount: number;
+  completedJobsLast30Days: number;
+  averageCompletedPerDay: number;
+  estimatedBacklogDays: number | null;
+  ageingBuckets: {
+    zeroToTwoDays: number;
+    threeToSevenDays: number;
+    eightToFourteenDays: number;
+    fifteenPlusDays: number;
   };
-  jobs: DashboardJob[];
 };
 
-type WorkloadRow = {
-  key: string;
+type AgeingRow = {
   label: string;
-  openJobs: number;
-  waitingApproval: number;
-  waitingParts: number;
-  ready: number;
+  count: number;
+  actionPath: string;
+  actionLabel: string;
 };
 
-const formatDateKey = (value: Date) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, "0");
-  const day = `${value.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+const backlogBadgeClass = (backlogDays: number | null) => {
+  if (backlogDays === null) {
+    return "status-badge";
+  }
+  if (backlogDays >= 10) {
+    return "status-badge status-cancelled";
+  }
+  if (backlogDays >= 5) {
+    return "status-badge status-warning";
+  }
+  return "status-badge status-complete";
 };
 
-const shiftDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+const backlogLabel = (backlogDays: number | null) => {
+  if (backlogDays === null) {
+    return "No throughput data";
+  }
+  if (backlogDays >= 10) {
+    return "High pressure";
+  }
+  if (backlogDays >= 5) {
+    return "Moderate pressure";
+  }
+  return "Manageable";
 };
-
-const OPEN_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-  "BIKE_READY",
-]);
-
-const isWaitingParts = (job: DashboardJob) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT";
 
 export const WorkshopCapacityPage = () => {
   const { error } = useToasts();
-
-  const [rangePreset, setRangePreset] = useState<RangePreset>("90");
-  const [dailyRows, setDailyRows] = useState<WorkshopDailyRow[]>([]);
-  const [dashboard, setDashboard] = useState<WorkshopDashboardResponse | null>(null);
+  const [report, setReport] = useState<WorkshopCapacityResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const loadCapacity = async () => {
+  const loadReport = async () => {
     setLoading(true);
-    const today = new Date();
-    const to = formatDateKey(today);
-    const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
-
-    const [dailyResult, dashboardResult] = await Promise.allSettled([
-      apiGet<WorkshopDailyRow[]>(`/api/reports/workshop/daily?from=${from}&to=${to}`),
-      apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=100"),
-    ]);
-
-    if (dailyResult.status === "fulfilled") {
-      setDailyRows(dailyResult.value || []);
-    } else {
-      setDailyRows([]);
-      error(dailyResult.reason instanceof Error ? dailyResult.reason.message : "Failed to load workshop throughput");
+    try {
+      const payload = await apiGet<WorkshopCapacityResponse>("/api/reports/workshop/capacity");
+      setReport(payload);
+    } catch (loadError) {
+      setReport(null);
+      error(loadError instanceof Error ? loadError.message : "Failed to load workshop capacity");
+    } finally {
+      setLoading(false);
     }
-
-    if (dashboardResult.status === "fulfilled") {
-      setDashboard(dashboardResult.value);
-    } else {
-      setDashboard(null);
-      error(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : "Failed to load workshop queue");
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
-    void loadCapacity();
+    void loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangePreset]);
+  }, []);
 
-  const completedJobs = dailyRows.reduce((sum, row) => sum + row.jobCount, 0);
-  const averageJobsPerDay = dailyRows.length > 0 ? Number((completedJobs / dailyRows.length).toFixed(1)) : 0;
-
-  const jobs = dashboard?.jobs ?? [];
-  const openQueue = useMemo(
-    () => jobs.filter((job) => OPEN_STATUSES.has(job.status)).length,
-    [jobs],
-  );
-  const waitingApprovalCount = useMemo(
-    () => jobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length,
-    [jobs],
-  );
-  const waitingPartsCount = useMemo(
-    () => jobs.filter((job) => isWaitingParts(job)).length,
-    [jobs],
-  );
-  const backlogDays = averageJobsPerDay > 0 ? Number((openQueue / averageJobsPerDay).toFixed(1)) : null;
-
-  const workloadRows = useMemo<WorkloadRow[]>(() => {
-    const grouped = new Map<string, WorkloadRow>();
-
-    for (const job of jobs) {
-      if (!OPEN_STATUSES.has(job.status)) {
-        continue;
-      }
-
-      const key = job.assignedStaffId ?? "unassigned";
-      const label = job.assignedStaffName?.trim() || "Unassigned";
-      const existing = grouped.get(key) ?? {
-        key,
-        label,
-        openJobs: 0,
-        waitingApproval: 0,
-        waitingParts: 0,
-        ready: 0,
-      };
-
-      existing.openJobs += 1;
-      if (job.status === "WAITING_FOR_APPROVAL") {
-        existing.waitingApproval += 1;
-      }
-      if (isWaitingParts(job)) {
-        existing.waitingParts += 1;
-      }
-      if (job.status === "BIKE_READY") {
-        existing.ready += 1;
-      }
-
-      grouped.set(key, existing);
-    }
-
-    return Array.from(grouped.values()).sort((left, right) => (
-      right.openJobs - left.openJobs || left.label.localeCompare(right.label)
-    ));
-  }, [jobs]);
+  const ageingRows = useMemo<AgeingRow[]>(() => ([
+    {
+      label: "0 to 2 days",
+      count: report?.ageingBuckets.zeroToTwoDays ?? 0,
+      actionPath: "/workshop",
+      actionLabel: "Open workshop",
+    },
+    {
+      label: "3 to 7 days",
+      count: report?.ageingBuckets.threeToSevenDays ?? 0,
+      actionPath: "/management/workshop-ageing",
+      actionLabel: "Review ageing",
+    },
+    {
+      label: "8 to 14 days",
+      count: report?.ageingBuckets.eightToFourteenDays ?? 0,
+      actionPath: "/management/workshop-ageing",
+      actionLabel: "Review ageing",
+    },
+    {
+      label: "15+ days",
+      count: report?.ageingBuckets.fifteenPlusDays ?? 0,
+      actionPath: "/management/workshop-ageing",
+      actionLabel: "Escalate backlog",
+    },
+  ]), [report]);
 
   return (
     <div className="page-shell">
@@ -167,56 +110,51 @@ export const WorkshopCapacityPage = () => {
           <div>
             <h1>Workshop Capacity</h1>
             <p className="muted-text">
-              Manager-facing workshop capacity view built from current throughput and the live open queue. Backlog days are derived as open queue divided by average daily completions.
+              Practical management view of workshop backlog, ageing, and recent completion throughput using current job statuses and the last {report?.lookbackDays ?? 30} days of completions.
             </p>
           </div>
           <div className="actions-inline">
-            <label>
-              Range
-              <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as RangePreset)}>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="365">Last 365 days</option>
-              </select>
-            </label>
-            <button type="button" onClick={() => void loadCapacity()} disabled={loading}>
+            <button type="button" onClick={() => void loadReport()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+            <Link to="/workshop">Workshop</Link>
           </div>
         </div>
 
         <div className="dashboard-summary-grid">
           <div className="metric-card">
-            <span className="metric-label">Open Queue</span>
-            <strong className="metric-value">{openQueue}</strong>
-            <span className="dashboard-metric-detail">Current active workshop jobs</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Average Jobs / Day</span>
-            <strong className="metric-value">{averageJobsPerDay.toFixed(1)}</strong>
-            <span className="dashboard-metric-detail">Completed jobs over selected range</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Backlog Days</span>
-            <strong className="metric-value">{backlogDays === null ? "-" : backlogDays.toFixed(1)}</strong>
-            <span className="dashboard-metric-detail">
-              {backlogDays === null ? "No throughput data available" : "Derived from queue / throughput"}
-            </span>
+            <span className="metric-label">Open Jobs</span>
+            <strong className="metric-value">{report?.openJobCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Current active workshop backlog</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Waiting Approval</span>
-            <strong className="metric-value">{waitingApprovalCount}</strong>
-            <span className="dashboard-metric-detail">Open estimate decisions</span>
+            <strong className="metric-value">{report?.waitingForApprovalCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Jobs blocked on customer decision</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Waiting Parts</span>
-            <strong className="metric-value">{waitingPartsCount}</strong>
-            <span className="dashboard-metric-detail">Parts-limited jobs</span>
+            <strong className="metric-value">{report?.waitingForPartsCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Jobs blocked on parts arrival</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Overdue</span>
-            <strong className="metric-value">{dashboard?.summary.overdue ?? 0}</strong>
-            <span className="dashboard-metric-detail">Based on current scheduled dates</span>
+            <span className="metric-label">Completed (30d)</span>
+            <strong className="metric-value">{report?.completedJobsLast30Days ?? 0}</strong>
+            <span className="dashboard-metric-detail">Recent throughput baseline</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Average / Day</span>
+            <strong className="metric-value">{(report?.averageCompletedPerDay ?? 0).toFixed(1)}</strong>
+            <span className="dashboard-metric-detail">Based on last 30 days</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Backlog Days</span>
+            <strong className="metric-value">{report?.estimatedBacklogDays === null ? "-" : report?.estimatedBacklogDays.toFixed(1)}</strong>
+            <span className="dashboard-metric-detail">
+              <span className={backlogBadgeClass(report?.estimatedBacklogDays ?? null)}>
+                {backlogLabel(report?.estimatedBacklogDays ?? null)}
+              </span>
+            </span>
           </div>
         </div>
       </section>
@@ -224,28 +162,44 @@ export const WorkshopCapacityPage = () => {
       <div className="dashboard-grid analytics-grid">
         <section className="card">
           <div className="card-header-row">
-            <h2>Daily Throughput</h2>
-            <Link to="/management">Back to management</Link>
+            <div>
+              <h2>Capacity Pressure</h2>
+              <p className="muted-text">
+                Use backlog days as the simple operating signal: open jobs divided by recent average completions per day.
+              </p>
+            </div>
+            <Link to="/management/workshop">Workshop metrics</Link>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Jobs Completed</th>
+                  <th>Metric</th>
+                  <th>Value</th>
+                  <th>Use</th>
                 </tr>
               </thead>
               <tbody>
-                {dailyRows.length ? [...dailyRows].reverse().map((row) => (
-                  <tr key={row.date}>
-                    <td>{row.date}</td>
-                    <td>{row.jobCount}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={2}>No workshop throughput data for this range.</td>
-                  </tr>
-                )}
+                <tr>
+                  <td>Open jobs</td>
+                  <td>{report?.openJobCount ?? 0}</td>
+                  <td>Gauge the size of the live queue.</td>
+                </tr>
+                <tr>
+                  <td>Average completions per day</td>
+                  <td>{(report?.averageCompletedPerDay ?? 0).toFixed(1)}</td>
+                  <td>Use as the practical recent capacity baseline.</td>
+                </tr>
+                <tr>
+                  <td>Estimated backlog days</td>
+                  <td>{report?.estimatedBacklogDays === null ? "-" : report.estimatedBacklogDays.toFixed(1)}</td>
+                  <td>Quick pressure read for booking promises and queue triage.</td>
+                </tr>
+                <tr>
+                  <td>Blocked jobs</td>
+                  <td>{(report?.waitingForApprovalCount ?? 0) + (report?.waitingForPartsCount ?? 0)}</td>
+                  <td>Jobs needing follow-up before throughput can improve.</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -253,68 +207,74 @@ export const WorkshopCapacityPage = () => {
 
         <section className="card">
           <div className="card-header-row">
-            <h2>Queue Summary</h2>
+            <div>
+              <h2>Open Job Ageing</h2>
+              <p className="muted-text">
+                Ageing uses job created date because exact stage-entry timestamps are not stored in the current workshop model.
+              </p>
+            </div>
+            <Link to="/management/workshop-ageing">Ageing detail</Link>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Jobs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboard?.summary.byStatus ? Object.entries(dashboard.summary.byStatus)
-                  .filter(([, count]) => count > 0)
-                  .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-                  .map(([status, count]) => (
-                    <tr key={status}>
-                      <td>{status}</td>
-                      <td>{count}</td>
-                    </tr>
-                  )) : (
-                  <tr>
-                    <td colSpan={2}>No queue summary available.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Assignment Workload</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Assignee</th>
+                  <th>Age Bucket</th>
                   <th>Open Jobs</th>
-                  <th>Waiting Approval</th>
-                  <th>Waiting Parts</th>
-                  <th>Ready</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {workloadRows.length ? workloadRows.map((row) => (
-                  <tr key={row.key}>
+                {ageingRows.map((row) => (
+                  <tr key={row.label}>
                     <td>{row.label}</td>
-                    <td>{row.openJobs}</td>
-                    <td>{row.waitingApproval}</td>
-                    <td>{row.waitingParts}</td>
-                    <td>{row.ready}</td>
+                    <td>{row.count}</td>
+                    <td><Link to={row.actionPath}>{row.actionLabel}</Link></td>
                   </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5}>No assignment workload data available.</td>
-                  </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-          <p className="muted-text">Jobs without assignment are grouped under Unassigned. Backlog days are not shown when average daily completions is zero.</p>
+        </section>
+
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Follow-up Focus</h2>
+              <p className="muted-text">
+                These are the operational queues most likely to reduce backlog quickly.
+              </p>
+            </div>
+            <Link to="/workshop/bookings">Bookings</Link>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Queue</th>
+                  <th>Count</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Waiting for approval</td>
+                  <td>{report?.waitingForApprovalCount ?? 0}</td>
+                  <td><Link to="/workshop">Call customer / approve work</Link></td>
+                </tr>
+                <tr>
+                  <td>Waiting for parts</td>
+                  <td>{report?.waitingForPartsCount ?? 0}</td>
+                  <td><Link to="/management/workshop-ageing">Chase blocked jobs</Link></td>
+                </tr>
+                <tr>
+                  <td>All open work</td>
+                  <td>{report?.openJobCount ?? 0}</td>
+                  <td><Link to="/workshop">Rebalance workshop board</Link></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
     </div>

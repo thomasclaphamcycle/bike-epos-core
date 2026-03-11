@@ -261,6 +261,77 @@ export const getWorkshopDailyReport = async (from?: string, to?: string) => {
   });
 };
 
+const WORKSHOP_CAPACITY_LOOKBACK_DAYS = 30;
+const WORKSHOP_CAPACITY_OPEN_STATUSES = new Set<WorkshopJobStatus>([
+  "BOOKING_MADE",
+  "BIKE_ARRIVED",
+  "WAITING_FOR_APPROVAL",
+  "APPROVED",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
+  "BIKE_READY",
+]);
+
+export const getWorkshopCapacityReport = async () => {
+  const now = new Date();
+  const completedFrom = new Date(now);
+  completedFrom.setUTCDate(completedFrom.getUTCDate() - (WORKSHOP_CAPACITY_LOOKBACK_DAYS - 1));
+  completedFrom.setUTCHours(0, 0, 0, 0);
+
+  const jobs = await prisma.workshopJob.findMany({
+    select: {
+      status: true,
+      createdAt: true,
+      completedAt: true,
+    },
+  });
+
+  const openJobs = jobs.filter((job) => WORKSHOP_CAPACITY_OPEN_STATUSES.has(job.status));
+  const waitingForApprovalCount = openJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
+  const waitingForPartsCount = openJobs.filter((job) => job.status === "WAITING_FOR_PARTS").length;
+  const completedJobsLast30Days = jobs.filter((job) => (
+    job.completedAt !== null
+    && job.completedAt >= completedFrom
+    && job.completedAt <= now
+  )).length;
+  const averageCompletedPerDay = Number((completedJobsLast30Days / WORKSHOP_CAPACITY_LOOKBACK_DAYS).toFixed(1));
+  const estimatedBacklogDays = averageCompletedPerDay > 0
+    ? Number((openJobs.length / averageCompletedPerDay).toFixed(1))
+    : null;
+
+  const ageingBuckets = {
+    zeroToTwoDays: 0,
+    threeToSevenDays: 0,
+    eightToFourteenDays: 0,
+    fifteenPlusDays: 0,
+  };
+
+  for (const job of openJobs) {
+    const ageDays = Math.max(0, Math.floor((now.getTime() - job.createdAt.getTime()) / 86_400_000));
+    if (ageDays <= 2) {
+      ageingBuckets.zeroToTwoDays += 1;
+    } else if (ageDays <= 7) {
+      ageingBuckets.threeToSevenDays += 1;
+    } else if (ageDays <= 14) {
+      ageingBuckets.eightToFourteenDays += 1;
+    } else {
+      ageingBuckets.fifteenPlusDays += 1;
+    }
+  }
+
+  return {
+    generatedAt: now.toISOString(),
+    lookbackDays: WORKSHOP_CAPACITY_LOOKBACK_DAYS,
+    openJobCount: openJobs.length,
+    waitingForApprovalCount,
+    waitingForPartsCount,
+    completedJobsLast30Days,
+    averageCompletedPerDay,
+    estimatedBacklogDays,
+    ageingBuckets,
+  };
+};
+
 export const getInventoryOnHandReport = async (locationId?: string) => {
   // Keep locationId validation for API compatibility while using a single-location inventory ledger.
   await assertLocationIdOrThrow(locationId);
