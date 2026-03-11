@@ -1,65 +1,48 @@
-import { useEffect, useMemo, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
-type RangePreset = "30" | "90" | "365";
+type VelocityClass = "FAST_MOVER" | "NORMAL" | "SLOW_MOVER" | "DEAD_STOCK";
 
 type VelocityRow = {
-  productId: string;
+  variantId: string;
   productName: string;
-  currentOnHand: number;
-  quantitySold: number;
-  grossRevenuePence: number;
-  velocityPer30Days: number;
-  sellThroughRate: number;
-  lastSoldAt: string | null;
+  sku: string;
+  onHand: number;
+  sales30Days: number;
+  sales90Days: number;
+  velocityClass: VelocityClass;
 };
 
 type VelocityResponse = {
-  summary: {
-    trackedProductCount: number;
-    productsWithSales: number;
-    deadStockCount: number;
-    totalOnHand: number;
-  };
-  fastMovingProducts: VelocityRow[];
-  slowMovingProducts: VelocityRow[];
-  deadStockCandidates: VelocityRow[];
-  products: VelocityRow[];
+  generatedAt: string;
+  items: VelocityRow[];
 };
 
-const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-
-const formatDateKey = (value: Date) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, "0");
-  const day = `${value.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+const rowAccent: Record<VelocityClass, CSSProperties> = {
+  FAST_MOVER: { backgroundColor: "rgba(84, 166, 74, 0.14)" },
+  NORMAL: {},
+  SLOW_MOVER: { backgroundColor: "rgba(214, 148, 34, 0.14)" },
+  DEAD_STOCK: { backgroundColor: "rgba(194, 58, 58, 0.14)" },
 };
 
-const shiftDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+const badgeClass: Record<VelocityClass, string> = {
+  FAST_MOVER: "status-badge status-complete",
+  NORMAL: "status-badge",
+  SLOW_MOVER: "status-badge status-warning",
+  DEAD_STOCK: "status-badge status-cancelled",
 };
-
-const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 export const InventoryVelocityPage = () => {
   const { error } = useToasts();
-
-  const [rangePreset, setRangePreset] = useState<RangePreset>("90");
   const [report, setReport] = useState<VelocityResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      const today = new Date();
-      const to = formatDateKey(today);
-      const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
-      const payload = await apiGet<VelocityResponse>(`/api/reports/inventory/velocity?from=${from}&to=${to}&take=10`);
+      const payload = await apiGet<VelocityResponse>("/api/reports/inventory-velocity");
       setReport(payload);
     } catch (loadError) {
       setReport(null);
@@ -72,9 +55,14 @@ export const InventoryVelocityPage = () => {
   useEffect(() => {
     void loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangePreset]);
+  }, []);
 
-  const fastest = useMemo(() => report?.fastMovingProducts[0] ?? null, [report]);
+  const summary = useMemo(() => ({
+    fast: report?.items.filter((row) => row.velocityClass === "FAST_MOVER").length ?? 0,
+    normal: report?.items.filter((row) => row.velocityClass === "NORMAL").length ?? 0,
+    slow: report?.items.filter((row) => row.velocityClass === "SLOW_MOVER").length ?? 0,
+    dead: report?.items.filter((row) => row.velocityClass === "DEAD_STOCK").length ?? 0,
+  }), [report]);
 
   return (
     <div className="page-shell">
@@ -83,193 +71,83 @@ export const InventoryVelocityPage = () => {
           <div>
             <h1>Inventory Velocity</h1>
             <p className="muted-text">
-              Manager-facing inventory movement signals derived from sales volume and current on-hand. This is practical velocity reporting, not forecasting.
+              Manager-facing stock movement report using 30-day sales, 90-day sales, and current on-hand stock.
             </p>
           </div>
           <div className="actions-inline">
-            <label>
-              Range
-              <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as RangePreset)}>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="365">Last 365 days</option>
-              </select>
-            </label>
             <button type="button" onClick={() => void loadReport()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+            <Link to="/management">Management</Link>
           </div>
         </div>
 
         <div className="dashboard-summary-grid">
           <div className="metric-card">
-            <span className="metric-label">Tracked Products</span>
-            <strong className="metric-value">{report?.summary.trackedProductCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Products with stock or sales signals</span>
+            <span className="metric-label">Fast Movers</span>
+            <strong className="metric-value">{summary.fast}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Products With Sales</span>
-            <strong className="metric-value">{report?.summary.productsWithSales ?? 0}</strong>
-            <span className="dashboard-metric-detail">In the selected range</span>
+            <span className="metric-label">Normal</span>
+            <strong className="metric-value">{summary.normal}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Dead Stock Candidates</span>
-            <strong className="metric-value">{report?.summary.deadStockCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">On hand with zero sold units</span>
+            <span className="metric-label">Slow Movers</span>
+            <strong className="metric-value">{summary.slow}</strong>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Fastest Product</span>
-            <strong className="metric-value">{fastest?.productName ?? "-"}</strong>
-            <span className="dashboard-metric-detail">
-              {fastest ? `${fastest.quantitySold} sold | ${fastest.currentOnHand} on hand` : "No data"}
-            </span>
+            <span className="metric-label">Dead Stock</span>
+            <strong className="metric-value">{summary.dead}</strong>
           </div>
         </div>
       </section>
 
-      <div className="dashboard-grid analytics-grid">
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Fast-Moving Products</h2>
-            <Link to="/management">Back to management</Link>
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Velocity Classification</h2>
+            <p className="muted-text">
+              Fast mover: 10+ sold in 30 days. Normal: 3-9. Slow mover: 1-2. Dead stock: no sales in 90 days with stock on hand.
+            </p>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Units Sold</th>
-                  <th>On Hand</th>
-                  <th>Velocity / 30d</th>
-                  <th>Sell Through</th>
-                  <th>Revenue</th>
+          <Link to="/inventory">Inventory</Link>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>SKU</th>
+                <th>On Hand</th>
+                <th>Sales (30d)</th>
+                <th>Sales (90d)</th>
+                <th>Velocity Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report?.items.length ? report.items.map((row) => (
+                <tr key={row.variantId} style={rowAccent[row.velocityClass]}>
+                  <td>
+                    <div className="table-primary">{row.productName}</div>
+                    <div className="table-secondary">
+                      <Link to={`/inventory/${row.variantId}`}>Open inventory item</Link>
+                    </div>
+                  </td>
+                  <td className="mono-text">{row.sku}</td>
+                  <td>{row.onHand}</td>
+                  <td>{row.sales30Days}</td>
+                  <td>{row.sales90Days}</td>
+                  <td><span className={badgeClass[row.velocityClass]}>{row.velocityClass}</span></td>
                 </tr>
-              </thead>
-              <tbody>
-                {report?.fastMovingProducts.length ? report.fastMovingProducts.map((row) => (
-                  <tr key={row.productId}>
-                    <td>{row.productName}</td>
-                    <td>{row.quantitySold}</td>
-                    <td>{row.currentOnHand}</td>
-                    <td>{row.velocityPer30Days.toFixed(1)}</td>
-                    <td>{formatPercent(row.sellThroughRate)}</td>
-                    <td>{formatMoney(row.grossRevenuePence)}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6}>No fast-moving products for this range.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Slow-Moving Products</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
+              )) : (
                 <tr>
-                  <th>Product</th>
-                  <th>Units Sold</th>
-                  <th>On Hand</th>
-                  <th>Velocity / 30d</th>
-                  <th>Sell Through</th>
-                  <th>Last Sold</th>
+                  <td colSpan={6}>{loading ? "Loading inventory velocity..." : "No inventory velocity rows available."}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {report?.slowMovingProducts.length ? report.slowMovingProducts.map((row) => (
-                  <tr key={row.productId}>
-                    <td>{row.productName}</td>
-                    <td>{row.quantitySold}</td>
-                    <td>{row.currentOnHand}</td>
-                    <td>{row.velocityPer30Days.toFixed(1)}</td>
-                    <td>{formatPercent(row.sellThroughRate)}</td>
-                    <td>{row.lastSoldAt ? new Date(row.lastSoldAt).toLocaleString() : "-"}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6}>No slow-moving products for this range.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Dead Stock Candidates</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>On Hand</th>
-                  <th>Units Sold</th>
-                  <th>Velocity / 30d</th>
-                  <th>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report?.deadStockCandidates.length ? report.deadStockCandidates.map((row) => (
-                  <tr key={row.productId}>
-                    <td>{row.productName}</td>
-                    <td>{row.currentOnHand}</td>
-                    <td>{row.quantitySold}</td>
-                    <td>{row.velocityPer30Days.toFixed(1)}</td>
-                    <td>{formatMoney(row.grossRevenuePence)}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5}>No dead stock candidates in this range.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <p className="muted-text">Dead stock candidates are products with current on-hand and zero sold units in the selected range.</p>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Velocity Signals</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Units Sold</th>
-                  <th>On Hand</th>
-                  <th>Velocity / 30d</th>
-                  <th>Sell Through</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report?.products.length ? report.products.map((row) => (
-                  <tr key={row.productId}>
-                    <td>{row.productName}</td>
-                    <td>{row.quantitySold}</td>
-                    <td>{row.currentOnHand}</td>
-                    <td>{row.velocityPer30Days.toFixed(1)}</td>
-                    <td>{formatPercent(row.sellThroughRate)}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5}>No product velocity signals available.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 };

@@ -685,6 +685,144 @@ export const getInventoryVelocityReport = async (from?: string, to?: string, tak
   };
 };
 
+type InventoryVelocityClass = "FAST_MOVER" | "NORMAL" | "SLOW_MOVER" | "DEAD_STOCK";
+
+const getInventoryVelocityClass = (sales30Days: number, sales90Days: number, onHand: number): InventoryVelocityClass => {
+  if (sales90Days === 0 && onHand > 0) {
+    return "DEAD_STOCK";
+  }
+  if (sales30Days >= 10) {
+    return "FAST_MOVER";
+  }
+  if (sales30Days >= 3) {
+    return "NORMAL";
+  }
+  if (sales30Days >= 1) {
+    return "SLOW_MOVER";
+  }
+  return "NORMAL";
+};
+
+export const getInventoryVelocity = async () => {
+  const now = new Date();
+  const from30Days = new Date(now);
+  from30Days.setUTCDate(from30Days.getUTCDate() - 29);
+  from30Days.setUTCHours(0, 0, 0, 0);
+
+  const from90Days = new Date(now);
+  from90Days.setUTCDate(from90Days.getUTCDate() - 89);
+  from90Days.setUTCHours(0, 0, 0, 0);
+
+  const saleItems = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        completedAt: {
+          gte: from90Days,
+          lte: now,
+        },
+      },
+    },
+    select: {
+      quantity: true,
+      sale: {
+        select: {
+          completedAt: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          product: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const stockRows = await prisma.inventoryMovement.groupBy({
+    by: ["variantId"],
+    _sum: {
+      quantity: true,
+    },
+  });
+
+  const variantIds = Array.from(new Set([
+    ...saleItems.map((item) => item.variant.id),
+    ...stockRows.map((row) => row.variantId),
+  ]));
+
+  const variants = variantIds.length > 0
+    ? await prisma.variant.findMany({
+        where: {
+          id: {
+            in: variantIds,
+          },
+        },
+        select: {
+          id: true,
+          sku: true,
+          product: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      })
+    : [];
+
+  const variantMap = new Map(variants.map((variant) => [variant.id, variant]));
+  const onHandMap = new Map(stockRows.map((row) => [row.variantId, toInteger(row._sum.quantity)]));
+  const salesMap = new Map<string, { sales30Days: number; sales90Days: number }>();
+
+  for (const item of saleItems) {
+    const existing = salesMap.get(item.variant.id) ?? { sales30Days: 0, sales90Days: 0 };
+    existing.sales90Days += item.quantity;
+    if (item.sale.completedAt && item.sale.completedAt >= from30Days) {
+      existing.sales30Days += item.quantity;
+    }
+    salesMap.set(item.variant.id, existing);
+  }
+
+  const items = variantIds
+    .map((variantId) => {
+      const variant = variantMap.get(variantId);
+      if (!variant) {
+        return null;
+      }
+
+      const sales = salesMap.get(variantId) ?? { sales30Days: 0, sales90Days: 0 };
+      const onHand = onHandMap.get(variantId) ?? 0;
+
+      return {
+        variantId,
+        productName: variant.product.name,
+        sku: variant.sku,
+        onHand,
+        sales30Days: sales.sales30Days,
+        sales90Days: sales.sales90Days,
+        velocityClass: getInventoryVelocityClass(sales.sales30Days, sales.sales90Days, onHand),
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+    .sort((left, right) => (
+      (right.velocityClass === "FAST_MOVER" ? 4 : right.velocityClass === "NORMAL" ? 3 : right.velocityClass === "SLOW_MOVER" ? 2 : 1)
+      - (left.velocityClass === "FAST_MOVER" ? 4 : left.velocityClass === "NORMAL" ? 3 : left.velocityClass === "SLOW_MOVER" ? 2 : 1)
+      || right.sales30Days - left.sales30Days
+      || right.sales90Days - left.sales90Days
+      || left.productName.localeCompare(right.productName)
+      || left.sku.localeCompare(right.sku)
+    ));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items,
+  };
+};
+
 type ReorderSuggestionUrgency = "Reorder Now" | "Reorder Soon" | "On Order";
 
 const REORDER_LOOKBACK_DAYS = 30;

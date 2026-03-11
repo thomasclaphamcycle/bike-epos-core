@@ -260,7 +260,10 @@ export const ManagementDashboardPage = () => {
       <section className="card" key="inventory">
         <div className="card-header-row">
           <h2>Inventory Alerts</h2>
-          <Link to="/inventory">View inventory</Link>
+          <div className="actions-inline">
+            <Link to="/management/inventory">Velocity report</Link>
+            <Link to="/inventory">View inventory</Link>
+          </div>
         </div>
         <div className="table-wrap">
           <table>
@@ -303,6 +306,7 @@ export const ManagementDashboardPage = () => {
           <Link className="button-link dashboard-link-card" to="/pos">POS</Link>
           <Link className="button-link dashboard-link-card" to="/workshop">Workshop</Link>
           <Link className="button-link dashboard-link-card" to="/inventory">Inventory</Link>
+          <Link className="button-link dashboard-link-card" to="/management/inventory">Velocity</Link>
           <Link className="button-link dashboard-link-card" to="/customers">Customers</Link>
           <Link className="button-link dashboard-link-card" to="/suppliers">Suppliers</Link>
           <Link className="button-link dashboard-link-card" to="/purchasing">Purchasing</Link>

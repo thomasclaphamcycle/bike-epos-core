@@ -4,6 +4,7 @@ import {
   getInventoryOnHandReportHandler,
   getInventoryOnHandReportCsvHandler,
   getInventoryReorderSuggestionsReportHandler,
+  getInventoryVelocityHandler,
   getInventoryVelocityReportHandler,
   getInventoryValueReportHandler,
   getInventoryValueReportCsvHandler,
@@ -45,6 +46,7 @@ reportRouter.get(
 reportRouter.get("/payments", requireRoleAtLeast("MANAGER"), getPaymentsReportCsvHandler);
 reportRouter.get("/sales/products", requireRoleAtLeast("MANAGER"), getProductSalesReportHandler);
 reportRouter.get("/inventory/location-summary", requireRoleAtLeast("STAFF"), getInventoryLocationSummaryReportHandler);
+reportRouter.get("/inventory-velocity", requireRoleAtLeast("MANAGER"), getInventoryVelocityHandler);
 reportRouter.get("/inventory/velocity", requireRoleAtLeast("MANAGER"), getInventoryVelocityReportHandler);
 reportRouter.get("/inventory/reorder-suggestions", requireRoleAtLeast("MANAGER"), getInventoryReorderSuggestionsReportHandler);
 reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSupplierPerformanceReportHandler);
