@@ -90,6 +90,7 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
       { key: "cmd-health", group: "Shortcut", title: "Ops health", subtitle: "Operational readiness view", path: "/management/health" },
       { key: "cmd-integrity", group: "Shortcut", title: "Data integrity", subtitle: "Operational data problems and investigation queues", path: "/management/integrity" },
       { key: "cmd-alerts", group: "Shortcut", title: "Alerts centre", subtitle: "Operational alerts", path: "/management/alerts" },
+      { key: "cmd-exceptions", group: "Shortcut", title: "Operations exceptions", subtitle: "Single queue of cross-functional issues", path: "/management/exceptions" },
       { key: "cmd-product-data", group: "Shortcut", title: "Product data queue", subtitle: "Variants needing data cleanup", path: "/management/product-data" },
       { key: "cmd-pricing", group: "Shortcut", title: "Pricing review", subtitle: "Margin and pricing exceptions", path: "/management/pricing" },
       { key: "cmd-supplier-returns", group: "Shortcut", title: "Supplier returns", subtitle: "Warranty and receiving send-backs", path: "/management/supplier-returns" },

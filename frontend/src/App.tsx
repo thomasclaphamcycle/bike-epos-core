@@ -34,6 +34,7 @@ import { RefundOversightPage } from "./pages/RefundOversightPage";
 import { CashOversightPage } from "./pages/CashOversightPage";
 import { OperationsSummaryPage } from "./pages/OperationsSummaryPage";
 import { AlertsCentrePage } from "./pages/AlertsCentrePage";
+import { OperationsExceptionsPage } from "./pages/OperationsExceptionsPage";
 import { SavedViewsPage } from "./pages/SavedViewsPage";
 import { ExportHubPage } from "./pages/ExportHubPage";
 import { CustomerRemindersPage } from "./pages/CustomerRemindersPage";
@@ -198,6 +199,14 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <AlertsCentrePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/exceptions"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <OperationsExceptionsPage />
             </ProtectedRoute>
           )}
         />

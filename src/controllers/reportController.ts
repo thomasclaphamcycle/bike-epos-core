@@ -7,6 +7,7 @@ import {
   getPaymentsReport,
   getCustomerInsightsReport,
   getInventoryLocationSummaryReport,
+  getOperationsExceptions,
   getPricingExceptionsReport,
   getInventoryReorderSuggestionsReport,
   getInventoryVelocity,
@@ -190,6 +191,11 @@ export const getInventoryReorderSuggestionsReportHandler = async (req: Request, 
 
 export const getPricingExceptionsReportHandler = async (_req: Request, res: Response) => {
   const report = await getPricingExceptionsReport();
+  res.json(report);
+};
+
+export const getOperationsExceptionsHandler = async (_req: Request, res: Response) => {
+  const report = await getOperationsExceptions();
   res.json(report);
 };
 

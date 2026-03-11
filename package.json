@@ -67,6 +67,7 @@
     "test:m122": "node scripts/run_smoke_test.js scripts/pricing_exceptions_m122_smoke_tests.js",
     "test:m123": "node scripts/run_smoke_test.js scripts/workshop_capacity_m123_smoke_tests.js",
     "test:m124": "node scripts/run_smoke_test.js scripts/customer_reminders_m124_smoke_tests.js",
+    "test:m125": "node scripts/run_smoke_test.js scripts/operations_exceptions_m125_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js"
   },
   "repository": {
