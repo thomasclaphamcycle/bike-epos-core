@@ -41,7 +41,7 @@ const actionCentreSections: Array<{
   {
     key: "inventory",
     title: "Inventory",
-    description: "Dead stock and slow-moving inventory attention items.",
+    description: "Dead stock and stock anomalies. Use the stock investigation queue for deeper follow-up.",
     types: ["DEAD_STOCK"],
   },
 ];
