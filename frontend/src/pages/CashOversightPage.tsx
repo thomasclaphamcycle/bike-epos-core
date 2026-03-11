@@ -81,6 +81,12 @@ const CASH_OUT_REASON_OPTIONS: Array<{ value: CashMovementReason; label: string 
   { value: "OTHER", label: "Other" },
 ];
 
+const RANGE_PRESET_DAYS: Record<RangePreset, number> = {
+  "7": 7,
+  "30": 30,
+  "90": 90,
+};
+
 const formatMoney = (pence: number | null | undefined) =>
   pence === null || pence === undefined ? "-" : `£${(pence / 100).toFixed(2)}`;
 
@@ -96,6 +102,9 @@ const shiftDays = (date: Date, days: number) => {
   next.setDate(next.getDate() + days);
   return next;
 };
+
+const normalizeRangePreset = (value: string): RangePreset =>
+  value === "7" || value === "30" || value === "90" ? value : "30";
 
 const toPence = (value: string) => {
   const trimmed = value.trim();
@@ -140,18 +149,47 @@ export const CashOversightPage = () => {
     setLoading(true);
     try {
       const today = new Date();
+      const rangeDays = RANGE_PRESET_DAYS[rangePreset] ?? RANGE_PRESET_DAYS["30"];
       const to = formatDateKey(today);
-      const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
+      const from = formatDateKey(shiftDays(today, -(rangeDays - 1)));
 
-      const [current, history, movementList] = await Promise.all([
+      const [currentResult, historyResult, movementResult] = await Promise.allSettled([
         apiGet<CashSessionSummaryResponse>("/api/management/cash/register/current"),
         apiGet<CashSessionListResponse>(`/api/management/cash/register/history?from=${from}&to=${to}`),
         apiGet<CashMovementListResponse>(`/api/management/cash/movements?from=${from}&to=${to}`),
       ]);
 
-      setCurrentSession(current);
-      setSessions(history.sessions ?? []);
-      setMovements(movementList.movements ?? []);
+      if (currentResult.status === "fulfilled") {
+        setCurrentSession(currentResult.value);
+      } else {
+        setCurrentSession({ session: null });
+      }
+
+      if (historyResult.status === "fulfilled") {
+        setSessions(historyResult.value.sessions ?? []);
+      } else {
+        setSessions([]);
+      }
+
+      if (movementResult.status === "fulfilled") {
+        setMovements(movementResult.value.movements ?? []);
+      } else {
+        setMovements([]);
+      }
+
+      if (currentResult.status === "rejected") {
+        throw currentResult.reason;
+      }
+      if (historyResult.status === "rejected") {
+        error(historyResult.reason instanceof Error ? historyResult.reason.message : "Failed to load register history");
+      }
+      if (movementResult.status === "rejected") {
+        error(
+          movementResult.reason instanceof Error
+            ? movementResult.reason.message
+            : "Failed to load cash movements",
+        );
+      }
     } catch (loadError) {
       error(loadError instanceof Error ? loadError.message : "Failed to load cash management");
     } finally {
@@ -376,7 +414,7 @@ export const CashOversightPage = () => {
           <div className="actions-inline">
             <label>
               Range
-              <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as RangePreset)}>
+              <select value={rangePreset} onChange={(event) => setRangePreset(normalizeRangePreset(event.target.value))}>
                 <option value="7">Last 7 days</option>
                 <option value="30">Last 30 days</option>
                 <option value="90">Last 90 days</option>

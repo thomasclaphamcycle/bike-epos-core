@@ -1,5 +1,14 @@
 # CorePOS Plan
 
+## CorePOS Development Rule
+
+`PLAN.md` is the single source of truth for project roadmap, development phases, project direction, and implementation order.
+
+Agents must follow phases in order and must not begin work on later phases unless explicitly instructed.
+
+`AGENTS.md` defines how agents should behave.
+`TASK.md` defines the current task being worked on.
+
 ## Summary
 
 CorePOS is a bike-shop staff platform spanning EPOS, workshop operations, stock control, receipts, refunds, till cash-up, reporting, and admin/auth workflows. The repo also contains a React frontend for key staff journeys while retaining server-rendered pages and printable HTML flows.

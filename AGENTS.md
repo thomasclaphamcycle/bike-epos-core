@@ -34,10 +34,17 @@ When repo notes conflict, trust sources in this order:
 1. Running code in `src/`, `frontend/`, `prisma/`
 2. Prisma migrations in `prisma/migrations/`
 3. Automated regression scripts in `scripts/` and `e2e/`
-4. `README.md` and `docs/`
-5. Older milestone notes such as `PROJECT_CONTEXT.md` and `M12_CLOSEOUT.md`
+4. `PLAN.md` for roadmap, phase order, and project direction
+5. `README.md` and `docs/`
+6. Older milestone notes such as `PROJECT_CONTEXT.md` and `M12_CLOSEOUT.md`
 
 Mark anything inferred from gaps as inferred. Do not present inferred future state as completed work.
+
+## Roadmap Authority
+
+- Follow `PLAN.md` as the authoritative roadmap and sequencing document.
+- Use `TASK.md` as the source of the current assignment only.
+- Do not implement work from later phases unless explicitly instructed.
 
 ## Current Architecture
 

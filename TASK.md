@@ -3,6 +3,8 @@
 ## Current Snapshot
 
 - Working branch: `ux/staff-management-scan-pass`
+- `PLAN.md` is the authoritative roadmap and phase-order document
+- this file tracks the current assignment and immediate next work only
 - Stable local restore point:
   - tag `v1.2-demo-running`
   - branch `stable-demo`
@@ -106,12 +108,13 @@ These milestones are confirmed in branch history and/or remote refs. The current
 
 Highest priority:
 
-1. keep the branch buildable and smoke-stable
-2. keep password login functional in the backend while PIN login rolls out in the UI
-3. decide and document the admin policy for button-based PIN login long term
-4. add manager-facing PIN reset UI if product policy still requires it
-5. consider register lock / quick user switch flow if trial usage requires it
-6. continue repo hygiene and branch consolidation in parallel
+1. keep current work aligned with the active phase and sequencing defined in `PLAN.md`
+2. keep the branch buildable and smoke-stable
+3. keep password login functional in the backend while PIN login rolls out in the UI
+4. decide and document the admin policy for button-based PIN login long term
+5. add manager-facing PIN reset UI if product policy still requires it
+6. consider register lock / quick user switch flow if trial usage requires it
+7. continue repo hygiene and branch consolidation in parallel
 
 ## Completed
 

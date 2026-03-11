@@ -1,257 +1,344 @@
 # CorePOS Development Roadmap
 
-## Phase 1 — POS Foundation
-Goal: Run the till
+This document is the canonical forward-looking roadmap for CorePOS.
+It must remain the master 11-phase planning structure for the project.
 
-Features:
-- Product search
-- Basket management
-- Checkout
-- Payment methods
-- Register sessions
-- Blind till close
-- Cash in / cash out
-- Petty cash receipt capture
-- Customer attach
-- Email capture
-- Quick product buttons
-- Basket -> Quote
-- Quote -> Sale
-- Email quotes
+It should remain the master planning structure for the project and should be read alongside:
 
-Milestone:
-Shop can sell products and send quotes.
+- [PLAN.md](/Users/thomaswitherspoon/Development/bike-epos-core/PLAN.md) for repo-history and milestone evidence
+- [docs/ARCHITECTURE.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ARCHITECTURE.md) for domain and system structure
 
----
+CorePOS is evolving from a simple POS into a full bike shop operating system.
 
-## Phase 2 — Inventory Control
-Goal: Accurate stock
+Development Rule:
+- Only work on tasks in the current phase unless explicitly instructed.
 
-Features:
-- Product management
-- SKU / barcode
-- Price / cost
-- Stock levels
-- Stock movements
-- Stock adjustments
-- Multiple locations
-- Low stock alerts
-- Stock take
-- Cycle counting
+Important planning note:
 
-Milestone:
-Shop trusts inventory numbers.
+- `parts + labour bundle products` are intentionally not included here yet
+- that feature remains pending internal discussion
+
+## Current Progress Snapshot
+
+The current codebase already contains substantial implementation across the early and middle roadmap phases:
+
+- POS and cash-handling foundations are largely implemented
+- product, inventory, stock movement, and purchasing foundations are largely implemented
+- workshop operations are substantially implemented
+- staff/admin/reporting surfaces are substantially implemented
+- customer and communication features are only partially complete
+- rental and online-store phases remain future work
+
+The roadmap below remains the canonical planning structure even where current implementation is ahead in some areas and behind in others.
+The phase count should not be collapsed or reduced unless the product strategy itself is intentionally changed.
 
 ---
 
-## Phase 3 — Bulk Data Import & Export
-Goal: Efficiently manage large datasets
-
-This phase supports:
-- POS migration imports
-- Supplier catalogue uploads where no live feed/API exists
-- Bulk shop updates
-
-Typical imports:
-- Customers
-- Products
-- Inventory
-- Supplier catalogues
-- Price updates
-
-Typical fields:
-- Supplier SKU
-- Barcode
-- Product name
-- Description
-- Cost
-- RRP
-- Category
-- Image URL
-
-Workflow:
-1. Upload CSV
-2. Map columns
-3. Validate
-4. Preview
-5. Import
-
-Exports:
-- Customers
-- Products
-- Sales
-- Inventory
-- Suppliers
-
-Milestone:
-CorePOS can ingest large datasets easily.
-
----
-
-## Phase 4 — Purchasing
-Goal: Manage suppliers and orders
-
-Features:
-- Supplier management
-- Purchase orders
-- Receive stock
-- Backorders
-- Product -> supplier linking
-
-Milestone:
-Shop can order and receive inventory.
-
----
-
-## Phase 5 — Staff Management
-Goal: Manage staff operations
-
-Features:
-- Staff accounts
-- Role permissions
-- PIN login
-- Staff rota
-- Workshop capacity planning
-- Activity logs
-- Sales performance tracking
-- Mechanic performance tracking
-
-Milestone:
-Shop can manage staff and productivity.
-
----
-
-## Phase 6 — Rental System
-Goal: Manage bike rentals
-
-Features:
-- Rental products
-- Availability tracking
-- Booking calendar
-- Deposits
-- Rental agreements
-- Collection and return workflow
-- Damage tracking
-
-Calendar notes:
-- Rental and workshop should remain operationally separate calendars
-- Workshop calendar should display rental bookings as a secondary visibility overlay
-- Rental calendar does not need full workshop visibility by default
-
-Milestone:
-Shop can run bike hire operations.
-
----
-
-## Phase 7 — Workshop System
-Goal: Manage bike repairs
-
-Features:
-- Workshop jobs
-- Customer bikes
-- Job estimates
-- Quote -> job conversion
-- Parts + labour tracking
-- Job workflow
-- Customer notifications
-- Collection workflow
-
-Milestone:
-Shop can run repairs digitally.
-
----
-
-## Phase 8 — Workshop Booking Widget
-Goal: Allow customers to book repairs online
-
-Embeddable widget for any website.
-
-Features:
-- Repair booking
-- Service selection
-- Issue description
-- Customer contact capture
-- Email confirmations
-- Automatic workshop job creation
+## Phase 1 — POS & Cash Control (IN PROGRESS)
 
 Purpose:
-- Validate workshop workflow
-- Stress-test booking and job creation
-- Allow shops to embed booking on any existing website
+Run the till reliably with accountable cash handling.
+
+Features:
+- POS checkout UX
+- basket editing
+- barcode scanning workflow
+- payment selection UI
+- sale confirmation
+- attach customer to sale
+
+Cash register system:
+- open register
+- enforce register session
+- close register
+- expected vs counted cash
+- X report
+- Z report
+- register audit log
+
+Payments:
+- cash
+- card
+- mixed payments
+- refunds
+- receipt generation
 
 Milestone:
-Customers can book repairs online.
+CorePOS can run day-to-day retail checkout and cash control confidently.
+
+Implementation status:
+- largely implemented on the current working line
 
 ---
 
-## Phase 9 — Reporting & Insights
-Goal: Understand business performance
+## Phase 2 — Product Catalogue (PLANNED)
+
+Purpose:
+Give the shop a reliable, searchable product catalogue.
 
 Features:
-- Daily sales
-- Product performance
-- Workshop revenue
-- Stock valuation
-- Customer insights
-- Staff performance
+- create/edit product
+- SKU
+- barcode
+- categories
+- pricing
+- product search
 
 Milestone:
-Owner understands business metrics.
+The shop can manage and search its sellable catalogue accurately.
+
+Implementation status:
+- largely implemented, with follow-on polish still possible around product data quality and supplier-linked enrichment
 
 ---
 
-## Phase 10 — Supplier Feed Integration
-Goal: Automate product data
+## Phase 3 — Inventory Control (PLANNED)
 
-Notes:
-Some suppliers may provide live stock feeds.
+Purpose:
+Keep stock levels trustworthy and operationally useful.
 
 Features:
-- Supplier catalogue APIs
-- Supplier stock feeds
-- Automatic cost updates
-- Automatic RRP updates
-- Product matching
-- Product image imports
-- Supplier stock visibility
-- Quick supplier ordering
+- stock levels
+- stock adjustments
+- stock movement history
+- low stock alerts
+- multiple locations
+- workshop parts -> inventory deduction
+  - parts used during repairs automatically reduce stock
 
 Milestone:
-Catalogue and stock availability update automatically.
+The shop trusts inventory numbers and stock movement history.
+
+Implementation status:
+- largely implemented, with continued scope around replenishment refinement and multi-location depth
 
 ---
 
-## Phase 11 — Automation
-Goal: Reduce manual work
+## Phase 4 — Stock Take (PLANNED)
+
+Purpose:
+Provide reliable count and reconciliation workflows.
 
 Features:
-- Reorder suggestions
-- Service reminders
-- Warranty tracking
-- Customer communication queue
-- Internal task reminders
+- stock take
+- cycle counting
+- variance review
+- reconciliation workflow
 
 Milestone:
-System automatically manages routine tasks.
+The shop can regularly verify and correct stock accuracy.
+
+Implementation status:
+- foundational stocktake support is implemented, with future room for workflow refinement
 
 ---
 
-## Phase 12 — Customer Website Platform
-Goal: Provide shop websites powered by CorePOS
+## Phase 5 — Purchasing (PLANNED)
 
-This phase should come after embedded customer-facing tools have been proven.
+Purpose:
+Manage supplier ordering and stock receiving.
 
 Features:
-- Shop website builder
-- Content editor
-- Media library
-- Branding/themes
-- Embedded CorePOS modules
-
-Product strategy notes:
-- Start with embedded customer-facing widgets rather than replacing whole websites immediately
-- Use the workshop booking widget as the first real customer-facing embedded tool
-- A good validation step is building the shop's own website using this tool
+- supplier management
+- purchase orders
+- receive stock
+- backorders
+- product -> supplier linking
 
 Milestone:
-Shops can run their website on CorePOS.
+The shop can order and receive inventory through CorePOS.
+
+Implementation status:
+- substantially implemented on the current working line
+
+---
+
+## Phase 6 — Data Import / Export (PLANNED)
+
+Purpose:
+Handle migration, bulk updates, and supplier catalogue ingestion efficiently.
+
+Import support:
+- CSV import
+- validation preview
+- supplier CSV feeds
+- product imports
+- image URL imports
+
+Typical import/export areas:
+- customers
+- products
+- inventory
+- suppliers
+- price updates
+- operational exports
+
+Milestone:
+CorePOS can ingest and export large datasets safely and efficiently.
+
+Implementation status:
+- partially implemented, with supplier-feed and import quality refinement still relevant
+
+---
+
+## Phase 7 — Supplier Integrations (PLANNED)
+
+Purpose:
+Automate supplier catalogue and availability updates where suppliers support it.
+
+Features:
+- supplier price feeds
+- product imports
+- validation preview
+- image URL imports
+- supplier stock feeds
+- automated cost updates
+- automated RRP updates
+- product matching
+- supplier stock visibility
+
+Milestone:
+Supplier catalogue and availability updates become automated where supported.
+
+Implementation status:
+- early groundwork exists, but this phase remains meaningfully future-facing
+
+---
+
+## Phase 8 — Workshop System (PLANNED)
+
+Purpose:
+Run the repair and service side of the bike shop digitally.
+
+Workshop improvements:
+- repair job queue
+- workshop job tickets
+- queue view
+- job status tracking
+- technician assignment
+- workshop notes
+
+Bike records:
+- bike records linked to customers
+- brand
+- model
+- year
+- frame number
+- wheel size
+- notes
+
+Bike service history:
+- bike service history
+- services per bike
+- parts used
+- labour performed
+- technician
+- service notes
+
+Bike build queue:
+- bike build queue
+- track bikes awaiting assembly
+- build status
+- ready for pickup status
+
+Inventory linkage:
+- workshop parts -> inventory deduction
+
+Customer workflow:
+- estimates
+- quote -> job conversion
+- SMS notifications
+- repair completion alerts
+- two-way messaging
+- customer notifications
+- collection workflow
+
+Milestone:
+The shop can manage repair, service history, bike-build workflow, and workshop customer communication in one connected system.
+
+Implementation status:
+- substantially implemented, with additional bike-record depth and build-specific refinement still possible
+
+---
+
+## Phase 9 — Staff & Operations (PARTIAL)
+
+Purpose:
+Manage staff access, oversight, daily operations, and business reporting.
+
+Features:
+- user roles
+- PIN login
+- activity logs
+- rota planning
+- workshop capacity planning
+- sales performance tracking
+- mechanic performance tracking
+
+Reports:
+- sales reports
+- register reports
+- product performance
+- workshop revenue
+- dashboard views
+- daily operational summaries
+
+Milestone:
+Managers and admins can operate, supervise, and measure the shop effectively.
+
+Implementation status:
+- substantially implemented on the current working line, with ongoing hardening and policy refinement
+
+---
+
+## Phase 10 — Rental Services (FUTURE)
+
+Purpose:
+Support bike hire and rental operations as a first-class flow.
+
+Features:
+- rental products
+- availability tracking
+- booking calendar
+- deposits
+- rental agreements
+- collection and return workflow
+- damage tracking
+
+Calendar notes:
+- rental and workshop should remain operationally separate calendars
+- workshop calendar should display rental bookings as a secondary visibility overlay
+- rental calendar does not need full workshop visibility by default
+
+Milestone:
+The shop can run bike rental operations through CorePOS.
+
+Implementation status:
+- planned, not yet a completed product line
+
+---
+
+## Phase 11 — Online Store & Website Builder (FUTURE)
+
+Purpose:
+Support customer-facing online workflows and eventually shop websites powered by CorePOS.
+
+Embedded customer-facing tools:
+- workshop booking widget
+- service reminder booking links
+- quote approval and other customer workflows where appropriate
+
+Website platform:
+- online store
+- shop website builder
+- content editor
+- media library
+- branding/themes
+- embedded CorePOS modules
+
+Milestone:
+Shops can use CorePOS for customer-facing digital experiences and, later, for their website platform.
+
+Implementation status:
+- mostly future-facing
+- customer communication groundwork exists, but the full online-store / website-builder phase is not yet complete
