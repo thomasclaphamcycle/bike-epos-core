@@ -643,6 +643,36 @@ th {
   gap: 12px;
 }
 
+.cash-register-banner {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  display: grid;
+  gap: 4px;
+}
+
+.cash-register-banner strong {
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+}
+
+.cash-register-banner span {
+  font-size: 0.92rem;
+}
+
+.cash-register-banner-open {
+  background: #ebf8f0;
+  border-color: #b8e3c8;
+  color: #155f39;
+}
+
+.cash-register-banner-closed {
+  background: #fff1eb;
+  border-color: #f1d0bf;
+  color: #7c3a18;
+}
+
 .cash-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, max-content));

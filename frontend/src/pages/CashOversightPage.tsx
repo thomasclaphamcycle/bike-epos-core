@@ -249,6 +249,10 @@ export const CashOversightPage = () => {
 
   const currentSessionId = currentSession?.session?.id ?? null;
   const currentSessionOpen = Boolean(currentSession?.session);
+  const currentBusinessDate = currentSession?.session?.businessDate
+    ? new Date(currentSession.session.businessDate).toLocaleDateString()
+    : null;
+  const currentExpectedCash = currentSession?.totals?.expectedCashPence;
 
   const pettyExpenseWithoutReceipt = useMemo(
     () =>
@@ -433,6 +437,22 @@ export const CashOversightPage = () => {
             </button>
           </div>
         </div>
+
+        {currentSessionOpen ? (
+          <div className="cash-register-banner cash-register-banner-open">
+            <strong>Register OPEN</strong>
+            <span>
+              Session {currentSessionId?.slice(0, 8)}
+              {currentBusinessDate ? ` — ${currentBusinessDate}` : ""}
+              {currentExpectedCash !== undefined ? ` — Expected cash ${formatMoney(currentExpectedCash)}` : ""}
+            </span>
+          </div>
+        ) : (
+          <div className="cash-register-banner cash-register-banner-closed">
+            <strong>Register CLOSED</strong>
+            <span>Start a till to begin trading.</span>
+          </div>
+        )}
 
         <div className="dashboard-summary-grid">
           {registerSummary.map((item) => (
