@@ -30,7 +30,7 @@ type ListCashSessionsInput = {
   to?: string;
 };
 
-const DATE_ONLY_REGEX = /^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 export const DEFAULT_CASH_LOCATION_ID = "default";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {

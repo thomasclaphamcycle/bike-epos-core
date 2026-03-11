@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
-type RangePreset = "7" | "30" | "90";
+type RangePreset = 7 | 30 | 90;
 type MovementType = "CASH_IN" | "CASH_OUT";
 type CashMovementReason = "BANK_DEPOSIT" | "SAFE_DROP" | "SUPPLIER_PAYMENT" | "PETTY_EXPENSE" | "OTHER";
 
@@ -81,30 +81,40 @@ const CASH_OUT_REASON_OPTIONS: Array<{ value: CashMovementReason; label: string 
   { value: "OTHER", label: "Other" },
 ];
 
-const RANGE_PRESET_DAYS: Record<RangePreset, number> = {
-  "7": 7,
-  "30": 30,
-  "90": 90,
-};
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const formatMoney = (pence: number | null | undefined) =>
   pence === null || pence === undefined ? "-" : `£${(pence / 100).toFixed(2)}`;
 
-const formatDateKey = (value: Date) => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, "0");
-  const day = `${value.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const toISODate = (value: Date) => value.toISOString().slice(0, 10);
 
 const shiftDays = (date: Date, days: number) => {
   const next = new Date(date);
-  next.setDate(next.getDate() + days);
+  next.setUTCDate(next.getUTCDate() + days);
   return next;
 };
 
-const normalizeRangePreset = (value: string): RangePreset =>
-  value === "7" || value === "30" || value === "90" ? value : "30";
+const normalizeRangePreset = (value: string): RangePreset => {
+  if (value === "7") {
+    return 7;
+  }
+  if (value === "90") {
+    return 90;
+  }
+  return 30;
+};
+
+const buildHistoryRange = (preset: RangePreset) => {
+  const today = new Date();
+  const to = toISODate(today);
+  const from = toISODate(shiftDays(today, -(preset - 1)));
+
+  if (!DATE_ONLY_REGEX.test(from) || !DATE_ONLY_REGEX.test(to)) {
+    throw new Error("Failed to build valid cash history range");
+  }
+
+  return { from, to };
+};
 
 const toPence = (value: string) => {
   const trimmed = value.trim();
@@ -121,7 +131,7 @@ const toPence = (value: string) => {
 export const CashOversightPage = () => {
   const { error, success } = useToasts();
 
-  const [rangePreset, setRangePreset] = useState<RangePreset>("30");
+  const [rangePreset, setRangePreset] = useState<RangePreset>(30);
   const [currentSession, setCurrentSession] = useState<CashSessionSummaryResponse | null>(null);
   const [sessions, setSessions] = useState<CashSession[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
@@ -148,10 +158,7 @@ export const CashOversightPage = () => {
   const loadCashManagement = async () => {
     setLoading(true);
     try {
-      const today = new Date();
-      const rangeDays = RANGE_PRESET_DAYS[rangePreset] ?? RANGE_PRESET_DAYS["30"];
-      const to = formatDateKey(today);
-      const from = formatDateKey(shiftDays(today, -(rangeDays - 1)));
+      const { from, to } = buildHistoryRange(rangePreset);
 
       const [currentResult, historyResult, movementResult] = await Promise.allSettled([
         apiGet<CashSessionSummaryResponse>("/api/management/cash/register/current"),
@@ -414,7 +421,7 @@ export const CashOversightPage = () => {
           <div className="actions-inline">
             <label>
               Range
-              <select value={rangePreset} onChange={(event) => setRangePreset(normalizeRangePreset(event.target.value))}>
+              <select value={String(rangePreset)} onChange={(event) => setRangePreset(normalizeRangePreset(event.target.value))}>
                 <option value="7">Last 7 days</option>
                 <option value="30">Last 30 days</option>
                 <option value="90">Last 90 days</option>
