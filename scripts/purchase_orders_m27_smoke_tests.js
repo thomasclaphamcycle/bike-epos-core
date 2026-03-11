@@ -396,7 +396,26 @@ const run = async () => {
     assert.equal(receivePartialRes.status, 200, JSON.stringify(receivePartialRes.json));
     assert.equal(receivePartialRes.json.status, "PARTIALLY_RECEIVED");
     assert.equal(receivePartialRes.json.items[0].quantityReceived, 5);
+    assert.equal(receivePartialRes.json.items[0].quantityRemaining, 7);
     assert.equal(receivePartialRes.json.items[0].unitCostPence, 2800);
+
+    const onHandAfterPartialRes = await fetchJson(
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandAfterPartialRes.status, 200, JSON.stringify(onHandAfterPartialRes.json));
+    assert.equal(onHandAfterPartialRes.json.onHand, 5);
+
+    const poAfterPartialRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}`, {
+      headers: staffHeaders,
+    });
+    assert.equal(poAfterPartialRes.status, 200, JSON.stringify(poAfterPartialRes.json));
+    assert.equal(poAfterPartialRes.json.status, "PARTIALLY_RECEIVED");
+    assert.equal(poAfterPartialRes.json.totals.quantityOrdered, 12);
+    assert.equal(poAfterPartialRes.json.totals.quantityReceived, 5);
+    assert.equal(poAfterPartialRes.json.totals.quantityRemaining, 7);
 
     const partialMovementRows = await prisma.inventoryMovement.findMany({
       where: {
@@ -428,6 +447,15 @@ const run = async () => {
     assert.equal(receiveFinalRes.json.items[0].quantityReceived, 12);
     assert.equal(receiveFinalRes.json.items[0].quantityRemaining, 0);
 
+    const onHandAfterFinalRes = await fetchJson(
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandAfterFinalRes.status, 200, JSON.stringify(onHandAfterFinalRes.json));
+    assert.equal(onHandAfterFinalRes.json.onHand, 12);
+
     const movementRows = await prisma.inventoryMovement.findMany({
       where: {
         referenceType: "PURCHASE_ORDER_ITEM",
@@ -439,21 +467,15 @@ const run = async () => {
     assert.equal(movementRows[0].quantity, 5);
     assert.equal(movementRows[1].quantity, 7);
 
-    const onHandRes = await fetchJson(
-      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
-      {
-        headers: staffHeaders,
-      },
-    );
-    assert.equal(onHandRes.status, 200, JSON.stringify(onHandRes.json));
-    assert.equal(onHandRes.json.onHand, 12);
-
     const getPoRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}`, {
       headers: staffHeaders,
     });
     assert.equal(getPoRes.status, 200, JSON.stringify(getPoRes.json));
     assert.equal(getPoRes.json.poNumber, poRes.json.poNumber);
     assert.equal(getPoRes.json.status, "RECEIVED");
+    assert.equal(getPoRes.json.totals.quantityOrdered, 12);
+    assert.equal(getPoRes.json.totals.quantityReceived, 12);
+    assert.equal(getPoRes.json.totals.quantityRemaining, 0);
 
     console.log("PASS m27 purchase order workflow smoke tests");
   } finally {

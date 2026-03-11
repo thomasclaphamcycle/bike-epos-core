@@ -62,13 +62,24 @@ const toStatusBadgeClass = (status: PurchaseOrder["status"]) => {
 const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
   switch (status) {
     case "PARTIALLY_RECEIVED":
-      return "Part Received";
+      return "Partially Received";
     case "SENT":
       return "Ordered";
     default:
       return status.charAt(0) + status.slice(1).toLowerCase();
   }
 };
+
+const formatShortDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
+
+const isOpenPurchaseOrder = (purchaseOrder: PurchaseOrder) =>
+  (purchaseOrder.status === "SENT" || purchaseOrder.status === "PARTIALLY_RECEIVED")
+  && purchaseOrder.totals.quantityRemaining > 0;
+
+const isOverduePurchaseOrder = (purchaseOrder: PurchaseOrder) =>
+  isOpenPurchaseOrder(purchaseOrder)
+  && purchaseOrder.expectedAt !== null
+  && new Date(purchaseOrder.expectedAt).getTime() < Date.now();
 
 export const PurchasingPage = () => {
   const navigate = useNavigate();
@@ -192,6 +203,67 @@ export const PurchasingPage = () => {
     () => purchaseOrders.filter((po) => po.status === "DRAFT").length,
     [purchaseOrders],
   );
+  const overduePurchaseOrders = useMemo(
+    () => purchaseOrders
+      .filter((purchaseOrder) => isOverduePurchaseOrder(purchaseOrder))
+      .sort((left, right) => new Date(left.expectedAt || left.createdAt).getTime() - new Date(right.expectedAt || right.createdAt).getTime()),
+    [purchaseOrders],
+  );
+  const partiallyReceivedPurchaseOrders = useMemo(
+    () => purchaseOrders
+      .filter((purchaseOrder) => purchaseOrder.status === "PARTIALLY_RECEIVED" && purchaseOrder.totals.quantityRemaining > 0)
+      .sort((left, right) => new Date(left.expectedAt || left.createdAt).getTime() - new Date(right.expectedAt || right.createdAt).getTime()),
+    [purchaseOrders],
+  );
+  const openAwaitingDeliveryPurchaseOrders = useMemo(
+    () => purchaseOrders
+      .filter((purchaseOrder) => purchaseOrder.status === "SENT" && purchaseOrder.totals.quantityRemaining > 0)
+      .filter((purchaseOrder) => !isOverduePurchaseOrder(purchaseOrder))
+      .sort((left, right) => new Date(left.expectedAt || left.createdAt).getTime() - new Date(right.expectedAt || right.createdAt).getTime()),
+    [purchaseOrders],
+  );
+
+  const renderVisibilityTable = (rows: PurchaseOrder[], emptyLabel: string) => (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>PO Number</th>
+            <th>Supplier</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Expected</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={6}>{emptyLabel}</td>
+            </tr>
+          ) : (
+            rows.map((purchaseOrder) => (
+              <tr key={purchaseOrder.id}>
+                <td>
+                  <div className="table-primary">{purchaseOrder.poNumber}</div>
+                  <div className="table-secondary mono-text">{purchaseOrder.id.slice(0, 8)}</div>
+                </td>
+                <td>{purchaseOrder.supplier.name}</td>
+                <td>
+                  <span className={toStatusBadgeClass(purchaseOrder.status)}>
+                    {formatPurchaseOrderStatus(purchaseOrder.status)}
+                  </span>
+                </td>
+                <td>{formatShortDate(purchaseOrder.createdAt)}</td>
+                <td>{formatShortDate(purchaseOrder.expectedAt)}</td>
+                <td><Link to={`/purchasing/${purchaseOrder.id}`}>Open PO</Link></td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="page-shell">
@@ -268,6 +340,52 @@ export const PurchasingPage = () => {
           </div>
         </div>
 
+        {canManage ? (
+          <div className="page-shell">
+            <div className="card-header-row">
+              <div>
+                <h2>Purchasing Visibility</h2>
+                <p className="muted-text">
+                  Simple manager-facing purchase order triage using the current purchase-order list and detail workflow.
+                </p>
+              </div>
+              <div className="actions-inline">
+                <Link to="/purchasing/receiving" className="button-link">Receiving Workspace</Link>
+              </div>
+            </div>
+
+            <section className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Overdue Purchase Orders</h3>
+                  <p className="muted-text">Open purchase orders with an expected date in the past.</p>
+                </div>
+              </div>
+              {renderVisibilityTable(overduePurchaseOrders, "No overdue purchase orders are currently visible.")}
+            </section>
+
+            <section className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Partially Received Purchase Orders</h3>
+                  <p className="muted-text">Purchase orders where receiving has started but stock is still outstanding.</p>
+                </div>
+              </div>
+              {renderVisibilityTable(partiallyReceivedPurchaseOrders, "No partially received purchase orders are currently visible.")}
+            </section>
+
+            <section className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Open Purchase Orders Awaiting Delivery</h3>
+                  <p className="muted-text">Sent purchase orders still waiting for delivery and not yet overdue.</p>
+                </div>
+              </div>
+              {renderVisibilityTable(openAwaitingDeliveryPurchaseOrders, "No open purchase orders are currently awaiting delivery.")}
+            </section>
+          </div>
+        ) : null}
+
         <div className="table-wrap">
           <table>
             <thead>
@@ -310,8 +428,8 @@ export const PurchasingPage = () => {
                     <td className="numeric-cell">{purchaseOrder.totals.quantityOrdered}</td>
                     <td className="numeric-cell">{purchaseOrder.totals.quantityReceived}</td>
                     <td className="numeric-cell">{purchaseOrder.totals.quantityRemaining}</td>
-                    <td>{purchaseOrder.expectedAt ? new Date(purchaseOrder.expectedAt).toLocaleDateString() : "-"}</td>
-                    <td>{new Date(purchaseOrder.createdAt).toLocaleDateString()}</td>
+                    <td>{formatShortDate(purchaseOrder.expectedAt)}</td>
+                    <td>{formatShortDate(purchaseOrder.createdAt)}</td>
                   </tr>
                 ))
               )}
