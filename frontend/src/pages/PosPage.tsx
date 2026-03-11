@@ -268,6 +268,12 @@ export const PosPage = () => {
   }, [debouncedSearch, error]);
 
   useEffect(() => {
+    if (!loading && basket && !sale) {
+      focusProductSearch();
+    }
+  }, [loading, basket, sale]);
+
+  useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
       setCustomerResults([]);
       setCustomerLoading(false);
@@ -815,6 +821,18 @@ export const PosPage = () => {
             data-testid="pos-product-search"
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") {
+                return;
+              }
+
+              if (!basketId || saleId || searchRows.length === 0) {
+                return;
+              }
+
+              event.preventDefault();
+              void addItem(searchRows[0].id);
+            }}
             placeholder="sku, barcode, name"
           />
         </label>
