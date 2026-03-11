@@ -85,6 +85,16 @@ type CompleteSaleResult = {
   receiptUrl?: string;
 };
 
+type TenderMethod = "CASH" | "CARD";
+
+type CompletedSaleState = {
+  saleId: string;
+  receiptUrl: string;
+  changeDuePence: number;
+  tenderMethod: TenderMethod;
+  customerName: string | null;
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 export const PosPage = () => {
@@ -109,6 +119,8 @@ export const PosPage = () => {
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
+  const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -440,6 +452,7 @@ export const PosPage = () => {
     }
 
     try {
+      setCompletedSale(null);
       const payload = await apiPost<{ sale: { id: string } }>(
         `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
         {},
@@ -470,7 +483,7 @@ export const PosPage = () => {
       const remaining = sale.tenderSummary.remainingPence;
       if (remaining > 0) {
         await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
-          method: "CASH",
+          method: selectedTenderMethod,
           amountPence: remaining,
         });
       }
@@ -479,8 +492,16 @@ export const PosPage = () => {
         `/api/sales/${encodeURIComponent(sale.sale.id)}/complete`,
         {},
       );
+      setCompletedSale({
+        saleId: sale.sale.id,
+        receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
+        changeDuePence: result.changeDuePence,
+        tenderMethod: selectedTenderMethod,
+        customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
+      });
       setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
-      await loadSale(sale.sale.id);
+      await createBasket();
+      setSelectedTenderMethod("CARD");
       success("Sale completed.");
     } catch (completeError) {
       const message = completeError instanceof Error ? completeError.message : "Completion failed";
@@ -514,7 +535,14 @@ export const PosPage = () => {
             >
               Checkout Basket
             </button>
-            <button type="button" onClick={() => void createBasket()}>
+            <button
+              type="button"
+              onClick={() => {
+                setCompletedSale(null);
+                setSelectedTenderMethod("CARD");
+                void createBasket();
+              }}
+            >
               New Sale
             </button>
           </div>
@@ -525,6 +553,27 @@ export const PosPage = () => {
         </p>
 
         {loading ? <p>Loading...</p> : null}
+
+        {completedSale ? (
+          <div className="success-panel">
+            <strong>Sale complete.</strong>
+            <div className="muted-text">
+              Tender: {completedSale.tenderMethod} | Customer: {completedSale.customerName || "Walk-in"} | Change: {formatMoney(completedSale.changeDuePence)}
+            </div>
+            <div className="success-links">
+              <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
+                Open receipt
+              </a>
+              <a
+                href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open direct receipt page
+              </a>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="card">
@@ -807,10 +856,32 @@ export const PosPage = () => {
 
       {sale ? (
         <section className="card">
-          <h2>Sale</h2>
+          <h2>Checkout</h2>
+          <p className="muted-text">
+            Total: {formatMoney(sale.tenderSummary.totalPence)} | Lines: {sale.saleItems.length} | Customer: {sale.sale.customer?.name || selectedCustomer?.name || "Walk-in"}
+          </p>
           <p className="muted-text">
             Tendered: {formatMoney(sale.tenderSummary.tenderedPence)} | Remaining: {formatMoney(sale.tenderSummary.remainingPence)} | Change: {formatMoney(sale.tenderSummary.changeDuePence)}
           </p>
+
+          <div className="actions-inline" role="group" aria-label="Tender type">
+            <button
+              type="button"
+              className={selectedTenderMethod === "CARD" ? "primary" : ""}
+              onClick={() => setSelectedTenderMethod("CARD")}
+              disabled={completing}
+            >
+              Card
+            </button>
+            <button
+              type="button"
+              className={selectedTenderMethod === "CASH" ? "primary" : ""}
+              onClick={() => setSelectedTenderMethod("CASH")}
+              disabled={completing}
+            >
+              Cash
+            </button>
+          </div>
 
           <div className="actions-inline">
             <button
@@ -823,24 +894,6 @@ export const PosPage = () => {
               {completing ? "Completing..." : "Complete Sale"}
             </button>
           </div>
-
-          {receiptUrl ? (
-            <div className="success-panel">
-              <strong>Sale complete.</strong>
-              <div className="success-links">
-                <a href={toBackendUrl(receiptUrl)} target="_blank" rel="noreferrer">
-                  Open receipt
-                </a>
-                <a
-                  href={toBackendUrl(`/sales/${encodeURIComponent(sale.sale.id)}/receipt`)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open direct receipt page
-                </a>
-              </div>
-            </div>
-          ) : null}
         </section>
       ) : null}
     </div>
