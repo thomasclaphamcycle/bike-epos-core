@@ -68,6 +68,10 @@ It covers:
 - recovery procedures
 - minimal hardware guidance
 
+## Real Shop Pilot Guide
+
+For a concise trial-evaluation walkthrough covering seeded logins, operator flows, sample shop scenarios, and known pilot limitations, use [docs/pilot_preparation.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_preparation.md).
+
 ## Local Setup
 
 1. Install dependencies:
