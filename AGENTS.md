@@ -250,6 +250,18 @@ Minimum expectations depend on the surface changed:
 - Terminate any leftover Node or test server processes from previous runs.
 - Ensure verification commands run sequentially and not concurrently.
 
+## Codex Project Config
+
+- Project-scoped Codex defaults live in `.codex/config.toml`.
+- This repo uses `workspace-write` with `approval_policy = "never"` and `[sandbox_workspace_write].network_access = true` so trusted local development can reach services such as PostgreSQL on `localhost:5432` without switching to full-access mode.
+- The project config remains workspace-scoped. It does not grant `danger-full-access` or unrestricted writes outside the repo workspace.
+
+## Codex Project Config
+
+- Project-scoped Codex defaults live in `.codex/config.toml`.
+- This repo uses `workspace-write` with `approval_policy = "never"` and `[sandbox_workspace_write].network_access = true` so trusted local development can reach services such as PostgreSQL on `localhost:5432` without switching to full-access mode.
+- The project config remains workspace-scoped. It does not grant `danger-full-access` or unrestricted writes outside the repo workspace.
+
 Verification commands should run in this order:
 
 - `npm test`

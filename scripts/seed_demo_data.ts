@@ -1,6 +1,12 @@
 import "dotenv/config";
 
-import { Prisma, PrismaClient, UserRole, WorkshopJobStatus } from "@prisma/client";
+import {
+  Prisma,
+  PrismaClient,
+  PurchaseOrderStatus,
+  UserRole,
+  WorkshopJobStatus,
+} from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword, hashPin } from "../src/services/passwordService";
 
@@ -26,6 +32,21 @@ const ensureMainLocation = async () =>
       name: "Main",
       code: "MAIN",
       isActive: true,
+    },
+    select: { id: true },
+  });
+
+const ensureDemoStockLocation = async () =>
+  prisma.stockLocation.upsert({
+    where: { id: DEMO_STOCK_LOCATION.id },
+    update: {
+      name: DEMO_STOCK_LOCATION.name,
+      isDefault: true,
+    },
+    create: {
+      id: DEMO_STOCK_LOCATION.id,
+      name: DEMO_STOCK_LOCATION.name,
+      isDefault: true,
     },
     select: { id: true },
   });
@@ -56,6 +77,7 @@ type DemoWorkshopJob = {
   customerName: string;
   bikeDescription: string;
   status: WorkshopJobStatus;
+  scheduledDate?: string;
   notes: string;
   line: {
     id: string;
@@ -93,11 +115,58 @@ type DemoSale = {
   }>;
 };
 
+type DemoOpeningStock = {
+  inventoryMovementId: string;
+  stockLedgerEntryId: string;
+  sku: string;
+  quantity: number;
+  unitCostPence: number;
+  note: string;
+};
+
+type DemoSupplier = {
+  id: string;
+  name: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  notes: string;
+};
+
+type DemoPurchaseOrder = {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  status: PurchaseOrderStatus;
+  orderedAt: string;
+  expectedAt: string;
+  notes: string;
+  items: Array<{
+    id: string;
+    sku: string;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitCostPence: number;
+  }>;
+};
+
+const toRelativeIso = (dayOffset: number, hour = 10, minute = 0) => {
+  const date = new Date();
+  date.setUTCHours(hour, minute, 0, 0);
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  return date.toISOString();
+};
+
+const DEMO_STOCK_LOCATION = {
+  id: "40000000-0000-4000-8000-000000000001",
+  name: "Main Stock",
+};
+
 const DEMO_USERS = [
   {
     username: "admin",
     email: "admin@local",
-    name: "Thomas",
+    name: "Demo Admin",
     role: "ADMIN" as UserRole,
     password: "admin123",
     pin: "4444",
@@ -105,7 +174,7 @@ const DEMO_USERS = [
   {
     username: "manager",
     email: "manager@local",
-    name: "Kyle",
+    name: "Demo Manager",
     role: "MANAGER" as UserRole,
     password: "manager123",
     pin: "2222",
@@ -113,7 +182,7 @@ const DEMO_USERS = [
   {
     username: "staff",
     email: "staff@local",
-    name: "Eric",
+    name: "Demo Staff",
     role: "STAFF" as UserRole,
     password: "staff123",
     pin: "1111",
@@ -122,184 +191,126 @@ const DEMO_USERS = [
 
 const DEMO_PRODUCTS: DemoProduct[] = [
   {
-    name: "Demo Road Bike 54cm",
-    brand: "CoreCycles",
-    description: "Aluminium road bike with Shimano Tiagra.",
-    sku: "DEMO-BIKE-R54",
-    barcode: "9900000000001",
-    retailPricePence: 109999,
-    costPricePence: 76000,
-  },
-  {
-    name: "Demo Gravel Bike 56cm",
-    brand: "CoreCycles",
-    description: "Gravel bike with hydraulic disc brakes.",
-    sku: "DEMO-BIKE-G56",
-    barcode: "9900000000002",
-    retailPricePence: 139999,
-    costPricePence: 99000,
-  },
-  {
     name: "Demo City Bike 52cm",
     brand: "MetroRide",
-    description: "Step-through city bike.",
+    description: "Step-through city bike for an easy complete-bike sale walkthrough.",
     sku: "DEMO-BIKE-C52",
-    barcode: "9900000000003",
+    barcode: "DEMO-BC-C52",
     retailPricePence: 74999,
     costPricePence: 51000,
   },
   {
-    name: "Demo MTB Hardtail M",
-    brand: "TrailForge",
-    description: "Hardtail mountain bike, 29 inch wheels.",
-    sku: "DEMO-BIKE-MTB-M",
-    barcode: "9900000000004",
-    retailPricePence: 124999,
-    costPricePence: 88000,
-  },
-  {
     name: "Demo Helmet Road",
     brand: "SafeLine",
-    description: "Lightweight road helmet.",
+    description: "Lightweight road helmet for a simple accessory sale.",
     sku: "DEMO-ACC-HELMET",
-    barcode: "9900000000005",
+    barcode: "DEMO-BC-HELMET",
     retailPricePence: 5999,
     costPricePence: 3100,
-  },
-  {
-    name: "Demo Cycling Gloves",
-    brand: "GripMax",
-    description: "Half-finger summer gloves.",
-    sku: "DEMO-ACC-GLOVES",
-    barcode: "9900000000006",
-    retailPricePence: 2499,
-    costPricePence: 1200,
   },
   {
     name: "Demo Floor Pump",
     brand: "AirFlow",
     description: "Workshop floor pump with pressure gauge.",
     sku: "DEMO-ACC-PUMP",
-    barcode: "9900000000007",
+    barcode: "DEMO-BC-PUMP",
     retailPricePence: 3499,
     costPricePence: 1800,
   },
   {
-    name: "Demo Bottle Cage",
-    brand: "Hydra",
-    description: "Alloy bottle cage.",
-    sku: "DEMO-ACC-CAGE",
-    barcode: "9900000000008",
-    retailPricePence: 1299,
-    costPricePence: 500,
-  },
-  {
-    name: "Demo Chain 11-Speed",
-    brand: "DriveTech",
-    description: "11-speed chain for road and gravel.",
-    sku: "DEMO-PART-CHAIN11",
-    barcode: "9900000000009",
-    retailPricePence: 2799,
-    costPricePence: 1500,
-  },
-  {
-    name: "Demo Cassette 11-30",
-    brand: "DriveTech",
-    description: "11-speed cassette 11-30T.",
-    sku: "DEMO-PART-CASS1130",
-    barcode: "9900000000010",
-    retailPricePence: 4599,
-    costPricePence: 2900,
-  },
-  {
-    name: "Demo Disc Rotor 160mm",
-    brand: "StopFast",
-    description: "160mm centre-lock disc rotor.",
-    sku: "DEMO-PART-ROTOR160",
-    barcode: "9900000000011",
-    retailPricePence: 2199,
-    costPricePence: 1200,
-  },
-  {
-    name: "Demo Brake Pads Resin",
-    brand: "StopFast",
-    description: "Resin hydraulic disc brake pads.",
-    sku: "DEMO-PART-PADS-R",
-    barcode: "9900000000012",
-    retailPricePence: 1499,
-    costPricePence: 700,
-  },
-  {
-    name: "Demo Inner Tube 700x25-32",
-    brand: "AirFlow",
-    description: "Road inner tube 700x25-32 presta.",
-    sku: "DEMO-PART-TUBE700",
-    barcode: "9900000000013",
-    retailPricePence: 699,
-    costPricePence: 300,
-  },
-  {
-    name: "Demo Tyre 700x28",
-    brand: "GripMax",
-    description: "Puncture-resistant road tyre 700x28.",
-    sku: "DEMO-PART-TYRE728",
-    barcode: "9900000000014",
-    retailPricePence: 3299,
-    costPricePence: 1900,
-  },
-  {
     name: "Demo Chain Lube 120ml",
     brand: "SmoothRide",
-    description: "All-weather chain lubricant.",
+    description: "All-weather chain lubricant for a quick basket add-on.",
     sku: "DEMO-ACC-LUBE",
-    barcode: "9900000000015",
+    barcode: "DEMO-BC-LUBE",
     retailPricePence: 899,
     costPricePence: 400,
   },
   {
-    name: "Demo Multi-Tool 15-in-1",
-    brand: "FixKit",
-    description: "Compact roadside multi-tool.",
-    sku: "DEMO-ACC-TOOL15",
-    barcode: "9900000000016",
-    retailPricePence: 2499,
-    costPricePence: 1200,
+    name: "Demo Inner Tube 700x25-32",
+    brand: "AirFlow",
+    description: "Road inner tube used by the workshop demo jobs.",
+    sku: "DEMO-PART-TUBE700",
+    barcode: "DEMO-BC-TUBE700",
+    retailPricePence: 699,
+    costPricePence: 300,
   },
   {
-    name: "Demo Pedals Flat Alloy",
-    brand: "TrailForge",
-    description: "Flat MTB pedals in alloy.",
-    sku: "DEMO-PART-PEDALFLAT",
-    barcode: "9900000000017",
-    retailPricePence: 2899,
-    costPricePence: 1700,
+    name: "Demo Brake Pads Resin",
+    brand: "StopFast",
+    description: "Resin hydraulic disc brake pads for workshop and PO flows.",
+    sku: "DEMO-PART-PADS-R",
+    barcode: "DEMO-BC-PADS",
+    retailPricePence: 1499,
+    costPricePence: 700,
   },
   {
-    name: "Demo Saddle Comfort",
-    brand: "RideWell",
-    description: "Comfort saddle with gel insert.",
-    sku: "DEMO-PART-SADDLE-C",
-    barcode: "9900000000018",
-    retailPricePence: 3199,
-    costPricePence: 1800,
-  },
-  {
-    name: "Demo Light Set USB",
-    brand: "BeamBright",
-    description: "USB rechargeable front/rear light set.",
-    sku: "DEMO-ACC-LIGHTS-USB",
-    barcode: "9900000000019",
-    retailPricePence: 3999,
-    costPricePence: 2200,
-  },
-  {
-    name: "Demo Lock U-Lock",
-    brand: "SecureRide",
-    description: "Hardened steel U-lock.",
-    sku: "DEMO-ACC-ULOCK",
-    barcode: "9900000000020",
+    name: "Demo Cassette 11-30",
+    brand: "DriveTech",
+    description: "11-speed cassette used by the waiting-for-parts workshop demo.",
+    sku: "DEMO-PART-CASS1130",
+    barcode: "DEMO-BC-CASS1130",
     retailPricePence: 4599,
-    costPricePence: 2500,
+    costPricePence: 2900,
+  },
+];
+
+const DEMO_OPENING_STOCK: DemoOpeningStock[] = [
+  {
+    inventoryMovementId: "demo-opening-stock-001",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000001",
+    sku: "DEMO-BIKE-C52",
+    quantity: 2,
+    unitCostPence: 51000,
+    note: "Demo opening stock for complete-bike POS walkthroughs.",
+  },
+  {
+    inventoryMovementId: "demo-opening-stock-002",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000002",
+    sku: "DEMO-ACC-HELMET",
+    quantity: 6,
+    unitCostPence: 3100,
+    note: "Demo opening stock for accessory sales.",
+  },
+  {
+    inventoryMovementId: "demo-opening-stock-003",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000003",
+    sku: "DEMO-ACC-PUMP",
+    quantity: 4,
+    unitCostPence: 1800,
+    note: "Demo opening stock for accessory sales.",
+  },
+  {
+    inventoryMovementId: "demo-opening-stock-004",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000004",
+    sku: "DEMO-ACC-LUBE",
+    quantity: 8,
+    unitCostPence: 400,
+    note: "Demo opening stock for low-value add-on sales.",
+  },
+  {
+    inventoryMovementId: "demo-opening-stock-005",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000005",
+    sku: "DEMO-PART-TUBE700",
+    quantity: 12,
+    unitCostPence: 300,
+    note: "Demo opening stock for workshop puncture repairs.",
+  },
+  {
+    inventoryMovementId: "demo-opening-stock-006",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000006",
+    sku: "DEMO-PART-PADS-R",
+    quantity: 8,
+    unitCostPence: 700,
+    note: "Demo opening stock for workshop brake jobs.",
+  },
+  {
+    inventoryMovementId: "demo-opening-stock-007",
+    stockLedgerEntryId: "60000000-0000-4000-8000-000000000007",
+    sku: "DEMO-PART-CASS1130",
+    quantity: 3,
+    unitCostPence: 2900,
+    note: "Demo opening stock for drivetrain workshop jobs.",
   },
 ];
 
@@ -309,101 +320,48 @@ const DEMO_CUSTOMERS: DemoCustomer[] = [
     name: "Alex Turner",
     firstName: "Alex",
     lastName: "Turner",
-    email: "alex.turner@demo.local",
+    email: "alex.turner+corepos-demo@demo.local",
     phone: "07700000001",
-    notes: "Demo customer profile for POS walkthroughs.",
+    notes: "Use for a simple POS sale or customer attachment walkthrough.",
   },
   {
     id: "10000000-0000-4000-8000-000000000002",
     name: "Jordan Patel",
     firstName: "Jordan",
     lastName: "Patel",
-    email: "jordan.patel@demo.local",
+    email: "jordan.patel+corepos-demo@demo.local",
     phone: "07700000002",
-    notes: "Prefers phone updates for service work.",
+    notes: "Use for workshop intake and status updates.",
   },
   {
     id: "10000000-0000-4000-8000-000000000003",
-    name: "Morgan Lee",
-    firstName: "Morgan",
-    lastName: "Lee",
-    email: "morgan.lee@demo.local",
-    phone: "07700000003",
-    notes: "Interested in commuter upgrades.",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000004",
-    name: "Taylor Smith",
-    firstName: "Taylor",
-    lastName: "Smith",
-    email: "taylor.smith@demo.local",
-    phone: "07700000004",
-    notes: "Collects accessories frequently.",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000005",
     name: "Riley Evans",
     firstName: "Riley",
     lastName: "Evans",
-    email: "riley.evans@demo.local",
-    phone: "07700000005",
-    notes: "Demo workshop customer.",
+    email: "riley.evans+corepos-demo@demo.local",
+    phone: "07700000003",
+    notes: "Waiting-for-parts workshop customer.",
   },
   {
-    id: "10000000-0000-4000-8000-000000000006",
-    name: "Casey Walker",
-    firstName: "Casey",
-    lastName: "Walker",
-    email: "casey.walker@demo.local",
-    phone: "07700000006",
-    notes: "High-value customer account.",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000007",
+    id: "10000000-0000-4000-8000-000000000004",
     name: "Jamie Green",
     firstName: "Jamie",
     lastName: "Green",
-    email: "jamie.green@demo.local",
-    phone: "07700000007",
-    notes: "Orders parts in advance.",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000008",
-    name: "Sam Johnson",
-    firstName: "Sam",
-    lastName: "Johnson",
-    email: "sam.johnson@demo.local",
-    phone: "07700000008",
-    notes: "Interested in gravel bikes.",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000009",
-    name: "Drew Kim",
-    firstName: "Drew",
-    lastName: "Kim",
-    email: "drew.kim@demo.local",
-    phone: "07700000009",
-    notes: "Workshop repeat customer.",
-  },
-  {
-    id: "10000000-0000-4000-8000-000000000010",
-    name: "Avery Lewis",
-    firstName: "Avery",
-    lastName: "Lewis",
-    email: "avery.lewis@demo.local",
-    phone: "07700000010",
-    notes: "Prefers card payments.",
+    email: "jamie.green+corepos-demo@demo.local",
+    phone: "07700000004",
+    notes: "Ready-for-collection workshop customer.",
   },
 ];
 
 const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
   {
     id: "20000000-0000-4000-8000-000000000001",
-    customerId: DEMO_CUSTOMERS[0].id,
-    customerName: DEMO_CUSTOMERS[0].name,
-    bikeDescription: "CoreCycles Road Bike - brake rub",
+    customerId: DEMO_CUSTOMERS[1].id,
+    customerName: DEMO_CUSTOMERS[1].name,
+    bikeDescription: "MetroRide commuter bike - booked for safety check",
     status: "BOOKING_MADE",
-    notes: "[DEMO_SEED:M67:JOB:001] Awaiting bike drop-off.",
+    scheduledDate: toRelativeIso(1, 9, 30),
+    notes: "Minimal demo booking ready for intake and approval flow.",
     line: {
       id: "21000000-0000-4000-8000-000000000001",
       type: "LABOUR",
@@ -414,59 +372,14 @@ const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
   },
   {
     id: "20000000-0000-4000-8000-000000000002",
-    customerId: DEMO_CUSTOMERS[1].id,
-    customerName: DEMO_CUSTOMERS[1].name,
-    bikeDescription: "MetroRide City Bike - puncture repair",
-    status: "BIKE_ARRIVED",
-    notes: "[DEMO_SEED:M67:JOB:002] In workshop queue.",
-    line: {
-      id: "21000000-0000-4000-8000-000000000002",
-      type: "PART",
-      description: "Replace inner tube",
-      qty: 1,
-      unitPricePence: 699,
-      sku: "DEMO-PART-TUBE700",
-    },
-  },
-  {
-    id: "20000000-0000-4000-8000-000000000003",
     customerId: DEMO_CUSTOMERS[2].id,
     customerName: DEMO_CUSTOMERS[2].name,
-    bikeDescription: "TrailForge MTB - drivetrain noise",
-    status: "WAITING_FOR_APPROVAL",
-    notes: "[DEMO_SEED:M67:JOB:003] Waiting customer approval.",
-    line: {
-      id: "21000000-0000-4000-8000-000000000003",
-      type: "LABOUR",
-      description: "Drivetrain diagnostic",
-      qty: 1,
-      unitPricePence: 3000,
-    },
-  },
-  {
-    id: "20000000-0000-4000-8000-000000000004",
-    customerId: DEMO_CUSTOMERS[3].id,
-    customerName: DEMO_CUSTOMERS[3].name,
-    bikeDescription: "Gravel bike - full service",
-    status: "APPROVED",
-    notes: "[DEMO_SEED:M67:JOB:004] Approved and queued.",
-    line: {
-      id: "21000000-0000-4000-8000-000000000004",
-      type: "LABOUR",
-      description: "Full service labour",
-      qty: 2,
-      unitPricePence: 4500,
-    },
-  },
-  {
-    id: "20000000-0000-4000-8000-000000000005",
-    customerId: DEMO_CUSTOMERS[4].id,
-    customerName: DEMO_CUSTOMERS[4].name,
-    bikeDescription: "Road bike - waiting on cassette",
+    bikeDescription: "Road bike - waiting on cassette replacement",
     status: "WAITING_FOR_PARTS",
-    notes: "[DEMO_SEED:M67:JOB:005] Waiting for part delivery.",
+    scheduledDate: toRelativeIso(0, 11, 0),
+    notes: "Clear parts-blocked demo job linked to the demo purchase order.",
     line: {
-      id: "21000000-0000-4000-8000-000000000005",
+      id: "21000000-0000-4000-8000-000000000002",
       type: "PART",
       description: "Install cassette 11-30",
       qty: 1,
@@ -475,14 +388,15 @@ const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
     },
   },
   {
-    id: "20000000-0000-4000-8000-000000000006",
-    customerId: DEMO_CUSTOMERS[5].id,
-    customerName: DEMO_CUSTOMERS[5].name,
-    bikeDescription: "Commuter bike - brake pads + tune",
-    status: "ON_HOLD",
-    notes: "[DEMO_SEED:M67:JOB:006] Customer requested hold.",
+    id: "20000000-0000-4000-8000-000000000003",
+    customerId: DEMO_CUSTOMERS[3].id,
+    customerName: DEMO_CUSTOMERS[3].name,
+    bikeDescription: "Hybrid bike - ready for collection",
+    status: "BIKE_READY",
+    scheduledDate: toRelativeIso(-1, 15, 0),
+    notes: "Use this for collection, finalize-to-basket, and workshop checkout walkthroughs.",
     line: {
-      id: "21000000-0000-4000-8000-000000000006",
+      id: "21000000-0000-4000-8000-000000000003",
       type: "PART",
       description: "Replace brake pads",
       qty: 1,
@@ -490,35 +404,44 @@ const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
       sku: "DEMO-PART-PADS-R",
     },
   },
+];
+
+const DEMO_SUPPLIERS: DemoSupplier[] = [
   {
-    id: "20000000-0000-4000-8000-000000000007",
-    customerId: DEMO_CUSTOMERS[6].id,
-    customerName: DEMO_CUSTOMERS[6].name,
-    bikeDescription: "Road bike - ready for collection",
-    status: "BIKE_READY",
-    notes: "[DEMO_SEED:M67:JOB:007] Ready and awaiting collection.",
-    line: {
-      id: "21000000-0000-4000-8000-000000000007",
-      type: "LABOUR",
-      description: "Wheel truing labour",
-      qty: 1,
-      unitPricePence: 2200,
-    },
+    id: "50000000-0000-4000-8000-000000000001",
+    name: "Demo Parts Supply",
+    contactName: "Mia Jones",
+    email: "buying+corepos-demo@demo-supplier.local",
+    phone: "02070000001",
+    notes: "Minimal seeded supplier for purchasing and receiving evaluation.",
   },
+];
+
+const DEMO_PURCHASE_ORDERS: DemoPurchaseOrder[] = [
   {
-    id: "20000000-0000-4000-8000-000000000008",
-    customerId: DEMO_CUSTOMERS[7].id,
-    customerName: DEMO_CUSTOMERS[7].name,
-    bikeDescription: "MTB - service completed",
-    status: "COMPLETED",
-    notes: "[DEMO_SEED:M67:JOB:008] Completed service.",
-    line: {
-      id: "21000000-0000-4000-8000-000000000008",
-      type: "LABOUR",
-      description: "Suspension setup labour",
-      qty: 1,
-      unitPricePence: 5000,
-    },
+    id: "51000000-0000-4000-8000-000000000001",
+    poNumber: "COREPOS-DEMO-PO-0001",
+    supplierId: DEMO_SUPPLIERS[0].id,
+    status: "SENT",
+    orderedAt: toRelativeIso(-1, 9, 0),
+    expectedAt: toRelativeIso(2, 14, 0),
+    notes: "Demo purchase order left open so receiving can be tested immediately.",
+    items: [
+      {
+        id: "51100000-0000-4000-8000-000000000001",
+        sku: "DEMO-PART-CASS1130",
+        quantityOrdered: 2,
+        quantityReceived: 0,
+        unitCostPence: 2800,
+      },
+      {
+        id: "51100000-0000-4000-8000-000000000002",
+        sku: "DEMO-PART-PADS-R",
+        quantityOrdered: 6,
+        quantityReceived: 0,
+        unitCostPence: 650,
+      },
+    ],
   },
 ];
 
@@ -528,91 +451,22 @@ const DEMO_SALES: DemoSale[] = [
     basketId: "31000000-0000-4000-8000-000000000001",
     customerId: DEMO_CUSTOMERS[0].id,
     createdByUsername: "staff",
-    completed: false,
+    completed: true,
+    completedAt: toRelativeIso(-1, 11, 15),
+    receiptNumber: "COREPOS-DEMO-REC-0001",
+    tenders: [{ id: "33000000-0000-4000-8000-000000000001", method: "CARD", amountPence: 6898 }],
+    payments: [
+      {
+        id: "34000000-0000-4000-8000-000000000001",
+        method: "CARD",
+        amountPence: 6898,
+        providerRef: "DEMO-CARD-0001",
+      },
+    ],
     items: [
       { id: "32000000-0000-4000-8000-000000000001", sku: "DEMO-ACC-HELMET", quantity: 1 },
-      { id: "32000000-0000-4000-8000-000000000002", sku: "DEMO-ACC-GLOVES", quantity: 1 },
+      { id: "32000000-0000-4000-8000-000000000002", sku: "DEMO-ACC-LUBE", quantity: 1 },
     ],
-  },
-  {
-    id: "30000000-0000-4000-8000-000000000002",
-    basketId: "31000000-0000-4000-8000-000000000002",
-    customerId: DEMO_CUSTOMERS[1].id,
-    createdByUsername: "staff",
-    completed: false,
-    items: [
-      { id: "32000000-0000-4000-8000-000000000003", sku: "DEMO-ACC-PUMP", quantity: 1 },
-      { id: "32000000-0000-4000-8000-000000000004", sku: "DEMO-ACC-CAGE", quantity: 2 },
-    ],
-  },
-  {
-    id: "30000000-0000-4000-8000-000000000003",
-    basketId: "31000000-0000-4000-8000-000000000003",
-    customerId: DEMO_CUSTOMERS[2].id,
-    createdByUsername: "manager",
-    completed: true,
-    completedAt: "2026-03-01T10:15:00.000Z",
-    receiptNumber: "DEMO-REC-0001",
-    tenders: [{ id: "33000000-0000-4000-8000-000000000001", method: "CASH", amountPence: 6098 }],
-    payments: [{ id: "34000000-0000-4000-8000-000000000001", method: "CASH", amountPence: 6098 }],
-    items: [
-      { id: "32000000-0000-4000-8000-000000000005", sku: "DEMO-PART-CHAIN11", quantity: 1 },
-      { id: "32000000-0000-4000-8000-000000000006", sku: "DEMO-PART-PADS-R", quantity: 2 },
-    ],
-  },
-  {
-    id: "30000000-0000-4000-8000-000000000004",
-    basketId: "31000000-0000-4000-8000-000000000004",
-    customerId: DEMO_CUSTOMERS[3].id,
-    createdByUsername: "manager",
-    completed: true,
-    completedAt: "2026-03-02T14:40:00.000Z",
-    receiptNumber: "DEMO-REC-0002",
-    tenders: [{ id: "33000000-0000-4000-8000-000000000002", method: "CARD", amountPence: 3999 }],
-    payments: [
-      {
-        id: "34000000-0000-4000-8000-000000000002",
-        method: "CARD",
-        amountPence: 3999,
-        providerRef: "DEMO-CARD-0002",
-      },
-    ],
-    items: [{ id: "32000000-0000-4000-8000-000000000007", sku: "DEMO-ACC-LIGHTS-USB", quantity: 1 }],
-  },
-  {
-    id: "30000000-0000-4000-8000-000000000005",
-    basketId: "31000000-0000-4000-8000-000000000005",
-    customerId: DEMO_CUSTOMERS[4].id,
-    createdByUsername: "admin",
-    completed: true,
-    completedAt: "2026-03-03T11:25:00.000Z",
-    receiptNumber: "DEMO-REC-0003",
-    tenders: [{ id: "33000000-0000-4000-8000-000000000003", method: "CARD", amountPence: 11498 }],
-    payments: [
-      {
-        id: "34000000-0000-4000-8000-000000000003",
-        method: "CARD",
-        amountPence: 11498,
-        providerRef: "DEMO-CARD-0003",
-      },
-    ],
-    items: [
-      { id: "32000000-0000-4000-8000-000000000008", sku: "DEMO-ACC-ULOCK", quantity: 1 },
-      { id: "32000000-0000-4000-8000-000000000009", sku: "DEMO-ACC-TOOL15", quantity: 1 },
-      { id: "32000000-0000-4000-8000-000000000010", sku: "DEMO-ACC-LUBE", quantity: 1 },
-    ],
-  },
-  {
-    id: "30000000-0000-4000-8000-000000000006",
-    basketId: "31000000-0000-4000-8000-000000000006",
-    customerId: DEMO_CUSTOMERS[5].id,
-    createdByUsername: "admin",
-    completed: true,
-    completedAt: "2026-03-04T16:55:00.000Z",
-    receiptNumber: "DEMO-REC-0004",
-    tenders: [{ id: "33000000-0000-4000-8000-000000000004", method: "CASH", amountPence: 74999 }],
-    payments: [{ id: "34000000-0000-4000-8000-000000000004", method: "CASH", amountPence: 74999 }],
-    items: [{ id: "32000000-0000-4000-8000-000000000011", sku: "DEMO-BIKE-C52", quantity: 1 }],
   },
 ];
 
@@ -633,25 +487,31 @@ const seedDemoUsers = async () => {
   for (const user of DEMO_USERS) {
     const passwordHash = await hashPassword(user.password);
     const pinHash = await hashPin(user.pin);
-    await prisma.user.upsert({
+    const existingUser = await prisma.user.findUnique({
       where: { username: user.username },
-      update: {
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        isActive: true,
-        passwordHash,
-        pinHash,
-      },
-      create: {
-        username: user.username,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        isActive: true,
-        passwordHash,
-        pinHash,
-      },
+      select: { id: true },
+    });
+
+    const userData = {
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isActive: true,
+      passwordHash,
+      pinHash,
+    };
+
+    if (existingUser) {
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: userData,
+      });
+      continue;
+    }
+
+    await prisma.user.create({
+      data: userData,
     });
   }
 };
@@ -743,24 +603,95 @@ const seedDemoProducts = async () => {
 
 const seedDemoCustomers = async () => {
   for (const customer of DEMO_CUSTOMERS) {
-    await prisma.customer.upsert({
-      where: { id: customer.id },
+    const existingCustomer = await prisma.customer.findFirst({
+      where: {
+        OR: [{ id: customer.id }, { email: customer.email }],
+      },
+      select: { id: true },
+    });
+
+    const customerData = {
+      name: customer.name,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      email: customer.email,
+      phone: customer.phone,
+      notes: customer.notes,
+    };
+
+    if (existingCustomer) {
+      await prisma.customer.update({
+        where: { id: existingCustomer.id },
+        data: customerData,
+      });
+      continue;
+    }
+
+    await prisma.customer.create({
+      data: {
+        id: customer.id,
+        ...customerData,
+      },
+    });
+  }
+};
+
+const seedDemoOpeningStock = async (
+  variantBySku: Map<string, { id: string; productId: string; retailPricePence: number }>,
+) => {
+  const stockLocation = await ensureDemoStockLocation();
+
+  for (const item of DEMO_OPENING_STOCK) {
+    const variant = variantBySku.get(item.sku);
+    if (!variant) {
+      throw new Error(`Missing seeded variant for sku ${item.sku}`);
+    }
+
+    await prisma.inventoryMovement.upsert({
+      where: { id: item.inventoryMovementId },
       update: {
-        name: customer.name,
-        firstName: customer.firstName,
-        lastName: customer.lastName,
-        email: customer.email,
-        phone: customer.phone,
-        notes: customer.notes,
+        variantId: variant.id,
+        type: "ADJUSTMENT",
+        quantity: item.quantity,
+        unitCost: new Prisma.Decimal(item.unitCostPence),
+        referenceType: "DEMO_OPENING_STOCK",
+        referenceId: item.inventoryMovementId,
+        note: item.note,
       },
       create: {
-        id: customer.id,
-        name: customer.name,
-        firstName: customer.firstName,
-        lastName: customer.lastName,
-        email: customer.email,
-        phone: customer.phone,
-        notes: customer.notes,
+        id: item.inventoryMovementId,
+        variantId: variant.id,
+        type: "ADJUSTMENT",
+        quantity: item.quantity,
+        unitCost: new Prisma.Decimal(item.unitCostPence),
+        referenceType: "DEMO_OPENING_STOCK",
+        referenceId: item.inventoryMovementId,
+        note: item.note,
+      },
+    });
+
+    await prisma.stockLedgerEntry.upsert({
+      where: { id: item.stockLedgerEntryId },
+      update: {
+        variantId: variant.id,
+        locationId: stockLocation.id,
+        type: "ADJUSTMENT",
+        quantityDelta: item.quantity,
+        unitCostPence: item.unitCostPence,
+        referenceType: "DEMO_OPENING_STOCK",
+        referenceId: item.inventoryMovementId,
+        note: item.note,
+      },
+      create: {
+        id: item.stockLedgerEntryId,
+        variantId: variant.id,
+        locationId: stockLocation.id,
+        type: "ADJUSTMENT",
+        quantityDelta: item.quantity,
+        unitCostPence: item.unitCostPence,
+        referenceType: "DEMO_OPENING_STOCK",
+        referenceId: item.inventoryMovementId,
+        note: item.note,
       },
     });
   }
@@ -780,6 +711,7 @@ const seedDemoWorkshopJobs = async (
         customerName: job.customerName,
         bikeDescription: job.bikeDescription,
         status: job.status,
+        scheduledDate: job.scheduledDate ? new Date(job.scheduledDate) : null,
         notes: job.notes,
         source: "IN_STORE",
       },
@@ -790,6 +722,7 @@ const seedDemoWorkshopJobs = async (
         customerName: job.customerName,
         bikeDescription: job.bikeDescription,
         status: job.status,
+        scheduledDate: job.scheduledDate ? new Date(job.scheduledDate) : null,
         notes: job.notes,
         source: "IN_STORE",
       },
@@ -820,6 +753,82 @@ const seedDemoWorkshopJobs = async (
         variantId: lineVariant?.id ?? null,
       },
     });
+  }
+};
+
+const seedDemoSuppliers = async () => {
+  for (const supplier of DEMO_SUPPLIERS) {
+    await prisma.supplier.upsert({
+      where: { id: supplier.id },
+      update: {
+        name: supplier.name,
+        contactName: supplier.contactName,
+        email: supplier.email,
+        phone: supplier.phone,
+        notes: supplier.notes,
+      },
+      create: {
+        id: supplier.id,
+        name: supplier.name,
+        contactName: supplier.contactName,
+        email: supplier.email,
+        phone: supplier.phone,
+        notes: supplier.notes,
+      },
+    });
+  }
+};
+
+const seedDemoPurchaseOrders = async (
+  variantBySku: Map<string, { id: string; productId: string; retailPricePence: number }>,
+) => {
+  for (const purchaseOrder of DEMO_PURCHASE_ORDERS) {
+    await prisma.purchaseOrder.upsert({
+      where: { id: purchaseOrder.id },
+      update: {
+        poNumber: purchaseOrder.poNumber,
+        supplierId: purchaseOrder.supplierId,
+        status: purchaseOrder.status,
+        orderedAt: new Date(purchaseOrder.orderedAt),
+        expectedAt: new Date(purchaseOrder.expectedAt),
+        notes: purchaseOrder.notes,
+      },
+      create: {
+        id: purchaseOrder.id,
+        poNumber: purchaseOrder.poNumber,
+        supplierId: purchaseOrder.supplierId,
+        status: purchaseOrder.status,
+        orderedAt: new Date(purchaseOrder.orderedAt),
+        expectedAt: new Date(purchaseOrder.expectedAt),
+        notes: purchaseOrder.notes,
+      },
+    });
+
+    for (const item of purchaseOrder.items) {
+      const variant = variantBySku.get(item.sku);
+      if (!variant) {
+        throw new Error(`Missing seeded variant for sku ${item.sku}`);
+      }
+
+      await prisma.purchaseOrderItem.upsert({
+        where: { id: item.id },
+        update: {
+          purchaseOrderId: purchaseOrder.id,
+          variantId: variant.id,
+          quantityOrdered: item.quantityOrdered,
+          quantityReceived: item.quantityReceived,
+          unitCostPence: item.unitCostPence,
+        },
+        create: {
+          id: item.id,
+          purchaseOrderId: purchaseOrder.id,
+          variantId: variant.id,
+          quantityOrdered: item.quantityOrdered,
+          quantityReceived: item.quantityReceived,
+          unitCostPence: item.unitCostPence,
+        },
+      });
+    }
   }
 };
 
@@ -908,55 +917,94 @@ const seedDemoSales = async (
 
     await prisma.basketItem.deleteMany({ where: { basketId: sale.basketId } });
     if (!sale.completed) {
-      await prisma.basketItem.createMany({
-        data: resolvedItems.map((item) => ({
-          id: item.id,
-          basketId: sale.basketId,
-          variantId: item.variantId,
-          quantity: item.quantity,
-          unitPrice: item.unitPricePence,
-        })),
-      });
+      for (const item of resolvedItems) {
+        await prisma.basketItem.upsert({
+          where: { id: item.id },
+          update: {
+            basketId: sale.basketId,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            unitPrice: item.unitPricePence,
+          },
+          create: {
+            id: item.id,
+            basketId: sale.basketId,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            unitPrice: item.unitPricePence,
+          },
+        });
+      }
     }
 
     await prisma.saleItem.deleteMany({ where: { saleId: sale.id } });
-    await prisma.saleItem.createMany({
-      data: resolvedItems.map((item) => ({
-        id: item.id,
-        saleId: sale.id,
-        variantId: item.variantId,
-        quantity: item.quantity,
-        unitPricePence: item.unitPricePence,
-        lineTotalPence: item.lineTotalPence,
-      })),
-    });
+    for (const item of resolvedItems) {
+      await prisma.saleItem.upsert({
+        where: { id: item.id },
+        update: {
+          saleId: sale.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitPricePence: item.unitPricePence,
+          lineTotalPence: item.lineTotalPence,
+        },
+        create: {
+          id: item.id,
+          saleId: sale.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitPricePence: item.unitPricePence,
+          lineTotalPence: item.lineTotalPence,
+        },
+      });
+    }
 
     await prisma.saleTender.deleteMany({ where: { saleId: sale.id } });
     if (sale.completed && sale.tenders && sale.tenders.length > 0) {
-      await prisma.saleTender.createMany({
-        data: sale.tenders.map((tender) => ({
-          id: tender.id,
-          saleId: sale.id,
-          method: tender.method,
-          amountPence: tender.amountPence,
-          createdByStaffId,
-        })),
-      });
+      for (const tender of sale.tenders) {
+        await prisma.saleTender.upsert({
+          where: { id: tender.id },
+          update: {
+            saleId: sale.id,
+            method: tender.method,
+            amountPence: tender.amountPence,
+            createdByStaffId,
+          },
+          create: {
+            id: tender.id,
+            saleId: sale.id,
+            method: tender.method,
+            amountPence: tender.amountPence,
+            createdByStaffId,
+          },
+        });
+      }
     }
 
     await prisma.payment.deleteMany({ where: { saleId: sale.id } });
     if (sale.completed && sale.payments && sale.payments.length > 0) {
-      await prisma.payment.createMany({
-        data: sale.payments.map((payment) => ({
-          id: payment.id,
-          saleId: sale.id,
-          method: payment.method,
-          purpose: "FINAL",
-          status: "COMPLETED",
-          amountPence: payment.amountPence,
-          providerRef: payment.providerRef ?? null,
-        })),
-      });
+      for (const payment of sale.payments) {
+        await prisma.payment.upsert({
+          where: { id: payment.id },
+          update: {
+            saleId: sale.id,
+            method: payment.method,
+            purpose: "FINAL",
+            status: "COMPLETED",
+            amountPence: payment.amountPence,
+            providerRef: payment.providerRef ?? null,
+          },
+          create: {
+            id: payment.id,
+            saleId: sale.id,
+            method: payment.method,
+            purpose: "FINAL",
+            status: "COMPLETED",
+            amountPence: payment.amountPence,
+            providerRef: payment.providerRef ?? null,
+          },
+        });
+      }
     }
 
     if (sale.completed && sale.receiptNumber) {
@@ -992,9 +1040,18 @@ const run = async () => {
   await seedDemoUsers();
   const variantBySku = await seedDemoProducts();
   await seedDemoCustomers();
+  await seedDemoOpeningStock(variantBySku);
   await seedDemoWorkshopJobs(variantBySku);
+  await seedDemoSuppliers();
+  await seedDemoPurchaseOrders(variantBySku);
   await seedDemoSales(variantBySku);
 
+  console.log("Demo seed ready:");
+  console.log(`- ${DEMO_USERS.length} role-based staff accounts`);
+  console.log(`- ${DEMO_PRODUCTS.length} products with opening stock in ${DEMO_STOCK_LOCATION.name}`);
+  console.log(`- ${DEMO_CUSTOMERS.length} customers`);
+  console.log(`- ${DEMO_WORKSHOP_JOBS.length} workshop jobs`);
+  console.log(`- ${DEMO_SUPPLIERS.length} supplier and ${DEMO_PURCHASE_ORDERS.length} open purchase order`);
   console.log("Demo users created:");
   for (const user of DEMO_USERS) {
     console.log(
