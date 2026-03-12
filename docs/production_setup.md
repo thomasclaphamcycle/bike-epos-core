@@ -4,6 +4,8 @@ This checklist is for deploying CorePOS in a real shop environment with PostgreS
 
 Use this alongside [deployment.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/deployment.md). `deployment.md` covers the basic runtime model; this document is the operational checklist for first production setup, safe upgrades, backup, and recovery.
 
+For the repository release gate and tagging checklist, use [release_checklist.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/release_checklist.md).
+
 ## 1. Environment Variables
 
 Required backend variables:

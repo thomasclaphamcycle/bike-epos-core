@@ -68,6 +68,8 @@ It covers:
 - recovery procedures
 - minimal hardware guidance
 
+For the branch/release gate used before tagging, use [docs/release_checklist.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/release_checklist.md).
+
 ## Real Shop Pilot Guide
 
 For a concise trial-evaluation walkthrough covering seeded logins, operator flows, sample shop scenarios, and known pilot limitations, use [docs/pilot_preparation.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_preparation.md).
