@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { Prisma, PrismaClient, UserRole, WorkshopJobStatus } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { hashPassword } from "../src/services/passwordService";
+import { hashPassword, hashPin } from "../src/services/passwordService";
 
 const DATABASE_URL = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
 if (!DATABASE_URL) {
@@ -100,6 +100,7 @@ const DEMO_USERS = [
     name: "Thomas",
     role: "ADMIN" as UserRole,
     password: "admin123",
+    pin: "4444",
   },
   {
     username: "manager",
@@ -107,6 +108,7 @@ const DEMO_USERS = [
     name: "Kyle",
     role: "MANAGER" as UserRole,
     password: "manager123",
+    pin: "2222",
   },
   {
     username: "staff",
@@ -114,6 +116,7 @@ const DEMO_USERS = [
     name: "Eric",
     role: "STAFF" as UserRole,
     password: "staff123",
+    pin: "1111",
   },
 ];
 
@@ -629,6 +632,7 @@ const toReceiptSettings = async () => {
 const seedDemoUsers = async () => {
   for (const user of DEMO_USERS) {
     const passwordHash = await hashPassword(user.password);
+    const pinHash = await hashPin(user.pin);
     await prisma.user.upsert({
       where: { username: user.username },
       update: {
@@ -637,6 +641,7 @@ const seedDemoUsers = async () => {
         role: user.role,
         isActive: true,
         passwordHash,
+        pinHash,
       },
       create: {
         username: user.username,
@@ -645,6 +650,7 @@ const seedDemoUsers = async () => {
         role: user.role,
         isActive: true,
         passwordHash,
+        pinHash,
       },
     });
   }
@@ -990,9 +996,11 @@ const run = async () => {
   await seedDemoSales(variantBySku);
 
   console.log("Demo users created:");
-  console.log("admin / admin123");
-  console.log("manager / manager123");
-  console.log("staff / staff123");
+  for (const user of DEMO_USERS) {
+    console.log(
+      `${user.role}: ${user.email} / password ${user.password} / PIN ${user.pin}`,
+    );
+  }
 };
 
 run()

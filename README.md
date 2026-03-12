@@ -2,6 +2,53 @@
 
 Node/TypeScript + Express + Prisma + Postgres backend for bike EPOS workflows.
 
+## Trial Quickstart
+
+1. Install backend dependencies:
+
+```bash
+npm ci
+```
+
+2. Install frontend dependencies:
+
+```bash
+npm --prefix frontend ci
+```
+
+3. Create local env files:
+
+```bash
+cp .env.example .env
+cp .env.test.example .env.test
+```
+
+4. Start the test database, then prepare the local development database:
+
+```bash
+npm run test:db:up
+npx prisma generate
+npx prisma migrate dev
+npm run db:seed:dev
+```
+
+5. Run the backend:
+
+```bash
+npm run dev
+```
+
+6. In a second terminal, run the React frontend:
+
+```bash
+npm --prefix frontend run dev
+```
+
+7. Open `http://localhost:5173/login`.
+
+The React evaluator path is frontend on `http://localhost:5173` talking to the backend on `http://localhost:3000`.
+Production-style serving still comes from the backend after `npm run build`.
+
 ## Local Setup
 
 1. Install dependencies:
@@ -50,6 +97,13 @@ npx prisma migrate dev
 npm run db:seed:dev
 ```
 
+5. Install and run the React frontend when evaluating the SPA locally:
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run dev
+```
+
 ## Auth (M35)
 
 Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
@@ -60,6 +114,18 @@ Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 - Current user: `GET /api/auth/me`
 - Active login users: `GET /api/auth/active-users`
 - Login UI: `/login` (current React UI is PIN-first with active-user buttons, and now includes a password fallback form for password-only or reset-PIN accounts)
+
+### Demo login credentials after `npm run db:seed:dev`
+
+These demo accounts are created by `scripts/seed_demo_data.ts` and are intended for trial flows:
+
+| Role | Email | Password | PIN | Expected landing |
+| --- | --- | --- | --- | --- |
+| Staff | `staff@local` | `staff123` | `1111` | `/dashboard` |
+| Manager | `manager@local` | `manager123` | `2222` | `/management` |
+| Admin | `admin@local` | `admin123` | `4444` | `/management/staff` |
+
+The login screen is intentionally PIN-first. The same seeded accounts also keep password login so evaluators can verify both paths.
 
 ### Create initial admin
 
@@ -91,6 +157,22 @@ Current UX-branch shell visibility:
 - sidebar currently shows a reduced navigation set for redesign work
 - route access is still enforced by `ProtectedRoute` role checks
 - management/admin pages remain directly routable for authorized users
+
+## Trial Flow Guide
+
+Recommended evaluator pass:
+
+1. Log in as `staff@local` with PIN `1111` and confirm `/home` routes to `/dashboard`.
+2. Open POS and complete a simple sale against the seeded products and customers.
+3. Open Workshop to review seeded jobs across booking, in-progress, ready, and completed states.
+4. Log in as `manager@local` with PIN `2222` to review management pages, inventory visibility, purchasing, and receiving.
+5. Log in as `admin@local` with PIN `4444` to review staff management and password/PIN lifecycle controls.
+
+Intentional trial limitations to note:
+
+- purchasing and supplier flows start light; if no suppliers exist yet, create one from `/suppliers` before creating a PO
+- some management surfaces are visibility/reporting groundwork rather than full operational modules
+- backend-only legacy HTML routes still exist, but the current evaluator path is the React SPA
 
 ## POS Tenders (M39)
 
@@ -226,17 +308,23 @@ Start dev server:
 npm run dev
 ```
 
+Start the frontend dev server in a second terminal:
+
+```bash
+npm --prefix frontend run dev
+```
+
 Useful UI routes:
 
 - `/login`
+- `/home`
+- `/dashboard`
+- `/management`
 - `/pos`
 - `/workshop`
 - `/inventory`
-- `/inventory/adjust`
-- `/admin`
-- `/admin/audit`
-- `/till`
-- `/reports`
+- `/suppliers`
+- `/purchasing`
 
 ## CI
 

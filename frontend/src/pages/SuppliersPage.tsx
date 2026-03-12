@@ -184,7 +184,13 @@ export const SuppliersPage = () => {
             <tbody>
               {suppliers.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>{loading ? "Loading suppliers..." : "No suppliers found."}</td>
+                  <td colSpan={7}>
+                    {loading
+                      ? "Loading suppliers..."
+                      : canManage
+                        ? "No suppliers found yet. Create a supplier below to start a purchasing trial flow."
+                        : "No suppliers found yet. Ask a manager to create one before testing purchasing and receiving."}
+                  </td>
                 </tr>
               ) : (
                 suppliers.map((supplier) => (

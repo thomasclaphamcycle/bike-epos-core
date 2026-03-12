@@ -403,7 +403,13 @@ export const PurchasingPage = () => {
             <tbody>
               {purchaseOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>{loading ? "Loading purchase orders..." : "No purchase orders found."}</td>
+                  <td colSpan={8}>
+                    {loading
+                      ? "Loading purchase orders..."
+                      : canManage
+                        ? "No purchase orders found yet. Create a supplier first if needed, then create a draft purchase order below."
+                        : "No purchase orders found yet. Ask a manager to create one before testing receiving."}
+                  </td>
                 </tr>
               ) : (
                 purchaseOrders.map((purchaseOrder) => (
@@ -450,6 +456,11 @@ export const PurchasingPage = () => {
           <div className="restricted-panel">You can view purchase orders, but creating them requires MANAGER+.</div>
         ) : (
           <form className="purchase-form-grid" onSubmit={createPurchaseOrder}>
+            {suppliers.length === 0 ? (
+              <div className="restricted-panel">
+                Create a supplier in <Link to="/suppliers">Suppliers</Link> before starting a purchase order trial flow.
+              </div>
+            ) : null}
             <label>
               Supplier
               <select value={createSupplierId} onChange={(event) => setCreateSupplierId(event.target.value)} required>

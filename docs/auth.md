@@ -63,10 +63,23 @@ POST /api/auth/bootstrap
 ## Local Login Flow
 
 1. Start app (`npm run dev`).
-2. Open `/login`.
-3. Select an active user button and enter a 4-digit PIN when the account has a PIN set.
-4. If the account is password-only or its PIN has been reset, use the password fallback form on the same `/login` screen.
-5. On successful login, navigate through `/home` to the authorized area based on role.
+2. Start the React frontend for the trial path (`npm --prefix frontend run dev`).
+3. Open `http://localhost:5173/login`.
+4. Select an active user button and enter a 4-digit PIN when the account has a PIN set.
+5. If the account is password-only or its PIN has been reset, use the password fallback form on the same `/login` screen.
+6. On successful login, navigate through `/home` to the authorized area based on role.
+
+## Seeded Demo Accounts
+
+After `npm run db:seed:dev`, the demo seed creates these trial users:
+
+| Role | Email | Password | PIN | Redirect from `/home` |
+| --- | --- | --- | --- | --- |
+| STAFF | `staff@local` | `staff123` | `1111` | `/dashboard` |
+| MANAGER | `manager@local` | `manager123` | `2222` | `/management` |
+| ADMIN | `admin@local` | `admin123` | `4444` | `/management/staff` |
+
+The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows.
 
 ## Default Routes and Navigation
 
