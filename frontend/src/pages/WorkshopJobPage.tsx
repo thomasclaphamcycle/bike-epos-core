@@ -189,6 +189,97 @@ const partsStatusClass = (status: WorkshopPartsStatus | undefined) => {
   return "status-badge status-complete";
 };
 
+const workflowStatusClass = (status: string) => {
+  switch (status) {
+    case "WAITING_FOR_APPROVAL":
+      return "status-badge status-warning";
+    case "APPROVED":
+    case "ON_HOLD":
+      return "status-badge status-info";
+    case "WAITING_FOR_PARTS":
+      return "status-badge status-warning";
+    case "BIKE_READY":
+      return "status-badge status-ready";
+    case "COMPLETED":
+      return "status-badge status-complete";
+    case "CANCELLED":
+      return "status-badge status-cancelled";
+    default:
+      return "status-badge";
+  }
+};
+
+const workflowStatusLabel = (status: string) => {
+  switch (status) {
+    case "BOOKING_MADE":
+      return "Booked";
+    case "BIKE_ARRIVED":
+      return "In Progress";
+    case "WAITING_FOR_APPROVAL":
+      return "Awaiting Approval";
+    case "APPROVED":
+      return "Approved";
+    case "WAITING_FOR_PARTS":
+      return "Waiting For Parts";
+    case "ON_HOLD":
+      return "On Hold";
+    case "BIKE_READY":
+      return "Ready For Collection";
+    case "COMPLETED":
+      return "Collected";
+    case "CANCELLED":
+      return "Cancelled";
+    default:
+      return status || "-";
+  }
+};
+
+const truncateText = (value: string, limit = 96) =>
+  value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
+
+const getWorkflowGuidance = (input: {
+  rawStatus: string;
+  partsStatus: WorkshopPartsStatus | undefined;
+  hasSale: boolean;
+  hasBasket: boolean;
+}) => {
+  if (input.rawStatus === "WAITING_FOR_APPROVAL") {
+    return "Pause workshop work until the estimate is approved or updated for the customer.";
+  }
+
+  if (input.rawStatus === "WAITING_FOR_PARTS" || input.partsStatus === "SHORT") {
+    return "This job is blocked on parts. Reserve stock or receive missing parts before pushing it forward.";
+  }
+
+  if (input.rawStatus === "BOOKING_MADE") {
+    return "The bike is checked in and ready for the mechanic to start work or request approval.";
+  }
+
+  if (input.rawStatus === "BIKE_ARRIVED" || input.rawStatus === "APPROVED" || input.rawStatus === "ON_HOLD") {
+    return "Continue work, update notes as progress changes, and mark the bike ready when the bench work is complete.";
+  }
+
+  if (input.rawStatus === "BIKE_READY") {
+    if (input.hasSale) {
+      return "A sale is already linked. Open the sale to collect payment and finish the handover.";
+    }
+    if (input.hasBasket) {
+      return "A POS handoff basket is ready. Open it to complete collection at the counter.";
+    }
+    return "Workshop work is finished. Send the job to POS to create the collection handoff.";
+  }
+
+  if (input.rawStatus === "COMPLETED") {
+    return "This job has already been collected through POS checkout.";
+  }
+
+  if (input.rawStatus === "CANCELLED") {
+    return "This job is cancelled and is no longer part of the active workshop queue.";
+  }
+
+  return "Use the status actions below to keep the workshop board aligned with bench progress.";
+};
+
 const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
   if (!job) {
     return "";
@@ -638,6 +729,7 @@ export const WorkshopJobPage = () => {
     () => toApprovalState(rawStatus),
     [rawStatus],
   );
+  const stageActions = useMemo(() => getStageActions(rawStatus), [rawStatus]);
 
   const customerNotes = useMemo(
     () => notes.filter((note) => note.visibility === "CUSTOMER"),
@@ -647,6 +739,37 @@ export const WorkshopJobPage = () => {
     () => notes.filter((note) => note.visibility === "INTERNAL"),
     [notes],
   );
+  const latestCustomerNote = customerNotes[0] ?? null;
+  const latestInternalNote = internalNotes[0] ?? null;
+  const workflowGuidance = useMemo(
+    () =>
+      getWorkflowGuidance({
+        rawStatus,
+        partsStatus: partsOverview?.summary.partsStatus,
+        hasSale: Boolean(payload?.job.sale),
+        hasBasket: Boolean(payload?.job.finalizedBasketId),
+      }),
+    [partsOverview?.summary.partsStatus, payload?.job.finalizedBasketId, payload?.job.sale, rawStatus],
+  );
+  const collectionSummary = useMemo(() => {
+    if (!payload) {
+      return null;
+    }
+
+    if (payload.job.sale) {
+      return `Sale ${payload.job.sale.id.slice(0, 8)} linked for ${formatMoney(payload.job.sale.totalPence)}.`;
+    }
+
+    if (payload.job.finalizedBasketId) {
+      return `POS basket ${payload.job.finalizedBasketId.slice(0, 8)} is ready for collection handoff.`;
+    }
+
+    if (rawStatus === "BIKE_READY") {
+      return "Ready for collection, but the POS handoff has not been opened yet.";
+    }
+
+    return null;
+  }, [payload, rawStatus]);
 
   if (!id) {
     return <div className="page-shell"><p>Missing workshop job id.</p></div>;
@@ -684,14 +807,16 @@ export const WorkshopJobPage = () => {
           <>
             <div className="job-meta-grid">
               <div>
-                <strong>Workflow Status:</strong> {payload.job.status}
+                <strong>Workflow Status:</strong>{" "}
+                <span className={workflowStatusClass(rawStatus)}>{workflowStatusLabel(rawStatus)}</span>
               </div>
+              <div><strong>Next Step:</strong> {workflowGuidance}</div>
               <div>
                 <strong>Approval State:</strong>{" "}
                 <span className={approvalBadgeClass(approvalState)}>{approvalLabel(approvalState)}</span>
               </div>
               <div>
-                <strong>Raw Status:</strong> {rawStatus || "-"}
+                <strong>System Status:</strong> {rawStatus || "-"}
               </div>
               <div>
                 <strong>Parts State:</strong>{" "}
@@ -701,7 +826,8 @@ export const WorkshopJobPage = () => {
               </div>
               <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
-              <div><strong>Job Notes:</strong> {payload.job.notes || "-"}</div>
+              <div><strong>Check-in Notes:</strong> {payload.job.notes || "-"}</div>
+              <div><strong>Collection Handoff:</strong> {collectionSummary ?? "Not ready for collection yet."}</div>
               <div><strong>Updated:</strong> {new Date(payload.job.updatedAt).toLocaleString()}</div>
               <div>
                 <strong>Parts Location:</strong> {partsOverview?.stockLocation.name ?? "-"}
@@ -709,7 +835,7 @@ export const WorkshopJobPage = () => {
             </div>
 
             <div className="action-wrap" style={{ marginBottom: "10px" }}>
-              {getStageActions(rawStatus).map((action) => (
+              {stageActions.map((action) => (
                 <button key={action.value} type="button" onClick={() => void updateStageStatus(action.value)}>
                   {action.label}
                 </button>
@@ -732,6 +858,9 @@ export const WorkshopJobPage = () => {
                   </button>
                 </>
               ) : null}
+              {stageActions.length === 0 && !canPersistApprovalStatus(rawStatus) ? (
+                <span className="muted-text">No manual workflow status changes are available for this job right now.</span>
+              ) : null}
             </div>
 
             <p className="muted-text">
@@ -739,10 +868,40 @@ export const WorkshopJobPage = () => {
               workflow additive, but approval does not live in a separate estimate object in v1.
             </p>
 
+            {latestInternalNote || latestCustomerNote ? (
+              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+                <div className="job-meta-grid">
+                  <div>
+                    <strong>Latest internal note:</strong>{" "}
+                    {latestInternalNote ? truncateText(latestInternalNote.note) : "No internal notes yet."}
+                  </div>
+                  <div>
+                    <strong>Latest customer note:</strong>{" "}
+                    {latestCustomerNote ? truncateText(latestCustomerNote.note) : "No customer-visible notes yet."}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {rawStatus === "BIKE_READY" ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 Collection is completed through POS checkout. Use the POS handoff button above instead of
                 manually marking the job collected.
+              </div>
+            ) : null}
+
+            {collectionSummary ? (
+              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+                <strong>Collection Summary</strong>
+                <div className="job-meta-grid" style={{ marginTop: "8px" }}>
+                  <div><strong>Estimate total:</strong> {formatMoney(subtotalPence)}</div>
+                  <div><strong>Parts fitted:</strong> {partsOverview?.summary.consumedQty ?? 0}</div>
+                  <div><strong>Outstanding parts:</strong> {partsOverview?.summary.outstandingQty ?? 0}</div>
+                  <div>
+                    <strong>Customer note for pickup:</strong>{" "}
+                    {latestCustomerNote ? truncateText(latestCustomerNote.note) : "No customer-visible note recorded."}
+                  </div>
+                </div>
               </div>
             ) : null}
           </>
@@ -908,6 +1067,11 @@ export const WorkshopJobPage = () => {
                 <span className="table-secondary">{usedPartRecords.length} used records</span>
               </div>
               <div className="metric-card">
+                <span className="metric-label">Used Value</span>
+                <strong className="metric-value">{formatMoney(partsPayload?.totals.partsUsedTotalPence ?? 0)}</strong>
+                <span className="table-secondary">Tracked parts consumed on this job</span>
+              </div>
+              <div className="metric-card">
                 <span className="metric-label">Parts Status</span>
                 <strong className="metric-value">
                   <span className={partsStatusClass(partsOverview.summary.partsStatus)}>
@@ -966,6 +1130,7 @@ export const WorkshopJobPage = () => {
                             <div className="table-secondary">
                               {requirement.variantName || requirement.sku} · {requirement.sku}
                             </div>
+                            <div className="table-secondary">Estimate value {formatMoney(requirement.estimateValuePence)}</div>
                           </td>
                           <td>{requirement.requiredQty}</td>
                           <td>{requirement.allocatedQty}</td>
@@ -1000,7 +1165,7 @@ export const WorkshopJobPage = () => {
               <table>
                 <thead>
                   <tr>
-                    <th>Allocated Record</th>
+                    <th>Job Part Record</th>
                     <th>Status</th>
                     <th>Qty</th>
                     <th>Location</th>
@@ -1028,7 +1193,10 @@ export const WorkshopJobPage = () => {
                           </span>
                         </td>
                         <td>{part.quantity}</td>
-                        <td>{part.stockLocationName}</td>
+                        <td>
+                          <div>{part.stockLocationName}</div>
+                          <div className="table-secondary">{new Date(part.updatedAt).toLocaleString()}</div>
+                        </td>
                         <td>{formatMoney(part.lineTotalPence)}</td>
                         <td>
                           <div className="actions-inline">
@@ -1064,7 +1232,7 @@ export const WorkshopJobPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
-            <h2>Quote & Notes</h2>
+            <h2>Progress & Notes</h2>
             <p className="muted-text">
               Use internal notes for staff context. Use customer-visible notes for quote or approval messaging.
             </p>

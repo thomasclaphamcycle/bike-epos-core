@@ -167,7 +167,14 @@ export const WorkshopCollectionPage = () => {
                     <div className="table-primary">{customerName(job)}</div>
                     <div className="table-secondary">{job.customer?.phone || job.customer?.email || "-"}</div>
                   </td>
-                  <td>{job.bikeDescription || "-"}</td>
+                  <td>
+                    <div className="table-primary">{job.bikeDescription || "-"}</div>
+                    <div className="table-secondary">
+                      {job.noteCount && job.noteCount > 0
+                        ? `${job.noteCount} job note${job.noteCount === 1 ? "" : "s"}`
+                        : "No job notes"}
+                    </div>
+                  </td>
                   <td>{job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}</td>
                   <td>{job.depositStatus}</td>
                   <td>
