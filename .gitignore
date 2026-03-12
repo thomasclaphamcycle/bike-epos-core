@@ -92,3 +92,4 @@ typings/
 playwright-report/
 test-results/
 uploads/
+.DS_Store
