@@ -76,11 +76,11 @@ Content-Type: application/json
   "referenceId": "open_stock_001"
 }
 
-### M24: Record inventory movement (STAFF+)
+### M24: Record inventory movement (MANAGER+)
 POST {{baseUrl}}/api/inventory/movements
 Content-Type: application/json
-X-Staff-Role: STAFF
-X-Staff-Id: demo-staff
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 {
   "variantId": "{{variantId}}",
@@ -92,7 +92,7 @@ X-Staff-Id: demo-staff
   "note": "Initial receipt"
 }
 
-### M24: ADJUSTMENT movement requires MANAGER+
+### M24: ADJUSTMENT movement (MANAGER+)
 POST {{baseUrl}}/api/inventory/movements
 Content-Type: application/json
 X-Staff-Role: MANAGER

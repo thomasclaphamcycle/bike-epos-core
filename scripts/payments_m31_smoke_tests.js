@@ -263,6 +263,22 @@ const run = async () => {
       "X-Staff-Id": staffUser.id,
     };
 
+    const currentSessionRes = await fetchJson("/api/till/sessions/current", {
+      headers: managerHeaders,
+    });
+    assert.equal(currentSessionRes.status, 200, JSON.stringify(currentSessionRes.json));
+
+    if (!currentSessionRes.json.session?.id) {
+      const openSessionRes = await fetchJson("/api/till/sessions/open", {
+        method: "POST",
+        headers: managerHeaders,
+        body: JSON.stringify({
+          openingFloatPence: 0,
+        }),
+      });
+      assert.equal(openSessionRes.status, 201, JSON.stringify(openSessionRes.json));
+    }
+
     const productRes = await fetchJson("/api/products", {
       method: "POST",
       headers: managerHeaders,
@@ -287,7 +303,7 @@ const run = async () => {
 
     const seedRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId: variantRes.json.id,
         type: "PURCHASE",
@@ -392,4 +408,3 @@ run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-

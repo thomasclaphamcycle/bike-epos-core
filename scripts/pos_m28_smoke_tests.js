@@ -298,7 +298,7 @@ const run = async () => {
 
     const stockSeedRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId: variantRes.json.id,
         type: "PURCHASE",

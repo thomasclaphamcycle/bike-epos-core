@@ -243,7 +243,7 @@ const run = async () => {
 
     const seedRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId: variantRes.id,
         type: "PURCHASE",

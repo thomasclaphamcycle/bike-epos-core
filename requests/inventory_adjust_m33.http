@@ -1,17 +1,17 @@
 @baseUrl = http://localhost:3000
-@staffRole = STAFF
+@managerRole = MANAGER
 @staffId = demo-staff
 @variantId = REPLACE_VARIANT_ID
 
-### Inventory adjust page (STAFF+)
+### Inventory adjust page (MANAGER+)
 GET {{baseUrl}}/inventory/adjust
-X-Staff-Role: {{staffRole}}
+X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{staffId}}
 
-### Post positive adjustment (STAFF+)
+### Post positive adjustment (MANAGER+)
 POST {{baseUrl}}/api/inventory/adjustments
 Content-Type: application/json
-X-Staff-Role: {{staffRole}}
+X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{staffId}}
 
 {
@@ -21,10 +21,10 @@ X-Staff-Id: {{staffId}}
   "note": "Cycle count correction"
 }
 
-### Post negative adjustment (STAFF+)
+### Post negative adjustment (MANAGER+)
 POST {{baseUrl}}/api/inventory/adjustments
 Content-Type: application/json
-X-Staff-Role: {{staffRole}}
+X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{staffId}}
 
 {

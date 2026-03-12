@@ -213,9 +213,21 @@ const run = async () => {
     const variantId = variantRes.json.id;
     state.variantIds.add(variantId);
 
-    const plusFiveRes = await fetchJson("/api/inventory/adjustments", {
+    const blockedAdjustRes = await fetchJson("/api/inventory/adjustments", {
       method: "POST",
       headers: staffHeaders,
+      body: JSON.stringify({
+        variantId,
+        quantityDelta: 1,
+        reason: "COUNT_CORRECTION",
+        note: "Staff should not adjust stock",
+      }),
+    });
+    assert.equal(blockedAdjustRes.status, 403, JSON.stringify(blockedAdjustRes.json));
+
+    const plusFiveRes = await fetchJson("/api/inventory/adjustments", {
+      method: "POST",
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId,
         quantityDelta: 5,
@@ -231,7 +243,7 @@ const run = async () => {
 
     const minusTwoRes = await fetchJson("/api/inventory/adjustments", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId,
         quantityDelta: -2,

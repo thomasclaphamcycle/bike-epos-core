@@ -162,7 +162,7 @@ const seedCatalogVariant = async (request, options = {}) => {
 
   const initialOnHand = options.initialOnHand ?? 4;
   if (initialOnHand !== 0) {
-    await apiJsonWithHeaderBypass(request, "POST", "/api/inventory/adjustments", "STAFF", {
+    await apiJsonWithHeaderBypass(request, "POST", "/api/inventory/adjustments", "MANAGER", {
       data: {
         variantId: variant.id,
         quantityDelta: initialOnHand,

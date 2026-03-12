@@ -298,9 +298,23 @@ const run = async () => {
     const variantId = variantRes.json.id;
     state.variantIds.add(variantId);
 
-    const purchaseRes = await fetchJson("/api/inventory/movements", {
+    const blockedPurchaseRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
       headers: staffHeaders,
+      body: JSON.stringify({
+        variantId,
+        type: "PURCHASE",
+        quantity: 1,
+        unitCost: 100,
+        referenceType: "M24_TEST",
+        referenceId: `purchase_blocked_${uniqueRef()}`,
+      }),
+    });
+    assert.equal(blockedPurchaseRes.status, 403, JSON.stringify(blockedPurchaseRes.json));
+
+    const purchaseRes = await fetchJson("/api/inventory/movements", {
+      method: "POST",
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId,
         type: "PURCHASE",
@@ -321,7 +335,7 @@ const run = async () => {
 
     const saleRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId,
         type: "SALE",
