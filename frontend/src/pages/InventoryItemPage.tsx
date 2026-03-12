@@ -391,7 +391,8 @@ export const InventoryItemPage = () => {
             <p className="muted-text">Variant-level stock, locations, and movement history.</p>
           </div>
           <div className="actions-inline">
-            <Link to={`/inventory/${variantId}?mode=count`}>Stocktake</Link>
+            <Link to="/inventory/stocktakes">Stocktake sessions</Link>
+            <Link to={`/inventory/${variantId}?mode=count`}>Cycle count</Link>
             <Link to="/inventory">Back to Inventory</Link>
           </div>
         </div>

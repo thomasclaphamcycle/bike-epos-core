@@ -1,0 +1,727 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { apiDelete, apiGet, apiPost } from "../api/client";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useToasts } from "../components/ToastProvider";
+
+type WorkflowState = "DRAFT" | "COUNTING" | "REVIEW" | "COMPLETED" | "CANCELLED";
+type StocktakeStatus = "OPEN" | "POSTED" | "CANCELLED";
+
+type LocationRow = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+};
+
+type LocationListResponse = {
+  locations: LocationRow[];
+};
+
+type VariantSearchRow = {
+  id: string;
+  sku: string;
+  barcode: string | null;
+  name: string | null;
+  option: string | null;
+  product?: {
+    id: string;
+    name: string;
+    brand: string | null;
+  };
+};
+
+type VariantListResponse = {
+  variants: VariantSearchRow[];
+};
+
+type StocktakeLine = {
+  id: string;
+  stocktakeId: string;
+  variantId: string;
+  sku: string;
+  variantName: string | null;
+  productId: string;
+  productName: string;
+  countedQty: number;
+  expectedQty: number | null;
+  varianceQty: number | null;
+  currentOnHand?: number;
+  deltaNeeded?: number;
+  hasLiveDrift?: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type StocktakeSession = {
+  id: string;
+  locationId: string;
+  location: LocationRow;
+  status: StocktakeStatus;
+  workflowState: WorkflowState;
+  startedAt: string;
+  reviewRequestedAt: string | null;
+  postedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lineCount: number;
+  lines?: StocktakeLine[];
+};
+
+type StocktakeListResponse = {
+  stocktakes: StocktakeSession[];
+};
+
+const formatDateTime = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleString() : "-";
+
+const formatSignedQuantity = (quantity: number | null | undefined) => {
+  if (quantity === null || quantity === undefined) {
+    return "-";
+  }
+  return quantity > 0 ? `+${quantity}` : `${quantity}`;
+};
+
+const getWorkflowBadgeClass = (state: WorkflowState) => {
+  switch (state) {
+    case "COMPLETED":
+      return "stock-badge stock-good";
+    case "REVIEW":
+      return "stock-badge stock-state-low";
+    case "CANCELLED":
+      return "stock-badge stock-state-negative";
+    case "COUNTING":
+      return "stock-badge stock-muted";
+    case "DRAFT":
+    default:
+      return "stock-badge stock-state-zero";
+  }
+};
+
+const getSignedQuantityClass = (quantity: number | null | undefined) => {
+  if (quantity === null || quantity === undefined || quantity === 0) {
+    return "";
+  }
+  return quantity < 0 ? "movement-negative" : "movement-positive";
+};
+
+export const InventoryStocktakesPage = () => {
+  const { error, success } = useToasts();
+
+  const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [sessions, setSessions] = useState<StocktakeSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [selectedSession, setSelectedSession] = useState<StocktakeSession | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"" | StocktakeStatus>("");
+  const [createLocationId, setCreateLocationId] = useState("");
+  const [createNotes, setCreateNotes] = useState("");
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [loadingSessionDetail, setLoadingSessionDetail] = useState(false);
+  const [actioningSession, setActioningSession] = useState(false);
+
+  const [variantSearch, setVariantSearch] = useState("");
+  const debouncedVariantSearch = useDebouncedValue(variantSearch, 250);
+  const [variantResults, setVariantResults] = useState<VariantSearchRow[]>([]);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [countedQty, setCountedQty] = useState("");
+  const [savingLine, setSavingLine] = useState(false);
+  const [deletingLineId, setDeletingLineId] = useState("");
+
+  const loadLocations = async () => {
+    try {
+      const payload = await apiGet<LocationListResponse>("/api/locations");
+      const nextLocations = payload.locations || [];
+      setLocations(nextLocations);
+      setCreateLocationId((current) => {
+        if (current && nextLocations.some((location) => location.id === current)) {
+          return current;
+        }
+        return nextLocations.find((location) => location.isDefault)?.id ?? nextLocations[0]?.id ?? "";
+      });
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load stock locations");
+    }
+  };
+
+  const loadSessions = async (preferredSelectedId?: string) => {
+    setLoadingSessions(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter) {
+        params.set("status", statusFilter);
+      }
+      params.set("take", "50");
+      params.set("skip", "0");
+
+      const payload = await apiGet<StocktakeListResponse>(`/api/stocktake/sessions?${params.toString()}`);
+      const nextSessions = payload.stocktakes || [];
+      setSessions(nextSessions);
+
+      const requestedId = preferredSelectedId ?? selectedSessionId;
+      const nextSelectedId =
+        requestedId && nextSessions.some((session) => session.id === requestedId)
+          ? requestedId
+          : nextSessions[0]?.id ?? "";
+      setSelectedSessionId(nextSelectedId);
+      if (!nextSelectedId) {
+        setSelectedSession(null);
+      }
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load stocktake sessions");
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const loadSelectedSession = async (sessionId: string) => {
+    if (!sessionId) {
+      setSelectedSession(null);
+      return;
+    }
+
+    setLoadingSessionDetail(true);
+    try {
+      const payload = await apiGet<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(sessionId)}?includePreview=true`,
+      );
+      setSelectedSession(payload);
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load stocktake session");
+      setSelectedSession(null);
+    } finally {
+      setLoadingSessionDetail(false);
+    }
+  };
+
+  useEffect(() => {
+    void Promise.all([loadLocations(), loadSessions()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void loadSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setSelectedSession(null);
+      return;
+    }
+    void loadSelectedSession(selectedSessionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (!selectedSession || selectedSession.status !== "OPEN" || !debouncedVariantSearch.trim()) {
+      setVariantResults([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const payload = await apiGet<VariantListResponse>(
+          `/api/variants?q=${encodeURIComponent(debouncedVariantSearch.trim())}&active=1&take=25&skip=0`,
+        );
+        if (cancelled) {
+          return;
+        }
+        const nextVariants = payload.variants || [];
+        setVariantResults(nextVariants);
+        setSelectedVariantId((current) => {
+          if (current && nextVariants.some((variant) => variant.id === current)) {
+            return current;
+          }
+          return nextVariants[0]?.id ?? "";
+        });
+      } catch (loadError) {
+        if (!cancelled) {
+          error(loadError instanceof Error ? loadError.message : "Failed to search variants");
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedVariantSearch, error, selectedSession]);
+
+  const selectedLines = selectedSession?.lines ?? [];
+  const selectedSessionIsOpen = selectedSession?.status === "OPEN";
+  const canRequestReview =
+    selectedSessionIsOpen &&
+    selectedLines.length > 0 &&
+    selectedSession?.workflowState !== "REVIEW" &&
+    !actioningSession;
+  const canFinalize = selectedSessionIsOpen && selectedLines.length > 0 && !actioningSession;
+  const canCancel = selectedSessionIsOpen && !actioningSession;
+
+  const sessionMetrics = useMemo(() => {
+    const lines = selectedSession?.lines ?? [];
+    return {
+      countedUnits: lines.reduce((sum, line) => sum + line.countedQty, 0),
+      varianceLines: lines.filter((line) => (line.varianceQty ?? 0) !== 0).length,
+      liveAdjustmentLines: lines.filter((line) => (line.deltaNeeded ?? 0) !== 0).length,
+      liveDriftLines: lines.filter((line) => line.hasLiveDrift).length,
+    };
+  }, [selectedSession]);
+
+  const createSession = async () => {
+    if (!createLocationId) {
+      error("Choose a stock location before creating a session.");
+      return;
+    }
+
+    setCreatingSession(true);
+    try {
+      const payload = await apiPost<StocktakeSession>("/api/stocktake/sessions", {
+        locationId: createLocationId,
+        notes: createNotes.trim() || undefined,
+      });
+      setCreateNotes("");
+      success("Stocktake session created.");
+      await loadSessions(payload.id);
+      await loadSelectedSession(payload.id);
+    } catch (createError) {
+      error(createError instanceof Error ? createError.message : "Failed to create stocktake session");
+    } finally {
+      setCreatingSession(false);
+    }
+  };
+
+  const requestReview = async () => {
+    if (!selectedSession) {
+      return;
+    }
+
+    setActioningSession(true);
+    try {
+      const payload = await apiPost<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/review`,
+      );
+      setSelectedSession(payload);
+      await loadSessions(selectedSession.id);
+      success("Stocktake moved to review.");
+    } catch (requestError) {
+      error(requestError instanceof Error ? requestError.message : "Failed to request review");
+    } finally {
+      setActioningSession(false);
+    }
+  };
+
+  const finalizeSession = async () => {
+    if (!selectedSession) {
+      return;
+    }
+
+    setActioningSession(true);
+    try {
+      const payload = await apiPost<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/finalize`,
+      );
+      setSelectedSession(payload);
+      await loadSessions(selectedSession.id);
+      success("Stocktake finalized and adjustments posted.");
+    } catch (finalizeError) {
+      error(finalizeError instanceof Error ? finalizeError.message : "Failed to finalize stocktake");
+    } finally {
+      setActioningSession(false);
+    }
+  };
+
+  const cancelSession = async () => {
+    if (!selectedSession) {
+      return;
+    }
+
+    setActioningSession(true);
+    try {
+      const payload = await apiPost<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/cancel`,
+      );
+      setSelectedSession(payload);
+      await loadSessions(selectedSession.id);
+      success("Stocktake cancelled.");
+    } catch (cancelError) {
+      error(cancelError instanceof Error ? cancelError.message : "Failed to cancel stocktake");
+    } finally {
+      setActioningSession(false);
+    }
+  };
+
+  const saveLine = async () => {
+    if (!selectedSession) {
+      return;
+    }
+
+    const parsedCountedQty = Number.parseInt(countedQty, 10);
+    if (!selectedVariantId) {
+      error("Choose a variant before saving a count.");
+      return;
+    }
+    if (!Number.isInteger(parsedCountedQty) || parsedCountedQty < 0) {
+      error("Counted quantity must be a non-negative whole number.");
+      return;
+    }
+
+    setSavingLine(true);
+    try {
+      const payload = await apiPost<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/lines`,
+        {
+          variantId: selectedVariantId,
+          countedQty: parsedCountedQty,
+        },
+      );
+      setSelectedSession(payload);
+      setCountedQty("");
+      success("Stocktake line saved.");
+      await loadSessions(selectedSession.id);
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save stocktake line");
+    } finally {
+      setSavingLine(false);
+    }
+  };
+
+  const deleteLine = async (lineId: string) => {
+    if (!selectedSession) {
+      return;
+    }
+
+    setDeletingLineId(lineId);
+    try {
+      const payload = await apiDelete<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/lines/${encodeURIComponent(lineId)}`,
+      );
+      setSelectedSession(payload);
+      success("Stocktake line removed.");
+      await loadSessions(selectedSession.id);
+    } catch (deleteError) {
+      error(deleteError instanceof Error ? deleteError.message : "Failed to remove stocktake line");
+    } finally {
+      setDeletingLineId("");
+    }
+  };
+
+  return (
+    <div className="page-shell">
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h1>Stocktakes</h1>
+            <p className="muted-text">
+              Session-based stock counting with expected snapshots, review, and controlled variance posting back into the stock adjustment ledger.
+            </p>
+          </div>
+          <div className="actions-inline">
+            <Link to="/inventory">Inventory</Link>
+            <Link to="/inventory/locations">By location</Link>
+            <button type="button" onClick={() => void loadSessions(selectedSessionId)} disabled={loadingSessions}>
+              {loadingSessions ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+        </div>
+
+        <div className="purchase-form-grid">
+          <label>
+            Stock Location
+            <select value={createLocationId} onChange={(event) => setCreateLocationId(event.target.value)}>
+              {locations.length === 0 ? <option value="">No locations</option> : null}
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}{location.isDefault ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="purchase-form-wide">
+            Notes
+            <input
+              value={createNotes}
+              onChange={(event) => setCreateNotes(event.target.value)}
+              placeholder="Optional session notes"
+            />
+          </label>
+
+          <div className="actions-inline" style={{ alignSelf: "end" }}>
+            <button type="button" className="primary" onClick={() => void createSession()} disabled={creatingSession || !createLocationId}>
+              {creatingSession ? "Creating..." : "Create Session"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="calendar-grid">
+        <section className="card">
+          <div className="card-header-row">
+            <h2>Sessions</h2>
+            <label>
+              Status
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "" | StocktakeStatus)}>
+                <option value="">All</option>
+                <option value="OPEN">Open</option>
+                <option value="POSTED">Posted</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Location</th>
+                  <th>Workflow</th>
+                  <th>Lines</th>
+                  <th>Started</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>{loadingSessions ? "Loading sessions..." : "No stocktake sessions found."}</td>
+                  </tr>
+                ) : (
+                  sessions.map((session) => (
+                    <tr
+                      key={session.id}
+                      onClick={() => setSelectedSessionId(session.id)}
+                      style={{
+                        cursor: "pointer",
+                        background: session.id === selectedSessionId ? "#f5f9fc" : undefined,
+                      }}
+                    >
+                      <td>
+                        <div className="table-primary mono-text">{session.id.slice(0, 8)}</div>
+                        <div className="table-secondary">{session.notes || "No notes"}</div>
+                      </td>
+                      <td>{session.location.name}</td>
+                      <td>
+                        <span className={getWorkflowBadgeClass(session.workflowState)}>
+                          {session.workflowState}
+                        </span>
+                      </td>
+                      <td>{session.lineCount}</td>
+                      <td>{formatDateTime(session.startedAt)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Selected Session</h2>
+              <p className="muted-text">
+                Review uses the stored expected snapshot. Finalize posts live corrections to bring on-hand stock to the counted quantity.
+              </p>
+            </div>
+            {selectedSession ? (
+              <div className="actions-inline">
+                <button type="button" onClick={() => void requestReview()} disabled={!canRequestReview}>
+                  {actioningSession && selectedSession.workflowState !== "REVIEW" ? "Updating..." : "Request Review"}
+                </button>
+                <button type="button" className="primary" onClick={() => void finalizeSession()} disabled={!canFinalize}>
+                  {actioningSession ? "Finalizing..." : "Finalize"}
+                </button>
+                <button type="button" onClick={() => void cancelSession()} disabled={!canCancel}>
+                  Cancel
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {!selectedSession ? (
+            <p className="muted-text">Choose a stocktake session to view counts and variances.</p>
+          ) : loadingSessionDetail ? (
+            <p>Loading stocktake detail...</p>
+          ) : (
+            <>
+              <div className="detail-grid">
+                <div>
+                  <strong>ID:</strong>
+                  <div className="mono-text">{selectedSession.id}</div>
+                </div>
+                <div>
+                  <strong>Location:</strong>
+                  <div>{selectedSession.location.name}</div>
+                </div>
+                <div>
+                  <strong>Workflow:</strong>
+                  <div>
+                    <span className={getWorkflowBadgeClass(selectedSession.workflowState)}>
+                      {selectedSession.workflowState}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <strong>Review Requested:</strong>
+                  <div>{formatDateTime(selectedSession.reviewRequestedAt)}</div>
+                </div>
+                <div>
+                  <strong>Posted:</strong>
+                  <div>{formatDateTime(selectedSession.postedAt)}</div>
+                </div>
+                <div>
+                  <strong>Notes:</strong>
+                  <div>{selectedSession.notes || "-"}</div>
+                </div>
+              </div>
+
+              <div className="management-stat-grid">
+                <div className="management-stat-card">
+                  <span className="metric-label">Counted Lines</span>
+                  <strong className="metric-value">{selectedLines.length}</strong>
+                </div>
+                <div className="management-stat-card">
+                  <span className="metric-label">Counted Units</span>
+                  <strong className="metric-value">{sessionMetrics.countedUnits}</strong>
+                </div>
+                <div className="management-stat-card">
+                  <span className="metric-label">Snapshot Variances</span>
+                  <strong className="metric-value">{sessionMetrics.varianceLines}</strong>
+                </div>
+                <div className="management-stat-card">
+                  <span className="metric-label">Live Corrections</span>
+                  <strong className="metric-value">{sessionMetrics.liveAdjustmentLines}</strong>
+                </div>
+              </div>
+
+              {sessionMetrics.liveDriftLines > 0 ? (
+                <div className="restricted-panel warning-panel" style={{ marginBottom: "12px" }}>
+                  {sessionMetrics.liveDriftLines} counted line{sessionMetrics.liveDriftLines === 1 ? "" : "s"} changed on-hand after the snapshot was taken. Review the live correction column before finalizing.
+                </div>
+              ) : null}
+
+              {selectedSession.status === "OPEN" ? (
+                <section>
+                  <div className="card-header-row" style={{ marginBottom: "10px" }}>
+                    <div>
+                      <h3>Add Or Update Count</h3>
+                      <p className="muted-text">
+                        Search a variant, record the counted quantity, and keep the same expected snapshot for that line.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="purchase-form-grid">
+                    <label className="purchase-form-wide">
+                      Variant Search
+                      <input
+                        value={variantSearch}
+                        onChange={(event) => setVariantSearch(event.target.value)}
+                        placeholder="product, SKU, barcode"
+                      />
+                    </label>
+
+                    <label>
+                      Variant
+                      <select value={selectedVariantId} onChange={(event) => setSelectedVariantId(event.target.value)}>
+                        <option value="">Select variant</option>
+                        {variantResults.map((variant) => (
+                          <option key={variant.id} value={variant.id}>
+                            {variant.sku} - {variant.product?.name || variant.id} {variant.option || variant.name || ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      Counted Qty
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={countedQty}
+                        onChange={(event) => setCountedQty(event.target.value)}
+                        placeholder="0"
+                      />
+                    </label>
+
+                    <div className="actions-inline" style={{ alignSelf: "end" }}>
+                      <button type="button" className="primary" onClick={() => void saveLine()} disabled={savingLine || !selectedVariantId || countedQty.trim() === ""}>
+                        {savingLine ? "Saving..." : "Save Count"}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>SKU</th>
+                      <th>Counted</th>
+                      <th>Expected Snapshot</th>
+                      <th>Snapshot Variance</th>
+                      <th>Current On Hand</th>
+                      <th>Live Correction</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedLines.length === 0 ? (
+                      <tr>
+                        <td colSpan={8}>No counted lines yet.</td>
+                      </tr>
+                    ) : (
+                      selectedLines.map((line) => (
+                        <tr key={line.id}>
+                          <td>
+                            <Link to={`/inventory/${line.variantId}`}>{line.productName}</Link>
+                            <div className="table-secondary">{line.variantName || "-"}</div>
+                            {line.hasLiveDrift ? (
+                              <div className="table-secondary" style={{ color: "#8a6500" }}>
+                                Snapshot differs from live on-hand
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="mono-text">{line.sku}</td>
+                          <td className="numeric-cell">{line.countedQty}</td>
+                          <td className="numeric-cell">{line.expectedQty ?? "-"}</td>
+                          <td className={`numeric-cell ${getSignedQuantityClass(line.varianceQty)}`}>
+                            {formatSignedQuantity(line.varianceQty)}
+                          </td>
+                          <td className="numeric-cell">{line.currentOnHand ?? "-"}</td>
+                          <td className={`numeric-cell ${getSignedQuantityClass(line.deltaNeeded)}`}>
+                            {formatSignedQuantity(line.deltaNeeded)}
+                          </td>
+                          <td>
+                            {selectedSession.status === "OPEN" ? (
+                              <button
+                                type="button"
+                                onClick={() => void deleteLine(line.id)}
+                                disabled={deletingLineId === line.id}
+                              >
+                                {deletingLineId === line.id ? "Removing..." : "Remove"}
+                              </button>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};

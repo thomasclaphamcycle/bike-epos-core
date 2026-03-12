@@ -193,6 +193,7 @@ export const InventoryPage = () => {
             <p className="muted-text">Search live stock by product, variant, SKU, or barcode.</p>
           </div>
           <div className="actions-inline">
+            <Link to="/inventory/stocktakes">Stocktakes</Link>
             <Link to="/inventory/locations">Inventory by location</Link>
             <button type="button" onClick={() => void loadRows()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}

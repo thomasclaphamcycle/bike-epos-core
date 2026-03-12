@@ -27,11 +27,14 @@ Content-Type: application/json
   "countedQty": 2
 }
 
-### Get stocktake (includes preview currentOnHand + deltaNeeded)
+### Get stocktake (includes expected snapshot, currentOnHand, and live deltaNeeded)
 GET {{baseUrl}}/api/stocktakes/{{stocktakeId}}
 
 ### Remove a line
 DELETE {{baseUrl}}/api/stocktakes/{{stocktakeId}}/lines/{{stocktakeLineId}}
+
+### Request review before posting
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/review
 
 ### Post stocktake (writes ADJUSTMENT ledger deltas)
 POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/post

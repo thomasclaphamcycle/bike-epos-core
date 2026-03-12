@@ -262,6 +262,7 @@ model Stocktake {
   locationId String          @db.Uuid
   status     StocktakeStatus @default(OPEN)
   startedAt  DateTime        @default(now())
+  reviewRequestedAt DateTime?
   postedAt   DateTime?
   notes      String?
   createdAt  DateTime        @default(now())
@@ -277,6 +278,7 @@ model StocktakeLine {
   id          String   @id @default(uuid()) @db.Uuid
   stocktakeId String   @db.Uuid
   variantId   String
+  expectedQtySnapshot Int?
   countedQty  Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

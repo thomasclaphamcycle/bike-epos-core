@@ -12,6 +12,7 @@ import { CustomerTimelinePage } from "./pages/CustomerTimelinePage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { InventoryItemPage } from "./pages/InventoryItemPage";
 import { InventoryLocationsPage } from "./pages/InventoryLocationsPage";
+import { InventoryStocktakesPage } from "./pages/InventoryStocktakesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { PurchasingPage } from "./pages/PurchasingPage";
@@ -432,6 +433,14 @@ const AuthedApp = () => (
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/customers/:id/timeline" element={<CustomerTimelinePage />} />
         <Route path="/inventory" element={<InventoryPage />} />
+        <Route
+          path="/inventory/stocktakes"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <InventoryStocktakesPage />
+            </ProtectedRoute>
+          )}
+        />
         <Route path="/inventory/locations" element={<InventoryLocationsPage />} />
         <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />

@@ -129,7 +129,7 @@ Milestone:
 The shop can regularly verify and correct stock accuracy.
 
 Implementation status:
-- foundational stocktake support is implemented, with future room for workflow refinement
+- stocktake support is implemented on the current working line with expected snapshots, review/finalize workflow, and manager-facing React workflow, with future room for broader count-ops refinement
 
 ---
 

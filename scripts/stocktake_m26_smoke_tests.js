@@ -141,6 +141,15 @@ const cleanup = async (state) => {
   }
 
   if (stocktakeIds.length > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityType: "STOCKTAKE",
+        entityId: {
+          in: stocktakeIds,
+        },
+      },
+    });
+
     await prisma.stocktakeLine.deleteMany({
       where: {
         stocktakeId: {
@@ -403,6 +412,7 @@ const run = async () => {
     assert.equal(createSessionRes.status, 201, JSON.stringify(createSessionRes.json));
     const stocktakeId = createSessionRes.json.id;
     state.stocktakeIds.add(stocktakeId);
+    assert.equal(createSessionRes.json.workflowState, "DRAFT");
 
     const listSessionRes = await fetchJson("/api/stocktake/sessions?status=OPEN&take=20&skip=0", {
       headers: staffHeaders,
@@ -425,7 +435,46 @@ const run = async () => {
     assert.equal(upsertLineRes.json.lines.length, 1);
     const stocktakeLineId = upsertLineRes.json.lines[0].id;
     state.stocktakeLineIds.add(stocktakeLineId);
+    assert.equal(upsertLineRes.json.workflowState, "COUNTING");
+    assert.equal(upsertLineRes.json.lines[0].expectedQty, 7);
+    assert.equal(upsertLineRes.json.lines[0].varianceQty, -2);
     assert.equal(upsertLineRes.json.lines[0].deltaNeeded, -2);
+
+    const midSessionAdjustmentRes = await fetchJson("/api/stock/adjustments", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        variantId: stocktakeVariantId,
+        locationId: location.id,
+        quantityDelta: 1,
+        note: "M26 mid-session live change",
+        referenceType: "M26_TEST",
+        referenceId: `location_live_${uniqueRef()}`,
+      }),
+    });
+    assert.equal(midSessionAdjustmentRes.status, 201, JSON.stringify(midSessionAdjustmentRes.json));
+
+    const sessionDetailRes = await fetchJson(
+      `/api/stocktake/sessions/${stocktakeId}?includePreview=true`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(sessionDetailRes.status, 200, JSON.stringify(sessionDetailRes.json));
+    assert.equal(sessionDetailRes.json.lines[0].expectedQty, 7);
+    assert.equal(sessionDetailRes.json.lines[0].varianceQty, -2);
+    assert.equal(sessionDetailRes.json.lines[0].currentOnHand, 8);
+    assert.equal(sessionDetailRes.json.lines[0].deltaNeeded, -3);
+    assert.equal(sessionDetailRes.json.lines[0].hasLiveDrift, true);
+
+    const reviewRes = await fetchJson(`/api/stocktake/sessions/${stocktakeId}/review`, {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(reviewRes.status, 200, JSON.stringify(reviewRes.json));
+    assert.equal(reviewRes.json.workflowState, "REVIEW");
+    assert.ok(reviewRes.json.reviewRequestedAt, "Expected reviewRequestedAt on stocktake");
 
     const finalizeRes = await fetchJson(`/api/stocktake/sessions/${stocktakeId}/finalize`, {
       method: "POST",
@@ -434,6 +483,7 @@ const run = async () => {
     });
     assert.equal(finalizeRes.status, 200, JSON.stringify(finalizeRes.json));
     assert.equal(finalizeRes.json.status, "POSTED");
+    assert.equal(finalizeRes.json.workflowState, "COMPLETED");
 
     const onHandAfterFinalizeRes = await fetchJson(
       `/api/inventory/on-hand?variantId=${encodeURIComponent(stocktakeVariantId)}`,
@@ -451,8 +501,17 @@ const run = async () => {
       },
     });
     assert.ok(stocktakeMovement, "Expected STOCKTAKE_LINE inventory movement");
-    assert.equal(stocktakeMovement.quantity, -2);
+    assert.equal(stocktakeMovement.quantity, -3);
     assert.equal(stocktakeMovement.createdByStaffId, managerUser.id);
+
+    const finalizationAuditEvent = await prisma.auditEvent.findFirst({
+      where: {
+        entityType: "STOCKTAKE",
+        entityId: stocktakeId,
+        action: "STOCKTAKE_FINALIZED",
+      },
+    });
+    assert.ok(finalizationAuditEvent, "Expected STOCKTAKE_FINALIZED audit event");
 
     console.log("PASS m26 stock adjustments + stocktake session smoke tests");
   } finally {

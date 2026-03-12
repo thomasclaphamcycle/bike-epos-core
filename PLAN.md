@@ -272,6 +272,7 @@ Confirmed evidence:
 - `scripts/inventory_m24_smoke_tests.js`
 - `scripts/catalog_m25_smoke_tests.js`
 - `scripts/stocktake_m26_smoke_tests.js`
+- current working line refines the historical stocktake flow with expected quantity snapshots, review/finalize workflow state, and a React manager page under `/inventory/stocktakes`
 - `scripts/purchase_orders_m27_smoke_tests.js`
 - `scripts/pos_m28_smoke_tests.js`
 - `scripts/products_m29_smoke_tests.js`

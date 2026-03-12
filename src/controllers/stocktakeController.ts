@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { StocktakeStatus } from "@prisma/client";
-import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getRequestAuditActor } from "../middleware/staffRole";
 import {
   cancelStocktake,
   createStocktake,
@@ -8,6 +8,7 @@ import {
   getStocktakeById,
   listStocktakes,
   postStocktake,
+  requestStocktakeReview,
   upsertStocktakeLine,
 } from "../services/stocktakeService";
 import { HttpError } from "../utils/http";
@@ -92,7 +93,7 @@ export const createStocktakeHandler = async (req: Request, res: Response) => {
     throw new HttpError(400, "notes must be a string", "INVALID_STOCKTAKE");
   }
 
-  const stocktake = await createStocktake(body);
+  const stocktake = await createStocktake(body, getRequestAuditActor(req));
   res.status(201).json(stocktake);
 };
 
@@ -118,23 +119,32 @@ export const upsertStocktakeLineHandler = async (req: Request, res: Response) =>
     throw new HttpError(400, "countedQty must be a number", "INVALID_STOCKTAKE_LINE");
   }
 
-  const stocktake = await upsertStocktakeLine(req.params.id, body);
+  const stocktake = await upsertStocktakeLine(req.params.id, body, getRequestAuditActor(req));
   res.json(stocktake);
 };
 
 export const deleteStocktakeLineHandler = async (req: Request, res: Response) => {
-  const stocktake = await deleteStocktakeLine(req.params.id, req.params.lineId);
+  const stocktake = await deleteStocktakeLine(
+    req.params.id,
+    req.params.lineId,
+    getRequestAuditActor(req),
+  );
+  res.json(stocktake);
+};
+
+export const requestStocktakeReviewHandler = async (req: Request, res: Response) => {
+  const stocktake = await requestStocktakeReview(req.params.id, getRequestAuditActor(req));
   res.json(stocktake);
 };
 
 export const postStocktakeHandler = async (req: Request, res: Response) => {
-  const stocktake = await postStocktake(req.params.id, getRequestStaffActorId(req));
+  const stocktake = await postStocktake(req.params.id, getRequestAuditActor(req));
   res.json(stocktake);
 };
 
 export const finalizeStocktakeHandler = postStocktakeHandler;
 
 export const cancelStocktakeHandler = async (req: Request, res: Response) => {
-  const stocktake = await cancelStocktake(req.params.id);
+  const stocktake = await cancelStocktake(req.params.id, getRequestAuditActor(req));
   res.json(stocktake);
 };

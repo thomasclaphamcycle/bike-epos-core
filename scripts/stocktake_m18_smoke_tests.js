@@ -118,6 +118,15 @@ const cleanup = async (state) => {
   }
 
   if (stocktakeIds.length > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityType: "STOCKTAKE",
+        entityId: {
+          in: stocktakeIds,
+        },
+      },
+    });
+
     await prisma.stocktakeLine.deleteMany({
       where: {
         stocktakeId: {

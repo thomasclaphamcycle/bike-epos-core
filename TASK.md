@@ -17,7 +17,7 @@
 - Current focus is structural cleanup, reporting consistency, documentation alignment, and release-readiness
 - Completed login visual cleanup remains UX work from `ux-saledock-alignment`
 - PIN auth foundation and the main PIN login UI migration are now complete
-- Current branch purpose: maintain and harden the reporting-heavy management line without changing released feature behavior
+- Current branch purpose: maintain and harden the reporting-heavy management line, with explicitly assigned operational workflow refinements kept additive and release-safe
 
 ## Confirmed Done
 
@@ -85,6 +85,7 @@
 - `M133` onboarding / first run setup is implemented
 - `M134` UI polish / navigation consistency pass is implemented
 - `M135` admin / operations documentation hub is implemented
+- stocktake session workflow now includes expected snapshots, review/finalize state, audit trail, and a React manager workflow
 
 ### Confirmed Elsewhere In Repo History
 

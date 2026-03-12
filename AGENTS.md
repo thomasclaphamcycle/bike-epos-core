@@ -124,6 +124,7 @@ Mark anything inferred from gaps as inferred. Do not present inferred future sta
   - `/customers/:id/timeline`
   - `/inventory`
   - `/inventory/locations`
+  - `/inventory/stocktakes`
   - `/inventory/:variantId`
   - `/suppliers`
   - `/purchasing`
