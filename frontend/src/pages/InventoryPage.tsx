@@ -190,7 +190,10 @@ export const InventoryPage = () => {
         <div className="card-header-row">
           <div>
             <h1>Inventory</h1>
-            <p className="muted-text">Search live stock by product, variant, SKU, or barcode.</p>
+            <p className="muted-text">
+              Search live stock by product, variant, SKU, or barcode, then open a variant for detail, adjustments,
+              or stocktake.
+            </p>
           </div>
           <div className="actions-inline">
             <Link to="/inventory/stocktakes">Stocktakes</Link>
@@ -280,7 +283,8 @@ export const InventoryPage = () => {
         </div>
 
         <p className="muted-text">
-          Low stock currently means on-hand stock greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}. No per-product reorder threshold is applied in v1.
+          Low stock currently means on-hand stock greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}.
+          Use the variant detail page when you need location counts, adjustments, or a stocktake.
         </p>
 
         <div className="table-wrap">
@@ -301,7 +305,11 @@ export const InventoryPage = () => {
             <tbody>
               {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>{loading ? "Loading inventory..." : "No inventory rows found."}</td>
+                  <td colSpan={9}>
+                    {loading
+                      ? "Loading inventory..."
+                      : "No inventory rows match the current search and filters."}
+                  </td>
                 </tr>
               ) : (
                 visibleRows.map((row) => (

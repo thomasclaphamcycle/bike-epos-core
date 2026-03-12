@@ -99,7 +99,7 @@ export const WorkshopCollectionPage = () => {
           <div>
             <h1>Workshop Collection</h1>
             <p className="muted-text">
-              Internal ready-for-collection queue for final handover. This shows the readiness signals the current workshop and sale data already supports.
+              Move ready jobs into POS, confirm the handoff, and finish collection through checkout.
             </p>
           </div>
           <div className="actions-inline">
@@ -156,7 +156,10 @@ export const WorkshopCollectionPage = () => {
             <tbody>
               {jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No jobs are currently ready for collection.</td>
+                  <td colSpan={6}>
+                    Nothing is waiting for collection right now. Mark a job ready on the workshop board to bring it
+                    into this queue.
+                  </td>
                 </tr>
               ) : jobs.map((job) => (
                 <tr key={job.id}>
@@ -206,7 +209,8 @@ export const WorkshopCollectionPage = () => {
           </table>
         </div>
         <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-          Collection is completed by POS checkout. Ready jobs without a linked sale stay in this queue until staff open or create the POS handoff.
+          Collection finishes in POS checkout. Ready jobs without a linked sale stay here until staff open or create
+          the POS handoff.
         </div>
       </section>
     </div>

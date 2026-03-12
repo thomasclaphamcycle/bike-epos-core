@@ -597,7 +597,12 @@ export const PosPage = () => {
     <div className="page-shell">
       <section className="card">
         <div className="card-header-row">
-          <h1>POS</h1>
+          <div>
+            <h1>POS</h1>
+            <p className="muted-text">
+              Start a sale, attach a customer when needed, then take payment and open the receipt.
+            </p>
+          </div>
           <div className="actions-inline">
             <button
               type="button"
@@ -716,7 +721,7 @@ export const PosPage = () => {
             </div>
           </div>
         ) : (
-          <p className="muted-text">No customer selected.</p>
+          <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
         )}
 
         <div className="customer-search-panel">
@@ -750,7 +755,7 @@ export const PosPage = () => {
               <tbody>
                 {customerResults.length === 0 ? (
                   <tr>
-                    <td colSpan={4}>No customers found.</td>
+                    <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
                   </tr>
                 ) : (
                   customerResults.map((customer) => (
@@ -814,6 +819,7 @@ export const PosPage = () => {
 
       <section className="card">
         <h2>Product Search</h2>
+        <p className="muted-text">Scan a barcode or search by SKU or product name. Press Enter to add the first match.</p>
         <label className="grow">
           Search / Barcode
           <input
@@ -851,7 +857,9 @@ export const PosPage = () => {
             <tbody>
               {searchRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>No results.</td>
+                  <td colSpan={5}>
+                    {searchText.trim() ? "No products matched that search." : "Search or scan to start adding items."}
+                  </td>
                 </tr>
               ) : (
                 searchRows.map((row) => {
@@ -969,13 +977,14 @@ export const PosPage = () => {
             </table>
           </div>
         ) : (
-          <p className="muted-text">No basket lines yet.</p>
+          <p className="muted-text">No basket lines yet. Search or scan a product to start the sale.</p>
         )}
       </section>
 
       {sale ? (
         <section className="card">
           <h2>Checkout</h2>
+          <p className="muted-text">Take payment here to complete the sale and reset the counter for the next customer.</p>
           <p className="muted-text">
             Total: {formatMoney(sale.tenderSummary.totalPence)} | Lines: {sale.saleItems.length} | Customer: {sale.sale.customer?.name || selectedCustomer?.name || "Walk-in"}
           </p>

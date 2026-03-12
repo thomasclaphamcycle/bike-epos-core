@@ -303,7 +303,7 @@ export const WorkshopPage = () => {
           <div>
             <h1>Workshop Dashboard</h1>
             <p className="muted-text">
-              Board buckets are frontend display groups over the existing workshop statuses.
+              Track work by board bucket or switch to list view for the full raw status set and queue search.
             </p>
           </div>
           <div className="actions-inline">
@@ -355,9 +355,8 @@ export const WorkshopPage = () => {
           <>
             {hiddenFromBoardCount > 0 ? (
               <div className="restricted-panel">
-                {hiddenFromBoardCount} job{hiddenFromBoardCount === 1 ? "" : "s"} currently hidden from the
-                board because their raw status is not shown in the board columns. Use list view for the full raw
-                status set.
+                {hiddenFromBoardCount} job{hiddenFromBoardCount === 1 ? "" : "s"} currently sit outside the
+                board buckets. Switch to list view to see every raw status and find the next action.
               </div>
             ) : null}
 
@@ -377,7 +376,10 @@ export const WorkshopPage = () => {
 
                     <div className="workshop-column-body">
                       {columnJobs.length === 0 ? (
-                        <div className="workshop-empty-card">No jobs in this bucket.</div>
+                        <div className="workshop-empty-card">
+                          {column.label} is clear right now. Move a job here from the board or use list view to work
+                          from the full queue.
+                        </div>
                       ) : (
                         columnJobs.map((job) => (
                           <article
@@ -429,7 +431,7 @@ export const WorkshopPage = () => {
                               onClick={(event) => event.stopPropagation()}
                             >
                               {getQuickActions(job).length === 0 ? (
-                                <span className="muted-text">No quick actions</span>
+                                <span className="muted-text">Open job for full actions</span>
                               ) : (
                                 getQuickActions(job).map((action) => (
                                   <button
@@ -472,7 +474,7 @@ export const WorkshopPage = () => {
               <tbody>
                 {jobs.length === 0 ? (
                   <tr>
-                    <td colSpan={9}>No jobs found.</td>
+                    <td colSpan={9}>No jobs match the current filters.</td>
                   </tr>
                 ) : (
                   jobs.map((job) => (
@@ -510,7 +512,7 @@ export const WorkshopPage = () => {
                       <td onClick={(event) => event.stopPropagation()}>
                         <div className="action-wrap">
                           {getQuickActions(job).length === 0 ? (
-                            <span className="muted-text">No actions</span>
+                            <span className="muted-text">Open job for details</span>
                           ) : (
                             getQuickActions(job).map((action) => (
                               <button

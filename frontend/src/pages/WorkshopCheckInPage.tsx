@@ -222,7 +222,7 @@ export const WorkshopCheckInPage = () => {
           <div>
             <h1>Workshop Check-In</h1>
             <p className="muted-text">
-              Step-based internal intake flow for creating workshop jobs consistently from the counter.
+              Capture customer, bike, and issue details before the job moves onto the workshop board.
             </p>
           </div>
           <div className="actions-inline">
@@ -271,7 +271,13 @@ export const WorkshopCheckInPage = () => {
                 <tbody>
                   {customerResults.length === 0 ? (
                     <tr>
-                      <td colSpan={3}>{loadingCustomers ? "Searching..." : "No customer results yet."}</td>
+                      <td colSpan={3}>
+                        {loadingCustomers
+                          ? "Searching..."
+                          : customerSearch.trim()
+                            ? "No existing customers matched that search."
+                            : "Search for an existing customer, create one inline, or use a manual intake name."}
+                      </td>
                     </tr>
                   ) : customerResults.map((customer) => (
                     <tr key={customer.id}>
@@ -315,7 +321,7 @@ export const WorkshopCheckInPage = () => {
                   setSelectedCustomer(null);
                 }}
               >
-                Use manual name
+                Use walk-in/manual name
               </button>
               <button
                 type="button"
@@ -325,7 +331,7 @@ export const WorkshopCheckInPage = () => {
                   setManualCustomerName("");
                 }}
               >
-                Create customer inline
+                Create new customer
               </button>
             </div>
 
@@ -407,6 +413,7 @@ export const WorkshopCheckInPage = () => {
         {step === 2 ? (
           <section className="card">
             <h2>Review & Confirm</h2>
+            <p className="muted-text">Create the check-in to open the job and continue progress from the workshop dashboard.</p>
             <div className="job-meta-grid">
               <div><strong>Customer:</strong> {resolvedCustomerName}</div>
               <div><strong>Bike:</strong> {bikeDescription || "-"}</div>
