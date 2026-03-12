@@ -32,7 +32,7 @@ The reporting layer is intentionally split by domain:
 - `/management/investigations`: stock-focused anomaly queue.
 - `/management/reordering`: buying suggestions from stock, sales, and open POs.
 - `/management/pricing`: pricing and margin exception queue.
-- `/management/reminders`: customer follow-up queue.
+- `/management/reminders`: internal reminder-candidate queue for manager visibility.
 - `/management/capacity`: workshop backlog and ageing view.
 
 ## Event Foundation
@@ -60,5 +60,12 @@ Current internal subscribers are:
   - only create or refresh internal `ReminderCandidate` records when the job is actually completed and linked to a customer
   - derive a default `dueAt` at 90 days after completion and store `PENDING`, `READY`, or `DISMISSED`
   - preserve idempotency by keeping at most one reminder candidate per workshop job
+
+Manager-facing internal visibility now exists through:
+
+- `GET /api/reports/reminder-candidates`
+- the React management route `/management/reminders`
+
+These surfaces are internal visibility only. They expose reminder-candidate rows for review and linking back into customer/workshop flows, but they still do not perform delivery.
 
 Reminder groundwork is intentionally internal only. It does not send SMS, email, push notifications, or webhooks, and it does not include background scheduling or delivery orchestration yet.

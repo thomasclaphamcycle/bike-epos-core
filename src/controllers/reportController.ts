@@ -11,6 +11,7 @@ import {
   getInventoryLocationSummaryReport,
   getOperationsExceptions,
   getPricingExceptionsReport,
+  getReminderCandidatesReport,
   getInventoryReorderSuggestionsReport,
   getInventoryVelocity,
   getProductSalesReport,
@@ -21,6 +22,7 @@ import {
   getWorkshopDailyReport,
 } from "../services/reportService";
 import { toCsv } from "../utils/csv";
+import { HttpError } from "../utils/http";
 
 const getDateRangeQuery = (req: Request) => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
@@ -48,6 +50,22 @@ const getIntQuery = (req: Request, key: string) => {
   const raw = req.query[key];
   const value = typeof raw === "string" ? Number(raw) : Number.NaN;
   return Number.isNaN(value) ? undefined : value;
+};
+
+const getBooleanQuery = (req: Request, key: string) => {
+  if (req.query[key] === undefined) {
+    return undefined;
+  }
+
+  const raw = req.query[key];
+  if (raw === "1" || raw === "true") {
+    return true;
+  }
+  if (raw === "0" || raw === "false") {
+    return false;
+  }
+
+  throw new HttpError(400, `${key} must be 1, 0, true, or false`, "INVALID_REPORT_FILTER");
 };
 
 const sendCsv = (res: Response, filename: string, csv: string) => {
@@ -242,6 +260,16 @@ export const getCustomerServiceRemindersReportHandler = async (req: Request, res
     getIntQuery(req, "overdueDays"),
     getIntQuery(req, "lookbackDays"),
     getTakeQuery(req),
+  );
+  res.json(report);
+};
+
+export const getReminderCandidatesReportHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const report = await getReminderCandidatesReport(
+    status,
+    getTakeQuery(req),
+    getBooleanQuery(req, "includeDismissed"),
   );
   res.json(report);
 };

@@ -46,3 +46,8 @@ GET {{baseUrl}}/api/reports/inventory/value?locationId={{locationId}}
 GET {{baseUrl}}/api/reports/inventory/value.csv?locationId={{locationId}}
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
+
+### Reminder candidates report (MANAGER+)
+GET {{baseUrl}}/api/reports/reminder-candidates?take=50
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

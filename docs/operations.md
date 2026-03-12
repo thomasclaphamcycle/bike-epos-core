@@ -11,7 +11,7 @@
 - `/management/investigations`
   - stock anomaly review queue
 - `/management/reminders`
-  - customer follow-up queue
+  - internal service reminder candidates queue
 - `/management/reordering`
   - purchasing prompts
 - `/management/pricing`
@@ -47,7 +47,8 @@ Automated reminder groundwork is now present behind the event bus and is intenti
 - `workshop.job.completed` can create a persisted `ReminderCandidate` when the job has a real `completedAt` timestamp and a linked customer
 - candidates store narrow groundwork fields only: customer, workshop job, source event, due date, status, and timestamps
 - the current default reminder due date is 90 days after workshop completion
-- candidates are not delivered automatically and do not currently change the manager reminder pages or customer-facing flows
+- manager visibility is available through `GET /api/reports/reminder-candidates` and `/management/reminders`
+- candidates are not delivered automatically and do not change customer-facing flows
 
 Intentionally deferred:
 

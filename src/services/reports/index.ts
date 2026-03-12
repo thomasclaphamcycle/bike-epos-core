@@ -3,5 +3,6 @@ export * from "./inventoryReports";
 export * from "./operationsReports";
 export * from "./pricingReports";
 export * from "./purchasingReports";
+export * from "./reminderReports";
 export * from "./salesReports";
 export * from "./workshopReports";

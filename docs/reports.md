@@ -9,6 +9,7 @@
 - `/api/reports/customers/*`
 - `/api/reports/suppliers/*`
 - `/api/reports/operations/*`
+- `/api/reports/reminder-candidates`
 
 ## Current Manager-Facing Reporting Queue
 
@@ -24,6 +25,8 @@
   - missing retail, at/below-cost, and low-margin lines
 - Customer Reminders
   - follow-up queue from completed workshop activity
+- Reminder Candidates
+  - internal reminder-groundwork visibility from persisted workshop-completion candidates
 - Workshop Capacity
   - backlog, throughput, and ageing pressure
 

@@ -30,6 +30,10 @@ const STAFF_HEADERS = {
   "X-Staff-Role": "STAFF",
   "X-Staff-Id": `m128-staff-${RUN_REF}`,
 };
+const MANAGER_HEADERS = {
+  "X-Staff-Role": "MANAGER",
+  "X-Staff-Id": `m128-manager-${RUN_REF}`,
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -199,6 +203,20 @@ const main = async () => {
       where: { workshopJobId },
     });
     assert.equal(candidates.length, 1);
+
+    const report = await fetchJson("/api/reports/reminder-candidates?take=20", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(report.status, 200, JSON.stringify(report.json));
+    assert.ok(report.json.summary.candidateCount >= 1);
+    const row = report.json.items.find((item) => item.workshopJobId === workshopJobId);
+    assert.ok(row, JSON.stringify(report.json));
+    assert.equal(row.reminderCandidateId, candidate.id);
+    assert.equal(row.customerId, customer.id);
+    assert.equal(row.customerName, customer.name);
+    assert.equal(row.status, "PENDING");
+    assert.equal(row.daysOverdue, 0);
+    assert.equal(row.completedAt.slice(0, 10), complete.json.job.completedAt.slice(0, 10));
 
     console.log("[m128-smoke] reminder candidates groundwork passed");
   } finally {

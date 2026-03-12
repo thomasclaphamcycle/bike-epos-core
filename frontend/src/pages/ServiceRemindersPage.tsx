@@ -2,41 +2,54 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
 
-type ReminderStatus = "RECENT_COMPLETION" | "DUE_SOON" | "OVERDUE";
+type ReminderCandidateStatus = "PENDING" | "READY" | "DISMISSED";
 
-type ReminderCustomer = {
-  customerId: string;
+type ReminderCandidateRow = {
+  reminderCandidateId: string;
+  customerId: string | null;
   customerName: string;
-  email: string | null;
-  phone: string | null;
-  lastCompletedWorkshopAt: string;
-  latestWorkshopJobId: string;
-  latestBikeDescription: string | null;
-  completedWorkshopJobsInWindow: number;
-  activeWorkshopJobs: number;
-  lastSaleAt: string | null;
-  daysSinceLastCompletedWorkshop: number;
-  reminderStatus: ReminderStatus;
+  workshopJobId: string;
+  bikeDescription: string | null;
+  completedAt: string | null;
+  dueAt: string;
+  status: ReminderCandidateStatus;
+  sourceEvent: string;
+  daysUntilDue: number;
+  daysOverdue: number;
 };
 
 type ReminderResponse = {
   filters: {
-    dueSoonDays: number;
-    overdueDays: number;
-    lookbackDays: number;
+    status: ReminderCandidateStatus | null;
+    includeDismissed: boolean;
     take: number;
   };
   summary: {
-    customerCount: number;
+    candidateCount: number;
+    pendingCount: number;
+    readyCount: number;
+    dismissedCount: number;
     overdueCount: number;
-    dueSoonCount: number;
-    recentCompletionCount: number;
   };
-  overdueCustomers: ReminderCustomer[];
-  dueSoonCustomers: ReminderCustomer[];
-  recentCompletedCustomers: ReminderCustomer[];
-  customers: ReminderCustomer[];
+  items: ReminderCandidateRow[];
+};
+
+const reminderStatusBadgeClass: Record<ReminderCandidateStatus, string> = {
+  PENDING: "status-badge status-info",
+  READY: "status-badge status-warning",
+  DISMISSED: "status-badge",
+};
+
+const reminderSeverity = (row: ReminderCandidateRow): ReportSeverity => {
+  if (row.daysOverdue > 0) {
+    return "CRITICAL";
+  }
+  if (row.status === "READY") {
+    return "WARNING";
+  }
+  return "INFO";
 };
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
@@ -46,20 +59,13 @@ export const ServiceRemindersPage = () => {
 
   const [report, setReport] = useState<ReminderResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [dueSoonDays, setDueSoonDays] = useState("90");
-  const [overdueDays, setOverdueDays] = useState("180");
-  const [lookbackDays, setLookbackDays] = useState("365");
+  const [statusFilter, setStatusFilter] = useState<ReminderCandidateStatus | "">("");
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        dueSoonDays,
-        overdueDays,
-        lookbackDays,
-        take: "50",
-      });
-      const payload = await apiGet<ReminderResponse>(`/api/reports/customers/reminders?${params.toString()}`);
+      const params = new URLSearchParams({ take: "100" });
+      const payload = await apiGet<ReminderResponse>(`/api/reports/reminder-candidates?${params.toString()}`);
       setReport(payload);
     } catch (loadError) {
       setReport(null);
@@ -74,48 +80,9 @@ export const ServiceRemindersPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const renderRows = (rows: ReminderCustomer[], emptyText: string) => (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th>Contact</th>
-            <th>Last Completed Job</th>
-            <th>Bike</th>
-            <th>Days Since</th>
-            <th>Open Jobs</th>
-            <th>Last Sale</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={7}>{emptyText}</td>
-            </tr>
-          ) : rows.map((row) => (
-            <tr key={row.customerId}>
-              <td>
-                <div className="table-primary"><Link to={`/customers/${row.customerId}`}>{row.customerName}</Link></div>
-                <div className="table-secondary">
-                  <Link to={`/workshop/${row.latestWorkshopJobId}`}>Job {row.latestWorkshopJobId.slice(0, 8)}</Link>
-                </div>
-              </td>
-              <td>
-                <div>{row.email || "-"}</div>
-                <div className="table-secondary">{row.phone || "-"}</div>
-              </td>
-              <td>{formatDate(row.lastCompletedWorkshopAt)}</td>
-              <td>{row.latestBikeDescription || "-"}</td>
-              <td>{row.daysSinceLastCompletedWorkshop}</td>
-              <td>{row.activeWorkshopJobs}</td>
-              <td>{formatDate(row.lastSaleAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  const visibleItems = statusFilter
+    ? report?.items.filter((row) => row.status === statusFilter) ?? []
+    : report?.items ?? [];
 
   return (
     <div className="page-shell">
@@ -124,7 +91,7 @@ export const ServiceRemindersPage = () => {
           <div>
             <h1>Service Reminders</h1>
             <p className="muted-text">
-              Manager-facing follow-up queue derived from completed workshop jobs and recent customer activity. This is a practical outreach queue only; it does not automate messaging.
+              Internal visibility for reminder candidates created from completed workshop jobs. This page does not send messages or schedule delivery; it only shows reminder-ready groundwork.
             </p>
           </div>
           <div className="actions-inline">
@@ -135,64 +102,111 @@ export const ServiceRemindersPage = () => {
           </div>
         </div>
 
-        <div className="filter-row">
-          <label>
-            Due Soon (days)
-            <input value={dueSoonDays} onChange={(event) => setDueSoonDays(event.target.value)} inputMode="numeric" />
-          </label>
-          <label>
-            Overdue (days)
-            <input value={overdueDays} onChange={(event) => setOverdueDays(event.target.value)} inputMode="numeric" />
-          </label>
-          <label>
-            Lookback (days)
-            <input value={lookbackDays} onChange={(event) => setLookbackDays(event.target.value)} inputMode="numeric" />
-          </label>
-        </div>
-
         <div className="dashboard-summary-grid">
           <div className="metric-card">
-            <span className="metric-label">Reminder Candidates</span>
-            <strong className="metric-value">{report?.summary.customerCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Completed workshop jobs in lookback window</span>
+            <span className="metric-label">Visible Candidates</span>
+            <strong className="metric-value">{report?.summary.candidateCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Internal reminder-candidate rows</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Ready</span>
+            <strong className="metric-value">{report?.summary.readyCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Due date reached</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Pending</span>
+            <strong className="metric-value">{report?.summary.pendingCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Waiting for due date</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Overdue</span>
             <strong className="metric-value">{report?.summary.overdueCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Past the overdue threshold</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Due Soon</span>
-            <strong className="metric-value">{report?.summary.dueSoonCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Past the due-soon threshold</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Recent Completions</span>
-            <strong className="metric-value">{report?.summary.recentCompletionCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Freshly completed workshop jobs</span>
+            <span className="dashboard-metric-detail">Past due date and still open</span>
           </div>
         </div>
       </section>
 
-      <div className="dashboard-grid analytics-grid">
-        <section className="card">
-          <h2>Overdue Follow-up</h2>
-          {renderRows(report?.overdueCustomers ?? [], "No overdue service reminders.")}
-        </section>
-
-        <section className="card">
-          <h2>Due Soon</h2>
-          {renderRows(report?.dueSoonCustomers ?? [], "No due-soon reminder candidates.")}
-        </section>
-
-        <section className="card">
-          <h2>Recent Completed Jobs</h2>
-          {renderRows(report?.recentCompletedCustomers ?? [], "No recent workshop completions in the current lookback window.")}
-          <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-            Reminder status is derived from the number of days since the latest completed workshop job. It does not assume a formal maintenance schedule.
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Reminder Candidate Queue</h2>
+            <p className="muted-text">
+              Candidates come from `workshop.job.completed` only. Delivery, scheduling, and customer-facing reminder workflows are still intentionally deferred.
+            </p>
           </div>
-        </section>
-      </div>
+          <div className="actions-inline">
+            <label>
+              Status
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as ReminderCandidateStatus | "")}
+              >
+                <option value="">All open statuses</option>
+                <option value="READY">Ready</option>
+                <option value="PENDING">Pending</option>
+              </select>
+            </label>
+            <Link to="/customers">Customers</Link>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Last Workshop Job</th>
+                <th>Completed At</th>
+                <th>Due At</th>
+                <th>Status</th>
+                <th>Timing</th>
+                <th>Severity</th>
+                <th>Action / Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleItems.length ? visibleItems.map((row) => (
+                <tr key={row.reminderCandidateId}>
+                  <td>
+                    <div className="table-primary">
+                      {row.customerId ? <Link to={`/customers/${row.customerId}`}>{row.customerName}</Link> : row.customerName}
+                    </div>
+                    <div className="table-secondary">{row.bikeDescription || "-"}</div>
+                  </td>
+                  <td>
+                    <div className="table-primary">
+                      <Link to={`/workshop/${row.workshopJobId}`}>Job {row.workshopJobId.slice(0, 8)}</Link>
+                    </div>
+                    <div className="table-secondary">{row.sourceEvent}</div>
+                  </td>
+                  <td>{formatDate(row.completedAt)}</td>
+                  <td>{formatDate(row.dueAt)}</td>
+                  <td><span className={reminderStatusBadgeClass[row.status]}>{row.status}</span></td>
+                  <td>
+                    {row.daysOverdue > 0
+                      ? `${row.daysOverdue} day${row.daysOverdue === 1 ? "" : "s"} overdue`
+                      : row.daysUntilDue > 0
+                        ? `Due in ${row.daysUntilDue} day${row.daysUntilDue === 1 ? "" : "s"}`
+                        : "Due now"}
+                  </td>
+                  <td><span className={reportSeverityBadgeClass[reminderSeverity(row)]}>{reminderSeverity(row)}</span></td>
+                  <td>
+                    <div className="table-actions">
+                      {row.customerId ? <Link to={`/customers/${row.customerId}`}>Profile</Link> : null}
+                      {row.customerId ? <Link to={`/customers/${row.customerId}/timeline`}>Timeline</Link> : null}
+                      <Link to={`/workshop/${row.workshopJobId}`}>Job</Link>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={8}>{loading ? "Loading reminder candidates..." : "No reminder candidates available."}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 };

@@ -39,7 +39,7 @@ import { OperationsExceptionsPage } from "./pages/OperationsExceptionsPage";
 import { StockInvestigationsPage } from "./pages/StockInvestigationsPage";
 import { SavedViewsPage } from "./pages/SavedViewsPage";
 import { ExportHubPage } from "./pages/ExportHubPage";
-import { CustomerRemindersPage } from "./pages/CustomerRemindersPage";
+import { ServiceRemindersPage } from "./pages/ServiceRemindersPage";
 import { SupplierCataloguePage } from "./pages/SupplierCataloguePage";
 import { WorkshopBookingsPage } from "./pages/WorkshopBookingsPage";
 import { WorkshopCalendarPage } from "./pages/WorkshopCalendarPage";
@@ -232,7 +232,7 @@ const AuthedApp = () => (
           path="/management/reminders"
           element={(
             <ProtectedRoute minimumRole="MANAGER">
-              <CustomerRemindersPage />
+              <ServiceRemindersPage />
             </ProtectedRoute>
           )}
         />
