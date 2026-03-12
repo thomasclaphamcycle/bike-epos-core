@@ -1,4 +1,5 @@
 import { on, type CoreEventMap } from "./events";
+import { registerReminderSubscribers } from "./reminderSubscribers";
 
 type DiagnosticEventName = keyof CoreEventMap;
 
@@ -72,6 +73,7 @@ export const registerInternalEventSubscribers = () => {
   }
 
   subscribersRegistered = true;
+  registerReminderSubscribers();
 
   on("sale.completed", (payload) => {
     recordDiagnosticEvent("sale.completed", payload);

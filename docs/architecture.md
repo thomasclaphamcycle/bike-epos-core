@@ -39,6 +39,7 @@ The reporting layer is intentionally split by domain:
 
 `src/core/events.ts` provides a minimal internal event bus with `emit()` and `on()`.
 `src/core/eventSubscribers.ts` registers a tiny diagnostic subscriber set during server startup.
+`src/core/reminderSubscribers.ts` registers internal reminder groundwork subscribers.
 
 It exists as a safe extension point for future integrations and internal automation. Current emitted events are:
 
@@ -47,10 +48,17 @@ It exists as a safe extension point for future integrations and internal automat
 - `workshop.job.completed`
 - `stock.adjusted`
 
-These emissions are additive only. They do not change route behavior, API contracts, or database writes. Real consumers and third-party integrations are still future work.
+These emissions are additive only. They do not change route behavior or API contracts. Internal subscribers may now perform narrow internal persistence where explicitly documented.
 
-The current internal subscriber is diagnostic only:
+Current internal subscribers are:
 
-- it keeps a small in-memory ring buffer of recent events for development-time inspection
-- it can emit concise `[eventbus] ...` structured logs when `EVENT_BUS_DEBUG=1`
-- it is intentionally non-persistent and does not deliver events to external systems
+- diagnostic subscribers in `src/core/eventSubscribers.ts`
+  - keep a small in-memory ring buffer of recent events for development-time inspection
+  - can emit concise `[eventbus] ...` structured logs when `EVENT_BUS_DEBUG=1`
+- reminder groundwork subscribers in `src/core/reminderSubscribers.ts`
+  - currently listen to `workshop.job.completed`
+  - only create or refresh internal `ReminderCandidate` records when the job is actually completed and linked to a customer
+  - derive a default `dueAt` at 90 days after completion and store `PENDING`, `READY`, or `DISMISSED`
+  - preserve idempotency by keeping at most one reminder candidate per workshop job
+
+Reminder groundwork is intentionally internal only. It does not send SMS, email, push notifications, or webhooks, and it does not include background scheduling or delivery orchestration yet.

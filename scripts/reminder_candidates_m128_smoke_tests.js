@@ -1,0 +1,217 @@
+#!/usr/bin/env node
+require("dotenv/config");
+
+const assert = require("node:assert/strict");
+const { spawn } = require("node:child_process");
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
+
+const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
+const HEALTH_URL = `${BASE_URL}/health`;
+const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
+}
+if (process.env.NODE_ENV !== "test") {
+  throw new Error("Refusing to run: NODE_ENV must be 'test'.");
+}
+if (process.env.ALLOW_NON_TEST_DB !== "1" && !DATABASE_URL.toLowerCase().includes("test")) {
+  throw new Error("Refusing to run against non-test database URL.");
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+
+const RUN_REF = `m128_${Date.now()}`;
+const STAFF_HEADERS = {
+  "Content-Type": "application/json",
+  "X-Staff-Role": "STAFF",
+  "X-Staff-Id": `m128-staff-${RUN_REF}`,
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchJson = async (path, init = {}) => {
+  const response = await fetch(`${BASE_URL}${path}`, init);
+  const json = await response.json();
+  return { status: response.status, json };
+};
+
+const serverIsHealthy = async () => {
+  try {
+    const response = await fetch(HEALTH_URL);
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+const waitForServer = async () => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (await serverIsHealthy()) {
+      return;
+    }
+    await sleep(500);
+  }
+  throw new Error("Server did not become healthy on /health");
+};
+
+const waitForReminderCandidate = async (workshopJobId) => {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const candidate = await prisma.reminderCandidate.findUnique({
+      where: { workshopJobId },
+    });
+    if (candidate) {
+      return candidate;
+    }
+    await sleep(200);
+  }
+  throw new Error(`Reminder candidate not created for workshop job ${workshopJobId}`);
+};
+
+const cleanup = async (state) => {
+  if (state.workshopJobIds.length) {
+    await prisma.workshopJob.deleteMany({ where: { id: { in: state.workshopJobIds } } });
+  }
+  if (state.customerIds.length) {
+    await prisma.customer.deleteMany({ where: { id: { in: state.customerIds } } });
+  }
+};
+
+const main = async () => {
+  const state = { customerIds: [], workshopJobIds: [] };
+  let startedServer = false;
+  let serverProcess = null;
+
+  try {
+    const existing = await serverIsHealthy();
+    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
+      throw new Error(
+        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
+      );
+    }
+
+    if (!existing) {
+      serverProcess = spawn("npm", ["run", "dev"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          DATABASE_URL,
+        },
+      });
+      startedServer = true;
+      await waitForServer();
+    }
+
+    const customer = await prisma.customer.create({
+      data: {
+        name: `M128 Reminder ${RUN_REF}`,
+        firstName: "Reminder",
+        lastName: RUN_REF,
+        email: `m128-${RUN_REF}@local`,
+      },
+    });
+    state.customerIds.push(customer.id);
+
+    const createJob = await fetchJson("/api/workshop/jobs", {
+      method: "POST",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify({
+        customerName: customer.name,
+        bikeDescription: "Reminder groundwork bike",
+      }),
+    });
+    assert.equal(createJob.status, 201, JSON.stringify(createJob.json));
+    const workshopJobId = createJob.json.id;
+    state.workshopJobIds.push(workshopJobId);
+
+    const attachCustomer = await fetchJson(`/api/workshop/jobs/${workshopJobId}/customer`, {
+      method: "PATCH",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify({
+        customerId: customer.id,
+      }),
+    });
+    assert.equal(attachCustomer.status, 200, JSON.stringify(attachCustomer.json));
+
+    const inProgress = await fetchJson(`/api/workshop/jobs/${workshopJobId}/status`, {
+      method: "POST",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify({
+        status: "IN_PROGRESS",
+      }),
+    });
+    assert.equal(inProgress.status, 201, JSON.stringify(inProgress.json));
+
+    const ready = await fetchJson(`/api/workshop/jobs/${workshopJobId}/status`, {
+      method: "POST",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify({
+        status: "READY",
+      }),
+    });
+    assert.equal(ready.status, 201, JSON.stringify(ready.json));
+
+    await sleep(300);
+
+    const candidateCountBeforeCompletion = await prisma.reminderCandidate.count({
+      where: { workshopJobId },
+    });
+    assert.equal(candidateCountBeforeCompletion, 0);
+
+    const complete = await fetchJson(`/api/workshop/jobs/${workshopJobId}/status`, {
+      method: "POST",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify({
+        status: "COMPLETED",
+      }),
+    });
+    assert.equal(complete.status, 201, JSON.stringify(complete.json));
+    assert.equal(complete.json.job.status, "COMPLETED");
+
+    const candidate = await waitForReminderCandidate(workshopJobId);
+    assert.equal(candidate.customerId, customer.id);
+    assert.equal(candidate.workshopJobId, workshopJobId);
+    assert.equal(candidate.sourceEvent, "workshop.job.completed");
+    assert.equal(candidate.status, "PENDING");
+
+    const completedAt = new Date(complete.json.job.completedAt);
+    const dueAt = new Date(candidate.dueAt);
+    const dueDays = Math.round((dueAt.getTime() - completedAt.getTime()) / 86_400_000);
+    assert.equal(dueDays, 90);
+
+    const replay = await fetchJson(`/api/workshop/jobs/${workshopJobId}/status`, {
+      method: "POST",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify({
+        status: "COMPLETED",
+      }),
+    });
+    assert.equal(replay.status, 200, JSON.stringify(replay.json));
+    assert.equal(replay.json.idempotent, true);
+
+    await sleep(300);
+
+    const candidates = await prisma.reminderCandidate.findMany({
+      where: { workshopJobId },
+    });
+    assert.equal(candidates.length, 1);
+
+    console.log("[m128-smoke] reminder candidates groundwork passed");
+  } finally {
+    await cleanup(state);
+    await prisma.$disconnect();
+    if (startedServer && serverProcess) {
+      serverProcess.kill("SIGTERM");
+    }
+  }
+};
+
+main().catch(async (error) => {
+  console.error(error);
+  await prisma.$disconnect();
+  process.exit(1);
+});

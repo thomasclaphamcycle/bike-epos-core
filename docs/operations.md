@@ -39,3 +39,19 @@ Business-specific statuses such as reorder urgency or reminder status can still 
    - purchasing
    - workshop
    - customer profile
+
+## Reminder Groundwork
+
+Automated reminder groundwork is now present behind the event bus and is intentionally internal only.
+
+- `workshop.job.completed` can create a persisted `ReminderCandidate` when the job has a real `completedAt` timestamp and a linked customer
+- candidates store narrow groundwork fields only: customer, workshop job, source event, due date, status, and timestamps
+- the current default reminder due date is 90 days after workshop completion
+- candidates are not delivered automatically and do not currently change the manager reminder pages or customer-facing flows
+
+Intentionally deferred:
+
+- SMS, email, push, or webhook delivery
+- background schedulers and automated send orchestration
+- public or staff-facing reminder management UI based on these candidates
+- sale-driven reminder candidate creation until a concrete reminder policy exists for retail-only events

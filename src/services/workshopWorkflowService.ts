@@ -383,7 +383,7 @@ export const changeWorkshopJobStatus = async (
   const targetStage = parseTargetStageOrThrow(rawStatus);
   const targetStatus = canonicalStatusByStage[targetStage];
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
     });
@@ -485,6 +485,7 @@ export const changeWorkshopJobStatus = async (
       status: result.job.status,
       cancelledAt: result.job.cancelledAt,
       updatedAt: result.job.updatedAt,
+      completedAt: result.job.completedAt,
     },
     idempotent: result.idempotent,
   };
