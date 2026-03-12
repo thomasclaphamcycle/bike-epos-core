@@ -115,6 +115,7 @@ Minimum operational check after deploy:
 
 - confirm the server starts cleanly
 - confirm `/health` responds successfully
+- use `/health?details=1` when you want an operator-facing confirmation of database connectivity and migration status
 - confirm there are no repeated Prisma or auth errors in the first few minutes
 
 ## 6. Production Upgrade Procedure

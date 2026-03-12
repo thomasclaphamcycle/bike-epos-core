@@ -328,6 +328,8 @@ export const emitStockAdjusted = (result: StockAdjustmentResult) => {
   });
 
   logOperationalEvent("inventory.stock_adjusted", {
+    entityId: result.entry.id,
+    resultStatus: "succeeded",
     variantId: result.entry.variantId,
     locationId: result.entry.locationId,
     quantityDelta: result.entry.quantityDelta,

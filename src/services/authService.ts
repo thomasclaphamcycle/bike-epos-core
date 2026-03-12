@@ -47,7 +47,9 @@ export const authenticateWithEmailPassword = async (
 
   const user = await findUserByEmail(normalizedEmail);
   if (!user || !user.isActive) {
-    logOperationalEvent("auth.password_login.failed", {
+    logOperationalEvent("auth.password_login", {
+      entityId: user?.id ?? null,
+      resultStatus: "rejected",
       email: normalizedEmail,
       reason: !user ? "user_not_found" : "user_inactive",
     });
@@ -56,7 +58,9 @@ export const authenticateWithEmailPassword = async (
 
   const valid = await verifyPassword(normalizedPassword, user.passwordHash);
   if (!valid) {
-    logOperationalEvent("auth.password_login.failed", {
+    logOperationalEvent("auth.password_login", {
+      entityId: user.id,
+      resultStatus: "rejected",
       email: normalizedEmail,
       userId: user.id,
       reason: "invalid_password",
@@ -64,7 +68,9 @@ export const authenticateWithEmailPassword = async (
     throw new HttpError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
 
-  logOperationalEvent("auth.password_login.succeeded", {
+  logOperationalEvent("auth.password_login", {
+    entityId: user.id,
+    resultStatus: "succeeded",
     userId: user.id,
     role: user.role,
   });
@@ -123,7 +129,9 @@ export const authenticateWithPin = async (
     where: { id: normalizedUserId },
   });
   if (!user || !user.isActive || !user.pinHash) {
-    logOperationalEvent("auth.pin_login.failed", {
+    logOperationalEvent("auth.pin_login", {
+      entityId: user?.id ?? normalizedUserId,
+      resultStatus: "rejected",
       userId: normalizedUserId,
       reason: !user ? "user_not_found" : !user.isActive ? "user_inactive" : "pin_not_set",
     });
@@ -132,14 +140,18 @@ export const authenticateWithPin = async (
 
   const valid = await verifyPin(normalizedPin, user.pinHash);
   if (!valid) {
-    logOperationalEvent("auth.pin_login.failed", {
+    logOperationalEvent("auth.pin_login", {
+      entityId: normalizedUserId,
+      resultStatus: "rejected",
       userId: normalizedUserId,
       reason: "invalid_pin",
     });
     throw new HttpError(401, "Invalid login", "INVALID_CREDENTIALS");
   }
 
-  logOperationalEvent("auth.pin_login.succeeded", {
+  logOperationalEvent("auth.pin_login", {
+    entityId: user.id,
+    resultStatus: "succeeded",
     userId: user.id,
     role: user.role,
   });

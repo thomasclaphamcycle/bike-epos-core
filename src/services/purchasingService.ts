@@ -1298,6 +1298,8 @@ export const receivePurchaseOrder = async (
   });
 
   logOperationalEvent("purchasing.purchase_order.received", {
+    entityId: response.id,
+    resultStatus: "succeeded",
     purchaseOrderId: response.id,
     poNumber: response.poNumber,
     locationId: updated.event.locationId,

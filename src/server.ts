@@ -3,6 +3,7 @@ import express from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { prisma } from "./lib/prisma";
+import { getHealthStatus } from "./services/healthService";
 import { basketRouter } from "./routes/basketRoutes";
 import { salesRouter } from "./routes/salesRoutes";
 import { customerRouter } from "./routes/customerRoutes";
@@ -118,7 +119,19 @@ app.post("/dev/seed-tube", async (req, res) => {
   res.json({ variant, barcode });
 });
 
-app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/health", async (req, res, next) => {
+  try {
+    const includeDetails =
+      req.query.details === "1" ||
+      req.query.details === "true" ||
+      req.query.checks === "1" ||
+      req.query.checks === "true";
+    const result = await getHealthStatus(includeDetails);
+    res.status(result.httpStatus).json(result.body);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/", (req, res) => {
   if (serveFrontendSpa) {

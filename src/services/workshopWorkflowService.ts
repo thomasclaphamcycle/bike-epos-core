@@ -489,6 +489,8 @@ export const changeWorkshopJobStatus = async (
   });
 
   logOperationalEvent("workshop.job.status_changed", {
+    entityId: result.job.id,
+    resultStatus: result.idempotent ? "noop" : "succeeded",
     workshopJobId: result.job.id,
     fromStatus: result.fromStatus,
     toStatus: result.toStatus,
