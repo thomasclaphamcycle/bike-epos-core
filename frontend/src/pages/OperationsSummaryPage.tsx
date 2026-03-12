@@ -64,6 +64,20 @@ type InventorySearchResponse = {
   rows: InventoryRow[];
 };
 
+type AuditEvent = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actorRole: string | null;
+  actorId: string | null;
+  createdAt: string;
+};
+
+type AuditResponse = {
+  events: AuditEvent[];
+};
+
 type ActionItem = {
   label: string;
   count: number;
@@ -80,7 +94,22 @@ const formatDateKey = (value: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatLabel = (value: string) =>
+  value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
 const OPEN_PO_STATUSES = new Set(["DRAFT", "SENT", "PARTIALLY_RECEIVED"]);
+const WORKSHOP_IN_PROGRESS_STATUSES = new Set([
+  "BOOKING_MADE",
+  "BIKE_ARRIVED",
+  "WAITING_FOR_APPROVAL",
+  "APPROVED",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
+]);
 
 export const OperationsSummaryPage = () => {
   const { error } = useToasts();
@@ -90,18 +119,20 @@ export const OperationsSummaryPage = () => {
   const [workshopDashboard, setWorkshopDashboard] = useState<WorkshopDashboardResponse | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [lowestStockRows, setLowestStockRows] = useState<InventoryRow[]>([]);
+  const [recentActivity, setRecentActivity] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadSummary = async () => {
     setLoading(true);
     try {
       const today = formatDateKey(new Date());
-      const [salesResult, refundResult, workshopResult, purchasingResult, inventoryResult] = await Promise.allSettled([
+      const [salesResult, refundResult, workshopResult, purchasingResult, inventoryResult, activityResult] = await Promise.allSettled([
         apiGet<SalesDailyRow[]>(`/api/reports/sales/daily?from=${today}&to=${today}`),
         apiGet<RefundListResponse>(`/api/refunds?from=${today}&to=${today}`),
         apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=50"),
         apiGet<PurchaseOrderListResponse>("/api/purchase-orders?take=100&skip=0"),
         apiGet<InventorySearchResponse>("/api/inventory/on-hand/search?active=1&take=50&skip=0"),
+        apiGet<AuditResponse>("/api/audit?limit=8"),
       ]);
 
       if (salesResult.status === "fulfilled") {
@@ -148,6 +179,13 @@ export const OperationsSummaryPage = () => {
         setLowestStockRows([]);
         error(inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Failed to load low stock attention");
       }
+
+      if (activityResult.status === "fulfilled") {
+        setRecentActivity(activityResult.value.events || []);
+      } else {
+        setRecentActivity([]);
+        error(activityResult.reason instanceof Error ? activityResult.reason.message : "Failed to load recent activity");
+      }
     } finally {
       setLoading(false);
     }
@@ -179,6 +217,15 @@ export const OperationsSummaryPage = () => {
   );
 
   const lowStockCount = lowestStockRows.filter((row) => row.onHand <= 2).length;
+  const criticalStockCount = lowestStockRows.filter((row) => row.onHand <= 0).length;
+  const workshopInProgressCount = useMemo(
+    () => workshopDashboard?.jobs.filter((job) => WORKSHOP_IN_PROGRESS_STATUSES.has(job.status)).length ?? 0,
+    [workshopDashboard],
+  );
+  const bikesReadyCount = useMemo(
+    () => workshopDashboard?.jobs.filter((job) => job.status === "BIKE_READY").length ?? 0,
+    [workshopDashboard],
+  );
 
   const actionItems = useMemo<ActionItem[]>(() => [
     {
@@ -214,7 +261,7 @@ export const OperationsSummaryPage = () => {
           <div>
             <h1>Operations Summary</h1>
             <p className="muted-text">
-              Daily manager snapshot across sales, refunds, workshop, purchasing, and low-stock attention. This is a control-centre view, not a scheduler or notification system.
+              Daily manager snapshot across sales, refunds, workshop, purchasing, stock risk, and recent activity. Use it as the control-centre view before opening a working queue.
             </p>
           </div>
           <div className="actions-inline">
@@ -237,9 +284,14 @@ export const OperationsSummaryPage = () => {
             <span className="dashboard-metric-detail">{formatMoney(refunds.reduce((sum, refund) => sum + refund.totalPence, 0))}</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Open Workshop Queue</span>
-            <strong className="metric-value">{workshopDashboard?.summary.totalJobs ?? 0}</strong>
-            <span className="dashboard-metric-detail">Due today {workshopDashboard?.summary.dueToday ?? 0}</span>
+            <span className="metric-label">Workshop In Progress</span>
+            <strong className="metric-value">{workshopInProgressCount}</strong>
+            <span className="dashboard-metric-detail">Ready {bikesReadyCount} | Due today {workshopDashboard?.summary.dueToday ?? 0}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Low Stock Attention</span>
+            <strong className="metric-value">{lowStockCount}</strong>
+            <span className="dashboard-metric-detail">Critical {criticalStockCount}</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Open Purchase Orders</span>
@@ -271,6 +323,10 @@ export const OperationsSummaryPage = () => {
               <span className="metric-label">Waiting for Parts</span>
               <strong className="metric-value">{waitingForPartsCount}</strong>
             </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Bikes Ready</span>
+              <strong className="metric-value">{bikesReadyCount}</strong>
+            </div>
           </div>
         </section>
 
@@ -298,6 +354,49 @@ export const OperationsSummaryPage = () => {
                       <td><Link to={item.link}>{item.label}</Link></td>
                       <td>{item.count}</td>
                       <td>{item.detail}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Recent Operational Activity</h2>
+              <p className="muted-text">
+                Latest audit events across sales, workshop, inventory, and admin actions so a manager can verify what changed recently.
+              </p>
+            </div>
+            <Link to="/management/activity">Open full activity</Link>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Action</th>
+                  <th>Entity</th>
+                  <th>Actor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentActivity.length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>No recent audit events are visible. Open the activity screen for wider filters or older history.</td>
+                  </tr>
+                ) : (
+                  recentActivity.map((event) => (
+                    <tr key={event.id}>
+                      <td>{new Date(event.createdAt).toLocaleString()}</td>
+                      <td>{formatLabel(event.action)}</td>
+                      <td>
+                        <div className="table-primary">{formatLabel(event.entityType)}</div>
+                        <div className="table-secondary mono-text">{event.entityId}</div>
+                      </td>
+                      <td>{[event.actorRole, event.actorId].filter(Boolean).join(" / ") || "-"}</td>
                     </tr>
                   ))
                 )}
@@ -367,7 +466,7 @@ export const OperationsSummaryPage = () => {
                   <tr key={row.variantId}>
                     <td>{row.productName}</td>
                     <td>Low stock</td>
-                    <td>On hand {row.onHand}</td>
+                    <td>On hand {row.onHand} | <Link to={`/inventory/${row.variantId}`}>Open inventory</Link></td>
                   </tr>
                 ))}
                 {overduePurchaseOrders.length === 0 && lowestStockRows.length === 0 ? (

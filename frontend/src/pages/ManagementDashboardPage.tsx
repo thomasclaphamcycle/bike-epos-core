@@ -52,6 +52,20 @@ type InventorySearchResponse = {
   rows: InventoryRow[];
 };
 
+type AuditEvent = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actorRole: string | null;
+  actorId: string | null;
+  createdAt: string;
+};
+
+type AuditResponse = {
+  events: AuditEvent[];
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const formatDateKey = (value: Date) => {
@@ -70,14 +84,20 @@ const formatCustomerName = (
   return [customer.firstName, customer.lastName].filter(Boolean).join(" ") || "-";
 };
 
-const WORKSHOP_OPEN_STATUSES = new Set([
+const formatStatusLabel = (value: string) =>
+  value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const WORKSHOP_ACTIVE_STATUSES = new Set([
   "BOOKING_MADE",
   "BIKE_ARRIVED",
   "WAITING_FOR_APPROVAL",
   "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
 ]);
 
 export const ManagementDashboardPage = () => {
@@ -87,6 +107,7 @@ export const ManagementDashboardPage = () => {
   const [salesSummary, setSalesSummary] = useState<SalesDailyRow | null>(null);
   const [workshopPayload, setWorkshopPayload] = useState<WorkshopDashboardResponse | null>(null);
   const [lowestStockRows, setLowestStockRows] = useState<InventoryRow[]>([]);
+  const [recentActivity, setRecentActivity] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [widgetPrefs, setWidgetPrefs] = useState(() => loadManagementWidgetPrefs(user?.id ?? ""));
 
@@ -94,10 +115,11 @@ export const ManagementDashboardPage = () => {
     setLoading(true);
     const today = formatDateKey(new Date());
 
-    const [salesResult, workshopResult, inventoryResult] = await Promise.allSettled([
+    const [salesResult, workshopResult, inventoryResult, activityResult] = await Promise.allSettled([
       apiGet<SalesDailyRow[]>(`/api/reports/sales/daily?from=${today}&to=${today}`),
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=50"),
       apiGet<InventorySearchResponse>("/api/inventory/on-hand/search?active=1&take=50&skip=0"),
+      apiGet<AuditResponse>("/api/audit?limit=8"),
     ]);
 
     if (salesResult.status === "fulfilled") {
@@ -140,6 +162,17 @@ export const ManagementDashboardPage = () => {
       );
     }
 
+    if (activityResult.status === "fulfilled") {
+      setRecentActivity(activityResult.value.events || []);
+    } else {
+      setRecentActivity([]);
+      error(
+        activityResult.reason instanceof Error
+          ? activityResult.reason.message
+          : "Failed to load recent activity",
+      );
+    }
+
     setLoading(false);
   };
 
@@ -176,31 +209,45 @@ export const ManagementDashboardPage = () => {
     [workshopJobs],
   );
 
-  const openWorkshopCount = useMemo(() => {
-    if (!workshopSummary) {
-      return workshopJobs.length;
-    }
+  const activeWorkshopCount = useMemo(
+    () => workshopJobs.filter((job) => WORKSHOP_ACTIVE_STATUSES.has(job.status)).length,
+    [workshopJobs],
+  );
 
-    return Object.entries(workshopSummary.byStatus || {}).reduce((sum, [status, count]) => (
-      WORKSHOP_OPEN_STATUSES.has(status) ? sum + count : sum
-    ), 0);
-  }, [workshopJobs.length, workshopSummary]);
+  const bikeReadyCount = useMemo(
+    () => workshopJobs.filter((job) => job.status === "BIKE_READY").length,
+    [workshopJobs],
+  );
+
+  const criticalStockCount = useMemo(
+    () => lowestStockRows.filter((row) => row.onHand <= 0).length,
+    [lowestStockRows],
+  );
 
   const sections = useMemo<Record<ManagementWidgetKey, React.ReactNode>>(() => ({
     sales: (
       <section className="card" key="sales">
         <div className="card-header-row">
-          <h2>Sales Summary</h2>
+          <div>
+            <h2>Sales Summary</h2>
+            <p className="muted-text">Today&apos;s trading pace and net result so far.</p>
+          </div>
           <Link to="/pos">Open POS</Link>
         </div>
         <div className="management-stat-grid">
           <div className="management-stat-card">
             <span className="metric-label">Net Revenue</span>
             <strong className="metric-value">{salesSummary ? formatMoney(salesSummary.netPence) : "-"}</strong>
+            <span className="dashboard-metric-detail">
+              Gross {salesSummary ? formatMoney(salesSummary.grossPence) : "-"}
+            </span>
           </div>
           <div className="management-stat-card">
             <span className="metric-label">Sales Count</span>
             <strong className="metric-value">{salesSummary ? salesSummary.saleCount : "-"}</strong>
+            <span className="dashboard-metric-detail">
+              Refunds {salesSummary ? formatMoney(salesSummary.refundsPence) : "-"}
+            </span>
           </div>
         </div>
       </section>
@@ -208,10 +255,17 @@ export const ManagementDashboardPage = () => {
     workshop: (
       <section className="card" key="workshop">
         <div className="card-header-row">
-          <h2>Workshop Summary</h2>
+          <div>
+            <h2>Workshop Summary</h2>
+            <p className="muted-text">Open jobs, blockers, and ready-to-collect bikes.</p>
+          </div>
           <Link to="/workshop">View workshop</Link>
         </div>
         <div className="management-stat-grid">
+          <div className="management-stat-card">
+            <span className="metric-label">In Progress</span>
+            <strong className="metric-value">{activeWorkshopCount}</strong>
+          </div>
           <div className="management-stat-card">
             <span className="metric-label">Awaiting Approval</span>
             <strong className="metric-value">{awaitingApproval.length}</strong>
@@ -221,8 +275,8 @@ export const ManagementDashboardPage = () => {
             <strong className="metric-value">{waitingForParts.length}</strong>
           </div>
           <div className="management-stat-card">
-            <span className="metric-label">Open Jobs</span>
-            <strong className="metric-value">{openWorkshopCount}</strong>
+            <span className="metric-label">Ready To Collect</span>
+            <strong className="metric-value">{bikeReadyCount}</strong>
           </div>
         </div>
 
@@ -232,6 +286,7 @@ export const ManagementDashboardPage = () => {
               <tr>
                 <th>Job</th>
                 <th>Status</th>
+                <th>Parts</th>
                 <th>Customer</th>
                 <th>Promised</th>
               </tr>
@@ -239,7 +294,7 @@ export const ManagementDashboardPage = () => {
             <tbody>
               {workshopJobs.slice(0, 8).length === 0 ? (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     No workshop jobs are visible. Start from Workshop check-in for a new bike or open Workshop to review the live board.
                   </td>
                 </tr>
@@ -247,7 +302,8 @@ export const ManagementDashboardPage = () => {
                 workshopJobs.slice(0, 8).map((job) => (
                   <tr key={job.id}>
                     <td><Link to={`/workshop/${job.id}`}>{job.id.slice(0, 8)}</Link></td>
-                    <td>{job.status}</td>
+                    <td>{formatStatusLabel(job.status)}</td>
+                    <td>{job.partsStatus ? formatStatusLabel(job.partsStatus) : "-"}</td>
                     <td>{formatCustomerName(job.customer)}</td>
                     <td>{job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}</td>
                   </tr>
@@ -261,8 +317,12 @@ export const ManagementDashboardPage = () => {
     inventory: (
       <section className="card" key="inventory">
         <div className="card-header-row">
-          <h2>Inventory Alerts</h2>
+          <div>
+            <h2>Inventory Alerts</h2>
+            <p className="muted-text">Lowest stock rows first, with zero and negative stock treated as the immediate risk.</p>
+          </div>
           <div className="actions-inline">
+            <Link to="/management/reordering">Reordering</Link>
             <Link to="/management/inventory">Velocity report</Link>
             <Link to="/inventory">View inventory</Link>
           </div>
@@ -297,7 +357,9 @@ export const ManagementDashboardPage = () => {
             </tbody>
           </table>
         </div>
-        <p className="muted-text">Uses current on-hand data only. No reorder threshold logic is applied in v1.</p>
+        <p className="muted-text">
+          Critical rows here mean zero or negative stock. Open Reordering for buying guidance and Inventory Intel for slower-moving stock.
+        </p>
       </section>
     ),
     quickLinks: (
@@ -331,8 +393,9 @@ export const ManagementDashboardPage = () => {
   }), [
     awaitingApproval.length,
     lowestStockRows,
-    openWorkshopCount,
     salesSummary,
+    activeWorkshopCount,
+    bikeReadyCount,
     waitingForParts.length,
     workshopJobs,
   ]);
@@ -377,15 +440,15 @@ export const ManagementDashboardPage = () => {
           </div>
           <div className="metric-card">
             <span className="metric-label">Workshop Workload</span>
-            <strong className="metric-value">{openWorkshopCount}</strong>
+            <strong className="metric-value">{activeWorkshopCount}</strong>
             <span className="dashboard-metric-detail">
-              Due today {workshopSummary?.dueToday ?? 0} | Overdue {workshopSummary?.overdue ?? 0}
+              Ready {bikeReadyCount} | Overdue {workshopSummary?.overdue ?? 0}
             </span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Low Stock Alerts</span>
             <strong className="metric-value">{lowestStockRows.length}</strong>
-            <span className="dashboard-metric-detail">Lowest on-hand rows only</span>
+            <span className="dashboard-metric-detail">Critical {criticalStockCount} | Low list {lowestStockRows.length}</span>
           </div>
         </div>
       </section>
@@ -402,6 +465,49 @@ export const ManagementDashboardPage = () => {
           </section>
         )}
       </div>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Recent Operational Activity</h2>
+            <p className="muted-text">
+              Latest audit events across sales, workshop, inventory, and admin actions. Use it to confirm what just changed before drilling into the full activity view.
+            </p>
+          </div>
+          <Link to="/management/activity">Open full activity</Link>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Actor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentActivity.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>No recent audit events are visible. Open the activity view for wider filters or older history.</td>
+                </tr>
+              ) : (
+                recentActivity.map((event) => (
+                  <tr key={event.id}>
+                    <td>{new Date(event.createdAt).toLocaleString()}</td>
+                    <td>{formatStatusLabel(event.action)}</td>
+                    <td>
+                      <div className="table-primary">{formatStatusLabel(event.entityType)}</div>
+                      <div className="table-secondary mono-text">{event.entityId}</div>
+                    </td>
+                    <td>{[event.actorRole, event.actorId].filter(Boolean).join(" / ") || "-"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 };
