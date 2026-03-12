@@ -117,26 +117,37 @@ Minimum operational check after deploy:
 - confirm `/health` responds successfully
 - confirm there are no repeated Prisma or auth errors in the first few minutes
 
-## 6. Updating CorePOS Safely
+## 6. Production Upgrade Procedure
 
 Recommended release procedure:
 
 1. take a fresh database backup
 2. confirm the new release includes committed Prisma migrations if schema changed
-3. deploy code
-4. run `npx prisma migrate deploy`
-5. build frontend assets if needed:
+3. make sure the production checkout is clean with no local edits
+4. configure a safe restart command using either:
+   - `COREPOS_RESTART_CMD`, for example `COREPOS_RESTART_CMD="pm2 restart corepos"`
+   - `COREPOS_SYSTEMD_SERVICE`, for example `COREPOS_SYSTEMD_SERVICE=corepos`
+5. run the repo helper:
 
 ```bash
+COREPOS_SYSTEMD_SERVICE=corepos \
+COREPOS_HEALTHCHECK_URL=http://127.0.0.1:3000/health \
+scripts/upgrade_corepos.sh
+```
+
+Manual equivalent:
+
+```bash
+git pull --ff-only
+npm install
+npm --prefix frontend install
+npx prisma validate
+npx prisma generate
+npx prisma migrate deploy
 npm run build
 ```
 
-6. start or restart the production process:
-
-```bash
-npm run start:prod
-```
-
+6. restart the production process using your process manager
 7. smoke-check:
    - `/login`
    - `/home`
@@ -145,6 +156,8 @@ npm run start:prod
    - `/inventory`
    - `/purchasing`
    - `/management`
+
+The helper script will not run if the checkout is dirty, and it uses `git pull --ff-only` to avoid accidental merge commits during a production upgrade.
 
 If a release introduces unexpected operational issues, restore the backup and roll back to the last known-good release.
 
