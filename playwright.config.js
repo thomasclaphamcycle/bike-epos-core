@@ -22,7 +22,7 @@ module.exports = defineConfig({
     {
       command: "node scripts/run_with_test_env.js npx ts-node --transpile-only src/server.ts",
       url: `${baseUrl}/health`,
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       timeout: 120_000,
     },
     {
