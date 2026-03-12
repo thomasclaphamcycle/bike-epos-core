@@ -64,8 +64,10 @@ Current internal subscribers are:
 Manager-facing internal visibility now exists through:
 
 - `GET /api/reports/reminder-candidates`
+- `POST /api/reports/reminder-candidates/:reminderCandidateId/review`
+- `POST /api/reports/reminder-candidates/:reminderCandidateId/dismiss`
 - the React management route `/management/reminders`
 
-These surfaces are internal visibility only. They expose reminder-candidate rows for review and linking back into customer/workshop flows, but they still do not perform delivery.
+These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform delivery.
 
 Reminder groundwork is intentionally internal only. It does not send SMS, email, push notifications, or webhooks, and it does not include background scheduling or delivery orchestration yet.

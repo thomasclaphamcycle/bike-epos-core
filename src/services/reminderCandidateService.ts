@@ -37,6 +37,8 @@ const toResponse = (candidate: {
   sourceEvent: string;
   dueAt: Date;
   status: ReminderCandidateStatus;
+  reviewedAt: Date | null;
+  reviewedByStaffId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }) => ({
@@ -46,9 +48,27 @@ const toResponse = (candidate: {
   sourceEvent: candidate.sourceEvent,
   dueAt: candidate.dueAt,
   status: candidate.status,
+  reviewedAt: candidate.reviewedAt,
+  reviewedByStaffId: candidate.reviewedByStaffId,
   createdAt: candidate.createdAt,
   updatedAt: candidate.updatedAt,
 });
+
+const getReminderCandidateOrThrow = async (reminderCandidateId: string) => {
+  if (!isUuid(reminderCandidateId)) {
+    throw new HttpError(400, "Invalid reminder candidate id", "INVALID_REMINDER_CANDIDATE_ID");
+  }
+
+  const candidate = await prisma.reminderCandidate.findUnique({
+    where: { id: reminderCandidateId },
+  });
+
+  if (!candidate) {
+    throw new HttpError(404, "Reminder candidate not found", "REMINDER_CANDIDATE_NOT_FOUND");
+  }
+
+  return candidate;
+};
 
 const syncDueReminderCandidatesToReady = async (now = new Date()) => {
   await prisma.reminderCandidate.updateMany({
@@ -156,29 +176,61 @@ export const listReminderCandidates = async (input: ListReminderCandidatesInput 
 };
 
 export const dismissReminderCandidate = async (reminderCandidateId: string) => {
-  if (!isUuid(reminderCandidateId)) {
-    throw new HttpError(400, "Invalid reminder candidate id", "INVALID_REMINDER_CANDIDATE_ID");
-  }
+  return dismissReminderCandidateWithActor(reminderCandidateId);
+};
 
-  const existing = await prisma.reminderCandidate.findUnique({
-    where: { id: reminderCandidateId },
-    select: {
-      id: true,
-    },
-  });
+export const markReminderCandidateReviewed = async (
+  reminderCandidateId: string,
+  reviewedByStaffId?: string,
+) => {
+  const existing = await getReminderCandidateOrThrow(reminderCandidateId);
 
-  if (!existing) {
-    throw new HttpError(404, "Reminder candidate not found", "REMINDER_CANDIDATE_NOT_FOUND");
+  if (existing.reviewedAt) {
+    return {
+      candidate: toResponse(existing),
+      idempotent: true,
+    };
   }
 
   const candidate = await prisma.reminderCandidate.update({
-    where: { id: reminderCandidateId },
+    where: { id: existing.id },
     data: {
-      status: "DISMISSED",
+      reviewedAt: new Date(),
+      reviewedByStaffId: reviewedByStaffId ?? existing.reviewedByStaffId,
     },
   });
 
   return {
     candidate: toResponse(candidate),
+    idempotent: false,
+  };
+};
+
+export const dismissReminderCandidateWithActor = async (
+  reminderCandidateId: string,
+  reviewedByStaffId?: string,
+) => {
+  const existing = await getReminderCandidateOrThrow(reminderCandidateId);
+
+  if (existing.status === "DISMISSED") {
+    return {
+      candidate: toResponse(existing),
+      idempotent: true,
+    };
+  }
+
+  const reviewedAt = existing.reviewedAt ?? new Date();
+  const candidate = await prisma.reminderCandidate.update({
+    where: { id: existing.id },
+    data: {
+      status: "DISMISSED",
+      reviewedAt,
+      reviewedByStaffId: reviewedByStaffId ?? existing.reviewedByStaffId,
+    },
+  });
+
+  return {
+    candidate: toResponse(candidate),
+    idempotent: false,
   };
 };

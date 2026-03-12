@@ -4,11 +4,17 @@ import { HttpError } from "../../utils/http";
 import { toCustomerDisplayName, toPositiveIntWithinRangeOrThrow } from "./shared";
 
 const MS_PER_DAY = 86_400_000;
+type ReminderReviewState = "UNREVIEWED" | "REVIEWED";
 
 const statusRank: Record<ReminderCandidateStatus, number> = {
   READY: 3,
   PENDING: 2,
   DISMISSED: 1,
+};
+
+const reviewStateRank: Record<ReminderReviewState, number> = {
+  UNREVIEWED: 2,
+  REVIEWED: 1,
 };
 
 const parseReminderCandidateStatus = (
@@ -72,6 +78,8 @@ export const getReminderCandidatesReport = async (
       sourceEvent: true,
       dueAt: true,
       status: true,
+      reviewedAt: true,
+      reviewedByStaffId: true,
       createdAt: true,
       customer: {
         select: {
@@ -101,6 +109,7 @@ export const getReminderCandidatesReport = async (
       const daysOverdue = millisUntilDue < 0
         ? Math.ceil(Math.abs(millisUntilDue) / MS_PER_DAY)
         : 0;
+      const reviewState: ReminderReviewState = candidate.reviewedAt ? "REVIEWED" : "UNREVIEWED";
 
       return {
         reminderCandidateId: candidate.id,
@@ -113,6 +122,9 @@ export const getReminderCandidatesReport = async (
         completedAt: candidate.workshopJob.completedAt,
         dueAt: candidate.dueAt,
         status: candidate.status,
+        reviewState,
+        reviewedAt: candidate.reviewedAt,
+        reviewedByStaffId: candidate.reviewedByStaffId,
         sourceEvent: candidate.sourceEvent,
         createdAt: candidate.createdAt,
         daysUntilDue,
@@ -121,6 +133,7 @@ export const getReminderCandidatesReport = async (
     })
     .sort((left, right) => (
       statusRank[right.status] - statusRank[left.status]
+      || reviewStateRank[right.reviewState] - reviewStateRank[left.reviewState]
       || left.dueAt.getTime() - right.dueAt.getTime()
       || left.customerName.localeCompare(right.customerName)
     ))
@@ -137,6 +150,8 @@ export const getReminderCandidatesReport = async (
       pendingCount: items.filter((item) => item.status === "PENDING").length,
       readyCount: items.filter((item) => item.status === "READY").length,
       dismissedCount: items.filter((item) => item.status === "DISMISSED").length,
+      reviewedCount: items.filter((item) => item.reviewState === "REVIEWED").length,
+      unreviewedCount: items.filter((item) => item.reviewState === "UNREVIEWED").length,
       overdueCount: items.filter((item) => item.daysOverdue > 0).length,
     },
     items,

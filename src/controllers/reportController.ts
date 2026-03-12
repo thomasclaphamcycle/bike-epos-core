@@ -21,8 +21,13 @@ import {
   getWorkshopWarrantyReport,
   getWorkshopDailyReport,
 } from "../services/reportService";
+import {
+  dismissReminderCandidateWithActor,
+  markReminderCandidateReviewed,
+} from "../services/reminderCandidateService";
 import { toCsv } from "../utils/csv";
 import { HttpError } from "../utils/http";
+import { getRequestStaffActorId } from "../middleware/staffRole";
 
 const getDateRangeQuery = (req: Request) => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
@@ -272,6 +277,28 @@ export const getReminderCandidatesReportHandler = async (req: Request, res: Resp
     getBooleanQuery(req, "includeDismissed"),
   );
   res.json(report);
+};
+
+export const markReminderCandidateReviewedHandler = async (req: Request, res: Response) => {
+  const reminderCandidateId = typeof req.params.reminderCandidateId === "string"
+    ? req.params.reminderCandidateId
+    : "";
+  const result = await markReminderCandidateReviewed(
+    reminderCandidateId,
+    getRequestStaffActorId(req),
+  );
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const dismissReminderCandidateHandler = async (req: Request, res: Response) => {
+  const reminderCandidateId = typeof req.params.reminderCandidateId === "string"
+    ? req.params.reminderCandidateId
+    : "";
+  const result = await dismissReminderCandidateWithActor(
+    reminderCandidateId,
+    getRequestStaffActorId(req),
+  );
+  res.status(result.idempotent ? 200 : 201).json(result);
 };
 
 export const getWorkshopWarrantyReportHandler = async (req: Request, res: Response) => {

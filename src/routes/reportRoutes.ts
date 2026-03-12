@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  dismissReminderCandidateHandler,
   getActionCentreReportHandler,
   getCustomerServiceRemindersReportHandler,
   getInventoryInvestigationsReportHandler,
@@ -24,6 +25,7 @@ import {
   getWorkshopDailyReportHandler,
   getWorkshopDailyReportCsvHandler,
   getWorkshopWarrantyReportHandler,
+  markReminderCandidateReviewedHandler,
 } from "../controllers/reportController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
@@ -63,5 +65,15 @@ reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSup
 reportRouter.get("/customers/insights", requireRoleAtLeast("MANAGER"), getCustomerInsightsReportHandler);
 reportRouter.get("/customers/reminders", requireRoleAtLeast("MANAGER"), getCustomerServiceRemindersReportHandler);
 reportRouter.get("/reminder-candidates", requireRoleAtLeast("MANAGER"), getReminderCandidatesReportHandler);
+reportRouter.post(
+  "/reminder-candidates/:reminderCandidateId/review",
+  requireRoleAtLeast("MANAGER"),
+  markReminderCandidateReviewedHandler,
+);
+reportRouter.post(
+  "/reminder-candidates/:reminderCandidateId/dismiss",
+  requireRoleAtLeast("MANAGER"),
+  dismissReminderCandidateHandler,
+);
 reportRouter.get("/workshop/capacity", requireRoleAtLeast("MANAGER"), getWorkshopCapacityReportHandler);
 reportRouter.get("/workshop/warranty", requireRoleAtLeast("MANAGER"), getWorkshopWarrantyReportHandler);

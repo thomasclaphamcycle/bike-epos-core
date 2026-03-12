@@ -46,13 +46,15 @@ Automated reminder groundwork is now present behind the event bus and is intenti
 
 - `workshop.job.completed` can create a persisted `ReminderCandidate` when the job has a real `completedAt` timestamp and a linked customer
 - candidates store narrow groundwork fields only: customer, workshop job, source event, due date, status, and timestamps
+- candidates can now also be marked reviewed or dismissed by managers for operational queue control
 - the current default reminder due date is 90 days after workshop completion
 - manager visibility is available through `GET /api/reports/reminder-candidates` and `/management/reminders`
+- managers can now review or dismiss reminder candidates from the internal report/page without triggering delivery
 - candidates are not delivered automatically and do not change customer-facing flows
 
 Intentionally deferred:
 
 - SMS, email, push, or webhook delivery
 - background schedulers and automated send orchestration
-- public or staff-facing reminder management UI based on these candidates
+- public reminder APIs or customer-facing reminder management UI based on these candidates
 - sale-driven reminder candidate creation until a concrete reminder policy exists for retail-only events

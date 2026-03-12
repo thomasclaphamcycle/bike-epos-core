@@ -215,10 +215,75 @@ const main = async () => {
     assert.equal(row.customerId, customer.id);
     assert.equal(row.customerName, customer.name);
     assert.equal(row.status, "PENDING");
+    assert.equal(row.reviewState, "UNREVIEWED");
+    assert.equal(row.reviewedAt, null);
     assert.equal(row.daysOverdue, 0);
     assert.equal(row.completedAt.slice(0, 10), complete.json.job.completedAt.slice(0, 10));
 
-    console.log("[m128-smoke] reminder candidates groundwork passed");
+    const review = await fetchJson(
+      `/api/reports/reminder-candidates/${candidate.id}/review`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(review.status, 201, JSON.stringify(review.json));
+    assert.equal(review.json.idempotent, false);
+    assert.equal(review.json.candidate.id, candidate.id);
+    assert.equal(review.json.candidate.reviewedByStaffId, MANAGER_HEADERS["X-Staff-Id"]);
+    assert.ok(review.json.candidate.reviewedAt);
+
+    const reviewedCandidate = await prisma.reminderCandidate.findUnique({
+      where: { id: candidate.id },
+    });
+    assert.ok(reviewedCandidate);
+    assert.ok(reviewedCandidate.reviewedAt);
+    assert.equal(reviewedCandidate.reviewedByStaffId, MANAGER_HEADERS["X-Staff-Id"]);
+
+    const reviewReplay = await fetchJson(
+      `/api/reports/reminder-candidates/${candidate.id}/review`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(reviewReplay.status, 200, JSON.stringify(reviewReplay.json));
+    assert.equal(reviewReplay.json.idempotent, true);
+
+    const dismiss = await fetchJson(
+      `/api/reports/reminder-candidates/${candidate.id}/dismiss`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(dismiss.status, 201, JSON.stringify(dismiss.json));
+    assert.equal(dismiss.json.idempotent, false);
+    assert.equal(dismiss.json.candidate.id, candidate.id);
+    assert.equal(dismiss.json.candidate.status, "DISMISSED");
+    assert.ok(dismiss.json.candidate.reviewedAt);
+
+    const dismissedReport = await fetchJson("/api/reports/reminder-candidates?take=20&includeDismissed=1", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(dismissedReport.status, 200, JSON.stringify(dismissedReport.json));
+    const dismissedRow = dismissedReport.json.items.find((item) => item.reminderCandidateId === candidate.id);
+    assert.ok(dismissedRow, JSON.stringify(dismissedReport.json));
+    assert.equal(dismissedRow.status, "DISMISSED");
+    assert.equal(dismissedRow.reviewState, "REVIEWED");
+    assert.ok(dismissedRow.reviewedAt);
+
+    const dismissReplay = await fetchJson(
+      `/api/reports/reminder-candidates/${candidate.id}/dismiss`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(dismissReplay.status, 200, JSON.stringify(dismissReplay.json));
+    assert.equal(dismissReplay.json.idempotent, true);
+
+    console.log("[m128-smoke] reminder candidate controls passed");
   } finally {
     await cleanup(state);
     await prisma.$disconnect();

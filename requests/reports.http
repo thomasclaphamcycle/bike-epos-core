@@ -51,3 +51,18 @@ X-Staff-Id: demo-manager
 GET {{baseUrl}}/api/reports/reminder-candidates?take=50
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
+
+### Reminder candidates report including dismissed (MANAGER+)
+GET {{baseUrl}}/api/reports/reminder-candidates?take=50&includeDismissed=1
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Mark reminder candidate reviewed (MANAGER+)
+POST {{baseUrl}}/api/reports/reminder-candidates/{{reminderCandidateId}}/review
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Dismiss reminder candidate (MANAGER+)
+POST {{baseUrl}}/api/reports/reminder-candidates/{{reminderCandidateId}}/dismiss
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
