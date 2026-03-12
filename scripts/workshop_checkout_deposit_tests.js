@@ -2,6 +2,7 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
+const { once } = require("node:events");
 const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
@@ -174,6 +175,24 @@ const waitForServer = async (serverProcess, getStartupLog) => {
       ? `Server did not become healthy on /health.\n${startupLog}\nlast probe: ${lastProbeDetail}`
       : `Server did not become healthy on /health${lastProbeDetail ? `\nlast probe: ${lastProbeDetail}` : ""}`,
   );
+};
+
+const stopServerProcess = async (serverProcess) => {
+  if (!serverProcess || serverProcess.exitCode !== null) {
+    return;
+  }
+
+  const exitPromise = once(serverProcess, "exit").catch(() => undefined);
+  serverProcess.kill("SIGTERM");
+  const exitedGracefully = await Promise.race([
+    exitPromise.then(() => true),
+    sleep(400).then(() => false),
+  ]);
+
+  if (!exitedGracefully && serverProcess.exitCode === null) {
+    serverProcess.kill("SIGKILL");
+    await exitPromise;
+  }
 };
 
 let sequence = 0;
@@ -500,7 +519,7 @@ const run = async () => {
     await cleanupTestData(createdWorkshopJobIds, createdCustomerIds, createdSaleIds);
     await prisma.$disconnect();
     if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
+      await stopServerProcess(serverProcess);
     }
   }
 };
