@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
@@ -1040,7 +1040,7 @@ export const WorkshopJobPage = () => {
           <div>
             <h2>Parts Allocation</h2>
             <p className="muted-text">
-              Reserve parts against estimate lines, then consume them when they are fitted.
+              Reserve parts against estimate lines, then consume them when they are fitted. Consumed and returned parts create the workshop stock movements visible on the linked inventory item.
             </p>
           </div>
           <div className="table-secondary">
@@ -1131,6 +1131,9 @@ export const WorkshopJobPage = () => {
                               {requirement.variantName || requirement.sku} · {requirement.sku}
                             </div>
                             <div className="table-secondary">Estimate value {formatMoney(requirement.estimateValuePence)}</div>
+                            <div className="table-secondary">
+                              <Link to={`/inventory/${requirement.variantId}`}>Open inventory movement detail</Link>
+                            </div>
                           </td>
                           <td>{requirement.requiredQty}</td>
                           <td>{requirement.allocatedQty}</td>
@@ -1170,13 +1173,14 @@ export const WorkshopJobPage = () => {
                     <th>Qty</th>
                     <th>Location</th>
                     <th>Value</th>
+                    <th>Stock Effect</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
                   {!partsPayload || partsPayload.parts.length === 0 ? (
                     <tr>
-                      <td colSpan={6}>No workshop part allocations yet.</td>
+                      <td colSpan={7}>No workshop part allocations yet.</td>
                     </tr>
                   ) : (
                     partsPayload.parts.map((part) => (
@@ -1198,6 +1202,18 @@ export const WorkshopJobPage = () => {
                           <div className="table-secondary">{new Date(part.updatedAt).toLocaleString()}</div>
                         </td>
                         <td>{formatMoney(part.lineTotalPence)}</td>
+                        <td>
+                          <div className="table-primary">
+                            {part.status === "USED"
+                              ? `-${part.quantity} from ${part.stockLocationName}`
+                              : part.status === "RETURNED"
+                                ? `+${part.quantity} back into ${part.stockLocationName}`
+                                : "Reserved only, not yet consumed"}
+                          </div>
+                          <div className="table-secondary">
+                            <Link to={`/inventory/${part.variantId}`}>Open inventory history</Link>
+                          </div>
+                        </td>
                         <td>
                           <div className="actions-inline">
                             {part.status === "PLANNED" ? (

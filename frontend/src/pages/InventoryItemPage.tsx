@@ -104,6 +104,62 @@ const formatMovementTypeLabel = (value: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+const formatMovementReferenceLabel = (referenceType: string | null, referenceId: string | null) => {
+  if (referenceType === "WORKSHOP_JOB_PART") {
+    return {
+      primary: "Workshop part record",
+      secondary: referenceId,
+    };
+  }
+
+  if (referenceType === "WORKSHOP_JOB_LINE") {
+    return {
+      primary: "Workshop job line",
+      secondary: referenceId,
+    };
+  }
+
+  if (referenceType === "STOCK_ADJUSTMENT") {
+    return {
+      primary: formatReasonLabel(referenceId),
+      secondary: null,
+    };
+  }
+
+  return {
+    primary: referenceType ? formatMovementTypeLabel(referenceType) : "-",
+    secondary: referenceId,
+  };
+};
+
+const getMovementStory = (movement: MovementResponse["movements"][number]) => {
+  if (movement.type === "WORKSHOP_USE") {
+    if (movement.quantity < 0) {
+      return movement.referenceType === "WORKSHOP_JOB_PART"
+        ? "Consumed from a workshop part record."
+        : "Consumed during workshop job completion.";
+    }
+
+    return movement.referenceType === "WORKSHOP_JOB_PART"
+      ? "Returned from a workshop part record."
+      : "Returned back from workshop activity.";
+  }
+
+  if (movement.type === "PURCHASE") {
+    return "Booked into stock through purchase-order receiving.";
+  }
+
+  if (movement.type === "SALE") {
+    return "Reduced through a completed retail sale.";
+  }
+
+  if (movement.type === "ADJUSTMENT") {
+    return "Manual correction or count adjustment.";
+  }
+
+  return movement.note || "Inventory movement recorded.";
+};
+
 const getStockStateLabel = (onHand: number) => {
   if (onHand < 0) {
     return "Negative";
@@ -737,6 +793,19 @@ export const InventoryItemPage = () => {
               </div>
             </div>
 
+            {workshopUseQty > 0 ? (
+              <div className="actions-inline">
+                <button type="button" className="button-link" onClick={() => setMovementType("WORKSHOP_USE")}>
+                  Show workshop use only
+                </button>
+                {movementType ? (
+                  <button type="button" className="button-link" onClick={() => setMovementType("")}>
+                    Clear movement type filter
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="filter-row">
               <label>
                 Type
@@ -779,13 +848,14 @@ export const InventoryItemPage = () => {
                 <th>Change</th>
                 <th>Reason</th>
                 <th>Unit Cost</th>
+                <th>Stock Story</th>
                 <th>Note</th>
               </tr>
             </thead>
             <tbody>
               {movements.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     {canViewMovements
                       ? movementLoading
                         ? "Loading movement history..."
@@ -809,16 +879,13 @@ export const InventoryItemPage = () => {
                       {formatSignedQuantity(movement.quantity)}
                     </td>
                     <td>
-                      <div className="table-primary">
-                        {movement.referenceType === "STOCK_ADJUSTMENT"
-                          ? formatReasonLabel(movement.referenceId)
-                          : (movement.referenceType ? formatMovementTypeLabel(movement.referenceType) : "-")}
-                      </div>
-                      {movement.referenceId && movement.referenceType !== "STOCK_ADJUSTMENT" ? (
-                        <div className="table-secondary mono-text">{movement.referenceId}</div>
+                      <div className="table-primary">{formatMovementReferenceLabel(movement.referenceType, movement.referenceId).primary}</div>
+                      {formatMovementReferenceLabel(movement.referenceType, movement.referenceId).secondary ? (
+                        <div className="table-secondary mono-text">{formatMovementReferenceLabel(movement.referenceType, movement.referenceId).secondary}</div>
                       ) : null}
                     </td>
                     <td>{movement.unitCost ? `£${movement.unitCost}` : "-"}</td>
+                    <td>{getMovementStory(movement)}</td>
                     <td>{movement.note || "-"}</td>
                   </tr>
                 ))
