@@ -11,6 +11,7 @@ Backend:
 - `COOKIE_SECRET`
 - `PORT` (default `3000`)
 - `NODE_ENV` (`development`, `test`, or `production`)
+- `OPS_LOGGING=1` (optional, enables concise structured operational logs for auth, workshop, purchasing, and inventory lifecycle events)
 
 Frontend (optional build-time customizations):
 

@@ -14,6 +14,10 @@ Required backend variables:
 - `NODE_ENV=production`
 - `PORT`: backend listen port, usually `3000` behind a reverse proxy
 
+Optional operational variable:
+
+- `OPS_LOGGING=1`: enables concise structured lifecycle logs for auth, workshop status changes, stock adjustments, and purchase-order receiving
+
 Operational guidance:
 
 - use a dedicated PostgreSQL database and role for CorePOS
@@ -105,6 +109,7 @@ CorePOS logs to standard output and standard error. In production:
 - capture logs with your process manager, container runtime, or hosting platform
 - retain recent startup and error logs for troubleshooting
 - monitor for repeated auth failures, migration failures, database connection errors, and uncaught exceptions
+- enable `OPS_LOGGING=1` if you want structured lifecycle logs without introducing a separate logging stack
 
 Minimum operational check after deploy:
 

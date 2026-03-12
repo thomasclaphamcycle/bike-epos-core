@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { emit } from "../core/events";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { ensureVariantExistsById } from "./productService";
@@ -324,5 +325,15 @@ export const emitStockAdjusted = (result: StockAdjustmentResult) => {
     totalOnHand: result.stock.totalOnHand,
     referenceType: result.entry.referenceType,
     referenceId: result.entry.referenceId,
+  });
+
+  logOperationalEvent("inventory.stock_adjusted", {
+    variantId: result.entry.variantId,
+    locationId: result.entry.locationId,
+    quantityDelta: result.entry.quantityDelta,
+    totalOnHand: result.stock.totalOnHand,
+    referenceType: result.entry.referenceType,
+    referenceId: result.entry.referenceId,
+    createdByStaffId: result.entry.createdByStaffId,
   });
 };

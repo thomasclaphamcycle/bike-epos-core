@@ -1,5 +1,6 @@
 import { Prisma, PurchaseOrderStatus } from "@prisma/client";
 import { emit } from "../core/events";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 
@@ -1288,6 +1289,15 @@ export const receivePurchaseOrder = async (
     id: response.id,
     type: "purchaseOrder.received",
     timestamp: new Date().toISOString(),
+    purchaseOrderId: response.id,
+    poNumber: response.poNumber,
+    locationId: updated.event.locationId,
+    lineCount: updated.event.lineCount,
+    quantityReceived: updated.event.quantityReceived,
+    status: response.status,
+  });
+
+  logOperationalEvent("purchasing.purchase_order.received", {
     purchaseOrderId: response.id,
     poNumber: response.poNumber,
     locationId: updated.event.locationId,

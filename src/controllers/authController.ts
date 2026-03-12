@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import {
   authenticateWithPin,
@@ -97,6 +98,10 @@ export const activeUsersHandler = async (_req: Request, res: Response) => {
 };
 
 export const logoutHandler = async (_req: Request, res: Response) => {
+  const actorId = getRequestStaffActorId(_req);
+  logOperationalEvent("auth.logout", {
+    userId: actorId ?? null,
+  });
   res.clearCookie(AUTH_COOKIE_NAME, clearAuthCookieOptions());
   res.status(204).send();
 };

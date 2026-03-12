@@ -1,5 +1,6 @@
 import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import {
@@ -46,14 +47,27 @@ export const authenticateWithEmailPassword = async (
 
   const user = await findUserByEmail(normalizedEmail);
   if (!user || !user.isActive) {
+    logOperationalEvent("auth.password_login.failed", {
+      email: normalizedEmail,
+      reason: !user ? "user_not_found" : "user_inactive",
+    });
     throw new HttpError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
 
   const valid = await verifyPassword(normalizedPassword, user.passwordHash);
   if (!valid) {
+    logOperationalEvent("auth.password_login.failed", {
+      email: normalizedEmail,
+      userId: user.id,
+      reason: "invalid_password",
+    });
     throw new HttpError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
 
+  logOperationalEvent("auth.password_login.succeeded", {
+    userId: user.id,
+    role: user.role,
+  });
   return toPublicUser(user);
 };
 
@@ -109,14 +123,26 @@ export const authenticateWithPin = async (
     where: { id: normalizedUserId },
   });
   if (!user || !user.isActive || !user.pinHash) {
+    logOperationalEvent("auth.pin_login.failed", {
+      userId: normalizedUserId,
+      reason: !user ? "user_not_found" : !user.isActive ? "user_inactive" : "pin_not_set",
+    });
     throw new HttpError(401, "Invalid login", "INVALID_CREDENTIALS");
   }
 
   const valid = await verifyPin(normalizedPin, user.pinHash);
   if (!valid) {
+    logOperationalEvent("auth.pin_login.failed", {
+      userId: normalizedUserId,
+      reason: "invalid_pin",
+    });
     throw new HttpError(401, "Invalid login", "INVALID_CREDENTIALS");
   }
 
+  logOperationalEvent("auth.pin_login.succeeded", {
+    userId: user.id,
+    role: user.role,
+  });
   return toPublicUser(user);
 };
 

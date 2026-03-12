@@ -1,5 +1,6 @@
 import { Prisma, WorkshopJobNoteVisibility, WorkshopJobStatus } from "@prisma/client";
 import { emit } from "../core/events";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -409,6 +410,8 @@ export const changeWorkshopJobStatus = async (
           updatedAt: job.updatedAt,
           completedAt: job.completedAt,
         },
+        fromStatus: job.status,
+        toStatus: job.status,
         idempotent: true,
         emittedStage: targetStage,
       };
@@ -478,9 +481,20 @@ export const changeWorkshopJobStatus = async (
         updatedAt: updated.updatedAt,
         completedAt: updated.completedAt,
       },
+      fromStatus: job.status,
+      toStatus: updated.status,
       idempotent: false,
       emittedStage: targetStage,
     };
+  });
+
+  logOperationalEvent("workshop.job.status_changed", {
+    workshopJobId: result.job.id,
+    fromStatus: result.fromStatus,
+    toStatus: result.toStatus,
+    stage: result.emittedStage,
+    idempotent: result.idempotent,
+    completedAt: result.job.completedAt?.toISOString(),
   });
 
   if (!result.idempotent && result.emittedStage === "COMPLETED") {
