@@ -74,7 +74,8 @@
     "test:health-monitoring": "node scripts/run_smoke_test.js scripts/health_monitoring_smoke_tests.js",
     "test:supplier-product-links": "node scripts/run_smoke_test.js scripts/supplier_product_links_smoke_tests.js",
     "test:product-import": "node scripts/run_smoke_test.js scripts/product_csv_import_smoke_tests.js",
-    "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js"
+    "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
+    "verify": "NODE_ENV=test npm run test:m11 && NODE_ENV=test npm test && npm run build && NODE_ENV=test npm run e2e && NODE_ENV=test npm run test:m38 && NODE_ENV=test npm run test:m24 && NODE_ENV=test npm run test:m27 && NODE_ENV=test npm run test:m30 && npm run db:seed:dev"
   },
   "repository": {
     "type": "git",
