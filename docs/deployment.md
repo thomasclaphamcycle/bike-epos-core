@@ -117,10 +117,16 @@ Important distinction:
 To restore a backup into the database currently pointed to by `DATABASE_URL`:
 
 ```bash
-pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$DATABASE_URL" backups/pre-trial-corepos.dump
+COREPOS_CONFIRM_RESTORE=1 scripts/restore_database.sh backups/pre-trial-corepos.dump
 ```
 
 Restore should be treated as a deliberate operator action because it overwrites existing objects in the target database.
+
+Restore helper notes:
+
+- `pg_restore` must be installed and on `PATH` or in the common local PostgreSQL client paths
+- the script requires `COREPOS_CONFIRM_RESTORE=1` to avoid accidental destructive runs
+- the helper restores into the database pointed to by `DATABASE_URL`
 
 ## Local Automation Note
 

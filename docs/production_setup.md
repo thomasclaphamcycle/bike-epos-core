@@ -88,7 +88,7 @@ Requirements:
 Restore example:
 
 ```bash
-pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$DATABASE_URL" backups/corepos-pre-upgrade.dump
+COREPOS_CONFIRM_RESTORE=1 scripts/restore_database.sh backups/corepos-pre-upgrade.dump
 ```
 
 Restore guidance:
@@ -96,6 +96,7 @@ Restore guidance:
 - restore into a staging database first when possible
 - treat restore as destructive for the target database
 - after restore, restart the app and verify core flows before reopening the shop
+- keep `pg_restore` installed on the operator or admin machine performing the recovery
 
 ## 5. Monitoring Logs
 
