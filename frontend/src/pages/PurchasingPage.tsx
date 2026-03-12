@@ -70,6 +70,25 @@ const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
   }
 };
 
+const getPurchaseOrderNextStep = (purchaseOrder: PurchaseOrder) => {
+  switch (purchaseOrder.status) {
+    case "DRAFT":
+      return "Finish the lines and mark the PO ordered before any goods can be received.";
+    case "SENT":
+      return purchaseOrder.totals.quantityRemaining > 0
+        ? "Wait for delivery or open the PO when stock lands."
+        : "Nothing remains outstanding. Review whether the PO should already be closed.";
+    case "PARTIALLY_RECEIVED":
+      return "Open the PO detail to book in the remaining delivery and confirm final quantities.";
+    case "RECEIVED":
+      return "Receiving is complete. Use the PO detail for a final quantity and cost check.";
+    case "CANCELLED":
+      return "Cancelled orders should stay closed and must not be received.";
+    default:
+      return "Open the PO to review the current state.";
+  }
+};
+
 const formatShortDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
 
 const isOpenPurchaseOrder = (purchaseOrder: PurchaseOrder) =>
@@ -203,6 +222,10 @@ export const PurchasingPage = () => {
     () => purchaseOrders.filter((po) => po.status === "DRAFT").length,
     [purchaseOrders],
   );
+  const sentCount = useMemo(
+    () => purchaseOrders.filter((po) => po.status === "SENT" && po.totals.quantityRemaining > 0).length,
+    [purchaseOrders],
+  );
   const overduePurchaseOrders = useMemo(
     () => purchaseOrders
       .filter((purchaseOrder) => isOverduePurchaseOrder(purchaseOrder))
@@ -233,13 +256,15 @@ export const PurchasingPage = () => {
             <th>Status</th>
             <th>Created</th>
             <th>Expected</th>
+            <th>Remaining</th>
+            <th>Next Step</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6}>{emptyLabel}</td>
+              <td colSpan={8}>{emptyLabel}</td>
             </tr>
           ) : (
             rows.map((purchaseOrder) => (
@@ -256,6 +281,10 @@ export const PurchasingPage = () => {
                 </td>
                 <td>{formatShortDate(purchaseOrder.createdAt)}</td>
                 <td>{formatShortDate(purchaseOrder.expectedAt)}</td>
+                <td className="numeric-cell">{purchaseOrder.totals.quantityRemaining}</td>
+                <td>
+                  <div className="table-primary">{getPurchaseOrderNextStep(purchaseOrder)}</div>
+                </td>
                 <td><Link to={`/purchasing/${purchaseOrder.id}`}>Open PO</Link></td>
               </tr>
             ))
@@ -272,11 +301,12 @@ export const PurchasingPage = () => {
           <div>
             <h1>Purchasing</h1>
             <p className="muted-text">
-              Purchase order list, supplier filters, and receiving entry points. For a first trial, create a supplier, create a draft PO, send it, then receive against it here.
+              Purchase order list, supplier filters, and receiving entry points. For a first trial, create a supplier, create a draft PO, send it, then receive against it here. Draft means still editable, Ordered means waiting for delivery, and Partially Received means stock has started landing but more is still expected.
             </p>
           </div>
           <div className="actions-inline">
             <Link to="/suppliers" className="button-link">Suppliers</Link>
+            <Link to="/purchasing/receiving" className="button-link">Receiving Workspace</Link>
             <button type="button" onClick={() => void loadPurchaseOrders()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
@@ -340,6 +370,18 @@ export const PurchasingPage = () => {
             <span className="metric-label">Draft Orders</span>
             <strong className="metric-value">{draftCount}</strong>
           </div>
+          <div className="metric-card">
+            <span className="metric-label">Sent Awaiting Delivery</span>
+            <strong className="metric-value">{sentCount}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Partially Received</span>
+            <strong className="metric-value">{partiallyReceivedPurchaseOrders.length}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Overdue Deliveries</span>
+            <strong className="metric-value">{overduePurchaseOrders.length}</strong>
+          </div>
         </div>
 
         {canManage ? (
@@ -400,12 +442,13 @@ export const PurchasingPage = () => {
                 <th>Remaining</th>
                 <th>Expected</th>
                 <th>Created</th>
+                <th>Next Step</th>
               </tr>
             </thead>
             <tbody>
               {purchaseOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     {loading
                       ? "Loading purchase orders..."
                       : canManage
@@ -438,6 +481,9 @@ export const PurchasingPage = () => {
                     <td className="numeric-cell">{purchaseOrder.totals.quantityRemaining}</td>
                     <td>{formatShortDate(purchaseOrder.expectedAt)}</td>
                     <td>{formatShortDate(purchaseOrder.createdAt)}</td>
+                    <td>
+                      <div className="table-primary">{getPurchaseOrderNextStep(purchaseOrder)}</div>
+                    </td>
                   </tr>
                 ))
               )}

@@ -141,6 +141,25 @@ const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
   }
 };
 
+const getPurchaseOrderWorkflowMessage = (purchaseOrder: PurchaseOrder) => {
+  switch (purchaseOrder.status) {
+    case "DRAFT":
+      return "Still editable. Confirm line quantities, costs, and expected date before marking the order sent.";
+    case "SENT":
+      return purchaseOrder.totals.quantityRemaining > 0
+        ? "Ordered and waiting for delivery. Use Goods Receiving when stock arrives."
+        : "Nothing remains outstanding. Review whether the order should already be closed.";
+    case "PARTIALLY_RECEIVED":
+      return "Receiving has started. Keep using this PO until all remaining stock is booked in.";
+    case "RECEIVED":
+      return "Fully received. Use this page as the audit trail for costs, quantities, and supplier references.";
+    case "CANCELLED":
+      return "Cancelled orders stay read-only and must not be received.";
+    default:
+      return "Open the PO to review its current workflow state.";
+  }
+};
+
 const toDateInputValue = (value: string | null) => {
   if (!value) {
     return "";
@@ -601,6 +620,7 @@ export const PurchaseOrderPage = () => {
           </div>
           <div className="actions-inline">
             <Link to="/purchasing" className="button-link">Back to Purchasing</Link>
+            <Link to="/purchasing/receiving" className="button-link">Receiving Workspace</Link>
             <Link to="/suppliers" className="button-link">Suppliers</Link>
           </div>
         </div>
@@ -637,6 +657,10 @@ export const PurchaseOrderPage = () => {
                 <span className="table-secondary">From current line unit costs</span>
               </div>
             </div>
+
+            <p className="muted-text">
+              {getPurchaseOrderWorkflowMessage(purchaseOrder)}
+            </p>
 
             <form className="purchase-form-grid" onSubmit={saveDetails}>
               <label>
@@ -696,7 +720,7 @@ export const PurchaseOrderPage = () => {
         <div className="card-header-row">
           <div>
             <h2>Purchase Order Lines</h2>
-            <p className="muted-text">Variant-centric purchasing lines using the existing catalog API.</p>
+            <p className="muted-text">Variant-centric purchasing lines using the existing catalog API. Draft POs can still be edited; once ordered, line changes should only happen through controlled receiving.</p>
           </div>
         </div>
 
@@ -774,6 +798,7 @@ export const PurchaseOrderPage = () => {
                                       {formatMoney(supplierLink.supplierCostPence)}
                                       {supplierLink.preferredSupplier ? " | Preferred" : ""}
                                     </div>
+                                    <div className="table-secondary">Used as the fallback cost if PO line cost is left blank.</div>
                                   </>
                                 ) : (
                                   <span className="table-secondary">No active supplier link</span>
@@ -882,6 +907,11 @@ export const PurchaseOrderPage = () => {
                                   {formatMoney(supplierLink.supplierCostPence)}
                                   {supplierLink.preferredSupplier ? " | Preferred" : ""}
                                 </div>
+                                <div className="table-secondary">
+                                  {item.unitCostPence === supplierLink.supplierCostPence
+                                    ? "Matches current supplier link cost"
+                                    : "PO line cost can differ from the current supplier link"}
+                                </div>
                               </>
                             ) : (
                               <span className="table-secondary">No active supplier link</span>
@@ -908,7 +938,7 @@ export const PurchaseOrderPage = () => {
         <div className="card-header-row">
           <div>
             <h2>Goods Receiving</h2>
-            <p className="muted-text">Receive stock directly from this PO. Stock does not increase until receiving is posted.</p>
+            <p className="muted-text">Receive stock directly from this PO. Stock does not increase until receiving is posted, and partial receipts should stay on this PO until the full delivery is complete.</p>
           </div>
         </div>
 
@@ -938,6 +968,10 @@ export const PurchaseOrderPage = () => {
               </div>
             </div>
 
+            <p className="muted-text">
+              Select the location first, then either fill the remaining quantity or post a partial delivery line by line. If the supplier invoice cost differs from the PO line cost, override it here before receiving.
+            </p>
+
             {receiveSuccessMessage ? (
               <div className="restricted-panel">{receiveSuccessMessage}</div>
             ) : null}
@@ -957,6 +991,7 @@ export const PurchaseOrderPage = () => {
                     </option>
                   ))}
                 </select>
+                <span className="table-secondary">All receipts in this batch post into the selected location.</span>
               </label>
               <div className="actions-inline">
                 <button
@@ -982,13 +1017,14 @@ export const PurchaseOrderPage = () => {
                     <th>Remaining</th>
                     <th>Receive Now</th>
                     <th>Unit Cost (pence)</th>
+                    <th>Receiving Context</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {purchaseOrder.items.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>No lines available for receiving.</td>
+                      <td colSpan={9}>No lines available for receiving.</td>
                     </tr>
                   ) : (
                     purchaseOrder.items.map((item) => {
@@ -1041,6 +1077,18 @@ export const PurchaseOrderPage = () => {
                               }
                               disabled={item.quantityRemaining <= 0 || isSubmitting}
                             />
+                          </td>
+                          <td>
+                            <div className="table-primary">
+                              {item.quantityRemaining <= 0
+                                ? "Line already fully received"
+                                : item.quantityReceived > 0
+                                  ? "Partial delivery in progress"
+                                  : "First receipt for this line"}
+                            </div>
+                            <div className="table-secondary">
+                              Current PO cost {formatMoney(item.unitCostPence)}
+                            </div>
                           </td>
                           <td>
                             <div className="actions-inline">

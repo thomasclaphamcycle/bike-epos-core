@@ -35,6 +35,30 @@ const daysUntil = (value: string | null) => {
 
 const formatExpected = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
 
+const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
+  switch (status) {
+    case "PARTIALLY_RECEIVED":
+      return "Partially Received";
+    case "SENT":
+      return "Ordered";
+    default:
+      return status.charAt(0) + status.slice(1).toLowerCase();
+  }
+};
+
+const getReceivingNextStep = (purchaseOrder: PurchaseOrder) => {
+  if (purchaseOrder.status === "PARTIALLY_RECEIVED") {
+    return "Book in the remaining delivery on the same PO and confirm any final unit-cost changes.";
+  }
+
+  const delta = daysUntil(purchaseOrder.expectedAt);
+  if (delta !== null && delta < 0) {
+    return "Delivery is overdue. Chase the supplier, then receive only what has actually arrived.";
+  }
+
+  return "Open the PO when the delivery lands and post the received quantity into stock.";
+};
+
 const statusBadgeClass = (status: PurchaseOrder["status"]) => {
   switch (status) {
     case "RECEIVED":
@@ -118,13 +142,14 @@ export const SupplierReceivingPage = () => {
             <th>Ordered</th>
             <th>Received</th>
             <th>Remaining</th>
+            <th>Next Step</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={8}>{emptyLabel}</td>
+              <td colSpan={9}>{emptyLabel}</td>
             </tr>
           ) : rows.map((po) => (
             <tr key={po.id}>
@@ -133,11 +158,17 @@ export const SupplierReceivingPage = () => {
                 <div className="table-secondary">Created {new Date(po.createdAt).toLocaleDateString()}</div>
               </td>
               <td>{po.supplier.name}</td>
-              <td><span className={statusBadgeClass(po.status)}>{po.status.replaceAll("_", " ")}</span></td>
+              <td><span className={statusBadgeClass(po.status)}>{formatPurchaseOrderStatus(po.status)}</span></td>
               <td>{formatExpected(po.expectedAt)}</td>
               <td>{po.totals.quantityOrdered}</td>
               <td>{po.totals.quantityReceived}</td>
               <td>{po.totals.quantityRemaining}</td>
+              <td>
+                <div className="table-primary">{getReceivingNextStep(po)}</div>
+                <div className="table-secondary">
+                  {po.expectedAt ? `Expected ${formatExpected(po.expectedAt)}` : "No expected date recorded"}
+                </div>
+              </td>
               <td><Link to={`/purchasing/${po.id}`}>Open PO</Link></td>
             </tr>
           ))}
@@ -153,7 +184,7 @@ export const SupplierReceivingPage = () => {
           <div>
             <h1>Supplier Receiving</h1>
             <p className="muted-text">
-              Receiving-focused workspace built on the existing purchase order list and receiving flow. Use this to triage deliveries before drilling into PO detail.
+              Receiving-focused workspace built on the existing purchase order list and receiving flow. Use this to triage deliveries before drilling into PO detail. Ordered means no stock has been booked in yet; Partially Received means the PO is still live until the remaining delivery lands.
             </p>
           </div>
           <div className="actions-inline">
@@ -170,7 +201,7 @@ export const SupplierReceivingPage = () => {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="PO id or supplier"
+              placeholder="PO id, status, or supplier"
             />
           </label>
         </div>
@@ -196,9 +227,13 @@ export const SupplierReceivingPage = () => {
             <strong className="metric-value">
               {filtered.reduce((sum, po) => sum + po.totals.quantityRemaining, 0)}
             </strong>
-            <span className="dashboard-metric-detail">Across open receiving attention</span>
+            <span className="dashboard-metric-detail">Across the currently visible receiving queue</span>
           </div>
         </div>
+
+        <p className="muted-text">
+          Use Ready to Receive when a full delivery arrives, Partially Received when you are waiting on the balance of a supplier shipment, and Overdue Awaiting Delivery when someone needs chasing.
+        </p>
       </section>
 
       <div className="dashboard-grid analytics-grid">
