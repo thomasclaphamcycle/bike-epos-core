@@ -93,7 +93,7 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
       { key: "cmd-actions", group: "Shortcut", title: "Action centre", subtitle: "Grouped manager action queue", path: "/management/actions" },
       { key: "cmd-investigations", group: "Shortcut", title: "Stock investigations", subtitle: "Inventory anomaly review queue", path: "/management/investigations" },
       { key: "cmd-exceptions", group: "Shortcut", title: "Operations exceptions", subtitle: "Single queue of cross-functional issues", path: "/management/exceptions" },
-      { key: "cmd-product-data", group: "Shortcut", title: "Product data queue", subtitle: "Variants needing data cleanup", path: "/management/product-data" },
+      { key: "cmd-product-data", group: "Shortcut", title: "Product data queue", subtitle: "Data cleanup and product CSV import", path: "/management/product-data" },
       { key: "cmd-pricing", group: "Shortcut", title: "Pricing review", subtitle: "Margin and pricing exceptions", path: "/management/pricing" },
       { key: "cmd-supplier-returns", group: "Shortcut", title: "Supplier returns", subtitle: "Warranty and receiving send-backs", path: "/management/supplier-returns" },
       { key: "cmd-purchasing", group: "Shortcut", title: "PO action centre", subtitle: "Open purchase order priorities", path: "/management/purchasing" },

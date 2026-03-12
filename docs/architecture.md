@@ -32,8 +32,23 @@ The reporting layer is intentionally split by domain:
 - `/management/investigations`: stock-focused anomaly queue.
 - `/management/reordering`: buying suggestions from stock, sales, and open POs.
 - `/management/pricing`: pricing and margin exception queue.
+- `/management/product-data`: catalogue cleanup plus product CSV import preview/confirm.
 - `/management/reminders`: internal reminder-candidate queue for manager visibility.
 - `/management/capacity`: workshop backlog and ageing view.
+
+## Product Import Flow
+
+The first product CSV import flow is intentionally narrow and internal:
+
+- `POST /api/products/import/preview`
+  - parses CSV text, maps practical product columns, and returns row-level errors and warnings
+  - does not write products
+- `POST /api/products/import/confirm`
+  - revalidates the same CSV using the preview key before writing
+  - creates new `Product` and default `Variant` rows only for eligible rows
+  - can create opening stock through internal inventory movements when stock quantity is supplied
+
+This flow is manager-only groundwork for manual catalogue loading. It does not automate supplier feeds, catalogue matching, or external ingest.
 
 ## Event Foundation
 

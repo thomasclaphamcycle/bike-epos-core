@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -51,6 +51,74 @@ type ProductResponse = {
   variantCount?: number;
 };
 
+type ProductImportField =
+  | "name"
+  | "sku"
+  | "barcode"
+  | "retailPrice"
+  | "cost"
+  | "stockQuantity"
+  | "category";
+
+type ProductImportPreviewItem = {
+  rowNumber: number;
+  source: Record<ProductImportField, string>;
+  parsed: {
+    name: string | null;
+    sku: string | null;
+    barcode: string | null;
+    retailPrice: string | null;
+    retailPricePence: number | null;
+    cost: string | null;
+    costPricePence: number | null;
+    stockQuantity: number;
+    category: string | null;
+  };
+  errors: string[];
+  warnings: string[];
+  isEligible: boolean;
+};
+
+type ProductImportPreviewResponse = {
+  previewKey: string;
+  fileErrors: string[];
+  fileWarnings: string[];
+  summary: {
+    totalRows: number;
+    eligibleRows: number;
+    errorRows: number;
+    warningRows: number;
+    fileErrorCount: number;
+    fileWarningCount: number;
+  };
+  items: ProductImportPreviewItem[];
+};
+
+type ProductImportConfirmResponse = {
+  previewKey: string;
+  summary: {
+    totalRows: number;
+    eligibleRows: number;
+    importedRows: number;
+    failedRows: number;
+    skippedRows: number;
+    warningRows: number;
+  };
+  importedRows: Array<{
+    rowNumber: number;
+    productId: string;
+    variantId: string;
+    name: string;
+    sku: string;
+    stockImported: number;
+  }>;
+  failedRows: Array<{
+    rowNumber: number;
+    sku: string | null;
+    error: string;
+  }>;
+};
+
 const LOW_STOCK_THRESHOLD = 3;
 
 type CatalogueForm = {
@@ -86,6 +154,7 @@ const normalizeRetailPrice = (value: string) => {
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 const formatDate = (value: string) => new Date(value).toLocaleDateString();
+const formatOptionalMoney = (pence: number | null) => (pence === null ? "-" : formatMoney(pence));
 
 const getStockStateLabel = (onHand: number) => {
   if (onHand < 0) return "Negative";
@@ -101,17 +170,35 @@ const getStockStateClass = (onHand: number) => {
   return "stock-badge stock-state-positive";
 };
 
+const getImportStatusLabel = (row: ProductImportPreviewItem) => {
+  if (row.errors.length > 0) return "ERROR";
+  if (row.warnings.length > 0) return "WARNING";
+  return "READY";
+};
+
+const getImportStatusClass = (row: ProductImportPreviewItem) => {
+  if (row.errors.length > 0) return "status-badge status-cancelled";
+  if (row.warnings.length > 0) return "status-badge status-warning";
+  return "status-badge status-complete";
+};
+
 export const ProductDataQueuePage = () => {
   const { error, success } = useToasts();
   const [variants, setVariants] = useState<VariantRow[]>([]);
   const [stockByVariantId, setStockByVariantId] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [confirmingImport, setConfirmingImport] = useState(false);
   const [catalogScope, setCatalogScope] = useState<"active" | "all">("active");
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [createForm, setCreateForm] = useState<CatalogueForm>(emptyForm());
   const [editForm, setEditForm] = useState<CatalogueForm | null>(null);
+  const [importFileName, setImportFileName] = useState<string>("");
+  const [importCsvText, setImportCsvText] = useState("");
+  const [importPreview, setImportPreview] = useState<ProductImportPreviewResponse | null>(null);
+  const [importResult, setImportResult] = useState<ProductImportConfirmResponse | null>(null);
 
   const loadVariants = async () => {
     setLoading(true);
@@ -259,20 +346,274 @@ export const ProductDataQueuePage = () => {
     }
   };
 
+  const onImportFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) {
+      setImportFileName("");
+      setImportCsvText("");
+      setImportPreview(null);
+      setImportResult(null);
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setImportFileName(file.name);
+      setImportCsvText(text);
+      setImportPreview(null);
+      setImportResult(null);
+    } catch (fileError) {
+      error(fileError instanceof Error ? fileError.message : "Failed to read CSV file");
+      setImportFileName("");
+      setImportCsvText("");
+      setImportPreview(null);
+      setImportResult(null);
+    } finally {
+      input.value = "";
+    }
+  };
+
+  const previewImport = async () => {
+    if (!importCsvText.trim()) {
+      error("Choose a CSV file before previewing");
+      return;
+    }
+
+    setImportLoading(true);
+    try {
+      const preview = await apiPost<ProductImportPreviewResponse>("/api/products/import/preview", {
+        csvText: importCsvText,
+      });
+      setImportPreview(preview);
+      setImportResult(null);
+      success("CSV preview ready");
+    } catch (previewError) {
+      setImportPreview(null);
+      error(previewError instanceof Error ? previewError.message : "Failed to preview product import");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview) {
+      error("Run preview before importing");
+      return;
+    }
+
+    setConfirmingImport(true);
+    try {
+      const result = await apiPost<ProductImportConfirmResponse>("/api/products/import/confirm", {
+        csvText: importCsvText,
+        previewKey: importPreview.previewKey,
+      });
+      setImportResult(result);
+      setImportPreview(null);
+      success(`Imported ${result.summary.importedRows} product row${result.summary.importedRows === 1 ? "" : "s"}`);
+      await loadVariants();
+    } catch (confirmError) {
+      error(confirmError instanceof Error ? confirmError.message : "Failed to confirm product import");
+    } finally {
+      setConfirmingImport(false);
+    }
+  };
+
   return (
     <div className="page-shell product-catalogue-page">
-      <section className="card product-catalogue-create-card">
+      <section className="card">
         <div className="card-header-row">
           <div>
             <h1>Product Catalogue</h1>
             <p className="muted-text">
-              Create and maintain the sellable product records that drive POS search. Each entry creates or updates the product plus its default POS variant.
+              Create, correct, and import sellable product records. The CSV import validates rows first, shows warnings/errors, and only imports confirmed eligible rows.
             </p>
           </div>
           <div className="actions-inline">
             <button type="button" onClick={() => void loadVariants()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+          </div>
+        </div>
+
+        <div className="filter-row">
+          <label className="grow">
+            Product CSV
+            <input type="file" accept=".csv,text/csv" onChange={(event) => void onImportFileSelected(event)} />
+          </label>
+          <label className="grow">
+            Expected columns
+            <input value="name, sku, barcode, retail price, cost, stock quantity, category" readOnly />
+          </label>
+        </div>
+
+        <div className="actions-inline">
+          <button type="button" className="primary" onClick={() => void previewImport()} disabled={importLoading || confirmingImport || !importCsvText.trim()}>
+            {importLoading ? "Previewing..." : "Preview import"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void confirmImport()}
+            disabled={
+              confirmingImport
+              || importLoading
+              || !importPreview
+              || importPreview.summary.eligibleRows === 0
+            }
+          >
+            {confirmingImport ? "Importing..." : "Confirm import"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setImportFileName("");
+              setImportCsvText("");
+              setImportPreview(null);
+              setImportResult(null);
+            }}
+            disabled={importLoading || confirmingImport}
+          >
+            Clear
+          </button>
+          <Link to="/inventory">Inventory</Link>
+        </div>
+
+        <p className="muted-text">
+          {importFileName
+            ? `Loaded file: ${importFileName}`
+            : "No CSV selected. The first version creates new products and default variants only; it does not update existing catalogue rows."}
+        </p>
+
+        {importPreview ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Rows</span>
+                <strong className="metric-value">{importPreview.summary.totalRows}</strong>
+                <span className="dashboard-metric-detail">Non-blank CSV rows parsed</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Eligible</span>
+                <strong className="metric-value">{importPreview.summary.eligibleRows}</strong>
+                <span className="dashboard-metric-detail">Rows ready to import</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Errors</span>
+                <strong className="metric-value">{importPreview.summary.errorRows}</strong>
+                <span className="dashboard-metric-detail">Rows blocked from import</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Warnings</span>
+                <strong className="metric-value">{importPreview.summary.warningRows}</strong>
+                <span className="dashboard-metric-detail">Rows needing review before confirm</span>
+              </div>
+            </div>
+
+            {importPreview.fileErrors.length > 0 ? (
+              <div className="card">
+                <h2>File Errors</h2>
+                <ul className="muted-text">
+                  {importPreview.fileErrors.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {importPreview.fileWarnings.length > 0 ? (
+              <div className="card">
+                <h2>File Warnings</h2>
+                <ul className="muted-text">
+                  {importPreview.fileWarnings.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Name</th>
+                    <th>SKU</th>
+                    <th>Barcode</th>
+                    <th>Retail</th>
+                    <th>Cost</th>
+                    <th>Stock</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Issues</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.items.map((row) => (
+                    <tr key={row.rowNumber}>
+                      <td className="numeric-cell">{row.rowNumber}</td>
+                      <td>{row.parsed.name ?? "-"}</td>
+                      <td className="mono-text">{row.parsed.sku ?? "-"}</td>
+                      <td className="mono-text">{row.parsed.barcode ?? "-"}</td>
+                      <td>{formatOptionalMoney(row.parsed.retailPricePence)}</td>
+                      <td>{formatOptionalMoney(row.parsed.costPricePence)}</td>
+                      <td className="numeric-cell">{row.parsed.stockQuantity}</td>
+                      <td>{row.parsed.category ?? "-"}</td>
+                      <td><span className={getImportStatusClass(row)}>{getImportStatusLabel(row)}</span></td>
+                      <td>
+                        <div className="table-primary">
+                          {row.errors.length > 0 ? row.errors.join(" | ") : "No blocking errors"}
+                        </div>
+                        <div className="table-secondary">
+                          {row.warnings.length > 0 ? row.warnings.join(" | ") : "No warnings"}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+
+        {importResult ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Import Result</th>
+                  <th>Count</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Imported rows</td>
+                  <td className="numeric-cell">{importResult.summary.importedRows}</td>
+                  <td>Rows written into product, variant, and opening-stock records</td>
+                </tr>
+                <tr>
+                  <td>Skipped rows</td>
+                  <td className="numeric-cell">{importResult.summary.skippedRows}</td>
+                  <td>Rows blocked by validation or runtime conflicts</td>
+                </tr>
+                <tr>
+                  <td>Failed during confirm</td>
+                  <td className="numeric-cell">{importResult.summary.failedRows}</td>
+                  <td>{importResult.failedRows.length > 0 ? importResult.failedRows.map((row) => `Row ${row.rowNumber}: ${row.error}`).join(" | ") : "No runtime failures"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="card product-catalogue-create-card">
+        <div className="card-header-row">
+          <div>
+            <h2>Create Product</h2>
+            <p className="muted-text">
+              Create and maintain individual sellable product records that drive POS search. Each entry creates the product plus its default POS variant.
+            </p>
           </div>
         </div>
 

@@ -10,6 +10,8 @@
   - flat operational exception list
 - `/management/investigations`
   - stock anomaly review queue
+- `/management/product-data`
+  - catalogue cleanup plus product CSV import preview and confirm
 - `/management/reminders`
   - internal service reminder candidates queue
 - `/management/reordering`
@@ -58,3 +60,21 @@ Intentionally deferred:
 - background schedulers and automated send orchestration
 - public reminder APIs or customer-facing reminder management UI based on these candidates
 - sale-driven reminder candidate creation until a concrete reminder policy exists for retail-only events
+
+## Product CSV Import
+
+The first product import flow is internal and manager-facing only.
+
+- use `/management/product-data` to choose a CSV file, preview validation, and confirm the import
+- preview calls `POST /api/products/import/preview`
+- confirm calls `POST /api/products/import/confirm` and revalidates the same CSV before writing
+- the import creates new products plus default variants only
+- stock quantity, when supplied, is written as opening stock through inventory movements
+- invalid rows are not imported; warnings remain visible during preview so managers can decide whether to continue
+
+Intentionally deferred:
+
+- supplier feed automation
+- external catalogue sync
+- image URL import
+- updates/merge logic for existing product rows beyond duplicate detection

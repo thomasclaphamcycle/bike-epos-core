@@ -38,6 +38,18 @@ type CreateVariantInput = {
   isActive?: boolean;
 };
 
+type CreateImportedProductRowInput = {
+  name: string;
+  category?: string | null;
+  sku: string;
+  barcode?: string | null;
+  retailPrice: string | number;
+  costPricePence?: number | null;
+  openingStockQty?: number;
+  createdByStaffId?: string;
+  importReferenceId?: string;
+};
+
 type UpdateVariantInput = {
   productId?: string;
   sku?: string;
@@ -507,6 +519,102 @@ export const createProduct = async (input: CreateProductInput) => {
     }
 
     return toProductResponse(product);
+  });
+};
+
+export const createImportedProductRow = async (input: CreateImportedProductRowInput) => {
+  const name = normalizeOptionalText(input.name);
+  const category = normalizeOptionalNullableText(input.category);
+  const sku = normalizeOptionalText(input.sku);
+  const barcode = normalizeOptionalNullableText(input.barcode);
+  const createdByStaffId = normalizeOptionalNullableText(input.createdByStaffId);
+  const importReferenceId = normalizeOptionalText(input.importReferenceId) ?? sku ?? "PRODUCT_IMPORT";
+  const openingStockQty = input.openingStockQty ?? 0;
+
+  if (!name) {
+    throw new HttpError(400, "name is required", "INVALID_PRODUCT_IMPORT");
+  }
+  if (!sku) {
+    throw new HttpError(400, "sku is required", "INVALID_PRODUCT_IMPORT");
+  }
+  if (sku.length < 2) {
+    throw new HttpError(400, "sku must be at least 2 characters", "INVALID_PRODUCT_IMPORT");
+  }
+  if (!Number.isInteger(openingStockQty) || openingStockQty < 0) {
+    throw new HttpError(
+      400,
+      "openingStockQty must be an integer greater than or equal to 0",
+      "INVALID_PRODUCT_IMPORT",
+    );
+  }
+  if (
+    input.costPricePence !== undefined &&
+    input.costPricePence !== null &&
+    (!Number.isInteger(input.costPricePence) || input.costPricePence < 0)
+  ) {
+    throw new HttpError(
+      400,
+      "costPricePence must be null or a non-negative integer",
+      "INVALID_PRODUCT_IMPORT",
+    );
+  }
+
+  const parsedRetailPrice = parseRetailPriceInput(
+    input.retailPrice,
+    undefined,
+    "INVALID_PRODUCT_IMPORT",
+  );
+
+  return prisma.$transaction(async (tx) => {
+    await ensureSkuAvailable(tx, sku);
+
+    if (barcode) {
+      await ensureBarcodeAvailable(tx, barcode);
+    }
+
+    const product = await tx.product.create({
+      data: {
+        name,
+        category,
+        isActive: true,
+      },
+    });
+
+    const variant = await tx.variant.create({
+      data: {
+        productId: product.id,
+        sku,
+        barcode,
+        retailPrice: parsedRetailPrice.retailPrice,
+        retailPricePence: parsedRetailPrice.retailPricePence,
+        costPricePence: input.costPricePence ?? null,
+        isActive: true,
+      },
+    });
+
+    if (barcode) {
+      await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
+    }
+
+    if (openingStockQty > 0) {
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: variant.id,
+          type: "ADJUSTMENT",
+          quantity: openingStockQty,
+          referenceType: "PRODUCT_IMPORT",
+          referenceId: importReferenceId,
+          note: "Product CSV import opening stock",
+          createdByStaffId,
+        },
+      });
+    }
+
+    return {
+      product: toProductResponse(product),
+      variant: toVariantResponse(variant),
+      stockImported: openingStockQty,
+    };
   });
 };
 
