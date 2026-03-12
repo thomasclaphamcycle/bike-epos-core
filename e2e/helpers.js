@@ -103,21 +103,33 @@ const ensureUserViaAdminBypass = async (
 };
 
 const loginViaUi = async (page, credentials, nextPath = "/pos", options = {}) => {
+  const resolvedNextPath = nextPath === undefined ? "/pos" : nextPath;
+  const expectedPath = options.expectedPath ?? resolvedNextPath;
   const surface = options.surface || "legacy";
   if (surface === "frontend") {
-    await page.goto(`${frontendBaseUrl}/login?next=${encodeURIComponent(nextPath)}`);
+    const loginUrl = resolvedNextPath
+      ? `${frontendBaseUrl}/login?next=${encodeURIComponent(resolvedNextPath)}`
+      : `${frontendBaseUrl}/login`;
+    await page.goto(loginUrl);
     await page.click(`[data-testid="login-user-${credentials.user.id}"]`);
     await page.fill('[data-testid="login-pin"]', credentials.pin);
-    await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), {
-      timeout: 6000,
-    });
+    if (expectedPath) {
+      await page.waitForURL(new RegExp(`${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), {
+        timeout: 6000,
+      });
+    }
     return;
   }
-  await page.goto(`${backendBaseUrl}/login?next=${encodeURIComponent(nextPath)}`);
+  const loginUrl = resolvedNextPath
+    ? `${backendBaseUrl}/login?next=${encodeURIComponent(resolvedNextPath)}`
+    : `${backendBaseUrl}/login`;
+  await page.goto(loginUrl);
   await page.getByLabel("Email").fill(credentials.email);
   await page.getByLabel("Password").fill(credentials.password);
   await page.getByRole("button", { name: "Login" }).click();
-  await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  if (expectedPath) {
+    await page.waitForURL(new RegExp(`${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  }
 };
 
 const seedCatalogVariant = async (request, options = {}) => {

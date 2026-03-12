@@ -70,11 +70,12 @@ POST /api/auth/bootstrap
 
 ## Default Routes and Navigation
 
-- `/` redirects to `/pos` when authenticated, otherwise `/login`.
+- When the React SPA is active, `/` loads the app shell and immediately routes authenticated users through `/home` to their role landing page (`/dashboard`, `/management`, or `/management/staff`).
+- In backend-only/non-SPA mode, `/` continues to redirect authenticated users to `/pos`; unauthenticated access still goes to `/login`.
 - Protected HTML pages redirect to `/login?next=...` if unauthenticated.
 - If authenticated but role is insufficient, HTML pages redirect to `/not-authorized`.
 - Current UX branch shell visibility is intentionally reduced while navigation is being refined.
-- Protected routes still enforce role-based access for management and admin pages even when the sidebar does not expose every destination.
+- The reduced sidebar still exposes the core day-to-day links for the signed-in role, while protected routes continue to enforce direct access to management and admin pages that are not surfaced as top-level sidebar links.
 
 ## Smoke Tests and Auth
 

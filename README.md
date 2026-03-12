@@ -80,7 +80,8 @@ See [docs/auth.md](docs/auth.md) for full mode/flag details.
 
 Authenticated pages now use a shared app shell with role-aware navigation.
 
-- `/` redirects to `/pos` when authenticated, otherwise `/login`.
+- When the React SPA is active, `/` loads the app shell and routes authenticated users through `/home` to their role landing page (`/dashboard`, `/management`, or `/management/staff`).
+- In backend-only/non-SPA mode, `/` still redirects authenticated users to `/pos`; unauthenticated access still goes to `/login`.
 - Unauthenticated access to protected pages redirects to `/login?next=...`.
 - Role-based page access redirects to `/not-authorized` for HTML requests.
 
