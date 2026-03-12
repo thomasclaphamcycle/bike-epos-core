@@ -86,6 +86,8 @@ const MOVEMENT_TYPE_OPTIONS = [
   "RETURN",
 ] as const;
 
+const LOW_STOCK_THRESHOLD = 3;
+
 const formatReasonLabel = (value: string | null) =>
   value
     ? value
@@ -109,6 +111,9 @@ const getStockStateLabel = (onHand: number) => {
   if (onHand === 0) {
     return "Zero";
   }
+  if (onHand <= LOW_STOCK_THRESHOLD) {
+    return "Low";
+  }
   return "Positive";
 };
 
@@ -118,6 +123,9 @@ const getStockStateClass = (onHand: number) => {
   }
   if (onHand === 0) {
     return "stock-badge stock-state-zero";
+  }
+  if (onHand <= LOW_STOCK_THRESHOLD) {
+    return "stock-badge stock-state-low";
   }
   return "stock-badge stock-state-positive";
 };
@@ -294,6 +302,42 @@ export const InventoryItemPage = () => {
     return null;
   }, [countedQuantity, cycleCountDifference, parsedCountedQuantity]);
 
+  const purchaseQty = useMemo(
+    () => movements.reduce((sum, movement) => sum + (movement.type === "PURCHASE" ? Math.max(movement.quantity, 0) : 0), 0),
+    [movements],
+  );
+  const salesQty = useMemo(
+    () => movements.reduce((sum, movement) => sum + (movement.type === "SALE" ? Math.abs(Math.min(movement.quantity, 0)) : 0), 0),
+    [movements],
+  );
+  const workshopUseQty = useMemo(
+    () => movements.reduce((sum, movement) => sum + (movement.type === "WORKSHOP_USE" ? Math.abs(Math.min(movement.quantity, 0)) : 0), 0),
+    [movements],
+  );
+  const adjustmentNetQty = useMemo(
+    () => movements.reduce((sum, movement) => sum + (movement.type === "ADJUSTMENT" ? movement.quantity : 0), 0),
+    [movements],
+  );
+  const latestMovementAt = movements[0]?.createdAt ?? null;
+
+  const stockAttentionMessage = useMemo(() => {
+    const onHand = stock?.onHand ?? 0;
+
+    if (onHand < 0) {
+      return "Negative stock needs immediate review. Check the movement history, then run a cycle count before the next sale or workshop allocation.";
+    }
+    if (onHand === 0) {
+      return "This variant is out of stock. Confirm open purchase orders or raise a new reorder before it is promised again.";
+    }
+    if (onHand <= LOW_STOCK_THRESHOLD) {
+      return "Stock is low. Review reorder suggestions and recent workshop use before the next busy trading day.";
+    }
+    if (workshopUseQty > 0) {
+      return `Workshop use is visible in the movement history. ${workshopUseQty} unit${workshopUseQty === 1 ? "" : "s"} have been consumed by workshop jobs in the current view.`;
+    }
+    return "Stock level is currently healthy. Use movements and location counts to confirm where the remaining stock is sitting.";
+  }, [stock?.onHand, workshopUseQty]);
+
   const submitAdjustment = async (event: FormEvent) => {
     event.preventDefault();
 
@@ -391,6 +435,8 @@ export const InventoryItemPage = () => {
             <p className="muted-text">Variant-level stock, locations, and movement history.</p>
           </div>
           <div className="actions-inline">
+            <Link to="/management/reordering">Reordering</Link>
+            <Link to="/management/inventory">Inventory intel</Link>
             <Link to="/inventory/stocktakes">Stocktake sessions</Link>
             <Link to={`/inventory/${variantId}?mode=count`}>Cycle count</Link>
             <Link to="/inventory">Back to Inventory</Link>
@@ -435,6 +481,10 @@ export const InventoryItemPage = () => {
                 <strong className="metric-value">{stock?.locations.length ?? 0}</strong>
               </div>
             </div>
+
+            <p className="muted-text">
+              {stockAttentionMessage}
+            </p>
           </>
         ) : null}
       </section>
@@ -648,41 +698,76 @@ export const InventoryItemPage = () => {
 
       <section className="card">
         <div className="card-header-row">
-          <h2>Movement History</h2>
+          <div>
+            <h2>Movement History</h2>
+            <p className="muted-text">
+              Review purchasing receipts, retail sales, workshop usage, and manual corrections in one place. Use the filters to isolate a specific stock story.
+            </p>
+          </div>
           {movementNotice ? <span className="muted-text">{movementNotice}</span> : null}
         </div>
 
         {canViewMovements ? (
-          <div className="filter-row">
-            <label>
-              Type
-              <select
-                value={movementType}
-                onChange={(event) => setMovementType(event.target.value as (typeof MOVEMENT_TYPE_OPTIONS)[number])}
-              >
-                <option value="">All</option>
-                {MOVEMENT_TYPE_OPTIONS.filter((option) => option).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <>
+            <div className="metric-grid">
+              <div className="metric-card">
+                <span className="metric-label">Purchased</span>
+                <strong className="metric-value">{purchaseQty}</strong>
+                <span className="dashboard-metric-detail">Visible receipts</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Sold</span>
+                <strong className="metric-value">{salesQty}</strong>
+                <span className="dashboard-metric-detail">Retail sale movement</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Workshop Used</span>
+                <strong className="metric-value">{workshopUseQty}</strong>
+                <span className="dashboard-metric-detail">Bike job consumption</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Net Adjustments</span>
+                <strong className="metric-value">{adjustmentNetQty > 0 ? `+${adjustmentNetQty}` : adjustmentNetQty}</strong>
+                <span className="dashboard-metric-detail">Manual corrections</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Latest Movement</span>
+                <strong className="metric-value">{latestMovementAt ? new Date(latestMovementAt).toLocaleDateString() : "-"}</strong>
+                <span className="dashboard-metric-detail">Newest visible entry</span>
+              </div>
+            </div>
 
-            <label>
-              From
-              <input type="date" value={movementFrom} onChange={(event) => setMovementFrom(event.target.value)} />
-            </label>
+            <div className="filter-row">
+              <label>
+                Type
+                <select
+                  value={movementType}
+                  onChange={(event) => setMovementType(event.target.value as (typeof MOVEMENT_TYPE_OPTIONS)[number])}
+                >
+                  <option value="">All</option>
+                  {MOVEMENT_TYPE_OPTIONS.filter((option) => option).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <label>
-              To
-              <input type="date" value={movementTo} onChange={(event) => setMovementTo(event.target.value)} />
-            </label>
+              <label>
+                From
+                <input type="date" value={movementFrom} onChange={(event) => setMovementFrom(event.target.value)} />
+              </label>
 
-            <button type="button" onClick={() => void loadMovements()} disabled={movementLoading}>
-              {movementLoading ? "Loading..." : "Refresh"}
-            </button>
-          </div>
+              <label>
+                To
+                <input type="date" value={movementTo} onChange={(event) => setMovementTo(event.target.value)} />
+              </label>
+
+              <button type="button" onClick={() => void loadMovements()} disabled={movementLoading}>
+                {movementLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+          </>
         ) : null}
 
         <div className="table-wrap">
@@ -704,7 +789,7 @@ export const InventoryItemPage = () => {
                     {canViewMovements
                       ? movementLoading
                         ? "Loading movement history..."
-                        : "No movements found."
+                        : "No movements match the current filters. Clear the date or type filter to review the full stock history."
                       : "Movement history hidden for STAFF users."}
                   </td>
                 </tr>

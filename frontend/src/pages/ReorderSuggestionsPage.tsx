@@ -111,6 +111,7 @@ export const ReorderSuggestionsPage = () => {
             <button type="button" onClick={() => void loadReport()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
+            <Link to="/management/inventory">Inventory intel</Link>
             <Link to="/purchasing">Purchasing</Link>
           </div>
         </div>
@@ -137,6 +138,11 @@ export const ReorderSuggestionsPage = () => {
             <span className="dashboard-metric-detail">{topActions} high-priority lines</span>
           </div>
         </div>
+
+        <p className="muted-text">
+          Use this queue when stock is getting tight. Open PO quantity is already deducted, so lines marked Reorder Now or
+          Reorder Soon represent remaining gaps after current inbound stock is considered.
+        </p>
       </section>
 
       <section className="card">
@@ -144,10 +150,14 @@ export const ReorderSuggestionsPage = () => {
           <div>
             <h2>Buy Next</h2>
             <p className="muted-text">
-              {report?.heuristic.description ?? "Suggested reorder = recent demand minus current and incoming stock."}
+              {report?.heuristic.description ?? "Suggested reorder = recent demand minus current and incoming stock."} Open the
+              inventory item when you need movement detail or stock location checks before ordering.
             </p>
           </div>
-          <Link to="/management">Back to management</Link>
+          <div className="actions-inline">
+            <Link to="/purchasing/receiving">Receiving</Link>
+            <Link to="/management">Back to management</Link>
+          </div>
         </div>
         <div className="table-wrap">
           <table>
@@ -157,8 +167,9 @@ export const ReorderSuggestionsPage = () => {
                 <th>SKU</th>
                 <th>On Hand</th>
                 <th>Sold (30d)</th>
-                <th>Open PO</th>
+                <th>Open PO / ETA</th>
                 <th>Suggested</th>
+                <th>Buying Context</th>
                 <th>Status</th>
                 <th>Severity</th>
                 <th>Actions</th>
@@ -187,6 +198,18 @@ export const ReorderSuggestionsPage = () => {
                     </td>
                     <td>{row.suggestedReorderQty}</td>
                     <td>
+                      <div className="table-primary">
+                        {row.currentOnHand <= 0
+                          ? "No free stock left"
+                          : row.daysOfCover !== null && row.daysOfCover <= 7
+                            ? `About ${row.daysOfCover.toFixed(1)} days of cover left`
+                            : "Cover is tightening"}
+                      </div>
+                      <div className="table-secondary">
+                        Target {row.targetStockQty} | Last sold {formatDate(row.lastSoldAt)}
+                      </div>
+                    </td>
+                    <td>
                       <span className={urgencyBadgeClass[row.urgency]}>{row.urgency}</span>
                     </td>
                     <td>
@@ -202,7 +225,11 @@ export const ReorderSuggestionsPage = () => {
                 );
               }) : (
                 <tr>
-                  <td colSpan={9}>{loading ? "Loading reorder suggestions..." : "No reorder suggestions right now."}</td>
+                  <td colSpan={10}>
+                    {loading
+                      ? "Loading reorder suggestions..."
+                      : "No reorder suggestions right now. Current stock plus open purchase orders is covering recent sales demand."}
+                  </td>
                 </tr>
               )}
             </tbody>

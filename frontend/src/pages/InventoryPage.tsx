@@ -67,6 +67,22 @@ const getStockStateClass = (onHand: number) => {
   return "stock-badge stock-state-positive";
 };
 
+const getAttentionSummary = (row: InventoryRow) => {
+  if (!row.isActive) {
+    return "Inactive variant. Review it before counting or buying more stock.";
+  }
+  if (row.onHand < 0) {
+    return "Negative stock. Check recent movements and count this variant before the next sale or workshop allocation.";
+  }
+  if (row.onHand === 0) {
+    return "Out of stock. Confirm whether stock is already on order or needs a new purchase order.";
+  }
+  if (row.onHand <= LOW_STOCK_THRESHOLD) {
+    return "Low remaining cover. Review reordering before the next sale or workshop use.";
+  }
+  return "Healthy cover right now. Open the variant for locations, adjustments, and movement history.";
+};
+
 export const InventoryPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -196,6 +212,8 @@ export const InventoryPage = () => {
             </p>
           </div>
           <div className="actions-inline">
+            <Link to="/management/reordering">Reordering</Link>
+            <Link to="/management/inventory">Inventory intel</Link>
             <Link to="/inventory/stocktakes">Stocktakes</Link>
             <Link to="/inventory/locations">Inventory by location</Link>
             <button type="button" onClick={() => void loadRows()} disabled={loading}>
@@ -284,7 +302,8 @@ export const InventoryPage = () => {
 
         <p className="muted-text">
           Low stock currently means on-hand stock greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}.
-          Use the variant detail page when you need location counts, adjustments, or a stocktake.
+          Zero and negative rows need immediate review. Use reordering for buying decisions, inventory intel for slower
+          stock, and the variant detail page for location counts, movements, adjustments, or a stocktake.
         </p>
 
         <div className="table-wrap">
@@ -299,16 +318,17 @@ export const InventoryPage = () => {
                 <th>On Hand</th>
                 <th>Stock State</th>
                 <th>Status</th>
+                <th>Attention</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     {loading
                       ? "Loading inventory..."
-                      : "No inventory rows match the current search and filters."}
+                      : "No inventory rows match the current search and filters. Clear filters or search by product, SKU, or barcode."}
                   </td>
                 </tr>
               ) : (
@@ -336,6 +356,28 @@ export const InventoryPage = () => {
                       <span className={row.isActive ? "stock-badge stock-good" : "stock-badge stock-muted"}>
                         {row.isActive ? (row.onHand > 0 ? "In Stock" : "Out Of Stock") : "Inactive"}
                       </span>
+                    </td>
+                    <td>
+                      <div className="table-primary">{getAttentionSummary(row)}</div>
+                      <div className="table-secondary">
+                        {row.onHand < 0 ? (
+                          <Link
+                            to={`/inventory/${row.variantId}?mode=count`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Open cycle count
+                          </Link>
+                        ) : row.onHand <= LOW_STOCK_THRESHOLD ? (
+                          <Link
+                            to="/management/reordering"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Review reordering
+                          </Link>
+                        ) : (
+                          "No urgent stock action"
+                        )}
+                      </div>
                     </td>
                     <td>
                       <div className="actions-inline">
