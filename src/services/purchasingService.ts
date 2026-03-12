@@ -795,11 +795,28 @@ export const upsertPurchaseOrderItems = async (
       },
     });
 
+    const supplierLinks = await tx.supplierProductLink.findMany({
+      where: {
+        supplierId: po.supplierId,
+        variantId: {
+          in: variantIds,
+        },
+        isActive: true,
+      },
+      select: {
+        variantId: true,
+        supplierCostPence: true,
+      },
+    });
+
     if (variants.length !== variantIds.length) {
       throw new HttpError(404, "One or more variants were not found", "VARIANT_NOT_FOUND");
     }
 
     const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+    const supplierLinkByVariantId = new Map(
+      supplierLinks.map((link) => [link.variantId, link]),
+    );
     const existingItemByVariantId = new Map(
       po.items.map((item) => [item.variantId, item]),
     );
@@ -814,7 +831,11 @@ export const upsertPurchaseOrderItems = async (
       const requestedUnitCostPence =
         line.unitCostPence === undefined ? undefined : line.unitCostPence;
       const effectiveUnitCostPence =
-        requestedUnitCostPence ?? existingItem?.unitCostPence ?? variant.costPricePence ?? null;
+        requestedUnitCostPence
+        ?? existingItem?.unitCostPence
+        ?? supplierLinkByVariantId.get(line.variantId)?.supplierCostPence
+        ?? variant.costPricePence
+        ?? null;
 
       if (existingItem) {
         if (line.quantityOrdered < existingItem.quantityReceived) {
@@ -1160,6 +1181,22 @@ export const receivePurchaseOrder = async (
     }
 
     const itemById = new Map(po.items.map((item) => [item.id, item]));
+    const supplierLinks = await tx.supplierProductLink.findMany({
+      where: {
+        supplierId: po.supplierId,
+        variantId: {
+          in: Array.from(new Set(po.items.map((item) => item.variantId))),
+        },
+        isActive: true,
+      },
+      select: {
+        variantId: true,
+        supplierCostPence: true,
+      },
+    });
+    const supplierLinkByVariantId = new Map(
+      supplierLinks.map((link) => [link.variantId, link]),
+    );
 
     for (const line of parsedLines) {
       const item = itemById.get(line.purchaseOrderItemId);
@@ -1180,7 +1217,12 @@ export const receivePurchaseOrder = async (
         );
       }
 
-      const unitCost = line.unitCostPence ?? item.unitCostPence ?? item.variant.costPricePence ?? null;
+      const unitCost =
+        line.unitCostPence
+        ?? item.unitCostPence
+        ?? supplierLinkByVariantId.get(item.variantId)?.supplierCostPence
+        ?? item.variant.costPricePence
+        ?? null;
 
       await tx.purchaseOrderItem.update({
         where: {

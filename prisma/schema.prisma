@@ -47,6 +47,7 @@ model Supplier {
   updatedAt   DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  productLinks   SupplierProductLink[]
 
   @@index([name])
   @@index([email])
@@ -113,7 +114,7 @@ model Variant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  product            Product             @relation(fields: [productId], references: [id])
+  product            Product               @relation(fields: [productId], references: [id])
   barcodes           Barcode[]
   balances           StockBalance[]
   movements          StockMovement[]
@@ -123,8 +124,29 @@ model Variant {
   stockLedgerEntries StockLedgerEntry[]
   workshopParts      WorkshopJobPart[]
   purchaseOrderItems PurchaseOrderItem[]
+  supplierLinks      SupplierProductLink[]
   stocktakeLines     StocktakeLine[]
   workshopLines      WorkshopJobLine[]
+}
+
+model SupplierProductLink {
+  id                  String   @id @default(uuid()) @db.Uuid
+  supplierId          String   @db.Uuid
+  variantId           String
+  supplierProductCode String?
+  supplierCostPence   Int?
+  preferredSupplier   Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  variant  Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, variantId])
+  @@index([supplierId, isActive])
+  @@index([variantId, isActive])
+  @@index([variantId, preferredSupplier, isActive])
 }
 
 model Barcode {

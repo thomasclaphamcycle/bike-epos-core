@@ -12,6 +12,8 @@
   - stock anomaly review queue
 - `/management/product-data`
   - catalogue cleanup plus product CSV import preview and confirm
+- `/management/catalogue`
+  - supplier intake review plus manual supplier-product link management
 - `/management/reminders`
   - internal service reminder candidates queue
 - `/management/reordering`
@@ -78,3 +80,20 @@ Intentionally deferred:
 - external catalogue sync
 - image URL import
 - updates/merge logic for existing product rows beyond duplicate detection
+
+## Supplier Product Linking
+
+Supplier-product linking groundwork is now available for internal purchasing use.
+
+- use `/management/catalogue` to review existing supplier intake rows and manage supplier-product links
+- links store a supplier-specific product code, supplier-specific cost, preferred supplier flag, and active state for a variant
+- linked supplier cost is now used as the fallback when a manager adds a draft purchase-order line without entering unit cost manually
+- `GET /api/supplier-product-links` provides staff-visible internal listing, while managers can create and update links through the same internal API family
+
+Intentionally deferred:
+
+- automated supplier feeds
+- external supplier APIs
+- full supplier catalogue sync
+- advanced matching/deduplication
+- automated PO creation from supplier links

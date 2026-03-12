@@ -18,6 +18,8 @@
   - goods-in shortcuts
 - `/management/purchasing`
   - manager-facing PO action centre
+- `/management/catalogue`
+  - supplier intake review plus manual supplier-product link management
 - `/management/reordering`
   - stock-led buying suggestions
 - `/management/suppliers`
@@ -36,3 +38,23 @@
 - no forecasting engine
 - no purchasing schema redesign on this branch
 - manager reporting surfaces are advisory and operational rather than workflow automation
+
+## Supplier Product Links
+
+CorePOS now stores narrow supplier-product links for current purchasing groundwork.
+
+- each link connects one supplier to one variant
+- current stored fields are:
+  - supplier product code
+  - supplier cost in pence
+  - preferred supplier flag
+  - active/inactive state
+- managers can create and update links from `/management/catalogue`
+- current purchasing behavior uses the active supplier-link cost when a draft PO line is added without an explicit unit cost
+
+Intentionally deferred:
+
+- automated supplier feeds
+- external supplier API sync
+- advanced supplier catalogue matching or deduplication
+- automated purchase-order generation from these links

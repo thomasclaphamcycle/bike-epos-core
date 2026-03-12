@@ -69,6 +69,21 @@ type VariantListResponse = {
   variants: VariantSearchRow[];
 };
 
+type SupplierProductLink = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  variantId: string;
+  supplierProductCode: string | null;
+  supplierCostPence: number | null;
+  preferredSupplier: boolean;
+  isActive: boolean;
+};
+
+type SupplierProductLinkListResponse = {
+  supplierProductLinks: SupplierProductLink[];
+};
+
 type Location = {
   id: string;
   name: string;
@@ -157,6 +172,7 @@ export const PurchaseOrderPage = () => {
   const [variantSearch, setVariantSearch] = useState("");
   const debouncedVariantSearch = useDebouncedValue(variantSearch, 250);
   const [variantResults, setVariantResults] = useState<VariantSearchRow[]>([]);
+  const [supplierLinksByVariantId, setSupplierLinksByVariantId] = useState<Record<string, SupplierProductLink>>({});
   const [lineQuantity, setLineQuantity] = useState("1");
   const [lineUnitCostPence, setLineUnitCostPence] = useState("");
   const [addingVariantId, setAddingVariantId] = useState<string | null>(null);
@@ -262,6 +278,59 @@ export const PurchaseOrderPage = () => {
       cancelled = true;
     };
   }, [canEditLines, debouncedVariantSearch, error]);
+
+  useEffect(() => {
+    if (!purchaseOrder) {
+      setSupplierLinksByVariantId({});
+      return;
+    }
+
+    const variantIds = Array.from(new Set([
+      ...purchaseOrder.items.map((item) => item.variantId),
+      ...variantResults.map((variant) => variant.id),
+    ]));
+
+    if (variantIds.length === 0) {
+      setSupplierLinksByVariantId({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set("supplierId", purchaseOrder.supplierId);
+        params.set("variantIds", variantIds.join(","));
+        params.set("active", "1");
+        params.set("take", String(Math.min(variantIds.length, 200)));
+        params.set("skip", "0");
+
+        const payload = await apiGet<SupplierProductLinkListResponse>(
+          `/api/supplier-product-links?${params.toString()}`,
+        );
+
+        if (!cancelled) {
+          setSupplierLinksByVariantId(
+            Object.fromEntries(
+              (payload.supplierProductLinks || []).map((link) => [link.variantId, link]),
+            ),
+          );
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setSupplierLinksByVariantId({});
+          error(loadError instanceof Error ? loadError.message : "Failed to load supplier links");
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error, purchaseOrder, variantResults]);
 
   const saveDetails = async (event: FormEvent) => {
     event.preventDefault();
@@ -666,6 +735,9 @@ export const PurchaseOrderPage = () => {
                     />
                   </label>
                 </div>
+                <p className="muted-text">
+                  If unit cost is left blank, the PO line now falls back to the active supplier link cost for this supplier when one exists.
+                </p>
 
                 {variantResults.length > 0 ? (
                   <div className="table-wrap">
@@ -677,31 +749,48 @@ export const PurchaseOrderPage = () => {
                           <th>SKU</th>
                           <th>Retail</th>
                           <th>Cost</th>
+                          <th>Supplier Link</th>
                           <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {variantResults.map((variant) => (
-                          <tr key={variant.id}>
-                            <td>
-                              <div className="table-primary">{variant.product?.name || "-"}</div>
-                              <div className="table-secondary">{variant.product?.brand || "-"}</div>
-                            </td>
-                            <td>{variant.name || variant.option || "-"}</td>
-                            <td className="mono-text">{variant.sku}</td>
-                            <td>{formatMoney(variant.retailPricePence)}</td>
-                            <td>{formatMoney(variant.costPricePence)}</td>
-                            <td>
-                              <button
-                                type="button"
-                                onClick={() => void addVariantToPurchaseOrder(variant)}
-                                disabled={addingVariantId === variant.id}
-                              >
-                                {addingVariantId === variant.id ? "Adding..." : "Add"}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {variantResults.map((variant) => {
+                          const supplierLink = supplierLinksByVariantId[variant.id];
+                          return (
+                            <tr key={variant.id}>
+                              <td>
+                                <div className="table-primary">{variant.product?.name || "-"}</div>
+                                <div className="table-secondary">{variant.product?.brand || "-"}</div>
+                              </td>
+                              <td>{variant.name || variant.option || "-"}</td>
+                              <td className="mono-text">{variant.sku}</td>
+                              <td>{formatMoney(variant.retailPricePence)}</td>
+                              <td>{formatMoney(variant.costPricePence)}</td>
+                              <td>
+                                {supplierLink ? (
+                                  <>
+                                    <div>{supplierLink.supplierProductCode || "No supplier ref"}</div>
+                                    <div className="table-secondary">
+                                      {formatMoney(supplierLink.supplierCostPence)}
+                                      {supplierLink.preferredSupplier ? " | Preferred" : ""}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span className="table-secondary">No active supplier link</span>
+                                )}
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  onClick={() => void addVariantToPurchaseOrder(variant)}
+                                  disabled={addingVariantId === variant.id}
+                                >
+                                  {addingVariantId === variant.id ? "Adding..." : "Add"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -726,6 +815,7 @@ export const PurchaseOrderPage = () => {
                     <th>Received</th>
                     <th>Remaining</th>
                     <th>Unit Cost</th>
+                    <th>Supplier Link</th>
                     <th>Line Cost</th>
                     <th>Update</th>
                   </tr>
@@ -733,11 +823,12 @@ export const PurchaseOrderPage = () => {
                 <tbody>
                   {purchaseOrder.items.length === 0 ? (
                     <tr>
-                      <td colSpan={9}>No lines on this purchase order yet.</td>
+                      <td colSpan={10}>No lines on this purchase order yet.</td>
                     </tr>
                   ) : (
                     purchaseOrder.items.map((item) => {
                       const edit = lineEdits[item.id];
+                      const supplierLink = supplierLinksByVariantId[item.variantId];
                       return (
                         <tr key={item.id}>
                           <td>{item.productName}</td>
@@ -782,6 +873,19 @@ export const PurchaseOrderPage = () => {
                               }
                               disabled={!canEditLines}
                             />
+                          </td>
+                          <td>
+                            {supplierLink ? (
+                              <>
+                                <div>{supplierLink.supplierProductCode || "No supplier ref"}</div>
+                                <div className="table-secondary">
+                                  {formatMoney(supplierLink.supplierCostPence)}
+                                  {supplierLink.preferredSupplier ? " | Preferred" : ""}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="table-secondary">No active supplier link</span>
+                            )}
                           </td>
                           <td>{formatMoney((item.unitCostPence ?? 0) * item.quantityOrdered)}</td>
                           <td>

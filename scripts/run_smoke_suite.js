@@ -31,6 +31,7 @@ const baselineSteps = [
   "test:m126",
   "test:m127",
   "test:m128",
+  "test:supplier-product-links",
   "test:product-import",
 ];
 

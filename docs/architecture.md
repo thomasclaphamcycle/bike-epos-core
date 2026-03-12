@@ -33,6 +33,7 @@ The reporting layer is intentionally split by domain:
 - `/management/reordering`: buying suggestions from stock, sales, and open POs.
 - `/management/pricing`: pricing and margin exception queue.
 - `/management/product-data`: catalogue cleanup plus product CSV import preview/confirm.
+- `/management/catalogue`: supplier catalogue intake plus supplier-product link management.
 - `/management/reminders`: internal reminder-candidate queue for manager visibility.
 - `/management/capacity`: workshop backlog and ageing view.
 
@@ -49,6 +50,24 @@ The first product CSV import flow is intentionally narrow and internal:
   - can create opening stock through internal inventory movements when stock quantity is supplied
 
 This flow is manager-only groundwork for manual catalogue loading. It does not automate supplier feeds, catalogue matching, or external ingest.
+
+## Supplier Product Linking Groundwork
+
+Supplier integration groundwork now includes a narrow internal supplier-to-variant linkage model:
+
+- Prisma model `SupplierProductLink`
+  - stores `supplierId`, `variantId`, `supplierProductCode`, `supplierCostPence`, `preferredSupplier`, and `isActive`
+  - keeps one link row per supplier + variant pair
+- internal API surface under `GET|POST|PATCH /api/supplier-product-links`
+  - staff can list links
+  - managers can create and update links
+- purchasing integration
+  - draft PO line creation now prefers the active supplier-link cost for that supplier + variant when unit cost is left blank
+  - receiving still remains manual and does not introduce any automation
+- manager UI integration
+  - `/management/catalogue` now exposes manual link management on top of the existing supplier intake view
+
+This is groundwork only. It does not implement supplier feeds, external supplier APIs, advanced matching, or automated PO generation.
 
 ## Event Foundation
 
