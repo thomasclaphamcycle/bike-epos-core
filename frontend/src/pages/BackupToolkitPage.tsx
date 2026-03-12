@@ -35,6 +35,11 @@ const toQueryString = (params: Record<string, string>) => {
 
 const commandRows = [
   {
+    label: "Create PostgreSQL backup",
+    command: "scripts/backup_database.sh [output-file]",
+    detail: "Creates a custom-format pg_dump using the current DATABASE_URL before upgrades, trial resets, or risky maintenance.",
+  },
+  {
     label: "Reset local development database",
     command: "node scripts/reset_local_dev_db.js",
     detail: "Recreates the local development database from the current Prisma migration chain when drift is reported.",
@@ -131,7 +136,7 @@ export const BackupToolkitPage = () => {
         </div>
 
         <div className="restricted-panel info-panel">
-          This branch does not ship an in-app database backup job runner. Use the existing export endpoints for data extracts and the documented repo scripts for local reset, migration, and seeding operations.
+          This branch does not ship an automated in-app backup scheduler. Use the export hub for CSV extracts and `scripts/backup_database.sh` for a full PostgreSQL backup before maintenance or trial resets.
         </div>
       </section>
 
@@ -210,10 +215,15 @@ export const BackupToolkitPage = () => {
           </div>
           <ul>
             <li>Use `.env` plus `npx prisma migrate dev` for local development setup.</li>
+            <li>Use `scripts/backup_database.sh` before upgrades, resets, or any manual restore exercise.</li>
             <li>Use `node scripts/reset_local_dev_db.js` only for local development database drift.</li>
             <li>Use `npm run db:seed:dev` after resetting the local database to restore demo users and operational sample data.</li>
             <li>Use `node scripts/run_with_test_env.js` when a command must target the repository test environment.</li>
-            <li>For production-style export operations, prefer the existing export endpoints and the management export hub instead of inventing local SQL workflows in the app.</li>
+            <li>
+              Restore a dump with{" "}
+              <code>pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$DATABASE_URL" backup.dump</code>{" "}
+              only when you intentionally want to overwrite the target database.
+            </li>
           </ul>
         </section>
 

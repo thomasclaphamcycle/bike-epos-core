@@ -88,6 +88,38 @@ In production (`NODE_ENV=production`), the backend serves static files from `fro
 
 Legacy printable routes (for example receipt and workshop print views) continue to be served by backend HTML handlers.
 
+## Backup And Restore
+
+CorePOS now includes a simple repo-supported database backup helper for trusted local or operator-managed environments:
+
+```bash
+scripts/backup_database.sh
+```
+
+This uses the current `DATABASE_URL` and writes a timestamped PostgreSQL custom-format dump to `backups/` by default. You can also pass an explicit output path:
+
+```bash
+scripts/backup_database.sh backups/pre-trial-corepos.dump
+```
+
+Requirements:
+
+- `pg_dump` must be installed and on `PATH`
+- `DATABASE_URL` must point at the database you intend to back up
+
+Important distinction:
+
+- use the in-app Export Hub for CSV extracts and operational data handoff
+- use `scripts/backup_database.sh` for full database backup before upgrades, trial resets, or risky maintenance
+
+To restore a backup into the database currently pointed to by `DATABASE_URL`:
+
+```bash
+pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$DATABASE_URL" backups/pre-trial-corepos.dump
+```
+
+Restore should be treated as a deliberate operator action because it overwrites existing objects in the target database.
+
 ## Local Automation Note
 
 This repo includes a project-scoped `.codex/config.toml` for trusted local development. It keeps Codex in `workspace-write`, sets `approval_policy = "never"`, and enables workspace-write network access so local services such as PostgreSQL on `localhost:5432` remain reachable without switching to full-access mode.

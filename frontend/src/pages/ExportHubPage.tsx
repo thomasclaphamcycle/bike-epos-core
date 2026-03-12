@@ -73,10 +73,13 @@ export const ExportHubPage = () => {
           <div>
             <h1>Export Hub</h1>
             <p className="muted-text">
-              Central management download hub for CSV exports already supported by the system. This first version links directly to the existing export endpoints.
+              Central management download hub for CSV exports already supported by the system. Use the Backup Toolkit when you need a full PostgreSQL backup rather than an operational CSV extract.
             </p>
           </div>
-          <Link to="/management">Back to management</Link>
+          <div className="actions-inline">
+            <Link to="/management/backups">Backup toolkit</Link>
+            <Link to="/management">Back to management</Link>
+          </div>
         </div>
 
         <div className="filter-row">
