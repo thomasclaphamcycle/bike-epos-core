@@ -152,7 +152,7 @@ export const ActivityPage = () => {
           <div>
             <h1>Audit & Activity</h1>
             <p className="muted-text">
-              Recent system activity for operational visibility. Server-side filters stay aligned to the existing audit API, with a local actor filter on the returned rows.
+              Recent system activity for operational visibility. Use it to confirm who changed what during a trial, with server-side filters aligned to the existing audit API and a local actor filter on the returned rows.
             </p>
           </div>
           <div className="actions-inline">
@@ -244,7 +244,7 @@ export const ActivityPage = () => {
             <tbody>
               {filteredEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No audit activity matched the current filters.</td>
+                  <td colSpan={6}>No audit activity matched the current filters. Widen the date range or clear one of the filters to see more history.</td>
                 </tr>
               ) : (
                 filteredEvents.map((event) => (

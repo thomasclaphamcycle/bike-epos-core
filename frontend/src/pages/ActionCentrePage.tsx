@@ -78,7 +78,7 @@ export const ActionCentrePage = () => {
           <div>
             <h1>Action Centre</h1>
             <p className="muted-text">
-              One operational queue grouped across purchasing, workshop, pricing, inventory, and customer follow-up using existing report logic.
+              One grouped manager queue across purchasing, workshop, pricing, inventory, and customer follow-up. Review the reason here, then handle the work in the linked operational screen.
             </p>
           </div>
           <div className="actions-inline">
@@ -119,7 +119,7 @@ export const ActionCentrePage = () => {
           <div>
             <h2>Grouped Actions</h2>
             <p className="muted-text">
-              This page consolidates current report outputs into practical manager sections. It does not create or assign tasks.
+              This page consolidates current report outputs into practical manager sections. It does not create or assign tasks, so the next step is always to open the linked page and action the item there.
             </p>
           </div>
           <div className="actions-inline">
@@ -173,7 +173,9 @@ export const ActionCentrePage = () => {
                 )) : (
                   <tr>
                     <td colSpan={4}>
-                      {loading ? `Loading ${section.title.toLowerCase()} actions...` : `No ${section.title.toLowerCase()} actions right now.`}
+                      {loading
+                        ? `Loading ${section.title.toLowerCase()} actions...`
+                        : `No ${section.title.toLowerCase()} actions right now. Use the linked area for a manual review if you still need to check this section.`}
                     </td>
                   </tr>
                 )}

@@ -163,6 +163,12 @@ export const AlertsCentrePage = () => {
     .filter((refund) => refund.totalPence >= averageRefundPence && refund.totalPence > 0)
     .sort((left, right) => right.totalPence - left.totalPence)
     .slice(0, 10);
+  const totalAttentionCount = lowStockItems.length
+    + reorderNowItems.length
+    + awaitingApproval.length
+    + waitingForParts.length
+    + overduePurchaseOrders.length
+    + refundAttention.length;
 
   return (
     <div className="page-shell">
@@ -171,7 +177,7 @@ export const AlertsCentrePage = () => {
           <div>
             <h1>Alerts Centre</h1>
             <p className="muted-text">
-              Operational attention items derived from existing stock, workshop, purchasing, and refund data. This is a manager oversight page, not a push-notification system.
+              Operational attention derived from current stock, workshop, purchasing, and refund data. Use it as a manager watchlist for trial walkthroughs and daily checks, not as a push-notification system.
             </p>
           </div>
           <div className="actions-inline">
@@ -218,6 +224,19 @@ export const AlertsCentrePage = () => {
         </div>
       </section>
 
+      {!loading && totalAttentionCount === 0 ? (
+        <section className="card">
+          <p className="muted-text">
+            Nothing in the current range needs urgent attention. Open reordering, workshop, or the operations summary if you want to review those areas manually.
+          </p>
+          <div className="actions-inline">
+            <Link to="/management/reordering">Reordering</Link>
+            <Link to="/workshop">Workshop</Link>
+            <Link to="/management/summary">Operations summary</Link>
+          </div>
+        </section>
+      ) : null}
+
       <div className="dashboard-grid analytics-grid">
         <section className="card">
           <div className="card-header-row">
@@ -244,7 +263,7 @@ export const AlertsCentrePage = () => {
                         <td>{row.urgency}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={3}>No low stock alerts.</td></tr>
+                      <tr><td colSpan={3}>No low-stock alerts in range. Open Inventory for a manual lookup if you still want to inspect stock.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -269,7 +288,7 @@ export const AlertsCentrePage = () => {
                         <td>{row.daysOfCover === null ? "-" : row.daysOfCover.toFixed(1)}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={3}>No reorder-now candidates.</td></tr>
+                      <tr><td colSpan={3}>No reorder-now candidates in range. Open Reordering for the full buying list and open PO context.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -296,7 +315,7 @@ export const AlertsCentrePage = () => {
                         <td>{formatCustomerName(job.customer)}</td>
                         <td>{job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}</td>
                       </tr>
-                    )) : <tr><td colSpan={3}>No jobs waiting for approval.</td></tr>}
+                    )) : <tr><td colSpan={3}>No jobs are waiting for approval. Open Workshop to review the wider live board.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -313,7 +332,7 @@ export const AlertsCentrePage = () => {
                         <td>{formatCustomerName(job.customer)}</td>
                         <td>{job.partsStatus ?? job.status}</td>
                       </tr>
-                    )) : <tr><td colSpan={3}>No jobs waiting for parts.</td></tr>}
+                    )) : <tr><td colSpan={3}>No jobs are currently blocked by parts. Open Workshop if you need to inspect jobs manually.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -339,7 +358,7 @@ export const AlertsCentrePage = () => {
                         <td>{po.supplier.name}</td>
                         <td>{po.expectedAt ? new Date(po.expectedAt).toLocaleDateString() : "-"}</td>
                       </tr>
-                    )) : <tr><td colSpan={3}>No overdue purchase orders.</td></tr>}
+                    )) : <tr><td colSpan={3}>No overdue purchase orders are visible. Open Purchasing to review open and partially received orders.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -356,7 +375,7 @@ export const AlertsCentrePage = () => {
                         <td>{refund.customer?.name ?? "-"}</td>
                         <td>{formatMoney(refund.totalPence)}</td>
                       </tr>
-                    )) : <tr><td colSpan={3}>No refund attention items in range.</td></tr>}
+                    )) : <tr><td colSpan={3}>No refund attention items in range. Open Cash Management if you want to review refunds directly.</td></tr>}
                   </tbody>
                 </table>
               </div>

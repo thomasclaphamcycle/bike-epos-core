@@ -75,7 +75,7 @@ export const StockInvestigationsPage = () => {
           <div>
             <h1>Stock Investigation Queue</h1>
             <p className="muted-text">
-              Variant-level inventory and pricing anomalies that need manager review, using existing pricing and stock reporting logic.
+              Variant-level stock and pricing anomalies that need manager review. Use this queue to confirm the cause, then open the linked inventory or pricing surface to correct it.
             </p>
           </div>
           <div className="actions-inline">
@@ -158,7 +158,11 @@ export const StockInvestigationsPage = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5}>{loading ? "Loading stock investigations..." : "No stock investigations right now."}</td>
+                  <td colSpan={5}>
+                    {loading
+                      ? "Loading stock investigations..."
+                      : "No stock investigations are active right now. Open Inventory or Pricing Review if you still want to inspect products manually."}
+                  </td>
                 </tr>
               )}
             </tbody>

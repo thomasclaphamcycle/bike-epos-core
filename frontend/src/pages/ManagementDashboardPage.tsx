@@ -239,7 +239,9 @@ export const ManagementDashboardPage = () => {
             <tbody>
               {workshopJobs.slice(0, 8).length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No workshop jobs available.</td>
+                  <td colSpan={4}>
+                    No workshop jobs are visible. Start from Workshop check-in for a new bike or open Workshop to review the live board.
+                  </td>
                 </tr>
               ) : (
                 workshopJobs.slice(0, 8).map((job) => (
@@ -278,7 +280,9 @@ export const ManagementDashboardPage = () => {
             <tbody>
               {lowestStockRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No stock rows available.</td>
+                  <td colSpan={4}>
+                    No low-stock rows are visible. Open Inventory for a manual lookup or Reordering for the broader buying view.
+                  </td>
                 </tr>
               ) : (
                 lowestStockRows.map((row) => (
@@ -299,23 +303,28 @@ export const ManagementDashboardPage = () => {
     quickLinks: (
       <section className="card" key="quickLinks">
         <div className="card-header-row">
-          <h2>Quick Links</h2>
+          <div>
+            <h2>Common Manager Routes</h2>
+            <p className="muted-text">
+              Use these links for the most common trial walkthroughs and daily manager checks.
+            </p>
+          </div>
           <Link to="/management/dashboard-settings">Dashboard settings</Link>
         </div>
         <div className="dashboard-link-grid">
-          <Link className="button-link dashboard-link-card" to="/management/actions">Action Centre</Link>
-          <Link className="button-link dashboard-link-card" to="/management/reminders">Reminders</Link>
-          <Link className="button-link dashboard-link-card" to="/management/investigations">Investigations</Link>
-          <Link className="button-link dashboard-link-card" to="/management/product-data">Product data</Link>
-          <Link className="button-link dashboard-link-card" to="/management/catalogue">Supplier catalogue</Link>
-          <Link className="button-link dashboard-link-card" to="/pos">POS</Link>
-          <Link className="button-link dashboard-link-card" to="/workshop">Workshop</Link>
-          <Link className="button-link dashboard-link-card" to="/inventory">Inventory</Link>
-          <Link className="button-link dashboard-link-card" to="/management/inventory">Velocity</Link>
-          <Link className="button-link dashboard-link-card" to="/management/exceptions">Exceptions</Link>
-          <Link className="button-link dashboard-link-card" to="/customers">Customers</Link>
-          <Link className="button-link dashboard-link-card" to="/suppliers">Suppliers</Link>
-          <Link className="button-link dashboard-link-card" to="/purchasing">Purchasing</Link>
+          <Link className="button-link dashboard-link-card" to="/management/actions">Review action centre</Link>
+          <Link className="button-link dashboard-link-card" to="/management/reminders">Review reminders</Link>
+          <Link className="button-link dashboard-link-card" to="/management/investigations">Check investigations</Link>
+          <Link className="button-link dashboard-link-card" to="/management/product-data">Clean up product data</Link>
+          <Link className="button-link dashboard-link-card" to="/management/catalogue">Open supplier catalogue</Link>
+          <Link className="button-link dashboard-link-card" to="/pos">Open POS</Link>
+          <Link className="button-link dashboard-link-card" to="/workshop">Open workshop board</Link>
+          <Link className="button-link dashboard-link-card" to="/inventory">Search inventory</Link>
+          <Link className="button-link dashboard-link-card" to="/management/inventory">Review stock velocity</Link>
+          <Link className="button-link dashboard-link-card" to="/management/exceptions">Review exceptions</Link>
+          <Link className="button-link dashboard-link-card" to="/customers">Open customers</Link>
+          <Link className="button-link dashboard-link-card" to="/suppliers">Open suppliers</Link>
+          <Link className="button-link dashboard-link-card" to="/purchasing">Open purchasing</Link>
         </div>
       </section>
     ),
@@ -340,7 +349,7 @@ export const ManagementDashboardPage = () => {
           <div>
             <h1>Management Dashboard</h1>
             <p className="muted-text">
-              Manager-focused daily overview across sales, workshop operations, and inventory risk.
+              Manager start page for the day&apos;s sales, workshop blockers, and stock risk. Use it to decide what needs attention next, then jump straight into the linked working screen.
             </p>
           </div>
           <div className="actions-inline">
@@ -385,8 +394,11 @@ export const ManagementDashboardPage = () => {
         {orderedSections.length > 0 ? orderedSections : (
           <section className="card">
             <p className="muted-text">
-              All dashboard widgets are currently hidden. Use dashboard settings to restore them.
+              All dashboard widgets are currently hidden. Open dashboard settings to restore the manager overview cards for this account.
             </p>
+            <div className="actions-inline">
+              <Link to="/management/dashboard-settings">Open dashboard settings</Link>
+            </div>
           </section>
         )}
       </div>

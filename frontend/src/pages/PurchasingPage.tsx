@@ -271,7 +271,9 @@ export const PurchasingPage = () => {
         <div className="card-header-row">
           <div>
             <h1>Purchasing</h1>
-            <p className="muted-text">Purchase order list, supplier filters, and receiving entry points.</p>
+            <p className="muted-text">
+              Purchase order list, supplier filters, and receiving entry points. For a first trial, create a supplier, create a draft PO, send it, then receive against it here.
+            </p>
           </div>
           <div className="actions-inline">
             <Link to="/suppliers" className="button-link">Suppliers</Link>
@@ -343,10 +345,10 @@ export const PurchasingPage = () => {
         {canManage ? (
           <div className="page-shell">
             <div className="card-header-row">
-              <div>
-                <h2>Purchasing Visibility</h2>
-                <p className="muted-text">
-                  Simple manager-facing purchase order triage using the current purchase-order list and detail workflow.
+                <div>
+                  <h2>Purchasing Visibility</h2>
+                  <p className="muted-text">
+                  Simple manager-facing purchase order triage using the current purchase-order list and detail workflow. Use these sections to spot what needs chasing before opening the full PO.
                 </p>
               </div>
               <div className="actions-inline">
@@ -361,7 +363,7 @@ export const PurchasingPage = () => {
                   <p className="muted-text">Open purchase orders with an expected date in the past.</p>
                 </div>
               </div>
-              {renderVisibilityTable(overduePurchaseOrders, "No overdue purchase orders are currently visible.")}
+              {renderVisibilityTable(overduePurchaseOrders, "No overdue purchase orders are currently visible. Check the awaiting-delivery queue below for the live inbound list.")}
             </section>
 
             <section className="card">
@@ -371,7 +373,7 @@ export const PurchasingPage = () => {
                   <p className="muted-text">Purchase orders where receiving has started but stock is still outstanding.</p>
                 </div>
               </div>
-              {renderVisibilityTable(partiallyReceivedPurchaseOrders, "No partially received purchase orders are currently visible.")}
+              {renderVisibilityTable(partiallyReceivedPurchaseOrders, "No partially received purchase orders are currently visible. Use the receiving workspace when a delivery lands and only part of it arrives.")}
             </section>
 
             <section className="card">
@@ -381,7 +383,7 @@ export const PurchasingPage = () => {
                   <p className="muted-text">Sent purchase orders still waiting for delivery and not yet overdue.</p>
                 </div>
               </div>
-              {renderVisibilityTable(openAwaitingDeliveryPurchaseOrders, "No open purchase orders are currently awaiting delivery.")}
+              {renderVisibilityTable(openAwaitingDeliveryPurchaseOrders, "No open purchase orders are currently awaiting delivery. Create and send a draft PO to test the receiving flow.")}
             </section>
           </div>
         ) : null}

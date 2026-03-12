@@ -94,7 +94,7 @@ export const CustomerRemindersPage = () => {
           <div>
             <h1>Customer Reminders</h1>
             <p className="muted-text">
-              Practical follow-up queue built from completed workshop jobs and current customer contact details. This does not send messages; it shows who may need attention next.
+              Practical follow-up queue built from completed workshop jobs and current customer contact details. Use it to decide who may need attention next, then open the customer profile or last job for context.
             </p>
           </div>
           <div className="actions-inline">
@@ -136,7 +136,7 @@ export const CustomerRemindersPage = () => {
           <div>
             <h2>Follow-up Queue</h2>
             <p className="muted-text">
-              Reminder status is a simple age-based heuristic from the latest completed workshop job, not a messaging workflow or service-plan engine.
+              Reminder status is a simple age-based heuristic from the latest completed workshop job, not a messaging workflow or service-plan engine. Review the linked profile or job before contacting the customer.
             </p>
           </div>
           <div className="actions-inline">
@@ -193,7 +193,11 @@ export const CustomerRemindersPage = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7}>{loading ? "Loading customer reminders..." : "No customer reminders available."}</td>
+                  <td colSpan={7}>
+                    {loading
+                      ? "Loading customer reminders..."
+                      : "No customer reminders are due right now. Open Customers for a manual lookup or Workshop to complete more jobs first."}
+                  </td>
                 </tr>
               )}
             </tbody>
