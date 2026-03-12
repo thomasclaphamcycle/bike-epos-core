@@ -56,6 +56,24 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
+  const existingDefault = await tx.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: "Default",
+      isDefault: true,
+    },
+  });
+};
+
 const normalizeTake = (take: number | undefined): number => {
   if (take === undefined) {
     return 50;
@@ -1034,6 +1052,7 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
     });
 
     const labourVariant = await getOrCreateLabourVariantTx(tx);
+    const defaultStockLocation = await getOrCreateDefaultStockLocationTx(tx);
 
     for (const line of job.lines) {
       let variantId: string;
@@ -1083,6 +1102,18 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
       });
 
       if (line.type === "PART") {
+        await tx.stockLedgerEntry.create({
+          data: {
+            variantId,
+            locationId: defaultStockLocation.id,
+            type: "WORKSHOP",
+            quantityDelta: -line.qty,
+            referenceType: "WORKSHOP_JOB_LINE",
+            referenceId: line.id,
+            note: line.description,
+          },
+        });
+
         await tx.inventoryMovement.create({
           data: {
             variantId,

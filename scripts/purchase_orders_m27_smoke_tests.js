@@ -7,8 +7,12 @@ const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
+const portFromBaseUrl = () => {
+  const url = new URL(BASE_URL);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -34,11 +38,109 @@ const prisma = new PrismaClient({
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const MAX_STARTUP_LOG_CHARS = 4000;
+const APP_REQUEST_RETRIES = 8;
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
+
+  try {
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Keep the primary URL only if parsing fails unexpectedly.
+  }
+
+  return urls;
+})();
+let activeAppBaseUrl = appBaseUrlCandidates[0];
+let lastProbeDetail = "";
+const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
+const trimStartupLog = (value) =>
+  value.length > MAX_STARTUP_LOG_CHARS
+    ? value.slice(value.length - MAX_STARTUP_LOG_CHARS)
+    : value;
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
 
+const probeHealthyBaseUrl = async () => {
+  for (const baseUrl of appBaseUrlCandidates) {
+    try {
+      const response = await fetch(`${baseUrl}/health`);
+      if (response.ok) {
+        lastProbeDetail = `${baseUrl}/health -> ${response.status}`;
+        return baseUrl;
+      }
+      lastProbeDetail = `${baseUrl}/health -> ${response.status}`;
+    } catch (error) {
+      lastProbeDetail = `${baseUrl}/health -> ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  return null;
+};
+
+const waitForServer = async (serverProcess, getStartupLog) => {
+  for (let i = 0; i < 60; i += 1) {
+    const startupLog = getStartupLog();
+    if (serverProcess && serverProcess.exitCode !== null) {
+      throw new Error(
+        startupLog.trim()
+          ? `Server exited before becoming healthy:\n${startupLog.trim()}`
+          : "Server exited before becoming healthy.",
+      );
+    }
+
+    const healthyBaseUrl = await probeHealthyBaseUrl();
+    if (healthyBaseUrl) {
+      activeAppBaseUrl = healthyBaseUrl;
+      return;
+    }
+
+    await sleep(serverStartedPattern.test(startupLog) ? 250 : 500);
+  }
+
+  const startupLog = getStartupLog().trim();
+  throw new Error(
+    startupLog
+      ? `Server did not become healthy on /health.\n${startupLog}\nlast probe: ${lastProbeDetail}`
+      : `Server did not become healthy on /health${lastProbeDetail ? `\nlast probe: ${lastProbeDetail}` : ""}`,
+  );
+};
+
+const fetchFromApp = async (path, options = {}) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
+    try {
+      return await fetch(`${activeAppBaseUrl}${path}`, options);
+    } catch (error) {
+      lastError = error;
+
+      const healthyBaseUrl = await probeHealthyBaseUrl();
+      if (healthyBaseUrl) {
+        activeAppBaseUrl = healthyBaseUrl;
+      }
+    }
+
+    if (attempt < APP_REQUEST_RETRIES - 1) {
+      await sleep(250);
+    }
+  }
+
+  if (lastError instanceof Error) {
+    lastError.message = `${lastError.message} while requesting ${activeAppBaseUrl}${path}`;
+    throw lastError;
+  }
+
+  throw new Error(`Failed to fetch ${activeAppBaseUrl}${path}`);
+};
+
 const fetchJson = async (path, options = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchFromApp(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -55,25 +157,6 @@ const fetchJson = async (path, options = {}) => {
   }
 
   return { status: response.status, json };
-};
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
 };
 
 const cleanup = async (state) => {
@@ -197,9 +280,10 @@ const run = async () => {
 
   let startedServer = false;
   let serverProcess = null;
+  let serverStartupLog = "";
 
   try {
-    const existing = await serverIsHealthy();
+    const existing = await probeHealthyBaseUrl();
     if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
       throw new Error(
         "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
@@ -213,12 +297,19 @@ const run = async () => {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
+          PORT: portFromBaseUrl(),
         },
       });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
+      serverProcess.stdout.on("data", (chunk) => {
+        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
+      });
+      serverProcess.stderr.on("data", (chunk) => {
+        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
+      });
       startedServer = true;
-      await waitForServer();
+      await waitForServer(serverProcess, () => serverStartupLog);
+    } else {
+      activeAppBaseUrl = existing;
     }
 
     const managerUser = await prisma.user.create({
@@ -356,6 +447,22 @@ const run = async () => {
     assert.equal(patchLineRes.status, 200, JSON.stringify(patchLineRes.json));
     assert.equal(patchLineRes.json.items[0].quantityOrdered, 12);
     assert.equal(patchLineRes.json.items[0].unitCostPence, 2750);
+
+    const receiveDraftRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}/receive`, {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        locationId: location.id,
+        lines: [
+          {
+            purchaseOrderItemId,
+            quantity: 1,
+          },
+        ],
+      }),
+    });
+    assert.equal(receiveDraftRes.status, 409, JSON.stringify(receiveDraftRes.json));
+    assert.equal(receiveDraftRes.json.error?.code, "PURCHASE_ORDER_NOT_SENT");
 
     const listRes = await fetchJson(
       `/api/purchase-orders?status=DRAFT&q=${encodeURIComponent("M27 test")}&take=20&skip=0`,

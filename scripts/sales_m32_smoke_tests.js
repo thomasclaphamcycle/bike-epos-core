@@ -73,6 +73,35 @@ const waitForServer = async () => {
   throw new Error("Server did not become healthy on /health");
 };
 
+const closeAnyOpenCashSession = async (headers) => {
+  const currentSessionRes = await fetchJson("/api/till/sessions/current", {
+    headers,
+  });
+  assert.equal(currentSessionRes.status, 200, JSON.stringify(currentSessionRes.json));
+
+  const currentSessionId = currentSessionRes.json.session?.id;
+  if (!currentSessionId) {
+    return;
+  }
+
+  const countRes = await fetchJson(`/api/till/sessions/${currentSessionId}/count`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      countedCashPence: currentSessionRes.json.totals?.expectedCashPence ?? 0,
+      notes: "m32 pre-close",
+    }),
+  });
+  assert.equal(countRes.status, 201, JSON.stringify(countRes.json));
+
+  const closeRes = await fetchJson(`/api/till/sessions/${currentSessionId}/close`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({}),
+  });
+  assert.ok(closeRes.status === 200 || closeRes.status === 201, JSON.stringify(closeRes.json));
+};
+
 const cleanup = async (state) => {
   const saleIds = Array.from(state.saleIds);
   const basketIds = Array.from(state.basketIds);
@@ -278,6 +307,8 @@ const run = async () => {
       "X-Staff-Role": "STAFF",
       "X-Staff-Id": staffUser.id,
     };
+
+    await closeAnyOpenCashSession(managerHeaders);
 
     const openTillRes = await fetchJson("/api/till/sessions/open", {
       method: "POST",

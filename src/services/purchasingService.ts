@@ -1064,31 +1064,10 @@ export const updatePurchaseOrderItem = async (
       },
     });
 
-    return {
-      purchaseOrder: await getPurchaseOrderOrThrow(tx, purchaseOrderId),
-      event: {
-        purchaseOrderId,
-        locationId,
-        lineCount: parsedLines.length,
-        quantityReceived: parsedLines.reduce((sum, line) => sum + line.quantity, 0),
-      },
-    };
+    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
   });
 
-  const response = toPurchaseOrderResponse(updated.purchaseOrder);
-  emit("purchaseOrder.received", {
-    id: response.id,
-    type: "purchaseOrder.received",
-    timestamp: new Date().toISOString(),
-    purchaseOrderId: response.id,
-    poNumber: response.poNumber,
-    locationId: updated.event.locationId,
-    lineCount: updated.event.lineCount,
-    quantityReceived: updated.event.quantityReceived,
-    status: response.status,
-  });
-
-  return response;
+  return toPurchaseOrderResponse(updated);
 };
 
 export const receivePurchaseOrder = async (
@@ -1164,6 +1143,13 @@ export const receivePurchaseOrder = async (
       throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
     }
 
+    if (po.status === "DRAFT") {
+      throw new HttpError(
+        409,
+        "Draft purchase orders must be sent before receiving",
+        "PURCHASE_ORDER_NOT_SENT",
+      );
+    }
     if (po.status === "CANCELLED") {
       throw new HttpError(409, "Cancelled purchase orders cannot be received", "PURCHASE_ORDER_CANCELLED");
     }
@@ -1285,8 +1271,29 @@ export const receivePurchaseOrder = async (
       });
     }
 
-    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+    return {
+      purchaseOrder: await getPurchaseOrderOrThrow(tx, purchaseOrderId),
+      event: {
+        purchaseOrderId,
+        locationId,
+        lineCount: parsedLines.length,
+        quantityReceived: parsedLines.reduce((sum, line) => sum + line.quantity, 0),
+      },
+    };
   });
 
-  return toPurchaseOrderResponse(updated);
+  const response = toPurchaseOrderResponse(updated.purchaseOrder);
+  emit("purchaseOrder.received", {
+    id: response.id,
+    type: "purchaseOrder.received",
+    timestamp: new Date().toISOString(),
+    purchaseOrderId: response.id,
+    poNumber: response.poNumber,
+    locationId: updated.event.locationId,
+    lineCount: updated.event.lineCount,
+    quantityReceived: updated.event.quantityReceived,
+    status: response.status,
+  });
+
+  return response;
 };

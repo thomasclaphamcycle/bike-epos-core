@@ -188,6 +188,8 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   page,
   request,
 }) => {
+  const customerSearchInput = page.getByTestId("pos-customer-search");
+
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
     prefix: "react-pos-customer",
@@ -212,8 +214,11 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   await page.context().clearCookies();
   await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
   await expect(page.getByRole("heading", { name: "POS" })).toBeVisible();
+  await expect(customerSearchInput).toBeVisible();
 
-  await page.getByTestId("pos-customer-search").fill(firstCustomer.name);
+  await customerSearchInput.click();
+  await customerSearchInput.fill(firstCustomer.name);
+  await expect(customerSearchInput).toHaveValue(firstCustomer.name);
   await expect(page.getByTestId(`pos-customer-select-${firstCustomer.id}`)).toBeVisible();
   await page.getByTestId(`pos-customer-select-${firstCustomer.id}`).click();
   await expect(page.getByTestId("pos-selected-customer")).toContainText(firstCustomer.name);
@@ -232,7 +237,9 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   await page.getByTestId("pos-customer-clear").click();
   await expect(page.getByText("No customer selected.")).toBeVisible();
 
-  await page.getByTestId("pos-customer-search").fill(secondCustomer.email);
+  await customerSearchInput.click();
+  await customerSearchInput.fill(secondCustomer.email);
+  await expect(customerSearchInput).toHaveValue(secondCustomer.email);
   await expect(page.getByTestId(`pos-customer-select-${secondCustomer.id}`)).toBeVisible();
   await page.getByTestId(`pos-customer-select-${secondCustomer.id}`).click();
   await expect(page.getByTestId("pos-selected-customer")).toContainText(secondCustomer.name);

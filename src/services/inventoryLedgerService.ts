@@ -54,6 +54,73 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
+  const existingDefault = await tx.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: "Default",
+      isDefault: true,
+    },
+  });
+};
+
+const toStockLedgerEntryType = (type: InventoryMovementType) => {
+  switch (type) {
+    case "PURCHASE":
+      return "PURCHASE" as const;
+    case "SALE":
+      return "SALE" as const;
+    case "ADJUSTMENT":
+      return "ADJUSTMENT" as const;
+    case "WORKSHOP_USE":
+      return "WORKSHOP" as const;
+    case "RETURN":
+      return "RETURN" as const;
+    default: {
+      const exhaustiveCheck: never = type;
+      return exhaustiveCheck;
+    }
+  }
+};
+
+const toStockLedgerUnitCostPence = (
+  value: Prisma.Decimal | null | undefined,
+) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (value.decimalPlaces() > 0) {
+    return null;
+  }
+
+  return value.toNumber();
+};
+
+const resolveLedgerCreatedByStaffIdTx = async (
+  tx: Prisma.TransactionClient,
+  createdByStaffId: string | null,
+) => {
+  if (!createdByStaffId) {
+    return null;
+  }
+
+  const staff = await tx.user.findUnique({
+    where: { id: createdByStaffId },
+    select: { id: true },
+  });
+
+  return staff?.id ?? null;
+};
+
 const parseTake = (take: number | undefined): number | undefined => {
   if (take === undefined) {
     return undefined;
@@ -173,7 +240,7 @@ export const recordMovement = async (input: RecordMovementInput) => {
     const note = normalizeOptionalText(input.note) ?? null;
     const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
 
-    return tx.inventoryMovement.create({
+    const movement = await tx.inventoryMovement.create({
       data: {
         variantId,
         type: input.type,
@@ -185,6 +252,25 @@ export const recordMovement = async (input: RecordMovementInput) => {
         createdByStaffId,
       },
     });
+
+    const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    const ledgerCreatedByStaffId = await resolveLedgerCreatedByStaffIdTx(tx, createdByStaffId);
+
+    await tx.stockLedgerEntry.create({
+      data: {
+        variantId,
+        locationId: defaultLocation.id,
+        type: toStockLedgerEntryType(input.type),
+        quantityDelta: input.quantity,
+        unitCostPence: toStockLedgerUnitCostPence(unitCost),
+        referenceType: referenceType ?? "INVENTORY_MOVEMENT",
+        referenceId: referenceId ?? movement.id,
+        note,
+        createdByStaffId: ledgerCreatedByStaffId,
+      },
+    });
+
+    return movement;
   });
 
   return toMovementResponse(movement);
