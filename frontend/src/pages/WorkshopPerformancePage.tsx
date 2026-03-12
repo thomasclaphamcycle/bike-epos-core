@@ -40,6 +40,28 @@ type WorkloadRow = {
   ready: number;
 };
 
+type WorkshopCapacityResponse = {
+  generatedAt: string;
+  lookbackDays: number;
+  openJobCount: number;
+  waitingForApprovalCount: number;
+  waitingForPartsCount: number;
+  readyForCollectionCount: number;
+  completedJobsLast7Days: number;
+  completedJobsLast30Days: number;
+  averageCompletedPerDay: number;
+  estimatedBacklogDays: number | null;
+  averageCompletionDays: number | null;
+  averageOpenJobAgeDays: number | null;
+  longestOpenJobDays: number | null;
+  ageingBuckets: {
+    zeroToTwoDays: number;
+    threeToSevenDays: number;
+    eightToFourteenDays: number;
+    fifteenPlusDays: number;
+  };
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const formatDateKey = (value: Date) => {
@@ -74,6 +96,7 @@ export const WorkshopPerformancePage = () => {
   const [rangePreset, setRangePreset] = useState<RangePreset>("90");
   const [dailyRows, setDailyRows] = useState<WorkshopDailyRow[]>([]);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [capacityReport, setCapacityReport] = useState<WorkshopCapacityResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const applySavedFilters = (filters: Record<string, string>) => {
@@ -88,9 +111,10 @@ export const WorkshopPerformancePage = () => {
     const to = formatDateKey(today);
     const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
 
-    const [dailyResult, dashboardResult] = await Promise.allSettled([
+    const [dailyResult, dashboardResult, capacityResult] = await Promise.allSettled([
       apiGet<WorkshopDailyRow[]>(`/api/reports/workshop/daily?from=${from}&to=${to}`),
       apiGet<DashboardResponse>("/api/workshop/dashboard?limit=100"),
+      apiGet<WorkshopCapacityResponse>("/api/reports/workshop/capacity"),
     ]);
 
     if (dailyResult.status === "fulfilled") {
@@ -105,6 +129,13 @@ export const WorkshopPerformancePage = () => {
     } else {
       setDashboard(null);
       error(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : "Failed to load workshop dashboard");
+    }
+
+    if (capacityResult.status === "fulfilled") {
+      setCapacityReport(capacityResult.value);
+    } else {
+      setCapacityReport(null);
+      error(capacityResult.reason instanceof Error ? capacityResult.reason.message : "Failed to load workshop capacity");
     }
 
     setLoading(false);
@@ -245,6 +276,24 @@ export const WorkshopPerformancePage = () => {
             <strong className="metric-value">{formatMoney(totals.revenuePence)}</strong>
             <span className="dashboard-metric-detail">Secondary metric from completed jobs</span>
           </div>
+          <div className="metric-card">
+            <span className="metric-label">Completed Last 7 Days</span>
+            <strong className="metric-value">{capacityReport?.completedJobsLast7Days ?? 0}</strong>
+            <span className="dashboard-metric-detail">Recent workshop throughput</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Avg Completion Time</span>
+            <strong className="metric-value">
+              {capacityReport?.averageCompletionDays === null || capacityReport?.averageCompletionDays === undefined
+                ? "-"
+                : `${capacityReport.averageCompletionDays.toFixed(1)}d`}
+            </strong>
+            <span className="dashboard-metric-detail">
+              Backlog {capacityReport?.estimatedBacklogDays === null || capacityReport?.estimatedBacklogDays === undefined
+                ? "-"
+                : `${capacityReport.estimatedBacklogDays.toFixed(1)}d`}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -256,6 +305,41 @@ export const WorkshopPerformancePage = () => {
       />
 
       <div className="dashboard-grid analytics-grid">
+        <section className="card">
+          <div className="card-header-row">
+            <h2>Throughput Snapshot</h2>
+          </div>
+          <div className="management-stat-grid">
+            <div className="management-stat-card">
+              <span className="metric-label">Ready For Collection</span>
+              <strong className="metric-value">{capacityReport?.readyForCollectionCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Average Open Age</span>
+              <strong className="metric-value">
+                {capacityReport?.averageOpenJobAgeDays === null || capacityReport?.averageOpenJobAgeDays === undefined
+                  ? "-"
+                  : `${capacityReport.averageOpenJobAgeDays.toFixed(1)}d`}
+              </strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Longest Open Job</span>
+              <strong className="metric-value">
+                {capacityReport?.longestOpenJobDays === null || capacityReport?.longestOpenJobDays === undefined
+                  ? "-"
+                  : `${capacityReport.longestOpenJobDays}d`}
+              </strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Completions / Day</span>
+              <strong className="metric-value">{capacityReport?.averageCompletedPerDay?.toFixed(1) ?? "0.0"}</strong>
+            </div>
+          </div>
+          <p className="muted-text">
+            This snapshot uses the same workshop job data as the live board and adds a simple throughput view for managers planning bench load and customer promises.
+          </p>
+        </section>
+
         <section className="card">
           <div className="card-header-row">
             <h2>Daily Completions</h2>

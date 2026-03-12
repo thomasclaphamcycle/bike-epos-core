@@ -192,6 +192,8 @@ const main = async () => {
     assert.equal(after.json.openJobCount, before.json.openJobCount + 4);
     assert.equal(after.json.waitingForApprovalCount, before.json.waitingForApprovalCount + 1);
     assert.equal(after.json.waitingForPartsCount, before.json.waitingForPartsCount + 1);
+    assert.equal(after.json.readyForCollectionCount, before.json.readyForCollectionCount);
+    assert.equal(after.json.completedJobsLast7Days, before.json.completedJobsLast7Days + 2);
     assert.equal(after.json.completedJobsLast30Days, before.json.completedJobsLast30Days + 3);
 
     assert.equal(after.json.ageingBuckets.zeroToTwoDays, before.json.ageingBuckets.zeroToTwoDays + 1);
@@ -209,6 +211,12 @@ const main = async () => {
         ? Number((after.json.openJobCount / after.json.averageCompletedPerDay).toFixed(1))
         : null,
     );
+    assert.ok(after.json.averageOpenJobAgeDays === null || after.json.averageOpenJobAgeDays >= 0);
+    assert.ok(after.json.averageCompletionDays === null || after.json.averageCompletionDays >= 0);
+    assert.ok(after.json.longestOpenJobDays === null || after.json.longestOpenJobDays >= 0);
+    if (after.json.averageOpenJobAgeDays !== null && after.json.longestOpenJobDays !== null) {
+      assert.ok(after.json.longestOpenJobDays >= after.json.averageOpenJobAgeDays);
+    }
 
     console.log("[m123-smoke] workshop capacity report passed");
   } finally {

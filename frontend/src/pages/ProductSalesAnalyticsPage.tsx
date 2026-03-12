@@ -8,6 +8,8 @@ type RangePreset = "30" | "90" | "365";
 type ProductSalesRow = {
   productId: string;
   productName: string;
+  brandName: string | null;
+  categoryName: string | null;
   quantitySold: number;
   grossRevenuePence: number;
   saleCount: number;
@@ -16,15 +18,27 @@ type ProductSalesRow = {
   lastSoldAt: string | null;
 };
 
+type ProductCategoryRow = {
+  categoryName: string;
+  quantitySold: number;
+  grossRevenuePence: number;
+  productCount: number;
+  averageUnitPricePence: number;
+};
+
 type ProductSalesResponse = {
   summary: {
     productCount: number;
+    categoryCount: number;
     totalQuantitySold: number;
     totalRevenuePence: number;
+    topCategoryName: string | null;
+    topCategoryRevenuePence: number;
   };
   topSellingProducts: ProductSalesRow[];
   lowestSellingProducts: ProductSalesRow[];
   products: ProductSalesRow[];
+  categoryBreakdown: ProductCategoryRow[];
   categoryBreakdownSupported: boolean;
 };
 
@@ -121,6 +135,15 @@ export const ProductSalesAnalyticsPage = () => {
               {bestSeller ? `${bestSeller.quantitySold} units | ${formatMoney(bestSeller.grossRevenuePence)}` : "No data"}
             </span>
           </div>
+          <div className="metric-card">
+            <span className="metric-label">Top Category</span>
+            <strong className="metric-value">{report?.summary.topCategoryName ?? "-"}</strong>
+            <span className="dashboard-metric-detail">
+              {report?.summary.topCategoryName
+                ? `${formatMoney(report?.summary.topCategoryRevenuePence ?? 0)} across ${report?.summary.categoryCount ?? 0} categories`
+                : "No category data yet"}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -145,7 +168,12 @@ export const ProductSalesAnalyticsPage = () => {
               <tbody>
                 {report?.topSellingProducts.length ? report.topSellingProducts.map((row) => (
                   <tr key={row.productId}>
-                    <td>{row.productName}</td>
+                    <td>
+                      <div className="table-primary">{row.productName}</div>
+                      <div className="table-secondary">
+                        {[row.categoryName || "Uncategorized", row.brandName || "No brand"].join(" · ")}
+                      </div>
+                    </td>
                     <td>{row.quantitySold}</td>
                     <td>{formatMoney(row.grossRevenuePence)}</td>
                     <td>{row.saleCount}</td>
@@ -180,7 +208,10 @@ export const ProductSalesAnalyticsPage = () => {
               <tbody>
                 {report?.lowestSellingProducts.length ? report.lowestSellingProducts.map((row) => (
                   <tr key={row.productId}>
-                    <td>{row.productName}</td>
+                    <td>
+                      <div className="table-primary">{row.productName}</div>
+                      <div className="table-secondary">{row.categoryName || "Uncategorized"}</div>
+                    </td>
                     <td>{row.quantitySold}</td>
                     <td>{formatMoney(row.grossRevenuePence)}</td>
                     <td>{row.saleCount}</td>
@@ -216,7 +247,12 @@ export const ProductSalesAnalyticsPage = () => {
               <tbody>
                 {report?.products.length ? report.products.map((row) => (
                   <tr key={row.productId}>
-                    <td>{row.productName}</td>
+                    <td>
+                      <div className="table-primary">{row.productName}</div>
+                      <div className="table-secondary">
+                        {[row.categoryName || "Uncategorized", row.brandName || "No brand"].join(" · ")}
+                      </div>
+                    </td>
                     <td>{row.quantitySold}</td>
                     <td>{formatMoney(row.grossRevenuePence)}</td>
                     <td>{row.saleCount}</td>
@@ -235,10 +271,39 @@ export const ProductSalesAnalyticsPage = () => {
 
         <section className="card">
           <div className="card-header-row">
-            <h2>Scope Notes</h2>
+            <h2>Category Breakdown</h2>
           </div>
-          <div className="restricted-panel info-panel">
-            Category-level sales breakdown is intentionally omitted in M88 v1 because the current branch does not expose a clean category model in product data. This page stays additive by reporting product-level sales only.
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Products Sold</th>
+                  <th>Units</th>
+                  <th>Revenue</th>
+                  <th>Avg Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report?.categoryBreakdown.length ? report.categoryBreakdown.map((row) => (
+                  <tr key={row.categoryName}>
+                    <td>{row.categoryName}</td>
+                    <td>{row.productCount}</td>
+                    <td>{row.quantitySold}</td>
+                    <td>{formatMoney(row.grossRevenuePence)}</td>
+                    <td>{formatMoney(row.averageUnitPricePence)}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={5}>
+                      {report?.categoryBreakdownSupported
+                        ? "No category sales found for this range."
+                        : "Category breakdown is not supported on this branch."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       </div>

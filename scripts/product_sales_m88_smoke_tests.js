@@ -23,6 +23,8 @@ const prisma = new PrismaClient({
 });
 
 const RUN_REF = `m88_${Date.now()}`;
+const BIKE_CATEGORY = `M88 Bikes ${RUN_REF}`;
+const ACCESSORY_CATEGORY = `M88 Accessories ${RUN_REF}`;
 const STAFF_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": `m88-manager-${RUN_REF}`,
@@ -56,6 +58,7 @@ const main = async () => {
       prisma.product.create({
         data: {
           name: `M88 Alpha Bike ${RUN_REF}`,
+          category: BIKE_CATEGORY,
           variants: {
             create: {
               sku: `M88-A-${RUN_REF}`,
@@ -68,6 +71,7 @@ const main = async () => {
       prisma.product.create({
         data: {
           name: `M88 Beta Helmet ${RUN_REF}`,
+          category: ACCESSORY_CATEGORY,
           variants: {
             create: {
               sku: `M88-B-${RUN_REF}`,
@@ -80,6 +84,7 @@ const main = async () => {
       prisma.product.create({
         data: {
           name: `M88 Gamma Gloves ${RUN_REF}`,
+          category: ACCESSORY_CATEGORY,
           variants: {
             create: {
               sku: `M88-C-${RUN_REF}`,
@@ -160,7 +165,15 @@ const main = async () => {
     assert.equal(json.topSellingProducts[0].productName, gamma.name);
     assert.equal(json.topSellingProducts[0].quantitySold, 4);
     assert.ok(json.products.some((row) => row.productName === gamma.name && row.quantitySold === 4));
-    assert.ok(json.lowestSellingProducts.some((row) => row.productName === beta.name));
+    assert.ok(json.products.some((row) => row.productName === beta.name && row.quantitySold === 1));
+    assert.equal(json.categoryBreakdownSupported, true);
+    const accessoriesRow = json.categoryBreakdown.find((row) => row.categoryName === ACCESSORY_CATEGORY);
+    const bikeRow = json.categoryBreakdown.find((row) => row.categoryName === BIKE_CATEGORY);
+    assert.ok(accessoriesRow, "expected accessories category row");
+    assert.ok(bikeRow, "expected bike category row");
+    assert.equal(accessoriesRow.quantitySold, 5);
+    assert.equal(accessoriesRow.productCount, 2);
+    assert.equal(bikeRow.quantitySold, 2);
 
     console.log("[m88-smoke] product sales analytics passed");
   } finally {

@@ -28,18 +28,59 @@ type SupplierPerformanceResponse = {
   suppliers: SupplierRow[];
 };
 
+type SupplierCostHistoryRow = {
+  supplierId: string;
+  supplierName: string;
+  variantId: string;
+  productName: string;
+  variantName: string | null;
+  sku: string;
+  currentUnitCostPence: number;
+  currentRecordedAt: string;
+  currentPurchaseOrderId: string;
+  currentPurchaseOrderNumber: string;
+  previousUnitCostPence: number | null;
+  previousRecordedAt: string | null;
+  previousPurchaseOrderId: string | null;
+  previousPurchaseOrderNumber: string | null;
+  supplierLinkCostPence: number | null;
+  preferredSupplierLink: boolean;
+  changePence: number | null;
+};
+
+type SupplierCostHistoryResponse = {
+  generatedAt: string;
+  summary: {
+    trackedSupplierVariantCount: number;
+    changedSupplierVariantCount: number;
+    costIncreaseCount: number;
+    costDecreaseCount: number;
+    preferredSupplierLinkCount: number;
+  };
+  items: SupplierCostHistoryRow[];
+};
+
+const formatMoney = (pence: number | null) =>
+  pence === null ? "-" : `£${(pence / 100).toFixed(2)}`;
+
 export const SupplierPerformancePage = () => {
   const { error } = useToasts();
   const [report, setReport] = useState<SupplierPerformanceResponse | null>(null);
+  const [costHistory, setCostHistory] = useState<SupplierCostHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadReport = async () => {
     setLoading(true);
     try {
-      const payload = await apiGet<SupplierPerformanceResponse>("/api/reports/suppliers/performance");
-      setReport(payload);
+      const [performancePayload, costHistoryPayload] = await Promise.all([
+        apiGet<SupplierPerformanceResponse>("/api/reports/suppliers/performance"),
+        apiGet<SupplierCostHistoryResponse>("/api/reports/suppliers/cost-history?take=8"),
+      ]);
+      setReport(performancePayload);
+      setCostHistory(costHistoryPayload);
     } catch (loadError) {
       setReport(null);
+      setCostHistory(null);
       error(loadError instanceof Error ? loadError.message : "Failed to load supplier performance");
     } finally {
       setLoading(false);
@@ -99,6 +140,13 @@ export const SupplierPerformancePage = () => {
                 : "No supplier activity"}
             </span>
           </div>
+          <div className="metric-card">
+            <span className="metric-label">Recent Cost Changes</span>
+            <strong className="metric-value">{costHistory?.summary.changedSupplierVariantCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">
+              Increases {costHistory?.summary.costIncreaseCount ?? 0} | Decreases {costHistory?.summary.costDecreaseCount ?? 0}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -147,6 +195,76 @@ export const SupplierPerformancePage = () => {
               )) : (
                 <tr>
                   <td colSpan={7}>{loading ? "Loading supplier performance..." : "No supplier performance rows available."}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Recent Supplier Cost History</h2>
+            <p className="muted-text">
+              Latest known PO cost against the previous recorded cost for the same supplier and variant, with the current supplier link shown for comparison.
+            </p>
+          </div>
+          <div className="actions-inline">
+            <Link to="/management/catalogue">Supplier links</Link>
+            <Link to="/purchasing/receiving">Receiving workspace</Link>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Supplier / Variant</th>
+                <th>Current Cost</th>
+                <th>Previous Cost</th>
+                <th>Change</th>
+                <th>Supplier Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costHistory?.items.length ? costHistory.items.map((row) => (
+                <tr key={`${row.supplierId}:${row.variantId}`}>
+                  <td>
+                    <div className="table-primary">{row.supplierName}</div>
+                    <div className="table-secondary">{row.productName} · {row.variantName || row.sku}</div>
+                    <div className="table-secondary mono-text">{row.currentPurchaseOrderNumber}</div>
+                  </td>
+                  <td>
+                    <div className="table-primary">{formatMoney(row.currentUnitCostPence)}</div>
+                    <div className="table-secondary">{new Date(row.currentRecordedAt).toLocaleDateString()}</div>
+                  </td>
+                  <td>
+                    <div className="table-primary">{formatMoney(row.previousUnitCostPence)}</div>
+                    <div className="table-secondary">
+                      {row.previousRecordedAt ? new Date(row.previousRecordedAt).toLocaleDateString() : "No earlier recorded cost"}
+                    </div>
+                  </td>
+                  <td>
+                    {row.changePence === null ? (
+                      <span className="muted-text">No change recorded yet</span>
+                    ) : (
+                      <span className={row.changePence > 0 ? "movement-negative" : row.changePence < 0 ? "movement-positive" : ""}>
+                        {formatMoney(row.changePence)}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="table-primary">{formatMoney(row.supplierLinkCostPence)}</div>
+                    <div className="table-secondary">
+                      {row.preferredSupplierLink ? "Preferred supplier link" : "Active supplier link"}
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={5}>
+                    {loading ? "Loading supplier cost history..." : "No supplier cost history is available yet. Receive purchase orders with recorded unit cost to build this view."}
+                  </td>
                 </tr>
               )}
             </tbody>

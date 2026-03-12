@@ -42,6 +42,11 @@ X-Staff-Id: demo-manager
 ### Inventory value by location (purchase average cost v1)
 GET {{baseUrl}}/api/reports/inventory/value?locationId={{locationId}}
 
+### Inventory valuation snapshot (MANAGER+)
+GET {{baseUrl}}/api/reports/inventory/value-snapshot
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
 ### Inventory value CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/inventory/value.csv?locationId={{locationId}}
 X-Staff-Role: MANAGER
@@ -54,6 +59,11 @@ X-Staff-Id: demo-manager
 
 ### Reminder candidates report including dismissed (MANAGER+)
 GET {{baseUrl}}/api/reports/reminder-candidates?take=50&includeDismissed=1
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Supplier cost history (MANAGER+)
+GET {{baseUrl}}/api/reports/suppliers/cost-history?take=10
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 

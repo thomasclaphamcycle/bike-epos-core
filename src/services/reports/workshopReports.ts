@@ -57,6 +57,9 @@ export const getWorkshopCapacityReport = async () => {
   const completedFrom = new Date(now);
   completedFrom.setUTCDate(completedFrom.getUTCDate() - (WORKSHOP_CAPACITY_LOOKBACK_DAYS - 1));
   completedFrom.setUTCHours(0, 0, 0, 0);
+  const completedFrom7Days = new Date(now);
+  completedFrom7Days.setUTCDate(completedFrom7Days.getUTCDate() - 6);
+  completedFrom7Days.setUTCHours(0, 0, 0, 0);
 
   const jobs = await prisma.workshopJob.findMany({
     select: {
@@ -69,14 +72,28 @@ export const getWorkshopCapacityReport = async () => {
   const openJobs = jobs.filter((job) => WORKSHOP_CAPACITY_OPEN_STATUSES.has(job.status));
   const waitingForApprovalCount = openJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
   const waitingForPartsCount = openJobs.filter((job) => job.status === "WAITING_FOR_PARTS").length;
-  const completedJobsLast30Days = jobs.filter((job) => (
+  const readyForCollectionCount = openJobs.filter((job) => job.status === "BIKE_READY").length;
+  const completedJobsInLookback = jobs.filter((job) => (
     job.completedAt !== null
     && job.completedAt >= completedFrom
+    && job.completedAt <= now
+  ));
+  const completedJobsLast30Days = completedJobsInLookback.length;
+  const completedJobsLast7Days = jobs.filter((job) => (
+    job.completedAt !== null
+    && job.completedAt >= completedFrom7Days
     && job.completedAt <= now
   )).length;
   const averageCompletedPerDay = Number((completedJobsLast30Days / WORKSHOP_CAPACITY_LOOKBACK_DAYS).toFixed(1));
   const estimatedBacklogDays = averageCompletedPerDay > 0
     ? Number((openJobs.length / averageCompletedPerDay).toFixed(1))
+    : null;
+  const averageCompletionDays = completedJobsInLookback.length > 0
+    ? Number((
+      completedJobsInLookback.reduce((sum, job) => (
+        sum + Math.max(0, (job.completedAt!.getTime() - job.createdAt.getTime()) / 86_400_000)
+      ), 0) / completedJobsInLookback.length
+    ).toFixed(1))
     : null;
 
   const ageingBuckets = {
@@ -85,9 +102,13 @@ export const getWorkshopCapacityReport = async () => {
     eightToFourteenDays: 0,
     fifteenPlusDays: 0,
   };
+  let totalOpenJobAgeDays = 0;
+  let longestOpenJobDays = 0;
 
   for (const job of openJobs) {
     const ageDays = Math.max(0, Math.floor((now.getTime() - job.createdAt.getTime()) / 86_400_000));
+    totalOpenJobAgeDays += ageDays;
+    longestOpenJobDays = Math.max(longestOpenJobDays, ageDays);
     if (ageDays <= 2) {
       ageingBuckets.zeroToTwoDays += 1;
     } else if (ageDays <= 7) {
@@ -99,15 +120,24 @@ export const getWorkshopCapacityReport = async () => {
     }
   }
 
+  const averageOpenJobAgeDays = openJobs.length > 0
+    ? Number((totalOpenJobAgeDays / openJobs.length).toFixed(1))
+    : null;
+
   return {
     generatedAt: now.toISOString(),
     lookbackDays: WORKSHOP_CAPACITY_LOOKBACK_DAYS,
     openJobCount: openJobs.length,
     waitingForApprovalCount,
     waitingForPartsCount,
+    readyForCollectionCount,
+    completedJobsLast7Days,
     completedJobsLast30Days,
     averageCompletedPerDay,
     estimatedBacklogDays,
+    averageCompletionDays,
+    averageOpenJobAgeDays,
+    longestOpenJobDays: openJobs.length > 0 ? longestOpenJobDays : null,
     ageingBuckets,
   };
 };

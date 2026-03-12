@@ -10,6 +10,7 @@ import {
   getInventoryVelocityHandler,
   getInventoryVelocityReportHandler,
   getInventoryValueReportHandler,
+  getInventoryValueSnapshotReportHandler,
   getInventoryValueReportCsvHandler,
   getOperationsExceptionsHandler,
   getPaymentsReportCsvHandler,
@@ -20,6 +21,7 @@ import {
   getProductSalesReportHandler,
   getSalesDailyReportHandler,
   getSalesDailyReportCsvHandler,
+  getSupplierCostHistoryReportHandler,
   getSupplierPerformanceReportHandler,
   getWorkshopCapacityReportHandler,
   getWorkshopDailyReportHandler,
@@ -46,6 +48,7 @@ reportRouter.get(
   getInventoryOnHandReportCsvHandler,
 );
 reportRouter.get("/inventory/value", getInventoryValueReportHandler);
+reportRouter.get("/inventory/value-snapshot", requireRoleAtLeast("MANAGER"), getInventoryValueSnapshotReportHandler);
 reportRouter.get(
   "/inventory/value.csv",
   requireRoleAtLeast("MANAGER"),
@@ -62,6 +65,7 @@ reportRouter.get("/operations/actions", requireRoleAtLeast("MANAGER"), getAction
 reportRouter.get("/operations/exceptions", requireRoleAtLeast("MANAGER"), getOperationsExceptionsHandler);
 reportRouter.get("/pricing/exceptions", requireRoleAtLeast("MANAGER"), getPricingExceptionsReportHandler);
 reportRouter.get("/suppliers/performance", requireRoleAtLeast("MANAGER"), getSupplierPerformanceReportHandler);
+reportRouter.get("/suppliers/cost-history", requireRoleAtLeast("MANAGER"), getSupplierCostHistoryReportHandler);
 reportRouter.get("/customers/insights", requireRoleAtLeast("MANAGER"), getCustomerInsightsReportHandler);
 reportRouter.get("/customers/reminders", requireRoleAtLeast("MANAGER"), getCustomerServiceRemindersReportHandler);
 reportRouter.get("/reminder-candidates", requireRoleAtLeast("MANAGER"), getReminderCandidatesReportHandler);

@@ -138,6 +138,7 @@ const main = async () => {
               variantId: productA.variants[0].id,
               quantityOrdered: 10,
               quantityReceived: 6,
+              unitCostPence: 900,
             },
           ],
         },
@@ -156,6 +157,7 @@ const main = async () => {
               variantId: productA.variants[0].id,
               quantityOrdered: 5,
               quantityReceived: 0,
+              unitCostPence: 1100,
             },
           ],
         },
@@ -173,6 +175,7 @@ const main = async () => {
               variantId: productB.variants[0].id,
               quantityOrdered: 4,
               quantityReceived: 4,
+              unitCostPence: 500,
             },
           ],
         },
@@ -180,6 +183,15 @@ const main = async () => {
     });
 
     state.purchaseOrderIds.push(poA1.id, poA2.id, poB.id);
+
+    await prisma.supplierProductLink.create({
+      data: {
+        supplierId: supplierA.id,
+        variantId: productA.variants[0].id,
+        supplierCostPence: 1100,
+        preferredSupplier: true,
+      },
+    });
 
     const { status, json } = await fetchJson("/api/reports/suppliers/performance");
 
@@ -205,6 +217,19 @@ const main = async () => {
     assert.equal(supplierBRow.receivedPurchaseOrderCount, 1);
     assert.equal(supplierBRow.totalOrderedQuantity, 4);
     assert.equal(supplierBRow.totalReceivedQuantity, 4);
+
+    const costHistory = await fetchJson("/api/reports/suppliers/cost-history?take=5");
+    assert.equal(costHistory.status, 200);
+    assert.ok(costHistory.json.summary.trackedSupplierVariantCount >= 2);
+    assert.ok(costHistory.json.summary.changedSupplierVariantCount >= 1);
+
+    const supplierACostRow = costHistory.json.items.find((row) => row.supplierId === supplierA.id);
+    assert.ok(supplierACostRow, "expected supplier A cost history row");
+    assert.equal(supplierACostRow.currentUnitCostPence, 1100);
+    assert.equal(supplierACostRow.previousUnitCostPence, 900);
+    assert.equal(supplierACostRow.changePence, 200);
+    assert.equal(supplierACostRow.supplierLinkCostPence, 1100);
+    assert.equal(supplierACostRow.preferredSupplierLink, true);
 
     console.log("[m121-smoke] supplier performance report passed");
   } finally {

@@ -4,3 +4,4 @@ GET http://localhost:3000/api/reports/sales/products?from=2026-01-01&to=2026-03-
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Response now includes categoryBreakdown and topCategory summary fields when product categories exist.

@@ -3,3 +3,5 @@
 GET http://localhost:3000/api/reports/workshop/capacity
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
+
+### Response now includes readyForCollectionCount, completedJobsLast7Days, and simple completion/open-age metrics.

@@ -107,6 +107,8 @@ export const getProductSalesReport = async (from?: string, to?: string, take?: n
             select: {
               id: true,
               name: true,
+              brand: true,
+              category: true,
             },
           },
         },
@@ -117,6 +119,8 @@ export const getProductSalesReport = async (from?: string, to?: string, take?: n
   const byProduct = new Map<string, {
     productId: string;
     productName: string;
+    brandName: string | null;
+    categoryName: string | null;
     quantitySold: number;
     grossRevenuePence: number;
     saleIds: Set<string>;
@@ -129,6 +133,8 @@ export const getProductSalesReport = async (from?: string, to?: string, take?: n
     const existing = byProduct.get(productId) ?? {
       productId,
       productName: item.variant.product.name,
+      brandName: item.variant.product.brand?.trim() || null,
+      categoryName: item.variant.product.category?.trim() || null,
       quantitySold: 0,
       grossRevenuePence: 0,
       saleIds: new Set<string>(),
@@ -151,6 +157,8 @@ export const getProductSalesReport = async (from?: string, to?: string, take?: n
     .map((row) => ({
       productId: row.productId,
       productName: row.productName,
+      brandName: row.brandName,
+      categoryName: row.categoryName,
       quantitySold: row.quantitySold,
       grossRevenuePence: row.grossRevenuePence,
       saleCount: row.saleIds.size,
@@ -164,12 +172,53 @@ export const getProductSalesReport = async (from?: string, to?: string, take?: n
       || left.productName.localeCompare(right.productName)
     ));
 
+  const byCategory = new Map<string, {
+    categoryName: string;
+    quantitySold: number;
+    grossRevenuePence: number;
+    productIds: Set<string>;
+  }>();
+
+  for (const row of products) {
+    const categoryName = row.categoryName || "Uncategorized";
+    const existing = byCategory.get(categoryName) ?? {
+      categoryName,
+      quantitySold: 0,
+      grossRevenuePence: 0,
+      productIds: new Set<string>(),
+    };
+
+    existing.quantitySold += row.quantitySold;
+    existing.grossRevenuePence += row.grossRevenuePence;
+    existing.productIds.add(row.productId);
+    byCategory.set(categoryName, existing);
+  }
+
+  const categoryBreakdown = Array.from(byCategory.values())
+    .map((row) => ({
+      categoryName: row.categoryName,
+      quantitySold: row.quantitySold,
+      grossRevenuePence: row.grossRevenuePence,
+      productCount: row.productIds.size,
+      averageUnitPricePence: row.quantitySold > 0 ? Math.round(row.grossRevenuePence / row.quantitySold) : 0,
+    }))
+    .sort((left, right) => (
+      right.quantitySold - left.quantitySold
+      || right.grossRevenuePence - left.grossRevenuePence
+      || left.categoryName.localeCompare(right.categoryName)
+    ));
+
+  const topCategory = categoryBreakdown[0] ?? null;
+
   return {
     filters: range,
     summary: {
       productCount: products.length,
+      categoryCount: categoryBreakdown.length,
       totalQuantitySold: products.reduce((sum, row) => sum + row.quantitySold, 0),
       totalRevenuePence: products.reduce((sum, row) => sum + row.grossRevenuePence, 0),
+      topCategoryName: topCategory?.categoryName ?? null,
+      topCategoryRevenuePence: topCategory?.grossRevenuePence ?? 0,
     },
     topSellingProducts: products.slice(0, range.take),
     lowestSellingProducts: [...products]
@@ -180,6 +229,7 @@ export const getProductSalesReport = async (from?: string, to?: string, take?: n
       ))
       .slice(0, range.take),
     products,
-    categoryBreakdownSupported: false,
+    categoryBreakdown,
+    categoryBreakdownSupported: true,
   };
 };

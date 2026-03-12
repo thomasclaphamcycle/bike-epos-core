@@ -66,9 +66,7 @@ export const getInventoryOnHandReport = async (locationId?: string) => {
     });
 };
 
-export const getInventoryValueReport = async (locationId?: string) => {
-  const resolvedLocationId = await assertLocationIdOrThrow(locationId);
-
+const buildInventoryValueSnapshot = async () => {
   const onHandRows = await prisma.inventoryMovement.groupBy({
     by: ["variantId"],
     _sum: {
@@ -99,6 +97,27 @@ export const getInventoryValueReport = async (locationId?: string) => {
           },
         })
       : [];
+  const variants =
+    variantIds.length > 0
+      ? await prisma.variant.findMany({
+          where: {
+            id: {
+              in: variantIds,
+            },
+          },
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            option: true,
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        })
+      : [];
 
   const weightedCostByVariant = new Map<string, { totalQty: number; totalCost: number }>();
   for (const row of purchaseCostRows) {
@@ -110,11 +129,13 @@ export const getInventoryValueReport = async (locationId?: string) => {
     current.totalCost += quantity * unitCost;
     weightedCostByVariant.set(row.variantId, current);
   }
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
 
   const breakdown = onHandRows
     .map((row) => {
       const onHand = toInteger(row._sum.quantity);
       const weighted = weightedCostByVariant.get(row.variantId);
+      const variant = variantById.get(row.variantId);
 
       const avgUnitCostPence =
         weighted && weighted.totalQty > 0
@@ -124,25 +145,61 @@ export const getInventoryValueReport = async (locationId?: string) => {
 
       return {
         variantId: row.variantId,
+        productName: variant?.product.name ?? "Unknown",
+        variantName: variant?.name ?? variant?.option ?? null,
+        sku: variant?.sku ?? "-",
         onHand,
         avgUnitCostPence,
         valuePence,
+        stockState: onHand > 0 ? "IN_STOCK" : onHand === 0 ? "ZERO" : "NEGATIVE",
       };
     })
-    .sort((a, b) => a.variantId.localeCompare(b.variantId));
+    .sort((a, b) => (
+      b.valuePence - a.valuePence
+      || a.productName.localeCompare(b.productName)
+      || a.variantId.localeCompare(b.variantId)
+    ));
 
   const totalOnHand = breakdown.reduce((sum, row) => sum + row.onHand, 0);
   const totalValuePence = breakdown.reduce((sum, row) => sum + row.valuePence, 0);
   const countMissingCost = breakdown.filter((row) => row.avgUnitCostPence === null).length;
+  const positiveStockVariantCount = breakdown.filter((row) => row.onHand > 0).length;
+  const zeroOrNegativeStockVariantCount = breakdown.length - positiveStockVariantCount;
+  const topValueVariant = breakdown.find((row) => row.valuePence > 0) ?? null;
 
   return {
-    locationId: resolvedLocationId,
     totalOnHand,
     totalValuePence,
     method: "PURCHASE_COST_AVG_V1",
     countMissingCost,
+    summary: {
+      variantCount: breakdown.length,
+      positiveStockVariantCount,
+      zeroOrNegativeStockVariantCount,
+      totalOnHand,
+      totalValuePence,
+      countMissingCost,
+      topValueVariantId: topValueVariant?.variantId ?? null,
+      topValueProductName: topValueVariant?.productName ?? null,
+      topValuePence: topValueVariant?.valuePence ?? 0,
+    },
+    topValueVariants: breakdown.slice(0, 10),
     breakdown,
   };
+};
+
+export const getInventoryValueReport = async (locationId?: string) => {
+  const resolvedLocationId = await assertLocationIdOrThrow(locationId);
+  const snapshot = await buildInventoryValueSnapshot();
+
+  return {
+    locationId: resolvedLocationId,
+    ...snapshot,
+  };
+};
+
+export const getInventoryValueSnapshotReport = async () => {
+  return buildInventoryValueSnapshot();
 };
 
 export const getInventoryVelocityReport = async (from?: string, to?: string, take?: number) => {

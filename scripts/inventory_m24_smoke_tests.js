@@ -278,14 +278,16 @@ const run = async () => {
     });
     assert.equal(productRes.status, 201, JSON.stringify(productRes.json));
     state.productIds.add(productRes.json.id);
+    const productName = productRes.json.name;
 
     const barcode = `24${Date.now().toString().slice(-11)}`;
+    const sku = `M24-SKU-${uniqueRef()}`;
     const variantRes = await fetchJson("/api/variants", {
       method: "POST",
       headers: managerHeaders,
       body: JSON.stringify({
         productId: productRes.json.id,
-        sku: `M24-SKU-${uniqueRef()}`,
+        sku,
         barcode,
         option: "M24 option",
         retailPricePence: 1299,
@@ -413,6 +415,20 @@ const run = async () => {
     assert.equal(valueRow.onHand, 9);
     assert.equal(valueRow.avgUnitCostPence, 100);
     assert.equal(valueRow.valuePence, 900);
+
+    const valueSnapshotRes = await fetchJson(
+      "/api/reports/inventory/value-snapshot",
+      {
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(valueSnapshotRes.status, 200, JSON.stringify(valueSnapshotRes.json));
+    assert.ok(valueSnapshotRes.json.summary.totalValuePence >= 900);
+    const snapshotRow = valueSnapshotRes.json.breakdown.find((row) => row.variantId === variantId);
+    assert.ok(snapshotRow, "Expected inventory value snapshot row for test variant");
+    assert.equal(snapshotRow.productName, productName);
+    assert.equal(snapshotRow.sku, sku);
+    assert.equal(snapshotRow.valuePence, 900);
 
     console.log("PASS m24 inventory movement ledger smoke tests");
   } finally {

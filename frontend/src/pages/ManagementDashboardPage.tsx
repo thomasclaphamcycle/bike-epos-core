@@ -66,6 +66,30 @@ type AuditResponse = {
   events: AuditEvent[];
 };
 
+type InventoryValueSnapshotResponse = {
+  summary: {
+    variantCount: number;
+    positiveStockVariantCount: number;
+    zeroOrNegativeStockVariantCount: number;
+    totalOnHand: number;
+    totalValuePence: number;
+    countMissingCost: number;
+    topValueVariantId: string | null;
+    topValueProductName: string | null;
+    topValuePence: number;
+  };
+};
+
+type SupplierCostHistoryResponse = {
+  summary: {
+    trackedSupplierVariantCount: number;
+    changedSupplierVariantCount: number;
+    costIncreaseCount: number;
+    costDecreaseCount: number;
+    preferredSupplierLinkCount: number;
+  };
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const formatDateKey = (value: Date) => {
@@ -108,6 +132,8 @@ export const ManagementDashboardPage = () => {
   const [workshopPayload, setWorkshopPayload] = useState<WorkshopDashboardResponse | null>(null);
   const [lowestStockRows, setLowestStockRows] = useState<InventoryRow[]>([]);
   const [recentActivity, setRecentActivity] = useState<AuditEvent[]>([]);
+  const [inventoryValue, setInventoryValue] = useState<InventoryValueSnapshotResponse | null>(null);
+  const [supplierCostHistory, setSupplierCostHistory] = useState<SupplierCostHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [widgetPrefs, setWidgetPrefs] = useState(() => loadManagementWidgetPrefs(user?.id ?? ""));
 
@@ -115,11 +141,13 @@ export const ManagementDashboardPage = () => {
     setLoading(true);
     const today = formatDateKey(new Date());
 
-    const [salesResult, workshopResult, inventoryResult, activityResult] = await Promise.allSettled([
+    const [salesResult, workshopResult, inventoryResult, activityResult, inventoryValueResult, supplierCostResult] = await Promise.allSettled([
       apiGet<SalesDailyRow[]>(`/api/reports/sales/daily?from=${today}&to=${today}`),
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=50"),
       apiGet<InventorySearchResponse>("/api/inventory/on-hand/search?active=1&take=50&skip=0"),
       apiGet<AuditResponse>("/api/audit?limit=8"),
+      apiGet<InventoryValueSnapshotResponse>("/api/reports/inventory/value-snapshot"),
+      apiGet<SupplierCostHistoryResponse>("/api/reports/suppliers/cost-history?take=5"),
     ]);
 
     if (salesResult.status === "fulfilled") {
@@ -170,6 +198,28 @@ export const ManagementDashboardPage = () => {
         activityResult.reason instanceof Error
           ? activityResult.reason.message
           : "Failed to load recent activity",
+      );
+    }
+
+    if (inventoryValueResult.status === "fulfilled") {
+      setInventoryValue(inventoryValueResult.value);
+    } else {
+      setInventoryValue(null);
+      error(
+        inventoryValueResult.reason instanceof Error
+          ? inventoryValueResult.reason.message
+          : "Failed to load inventory valuation snapshot",
+      );
+    }
+
+    if (supplierCostResult.status === "fulfilled") {
+      setSupplierCostHistory(supplierCostResult.value);
+    } else {
+      setSupplierCostHistory(null);
+      error(
+        supplierCostResult.reason instanceof Error
+          ? supplierCostResult.reason.message
+          : "Failed to load supplier cost history",
       );
     }
 
@@ -449,6 +499,20 @@ export const ManagementDashboardPage = () => {
             <span className="metric-label">Low Stock Alerts</span>
             <strong className="metric-value">{lowestStockRows.length}</strong>
             <span className="dashboard-metric-detail">Critical {criticalStockCount} | Low list {lowestStockRows.length}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Inventory Value</span>
+            <strong className="metric-value">{formatMoney(inventoryValue?.summary.totalValuePence ?? 0)}</strong>
+            <span className="dashboard-metric-detail">
+              Missing costs {inventoryValue?.summary.countMissingCost ?? 0}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Supplier Cost Changes</span>
+            <strong className="metric-value">{supplierCostHistory?.summary.changedSupplierVariantCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">
+              Increases {supplierCostHistory?.summary.costIncreaseCount ?? 0}
+            </span>
           </div>
         </div>
       </section>
