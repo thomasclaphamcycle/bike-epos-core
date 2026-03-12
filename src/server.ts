@@ -49,8 +49,10 @@ import { errorHandler } from "./middleware/errorHandler";
 import { enforceAuthMode, requireRoleAtLeast } from "./middleware/staffRole";
 import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
+import { registerInternalEventSubscribers } from "./core/eventSubscribers";
 
 const app = express();
+registerInternalEventSubscribers();
 app.use(express.json({ limit: "12mb" }));
 app.use(enforceAuthMode);
 

@@ -38,6 +38,7 @@ The reporting layer is intentionally split by domain:
 ## Event Foundation
 
 `src/core/events.ts` provides a minimal internal event bus with `emit()` and `on()`.
+`src/core/eventSubscribers.ts` registers a tiny diagnostic subscriber set during server startup.
 
 It exists as a safe extension point for future integrations and internal automation. Current emitted events are:
 
@@ -47,3 +48,9 @@ It exists as a safe extension point for future integrations and internal automat
 - `stock.adjusted`
 
 These emissions are additive only. They do not change route behavior, API contracts, or database writes. Real consumers and third-party integrations are still future work.
+
+The current internal subscriber is diagnostic only:
+
+- it keeps a small in-memory ring buffer of recent events for development-time inspection
+- it can emit concise `[eventbus] ...` structured logs when `EVENT_BUS_DEBUG=1`
+- it is intentionally non-persistent and does not deliver events to external systems
