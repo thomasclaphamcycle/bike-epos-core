@@ -37,6 +37,18 @@ The reporting layer is intentionally split by domain:
 - `/management/reminders`: internal reminder-candidate queue for manager visibility.
 - `/management/capacity`: workshop backlog and ageing view.
 
+## Multi-Location Inventory Foundation
+
+Inventory groundwork now treats stock as location-aware while preserving existing single-location behavior:
+
+- `StockLocation` is the operational inventory-location model for stock such as shop floor, workshop, storage, or warehouse
+- `StockLedgerEntry` is the authoritative on-hand ledger and carries `locationId` on every stock-affecting entry
+- `InventoryMovement` remains as the compatible movement/history surface and now also carries `locationId` where available
+- existing inventory flows still default to the primary stock location when no explicit `locationId` is provided
+- purchasing receiving, stock adjustments, workshop part usage, and sales/returns continue to work without API breakage while remaining compatible with future transfer/location workflows
+
+This is foundation only. It does not yet introduce full transfer operations, location-specific replenishment rules, or location-aware POS picking UX.
+
 ## Workshop Handoff Safety
 
 Workshop collection is now treated as a sale-linked handoff rather than a manual status toggle:

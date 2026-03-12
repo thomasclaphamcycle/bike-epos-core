@@ -92,6 +92,23 @@ X-Staff-Id: demo-manager
   "note": "Initial receipt"
 }
 
+### M24: Record inventory movement at a specific stock location (MANAGER+)
+POST {{baseUrl}}/api/inventory/movements
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+{
+  "variantId": "{{variantId}}",
+  "locationId": "{{locationId}}",
+  "type": "PURCHASE",
+  "quantity": 4,
+  "unitCost": 100,
+  "referenceType": "PO_RECEIPT",
+  "referenceId": "po_123_line_2",
+  "note": "Warehouse receipt"
+}
+
 ### M24: ADJUSTMENT movement (MANAGER+)
 POST {{baseUrl}}/api/inventory/movements
 Content-Type: application/json
@@ -112,7 +129,22 @@ GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}
 X-Staff-Role: STAFF
 X-Staff-Id: demo-staff
 
+### M24: Get on-hand by variant at a location (STAFF+)
+GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}&locationId={{locationId}}
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
+### M24: Search on-hand rows at a location (STAFF+)
+GET {{baseUrl}}/api/inventory/on-hand/search?q={{variantId}}&locationId={{locationId}}&take=25&skip=0
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
 ### M24: List movements for a variant (MANAGER+)
 GET {{baseUrl}}/api/inventory/movements?variantId={{variantId}}&from=2026-03-01&to=2026-03-31&type=PURCHASE
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### M24: List movements for a variant at a location (MANAGER+)
+GET {{baseUrl}}/api/inventory/movements?variantId={{variantId}}&locationId={{locationId}}
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager

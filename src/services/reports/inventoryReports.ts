@@ -12,12 +12,15 @@ import {
 } from "./shared";
 
 export const getInventoryOnHandReport = async (locationId?: string) => {
-  await assertLocationIdOrThrow(locationId);
+  const resolvedLocationId = locationId ? await assertLocationIdOrThrow(locationId) : undefined;
 
-  const grouped = await prisma.inventoryMovement.groupBy({
+  const grouped = await prisma.stockLedgerEntry.groupBy({
     by: ["variantId"],
+    where: {
+      ...(resolvedLocationId ? { locationId: resolvedLocationId } : {}),
+    },
     _sum: {
-      quantity: true,
+      quantityDelta: true,
     },
   });
 
@@ -54,7 +57,7 @@ export const getInventoryOnHandReport = async (locationId?: string) => {
         barcode: variant?.barcode ?? null,
         option: variant?.option ?? variant?.name ?? null,
         productName: variant?.product.name ?? "Unknown",
-        onHand: toInteger(row._sum.quantity),
+        onHand: toInteger(row._sum.quantityDelta),
       };
     })
     .sort((a, b) => {
@@ -66,11 +69,14 @@ export const getInventoryOnHandReport = async (locationId?: string) => {
     });
 };
 
-const buildInventoryValueSnapshot = async () => {
-  const onHandRows = await prisma.inventoryMovement.groupBy({
+const buildInventoryValueSnapshot = async (locationId?: string) => {
+  const onHandRows = await prisma.stockLedgerEntry.groupBy({
     by: ["variantId"],
+    where: {
+      ...(locationId ? { locationId } : {}),
+    },
     _sum: {
-      quantity: true,
+      quantityDelta: true,
     },
   });
 
@@ -92,10 +98,10 @@ const buildInventoryValueSnapshot = async () => {
           },
           select: {
             variantId: true,
-            quantity: true,
-            unitCost: true,
-          },
-        })
+        quantity: true,
+        unitCost: true,
+      },
+    })
       : [];
   const variants =
     variantIds.length > 0
@@ -133,7 +139,7 @@ const buildInventoryValueSnapshot = async () => {
 
   const breakdown = onHandRows
     .map((row) => {
-      const onHand = toInteger(row._sum.quantity);
+      const onHand = toInteger(row._sum.quantityDelta);
       const weighted = weightedCostByVariant.get(row.variantId);
       const variant = variantById.get(row.variantId);
 
@@ -190,7 +196,7 @@ const buildInventoryValueSnapshot = async () => {
 
 export const getInventoryValueReport = async (locationId?: string) => {
   const resolvedLocationId = await assertLocationIdOrThrow(locationId);
-  const snapshot = await buildInventoryValueSnapshot();
+  const snapshot = await buildInventoryValueSnapshot(resolvedLocationId);
 
   return {
     locationId: resolvedLocationId,

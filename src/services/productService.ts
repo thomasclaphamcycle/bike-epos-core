@@ -95,6 +95,24 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
+  const existingDefault = await tx.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: "Default",
+      isDefault: true,
+    },
+  });
+};
+
 const normalizeOptionalNullableText = (value: string | undefined | null): string | null | undefined => {
   if (value === undefined) {
     return undefined;
@@ -597,9 +615,24 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
     }
 
     if (openingStockQty > 0) {
+      const defaultStockLocation = await getOrCreateDefaultStockLocationTx(tx);
+
+      await tx.stockLedgerEntry.create({
+        data: {
+          variantId: variant.id,
+          locationId: defaultStockLocation.id,
+          type: "ADJUSTMENT",
+          quantityDelta: openingStockQty,
+          referenceType: "PRODUCT_IMPORT",
+          referenceId: importReferenceId,
+          note: "Product CSV import opening stock",
+        },
+      });
+
       await tx.inventoryMovement.create({
         data: {
           variantId: variant.id,
+          locationId: defaultStockLocation.id,
           type: "ADJUSTMENT",
           quantity: openingStockQty,
           referenceType: "PRODUCT_IMPORT",

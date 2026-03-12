@@ -67,6 +67,13 @@ const cleanup = async (state) => {
         },
       },
     });
+    await prisma.stockLedgerEntry.deleteMany({
+      where: {
+        variantId: {
+          in: state.variantIds,
+        },
+      },
+    });
     await prisma.barcode.deleteMany({
       where: {
         variantId: {

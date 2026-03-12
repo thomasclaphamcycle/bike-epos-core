@@ -14,6 +14,7 @@ const VALID_REASONS = new Set([
 export const createInventoryAdjustmentHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     variantId?: unknown;
+    locationId?: unknown;
     quantityDelta?: unknown;
     reason?: unknown;
     note?: unknown;
@@ -21,6 +22,9 @@ export const createInventoryAdjustmentHandler = async (req: Request, res: Respon
 
   if (typeof body.variantId !== "string") {
     throw new HttpError(400, "variantId must be a string", "INVALID_INVENTORY_ADJUSTMENT");
+  }
+  if (body.locationId !== undefined && typeof body.locationId !== "string") {
+    throw new HttpError(400, "locationId must be a string", "INVALID_INVENTORY_ADJUSTMENT");
   }
   if (typeof body.quantityDelta !== "number") {
     throw new HttpError(
@@ -42,6 +46,7 @@ export const createInventoryAdjustmentHandler = async (req: Request, res: Respon
 
   const result = await recordAdjustment({
     variantId: body.variantId,
+    locationId: typeof body.locationId === "string" ? body.locationId : undefined,
     quantityDelta: body.quantityDelta,
     reason: body.reason,
     note: body.note,

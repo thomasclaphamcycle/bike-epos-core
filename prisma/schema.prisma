@@ -216,6 +216,7 @@ model StockLocation {
   stockLedgerEntries StockLedgerEntry[]
   stocktakes         Stocktake[]
   workshopParts      WorkshopJobPart[]
+  inventoryMovements InventoryMovement[]
 
   @@index([name])
 }
@@ -598,6 +599,7 @@ enum InventoryMovementType {
 model InventoryMovement {
   id               String                @id @default(cuid())
   variantId        String
+  locationId       String?               @db.Uuid
   type             InventoryMovementType
   quantity         Int
   unitCost         Decimal?              @db.Decimal(14, 4)
@@ -607,11 +609,14 @@ model InventoryMovement {
   createdByStaffId String?
   createdAt        DateTime              @default(now())
 
-  variant Variant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  variant  Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location StockLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@index([variantId])
+  @@index([locationId])
   @@index([type])
   @@index([createdAt])
+  @@index([variantId, locationId, createdAt])
 }
 
 model SaleReturn {

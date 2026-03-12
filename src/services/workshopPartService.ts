@@ -440,6 +440,7 @@ const writeWorkshopStockLedgerDeltaTx = async (
   await tx.inventoryMovement.create({
     data: {
       variantId: input.variantId,
+      locationId: location.id,
       type: "WORKSHOP_USE",
       quantity: input.quantityDelta,
       referenceType: "WORKSHOP_JOB_PART",

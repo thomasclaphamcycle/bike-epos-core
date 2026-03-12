@@ -332,6 +332,7 @@ const run = async () => {
     assert.equal(locationsRes.status, 200, JSON.stringify(locationsRes.json));
     const reportLocationId = locationsRes.json.locations?.[0]?.id;
     assert.ok(reportLocationId, "Expected at least one stock location after inventory seed");
+    assert.equal(purchaseRes.json.locationId, reportLocationId);
 
     const saleRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
@@ -345,6 +346,7 @@ const run = async () => {
       }),
     });
     assert.equal(saleRes.status, 201, JSON.stringify(saleRes.json));
+    assert.equal(saleRes.json.locationId, reportLocationId);
 
     const blockedAdjustmentRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
@@ -371,6 +373,7 @@ const run = async () => {
       }),
     });
     assert.equal(adjustmentRes.status, 201, JSON.stringify(adjustmentRes.json));
+    assert.equal(adjustmentRes.json.locationId, reportLocationId);
 
     const onHandRes = await fetchJson(
       `/api/inventory/on-hand?variantId=${encodeURIComponent(variantId)}`,
@@ -381,6 +384,16 @@ const run = async () => {
     assert.equal(onHandRes.status, 200, JSON.stringify(onHandRes.json));
     assert.equal(onHandRes.json.variantId, variantId);
     assert.equal(onHandRes.json.onHand, 9);
+
+    const onHandAtLocationRes = await fetchJson(
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantId)}&locationId=${encodeURIComponent(reportLocationId)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandAtLocationRes.status, 200, JSON.stringify(onHandAtLocationRes.json));
+    assert.equal(onHandAtLocationRes.json.locationId, reportLocationId);
+    assert.equal(onHandAtLocationRes.json.onHand, 9);
 
     const blockedMovementsRes = await fetchJson(
       `/api/inventory/movements?variantId=${encodeURIComponent(variantId)}`,
@@ -405,6 +418,29 @@ const run = async () => {
     assert.equal(quantityByType.get("PURCHASE"), 10);
     assert.equal(quantityByType.get("SALE"), -2);
     assert.equal(quantityByType.get("ADJUSTMENT"), 1);
+    assert.equal(movementsRes.json.movements.every((entry) => entry.locationId === reportLocationId), true);
+
+    const locationMovementsRes = await fetchJson(
+      `/api/inventory/movements?variantId=${encodeURIComponent(variantId)}&locationId=${encodeURIComponent(reportLocationId)}`,
+      {
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(locationMovementsRes.status, 200, JSON.stringify(locationMovementsRes.json));
+    assert.equal(locationMovementsRes.json.locationId, reportLocationId);
+    assert.equal(locationMovementsRes.json.movements.length, 3);
+
+    const onHandSearchRes = await fetchJson(
+      `/api/inventory/on-hand/search?q=${encodeURIComponent(sku)}&locationId=${encodeURIComponent(reportLocationId)}&take=25&skip=0`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandSearchRes.status, 200, JSON.stringify(onHandSearchRes.json));
+    const onHandSearchRow = onHandSearchRes.json.rows.find((row) => row.variantId === variantId);
+    assert.ok(onHandSearchRow, "Expected inventory on-hand search row for test variant");
+    assert.equal(onHandSearchRes.json.locationId, reportLocationId);
+    assert.equal(onHandSearchRow.onHand, 9);
 
     const onHandReportRes = await fetchJson(
       `/api/reports/inventory/on-hand?locationId=${encodeURIComponent(reportLocationId)}`,

@@ -21,6 +21,20 @@ X-Staff-Id: {{staffId}}
   "note": "Cycle count correction"
 }
 
+### Post positive adjustment at a location (MANAGER+)
+POST {{baseUrl}}/api/inventory/adjustments
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "variantId": "{{variantId}}",
+  "locationId": "{{locationId}}",
+  "quantityDelta": 3,
+  "reason": "COUNT_CORRECTION",
+  "note": "Workshop bin count correction"
+}
+
 ### Post negative adjustment (MANAGER+)
 POST {{baseUrl}}/api/inventory/adjustments
 Content-Type: application/json
@@ -36,5 +50,10 @@ X-Staff-Id: {{staffId}}
 
 ### Check on-hand after adjustments
 GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Check on-hand at a specific location
+GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}&locationId={{locationId}}
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}

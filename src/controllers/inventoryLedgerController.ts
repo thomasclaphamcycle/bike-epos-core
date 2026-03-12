@@ -39,6 +39,7 @@ const parseMovementTypeOrThrow = (
 export const createInventoryMovementHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     variantId?: string;
+    locationId?: unknown;
     type?: unknown;
     quantity?: unknown;
     unitCost?: unknown;
@@ -49,6 +50,9 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
 
   if (body.variantId !== undefined && typeof body.variantId !== "string") {
     throw new HttpError(400, "variantId must be a string", "INVALID_INVENTORY_MOVEMENT");
+  }
+  if (body.locationId !== undefined && typeof body.locationId !== "string") {
+    throw new HttpError(400, "locationId must be a string", "INVALID_INVENTORY_MOVEMENT");
   }
   if (body.quantity !== undefined && typeof body.quantity !== "number") {
     throw new HttpError(400, "quantity must be a number", "INVALID_INVENTORY_MOVEMENT");
@@ -82,6 +86,7 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
 
   const movementInput: {
     variantId?: string;
+    locationId?: string;
     type: InventoryMovementType;
     quantity?: number;
     unitCost?: string | number | null;
@@ -95,6 +100,9 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
 
   if (typeof body.variantId === "string") {
     movementInput.variantId = body.variantId;
+  }
+  if (typeof body.locationId === "string") {
+    movementInput.locationId = body.locationId;
   }
   if (typeof body.quantity === "number") {
     movementInput.quantity = body.quantity;
@@ -123,18 +131,23 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
 
 export const listInventoryMovementsHandler = async (req: Request, res: Response) => {
   const variantId = typeof req.query.variantId === "string" ? req.query.variantId : undefined;
+  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   const typeRaw = typeof req.query.type === "string" ? req.query.type : undefined;
 
   const filters: {
     variantId?: string;
+    locationId?: string;
     from?: string;
     to?: string;
     type?: InventoryMovementType;
   } = {};
   if (variantId) {
     filters.variantId = variantId;
+  }
+  if (locationId) {
+    filters.locationId = locationId;
   }
   if (from) {
     filters.from = from;
@@ -153,7 +166,8 @@ export const listInventoryMovementsHandler = async (req: Request, res: Response)
 
 export const getInventoryOnHandHandler = async (req: Request, res: Response) => {
   const variantId = typeof req.query.variantId === "string" ? req.query.variantId : undefined;
-  const response = await getOnHand(variantId);
+  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const response = await getOnHand(variantId, locationId);
   res.json(response);
 };
 
@@ -192,6 +206,7 @@ export const listInventoryOnHandHandler = async (req: Request, res: Response) =>
 
   const take = parseOptionalIntQuery(req.query.take);
   const skip = parseOptionalIntQuery(req.query.skip);
-  const result = await listOnHand({ q, isActive, take, skip });
+  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const result = await listOnHand({ q, locationId, isActive, take, skip });
   res.json(result);
 };

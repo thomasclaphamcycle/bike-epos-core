@@ -943,6 +943,7 @@ export const checkoutBasketToSale = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: defaultLocation.id,
           type: "SALE",
           quantity: -item.quantity,
           referenceType: "SALE_ITEM",
@@ -1164,6 +1165,7 @@ export const createSaleReturn = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId: defaultLocation.id,
           type: "RETURN",
           quantity: item.quantity,
           referenceType: "SALE_RETURN_ITEM",

@@ -1117,6 +1117,7 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
         await tx.inventoryMovement.create({
           data: {
             variantId,
+            locationId: defaultStockLocation.id,
             type: "WORKSHOP_USE",
             quantity: -line.qty,
             referenceType: "WORKSHOP_JOB_LINE",

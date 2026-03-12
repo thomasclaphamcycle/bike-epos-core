@@ -277,6 +277,7 @@ export const createStockAdjustmentTx = async (
   await tx.inventoryMovement.create({
     data: {
       variantId: input.variantId,
+      locationId: location.id,
       type: "ADJUSTMENT",
       quantity: input.quantityDelta,
       referenceType: input.referenceType,

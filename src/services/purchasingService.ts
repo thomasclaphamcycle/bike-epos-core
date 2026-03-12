@@ -1239,6 +1239,7 @@ export const receivePurchaseOrder = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
+          locationId,
           type: "PURCHASE",
           quantity: line.quantity,
           unitCost: unitCost,
