@@ -1,4 +1,4 @@
-import { ReminderCandidateStatus } from "@prisma/client";
+import { Prisma, ReminderCandidateStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 
@@ -121,17 +121,21 @@ export const prepareReminderCandidateFromWorkshopCompletion = async (
     },
   });
 
-  const candidate = existing
-    ? await prisma.reminderCandidate.update({
-        where: { workshopJobId: workshopJob.id },
-        data: {
-          customerId: workshopJob.customerId,
-          sourceEvent: input.sourceEvent,
-          dueAt,
-          status: existing.status === "DISMISSED" ? "DISMISSED" : nextStatus,
-        },
-      })
-    : await prisma.reminderCandidate.create({
+  let candidate;
+
+  if (existing) {
+    candidate = await prisma.reminderCandidate.update({
+      where: { workshopJobId: workshopJob.id },
+      data: {
+        customerId: workshopJob.customerId,
+        sourceEvent: input.sourceEvent,
+        dueAt,
+        status: existing.status === "DISMISSED" ? "DISMISSED" : nextStatus,
+      },
+    });
+  } else {
+    try {
+      candidate = await prisma.reminderCandidate.create({
         data: {
           customerId: workshopJob.customerId,
           workshopJobId: workshopJob.id,
@@ -140,6 +144,32 @@ export const prepareReminderCandidateFromWorkshopCompletion = async (
           status: nextStatus,
         },
       });
+    } catch (createError) {
+      if (
+        createError instanceof Prisma.PrismaClientKnownRequestError &&
+        createError.code === "P2002"
+      ) {
+        const concurrentExisting = await prisma.reminderCandidate.findUnique({
+          where: { workshopJobId: workshopJob.id },
+          select: {
+            status: true,
+          },
+        });
+
+        candidate = await prisma.reminderCandidate.update({
+          where: { workshopJobId: workshopJob.id },
+          data: {
+            customerId: workshopJob.customerId,
+            sourceEvent: input.sourceEvent,
+            dueAt,
+            status: concurrentExisting?.status === "DISMISSED" ? "DISMISSED" : nextStatus,
+          },
+        });
+      } else {
+        throw createError;
+      }
+    }
+  }
 
   return toResponse(candidate);
 };
