@@ -197,21 +197,29 @@ const main = async () => {
     });
     state.purchaseOrderIds.push(purchaseOrder.id);
 
-    const customer = await prisma.customer.create({
+    const reminderCustomer = await prisma.customer.create({
       data: {
-        name: `M125 Customer ${RUN_REF}`,
-        firstName: "M125",
+        name: `M125 Reminder ${RUN_REF}`,
+        firstName: "Reminder",
         lastName: RUN_REF,
-        email: `m125-${RUN_REF}@local`,
+        email: `m125-reminder-${RUN_REF}@local`,
       },
     });
-    state.customerIds.push(customer.id);
+    const backlogCustomer = await prisma.customer.create({
+      data: {
+        name: `M125 Backlog ${RUN_REF}`,
+        firstName: "Backlog",
+        lastName: RUN_REF,
+        email: `m125-backlog-${RUN_REF}@local`,
+      },
+    });
+    state.customerIds.push(reminderCustomer.id, backlogCustomer.id);
 
     const workshopJobs = await Promise.all([
       prisma.workshopJob.create({
         data: {
-          customerId: customer.id,
-          customerName: customer.name,
+          customerId: reminderCustomer.id,
+          customerName: reminderCustomer.name,
           locationId,
           bikeDescription: "Reminder bike",
           status: "COMPLETED",
@@ -221,16 +229,40 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Old Job ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
-          bikeDescription: "Old workshop job",
+          bikeDescription: `M125 backlog anchor ${RUN_REF}`,
           status: "APPROVED",
           createdAt: daysAgo(20),
         },
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Queue A ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
+          locationId,
+          bikeDescription: `M125 recently completed A ${RUN_REF}`,
+          status: "COMPLETED",
+          createdAt: daysAgo(4),
+          completedAt: daysAgo(2),
+        },
+      }),
+      prisma.workshopJob.create({
+        data: {
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
+          locationId,
+          bikeDescription: `M125 recently completed B ${RUN_REF}`,
+          status: "COMPLETED",
+          createdAt: daysAgo(3),
+          completedAt: daysAgo(1),
+        },
+      }),
+      prisma.workshopJob.create({
+        data: {
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue A",
           status: "BOOKING_MADE",
@@ -239,7 +271,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Queue B ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue B",
           status: "WAITING_FOR_APPROVAL",
@@ -248,7 +281,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Queue C ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue C",
           status: "WAITING_FOR_PARTS",
@@ -257,7 +291,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Queue D ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue D",
           status: "ON_HOLD",
@@ -266,7 +301,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Queue E ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue E",
           status: "BIKE_READY",
@@ -275,7 +311,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M125 Queue F ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue F",
           status: "APPROVED",
@@ -292,7 +329,7 @@ const main = async () => {
     const deadStockRow = after.json.items.find((row) => row.entityId === deadStockProduct.variants[0].id && row.type === "DEAD_STOCK");
     const overduePoRow = after.json.items.find((row) => row.entityId === purchaseOrder.id);
     const oldJobRow = after.json.items.find((row) => row.entityId === workshopJobs[1].id);
-    const overdueReminderRow = after.json.items.find((row) => row.entityId === customer.id && row.type === "CUSTOMER_OVERDUE_REMINDER");
+    const overdueReminderRow = after.json.items.find((row) => row.entityId === reminderCustomer.id && row.type === "CUSTOMER_OVERDUE_REMINDER");
     const backlogRow = after.json.items.find((row) => row.type === "WORKSHOP_BACKLOG");
 
     assert.ok(pricingRow, "expected pricing exception row");
@@ -309,12 +346,15 @@ const main = async () => {
     assert.ok(oldJobRow, "expected old workshop job row");
     assert.equal(oldJobRow.type, "WORKSHOP_OLD_JOB");
     assert.equal(oldJobRow.severity, "CRITICAL");
+    assert.equal(oldJobRow.link, `/workshop/${workshopJobs[1].id}`);
 
     assert.ok(overdueReminderRow, "expected overdue reminder row");
     assert.equal(overdueReminderRow.severity, "INFO");
-    assert.equal(overdueReminderRow.link, `/customers/${customer.id}`);
+    assert.equal(overdueReminderRow.link, `/customers/${reminderCustomer.id}`);
 
-    assert.ok(backlogRow || before.json.items.some((row) => row.type === "WORKSHOP_BACKLOG"), "expected workshop backlog row");
+    assert.ok(backlogRow, "expected workshop backlog row");
+    assert.match(backlogRow.description, /open jobs/i);
+    assert.equal(backlogRow.link, "/management/capacity");
     assert.ok(after.json.summary.total >= before.json.summary.total + 5);
 
     console.log("[m125-smoke] operations exceptions report passed");
