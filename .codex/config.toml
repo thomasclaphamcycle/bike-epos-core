@@ -3,3 +3,7 @@ sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
 network_access = true
+allowed_hosts = ["localhost", "127.0.0.1"]
+
+[env]
+allow = ["DATABASE_URL"]

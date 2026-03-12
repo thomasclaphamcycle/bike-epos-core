@@ -120,8 +120,20 @@ npm run test:db:up
 - `sandbox_mode = "workspace-write"`
 - `approval_policy = "never"`
 - `[sandbox_workspace_write].network_access = true`
+- `[sandbox_workspace_write].allowed_hosts = ["localhost", "127.0.0.1"]`
+- `[env].allow = ["DATABASE_URL"]`
 
 That keeps local automation project-scoped while still allowing trusted access to local services such as PostgreSQL on `localhost:5432`.
+
+### Trusted Local Codex Mode
+
+This repository is set up for trusted local Codex runs through `.codex/config.toml`.
+
+- `workspace-write` keeps file access scoped to the project instead of enabling full machine access
+- local loopback and PostgreSQL access on `localhost:5432` are expected for seeds, smoke tests, and verification
+- approval prompts should now be minimal during normal local development
+
+On a fully trusted machine, advanced users can still choose `sandbox_mode = "danger-full-access"` for fully autonomous runs, but that is intentionally not the project default.
 
 ## Auth (M35)
 
