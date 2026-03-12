@@ -195,6 +195,20 @@ const stopServerProcess = async (serverProcess) => {
   }
 };
 
+const spawnTestServer = () => spawn(
+  process.platform === "win32" ? "npx.cmd" : "npx",
+  ["ts-node", "--transpile-only", "src/server.ts"],
+  {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      DATABASE_URL,
+      PORT: portFromBaseUrl(),
+    },
+  },
+);
+
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
 
@@ -331,15 +345,7 @@ const run = async () => {
     }
 
     if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: portFromBaseUrl(),
-        },
-      });
+      serverProcess = spawnTestServer();
       serverProcess.stdout.on("data", (chunk) => {
         serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
       });
