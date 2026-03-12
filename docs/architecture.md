@@ -37,6 +37,15 @@ The reporting layer is intentionally split by domain:
 - `/management/reminders`: internal reminder-candidate queue for manager visibility.
 - `/management/capacity`: workshop backlog and ageing view.
 
+## Workshop Handoff Safety
+
+Workshop collection is now treated as a sale-linked handoff rather than a manual status toggle:
+
+- ready jobs should move into POS through the existing workshop finalize-to-basket flow or the explicit workshop checkout flow
+- POS checkout for a finalized workshop basket must preserve the workshop linkage on the resulting sale
+- ready jobs cannot be manually marked collected or closed unless a linked sale already exists
+- `workshop.job.completed` should only represent actual completion, which keeps reminder-candidate generation aligned with real completed jobs
+
 ## Product Import Flow
 
 The first product CSV import flow is intentionally narrow and internal:

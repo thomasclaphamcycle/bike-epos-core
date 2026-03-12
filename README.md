@@ -59,7 +59,7 @@ Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 - Logout API: `POST /api/auth/logout`
 - Current user: `GET /api/auth/me`
 - Active login users: `GET /api/auth/active-users`
-- Login UI: `/login` (current React UI uses active-user buttons plus 4-digit PIN; password login remains preserved in the backend)
+- Login UI: `/login` (current React UI is PIN-first with active-user buttons, and now includes a password fallback form for password-only or reset-PIN accounts)
 
 ### Create initial admin
 
@@ -82,6 +82,7 @@ Authenticated pages now use a shared app shell with role-aware navigation.
 
 - When the React SPA is active, `/` loads the app shell and routes authenticated users through `/home` to their role landing page (`/dashboard`, `/management`, or `/management/staff`).
 - In backend-only/non-SPA mode, `/` still redirects authenticated users to `/pos`; unauthenticated access still goes to `/login`.
+- The React `/login` screen now routes successful fallback password logins through `/home`; the backend-only legacy login page still falls back to `/pos`.
 - Unauthenticated access to protected pages redirects to `/login?next=...`.
 - Role-based page access redirects to `/not-authorized` for HTML requests.
 

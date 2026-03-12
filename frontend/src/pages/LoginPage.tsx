@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiGet, ApiError } from "../api/client";
+import { normalizeLoginRedirectTarget } from "../utils/authRedirect";
 import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "../components/branding/CorePosLogo";
 import { appBuildLabel } from "../utils/buildInfo";
@@ -10,19 +11,19 @@ type ActiveLoginUser = {
   id: string;
   displayName: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
+  hasPin: boolean;
 };
 
 export const LoginPage = () => {
-  const { user, loginWithPin } = useAuth();
+  const { user, login, loginWithPin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTarget = useMemo(() => {
-    const fromState = (location.state as { from?: string } | null)?.from;
+    const fromState = normalizeLoginRedirectTarget((location.state as { from?: string } | null)?.from);
     if (fromState) {
       return fromState;
     }
-    const next = new URLSearchParams(location.search).get("next");
-    return next || null;
+    return normalizeLoginRedirectTarget(new URLSearchParams(location.search).get("next"));
   }, [location.search, location.state]);
 
   const [users, setUsers] = useState<ActiveLoginUser[]>([]);
@@ -31,8 +32,16 @@ export const LoginPage = () => {
   const [pin, setPin] = useState("");
   const [pinFocused, setPinFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [passwordIdentifier, setPasswordIdentifier] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
   const pinInputRef = useRef<HTMLInputElement | null>(null);
+
+  const selectedUser = useMemo(
+    () => users.find((candidate) => candidate.id === selectedUserId) ?? null,
+    [selectedUserId, users],
+  );
 
   useEffect(() => {
     if (user) {
@@ -65,13 +74,27 @@ export const LoginPage = () => {
     });
   }, []);
 
+  useEffect(() => {
+    if (!selectedUser || selectedUser.hasPin) {
+      return;
+    }
+
+    setPin("");
+    setErrorMessage("This account does not have a PIN yet. Use email and password below.");
+  }, [selectedUser, setPin]);
+
   const canSubmit = useMemo(
-    () => Boolean(selectedUserId) && /^\d{4}$/.test(pin) && !submitting && !usersLoading,
-    [selectedUserId, pin, submitting, usersLoading],
+    () =>
+      Boolean(selectedUserId) &&
+      selectedUser?.hasPin === true &&
+      /^\d{4}$/.test(pin) &&
+      !submitting &&
+      !usersLoading,
+    [selectedUserId, selectedUser, pin, submitting, usersLoading],
   );
 
   const submitPinLogin = useCallback(async () => {
-    if (!selectedUserId || !/^\d{4}$/.test(pin)) {
+    if (!selectedUserId || !selectedUser?.hasPin || !/^\d{4}$/.test(pin)) {
       return;
     }
 
@@ -96,7 +119,30 @@ export const LoginPage = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [focusPinInput, loginWithPin, navigate, pin, redirectTarget, selectedUserId]);
+  }, [focusPinInput, loginWithPin, navigate, pin, redirectTarget, selectedUser, selectedUserId]);
+
+  const submitPasswordLogin = useCallback(async () => {
+    if (!passwordIdentifier.trim() || !passwordValue) {
+      setErrorMessage("Email and password are required.");
+      return;
+    }
+
+    setPasswordSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await login(passwordIdentifier, passwordValue);
+      navigate(redirectTarget || "/home", { replace: true });
+    } catch (error) {
+      if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage("Login failed.");
+      }
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  }, [login, navigate, passwordIdentifier, passwordValue, redirectTarget]);
 
   useEffect(() => {
     if (selectedUserId && /^\d{4}$/.test(pin) && !submitting && !usersLoading) {
@@ -104,15 +150,15 @@ export const LoginPage = () => {
     }
   }, [pin, selectedUserId, submitPinLogin, submitting, usersLoading]);
 
-  const onSubmit = async (event: FormEvent) => {
+  const onPasswordSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    await submitPinLogin();
+    await submitPasswordLogin();
   };
 
   return (
     <div className="login-shell">
       <div className="login-stage">
-        <form className="login-card" onSubmit={onSubmit}>
+        <div className="login-card">
           <div className="login-logo-wrap">
             <CorePosLogo variant="stacked" size={228} />
           </div>
@@ -130,12 +176,17 @@ export const LoginPage = () => {
                   onClick={() => {
                     setSelectedUserId(loginUser.id);
                     setErrorMessage(null);
-                    focusPinInput();
+                    if (loginUser.hasPin) {
+                      focusPinInput();
+                    }
                   }}
-                  disabled={submitting}
+                  disabled={submitting || passwordSubmitting}
                 >
                   <span className="login-user-name">{loginUser.displayName}</span>
-                  <span className="login-user-role">{loginUser.role}</span>
+                  <span className="login-user-role">
+                    {loginUser.role}
+                    {loginUser.hasPin ? "" : " · Password only"}
+                  </span>
                 </button>
               ))
             ) : (
@@ -177,6 +228,7 @@ export const LoginPage = () => {
                   }
                 }}
                 autoComplete="one-time-code"
+                disabled={selectedUser?.hasPin === false || passwordSubmitting}
                 required
               />
               <div className="login-pin-slots" aria-hidden="true">
@@ -196,9 +248,57 @@ export const LoginPage = () => {
             </div>
           </div>
 
+          <div className="login-password-divider">
+            <span>Password fallback</span>
+          </div>
+
+          <div className="login-password-section">
+            <div className="login-pin-labels">
+              <label htmlFor="password-email">Email</label>
+              <p className="login-pin-help">
+                Use this when a PIN is not set or has been reset.
+              </p>
+            </div>
+            <form className="login-password-form" onSubmit={onPasswordSubmit}>
+              <input
+                id="password-email"
+                data-testid="login-password-email"
+                type="email"
+                value={passwordIdentifier}
+                onChange={(event) => {
+                  setPasswordIdentifier(event.target.value);
+                  setErrorMessage(null);
+                }}
+                autoComplete="username"
+                placeholder="staff@example.com"
+                disabled={submitting || passwordSubmitting}
+              />
+              <input
+                data-testid="login-password-value"
+                type="password"
+                value={passwordValue}
+                onChange={(event) => {
+                  setPasswordValue(event.target.value);
+                  setErrorMessage(null);
+                }}
+                autoComplete="current-password"
+                placeholder="Password"
+                disabled={submitting || passwordSubmitting}
+              />
+              <button
+                type="submit"
+                className="login-password-submit"
+                data-testid="login-password-submit"
+                disabled={submitting || passwordSubmitting}
+              >
+                {passwordSubmitting ? "Logging in..." : "Use password"}
+              </button>
+            </form>
+          </div>
+
           {errorMessage ? <p className="error-banner">{errorMessage}</p> : null}
           <p className="login-build-info">{appBuildLabel}</p>
-        </form>
+        </div>
       </div>
     </div>
   );

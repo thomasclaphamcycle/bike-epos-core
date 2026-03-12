@@ -386,6 +386,13 @@ export const changeWorkshopJobStatus = async (
   const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
+      include: {
+        sale: {
+          select: {
+            id: true,
+          },
+        },
+      },
     });
 
     if (!job) {
@@ -418,6 +425,14 @@ export const changeWorkshopJobStatus = async (
         409,
         "Invalid workshop status transition",
         "INVALID_STATUS_TRANSITION",
+      );
+    }
+
+    if (fromStage === "READY" && targetStage === "COMPLETED" && !job.sale) {
+      throw new HttpError(
+        409,
+        "Workshop job must be checked out to a sale before collection",
+        "WORKSHOP_COLLECTION_REQUIRES_SALE",
       );
     }
 
@@ -468,7 +483,7 @@ export const changeWorkshopJobStatus = async (
     };
   });
 
-  if (!result.idempotent && (result.emittedStage === "READY" || result.emittedStage === "COMPLETED")) {
+  if (!result.idempotent && result.emittedStage === "COMPLETED") {
     emit("workshop.job.completed", {
       id: result.job.id,
       type: "workshop.job.completed",

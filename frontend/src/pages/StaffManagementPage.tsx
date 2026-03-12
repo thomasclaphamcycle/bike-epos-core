@@ -11,6 +11,7 @@ type StaffUser = {
   name: string | null;
   role: UserRole;
   isActive: boolean;
+  hasPin: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -172,6 +173,17 @@ export const StaffManagementPage = () => {
     }
   };
 
+  const resetPin = async (userId: string) => {
+    try {
+      await apiPost(`/api/admin/users/${encodeURIComponent(userId)}/reset-pin`);
+      success("PIN reset");
+      setPinInputs((current) => ({ ...current, [userId]: "" }));
+      await loadUsers();
+    } catch (resetError) {
+      error(resetError instanceof Error ? resetError.message : "Failed to reset PIN");
+    }
+  };
+
   const visibleUsers = showInactive ? users : users.filter((user) => user.isActive);
   const formatDate = (value: string) => new Date(value).toLocaleDateString();
 
@@ -254,6 +266,9 @@ export const StaffManagementPage = () => {
                   <span className={`staff-role-badge staff-role-badge-${user.role.toLowerCase()}`}>{user.role}</span>
                   <span className={`staff-status-badge ${user.isActive ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
                     {user.isActive ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                  <span className={`staff-status-badge ${user.hasPin ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
+                    {user.hasPin ? "PIN SET" : "PASSWORD ONLY"}
                   </span>
                   <span className="muted-text">Created {formatDate(user.createdAt)}</span>
                   <span className="staff-expand-affordance">{expandedUserId === user.id ? "Collapse" : "Edit"}</span>
@@ -379,6 +394,14 @@ export const StaffManagementPage = () => {
                         disabled={!/^\d{4}$/.test(pinInputs[user.id] ?? "")}
                       >
                         Set PIN
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => void resetPin(user.id)}
+                        disabled={!user.hasPin}
+                      >
+                        Reset PIN
                       </button>
                     </div>
                   </div>

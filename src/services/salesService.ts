@@ -141,6 +141,33 @@ const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) =
   });
 };
 
+const getWorkshopJobForBasketTx = async (
+  tx: Prisma.TransactionClient,
+  basketId: string,
+) => {
+  const matches = await tx.workshopJob.findMany({
+    where: { finalizedBasketId: basketId },
+    select: {
+      id: true,
+      customerId: true,
+      status: true,
+      completedAt: true,
+      cancelledAt: true,
+    },
+    take: 2,
+  });
+
+  if (matches.length > 1) {
+    throw new HttpError(
+      409,
+      "Basket is linked to multiple workshop jobs",
+      "WORKSHOP_BASKET_CONFLICT",
+    );
+  }
+
+  return matches[0] ?? null;
+};
+
 const toSaleResponse = async (saleId: string) => {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -772,7 +799,41 @@ export const checkoutBasketToSale = async (
   const txResult = await prisma.$transaction(async (tx) => {
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
     if (existingSale) {
-      return { saleId: existingSale.id, created: false };
+      const workshopJob = await getWorkshopJobForBasketTx(tx, basketId);
+      let emittedWorkshopCompletion = false;
+      let workshopCompletedAt: Date | null = null;
+
+      if (workshopJob) {
+        if (!existingSale.workshopJobId) {
+          await tx.sale.update({
+            where: { id: existingSale.id },
+            data: {
+              workshopJobId: workshopJob.id,
+              ...(existingSale.customerId ? {} : { customerId: workshopJob.customerId }),
+            },
+          });
+        }
+
+        if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
+          workshopCompletedAt = workshopJob.completedAt ?? new Date();
+          await tx.workshopJob.update({
+            where: { id: workshopJob.id },
+            data: {
+              status: "COMPLETED",
+              completedAt: workshopCompletedAt,
+            },
+          });
+          emittedWorkshopCompletion = true;
+        }
+      }
+
+      return {
+        saleId: existingSale.id,
+        created: false,
+        emittedWorkshopCompletion,
+        workshopJobId: workshopJob?.id ?? null,
+        workshopCompletedAt,
+      };
     }
 
     const basket = await tx.basket.findUnique({
@@ -794,6 +855,42 @@ export const checkoutBasketToSale = async (
       throw new HttpError(400, "Cannot checkout an empty basket", "EMPTY_BASKET");
     }
 
+    const workshopJob = await getWorkshopJobForBasketTx(tx, basket.id);
+    if (workshopJob) {
+      const existingWorkshopSale = await tx.sale.findUnique({
+        where: { workshopJobId: workshopJob.id },
+      });
+
+      if (existingWorkshopSale) {
+        await tx.basket.update({
+          where: { id: basket.id },
+          data: { status: BasketStatus.CHECKED_OUT },
+        });
+
+        let workshopCompletedAt = workshopJob.completedAt;
+        let emittedWorkshopCompletion = false;
+        if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
+          workshopCompletedAt = workshopJob.completedAt ?? new Date();
+          await tx.workshopJob.update({
+            where: { id: workshopJob.id },
+            data: {
+              status: "COMPLETED",
+              completedAt: workshopCompletedAt,
+            },
+          });
+          emittedWorkshopCompletion = true;
+        }
+
+        return {
+          saleId: existingWorkshopSale.id,
+          created: false,
+          emittedWorkshopCompletion,
+          workshopJobId: workshopJob.id,
+          workshopCompletedAt,
+        };
+      }
+    }
+
     const subtotalPence = basket.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
       0,
@@ -806,6 +903,12 @@ export const checkoutBasketToSale = async (
     const sale = await tx.sale.create({
       data: {
         basketId: basket.id,
+        ...(workshopJob
+          ? {
+              workshopJobId: workshopJob.id,
+              customerId: workshopJob.customerId,
+            }
+          : {}),
         subtotalPence,
         taxPence,
         totalPence,
@@ -874,10 +977,42 @@ export const checkoutBasketToSale = async (
       data: { status: BasketStatus.CHECKED_OUT },
     });
 
-    return { saleId: sale.id, created: true };
+    let workshopCompletedAt: Date | null = null;
+    let emittedWorkshopCompletion = false;
+
+    if (workshopJob && workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
+      workshopCompletedAt = workshopJob.completedAt ?? new Date();
+      await tx.workshopJob.update({
+        where: { id: workshopJob.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: workshopCompletedAt,
+        },
+      });
+      emittedWorkshopCompletion = true;
+    }
+
+    return {
+      saleId: sale.id,
+      created: true,
+      emittedWorkshopCompletion,
+      workshopJobId: workshopJob?.id ?? null,
+      workshopCompletedAt,
+    };
   });
 
   const response = await toSaleResponse(txResult.saleId);
+  if (txResult.emittedWorkshopCompletion && txResult.workshopJobId && txResult.workshopCompletedAt) {
+    emit("workshop.job.completed", {
+      id: txResult.workshopJobId,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: txResult.workshopJobId,
+      status: "COMPLETED",
+      completedAt: txResult.workshopCompletedAt.toISOString(),
+    });
+  }
+
   return {
     ...response,
     idempotent: !txResult.created,

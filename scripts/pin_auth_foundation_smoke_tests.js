@@ -28,6 +28,10 @@ const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": `pin-manager-${RUN_REF}`,
 };
+const ADMIN_HEADERS = {
+  "X-Staff-Role": "ADMIN",
+  "X-Staff-Id": `pin-admin-${RUN_REF}`,
+};
 
 const toCookieHeader = (response) => {
   const raw = response.headers.get("set-cookie");
@@ -65,6 +69,7 @@ const main = async () => {
     assert.ok(listedUser);
     assert.equal(typeof listedUser.displayName, "string");
     assert.equal(listedUser.role, "STAFF");
+    assert.equal(listedUser.hasPin, false);
     assert.equal(Object.prototype.hasOwnProperty.call(listedUser, "email"), false);
 
     const loginResult = await fetchJson("/api/auth/login", {
@@ -112,6 +117,7 @@ const main = async () => {
     });
     assert.equal(meResult.status, 200);
     assert.equal(meResult.json.user.id, user.id);
+    assert.equal(meResult.json.user.hasPin, true);
 
     const resetResult = await fetchJson(`/api/admin/users/${user.id}/reset-pin`, {
       method: "POST",
@@ -155,6 +161,40 @@ const main = async () => {
       body: JSON.stringify({ userId: user.id, pin: "9999" }),
     });
     assert.equal(limitedResult.status, 429);
+
+    const disableResult = await fetchJson(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { ...ADMIN_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: false }),
+    });
+    assert.equal(disableResult.status, 200);
+    assert.equal(disableResult.json.user.isActive, false);
+
+    const activeUsersAfterDisable = await fetchJson("/api/auth/active-users");
+    assert.equal(activeUsersAfterDisable.status, 200);
+    assert.equal(
+      activeUsersAfterDisable.json.users.some((row) => row.id === user.id),
+      false,
+    );
+
+    const disabledPasswordResult = await fetchJson("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: user.email, password }),
+    });
+    assert.equal(disabledPasswordResult.status, 401);
+
+    const disabledPinResult = await fetchJson("/api/auth/pin-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, pin: "2468" }),
+    });
+    assert.equal(disabledPinResult.status, 401);
+
+    const meAfterDisable = await fetchJson("/api/auth/me", {
+      headers: { cookie: pinCookie },
+    });
+    assert.equal(meAfterDisable.status, 401);
 
     console.log("[pin-auth-smoke] pin auth foundation passed");
   } finally {

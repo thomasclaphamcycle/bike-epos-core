@@ -376,8 +376,8 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "COMPLETED" }),
       });
-      assert.equal(toCompleted.status, 201, JSON.stringify(toCompleted.json));
-      assert.equal(toCompleted.json.job.status, "COMPLETED");
+      assert.equal(toCompleted.status, 409, JSON.stringify(toCompleted.json));
+      assert.equal(toCompleted.json.error.code, "WORKSHOP_COLLECTION_REQUIRES_SALE");
 
       const toCancelled = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -392,7 +392,7 @@ const run = async () => {
         { headers: MANAGER_HEADERS },
       );
       assert.equal(audit.status, 200, JSON.stringify(audit.json));
-      assert.ok(audit.json.events.length >= 4, JSON.stringify(audit.json));
+      assert.ok(audit.json.events.length >= 3, JSON.stringify(audit.json));
     }, results);
 
     await runTest("dashboard includes assignment + note stats and new filters", async () => {

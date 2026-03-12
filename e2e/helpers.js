@@ -74,6 +74,7 @@ const ensureUserViaAdminBypass = async (
   const email = `${token}@example.com`;
   const password = options.password || `Playwright!${token}`;
   const pin = options.pin || "1234";
+  const withPin = options.withPin !== false;
   const name = options.name || `${role} ${token}`;
 
   const payload = await apiJsonWithHeaderBypass(request, "POST", "/api/admin/users", "ADMIN", {
@@ -85,20 +86,22 @@ const ensureUserViaAdminBypass = async (
     },
   });
 
-  await apiJsonWithHeaderBypass(request, "POST", "/api/auth/pin", role, {
-    headers: {
-      "X-Staff-Id": payload.user.id,
-    },
-    data: {
-      pin,
-    },
-  });
+  if (withPin) {
+    await apiJsonWithHeaderBypass(request, "POST", "/api/auth/pin", role, {
+      headers: {
+        "X-Staff-Id": payload.user.id,
+      },
+      data: {
+        pin,
+      },
+    });
+  }
 
   return {
     user: payload.user,
     email,
     password,
-    pin,
+    ...(withPin ? { pin } : {}),
   };
 };
 

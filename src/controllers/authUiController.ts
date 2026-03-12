@@ -8,7 +8,7 @@ const normalizeNextPath = (nextPath: unknown) => {
     return "/pos";
   }
   const trimmed = nextPath.trim();
-  if (!trimmed.startsWith("/")) {
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
     return "/pos";
   }
   return trimmed;

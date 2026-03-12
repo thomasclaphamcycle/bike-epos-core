@@ -97,6 +97,12 @@ type WorkshopJobResponse = {
     customerName: string | null;
     bikeDescription: string | null;
     notes: string | null;
+    finalizedBasketId: string | null;
+    sale: {
+      id: string;
+      totalPence: number;
+      createdAt: string;
+    } | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -226,8 +232,6 @@ const getStageActions = (status: string): Array<{ label: string; value: string }
       ];
     case "WAITING_FOR_APPROVAL":
       return [{ label: "Cancel", value: "CANCELLED" }];
-    case "BIKE_READY":
-      return [{ label: "Collected", value: "COMPLETED" }];
     default:
       return [];
   }
@@ -509,8 +513,18 @@ export const WorkshopJobPage = () => {
     }
   };
 
-  const convertToSale = async () => {
+  const openPosHandoff = async () => {
     if (!id) {
+      return;
+    }
+
+    if (payload?.job.sale) {
+      navigate(`/pos?saleId=${encodeURIComponent(payload.job.sale.id)}`);
+      return;
+    }
+
+    if (payload?.job.finalizedBasketId) {
+      navigate(`/pos?basketId=${encodeURIComponent(payload.job.finalizedBasketId)}`);
       return;
     }
 
@@ -519,11 +533,10 @@ export const WorkshopJobPage = () => {
         `/api/workshop/jobs/${encodeURIComponent(id)}/finalize`,
         {},
       );
-      const basketId = response.basket.id;
-      success("Workshop job converted. Opening POS.");
-      navigate(`/pos?basketId=${encodeURIComponent(basketId)}`);
+      success("Workshop handed off to POS.");
+      navigate(`/pos?basketId=${encodeURIComponent(response.basket.id)}`);
     } catch (convertError) {
-      const message = convertError instanceof Error ? convertError.message : "Unable to convert job";
+      const message = convertError instanceof Error ? convertError.message : "Unable to open POS handoff";
       error(message);
     }
   };
@@ -645,9 +658,15 @@ export const WorkshopJobPage = () => {
         <div className="card-header-row">
           <h1>Workshop Job {id.slice(0, 8)}</h1>
           <div className="actions-inline">
-            <button type="button" className="primary" onClick={convertToSale}>
-              Convert to Sale
-            </button>
+            {payload?.job.status !== "CLOSED" && payload?.job.status !== "CANCELLED" ? (
+              <button type="button" className="primary" onClick={openPosHandoff}>
+                {payload?.job.sale
+                  ? "Open sale"
+                  : payload?.job.finalizedBasketId
+                    ? "Open POS handoff"
+                    : "Send to POS"}
+              </button>
+            ) : null}
             <a
               href={toBackendUrl(`/workshop/${encodeURIComponent(id)}/print`)}
               target="_blank"
@@ -719,6 +738,13 @@ export const WorkshopJobPage = () => {
               Estimate approval is stored using the existing raw workshop job status. This keeps the
               workflow additive, but approval does not live in a separate estimate object in v1.
             </p>
+
+            {rawStatus === "BIKE_READY" ? (
+              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+                Collection is completed through POS checkout. Use the POS handoff button above instead of
+                manually marking the job collected.
+              </div>
+            ) : null}
           </>
         ) : null}
       </section>

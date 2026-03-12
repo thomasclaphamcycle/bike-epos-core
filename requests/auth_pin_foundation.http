@@ -1,7 +1,7 @@
-### Active users for PIN login selection
+### Active users for PIN login selection (`hasPin` shows whether PIN login is available)
 GET http://localhost:3000/api/auth/active-users
 
-### Password login (existing path remains active)
+### Password login (existing path remains active and pairs with the `/login` password fallback UI)
 POST http://localhost:3000/api/auth/login
 Content-Type: application/json
 

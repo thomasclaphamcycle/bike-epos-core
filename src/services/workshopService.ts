@@ -1,4 +1,5 @@
 import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getOrCreateDefaultLocationTx } from "./locationService";
@@ -363,6 +364,11 @@ const toJobResponse = (job: {
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  sale?: {
+    id: string;
+    totalPence: number;
+    createdAt: Date;
+  } | null;
 }) => ({
   id: job.id,
   customerId: job.customerId,
@@ -373,6 +379,13 @@ const toJobResponse = (job: {
   rawStatus: job.status,
   notes: job.notes,
   finalizedBasketId: job.finalizedBasketId,
+  sale: job.sale
+    ? {
+        id: job.sale.id,
+        totalPence: job.sale.totalPence,
+        createdAt: job.sale.createdAt,
+      }
+    : null,
   closedAt: job.closedAt,
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
@@ -527,6 +540,13 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
   const job = await prisma.workshopJob.findUnique({
     where: { id: workshopJobId },
     include: {
+      sale: {
+        select: {
+          id: true,
+          totalPence: true,
+          createdAt: true,
+        },
+      },
       lines: {
         include: {
           product: {
@@ -576,9 +596,10 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
     throw new HttpError(400, "No fields provided", "INVALID_WORKSHOP_JOB_UPDATE");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
     const data: Prisma.WorkshopJobUpdateInput = {};
+    let shouldEmitCompletion = false;
 
     if (Object.prototype.hasOwnProperty.call(input, "customerName")) {
       const customerName = normalizeOptionalText(input.customerName);
@@ -606,14 +627,29 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
 
     if (Object.prototype.hasOwnProperty.call(input, "status")) {
       const parsed = parseWorkflowStatus(input.status ?? "");
+      if (parsed === "COLLECTED" || parsed === "CLOSED") {
+        const existingSale = await tx.sale.findUnique({
+          where: { workshopJobId },
+          select: { id: true },
+        });
+        if (!existingSale) {
+          throw new HttpError(
+            409,
+            "Workshop job must be checked out to a sale before collection",
+            "WORKSHOP_COLLECTION_REQUIRES_SALE",
+          );
+        }
+      }
       data.status = toWorkshopJobStatus(parsed);
       if (parsed === "CLOSED") {
         data.closedAt = job.closedAt ?? new Date();
         data.completedAt = job.completedAt ?? new Date();
+        shouldEmitCompletion = !job.completedAt;
       } else {
         data.closedAt = null;
         if (parsed === "COLLECTED") {
           data.completedAt = job.completedAt ?? new Date();
+          shouldEmitCompletion = !job.completedAt;
         }
       }
     }
@@ -623,8 +659,25 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
       data,
     });
 
-    return toJobResponse(updated);
+    return {
+      job: toJobResponse(updated),
+      emittedCompletion: shouldEmitCompletion && Boolean(updated.completedAt),
+      completedAt: updated.completedAt,
+    };
   });
+
+  if (result.emittedCompletion && result.completedAt) {
+    emit("workshop.job.completed", {
+      id: result.job.id,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      status: "COMPLETED",
+      completedAt: result.completedAt.toISOString(),
+    });
+  }
+
+  return result.job;
 };
 
 export const attachCustomerToWorkshopJob = async (
@@ -1068,13 +1121,28 @@ export const closeWorkshopJob = async (workshopJobId: string) => {
     throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
     if (job.closedAt) {
       return {
         job: toJobResponse(job),
         idempotent: true,
+        emittedCompletion: false,
+        completedAt: job.completedAt,
       };
+    }
+
+    const existingSale = await tx.sale.findUnique({
+      where: { workshopJobId },
+      select: { id: true },
+    });
+
+    if (!existingSale) {
+      throw new HttpError(
+        409,
+        "Workshop job must be checked out to a sale before collection",
+        "WORKSHOP_COLLECTION_REQUIRES_SALE",
+      );
     }
 
     const closed = await tx.workshopJob.update({
@@ -1089,6 +1157,24 @@ export const closeWorkshopJob = async (workshopJobId: string) => {
     return {
       job: toJobResponse(closed),
       idempotent: false,
+      emittedCompletion: !job.completedAt && Boolean(closed.completedAt),
+      completedAt: closed.completedAt,
     };
   });
+
+  if (result.emittedCompletion && result.completedAt) {
+    emit("workshop.job.completed", {
+      id: result.job.id,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      status: "COMPLETED",
+      completedAt: result.completedAt.toISOString(),
+    });
+  }
+
+  return {
+    job: result.job,
+    idempotent: result.idempotent,
+  };
 };

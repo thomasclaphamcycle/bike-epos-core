@@ -21,7 +21,7 @@ type ViewMode = "board" | "list";
 type DisplayBucket = "booked" | "inProgress" | "waitingParts" | "ready" | "completed";
 type QuickAction = {
   label: string;
-  kind: "status" | "approval";
+  kind: "status" | "approval" | "navigate";
   value: string;
 };
 
@@ -44,6 +44,7 @@ type DashboardJob = {
     id: string;
     totalPence: number;
   } | null;
+  finalizedBasketId?: string | null;
   partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
   partsSummary?: {
     requiredQty: number;
@@ -187,7 +188,7 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
       ];
     case "BIKE_READY":
       return [
-        { label: "Complete", kind: "status", value: "COMPLETED" },
+        { label: "Collection Queue", kind: "navigate", value: "/workshop/collection" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     default:
@@ -270,6 +271,11 @@ export const WorkshopPage = () => {
   const runQuickAction = async (jobId: string, action: QuickAction) => {
     if (action.kind === "approval") {
       await updateApprovalStatus(jobId, action.value as "WAITING_FOR_APPROVAL" | "APPROVED");
+      return;
+    }
+
+    if (action.kind === "navigate") {
+      navigate(action.value);
       return;
     }
 

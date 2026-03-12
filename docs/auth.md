@@ -8,7 +8,7 @@ The app uses real authentication by default (`AUTH_MODE=real`) with cookie-based
 - `POST /api/auth/pin-login` with `{ userId, pin }` sets the same HTTP-only auth cookie for the current PIN-first login UI.
 - `POST /api/auth/logout` clears the cookie.
 - `GET /api/auth/me` returns the authenticated user.
-- `GET /api/auth/active-users` returns the active login-button list for the React login screen.
+- `GET /api/auth/active-users` returns the active login-button list for the React login screen, including whether each account currently has a PIN set.
 - Protected routes use `requireRoleAtLeast("STAFF" | "MANAGER" | "ADMIN")`.
 
 Roles are stored in DB (`User.role`) and enforced from the authenticated user, not from headers.
@@ -64,14 +64,14 @@ POST /api/auth/bootstrap
 
 1. Start app (`npm run dev`).
 2. Open `/login`.
-3. Select an active user button and enter a 4-digit PIN.
-4. On successful PIN login, navigate to the authorized area based on role.
-5. Password login remains preserved in the backend as a controlled fallback path.
+3. Select an active user button and enter a 4-digit PIN when the account has a PIN set.
+4. If the account is password-only or its PIN has been reset, use the password fallback form on the same `/login` screen.
+5. On successful login, navigate through `/home` to the authorized area based on role.
 
 ## Default Routes and Navigation
 
 - When the React SPA is active, `/` loads the app shell and immediately routes authenticated users through `/home` to their role landing page (`/dashboard`, `/management`, or `/management/staff`).
-- In backend-only/non-SPA mode, `/` continues to redirect authenticated users to `/pos`; unauthenticated access still goes to `/login`.
+- In backend-only/non-SPA mode, `/` continues to redirect authenticated users to `/pos`; the legacy server-rendered `/login` page also keeps `/pos` as its default fallback target.
 - Protected HTML pages redirect to `/login?next=...` if unauthenticated.
 - If authenticated but role is insufficient, HTML pages redirect to `/not-authorized`.
 - Current UX branch shell visibility is intentionally reduced while navigation is being refined.
@@ -81,4 +81,4 @@ POST /api/auth/bootstrap
 
 Smoke scripts run with `NODE_ENV=test`, so header fallback remains available for existing milestone scripts.
 
-New auth/admin/till smoke tests validate backend auth behavior, while the current React login UI uses `GET /api/auth/active-users` plus `POST /api/auth/pin-login`.
+New auth/admin/till smoke tests validate backend auth behavior, while the current React login UI uses `GET /api/auth/active-users`, `POST /api/auth/pin-login`, and the preserved password fallback path as needed.

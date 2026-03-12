@@ -28,6 +28,7 @@ export type ActiveLoginUser = {
   id: string;
   displayName: string;
   role: UserRole;
+  hasPin: boolean;
 };
 
 const ACTIVE_LOGIN_ROLE_PRIORITY: Record<UserRole, number> = {
@@ -74,14 +75,16 @@ export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
       username: true,
       name: true,
       role: true,
+      pinHash: true,
     },
   });
 
   return users
     .map((user) => ({
-    id: user.id,
-    displayName: user.name?.trim() || user.username,
-    role: user.role,
+      id: user.id,
+      displayName: user.name?.trim() || user.username,
+      role: user.role,
+      hasPin: Boolean(user.pinHash),
     }))
     .sort((left, right) => {
       const roleOrder = ACTIVE_LOGIN_ROLE_PRIORITY[left.role] - ACTIVE_LOGIN_ROLE_PRIORITY[right.role];

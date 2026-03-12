@@ -8,6 +8,8 @@ const {
   uniqueToken,
 } = require("./helpers");
 
+const frontendBaseUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
+
 const parseOnHand = (labelText) => {
   const match = labelText.match(/On hand:\s*(-?\d+)/i);
   if (!match) {
@@ -58,6 +60,9 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
   await page.goto("/workshop");
   await expect(page).toHaveURL(/\/workshop/);
+  await page.goto(`${frontendBaseUrl}/home`);
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(primaryNav).toBeVisible();
 
   const managerCredentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
@@ -88,6 +93,28 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
   await page.goto("/management/staff");
   await expect(page).toHaveURL(/\/management\/staff/);
+});
+
+test("Password fallback login works for active users without a PIN", async ({ page, request }) => {
+  const passwordOnlyCredentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "password-fallback",
+    withPin: false,
+  });
+  const passwordOnlyButton = page.getByTestId(`login-user-${passwordOnlyCredentials.user.id}`);
+
+  await page.goto(`${frontendBaseUrl}/login`);
+  await expect(passwordOnlyButton).toContainText("Password only");
+  await passwordOnlyButton.click();
+  await expect(page.getByText("This account does not have a PIN yet. Use email and password below.")).toBeVisible();
+  await expect(page.getByTestId("login-pin")).toBeDisabled();
+
+  await page.getByTestId("login-password-email").fill(passwordOnlyCredentials.email);
+  await page.getByTestId("login-password-value").fill(passwordOnlyCredentials.password);
+  await page.getByTestId("login-password-submit").click();
+
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toBeVisible();
 });
 
 test("Login then POS page loads and can search products", async ({ page, request }) => {

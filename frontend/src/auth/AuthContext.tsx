@@ -15,6 +15,7 @@ type AuthUser = {
   name: string | null;
   role: "STAFF" | "MANAGER" | "ADMIN";
   isActive: boolean;
+  hasPin: boolean;
 };
 
 type AuthContextValue = {
@@ -72,6 +73,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
       }
     })();
+  }, [refresh]);
+
+  useEffect(() => {
+    const syncAuthState = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      void refresh().catch(() => {
+        // Let the next explicit auth action surface non-auth errors.
+      });
+    };
+
+    window.addEventListener("focus", syncAuthState);
+    document.addEventListener("visibilitychange", syncAuthState);
+
+    return () => {
+      window.removeEventListener("focus", syncAuthState);
+      document.removeEventListener("visibilitychange", syncAuthState);
+    };
   }, [refresh]);
 
   const login = useCallback(async (identifier: string, password: string) => {

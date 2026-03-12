@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
 type CollectionJob = {
   id: string;
   status: string;
+  finalizedBasketId: string | null;
   scheduledDate: string | null;
   bikeDescription: string | null;
   depositStatus: string;
@@ -33,10 +34,11 @@ const customerName = (job: CollectionJob) =>
   job.customer ? [job.customer.firstName, job.customer.lastName].filter(Boolean).join(" ") || "-" : "-";
 
 export const WorkshopCollectionPage = () => {
+  const navigate = useNavigate();
   const { success, error } = useToasts();
   const [jobs, setJobs] = useState<CollectionJob[]>([]);
   const [loading, setLoading] = useState(false);
-  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [handoffId, setHandoffId] = useState<string | null>(null);
 
   const loadReadyJobs = async () => {
     setLoading(true);
@@ -59,22 +61,34 @@ export const WorkshopCollectionPage = () => {
   const summary = useMemo(() => ({
     readyCount: jobs.length,
     withSaleCount: jobs.filter((job) => Boolean(job.sale)).length,
-    unpaidOrUnpreparedCount: jobs.filter((job) => !job.sale).length,
+    handoffReadyCount: jobs.filter((job) => Boolean(job.sale || job.finalizedBasketId)).length,
+    needsHandoffCount: jobs.filter((job) => !job.sale && !job.finalizedBasketId).length,
     depositPaidCount: jobs.filter((job) => job.depositStatus === "PAID" || job.depositStatus === "NOT_REQUIRED").length,
   }), [jobs]);
 
-  const confirmCollected = async (jobId: string) => {
-    setCompletingId(jobId);
+  const openCollectionHandoff = async (job: CollectionJob) => {
+    if (job.sale) {
+      navigate(`/pos?saleId=${encodeURIComponent(job.sale.id)}`);
+      return;
+    }
+
+    if (job.finalizedBasketId) {
+      navigate(`/pos?basketId=${encodeURIComponent(job.finalizedBasketId)}`);
+      return;
+    }
+
+    setHandoffId(job.id);
     try {
-      await apiPost(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
-        status: "COMPLETED",
-      });
-      success("Collection confirmed");
-      await loadReadyJobs();
-    } catch (completeError) {
-      error(completeError instanceof Error ? completeError.message : "Failed to confirm collection");
+      const result = await apiPost<{ basket: { id: string } }>(
+        `/api/workshop/jobs/${encodeURIComponent(job.id)}/finalize`,
+        {},
+      );
+      success("Workshop handed off to POS");
+      navigate(`/pos?basketId=${encodeURIComponent(result.basket.id)}`);
+    } catch (handoffError) {
+      error(handoffError instanceof Error ? handoffError.message : "Failed to open POS handoff");
     } finally {
-      setCompletingId(null);
+      setHandoffId(null);
     }
   };
 
@@ -105,12 +119,17 @@ export const WorkshopCollectionPage = () => {
           <div className="metric-card">
             <span className="metric-label">Linked Sale Visible</span>
             <strong className="metric-value">{summary.withSaleCount}</strong>
-            <span className="dashboard-metric-detail">Jobs already linked to a sale record</span>
+            <span className="dashboard-metric-detail">Ready jobs already linked to a sale record</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Needs Invoice / Payment Check</span>
-            <strong className="metric-value">{summary.unpaidOrUnpreparedCount}</strong>
-            <span className="dashboard-metric-detail">No linked sale visible yet</span>
+            <span className="metric-label">POS Handoff Ready</span>
+            <strong className="metric-value">{summary.handoffReadyCount}</strong>
+            <span className="dashboard-metric-detail">Sale or POS basket already available</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Needs POS Handoff</span>
+            <strong className="metric-value">{summary.needsHandoffCount}</strong>
+            <span className="dashboard-metric-detail">No linked sale or POS basket yet</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Deposit OK</span>
@@ -130,7 +149,7 @@ export const WorkshopCollectionPage = () => {
                 <th>Bike</th>
                 <th>Promised</th>
                 <th>Deposit</th>
-                <th>Sale Visibility</th>
+                <th>Collection Readiness</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -154,20 +173,30 @@ export const WorkshopCollectionPage = () => {
                         <div className="table-primary">Sale {job.sale.id.slice(0, 8)}</div>
                         <div className="table-secondary">{formatMoney(job.sale.totalPence)}</div>
                       </div>
+                    ) : job.finalizedBasketId ? (
+                      <div>
+                        <div className="table-primary">POS basket ready</div>
+                        <div className="table-secondary">Basket {job.finalizedBasketId.slice(0, 8)}</div>
+                      </div>
                     ) : (
-                      <span className="parts-short">No linked sale visible</span>
+                      <span className="parts-short">Needs POS handoff</span>
                     )}
                   </td>
                   <td>
                     <div className="actions-inline">
                       <Link to={`/workshop/${job.id}`}>Open job</Link>
-                      {job.sale ? <Link to={`/pos?saleId=${encodeURIComponent(job.sale.id)}`}>Open sale</Link> : null}
                       <button
                         type="button"
-                        onClick={() => void confirmCollected(job.id)}
-                        disabled={completingId === job.id}
+                        onClick={() => void openCollectionHandoff(job)}
+                        disabled={handoffId === job.id}
                       >
-                        {completingId === job.id ? "Confirming..." : "Confirm collection"}
+                        {handoffId === job.id
+                          ? "Opening..."
+                          : job.sale
+                            ? "Open sale"
+                            : job.finalizedBasketId
+                              ? "Open POS handoff"
+                              : "Send to POS"}
                       </button>
                     </div>
                   </td>
@@ -177,7 +206,7 @@ export const WorkshopCollectionPage = () => {
           </table>
         </div>
         <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-          This queue uses current workshop status and sale linkage only. If a linked sale is not visible yet, drill into the job before handover.
+          Collection is completed by POS checkout. Ready jobs without a linked sale stay in this queue until staff open or create the POS handoff.
         </div>
       </section>
     </div>

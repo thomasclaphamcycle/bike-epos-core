@@ -80,10 +80,28 @@ const waitForServer = async () => {
 
 const cleanup = async (state) => {
   const basketIds = Array.from(state.basketIds);
+  const saleIds = Array.from(state.saleIds);
   const workshopJobIds = Array.from(state.workshopJobIds);
   const variantIds = Array.from(state.variantIds);
   const productIds = Array.from(state.productIds);
   const userIds = Array.from(state.userIds);
+
+  if (saleIds.length > 0) {
+    await prisma.payment.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
+    await prisma.sale.deleteMany({
+      where: {
+        id: {
+          in: saleIds,
+        },
+      },
+    });
+  }
 
   if (basketIds.length > 0) {
     await prisma.basketItem.deleteMany({
@@ -174,6 +192,7 @@ const cleanup = async (state) => {
 const run = async () => {
   const state = {
     basketIds: new Set(),
+    saleIds: new Set(),
     workshopJobIds: new Set(),
     variantIds: new Set(),
     productIds: new Set(),
@@ -339,6 +358,39 @@ const run = async () => {
     });
     assert.equal(getJobRes.status, 200, JSON.stringify(getJobRes.json));
     assert.equal(getJobRes.json.job.finalizedBasketId, finalizeRes.json.basket.id);
+
+    const checkoutRes = await fetchJson(`/api/baskets/${finalizeRes.json.basket.id}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        paymentMethod: "CARD",
+        amountPence: finalizeRes.json.basket.totals.totalPence,
+        providerRef: `m30-checkout-${uniqueRef()}`,
+      }),
+    });
+    assert.equal(checkoutRes.status, 201, JSON.stringify(checkoutRes.json));
+    state.saleIds.add(checkoutRes.json.sale.id);
+
+    const linkedSale = await prisma.sale.findUnique({
+      where: { id: checkoutRes.json.sale.id },
+      select: {
+        id: true,
+        basketId: true,
+        workshopJobId: true,
+      },
+    });
+    assert.equal(linkedSale?.basketId, finalizeRes.json.basket.id);
+    assert.equal(linkedSale?.workshopJobId, workshopJobId);
+
+    const jobAfterCheckout = await prisma.workshopJob.findUnique({
+      where: { id: workshopJobId },
+      select: {
+        status: true,
+        completedAt: true,
+      },
+    });
+    assert.equal(jobAfterCheckout?.status, "COMPLETED");
+    assert.ok(jobAfterCheckout?.completedAt, "Expected workshop completedAt after POS checkout");
 
     console.log("M30 smoke tests passed.");
   } finally {

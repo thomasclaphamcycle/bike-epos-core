@@ -392,6 +392,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
       id: job.id,
       status: job.status,
       source: job.source,
+      finalizedBasketId: job.finalizedBasketId,
       scheduledDate: job.scheduledDate,
       notes: job.notes,
       depositRequiredPence: job.depositRequiredPence,

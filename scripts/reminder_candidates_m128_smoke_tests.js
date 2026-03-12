@@ -76,6 +76,9 @@ const waitForReminderCandidate = async (workshopJobId) => {
 };
 
 const cleanup = async (state) => {
+  if (state.saleIds.length) {
+    await prisma.sale.deleteMany({ where: { id: { in: state.saleIds } } });
+  }
   if (state.workshopJobIds.length) {
     await prisma.workshopJob.deleteMany({ where: { id: { in: state.workshopJobIds } } });
   }
@@ -85,7 +88,7 @@ const cleanup = async (state) => {
 };
 
 const main = async () => {
-  const state = { customerIds: [], workshopJobIds: [] };
+  const state = { customerIds: [], workshopJobIds: [], saleIds: [] };
   let startedServer = false;
   let serverProcess = null;
 
@@ -166,15 +169,15 @@ const main = async () => {
     });
     assert.equal(candidateCountBeforeCompletion, 0);
 
-    const complete = await fetchJson(`/api/workshop/jobs/${workshopJobId}/status`, {
+    const complete = await fetchJson(`/api/workshop/jobs/${workshopJobId}/checkout`, {
       method: "POST",
       headers: STAFF_HEADERS,
       body: JSON.stringify({
-        status: "COMPLETED",
+        saleTotalPence: 0,
       }),
     });
     assert.equal(complete.status, 201, JSON.stringify(complete.json));
-    assert.equal(complete.json.job.status, "COMPLETED");
+    state.saleIds.push(complete.json.sale.id);
 
     const candidate = await waitForReminderCandidate(workshopJobId);
     assert.equal(candidate.customerId, customer.id);
@@ -182,20 +185,28 @@ const main = async () => {
     assert.equal(candidate.sourceEvent, "workshop.job.completed");
     assert.equal(candidate.status, "PENDING");
 
-    const completedAt = new Date(complete.json.job.completedAt);
+    const completedJob = await prisma.workshopJob.findUnique({
+      where: { id: workshopJobId },
+      select: { status: true, completedAt: true },
+    });
+    assert.equal(completedJob?.status, "COMPLETED");
+    assert.ok(completedJob?.completedAt);
+
+    const completedAt = new Date(completedJob.completedAt);
     const dueAt = new Date(candidate.dueAt);
     const dueDays = Math.round((dueAt.getTime() - completedAt.getTime()) / 86_400_000);
     assert.equal(dueDays, 90);
 
-    const replay = await fetchJson(`/api/workshop/jobs/${workshopJobId}/status`, {
+    const replay = await fetchJson(`/api/workshop/jobs/${workshopJobId}/checkout`, {
       method: "POST",
       headers: STAFF_HEADERS,
       body: JSON.stringify({
-        status: "COMPLETED",
+        saleTotalPence: 0,
       }),
     });
     assert.equal(replay.status, 200, JSON.stringify(replay.json));
     assert.equal(replay.json.idempotent, true);
+    assert.equal(replay.json.sale.id, complete.json.sale.id);
 
     await sleep(300);
 
@@ -218,7 +229,7 @@ const main = async () => {
     assert.equal(row.reviewState, "UNREVIEWED");
     assert.equal(row.reviewedAt, null);
     assert.equal(row.daysOverdue, 0);
-    assert.equal(row.completedAt.slice(0, 10), complete.json.job.completedAt.slice(0, 10));
+    assert.equal(row.completedAt.slice(0, 10), completedJob.completedAt.toISOString().slice(0, 10));
 
     const review = await fetchJson(
       `/api/reports/reminder-candidates/${candidate.id}/review`,
