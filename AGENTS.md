@@ -243,6 +243,31 @@ Minimum expectations depend on the surface changed:
 - Cross-cutting change: `npm test`, `npm run e2e`, and frontend build
 - Schema change: `npx prisma generate`, `npx prisma migrate dev`, seed validation
 
+## Verification Environment Safety
+
+- Before running verification commands, ensure the development environment is clean.
+- No stale dev/test servers should be running on shared ports such as `3100`.
+- Terminate any leftover Node or test server processes from previous runs.
+- Ensure verification commands run sequentially and not concurrently.
+
+Verification commands should run in this order:
+
+- `npm test`
+- `npm run build`
+- `npm run e2e`
+- `npm run test:m38` if present
+- any repository-specific smoke tests
+
+If a port conflict or stale server is detected:
+
+- stop verification
+- terminate the stale process
+- restart verification from the beginning
+
+Agents may check for processes using the shared test port before verification. Example:
+
+- `lsof -i :3100`
+
 Current baseline smoke runner: `scripts/run_smoke_suite.js`
 
 Smoke runner expectations:
