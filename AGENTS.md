@@ -250,6 +250,32 @@ Minimum expectations depend on the surface changed:
 - Terminate any leftover Node or test server processes from previous runs.
 - Ensure verification commands run sequentially and not concurrently.
 
+## Release Verification Rule
+
+CorePOS uses a single release verification command.
+
+Before committing feature work, pushing changes, or creating a release tag, agents must run:
+
+- `npm run verify`
+
+This command runs the full release validation pipeline and replaces the manual sequence:
+
+- `NODE_ENV=test npm run test:m11`
+- `NODE_ENV=test npm test`
+- `npm run build`
+- `NODE_ENV=test npm run e2e`
+- `NODE_ENV=test npm run test:m38`
+- `NODE_ENV=test npm run test:m24`
+- `NODE_ENV=test npm run test:m27`
+- `NODE_ENV=test npm run test:m30`
+- `npm run db:seed:dev`
+
+Guidelines for agents:
+
+- Always run `npm run verify` before committing feature work or preparing a release.
+- Do not expand the verification sequence manually unless debugging a failure.
+- If `npm run verify` fails, stop and report the failing step instead of committing.
+
 ## Codex Project Config
 
 - Project-scoped Codex defaults live in `.codex/config.toml`.
