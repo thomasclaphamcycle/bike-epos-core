@@ -2,6 +2,12 @@
 
 Node/TypeScript + Express + Prisma + Postgres backend for bike EPOS workflows.
 
+## Prerequisites
+
+- local PostgreSQL running on `localhost:5432`
+- Node.js with `npm`
+- two terminals when evaluating the React SPA locally
+
 ## Trial Quickstart
 
 1. Install backend dependencies:
@@ -23,10 +29,9 @@ cp .env.example .env
 cp .env.test.example .env.test
 ```
 
-4. Start the test database, then prepare the local development database:
+4. Prepare the local development database:
 
 ```bash
-npm run test:db:up
 npx prisma generate
 npx prisma migrate dev
 npm run db:seed:dev
@@ -83,18 +88,18 @@ If `prisma migrate dev` reports drift against an old local dev database, reset o
 node scripts/reset_local_dev_db.js
 ```
 
-3. Start dedicated test DB + migrations:
-
-```bash
-npm run test:db:up
-```
-
-4. Prepare the local development database:
+3. Prepare the local development database:
 
 ```bash
 npx prisma generate
 npx prisma migrate dev
 npm run db:seed:dev
+```
+
+4. Start the backend:
+
+```bash
+npm run dev
 ```
 
 5. Install and run the React frontend when evaluating the SPA locally:
@@ -103,6 +108,20 @@ npm run db:seed:dev
 npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
+
+6. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
+
+```bash
+npm run test:db:up
+```
+
+7. If you are using Codex locally, this repo already ships a project-scoped `.codex/config.toml` with:
+
+- `sandbox_mode = "workspace-write"`
+- `approval_policy = "never"`
+- `[sandbox_workspace_write].network_access = true`
+
+That keeps local automation project-scoped while still allowing trusted access to local services such as PostgreSQL on `localhost:5432`.
 
 ## Auth (M35)
 
@@ -126,6 +145,14 @@ These demo accounts are created by `scripts/seed_demo_data.ts` and are intended 
 | Admin | `admin@local` | `admin123` | `4444` | `/management/staff` |
 
 The login screen is intentionally PIN-first. The same seeded accounts also keep password login so evaluators can verify both paths.
+
+`npm run db:seed:dev` now keeps the demo environment intentionally small:
+
+- 3 role-based users
+- 7 products with opening stock in `Main Stock`
+- 4 customers
+- 3 workshop jobs
+- 1 supplier and 1 open purchase order for receiving
 
 ### Create initial admin
 
@@ -163,14 +190,13 @@ Current UX-branch shell visibility:
 Recommended evaluator pass:
 
 1. Log in as `staff@local` with PIN `1111` and confirm `/home` routes to `/dashboard`.
-2. Open POS and complete a simple sale against the seeded products and customers.
-3. Open Workshop to review seeded jobs across booking, in-progress, ready, and completed states.
-4. Log in as `manager@local` with PIN `2222` to review management pages, inventory visibility, purchasing, and receiving.
-5. Log in as `admin@local` with PIN `4444` to review staff management and password/PIN lifecycle controls.
+2. Open `/pos`, attach a seeded customer, add one or two seeded products, and complete a simple sale.
+3. Open `/workshop` and `/workshop/collection` to review the three seeded jobs across booking, waiting-for-parts, and ready-for-collection states.
+4. Log in as `manager@local` with PIN `2222`, then review `/inventory`, `/purchasing`, and `/management` using the seeded supplier and open purchase order.
+5. Log in as `admin@local` with PIN `4444` and review `/management/staff` for staff lifecycle and password/PIN controls.
 
 Intentional trial limitations to note:
 
-- purchasing and supplier flows start light; if no suppliers exist yet, create one from `/suppliers` before creating a PO
 - some management surfaces are visibility/reporting groundwork rather than full operational modules
 - backend-only legacy HTML routes still exist, but the current evaluator path is the React SPA
 
@@ -299,6 +325,27 @@ E2E covers:
 - login + workshop critical paths
 - admin permissions
 - till open/paid-in/count/close flow
+
+### Full local verification pass
+
+Run these sequentially from a clean environment:
+
+```bash
+npm test
+npm run build
+npm run e2e
+npm run test:m38
+npm run test:m24
+npm run test:m27
+npm run test:m30
+npm run db:seed:dev
+```
+
+Notes:
+
+- keep shared test ports such as `3100` clear before starting
+- standalone smoke commands start their own local test-mode server on `http://localhost:3100`
+- run `npm run test:db:up` first if the dedicated test database is not already running
 
 ## Dev Workflow
 

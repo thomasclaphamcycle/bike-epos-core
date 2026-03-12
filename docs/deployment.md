@@ -5,7 +5,7 @@
 Backend:
 
 - `DATABASE_URL` (PostgreSQL connection string)
-- `JWT_SECRET`
+- `AUTH_JWT_SECRET`
 - `COOKIE_SECRET`
 - `PORT` (default `3000`)
 - `NODE_ENV` (`development`, `test`, or `production`)
@@ -41,33 +41,34 @@ If you previously ran a different branch and `npx prisma migrate dev` reports dr
 node scripts/reset_local_dev_db.js
 ```
 
-2. Run migrations:
+2. Run migrations and seed demo data:
 
 ```bash
 npx prisma generate
 npx prisma migrate dev
-```
-
-3. Seed demo data:
-
-```bash
 npm run db:seed:dev
 ```
 
-4. Start backend (server-rendered UI and APIs):
+3. Start backend (server-rendered UI and APIs):
 
 ```bash
 npm run dev
 ```
 
-5. Optional React UI development server:
+4. Optional React UI development server for the current evaluator path:
 
 ```bash
-npm --prefix frontend install
+npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
-The React app proxies `/api` to `http://localhost:3000` in development.
+The React app proxies `/api` to `http://localhost:3000` in development and is the recommended trial/evaluation surface on `http://localhost:5173/login`.
+
+5. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
+
+```bash
+npm run test:db:up
+```
 
 ## Production Build
 
@@ -86,6 +87,10 @@ npm run start:prod
 In production (`NODE_ENV=production`), the backend serves static files from `frontend/dist` and returns `index.html` for non-API SPA routes.
 
 Legacy printable routes (for example receipt and workshop print views) continue to be served by backend HTML handlers.
+
+## Local Automation Note
+
+This repo includes a project-scoped `.codex/config.toml` for trusted local development. It keeps Codex in `workspace-write`, sets `approval_policy = "never"`, and enables workspace-write network access so local services such as PostgreSQL on `localhost:5432` remain reachable without switching to full-access mode.
 
 ## Test Seeding
 

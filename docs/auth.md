@@ -62,12 +62,14 @@ POST /api/auth/bootstrap
 
 ## Local Login Flow
 
-1. Start app (`npm run dev`).
+1. Start the backend (`npm run dev`).
 2. Start the React frontend for the trial path (`npm --prefix frontend run dev`).
 3. Open `http://localhost:5173/login`.
 4. Select an active user button and enter a 4-digit PIN when the account has a PIN set.
 5. If the account is password-only or its PIN has been reset, use the password fallback form on the same `/login` screen.
 6. On successful login, navigate through `/home` to the authorized area based on role.
+
+If the React frontend is not running, the backend-only login surface remains available on `http://localhost:3000/login`, but the current trial/evaluator path is the React SPA on `http://localhost:5173`.
 
 ## Seeded Demo Accounts
 
@@ -79,7 +81,9 @@ After `npm run db:seed:dev`, the demo seed creates these trial users:
 | MANAGER | `manager@local` | `manager123` | `2222` | `/management` |
 | ADMIN | `admin@local` | `admin123` | `4444` | `/management/staff` |
 
-The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows.
+The demo seed keeps the login list intentionally minimal at three clearly named role accounts. The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows.
+
+Inactive or disabled users are not shown in the active-user login list and cannot authenticate through either the PIN or password flow.
 
 ## Default Routes and Navigation
 
