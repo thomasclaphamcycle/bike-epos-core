@@ -199,21 +199,29 @@ const main = async () => {
     });
     state.purchaseOrderIds.push(purchaseOrder.id);
 
-    const customer = await prisma.customer.create({
+    const reminderCustomer = await prisma.customer.create({
       data: {
-        name: `M126 Customer ${RUN_REF}`,
-        firstName: "M126",
+        name: `M126 Reminder ${RUN_REF}`,
+        firstName: "Reminder",
         lastName: RUN_REF,
-        email: `m126-${RUN_REF}@local`,
+        email: `m126-reminder-${RUN_REF}@local`,
       },
     });
-    state.customerIds.push(customer.id);
+    const backlogCustomer = await prisma.customer.create({
+      data: {
+        name: `M126 Backlog ${RUN_REF}`,
+        firstName: "Backlog",
+        lastName: RUN_REF,
+        email: `m126-backlog-${RUN_REF}@local`,
+      },
+    });
+    state.customerIds.push(reminderCustomer.id, backlogCustomer.id);
 
     const workshopJobs = await Promise.all([
       prisma.workshopJob.create({
         data: {
-          customerId: customer.id,
-          customerName: customer.name,
+          customerId: reminderCustomer.id,
+          customerName: reminderCustomer.name,
           locationId,
           bikeDescription: "Reminder bike",
           status: "COMPLETED",
@@ -223,16 +231,40 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Old Job ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
-          bikeDescription: "Old workshop job",
+          bikeDescription: `M126 backlog anchor ${RUN_REF}`,
           status: "APPROVED",
           createdAt: daysAgo(20),
         },
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Queue A ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
+          locationId,
+          bikeDescription: `M126 recently completed A ${RUN_REF}`,
+          status: "COMPLETED",
+          createdAt: daysAgo(4),
+          completedAt: daysAgo(2),
+        },
+      }),
+      prisma.workshopJob.create({
+        data: {
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
+          locationId,
+          bikeDescription: `M126 recently completed B ${RUN_REF}`,
+          status: "COMPLETED",
+          createdAt: daysAgo(3),
+          completedAt: daysAgo(1),
+        },
+      }),
+      prisma.workshopJob.create({
+        data: {
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue A",
           status: "BOOKING_MADE",
@@ -241,7 +273,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Queue B ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue B",
           status: "WAITING_FOR_APPROVAL",
@@ -250,7 +283,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Queue C ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue C",
           status: "WAITING_FOR_PARTS",
@@ -259,7 +293,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Queue D ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue D",
           status: "ON_HOLD",
@@ -268,7 +303,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Queue E ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue E",
           status: "BIKE_READY",
@@ -277,7 +313,8 @@ const main = async () => {
       }),
       prisma.workshopJob.create({
         data: {
-          customerName: `M126 Queue F ${RUN_REF}`,
+          customerId: backlogCustomer.id,
+          customerName: backlogCustomer.name,
           locationId,
           bikeDescription: "Queue F",
           status: "APPROVED",
@@ -303,7 +340,9 @@ const main = async () => {
     assert.ok(inventorySection, "expected inventory section");
 
     const overduePoRow = purchasingSection.items.find((row) => row.entityId === purchaseOrder.id);
-    const overdueReminderRow = customerSection.items.find((row) => row.entityId === customer.id);
+    const overdueReminderRow = customerSection.items.find((row) => (
+      row.entityId === reminderCustomer.id && row.type === "CUSTOMER_OVERDUE_REMINDER"
+    ));
     const oldJobRow = workshopSection.items.find((row) => row.entityId === workshopJobs[1].id);
     const backlogRow = workshopSection.items.find((row) => row.type === "WORKSHOP_BACKLOG");
     const pricingRow = pricingSection.items.find((row) => row.entityId === pricingProduct.variants[0].id);
@@ -315,14 +354,14 @@ const main = async () => {
 
     assert.ok(overdueReminderRow, "expected overdue reminder action");
     assert.equal(overdueReminderRow.severity, "INFO");
-    assert.equal(overdueReminderRow.link, `/customers/${customer.id}`);
+    assert.equal(overdueReminderRow.link, `/customers/${reminderCustomer.id}`);
 
     assert.ok(oldJobRow, "expected workshop old-job action");
     assert.equal(oldJobRow.severity, "CRITICAL");
 
-    assert.ok(backlogRow || before.json.sections.some((section) => (
-      section.key === "workshop" && section.items.some((row) => row.type === "WORKSHOP_BACKLOG")
-    )), "expected workshop backlog action");
+    assert.ok(backlogRow, "expected workshop backlog action");
+    assert.match(backlogRow.reason, /open jobs/i);
+    assert.equal(backlogRow.link, "/management/capacity");
 
     assert.ok(pricingRow, "expected pricing action");
     assert.equal(pricingRow.type, "MISSING_RETAIL_PRICE");
