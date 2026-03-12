@@ -54,6 +54,20 @@ npm --prefix frontend run dev
 The React evaluator path is frontend on `http://localhost:5173` talking to the backend on `http://localhost:3000`.
 Production-style serving still comes from the backend after `npm run build`.
 
+## Production Deployment Checklist
+
+For a real shop deployment, use the concise production runbook in [docs/production_setup.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/production_setup.md).
+
+It covers:
+
+- production environment variables
+- database initialization and Prisma migrations
+- backup and restore
+- log handling
+- safe upgrade steps
+- recovery procedures
+- minimal hardware guidance
+
 ## Local Setup
 
 1. Install dependencies:

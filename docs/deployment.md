@@ -1,5 +1,7 @@
 # Deployment Guide
 
+For a production-first operator checklist covering backups, restore, safe upgrades, logs, recovery, and minimal hardware guidance, use [production_setup.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/production_setup.md) alongside this document.
+
 ## Required Environment Variables
 
 Backend:
