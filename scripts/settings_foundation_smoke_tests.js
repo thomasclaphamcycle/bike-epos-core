@@ -3,6 +3,8 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
@@ -26,6 +28,21 @@ if (process.env.NODE_ENV !== "test") {
 if (process.env.ALLOW_NON_TEST_DB !== "1" && !DATABASE_URL.toLowerCase().includes("test")) {
   throw new Error("Refusing to run against non-test database URL.");
 }
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+
+const SETTINGS_KEYS = [
+  "store.name",
+  "store.email",
+  "store.phone",
+  "pos.defaultTaxRatePercent",
+  "pos.barcodeSearchAutoFocus",
+  "workshop.defaultJobDurationMinutes",
+  "workshop.defaultDepositPence",
+  "operations.lowStockThreshold",
+];
 
 const fetchJson = async (path, options = {}) => {
   const response = await fetch(`${BASE_URL}${path}`, options);
@@ -78,6 +95,14 @@ const run = async () => {
       await waitForServer();
     }
 
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: SETTINGS_KEYS,
+        },
+      },
+    });
+
     const defaultRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(defaultRes.status, 200, JSON.stringify(defaultRes.json));
     assert.equal(defaultRes.json.settings.store.name, "Bike EPOS");
@@ -128,6 +153,8 @@ const run = async () => {
 
     console.log("[settings-smoke] persisted settings API passed");
   } finally {
+    await prisma.$disconnect();
+
     if (startedServer && serverProcess) {
       serverProcess.kill("SIGTERM");
       await sleep(400);
