@@ -18,6 +18,18 @@ type UpsertStocktakeLineInput = {
   countedQty?: number;
 };
 
+type ScanStocktakeLineInput = {
+  code?: string;
+  quantityDelta?: number;
+};
+
+type BulkStocktakeLinesInput = {
+  lines?: Array<{
+    code?: string;
+    countedQty?: number;
+  }>;
+};
+
 type ListStocktakeFilters = {
   locationId?: string;
   status?: StocktakeStatus;
@@ -120,6 +132,62 @@ const ensureVariantExistsTx = async (
   if (!variant) {
     throw new HttpError(404, "Variant not found", "VARIANT_NOT_FOUND");
   }
+  return variant;
+};
+
+const resolveVariantByCodeTx = async (
+  tx: Prisma.TransactionClient,
+  rawCode: string,
+) => {
+  const code = normalizeOptionalText(rawCode);
+  if (!code) {
+    throw new HttpError(400, "code is required", "INVALID_STOCKTAKE_SCAN");
+  }
+
+  const variant = await tx.variant.findFirst({
+    where: {
+      OR: [
+        {
+          sku: {
+            equals: code,
+            mode: "insensitive",
+          },
+        },
+        {
+          barcode: {
+            equals: code,
+            mode: "insensitive",
+          },
+        },
+        {
+          barcodes: {
+            some: {
+              code: {
+                equals: code,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      product: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!variant) {
+    throw new HttpError(404, "Variant not found for scanned code", "VARIANT_NOT_FOUND");
+  }
+
   return variant;
 };
 
@@ -526,6 +594,250 @@ export const upsertStocktakeLine = async (
 
     const reloaded = await getStocktakeWithLinesOrThrow(tx, stocktakeId);
     return toStocktakeResponseTx(tx, reloaded, true);
+  });
+};
+
+export const scanStocktakeLine = async (
+  stocktakeId: string,
+  input: ScanStocktakeLineInput,
+  auditActor?: AuditActor,
+) => {
+  assertUuidOrThrow(stocktakeId, "Invalid stocktake id", "INVALID_STOCKTAKE_ID");
+
+  const code = normalizeOptionalText(input.code);
+  if (!code) {
+    throw new HttpError(400, "code is required", "INVALID_STOCKTAKE_SCAN");
+  }
+
+  const quantityDelta = input.quantityDelta ?? 1;
+  if (!Number.isInteger(quantityDelta) || quantityDelta <= 0) {
+    throw new HttpError(
+      400,
+      "quantityDelta must be a positive integer",
+      "INVALID_STOCKTAKE_SCAN",
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const stocktake = await tx.stocktake.findUnique({
+      where: { id: stocktakeId },
+      select: {
+        id: true,
+        locationId: true,
+        status: true,
+        reviewRequestedAt: true,
+      },
+    });
+
+    if (!stocktake) {
+      throw new HttpError(404, "Stocktake not found", "STOCKTAKE_NOT_FOUND");
+    }
+
+    ensureStocktakeOpen(stocktake.status);
+
+    const variant = await resolveVariantByCodeTx(tx, code);
+    const existingLine = await tx.stocktakeLine.findUnique({
+      where: {
+        stocktakeId_variantId: {
+          stocktakeId,
+          variantId: variant.id,
+        },
+      },
+      select: {
+        id: true,
+        countedQty: true,
+        expectedQtySnapshot: true,
+      },
+    });
+
+    const snapshotMap = await buildOnHandPreviewMapTx(tx, stocktake.locationId, [variant.id]);
+    const expectedQtySnapshot = existingLine?.expectedQtySnapshot ?? snapshotMap.get(variant.id) ?? 0;
+    const nextCountedQty = (existingLine?.countedQty ?? 0) + quantityDelta;
+
+    await tx.stocktakeLine.upsert({
+      where: {
+        stocktakeId_variantId: {
+          stocktakeId,
+          variantId: variant.id,
+        },
+      },
+      create: {
+        stocktakeId,
+        variantId: variant.id,
+        expectedQtySnapshot,
+        countedQty: nextCountedQty,
+      },
+      update: {
+        countedQty: nextCountedQty,
+        expectedQtySnapshot,
+      },
+    });
+
+    await clearReviewRequestedAtTx(tx, stocktakeId, stocktake.reviewRequestedAt);
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "STOCKTAKE_LINE_SCANNED",
+        entityType: "STOCKTAKE",
+        entityId: stocktakeId,
+        metadata: {
+          code,
+          variantId: variant.id,
+          previousCountedQty: existingLine?.countedQty ?? 0,
+          quantityDelta,
+          countedQty: nextCountedQty,
+          expectedQtySnapshot,
+          reviewReset: Boolean(stocktake.reviewRequestedAt),
+        },
+      },
+      auditActor,
+    );
+
+    const reloaded = await getStocktakeWithLinesOrThrow(tx, stocktakeId);
+    return {
+      stocktake: await toStocktakeResponseTx(tx, reloaded, true),
+      scannedLine: {
+        variantId: variant.id,
+        sku: variant.sku,
+        variantName: variant.name,
+        productId: variant.product.id,
+        productName: variant.product.name,
+        countedQty: nextCountedQty,
+        quantityDelta,
+      },
+    };
+  });
+};
+
+export const bulkUpsertStocktakeLines = async (
+  stocktakeId: string,
+  input: BulkStocktakeLinesInput,
+  auditActor?: AuditActor,
+) => {
+  assertUuidOrThrow(stocktakeId, "Invalid stocktake id", "INVALID_STOCKTAKE_ID");
+
+  if (!Array.isArray(input.lines) || input.lines.length === 0) {
+    throw new HttpError(400, "lines must be a non-empty array", "INVALID_STOCKTAKE_BULK_LINES");
+  }
+
+  const normalizedLines = input.lines.map((line) => {
+    const code = normalizeOptionalText(line.code);
+    if (!code) {
+      throw new HttpError(400, "Each line requires a code", "INVALID_STOCKTAKE_BULK_LINES");
+    }
+    if (!Number.isInteger(line.countedQty) || (line.countedQty ?? -1) < 0) {
+      throw new HttpError(
+        400,
+        "Each line countedQty must be a non-negative integer",
+        "INVALID_STOCKTAKE_BULK_LINES",
+      );
+    }
+    return {
+      code,
+      countedQty: line.countedQty,
+    };
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const stocktake = await tx.stocktake.findUnique({
+      where: { id: stocktakeId },
+      select: {
+        id: true,
+        locationId: true,
+        status: true,
+        reviewRequestedAt: true,
+      },
+    });
+
+    if (!stocktake) {
+      throw new HttpError(404, "Stocktake not found", "STOCKTAKE_NOT_FOUND");
+    }
+
+    ensureStocktakeOpen(stocktake.status);
+
+    const resolvedVariants = [];
+    const seenVariantIds = new Set<string>();
+    for (const line of normalizedLines) {
+      const variant = await resolveVariantByCodeTx(tx, line.code);
+      if (seenVariantIds.has(variant.id)) {
+        throw new HttpError(
+          409,
+          "Each variant can only appear once per bulk import",
+          "DUPLICATE_STOCKTAKE_VARIANT",
+        );
+      }
+      seenVariantIds.add(variant.id);
+      resolvedVariants.push({
+        ...line,
+        variant,
+      });
+    }
+
+    const variantIds = resolvedVariants.map((line) => line.variant.id);
+    const existingLines = await tx.stocktakeLine.findMany({
+      where: {
+        stocktakeId,
+        variantId: {
+          in: variantIds,
+        },
+      },
+      select: {
+        variantId: true,
+        expectedQtySnapshot: true,
+      },
+    });
+    const existingLineByVariantId = new Map(
+      existingLines.map((line) => [line.variantId, line]),
+    );
+    const snapshotMap = await buildOnHandPreviewMapTx(tx, stocktake.locationId, variantIds);
+
+    for (const line of resolvedVariants) {
+      const existingLine = existingLineByVariantId.get(line.variant.id);
+      const expectedQtySnapshot = existingLine?.expectedQtySnapshot ?? snapshotMap.get(line.variant.id) ?? 0;
+
+      await tx.stocktakeLine.upsert({
+        where: {
+          stocktakeId_variantId: {
+            stocktakeId,
+            variantId: line.variant.id,
+          },
+        },
+        create: {
+          stocktakeId,
+          variantId: line.variant.id,
+          expectedQtySnapshot,
+          countedQty: line.countedQty,
+        },
+        update: {
+          countedQty: line.countedQty,
+          expectedQtySnapshot,
+        },
+      });
+    }
+
+    await clearReviewRequestedAtTx(tx, stocktakeId, stocktake.reviewRequestedAt);
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "STOCKTAKE_LINES_BULK_UPSERTED",
+        entityType: "STOCKTAKE",
+        entityId: stocktakeId,
+        metadata: {
+          appliedCount: resolvedVariants.length,
+          reviewReset: Boolean(stocktake.reviewRequestedAt),
+          codes: resolvedVariants.map((line) => line.code),
+        },
+      },
+      auditActor,
+    );
+
+    const reloaded = await getStocktakeWithLinesOrThrow(tx, stocktakeId);
+    return {
+      stocktake: await toStocktakeResponseTx(tx, reloaded, true),
+      appliedCount: resolvedVariants.length,
+    };
   });
 };
 

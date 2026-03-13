@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { StocktakeStatus } from "@prisma/client";
 import { getRequestAuditActor } from "../middleware/staffRole";
 import {
+  bulkUpsertStocktakeLines,
   cancelStocktake,
   createStocktake,
   deleteStocktakeLine,
@@ -9,6 +10,7 @@ import {
   listStocktakes,
   postStocktake,
   requestStocktakeReview,
+  scanStocktakeLine,
   upsertStocktakeLine,
 } from "../services/stocktakeService";
 import { HttpError } from "../utils/http";
@@ -121,6 +123,48 @@ export const upsertStocktakeLineHandler = async (req: Request, res: Response) =>
 
   const stocktake = await upsertStocktakeLine(req.params.id, body, getRequestAuditActor(req));
   res.json(stocktake);
+};
+
+export const scanStocktakeLineHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    code?: string;
+    quantityDelta?: number;
+  };
+
+  if (body.code !== undefined && typeof body.code !== "string") {
+    throw new HttpError(400, "code must be a string", "INVALID_STOCKTAKE_SCAN");
+  }
+  if (body.quantityDelta !== undefined && typeof body.quantityDelta !== "number") {
+    throw new HttpError(400, "quantityDelta must be a number", "INVALID_STOCKTAKE_SCAN");
+  }
+
+  const result = await scanStocktakeLine(req.params.id, body, getRequestAuditActor(req));
+  res.json(result);
+};
+
+export const bulkUpsertStocktakeLinesHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    lines?: Array<{
+      code?: string;
+      countedQty?: number;
+    }>;
+  };
+
+  if (!Array.isArray(body.lines)) {
+    throw new HttpError(400, "lines must be an array", "INVALID_STOCKTAKE_BULK_LINES");
+  }
+
+  for (const line of body.lines) {
+    if (line.code !== undefined && typeof line.code !== "string") {
+      throw new HttpError(400, "line code must be a string", "INVALID_STOCKTAKE_BULK_LINES");
+    }
+    if (line.countedQty !== undefined && typeof line.countedQty !== "number") {
+      throw new HttpError(400, "line countedQty must be a number", "INVALID_STOCKTAKE_BULK_LINES");
+    }
+  }
+
+  const result = await bulkUpsertStocktakeLines(req.params.id, body, getRequestAuditActor(req));
+  res.json(result);
 };
 
 export const deleteStocktakeLineHandler = async (req: Request, res: Response) => {

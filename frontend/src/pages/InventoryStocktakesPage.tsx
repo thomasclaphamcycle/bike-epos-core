@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiDelete, apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -72,6 +72,32 @@ type StocktakeListResponse = {
   stocktakes: StocktakeSession[];
 };
 
+type StocktakeScanResponse = {
+  stocktake: StocktakeSession;
+  scannedLine: {
+    variantId: string;
+    sku: string;
+    variantName: string | null;
+    productId: string;
+    productName: string;
+    countedQty: number;
+    quantityDelta: number;
+  };
+};
+
+type StocktakeBulkResponse = {
+  stocktake: StocktakeSession;
+  appliedCount: number;
+};
+
+type RecentScan = {
+  code: string;
+  sku: string;
+  productName: string;
+  countedQty: number;
+  quantityDelta: number;
+};
+
 const formatDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
 
@@ -107,6 +133,8 @@ const getSignedQuantityClass = (quantity: number | null | undefined) => {
 
 export const InventoryStocktakesPage = () => {
   const { error, success } = useToasts();
+  const variantSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const scanInputRef = useRef<HTMLInputElement | null>(null);
 
   const [locations, setLocations] = useState<LocationRow[]>([]);
   const [sessions, setSessions] = useState<StocktakeSession[]>([]);
@@ -127,6 +155,12 @@ export const InventoryStocktakesPage = () => {
   const [countedQty, setCountedQty] = useState("");
   const [savingLine, setSavingLine] = useState(false);
   const [deletingLineId, setDeletingLineId] = useState("");
+  const [scanCode, setScanCode] = useState("");
+  const [scanQuantityDelta, setScanQuantityDelta] = useState("1");
+  const [scanningLine, setScanningLine] = useState(false);
+  const [bulkImportText, setBulkImportText] = useState("");
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
 
   const loadLocations = async () => {
     try {
@@ -251,6 +285,12 @@ export const InventoryStocktakesPage = () => {
     };
   }, [debouncedVariantSearch, error, selectedSession]);
 
+  useEffect(() => {
+    setRecentScans([]);
+    setScanCode("");
+    setBulkImportText("");
+  }, [selectedSessionId]);
+
   const selectedLines = selectedSession?.lines ?? [];
   const selectedSessionIsOpen = selectedSession?.status === "OPEN";
   const canRequestReview =
@@ -270,6 +310,48 @@ export const InventoryStocktakesPage = () => {
       liveDriftLines: lines.filter((line) => line.hasLiveDrift).length,
     };
   }, [selectedSession]);
+
+  const parsedScanQuantityDelta = useMemo(() => {
+    if (!scanQuantityDelta.trim()) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(scanQuantityDelta, 10);
+    return Number.isInteger(parsed) ? parsed : Number.NaN;
+  }, [scanQuantityDelta]);
+
+  const bulkImportPreview = useMemo(() => {
+    const lines = bulkImportText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const parsedLines: Array<{ code: string; countedQty: number }> = [];
+    const errors: string[] = [];
+
+    lines.forEach((line, index) => {
+      const commaParts = line.split(",").map((part) => part.trim()).filter(Boolean);
+      const parts = commaParts.length >= 2 ? commaParts : line.split(/\s+/).filter(Boolean);
+      if (parts.length < 2) {
+        errors.push(`Line ${index + 1}: use "barcode qty" or "barcode,qty".`);
+        return;
+      }
+
+      const code = parts[0];
+      const countedQty = Number.parseInt(parts[1], 10);
+      if (!Number.isInteger(countedQty) || countedQty < 0) {
+        errors.push(`Line ${index + 1}: counted quantity must be a non-negative integer.`);
+        return;
+      }
+
+      parsedLines.push({ code, countedQty });
+    });
+
+    return {
+      parsedLines,
+      errors,
+    };
+  }, [bulkImportText]);
 
   const createSession = async () => {
     if (!createLocationId) {
@@ -384,6 +466,119 @@ export const InventoryStocktakesPage = () => {
       await loadSessions(selectedSession.id);
     } catch (saveError) {
       error(saveError instanceof Error ? saveError.message : "Failed to save stocktake line");
+    } finally {
+      setSavingLine(false);
+    }
+  };
+
+  const scanLine = async () => {
+    if (!selectedSession) {
+      return;
+    }
+    if (!scanCode.trim()) {
+      error("Scan or enter a barcode or SKU first.");
+      return;
+    }
+    if (parsedScanQuantityDelta === null || Number.isNaN(parsedScanQuantityDelta) || parsedScanQuantityDelta <= 0) {
+      error("Scan quantity must be a positive whole number.");
+      return;
+    }
+
+    setScanningLine(true);
+    try {
+      const payload = await apiPost<StocktakeScanResponse>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/scan`,
+        {
+          code: scanCode.trim(),
+          quantityDelta: parsedScanQuantityDelta,
+        },
+      );
+      setSelectedSession(payload.stocktake);
+      setRecentScans((current) => [
+        {
+          code: scanCode.trim(),
+          sku: payload.scannedLine.sku,
+          productName: payload.scannedLine.productName,
+          countedQty: payload.scannedLine.countedQty,
+          quantityDelta: payload.scannedLine.quantityDelta,
+        },
+        ...current,
+      ].slice(0, 8));
+      setScanCode("");
+      success(
+        `${payload.scannedLine.productName} counted to ${payload.scannedLine.countedQty}.`,
+      );
+      await loadSessions(selectedSession.id);
+      window.requestAnimationFrame(() => {
+        scanInputRef.current?.focus();
+      });
+    } catch (scanError) {
+      error(scanError instanceof Error ? scanError.message : "Failed to scan stocktake line");
+    } finally {
+      setScanningLine(false);
+    }
+  };
+
+  const applyBulkImport = async () => {
+    if (!selectedSession) {
+      return;
+    }
+    if (bulkImportPreview.parsedLines.length === 0) {
+      error("Add at least one barcode/SKU and counted quantity before importing.");
+      return;
+    }
+    if (bulkImportPreview.errors.length > 0) {
+      error("Fix the bulk import rows before applying them.");
+      return;
+    }
+
+    setBulkImporting(true);
+    try {
+      const payload = await apiPost<StocktakeBulkResponse>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/bulk-lines`,
+        {
+          lines: bulkImportPreview.parsedLines,
+        },
+      );
+      setSelectedSession(payload.stocktake);
+      setBulkImportText("");
+      success(`Applied ${payload.appliedCount} bulk stocktake count${payload.appliedCount === 1 ? "" : "s"}.`);
+      await loadSessions(selectedSession.id);
+      window.requestAnimationFrame(() => {
+        scanInputRef.current?.focus();
+      });
+    } catch (bulkError) {
+      error(bulkError instanceof Error ? bulkError.message : "Failed to import bulk counts");
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
+  const adjustSavedLine = async (line: StocktakeLine, delta: number) => {
+    if (!selectedSession) {
+      return;
+    }
+
+    const nextCount = line.countedQty + delta;
+    if (nextCount < 0) {
+      error("Counted quantity cannot go below zero.");
+      return;
+    }
+
+    setSavingLine(true);
+    try {
+      const payload = await apiPost<StocktakeSession>(
+        `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/lines`,
+        {
+          variantId: line.variantId,
+          countedQty: nextCount,
+        },
+      );
+      setSelectedSession(payload);
+      success(`${line.productName} counted quantity updated to ${nextCount}.`);
+      await loadSessions(selectedSession.id);
+    } catch (adjustError) {
+      error(adjustError instanceof Error ? adjustError.message : "Failed to adjust counted line");
     } finally {
       setSavingLine(false);
     }
@@ -608,6 +803,137 @@ export const InventoryStocktakesPage = () => {
                 <section>
                   <div className="card-header-row" style={{ marginBottom: "10px" }}>
                     <div>
+                      <h3>Scan Mode</h3>
+                      <p className="muted-text">
+                        Scan the barcode or SKU and CorePOS increments the counted quantity on the matching line without touching the stored snapshot.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="purchase-form-grid">
+                    <label className="purchase-form-wide">
+                      Scan Barcode / SKU
+                      <input
+                        ref={scanInputRef}
+                        value={scanCode}
+                        onChange={(event) => setScanCode(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") {
+                            return;
+                          }
+                          event.preventDefault();
+                          void scanLine();
+                        }}
+                        placeholder="scan barcode or SKU"
+                        data-testid="stocktake-scan-code"
+                      />
+                    </label>
+
+                    <label>
+                      Scan Qty
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={scanQuantityDelta}
+                        onChange={(event) => setScanQuantityDelta(event.target.value)}
+                        placeholder="1"
+                      />
+                    </label>
+
+                    <div className="actions-inline" style={{ alignSelf: "end" }}>
+                      {[1, 5, 10].map((value) => (
+                        <button key={value} type="button" onClick={() => setScanQuantityDelta(String(value))}>
+                          +{value}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => void scanLine()}
+                        disabled={scanningLine || !scanCode.trim()}
+                      >
+                        {scanningLine ? "Scanning..." : "Count Scan"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {recentScans.length > 0 ? (
+                    <div className="table-wrap" style={{ marginBottom: "16px" }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Recent Scan</th>
+                            <th>Code</th>
+                            <th>Change</th>
+                            <th>Counted</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentScans.map((scan, index) => (
+                            <tr key={`${scan.sku}-${index}`}>
+                              <td>
+                                <div className="table-primary">{scan.productName}</div>
+                                <div className="table-secondary mono-text">{scan.sku}</div>
+                              </td>
+                              <td className="mono-text">{scan.code}</td>
+                              <td className={getSignedQuantityClass(scan.quantityDelta)}>{formatSignedQuantity(scan.quantityDelta)}</td>
+                              <td>{scan.countedQty}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  <div className="card-header-row" style={{ marginBottom: "10px" }}>
+                    <div>
+                      <h3>Bulk Count Import</h3>
+                      <p className="muted-text">
+                        Paste one count per line using <span className="mono-text">barcode qty</span> or <span className="mono-text">barcode,qty</span>. CorePOS applies them as absolute counted quantities.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="purchase-form-grid" style={{ marginBottom: "18px" }}>
+                    <label className="purchase-form-wide">
+                      Bulk Count Lines
+                      <textarea
+                        value={bulkImportText}
+                        onChange={(event) => setBulkImportText(event.target.value)}
+                        placeholder={"DEMO-BC-C52 3\nDEMO-BC-PUMP,7"}
+                        rows={5}
+                        data-testid="stocktake-bulk-import"
+                      />
+                    </label>
+
+                    <div className="actions-inline" style={{ alignSelf: "end" }}>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => void applyBulkImport()}
+                        disabled={bulkImporting || bulkImportPreview.parsedLines.length === 0 || bulkImportPreview.errors.length > 0}
+                        data-testid="stocktake-bulk-apply"
+                      >
+                        {bulkImporting ? "Applying..." : `Apply ${bulkImportPreview.parsedLines.length || ""} Lines`}
+                      </button>
+                    </div>
+                  </div>
+
+                  {bulkImportPreview.parsedLines.length > 0 ? (
+                    <p className="muted-text" style={{ marginTop: "-8px", marginBottom: "12px" }}>
+                      Ready to apply {bulkImportPreview.parsedLines.length} bulk count line{bulkImportPreview.parsedLines.length === 1 ? "" : "s"}.
+                    </p>
+                  ) : null}
+
+                  {bulkImportPreview.errors.length > 0 ? (
+                    <div className="restricted-panel warning-panel" style={{ marginBottom: "12px" }}>
+                      {bulkImportPreview.errors.join(" ")}
+                    </div>
+                  ) : null}
+
+                  <div className="card-header-row" style={{ marginBottom: "10px" }}>
+                    <div>
                       <h3>Add Or Update Count</h3>
                       <p className="muted-text">
                         Search a variant, record the counted quantity, and keep the same expected snapshot for that line.
@@ -619,6 +945,7 @@ export const InventoryStocktakesPage = () => {
                     <label className="purchase-form-wide">
                       Variant Search
                       <input
+                        ref={variantSearchInputRef}
                         value={variantSearch}
                         onChange={(event) => setVariantSearch(event.target.value)}
                         placeholder="product, SKU, barcode"
@@ -661,11 +988,11 @@ export const InventoryStocktakesPage = () => {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr>
-                      <th>Product</th>
-                      <th>SKU</th>
-                      <th>Counted</th>
-                      <th>Expected Snapshot</th>
+                        <tr>
+                          <th>Product</th>
+                          <th>SKU</th>
+                          <th>Counted</th>
+                          <th>Expected Snapshot</th>
                       <th>Snapshot Variance</th>
                       <th>Current On Hand</th>
                       <th>Live Correction</th>
@@ -690,7 +1017,7 @@ export const InventoryStocktakesPage = () => {
                             ) : null}
                           </td>
                           <td className="mono-text">{line.sku}</td>
-                          <td className="numeric-cell">{line.countedQty}</td>
+                          <td className="numeric-cell" data-testid={`stocktake-line-count-${line.variantId}`}>{line.countedQty}</td>
                           <td className="numeric-cell">{line.expectedQty ?? "-"}</td>
                           <td className={`numeric-cell ${getSignedQuantityClass(line.varianceQty)}`}>
                             {formatSignedQuantity(line.varianceQty)}
@@ -701,13 +1028,24 @@ export const InventoryStocktakesPage = () => {
                           </td>
                           <td>
                             {selectedSession.status === "OPEN" ? (
-                              <button
-                                type="button"
-                                onClick={() => void deleteLine(line.id)}
-                                disabled={deletingLineId === line.id}
-                              >
-                                {deletingLineId === line.id ? "Removing..." : "Remove"}
-                              </button>
+                              <div className="actions-inline">
+                                <button type="button" onClick={() => void adjustSavedLine(line, -1)} disabled={savingLine || line.countedQty <= 0}>
+                                  -1
+                                </button>
+                                <button type="button" onClick={() => void adjustSavedLine(line, 1)} disabled={savingLine}>
+                                  +1
+                                </button>
+                                <button type="button" onClick={() => void adjustSavedLine(line, 5)} disabled={savingLine}>
+                                  +5
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void deleteLine(line.id)}
+                                  disabled={deletingLineId === line.id}
+                                >
+                                  {deletingLineId === line.id ? "Removing..." : "Remove"}
+                                </button>
+                              </div>
                             ) : (
                               "-"
                             )}
