@@ -76,6 +76,8 @@ For a concise trial-evaluation walkthrough covering seeded logins, operator flow
 
 For a tighter step-by-step onboarding guide aimed at a real bike shop trial setup, use [docs/pilot_shop_guide.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_shop_guide.md).
 
+For first-live-week support, backup, restore, and daily pilot runbook guidance, use [docs/pilot_support_pack.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_support_pack.md).
+
 ## Local Setup
 
 1. Install dependencies:

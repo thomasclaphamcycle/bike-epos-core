@@ -7,6 +7,7 @@ Use this alongside:
 - [README.md](/Users/thomaswitherspoon/Development/bike-epos-core/README.md) for the main developer setup reference
 - [docs/auth.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/auth.md) for login and role details
 - [docs/production_setup.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/production_setup.md) for real deployment, backup, restore, and upgrade procedures
+- [docs/pilot_support_pack.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_support_pack.md) for first-live-week support and recovery guidance
 
 ## 1. System Requirements
 
