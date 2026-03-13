@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { apiGet, apiPatch } from "../api/client";
+import { useToasts } from "../components/ToastProvider";
 
 type LocationRow = {
   id: string;
@@ -9,10 +10,36 @@ type LocationRow = {
   isActive: boolean;
 };
 
+type ShopSettings = {
+  store: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  pos: {
+    defaultTaxRatePercent: number;
+    barcodeSearchAutoFocus: boolean;
+  };
+  workshop: {
+    defaultJobDurationMinutes: number;
+    defaultDepositPence: number;
+  };
+  operations: {
+    lowStockThreshold: number;
+  };
+};
+
+type SettingsResponse = {
+  settings: ShopSettings;
+};
+
 const envLabel = import.meta.env.MODE || "development";
 
 export const SystemSettingsPage = () => {
+  const { error, success } = useToasts();
   const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [settings, setSettings] = useState<ShopSettings | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -24,6 +51,17 @@ export const SystemSettingsPage = () => {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const payload = await apiGet<SettingsResponse>("/api/settings");
+        setSettings(payload.settings);
+      } catch (loadError) {
+        error(loadError instanceof Error ? loadError.message : "Failed to load persisted settings");
+      }
+    })();
+  }, [error]);
 
   const operationalControlPoints = useMemo(() => [
     {
@@ -58,6 +96,59 @@ export const SystemSettingsPage = () => {
     },
   ], []);
 
+  const updateSettings = async (patch: Partial<ShopSettings>) => {
+    setSaving(true);
+    try {
+      const payload = await apiPatch<SettingsResponse>("/api/settings", patch);
+      setSettings(payload.settings);
+      success("System settings updated.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to update settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setStoreField = <K extends keyof ShopSettings["store"]>(key: K, value: ShopSettings["store"][K]) => {
+    setSettings((current) => (current ? {
+      ...current,
+      store: {
+        ...current.store,
+        [key]: value,
+      },
+    } : current));
+  };
+
+  const setPosField = <K extends keyof ShopSettings["pos"]>(key: K, value: ShopSettings["pos"][K]) => {
+    setSettings((current) => (current ? {
+      ...current,
+      pos: {
+        ...current.pos,
+        [key]: value,
+      },
+    } : current));
+  };
+
+  const setWorkshopField = <K extends keyof ShopSettings["workshop"]>(key: K, value: ShopSettings["workshop"][K]) => {
+    setSettings((current) => (current ? {
+      ...current,
+      workshop: {
+        ...current.workshop,
+        [key]: value,
+      },
+    } : current));
+  };
+
+  const setOperationsField = <K extends keyof ShopSettings["operations"]>(key: K, value: ShopSettings["operations"][K]) => {
+    setSettings((current) => (current ? {
+      ...current,
+      operations: {
+        ...current.operations,
+        [key]: value,
+      },
+    } : current));
+  };
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -65,7 +156,7 @@ export const SystemSettingsPage = () => {
           <div>
             <h1>System Settings</h1>
             <p className="muted-text">
-              Admin-facing overview of the current operational defaults, control points, and governance links already supported by this branch. This is intentionally a truthful control panel, not a new persisted settings framework.
+              Manager-facing control panel for persisted shop defaults plus the existing governance and operational entry points already supported on this branch.
             </p>
           </div>
           <div className="actions-inline">
@@ -87,8 +178,8 @@ export const SystemSettingsPage = () => {
           </div>
           <div className="metric-card">
             <span className="metric-label">Persisted Admin Tools</span>
-            <strong className="metric-value">2</strong>
-            <span className="dashboard-metric-detail">Staff management and admin review currently change real app state</span>
+            <strong className="metric-value">{settings ? 4 : 3}</strong>
+            <span className="dashboard-metric-detail">Staff admin, admin review, and system settings now persist real operational defaults</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Local Preference Surfaces</span>
@@ -98,8 +189,112 @@ export const SystemSettingsPage = () => {
         </div>
 
         <div className="restricted-panel info-panel">
-          No broad persisted settings model exists on this branch. Where clean controls do not already exist, this page centralizes the current defaults and the correct operational entry points instead of pretending those settings are editable.
+          CorePOS now stores a small persisted settings set for shop metadata and operational defaults. Existing specialist controls such as dashboard widgets, saved views, staff admin, bookings, and backups still keep their current dedicated surfaces.
         </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Persisted Shop Defaults</h2>
+            <p className="muted-text">
+              These settings are stored in CorePOS and give future POS, workshop, and management workflows a single configuration source instead of scattering new hardcoded defaults.
+            </p>
+          </div>
+          {settings ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void updateSettings(settings)}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save settings"}
+            </button>
+          ) : null}
+        </div>
+
+        {!settings ? (
+          <p className="muted-text">Loading persisted settings...</p>
+        ) : (
+          <div className="purchase-form-grid">
+            <label>
+              Store Name
+              <input
+                value={settings.store.name}
+                onChange={(event) => setStoreField("name", event.target.value)}
+                placeholder="Bike shop display name"
+              />
+            </label>
+            <label>
+              Store Email
+              <input
+                value={settings.store.email}
+                onChange={(event) => setStoreField("email", event.target.value)}
+                placeholder="contact@example.com"
+              />
+            </label>
+            <label>
+              Store Phone
+              <input
+                value={settings.store.phone}
+                onChange={(event) => setStoreField("phone", event.target.value)}
+                placeholder="01234 567890"
+              />
+            </label>
+            <label>
+              Default Tax Rate %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={settings.pos.defaultTaxRatePercent}
+                onChange={(event) => setPosField("defaultTaxRatePercent", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Workshop Default Minutes
+              <input
+                type="number"
+                min="15"
+                max="480"
+                step="5"
+                value={settings.workshop.defaultJobDurationMinutes}
+                onChange={(event) => setWorkshopField("defaultJobDurationMinutes", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Workshop Default Deposit (pence)
+              <input
+                type="number"
+                min="0"
+                max="100000"
+                step="50"
+                value={settings.workshop.defaultDepositPence}
+                onChange={(event) => setWorkshopField("defaultDepositPence", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Low Stock Threshold
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="1"
+                value={settings.operations.lowStockThreshold}
+                onChange={(event) => setOperationsField("lowStockThreshold", Number(event.target.value))}
+              />
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={settings.pos.barcodeSearchAutoFocus}
+                onChange={(event) => setPosField("barcodeSearchAutoFocus", event.target.checked)}
+              />
+              <span>Keep POS barcode/search workflows autofocus-friendly</span>
+            </label>
+          </div>
+        )}
       </section>
 
       <div className="dashboard-grid analytics-grid">

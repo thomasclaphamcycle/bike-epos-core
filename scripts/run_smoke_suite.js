@@ -35,6 +35,7 @@ const baselineSteps = [
   "test:product-import",
   "test:stock-transfers",
   "test:bike-hire",
+  "test:settings",
 ];
 
 const env = {

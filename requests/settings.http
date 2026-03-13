@@ -1,0 +1,31 @@
+@baseUrl = http://localhost:3000
+
+### Get persisted shop settings (MANAGER+)
+GET {{baseUrl}}/api/settings
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Update persisted shop settings (MANAGER+)
+PATCH {{baseUrl}}/api/settings
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+{
+  "store": {
+    "name": "CorePOS Cycles",
+    "email": "hello@corepos.local",
+    "phone": "01234 567890"
+  },
+  "pos": {
+    "defaultTaxRatePercent": 20,
+    "barcodeSearchAutoFocus": true
+  },
+  "workshop": {
+    "defaultJobDurationMinutes": 90,
+    "defaultDepositPence": 1500
+  },
+  "operations": {
+    "lowStockThreshold": 5
+  }
+}

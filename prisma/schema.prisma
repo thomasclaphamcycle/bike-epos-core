@@ -568,6 +568,13 @@ model ReceiptCounter {
   updatedAt DateTime @updatedAt
 }
 
+model AppConfig {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Receipt {
   id              String   @id @default(uuid()) @db.Uuid
   saleId          String?  @unique @db.Uuid

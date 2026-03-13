@@ -70,6 +70,24 @@ CorePOS now includes a narrow first-pass bike hire workflow that stays additive 
 
 This is groundwork only. It does not yet implement fleet maintenance scheduling, online booking, damage charging workflows, or tight payment/till reconciliation for deposits.
 
+## Configuration Foundation
+
+CorePOS now includes a small persisted configuration layer for operational defaults:
+
+- Prisma model `AppConfig`
+  - stores additive key/value settings using a simple JSON payload per key
+  - is intended for gradual expansion rather than a large one-shot settings schema
+- backend service `src/services/configurationService.ts`
+  - centralizes setting defaults and validation
+  - exposes a typed manager-facing snapshot instead of scattering raw config lookups
+- manager API surface
+  - `GET /api/settings`
+  - `PATCH /api/settings`
+- manager UI surface
+  - `/management/settings`
+
+This foundation is intentionally narrow. Existing specialist settings models such as receipt settings and workshop booking settings remain in place, while future operational defaults can move into the shared configuration layer gradually.
+
 ## Workshop Handoff Safety
 
 Workshop collection is now treated as a sale-linked handoff rather than a manual status toggle:
