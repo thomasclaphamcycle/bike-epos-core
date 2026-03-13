@@ -2135,7 +2135,9 @@ th {
   margin: 4px 0 0;
   text-align: center;
   font-size: 0.8rem;
-  color: #66788c;
+  font-weight: 600;
+  color: #3f5568;
+  letter-spacing: 0.01em;
 }
 
 .login-pin-labels {
