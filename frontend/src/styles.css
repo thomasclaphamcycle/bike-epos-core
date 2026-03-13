@@ -165,7 +165,7 @@ textarea {
     color 120ms ease;
 }
 
-.sidebar-section-row--group:hover {
+.sidebar-section-row--group:not(.sidebar-section-row--group-active):hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -301,8 +301,8 @@ textarea {
   background: transparent;
 }
 
-.sidebar-section-row--group:hover .sidebar-link--group,
-.sidebar-section-row--group:hover .sidebar-group-toggle {
+.sidebar-section-row--group:not(.sidebar-section-row--group-active):hover .sidebar-link--group,
+.sidebar-section-row--group:not(.sidebar-section-row--group-active):hover .sidebar-group-toggle {
   color: #ffffff;
 }
 
