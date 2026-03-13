@@ -7,6 +7,7 @@ It should remain the master planning structure for the project and should be rea
 
 - [PLAN.md](/Users/thomaswitherspoon/Development/bike-epos-core/PLAN.md) for repo-history and milestone evidence
 - [docs/architecture.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/architecture.md) for domain and system structure
+- [docs/roadmap_progress.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/roadmap_progress.md) for the computed scoring model and roadmap progress commands
 
 CorePOS is evolving from a simple POS into a full bike shop operating system.
 
@@ -32,9 +33,16 @@ The current codebase already contains substantial implementation across the earl
 The roadmap below remains the canonical planning structure even where current implementation is ahead in some areas and behind in others.
 The phase count should not be collapsed or reduced unless the product strategy itself is intentionally changed.
 
+Progress percentages are no longer maintained manually in this document.
+Use the computed roadmap commands instead:
+
+- `npm run roadmap`
+- `npm run roadmap:json`
+- `npm run roadmap1`
+
 ---
 
-## Phase 1 — POS & Cash Control (IN PROGRESS) — 85% Complete
+## Phase 1 — POS & Cash Control (IN PROGRESS)
 
 Purpose:
 Run the till reliably with accountable cash handling.
@@ -71,7 +79,7 @@ Implementation status:
 
 ---
 
-## Phase 2 — Product Catalogue (PLANNED) — 80% Complete
+## Phase 2 — Product Catalogue (PLANNED)
 
 Purpose:
 Give the shop a reliable, searchable product catalogue.
@@ -92,7 +100,7 @@ Implementation status:
 
 ---
 
-## Phase 3 — Inventory Control (PLANNED) — 75% Complete
+## Phase 3 — Inventory Control (PLANNED)
 
 Purpose:
 Keep stock levels trustworthy and operationally useful.
@@ -114,7 +122,7 @@ Implementation status:
 
 ---
 
-## Phase 4 — Stock Take (PLANNED) — 80% Complete
+## Phase 4 — Stock Take (PLANNED)
 
 Purpose:
 Provide reliable count and reconciliation workflows.
@@ -133,7 +141,7 @@ Implementation status:
 
 ---
 
-## Phase 5 — Purchasing (PLANNED) — 80% Complete
+## Phase 5 — Purchasing (PLANNED)
 
 Purpose:
 Manage supplier ordering and stock receiving.
@@ -153,7 +161,7 @@ Implementation status:
 
 ---
 
-## Phase 6 — Data Import / Export (PLANNED) — 45% Complete
+## Phase 6 — Data Import / Export (PLANNED)
 
 Purpose:
 Handle migration, bulk updates, and supplier catalogue ingestion efficiently.
@@ -181,7 +189,7 @@ Implementation status:
 
 ---
 
-## Phase 7 — Supplier Integrations (PLANNED) — 15% Complete
+## Phase 7 — Supplier Integrations (PLANNED)
 
 Purpose:
 Automate supplier catalogue and availability updates where suppliers support it.
@@ -205,7 +213,7 @@ Implementation status:
 
 ---
 
-## Phase 8 — Workshop System (PLANNED) — 75% Complete
+## Phase 8 — Workshop System (PLANNED)
 
 Purpose:
 Run the repair and service side of the bike shop digitally.
@@ -261,7 +269,7 @@ Implementation status:
 
 ---
 
-## Phase 9 — Staff & Operations (PARTIAL) — 70% Complete
+## Phase 9 — Staff & Operations (PARTIAL)
 
 Purpose:
 Manage staff access, oversight, daily operations, and business reporting.
@@ -291,7 +299,7 @@ Implementation status:
 
 ---
 
-## Phase 10 — Rental Services (FUTURE) — 5% Complete
+## Phase 10 — Rental Services (FUTURE)
 
 Purpose:
 Support bike hire and rental operations as a first-class flow.
@@ -318,7 +326,7 @@ Implementation status:
 
 ---
 
-## Phase 11 — Online Store & Website Builder (FUTURE) — 5% Complete
+## Phase 11 — Online Store & Website Builder (FUTURE)
 
 Purpose:
 Support customer-facing online workflows and eventually shop websites powered by CorePOS.

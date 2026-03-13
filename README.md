@@ -70,6 +70,16 @@ It covers:
 
 For the branch/release gate used before tagging, use [docs/release_checklist.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/release_checklist.md).
 
+## Roadmap Progress
+
+CorePOS roadmap progress is now computed from real repo evidence rather than maintained as hardcoded percentages.
+
+- `npm run roadmap` prints the current per-phase completion table
+- `npm run roadmap:json` prints the explainable JSON breakdown
+- `npm run roadmap1` writes `docs/roadmap-progress.png`
+
+See [docs/roadmap_progress.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/roadmap_progress.md) for the scoring model, evidence rules, and maintenance guidance.
+
 ## Real Shop Pilot Guide
 
 For a concise trial-evaluation walkthrough covering seeded logins, operator flows, sample shop scenarios, and known pilot limitations, use [docs/pilot_preparation.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_preparation.md).
