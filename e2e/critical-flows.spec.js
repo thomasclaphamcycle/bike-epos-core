@@ -60,8 +60,7 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await expect(primaryNav.getByRole("link", { name: "Sale", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await posToggle.click();
-  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toHaveCount(0);
-  await posToggle.click();
+  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toHaveCount(0);
   await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toHaveCount(0);

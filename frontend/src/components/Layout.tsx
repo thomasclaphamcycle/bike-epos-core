@@ -64,13 +64,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setOpenSections(() => {
+    setOpenSections((current) => {
       const next: Record<string, boolean> = {};
       for (const section of visibleSections) {
         if (!section.items?.length) {
           continue;
         }
-        next[section.id] = isSectionActive(section);
+        next[section.id] = isSectionActive(section) || Boolean(current[section.id]);
       }
       return next;
     });
@@ -92,8 +92,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <div className="sidebar-link-list">
               {visibleSections.map((section) => {
                 const hasChildren = Boolean(section.items?.length);
+                const isActive = isSectionActive(section);
                 const isDirectlyActive = isSectionDirectlyActive(section);
-                const isOpen = hasChildren ? Boolean(openSections[section.id]) : false;
+                const isOpen = hasChildren ? (isActive || Boolean(openSections[section.id])) : false;
                 const submenuId = `sidebar-submenu-${section.id}`;
 
                 return (
@@ -106,7 +107,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                         <NavLink
                           to={section.to}
                           end
-                          className={isDirectlyActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                          className={isActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
                         >
                           <span className="sidebar-link-label">{section.label}</span>
                         </NavLink>

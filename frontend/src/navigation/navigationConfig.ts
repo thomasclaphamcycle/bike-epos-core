@@ -79,6 +79,7 @@ export const navigationSections: NavigationSection[] = [
         label: "Sale",
         to: "/pos",
         minimumRole: "STAFF",
+        matchPrefixes: ["/pos"],
       },
       {
         kind: "link",
