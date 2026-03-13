@@ -68,6 +68,7 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { DocumentationHubPage } from "./pages/DocumentationHubPage";
 import { PinSettingsPage } from "./pages/PinSettingsPage";
 import { CashReceiptUploadPage } from "./pages/CashReceiptUploadPage";
+import { CustomerSitePage } from "./pages/CustomerSitePage";
 
 const AuthedApp = () => (
   <ProtectedRoute>
@@ -457,6 +458,10 @@ export const App = () => {
   return (
     <Routes>
       <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
+      <Route path="/site" element={<CustomerSitePage variant="home" />} />
+      <Route path="/site/services" element={<CustomerSitePage variant="services" />} />
+      <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
+      <Route path="/site/contact" element={<CustomerSitePage variant="contact" />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="*" element={<AuthedApp />} />
     </Routes>

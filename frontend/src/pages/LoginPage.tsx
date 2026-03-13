@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiGet, ApiError } from "../api/client";
 import { normalizeLoginRedirectTarget } from "../utils/authRedirect";
@@ -161,6 +161,10 @@ export const LoginPage = () => {
         <div className="login-card">
           <div className="login-logo-wrap">
             <CorePosLogo variant="stacked" size={228} />
+          </div>
+
+          <div className="login-inline-links">
+            <Link to="/site">Customer website preview</Link>
           </div>
 
           <div className="login-user-list" data-testid="login-user-list">
