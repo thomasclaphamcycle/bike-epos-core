@@ -53,6 +53,23 @@ Inventory groundwork now treats stock as location-aware while preserving existin
 
 This remains intentionally narrow. It does not yet introduce transfer reservations, in-transit valuation, location-specific replenishment rules, or location-aware POS picking UX.
 
+## Bike Hire Foundations
+
+CorePOS now includes a narrow first-pass bike hire workflow that stays additive to existing sales, workshop, and inventory behavior:
+
+- `HireAsset` tracks a real hire fleet bike against an existing catalogue `Variant`
+- `HireBooking` links a hire asset to a `Customer` with reserved, checked-out, returned, and cancelled states
+- deposits are tracked independently from normal retail checkout through `HireDepositStatus`
+- current API surface lives under `/api/hire`
+  - `GET|POST /api/hire/assets`
+  - `GET|POST /api/hire/bookings`
+  - `POST /api/hire/bookings/:id/checkout`
+  - `POST /api/hire/bookings/:id/return`
+  - `POST /api/hire/bookings/:id/cancel`
+- manager-facing workflow currently starts from `/management/hire`
+
+This is groundwork only. It does not yet implement fleet maintenance scheduling, online booking, damage charging workflows, or tight payment/till reconciliation for deposits.
+
 ## Workshop Handoff Safety
 
 Workshop collection is now treated as a sale-linked handoff rather than a manual status toggle:

@@ -1,0 +1,63 @@
+### List hire assets
+GET http://localhost:3000/api/hire/assets
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+### Create hire asset
+POST http://localhost:3000/api/hire/assets
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+{
+  "variantId": "{{variantId}}",
+  "assetTag": "HIRE-001",
+  "displayName": "Demo gravel hire bike",
+  "notes": "Workshop-ready frame"
+}
+
+### List hire bookings
+GET http://localhost:3000/api/hire/bookings
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+### Create hire booking
+POST http://localhost:3000/api/hire/bookings
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: request-staff
+
+{
+  "hireAssetId": "{{hireAssetId}}",
+  "customerId": "{{customerId}}",
+  "startsAt": "2026-03-13T09:00:00.000Z",
+  "dueBackAt": "2026-03-14T17:00:00.000Z",
+  "hirePricePence": 4500,
+  "depositPence": 15000,
+  "notes": "Passport checked"
+}
+
+### Checkout hire booking
+POST http://localhost:3000/api/hire/bookings/{{hireBookingId}}/checkout
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: request-staff
+
+{
+  "depositHeldPence": 15000
+}
+
+### Return hire booking
+POST http://localhost:3000/api/hire/bookings/{{hireBookingId}}/return
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: request-staff
+
+{
+  "depositOutcome": "RETURNED"
+}
+
+### Cancel reserved hire booking
+POST http://localhost:3000/api/hire/bookings/{{hireBookingId}}/cancel
+X-Staff-Role: STAFF
+X-Staff-Id: request-staff

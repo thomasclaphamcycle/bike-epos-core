@@ -98,6 +98,7 @@ const staticCommands = (role: string | undefined): CommandResult[] => {
       { key: "cmd-pricing", group: "Shortcut", title: "Pricing review", subtitle: "Margin and pricing exceptions", path: "/management/pricing" },
       { key: "cmd-supplier-returns", group: "Shortcut", title: "Supplier returns", subtitle: "Warranty and receiving send-backs", path: "/management/supplier-returns" },
       { key: "cmd-purchasing", group: "Shortcut", title: "PO action centre", subtitle: "Open purchase order priorities", path: "/management/purchasing" },
+      { key: "cmd-hire", group: "Shortcut", title: "Bike hire desk", subtitle: "Fleet reservations, checkout, and returns", path: "/management/hire" },
       { key: "cmd-staff-performance", group: "Shortcut", title: "Staff performance", subtitle: "Workshop throughput and visible sales by staff", path: "/management/staff-performance" },
       { key: "cmd-transfers", group: "Shortcut", title: "Transfer queue", subtitle: "Location imbalance and replenishment", path: "/management/transfers" },
       { key: "cmd-ageing", group: "Shortcut", title: "Workshop ageing", subtitle: "Open-job SLA attention", path: "/management/workshop-ageing" },

@@ -52,6 +52,7 @@ import { WorkshopPrintCentrePage } from "./pages/WorkshopPrintCentrePage";
 import { InternalTasksPage } from "./pages/InternalTasksPage";
 import { StockExceptionsPage } from "./pages/StockExceptionsPage";
 import { TransferQueuePage } from "./pages/TransferQueuePage";
+import { BikeHirePage } from "./pages/BikeHirePage";
 import { WorkshopAgeingPage } from "./pages/WorkshopAgeingPage";
 import { ProductDataQueuePage } from "./pages/ProductDataQueuePage";
 import { AdminReviewPage } from "./pages/AdminReviewPage";
@@ -410,6 +411,14 @@ const AuthedApp = () => (
           element={(
             <ProtectedRoute minimumRole="MANAGER">
               <TransferQueuePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/management/hire"
+          element={(
+            <ProtectedRoute minimumRole="MANAGER">
+              <BikeHirePage />
             </ProtectedRoute>
           )}
         />

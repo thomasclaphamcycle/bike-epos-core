@@ -128,6 +128,7 @@ model Variant {
   stocktakeLines     StocktakeLine[]
   workshopLines      WorkshopJobLine[]
   stockTransferLines StockTransferLine[]
+  hireAssets         HireAsset[]
 }
 
 model SupplierProductLink {
@@ -270,6 +271,76 @@ model StockTransferLine {
 
   @@unique([stockTransferId, variantId])
   @@index([variantId])
+}
+
+enum HireAssetStatus {
+  AVAILABLE
+  RESERVED
+  ON_HIRE
+  MAINTENANCE
+  RETIRED
+}
+
+enum HireBookingStatus {
+  RESERVED
+  CHECKED_OUT
+  RETURNED
+  CANCELLED
+}
+
+enum HireDepositStatus {
+  NONE
+  HELD
+  RETURNED
+  KEPT
+}
+
+model HireAsset {
+  id          String          @id @default(uuid()) @db.Uuid
+  variantId   String
+  assetTag    String          @unique
+  displayName String?
+  notes       String?
+  status      HireAssetStatus @default(AVAILABLE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  variant  Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  bookings HireBooking[]
+
+  @@index([variantId])
+  @@index([status, createdAt])
+}
+
+model HireBooking {
+  id                  String             @id @default(uuid()) @db.Uuid
+  hireAssetId         String             @db.Uuid
+  customerId          String             @db.Uuid
+  status              HireBookingStatus  @default(RESERVED)
+  depositStatus       HireDepositStatus  @default(NONE)
+  startsAt            DateTime
+  dueBackAt           DateTime
+  checkedOutAt        DateTime?
+  returnedAt          DateTime?
+  hirePricePence      Int                @default(0)
+  depositPence        Int                @default(0)
+  depositHeldPence    Int                @default(0)
+  notes               String?
+  createdByStaffId    String?
+  checkedOutByStaffId String?
+  returnedByStaffId   String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  hireAsset         HireAsset @relation(fields: [hireAssetId], references: [id], onDelete: Restrict)
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdByStaff    User?     @relation("HireBookingCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  checkedOutByStaff User?     @relation("HireBookingCheckedOutByStaff", fields: [checkedOutByStaffId], references: [id], onDelete: SetNull)
+  returnedByStaff   User?     @relation("HireBookingReturnedByStaff", fields: [returnedByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([hireAssetId, status])
+  @@index([customerId, status])
+  @@index([status, dueBackAt])
 }
 
 enum StockLedgerEntryType {
@@ -710,6 +781,7 @@ model Customer {
   workshopJobs       WorkshopJob[]
   creditAccounts     CreditAccount[]
   reminderCandidates ReminderCandidate[]
+  hireBookings       HireBooking[]
 
   @@index([name])
   @@index([phone])
@@ -1002,6 +1074,9 @@ model User {
   createdStockTransfers  StockTransfer[]  @relation("StockTransferCreatedByStaff")
   sentStockTransfers     StockTransfer[]  @relation("StockTransferSentByStaff")
   receivedStockTransfers StockTransfer[]  @relation("StockTransferReceivedByStaff")
+  createdHireBookings    HireBooking[]    @relation("HireBookingCreatedByStaff")
+  checkedOutHireBookings HireBooking[]    @relation("HireBookingCheckedOutByStaff")
+  returnedHireBookings   HireBooking[]    @relation("HireBookingReturnedByStaff")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

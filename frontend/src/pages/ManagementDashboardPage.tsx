@@ -429,6 +429,7 @@ export const ManagementDashboardPage = () => {
           <Link className="button-link dashboard-link-card" to="/management/investigations">Check investigations</Link>
           <Link className="button-link dashboard-link-card" to="/management/product-data">Clean up product data</Link>
           <Link className="button-link dashboard-link-card" to="/management/catalogue">Open supplier catalogue</Link>
+          <Link className="button-link dashboard-link-card" to="/management/hire">Open bike hire desk</Link>
           <Link className="button-link dashboard-link-card" to="/pos">Open POS</Link>
           <Link className="button-link dashboard-link-card" to="/workshop">Open workshop board</Link>
           <Link className="button-link dashboard-link-card" to="/inventory">Search inventory</Link>
