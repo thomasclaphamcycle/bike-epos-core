@@ -170,21 +170,15 @@ Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 - Active login users: `GET /api/auth/active-users`
 - Login UI: `/login` (current React UI is PIN-first with active-user buttons, and now includes a password fallback form for password-only or reset-PIN accounts)
 
-### Demo login credentials after `npm run db:seed:dev`
+### Login after `npm run db:seed:dev`
 
-These demo accounts are created by `scripts/seed_demo_data.ts` and are intended for trial flows:
+`scripts/seed_demo_data.ts` no longer creates demo auth users.
 
-| Role | Email | Password | PIN | Expected landing |
-| --- | --- | --- | --- | --- |
-| Staff | `staff@local` | `staff123` | `1111` | `/dashboard` |
-| Manager | `manager@local` | `manager123` | `2222` | `/management` |
-| Admin | `admin@local` | `admin123` | `4444` | `/management/staff` |
-
-The login screen is intentionally PIN-first. The same seeded accounts also keep password login so evaluators can verify both paths.
+The login screen remains PIN-first and lists whatever active staff accounts already exist in the local database. For a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create or manage the remaining staff accounts from `/management/staff`.
 
 `npm run db:seed:dev` now keeps the demo environment intentionally small:
 
-- 3 role-based users
+- no demo auth users
 - 7 products with opening stock in `Main Stock`
 - 4 customers
 - 3 workshop jobs
@@ -225,11 +219,11 @@ Current UX-branch shell visibility:
 
 Recommended evaluator pass:
 
-1. Log in as `staff@local` with PIN `1111` and confirm `/home` routes to `/dashboard`.
+1. Log in with an existing staff account and confirm `/home` routes to `/dashboard`.
 2. Open `/pos`, attach a seeded customer, add one or two seeded products, and complete a simple sale.
 3. Open `/workshop` and `/workshop/collection` to review the three seeded jobs across booking, waiting-for-parts, and ready-for-collection states.
-4. Log in as `manager@local` with PIN `2222`, then review `/inventory`, `/purchasing`, and `/management` using the seeded supplier and open purchase order.
-5. Log in as `admin@local` with PIN `4444` and review `/management/staff` for staff lifecycle and password/PIN controls.
+4. Log in with an existing manager account, then review `/inventory`, `/purchasing`, and `/management` using the seeded supplier and open purchase order.
+5. Log in with an existing admin account and review `/management/staff` for staff lifecycle and password/PIN controls.
 
 Intentional trial limitations to note:
 

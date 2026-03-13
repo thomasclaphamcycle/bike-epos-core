@@ -94,21 +94,17 @@ Open:
 http://localhost:5173/login
 ```
 
-Use one of the seeded demo accounts:
+Use an existing active staff account.
 
-| Role | Email | Password | PIN | Expected landing |
-| --- | --- | --- | --- | --- |
-| Staff | `staff@local` | `staff123` | `1111` | `/dashboard` |
-| Manager | `manager@local` | `manager123` | `2222` | `/management` |
-| Admin | `admin@local` | `admin123` | `4444` | `/management/staff` |
+If this is a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create any additional staff users from `/management/staff`.
 
-The React login screen is intentionally PIN-first, but the same accounts also support password login.
+The React login screen is intentionally PIN-first and lists active users from the database. Password login remains available as a fallback.
 
 ## 6. Running A POS Sale
 
 Recommended first counter-sale walkthrough:
 
-1. Log in as `staff@local`.
+1. Log in as an active staff user.
 2. Confirm `/home` routes to `/dashboard`.
 3. Open `/pos`.
 4. Attach one of the seeded customers.
@@ -127,7 +123,7 @@ This validates:
 
 Recommended workshop walkthrough:
 
-1. Stay as staff or switch to `manager@local`.
+1. Stay as staff or switch to a manager.
 2. Open `/workshop`.
 3. Review the seeded jobs already present.
 4. Open `/workshop/check-in`.
@@ -144,7 +140,7 @@ This validates workshop intake and day-to-day job tracking.
 
 Recommended purchasing walkthrough:
 
-1. Log in as `manager@local`.
+1. Log in as a manager.
 2. Open `/purchasing`.
 3. Open the seeded purchase order.
 4. Review expected quantities and supplier cost.

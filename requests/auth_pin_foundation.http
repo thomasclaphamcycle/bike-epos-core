@@ -6,8 +6,8 @@ POST http://localhost:3000/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "manager@local",
-  "password": "manager123"
+  "email": "replace-with-existing-user-email",
+  "password": "replace-with-existing-user-password"
 }
 
 ### PIN status for current user

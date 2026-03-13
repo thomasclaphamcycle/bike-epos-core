@@ -21,9 +21,8 @@ const prisma = new PrismaClient({
 });
 
 const DEFAULT_BCRYPT_ROUNDS = 12;
-const TARGET_PIN = "1234";
-const TARGET_EMAIL = "admin@local";
-const TARGET_NAME = "Thomas";
+const TARGET_PIN = process.env.TARGET_PIN || "1234";
+const TARGET_EMAIL = process.env.TARGET_EMAIL;
 
 const toBcryptRounds = () => {
   const raw = process.env.AUTH_BCRYPT_ROUNDS;
@@ -40,6 +39,10 @@ const toBcryptRounds = () => {
 };
 
 async function main() {
+  if (!TARGET_EMAIL) {
+    throw new Error("TARGET_EMAIL is required.");
+  }
+
   const adminUsers = await prisma.user.findMany({
     where: {
       role: UserRole.ADMIN,

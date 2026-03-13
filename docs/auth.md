@@ -71,17 +71,11 @@ POST /api/auth/bootstrap
 
 If the React frontend is not running, the backend-only login surface remains available on `http://localhost:3000/login`, but the current trial/evaluator path is the React SPA on `http://localhost:5173`.
 
-## Seeded Demo Accounts
+## Local Login Accounts
 
-After `npm run db:seed:dev`, the demo seed creates these trial users:
+After `npm run db:seed:dev`, the demo seed preserves existing active staff users instead of creating demo auth accounts.
 
-| Role | Email | Password | PIN | Redirect from `/home` |
-| --- | --- | --- | --- | --- |
-| STAFF | `staff@local` | `staff123` | `1111` | `/dashboard` |
-| MANAGER | `manager@local` | `manager123` | `2222` | `/management` |
-| ADMIN | `admin@local` | `admin123` | `4444` | `/management/staff` |
-
-The demo seed keeps the login list intentionally minimal at three clearly named role accounts. The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows.
+The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows. For a fresh local setup, create an initial admin with `npm run auth:seed-admin`, then create or manage the rest of the staff accounts from `/management/staff`.
 
 Inactive or disabled users are not shown in the active-user login list and cannot authenticate through either the PIN or password flow.
 

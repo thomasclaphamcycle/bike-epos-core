@@ -4,11 +4,9 @@ import {
   Prisma,
   PrismaClient,
   PurchaseOrderStatus,
-  UserRole,
   WorkshopJobStatus,
 } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { hashPassword, hashPin } from "../src/services/passwordService";
 
 const DATABASE_URL = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
 if (!DATABASE_URL) {
@@ -162,30 +160,26 @@ const DEMO_STOCK_LOCATION = {
   name: "Main Stock",
 };
 
-const DEMO_USERS = [
+const LEGACY_REMOVED_USERS = [
   {
+    id: "compat-check",
+    username: "header_636f6d7061742d636865636b",
+    email: null,
+  },
+  {
+    id: null,
     username: "admin",
     email: "admin@local",
-    name: "Demo Admin",
-    role: "ADMIN" as UserRole,
-    password: "admin123",
-    pin: "4444",
   },
   {
+    id: null,
     username: "manager",
     email: "manager@local",
-    name: "Demo Manager",
-    role: "MANAGER" as UserRole,
-    password: "manager123",
-    pin: "2222",
   },
   {
+    id: null,
     username: "staff",
     email: "staff@local",
-    name: "Demo Staff",
-    role: "STAFF" as UserRole,
-    password: "staff123",
-    pin: "1111",
   },
 ];
 
@@ -483,37 +477,24 @@ const toReceiptSettings = async () => {
   });
 };
 
-const seedDemoUsers = async () => {
-  for (const user of DEMO_USERS) {
-    const passwordHash = await hashPassword(user.password);
-    const pinHash = await hashPin(user.pin);
-    const existingUser = await prisma.user.findUnique({
-      where: { username: user.username },
-      select: { id: true },
-    });
+const removeLegacyDemoUsers = async () => {
+  const emails = LEGACY_REMOVED_USERS.map((user) => user.email).filter(
+    (email): email is string => Boolean(email),
+  );
+  const usernames = LEGACY_REMOVED_USERS.map((user) => user.username);
+  const ids = LEGACY_REMOVED_USERS.map((user) => user.id).filter(
+    (id): id is string => Boolean(id),
+  );
 
-    const userData = {
-      username: user.username,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      isActive: true,
-      passwordHash,
-      pinHash,
-    };
-
-    if (existingUser) {
-      await prisma.user.update({
-        where: { id: existingUser.id },
-        data: userData,
-      });
-      continue;
-    }
-
-    await prisma.user.create({
-      data: userData,
-    });
-  }
+  await prisma.user.deleteMany({
+    where: {
+      OR: [
+        { email: { in: emails } },
+        { username: { in: usernames } },
+        { id: { in: ids } },
+      ],
+    },
+  });
 };
 
 const seedDemoProducts = async () => {
@@ -838,7 +819,7 @@ const seedDemoSales = async (
   const users = await prisma.user.findMany({
     where: {
       username: {
-        in: DEMO_USERS.map((user) => user.username),
+        in: ["admin", "manager", "staff"],
       },
     },
     select: {
@@ -1037,7 +1018,7 @@ const seedDemoSales = async (
 };
 
 const run = async () => {
-  await seedDemoUsers();
+  await removeLegacyDemoUsers();
   const variantBySku = await seedDemoProducts();
   await seedDemoCustomers();
   await seedDemoOpeningStock(variantBySku);
@@ -1047,17 +1028,12 @@ const run = async () => {
   await seedDemoSales(variantBySku);
 
   console.log("Demo seed ready:");
-  console.log(`- ${DEMO_USERS.length} role-based staff accounts`);
+  console.log("- no demo auth users are created");
   console.log(`- ${DEMO_PRODUCTS.length} products with opening stock in ${DEMO_STOCK_LOCATION.name}`);
   console.log(`- ${DEMO_CUSTOMERS.length} customers`);
   console.log(`- ${DEMO_WORKSHOP_JOBS.length} workshop jobs`);
   console.log(`- ${DEMO_SUPPLIERS.length} supplier and ${DEMO_PURCHASE_ORDERS.length} open purchase order`);
-  console.log("Demo users created:");
-  for (const user of DEMO_USERS) {
-    console.log(
-      `${user.role}: ${user.email} / password ${user.password} / PIN ${user.pin}`,
-    );
-  }
+  console.log("Existing local staff accounts are preserved.");
 };
 
 run()

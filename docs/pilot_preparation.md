@@ -30,11 +30,9 @@ npm --prefix frontend run dev
 
 3. Open `http://localhost:5173/login`.
 
-4. Log in with one of the seeded pilot accounts:
+4. Log in with an existing active staff account.
 
-- `staff@local` / `staff123` / PIN `1111`
-- `manager@local` / `manager123` / PIN `2222`
-- `admin@local` / `admin123` / PIN `4444`
+If this is a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create any additional operator accounts from `/management/staff`.
 
 5. Walk the core operational flows below in order.
 
@@ -42,7 +40,7 @@ npm --prefix frontend run dev
 
 ### 1. Staff login and POS sale
 
-- Log in as `staff@local`
+- Log in as an active staff user
 - confirm `/home` routes to `/dashboard`
 - open `/pos`
 - attach one of the seeded customers
@@ -57,7 +55,7 @@ What this proves:
 
 ### 2. Workshop intake and collection
 
-- stay as staff or log back in as `manager@local`
+- stay as staff or log back in as a manager
 - open `/workshop` and review the seeded jobs
 - open `/workshop/check-in` and create a simple new job for an existing customer
 - open a job detail page and review notes, parts, and current status
@@ -71,7 +69,7 @@ What this proves:
 
 ### 3. Inventory lookup and stock visibility
 
-- log in as `manager@local`
+- log in as a manager
 - open `/inventory`
 - search for a seeded product
 - open the variant detail page
@@ -84,7 +82,7 @@ What this proves:
 
 ### 4. Purchasing and receiving
 
-- remain logged in as `manager@local`
+- remain logged in as a manager
 - open `/purchasing`
 - open the seeded purchase order
 - review expected quantities and supplier cost
