@@ -53,6 +53,10 @@ X-Staff-Id: manager-1
 GET {{baseUrl}}/api/purchase-orders?status=DRAFT&q=m27&take=50&skip=0
 X-Staff-Role: {{staffRole}}
 
+### List purchase orders by variant barcode (STAFF+)
+GET {{baseUrl}}/api/purchase-orders?status=DRAFT&q=5000000000001&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
 ### Update purchase order metadata/status (MANAGER+)
 PATCH {{baseUrl}}/api/purchase-orders/{{purchaseOrderId}}
 Content-Type: application/json

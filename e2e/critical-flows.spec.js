@@ -224,9 +224,10 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   await expect(page.getByTestId("pos-selected-customer")).toContainText(firstCustomer.name);
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Selected for checkout");
 
-  await page.getByTestId("pos-product-search").fill(seeded.sku);
-  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
-  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
+  await page.getByTestId("pos-product-search").fill(seeded.barcode);
+  await page.getByTestId("pos-product-search").press("Enter");
+  await expect(page.getByTestId("pos-product-search")).toHaveValue("");
+  await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
 
   await page.getByTestId("pos-checkout-basket").click();
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to sale");

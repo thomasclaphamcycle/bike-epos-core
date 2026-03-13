@@ -162,6 +162,7 @@ const toPurchaseOrderItemResponse = (item: {
   variant: {
     id: string;
     sku: string;
+    barcode: string | null;
     name: string | null;
     product: {
       id: string;
@@ -173,6 +174,7 @@ const toPurchaseOrderItemResponse = (item: {
   purchaseOrderId: item.purchaseOrderId,
   variantId: item.variantId,
   sku: item.variant.sku,
+  barcode: item.variant.barcode,
   variantName: item.variant.name,
   productId: item.variant.product.id,
   productName: item.variant.product.name,
@@ -642,9 +644,27 @@ export const listPurchaseOrders = async (filters: ListPurchaseOrderFilters = {})
               {
                 items: {
                   some: {
-                    variant: {
-                      sku: { contains: normalizedQuery, mode: "insensitive" },
-                    },
+                    OR: [
+                      {
+                        variant: {
+                          sku: { contains: normalizedQuery, mode: "insensitive" },
+                        },
+                      },
+                      {
+                        variant: {
+                          barcode: { contains: normalizedQuery, mode: "insensitive" },
+                        },
+                      },
+                      {
+                        variant: {
+                          barcodes: {
+                            some: {
+                              code: { contains: normalizedQuery, mode: "insensitive" },
+                            },
+                          },
+                        },
+                      },
+                    ],
                   },
                 },
               },

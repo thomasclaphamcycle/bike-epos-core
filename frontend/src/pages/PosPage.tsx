@@ -4,6 +4,7 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { toBackendUrl } from "../utils/backendUrl";
+import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 const ACTIVE_SALE_KEY = "corepos.activeSaleId";
 
@@ -184,6 +185,11 @@ export const PosPage = () => {
   const loadBasket = async (id: string) => {
     const payload = await apiGet<BasketResponse>(`/api/baskets/${encodeURIComponent(id)}`);
     setBasket(payload);
+  };
+
+  const loadProductMatches = async (params: URLSearchParams) => {
+    const payload = await apiGet<{ rows: ProductSearchRow[] }>(`/api/products/search?${params.toString()}`);
+    return payload.rows || [];
   };
 
   const loadSale = async (id: string) => {
@@ -405,6 +411,50 @@ export const PosPage = () => {
     }
   };
 
+  const resolveProductSearchRow = async (rawInput: string) => {
+    const trimmed = rawInput.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const exactLoadedMatch = searchRows.find((row) =>
+      isExactLookupMatch(row.barcode, trimmed) || isExactLookupMatch(row.sku, trimmed),
+    );
+    if (exactLoadedMatch) {
+      return exactLoadedMatch;
+    }
+
+    if (looksLikeScannerInput(trimmed)) {
+      const barcodeParams = new URLSearchParams();
+      barcodeParams.set("barcode", trimmed);
+      barcodeParams.set("take", "5");
+      const barcodeRows = await loadProductMatches(barcodeParams);
+      const exactBarcodeMatch = barcodeRows.find((row) => isExactLookupMatch(row.barcode, trimmed));
+      if (exactBarcodeMatch) {
+        return exactBarcodeMatch;
+      }
+
+      const skuParams = new URLSearchParams();
+      skuParams.set("sku", trimmed);
+      skuParams.set("take", "5");
+      const skuRows = await loadProductMatches(skuParams);
+      const exactSkuMatch = skuRows.find((row) => isExactLookupMatch(row.sku, trimmed));
+      if (exactSkuMatch) {
+        return exactSkuMatch;
+      }
+    }
+
+    if (searchRows.length > 0) {
+      return searchRows[0];
+    }
+
+    const queryParams = new URLSearchParams();
+    queryParams.set("q", trimmed);
+    queryParams.set("take", "5");
+    const queriedRows = await loadProductMatches(queryParams);
+    return queriedRows[0] ?? null;
+  };
+
   const addItem = async (variantId: string) => {
     if (!basketId) {
       error("No active basket.");
@@ -447,6 +497,34 @@ export const PosPage = () => {
       focusProductSearch();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
+      error(message);
+    }
+  };
+
+  const submitProductSearch = async (quantity: number) => {
+    if (!basketId) {
+      error("No active basket.");
+      return;
+    }
+    if (saleId) {
+      error("Finish or reset the current sale before adding more items.");
+      return;
+    }
+
+    try {
+      const row = await resolveProductSearchRow(searchText);
+      if (!row) {
+        error("No product matched that barcode, SKU, or search.");
+        return;
+      }
+
+      if (quantity === 1) {
+        await addItem(row.id);
+      } else {
+        await addMultipleItems(row.id, quantity);
+      }
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Failed to add searched item";
       error(message);
     }
   };
@@ -919,7 +997,7 @@ export const PosPage = () => {
       <section className="card">
         <h2>Product Search</h2>
         <p className="muted-text">
-          Scan a barcode or search by SKU or product name. Press Enter to add the first match, or Shift+Enter to add five.
+          Scan a barcode or search by SKU or product name. Press Enter to add the exact barcode or SKU match right away, or Shift+Enter to add five.
         </p>
         <label className="grow">
           Search / Barcode
@@ -933,20 +1011,19 @@ export const PosPage = () => {
                 return;
               }
 
-              if (!basketId || saleId || searchRows.length === 0) {
-                return;
-              }
-
               event.preventDefault();
               if (event.shiftKey) {
-                void addMultipleItems(searchRows[0].id, 5);
+                void submitProductSearch(5);
                 return;
               }
-              void addItem(searchRows[0].id);
+              void submitProductSearch(1);
             }}
             placeholder="sku, barcode, name"
           />
         </label>
+        <p className="muted-text">
+          Scanner note: if the scan lands before the debounced search refreshes, Enter still checks for an exact barcode or SKU match before falling back to the visible first row.
+        </p>
 
         <div className="table-wrap" style={{ marginTop: "10px" }}>
           <table>

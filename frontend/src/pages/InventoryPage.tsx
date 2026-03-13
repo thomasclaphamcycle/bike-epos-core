@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 type InventoryRow = {
   variantId: string;
@@ -87,6 +88,7 @@ export const InventoryPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { error } = useToasts();
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const debouncedSearch = useDebouncedValue(search, 250);
@@ -124,10 +126,51 @@ export const InventoryPage = () => {
     }
   };
 
+  const findExactInventoryMatch = async (rawInput: string) => {
+    const trimmed = rawInput.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const exactLoadedMatch = rows.find((row) =>
+      isExactLookupMatch(row.barcode, trimmed) || isExactLookupMatch(row.sku, trimmed),
+    );
+    if (exactLoadedMatch) {
+      return exactLoadedMatch;
+    }
+
+    const payload = await apiGet<InventorySearchResponse>(
+      `/api/inventory/on-hand/search?q=${encodeURIComponent(trimmed)}&active=${encodeURIComponent(active)}&take=25&skip=0`,
+    );
+    const matchedRows = payload.rows || [];
+    return matchedRows.find((row) =>
+      isExactLookupMatch(row.barcode, trimmed) || isExactLookupMatch(row.sku, trimmed),
+    ) ?? null;
+  };
+
   useEffect(() => {
     void loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isEditableTarget = target instanceof HTMLElement
+        && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if (!isEditableTarget && event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     const incoming = searchParams.get("q") ?? "";
@@ -226,8 +269,29 @@ export const InventoryPage = () => {
           <label className="grow">
             Search
             <input
+              ref={searchInputRef}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || !looksLikeScannerInput(search)) {
+                  return;
+                }
+
+                event.preventDefault();
+                void (async () => {
+                  try {
+                    const exactMatch = await findExactInventoryMatch(search);
+                    if (!exactMatch) {
+                      error("No exact barcode or SKU match was found. Review the filtered list below.");
+                      return;
+                    }
+
+                    navigate(`/inventory/${exactMatch.variantId}`);
+                  } catch (loadError) {
+                    error(loadError instanceof Error ? loadError.message : "Failed to resolve scanned inventory item");
+                  }
+                })();
+              }}
               placeholder="product, variant, SKU, barcode"
             />
           </label>
@@ -304,6 +368,9 @@ export const InventoryPage = () => {
           Low stock currently means on-hand stock greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}.
           Zero and negative rows need immediate review. Use reordering for buying decisions, inventory intel for slower
           stock, and the variant detail page for location counts, movements, adjustments, or a stocktake.
+        </p>
+        <p className="muted-text">
+          Shortcut: press <kbd>/</kbd> to focus search. After a scanner enters a barcode or SKU, press Enter to jump straight into the exact variant detail.
         </p>
 
         <div className="table-wrap">

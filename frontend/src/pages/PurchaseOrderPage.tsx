@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import { isExactLookupMatch, looksLikeScannerInput, normalizeLookupToken } from "../utils/barcode";
 
 type Supplier = {
   id: string;
@@ -18,6 +19,7 @@ type PurchaseOrderItem = {
   purchaseOrderId: string;
   variantId: string;
   sku: string;
+  barcode: string | null;
   variantName: string | null;
   productId: string;
   productName: string;
@@ -172,6 +174,7 @@ export const PurchaseOrderPage = () => {
   const { user } = useAuth();
   const { success, error } = useToasts();
   const canManage = isManagerPlus(user?.role);
+  const receiveSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -185,6 +188,7 @@ export const PurchaseOrderPage = () => {
   const [lineEdits, setLineEdits] = useState<Record<string, EditableLine>>({});
   const [receivingEdits, setReceivingEdits] = useState<Record<string, ReceivingLine>>({});
   const [locationId, setLocationId] = useState("");
+  const [receiveSearch, setReceiveSearch] = useState("");
   const [submittingReceiveItemId, setSubmittingReceiveItemId] = useState<string | null>(null);
   const [receiveSuccessMessage, setReceiveSuccessMessage] = useState<string | null>(null);
 
@@ -606,6 +610,66 @@ export const PurchaseOrderPage = () => {
     );
   }, [purchaseOrder]);
 
+  const filteredReceivingItems = useMemo(() => {
+    if (!purchaseOrder) {
+      return [];
+    }
+
+    const normalizedSearch = normalizeLookupToken(receiveSearch);
+    if (!normalizedSearch) {
+      return purchaseOrder.items;
+    }
+
+    return purchaseOrder.items.filter((item) =>
+      [
+        item.productName,
+        item.variantName,
+        item.sku,
+        item.barcode,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearch),
+    );
+  }, [purchaseOrder, receiveSearch]);
+
+  const primeReceiveLineFromSearch = async () => {
+    if (!purchaseOrder) {
+      return;
+    }
+
+    const normalizedSearch = normalizeLookupToken(receiveSearch);
+    if (!normalizedSearch) {
+      error("Scan or enter a barcode or SKU first.");
+      return;
+    }
+
+    const exactMatch = purchaseOrder.items.find((item) =>
+      isExactLookupMatch(item.barcode, normalizedSearch) || isExactLookupMatch(item.sku, normalizedSearch),
+    );
+
+    if (!exactMatch) {
+      error("No exact purchase order line matched that barcode or SKU.");
+      return;
+    }
+
+    if (exactMatch.quantityRemaining <= 0) {
+      error("That line is already fully received.");
+      return;
+    }
+
+    populateReceiveRemaining(exactMatch.id, exactMatch.quantityRemaining);
+    success(`Prepared ${exactMatch.productName} for receiving.`);
+    window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLInputElement>(
+        `[data-testid="po-receive-qty-${exactMatch.id}"]`,
+      );
+      target?.focus();
+      target?.select();
+    });
+  };
+
   if (!id) {
     return <div className="page-shell"><p>Missing purchase order id.</p></div>;
   }
@@ -771,6 +835,7 @@ export const PurchaseOrderPage = () => {
                           <th>Product</th>
                           <th>Variant</th>
                           <th>SKU</th>
+                          <th>Barcode</th>
                           <th>Retail</th>
                           <th>Cost</th>
                           <th>Supplier Link</th>
@@ -788,6 +853,7 @@ export const PurchaseOrderPage = () => {
                               </td>
                               <td>{variant.name || variant.option || "-"}</td>
                               <td className="mono-text">{variant.sku}</td>
+                              <td className="mono-text">{variant.barcode || "-"}</td>
                               <td>{formatMoney(variant.retailPricePence)}</td>
                               <td>{formatMoney(variant.costPricePence)}</td>
                               <td>
@@ -836,6 +902,7 @@ export const PurchaseOrderPage = () => {
                     <th>Product</th>
                     <th>Variant</th>
                     <th>SKU</th>
+                    <th>Barcode</th>
                     <th>Ordered</th>
                     <th>Received</th>
                     <th>Remaining</th>
@@ -848,7 +915,7 @@ export const PurchaseOrderPage = () => {
                 <tbody>
                   {purchaseOrder.items.length === 0 ? (
                     <tr>
-                      <td colSpan={10}>No lines on this purchase order yet.</td>
+                      <td colSpan={11}>No lines on this purchase order yet.</td>
                     </tr>
                   ) : (
                     purchaseOrder.items.map((item) => {
@@ -859,6 +926,7 @@ export const PurchaseOrderPage = () => {
                           <td>{item.productName}</td>
                           <td>{item.variantName || "-"}</td>
                           <td className="mono-text">{item.sku}</td>
+                          <td className="mono-text">{item.barcode || "-"}</td>
                           <td>
                             <input
                               className="compact-input"
@@ -993,7 +1061,35 @@ export const PurchaseOrderPage = () => {
                 </select>
                 <span className="table-secondary">All receipts in this batch post into the selected location.</span>
               </label>
+              <label className="grow">
+                Barcode / SKU
+                <input
+                  ref={receiveSearchInputRef}
+                  value={receiveSearch}
+                  onChange={(event) => setReceiveSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || !looksLikeScannerInput(receiveSearch)) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    void primeReceiveLineFromSearch();
+                  }}
+                  placeholder="scan barcode, SKU, product"
+                  data-testid="po-receive-search"
+                />
+                <span className="table-secondary">
+                  Scan a line barcode, press Enter, and CorePOS will prefill the remaining quantity for the exact match.
+                </span>
+              </label>
               <div className="actions-inline">
+                <button
+                  type="button"
+                  onClick={() => void primeReceiveLineFromSearch()}
+                  disabled={!receiveSearch.trim()}
+                >
+                  Prime Scanned Line
+                </button>
                 <button
                   type="button"
                   className="button-link"
@@ -1012,6 +1108,7 @@ export const PurchaseOrderPage = () => {
                   <tr>
                     <th>Product</th>
                     <th>Variant</th>
+                    <th>Barcode</th>
                     <th>Ordered</th>
                     <th>Received</th>
                     <th>Remaining</th>
@@ -1024,10 +1121,14 @@ export const PurchaseOrderPage = () => {
                 <tbody>
                   {purchaseOrder.items.length === 0 ? (
                     <tr>
-                      <td colSpan={9}>No lines available for receiving.</td>
+                      <td colSpan={10}>No lines available for receiving.</td>
+                    </tr>
+                  ) : filteredReceivingItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={10}>No PO lines matched the current barcode, SKU, or product filter.</td>
                     </tr>
                   ) : (
-                    purchaseOrder.items.map((item) => {
+                    filteredReceivingItems.map((item) => {
                       const receipt = receivingEdits[item.id];
                       const validation = validateReceiveLine(item, receipt);
                       const isSubmitting = submittingReceiveItemId === item.id;
@@ -1035,6 +1136,7 @@ export const PurchaseOrderPage = () => {
                         <tr key={`${item.id}-receive`}>
                           <td>{item.productName}</td>
                           <td>{item.variantName || item.sku}</td>
+                          <td className="mono-text">{item.barcode || item.sku}</td>
                           <td className="numeric-cell">{item.quantityOrdered}</td>
                           <td className="numeric-cell">{item.quantityReceived}</td>
                           <td className="numeric-cell">{item.quantityRemaining}</td>

@@ -386,6 +386,7 @@ const run = async () => {
       body: JSON.stringify({
         productId: productRes.json.id,
         sku: `M27-SKU-${uniqueRef()}`,
+        barcode: `M27-BC-${uniqueRef()}`,
         retailPricePence: 3499,
         costPricePence: 2200,
       }),
@@ -421,6 +422,7 @@ const run = async () => {
     });
     assert.equal(addItemsRes.status, 200, JSON.stringify(addItemsRes.json));
     assert.equal(addItemsRes.json.items.length, 1);
+    assert.equal(addItemsRes.json.items[0].barcode, variantRes.json.barcode);
     const purchaseOrderItemId = addItemsRes.json.items[0].id;
     state.purchaseOrderItemIds.add(purchaseOrderItemId);
 
@@ -475,6 +477,15 @@ const run = async () => {
     assert.ok(listRes.json.purchaseOrders.some((po) => po.id === poRes.json.id));
     assert.ok(listRes.json.purchaseOrders.some((po) => po.poNumber === poRes.json.poNumber));
 
+    const barcodeQueryRes = await fetchJson(
+      `/api/purchase-orders?status=DRAFT&q=${encodeURIComponent(variantRes.json.barcode)}&take=20&skip=0`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(barcodeQueryRes.status, 200, JSON.stringify(barcodeQueryRes.json));
+    assert.ok(barcodeQueryRes.json.purchaseOrders.some((po) => po.id === poRes.json.id));
+
     const patchPoRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}`, {
       method: "PATCH",
       headers: managerHeaders,
@@ -523,6 +534,7 @@ const run = async () => {
     assert.equal(poAfterPartialRes.json.totals.quantityOrdered, 12);
     assert.equal(poAfterPartialRes.json.totals.quantityReceived, 5);
     assert.equal(poAfterPartialRes.json.totals.quantityRemaining, 7);
+    assert.equal(poAfterPartialRes.json.items[0].barcode, variantRes.json.barcode);
 
     const partialMovementRows = await prisma.inventoryMovement.findMany({
       where: {

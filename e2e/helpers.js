@@ -146,6 +146,7 @@ const seedCatalogVariant = async (request, options = {}) => {
   });
 
   const sku = `E2E-${token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`;
+  const barcode = options.barcode || `BC-${token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`;
   const variant = await apiJsonWithHeaderBypass(
     request,
     "POST",
@@ -154,6 +155,7 @@ const seedCatalogVariant = async (request, options = {}) => {
     {
       data: {
         sku,
+        barcode,
         name: `E2E Variant ${token}`,
         retailPricePence: options.retailPricePence ?? 1499,
       },
@@ -177,6 +179,7 @@ const seedCatalogVariant = async (request, options = {}) => {
     product,
     variant,
     sku,
+    barcode,
     initialOnHand,
   };
 };
