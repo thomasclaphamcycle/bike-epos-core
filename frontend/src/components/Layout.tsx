@@ -40,26 +40,26 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       }))
   ), [user?.role]);
 
+  const getActiveChild = (section: typeof visibleSections[number]) =>
+    section.items?.find((item) => item.kind === "link" && matchesNavigationPath(currentPath, item));
+
   const isSectionActive = (section: typeof visibleSections[number]) =>
     matchesNavigationPath(currentPath, section)
-    || Boolean(section.items?.some((item) => item.kind === "link" && matchesNavigationPath(currentPath, item)));
+    || Boolean(getActiveChild(section));
+
+  const isSectionDirectlyActive = (section: typeof visibleSections[number]) =>
+    matchesNavigationPath(currentPath, section) && !getActiveChild(section);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    setOpenSections((current) => {
-      const next = { ...current };
+    setOpenSections(() => {
+      const next: Record<string, boolean> = {};
       for (const section of visibleSections) {
         if (!section.items?.length) {
           continue;
         }
-        if (next[section.id] === undefined) {
-          next[section.id] = Boolean(section.defaultExpanded || isSectionActive(section));
-          continue;
-        }
-        if (isSectionActive(section)) {
-          next[section.id] = true;
-        }
+        next[section.id] = isSectionActive(section);
       }
       return next;
     });
@@ -81,43 +81,52 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <div className="sidebar-link-list">
               {visibleSections.map((section) => {
                 const hasChildren = Boolean(section.items?.length);
-                const isActive = isSectionActive(section);
+                const isDirectlyActive = isSectionDirectlyActive(section);
                 const isOpen = hasChildren ? Boolean(openSections[section.id]) : false;
                 const submenuId = `sidebar-submenu-${section.id}`;
 
                 return (
                   <div
                     key={section.id}
-                    className={isActive ? "sidebar-section-item sidebar-section-item--active" : "sidebar-section-item"}
+                    className={isOpen ? "sidebar-section-item sidebar-section-item--open" : "sidebar-section-item"}
                   >
                     {hasChildren ? (
-                      <button
-                        type="button"
-                        className={isActive ? "sidebar-link sidebar-link--active sidebar-link--expandable" : "sidebar-link sidebar-link--expandable"}
-                        aria-expanded={isOpen}
-                        aria-controls={submenuId}
-                        data-testid={`nav-toggle-${section.id}`}
-                        onClick={() => {
-                          setOpenSections((current) => ({
-                            ...current,
-                            [section.id]: !current[section.id],
-                          }));
-                        }}
-                      >
-                        <span className="sidebar-link-label">{section.label}</span>
-                        <span
-                          aria-hidden="true"
-                          className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}
+                      <div className="sidebar-section-row sidebar-section-row--split">
+                        <NavLink
+                          to={section.to}
+                          end
+                          className={isDirectlyActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
                         >
-                          ▸
-                        </span>
-                      </button>
+                          <span className="sidebar-link-label">{section.label}</span>
+                        </NavLink>
+                        <button
+                          type="button"
+                          className="sidebar-group-toggle"
+                          aria-label={`${isOpen ? "Collapse" : "Expand"} ${section.label}`}
+                          aria-expanded={isOpen}
+                          aria-controls={submenuId}
+                          data-testid={`nav-toggle-${section.id}`}
+                          onClick={() => {
+                            setOpenSections((current) => ({
+                              ...current,
+                              [section.id]: !current[section.id],
+                            }));
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}
+                          >
+                            ▸
+                          </span>
+                        </button>
+                      </div>
                     ) : (
                       <div className="sidebar-section-row">
                         <NavLink
                           to={section.to}
                           end
-                          className={isActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                          className={isDirectlyActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
                         >
                           {section.label}
                         </NavLink>

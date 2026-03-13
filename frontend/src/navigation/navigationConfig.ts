@@ -71,7 +71,6 @@ export const navigationSections: NavigationSection[] = [
     label: "POS",
     to: "/pos",
     minimumRole: "STAFF",
-    defaultExpanded: true,
     matchPrefixes: ["/pos"],
     matchExact: ["/management/cash", "/sales-history/receipt-view"],
     items: [
@@ -100,35 +99,8 @@ export const navigationSections: NavigationSection[] = [
     label: "Sales History",
     to: "/sales-history/transactions",
     minimumRole: "STAFF",
-    matchPrefixes: ["/sales-history"],
+    matchPrefixes: ["/sales-history/transactions", "/sales-history/refund", "/sales-history/exchange"],
     matchExact: ["/management/refunds"],
-    items: [
-      {
-        kind: "link",
-        label: "Transaction List",
-        to: "/sales-history/transactions",
-        minimumRole: "STAFF",
-      },
-      {
-        kind: "link",
-        label: "Receipt View",
-        to: "/sales-history/receipt-view",
-        minimumRole: "STAFF",
-      },
-      {
-        kind: "link",
-        label: "Refund",
-        to: "/sales-history/refund",
-        minimumRole: "MANAGER",
-        matchExact: ["/management/refunds"],
-      },
-      {
-        kind: "link",
-        label: "Exchange",
-        to: "/sales-history/exchange",
-        minimumRole: "STAFF",
-      },
-    ],
   },
   {
     id: "workshop",
