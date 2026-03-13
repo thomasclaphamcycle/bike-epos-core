@@ -19,6 +19,7 @@ Required backend variables:
 Optional operational variable:
 
 - `OPS_LOGGING=1`: enables concise structured lifecycle logs for auth, workshop status changes, stock adjustments, and purchase-order receiving
+- `COREPOS_DEBUG=1`: enables concise request, error, and startup diagnostics for troubleshooting without changing API responses
 
 Operational guidance:
 
@@ -112,6 +113,7 @@ CorePOS logs to standard output and standard error. In production:
 - retain recent startup and error logs for troubleshooting
 - monitor for repeated auth failures, migration failures, database connection errors, and uncaught exceptions
 - enable `OPS_LOGGING=1` if you want structured lifecycle logs without introducing a separate logging stack
+- enable `COREPOS_DEBUG=1` temporarily when you need request ids, per-request timings, or richer startup diagnostics during an incident
 
 Minimum operational check after deploy:
 

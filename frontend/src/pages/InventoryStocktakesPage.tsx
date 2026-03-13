@@ -135,6 +135,9 @@ export const InventoryStocktakesPage = () => {
   const { error, success } = useToasts();
   const variantSearchInputRef = useRef<HTMLInputElement | null>(null);
   const scanInputRef = useRef<HTMLInputElement | null>(null);
+  const sessionsRequestSequenceRef = useRef(0);
+  const sessionDetailRequestSequenceRef = useRef(0);
+  const selectedSessionIdRef = useRef("");
 
   const [locations, setLocations] = useState<LocationRow[]>([]);
   const [sessions, setSessions] = useState<StocktakeSession[]>([]);
@@ -162,6 +165,10 @@ export const InventoryStocktakesPage = () => {
   const [bulkImporting, setBulkImporting] = useState(false);
   const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
 
+  useEffect(() => {
+    selectedSessionIdRef.current = selectedSessionId;
+  }, [selectedSessionId]);
+
   const loadLocations = async () => {
     try {
       const payload = await apiGet<LocationListResponse>("/api/locations");
@@ -179,6 +186,7 @@ export const InventoryStocktakesPage = () => {
   };
 
   const loadSessions = async (preferredSelectedId?: string) => {
+    const requestSequence = ++sessionsRequestSequenceRef.current;
     setLoadingSessions(true);
     try {
       const params = new URLSearchParams();
@@ -189,10 +197,13 @@ export const InventoryStocktakesPage = () => {
       params.set("skip", "0");
 
       const payload = await apiGet<StocktakeListResponse>(`/api/stocktake/sessions?${params.toString()}`);
+      if (requestSequence !== sessionsRequestSequenceRef.current) {
+        return;
+      }
       const nextSessions = payload.stocktakes || [];
       setSessions(nextSessions);
 
-      const requestedId = preferredSelectedId ?? selectedSessionId;
+      const requestedId = preferredSelectedId ?? selectedSessionIdRef.current;
       const nextSelectedId =
         requestedId && nextSessions.some((session) => session.id === requestedId)
           ? requestedId
@@ -202,9 +213,13 @@ export const InventoryStocktakesPage = () => {
         setSelectedSession(null);
       }
     } catch (loadError) {
-      error(loadError instanceof Error ? loadError.message : "Failed to load stocktake sessions");
+      if (requestSequence === sessionsRequestSequenceRef.current) {
+        error(loadError instanceof Error ? loadError.message : "Failed to load stocktake sessions");
+      }
     } finally {
-      setLoadingSessions(false);
+      if (requestSequence === sessionsRequestSequenceRef.current) {
+        setLoadingSessions(false);
+      }
     }
   };
 
@@ -214,17 +229,25 @@ export const InventoryStocktakesPage = () => {
       return;
     }
 
+    const requestSequence = ++sessionDetailRequestSequenceRef.current;
     setLoadingSessionDetail(true);
     try {
       const payload = await apiGet<StocktakeSession>(
         `/api/stocktake/sessions/${encodeURIComponent(sessionId)}?includePreview=true`,
       );
+      if (requestSequence !== sessionDetailRequestSequenceRef.current) {
+        return;
+      }
       setSelectedSession(payload);
     } catch (loadError) {
-      error(loadError instanceof Error ? loadError.message : "Failed to load stocktake session");
-      setSelectedSession(null);
+      if (requestSequence === sessionDetailRequestSequenceRef.current) {
+        error(loadError instanceof Error ? loadError.message : "Failed to load stocktake session");
+        setSelectedSession(null);
+      }
     } finally {
-      setLoadingSessionDetail(false);
+      if (requestSequence === sessionDetailRequestSequenceRef.current) {
+        setLoadingSessionDetail(false);
+      }
     }
   };
 
@@ -365,12 +388,16 @@ export const InventoryStocktakesPage = () => {
     }
 
     setCreatingSession(true);
+    setSelectedSessionId("");
+    setSelectedSession(null);
     try {
       const payload = await apiPost<StocktakeSession>("/api/stocktake/sessions", {
         locationId: createLocationId,
         notes: createNotes.trim() || undefined,
       });
       setCreateNotes("");
+      setSelectedSessionId(payload.id);
+      setSelectedSession(payload);
       success("Stocktake session created.");
       await refreshSessionState(payload.id);
     } catch (createError) {

@@ -12,6 +12,7 @@ Backend:
 - `PORT` (default `3000`)
 - `NODE_ENV` (`development`, `test`, or `production`)
 - `OPS_LOGGING=1` (optional, enables concise structured operational logs for auth, workshop, purchasing, and inventory lifecycle events)
+- `COREPOS_DEBUG=1` (optional, adds concise request, error, and startup diagnostics for support/debug sessions)
 
 Frontend (optional build-time customizations):
 

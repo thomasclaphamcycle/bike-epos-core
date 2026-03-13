@@ -50,13 +50,16 @@ import { publicReceiptUploadRouter } from "./routes/publicReceiptUploadRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
+import { requestLoggingMiddleware } from "./middleware/requestLogging";
 import { enforceAuthMode, requireRoleAtLeast } from "./middleware/staffRole";
+import { isCorePosDebugEnabled, logCorePosDebug, logCorePosEvent } from "./lib/operationalLogger";
 import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
 import { registerInternalEventSubscribers } from "./core/eventSubscribers";
 
 const app = express();
 registerInternalEventSubscribers();
+app.use(requestLoggingMiddleware);
 app.use(express.json({ limit: "12mb" }));
 app.use(enforceAuthMode);
 
@@ -248,6 +251,57 @@ app.use(errorHandler);
 
 const port = Number(process.env.PORT || 3000);
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+const startServer = async () => {
+  const startupPayload: Record<string, unknown> = {
+    environment: process.env.NODE_ENV || "development",
+    port,
+  };
+
+  try {
+    const healthStatus = await getHealthStatus(true);
+    const checks =
+      healthStatus.body &&
+      typeof healthStatus.body === "object" &&
+      "checks" in healthStatus.body &&
+      typeof healthStatus.body.checks === "object" &&
+      healthStatus.body.checks !== null
+        ? (healthStatus.body.checks as Record<string, unknown>)
+        : {};
+    const databaseCheck =
+      checks.database && typeof checks.database === "object"
+        ? (checks.database as Record<string, unknown>)
+        : null;
+    const migrationCheck =
+      checks.migrations && typeof checks.migrations === "object"
+        ? (checks.migrations as Record<string, unknown>)
+        : null;
+
+    startupPayload.databaseStatus =
+      typeof databaseCheck?.status === "string" ? databaseCheck.status : "unknown";
+    startupPayload.migrationStatus =
+      typeof migrationCheck?.status === "string" ? migrationCheck.status : "unknown";
+
+    if (isCorePosDebugEnabled()) {
+      logCorePosDebug("server.startup.preflight", {
+        ...startupPayload,
+        checks,
+      });
+    }
+  } catch (error) {
+    startupPayload.databaseStatus = "error";
+    startupPayload.migrationStatus = "error";
+    startupPayload.preflightError =
+      error instanceof Error ? error.message : String(error);
+    logCorePosEvent("server.startup.preflight_failed", startupPayload, "warn");
+  }
+
+  app.listen(port, () => {
+    logCorePosEvent("server.listening", {
+      ...startupPayload,
+      resultStatus: "succeeded",
+      url: `http://localhost:${port}`,
+    });
+  });
+};
+
+void startServer();
