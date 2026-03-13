@@ -107,7 +107,7 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await expect(page).toHaveURL(/\/management\/staff/);
 });
 
-test("Password fallback login works for active users without a PIN", async ({ page, request }) => {
+test("Login page stays PIN-only and hides users without a PIN", async ({ page, request }) => {
   const passwordOnlyCredentials = await ensureUserViaAdminBypass(request, {
     role: "STAFF",
     prefix: "password-fallback",
@@ -116,17 +116,12 @@ test("Password fallback login works for active users without a PIN", async ({ pa
   const passwordOnlyButton = page.getByTestId(`login-user-${passwordOnlyCredentials.user.id}`);
 
   await page.goto(`${frontendBaseUrl}/login`);
-  await expect(passwordOnlyButton).toContainText("Password only");
-  await passwordOnlyButton.click();
-  await expect(page.getByText("This account does not have a PIN yet. Use email and password below.")).toBeVisible();
+  await expect(passwordOnlyButton).toHaveCount(0);
+  await expect(page.getByText("Password fallback")).toHaveCount(0);
+  await expect(page.getByTestId("login-password-email")).toHaveCount(0);
+  await expect(page.getByTestId("login-password-value")).toHaveCount(0);
+  await expect(page.getByTestId("login-password-submit")).toHaveCount(0);
   await expect(page.getByTestId("login-pin")).toBeDisabled();
-
-  await page.getByTestId("login-password-email").fill(passwordOnlyCredentials.email);
-  await page.getByTestId("login-password-value").fill(passwordOnlyCredentials.password);
-  await page.getByTestId("login-password-submit").click();
-
-  await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toBeVisible();
 });
 
 test("Login then POS page loads and can search products", async ({ page, request }) => {

@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { apiGet, ApiError } from "../api/client";
@@ -15,7 +15,7 @@ type ActiveLoginUser = {
 };
 
 export const LoginPage = () => {
-  const { user, login, loginWithPin } = useAuth();
+  const { user, loginWithPin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTarget = useMemo(() => {
@@ -32,15 +32,13 @@ export const LoginPage = () => {
   const [pin, setPin] = useState("");
   const [pinFocused, setPinFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [passwordIdentifier, setPasswordIdentifier] = useState("");
-  const [passwordValue, setPasswordValue] = useState("");
   const pinInputRef = useRef<HTMLInputElement | null>(null);
+  const pinUsers = useMemo(() => users.filter((candidate) => candidate.hasPin), [users]);
 
   const selectedUser = useMemo(
-    () => users.find((candidate) => candidate.id === selectedUserId) ?? null,
-    [selectedUserId, users],
+    () => pinUsers.find((candidate) => candidate.id === selectedUserId) ?? null,
+    [selectedUserId, pinUsers],
   );
 
   useEffect(() => {
@@ -74,27 +72,17 @@ export const LoginPage = () => {
     });
   }, []);
 
-  useEffect(() => {
-    if (!selectedUser || selectedUser.hasPin) {
-      return;
-    }
-
-    setPin("");
-    setErrorMessage("This account does not have a PIN yet. Use email and password below.");
-  }, [selectedUser, setPin]);
-
   const canSubmit = useMemo(
     () =>
       Boolean(selectedUserId) &&
-      selectedUser?.hasPin === true &&
       /^\d{4}$/.test(pin) &&
       !submitting &&
       !usersLoading,
-    [selectedUserId, selectedUser, pin, submitting, usersLoading],
+    [selectedUserId, pin, submitting, usersLoading],
   );
 
   const submitPinLogin = useCallback(async () => {
-    if (!selectedUserId || !selectedUser?.hasPin || !/^\d{4}$/.test(pin)) {
+    if (!selectedUserId || !/^\d{4}$/.test(pin)) {
       return;
     }
 
@@ -119,41 +107,13 @@ export const LoginPage = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [focusPinInput, loginWithPin, navigate, pin, redirectTarget, selectedUser, selectedUserId]);
-
-  const submitPasswordLogin = useCallback(async () => {
-    if (!passwordIdentifier.trim() || !passwordValue) {
-      setErrorMessage("Email and password are required.");
-      return;
-    }
-
-    setPasswordSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      await login(passwordIdentifier, passwordValue);
-      navigate(redirectTarget || "/home", { replace: true });
-    } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("Login failed.");
-      }
-    } finally {
-      setPasswordSubmitting(false);
-    }
-  }, [login, navigate, passwordIdentifier, passwordValue, redirectTarget]);
+  }, [focusPinInput, loginWithPin, navigate, pin, redirectTarget, selectedUserId]);
 
   useEffect(() => {
     if (selectedUserId && /^\d{4}$/.test(pin) && !submitting && !usersLoading) {
       void submitPinLogin();
     }
   }, [pin, selectedUserId, submitPinLogin, submitting, usersLoading]);
-
-  const onPasswordSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    await submitPasswordLogin();
-  };
 
   return (
     <div className="login-shell">
@@ -166,8 +126,8 @@ export const LoginPage = () => {
           <div className="login-user-list" data-testid="login-user-list">
             {usersLoading ? (
               <div className="login-inline-status">Loading staff...</div>
-            ) : users.length ? (
-              users.map((loginUser) => (
+            ) : pinUsers.length ? (
+              pinUsers.map((loginUser) => (
                 <button
                   key={loginUser.id}
                   type="button"
@@ -180,17 +140,14 @@ export const LoginPage = () => {
                       focusPinInput();
                     }
                   }}
-                  disabled={submitting || passwordSubmitting}
+                  disabled={submitting}
                 >
                   <span className="login-user-name">{loginUser.displayName}</span>
-                  <span className="login-user-role">
-                    {loginUser.role}
-                    {loginUser.hasPin ? "" : " · Password only"}
-                  </span>
+                  <span className="login-user-role">{loginUser.role}</span>
                 </button>
               ))
             ) : (
-              <div className="login-inline-status">No active users available.</div>
+              <div className="login-inline-status">No PIN-enabled users available.</div>
             )}
           </div>
 
@@ -228,7 +185,7 @@ export const LoginPage = () => {
                   }
                 }}
                 autoComplete="one-time-code"
-                disabled={selectedUser?.hasPin === false || passwordSubmitting}
+                disabled={!selectedUser}
                 required
               />
               <div className="login-pin-slots" aria-hidden="true">
@@ -246,54 +203,6 @@ export const LoginPage = () => {
                 })}
               </div>
             </div>
-          </div>
-
-          <div className="login-password-divider">
-            <span>Password fallback</span>
-          </div>
-
-          <div className="login-password-section">
-            <div className="login-pin-labels">
-              <label htmlFor="password-email">Email</label>
-              <p className="login-pin-help">
-                Use this when a PIN is not set or has been reset.
-              </p>
-            </div>
-            <form className="login-password-form" onSubmit={onPasswordSubmit}>
-              <input
-                id="password-email"
-                data-testid="login-password-email"
-                type="email"
-                value={passwordIdentifier}
-                onChange={(event) => {
-                  setPasswordIdentifier(event.target.value);
-                  setErrorMessage(null);
-                }}
-                autoComplete="username"
-                placeholder="staff@example.com"
-                disabled={submitting || passwordSubmitting}
-              />
-              <input
-                data-testid="login-password-value"
-                type="password"
-                value={passwordValue}
-                onChange={(event) => {
-                  setPasswordValue(event.target.value);
-                  setErrorMessage(null);
-                }}
-                autoComplete="current-password"
-                placeholder="Password"
-                disabled={submitting || passwordSubmitting}
-              />
-              <button
-                type="submit"
-                className="login-password-submit"
-                data-testid="login-password-submit"
-                disabled={submitting || passwordSubmitting}
-              >
-                {passwordSubmitting ? "Logging in..." : "Use password"}
-              </button>
-            </form>
           </div>
 
           {errorMessage ? <p className="error-banner">{errorMessage}</p> : null}
