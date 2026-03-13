@@ -34,7 +34,7 @@ The phase count should not be collapsed or reduced unless the product strategy i
 
 ---
 
-## Phase 1 — POS & Cash Control (IN PROGRESS)
+## Phase 1 — POS & Cash Control (IN PROGRESS) — 85% Complete
 
 Purpose:
 Run the till reliably with accountable cash handling.
@@ -71,7 +71,7 @@ Implementation status:
 
 ---
 
-## Phase 2 — Product Catalogue (PLANNED)
+## Phase 2 — Product Catalogue (PLANNED) — 80% Complete
 
 Purpose:
 Give the shop a reliable, searchable product catalogue.
@@ -92,7 +92,7 @@ Implementation status:
 
 ---
 
-## Phase 3 — Inventory Control (PLANNED)
+## Phase 3 — Inventory Control (PLANNED) — 75% Complete
 
 Purpose:
 Keep stock levels trustworthy and operationally useful.
@@ -114,7 +114,7 @@ Implementation status:
 
 ---
 
-## Phase 4 — Stock Take (PLANNED)
+## Phase 4 — Stock Take (PLANNED) — 80% Complete
 
 Purpose:
 Provide reliable count and reconciliation workflows.
@@ -133,7 +133,7 @@ Implementation status:
 
 ---
 
-## Phase 5 — Purchasing (PLANNED)
+## Phase 5 — Purchasing (PLANNED) — 80% Complete
 
 Purpose:
 Manage supplier ordering and stock receiving.
@@ -153,7 +153,7 @@ Implementation status:
 
 ---
 
-## Phase 6 — Data Import / Export (PLANNED)
+## Phase 6 — Data Import / Export (PLANNED) — 45% Complete
 
 Purpose:
 Handle migration, bulk updates, and supplier catalogue ingestion efficiently.
@@ -181,7 +181,7 @@ Implementation status:
 
 ---
 
-## Phase 7 — Supplier Integrations (PLANNED)
+## Phase 7 — Supplier Integrations (PLANNED) — 15% Complete
 
 Purpose:
 Automate supplier catalogue and availability updates where suppliers support it.
@@ -205,7 +205,7 @@ Implementation status:
 
 ---
 
-## Phase 8 — Workshop System (PLANNED)
+## Phase 8 — Workshop System (PLANNED) — 75% Complete
 
 Purpose:
 Run the repair and service side of the bike shop digitally.
@@ -261,7 +261,7 @@ Implementation status:
 
 ---
 
-## Phase 9 — Staff & Operations (PARTIAL)
+## Phase 9 — Staff & Operations (PARTIAL) — 70% Complete
 
 Purpose:
 Manage staff access, oversight, daily operations, and business reporting.
@@ -291,7 +291,7 @@ Implementation status:
 
 ---
 
-## Phase 10 — Rental Services (FUTURE)
+## Phase 10 — Rental Services (FUTURE) — 5% Complete
 
 Purpose:
 Support bike hire and rental operations as a first-class flow.
@@ -318,7 +318,7 @@ Implementation status:
 
 ---
 
-## Phase 11 — Online Store & Website Builder (FUTURE)
+## Phase 11 — Online Store & Website Builder (FUTURE) — 5% Complete
 
 Purpose:
 Support customer-facing online workflows and eventually shop websites powered by CorePOS.
