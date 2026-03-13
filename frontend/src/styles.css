@@ -314,8 +314,13 @@ textarea {
 }
 
 .sidebar-submenu-link--active {
-  background: rgba(255, 122, 24, 0.18);
-  color: #fff4e8;
+  background: #ff7a00;
+  color: #041334;
+}
+
+.sidebar-submenu-link--active:hover {
+  background: #ff7a00;
+  color: #041334;
 }
 
 .header-right {

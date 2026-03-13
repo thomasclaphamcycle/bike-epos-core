@@ -40,8 +40,19 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       }))
   ), [user?.role]);
 
-  const getActiveChild = (section: typeof visibleSections[number]) =>
-    section.items?.find((item) => item.kind === "link" && matchesNavigationPath(currentPath, item));
+  const getActiveChild = (section: typeof visibleSections[number]) => {
+    const matchingChild = section.items?.find(
+      (item) => item.kind === "link" && matchesNavigationPath(currentPath, item),
+    );
+
+    if (matchingChild || !matchesNavigationPath(currentPath, section)) {
+      return matchingChild;
+    }
+
+    return section.items?.find(
+      (item) => item.kind === "link" && item.to === section.to,
+    );
+  };
 
   const isSectionActive = (section: typeof visibleSections[number]) =>
     matchesNavigationPath(currentPath, section)
