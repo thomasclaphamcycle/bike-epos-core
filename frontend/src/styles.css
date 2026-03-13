@@ -140,6 +140,18 @@ textarea {
   gap: 12px;
 }
 
+.sidebar-section-item {
+  display: grid;
+  gap: 6px;
+}
+
+.sidebar-section-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 6px;
+}
+
 .app-shell {
   min-width: 0;
   display: grid;
@@ -222,6 +234,66 @@ textarea {
 .sidebar-link--active:hover {
   background: #ff7a00;
   color: #041334;
+}
+
+.sidebar-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #ffffff;
+}
+
+.sidebar-toggle-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-toggle-chevron {
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+
+.sidebar-toggle-chevron--open {
+  transform: rotate(90deg);
+}
+
+.sidebar-submenu {
+  display: grid;
+  gap: 6px;
+  padding-left: 14px;
+  border-left: 1px solid rgba(157, 180, 201, 0.22);
+  margin-left: 10px;
+}
+
+.sidebar-subgroup-label {
+  padding: 6px 10px 2px;
+  color: #9db4c9;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-submenu-link {
+  color: rgba(237, 245, 251, 0.88);
+  text-decoration: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.94rem;
+}
+
+.sidebar-submenu-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.sidebar-submenu-link--active {
+  background: rgba(255, 122, 24, 0.18);
+  color: #fff4e8;
 }
 
 .header-right {

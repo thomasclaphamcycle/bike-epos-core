@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Layout } from "./components/Layout";
@@ -70,306 +71,292 @@ import { DocumentationHubPage } from "./pages/DocumentationHubPage";
 import { PinSettingsPage } from "./pages/PinSettingsPage";
 import { CashReceiptUploadPage } from "./pages/CashReceiptUploadPage";
 import { CustomerSitePage } from "./pages/CustomerSitePage";
+import { NavigationPlaceholderPage } from "./pages/NavigationPlaceholderPage";
+
+const managerOnly = (element: ReactNode) => (
+  <ProtectedRoute minimumRole="MANAGER">{element}</ProtectedRoute>
+);
+
+const adminOnly = (element: ReactNode) => (
+  <ProtectedRoute minimumRole="ADMIN">{element}</ProtectedRoute>
+);
 
 const AuthedApp = () => (
   <ProtectedRoute>
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/home" replace />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/home" element={<HomeRedirectPage />} />
         <Route path="/account/pin" element={<PinSettingsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route
           path="/management"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ManagementDashboardPage />
-            </ProtectedRoute>
+            managerOnly(<ManagementDashboardPage />)
           )}
         />
         <Route
           path="/management/dashboard-settings"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <DashboardSettingsPage />
-            </ProtectedRoute>
+            managerOnly(<DashboardSettingsPage />)
           )}
         />
         <Route
           path="/management/sales"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <SalesAnalyticsPage />
-            </ProtectedRoute>
+            managerOnly(<SalesAnalyticsPage />)
           )}
         />
         <Route
           path="/management/workshop"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <WorkshopPerformancePage />
-            </ProtectedRoute>
+            managerOnly(<WorkshopPerformancePage />)
           )}
         />
         <Route
           path="/management/products"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ProductSalesAnalyticsPage />
-            </ProtectedRoute>
+            managerOnly(<ProductSalesAnalyticsPage />)
           )}
         />
         <Route
           path="/management/inventory"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <InventoryVelocityPage />
-            </ProtectedRoute>
+            managerOnly(<InventoryVelocityPage />)
           )}
         />
         <Route
           path="/management/suppliers"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <SupplierPerformancePage />
-            </ProtectedRoute>
+            managerOnly(<SupplierPerformancePage />)
           )}
         />
         <Route
           path="/management/reordering"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ReorderSuggestionsPage />
-            </ProtectedRoute>
+            managerOnly(<ReorderSuggestionsPage />)
           )}
         />
         <Route
           path="/management/capacity"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <WorkshopCapacityPage />
-            </ProtectedRoute>
+            managerOnly(<WorkshopCapacityPage />)
           )}
         />
         <Route
           path="/management/activity"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ActivityPage />
-            </ProtectedRoute>
+            managerOnly(<ActivityPage />)
           )}
         />
         <Route
           path="/management/refunds"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <RefundOversightPage />
-            </ProtectedRoute>
+            managerOnly(<RefundOversightPage />)
           )}
         />
         <Route
           path="/management/cash"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <CashOversightPage />
-            </ProtectedRoute>
+            managerOnly(<CashOversightPage />)
           )}
         />
         <Route
           path="/management/summary"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <OperationsSummaryPage />
-            </ProtectedRoute>
+            managerOnly(<OperationsSummaryPage />)
           )}
         />
         <Route
           path="/management/trade-close"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <DailyTradeClosePage />
-            </ProtectedRoute>
+            managerOnly(<DailyTradeClosePage />)
           )}
         />
         <Route
           path="/management/liabilities"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <LiabilitiesReviewPage />
-            </ProtectedRoute>
+            managerOnly(<LiabilitiesReviewPage />)
           )}
         />
         <Route
           path="/management/alerts"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <AlertsCentrePage />
-            </ProtectedRoute>
+            managerOnly(<AlertsCentrePage />)
           )}
         />
         <Route
           path="/management/actions"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ActionCentrePage />
-            </ProtectedRoute>
+            managerOnly(<ActionCentrePage />)
           )}
         />
         <Route
           path="/management/investigations"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <StockInvestigationsPage />
-            </ProtectedRoute>
+            managerOnly(<StockInvestigationsPage />)
           )}
         />
         <Route
           path="/management/exceptions"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <OperationsExceptionsPage />
-            </ProtectedRoute>
+            managerOnly(<OperationsExceptionsPage />)
           )}
         />
         <Route
           path="/management/reminders"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ServiceRemindersPage />
-            </ProtectedRoute>
+            managerOnly(<ServiceRemindersPage />)
           )}
         />
         <Route
           path="/management/views"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <SavedViewsPage />
-            </ProtectedRoute>
+            managerOnly(<SavedViewsPage />)
           )}
         />
         <Route
           path="/management/catalogue"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <SupplierCataloguePage />
-            </ProtectedRoute>
+            managerOnly(<SupplierCataloguePage />)
           )}
         />
         <Route
           path="/management/exports"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ExportHubPage />
-            </ProtectedRoute>
+            managerOnly(<ExportHubPage />)
           )}
         />
         <Route
           path="/management/customers"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <CustomerInsightsPage />
-            </ProtectedRoute>
+            managerOnly(<CustomerInsightsPage />)
           )}
         />
         <Route
           path="/management/purchasing"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <PurchaseOrderActionPage />
-            </ProtectedRoute>
+            managerOnly(<PurchaseOrderActionPage />)
           )}
         />
         <Route
           path="/management/product-data"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <ProductDataQueuePage />
-            </ProtectedRoute>
+            managerOnly(<ProductDataQueuePage />)
           )}
         />
         <Route
           path="/management/pricing"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <PricingExceptionsPage />
-            </ProtectedRoute>
+            managerOnly(<PricingExceptionsPage />)
           )}
         />
         <Route
           path="/management/supplier-returns"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <SupplierReturnsPage />
-            </ProtectedRoute>
+            managerOnly(<SupplierReturnsPage />)
           )}
         />
         <Route
           path="/management/health"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <OpsHealthPage />
-            </ProtectedRoute>
+            managerOnly(<OpsHealthPage />)
           )}
         />
         <Route
           path="/management/integrity"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <DataIntegrityPage />
-            </ProtectedRoute>
+            managerOnly(<DataIntegrityPage />)
           )}
         />
         <Route
           path="/management/staff"
           element={(
-            <ProtectedRoute minimumRole="ADMIN">
-              <StaffManagementPage />
-            </ProtectedRoute>
+            adminOnly(<StaffManagementPage />)
           )}
         />
         <Route
           path="/management/admin-review"
           element={(
-            <ProtectedRoute minimumRole="ADMIN">
-              <AdminReviewPage />
-            </ProtectedRoute>
+            adminOnly(<AdminReviewPage />)
           )}
         />
         <Route
           path="/management/onboarding"
           element={(
-            <ProtectedRoute minimumRole="ADMIN">
-              <OnboardingPage />
-            </ProtectedRoute>
+            adminOnly(<OnboardingPage />)
           )}
         />
         <Route
           path="/management/backups"
           element={(
-            <ProtectedRoute minimumRole="ADMIN">
-              <BackupToolkitPage />
-            </ProtectedRoute>
+            adminOnly(<BackupToolkitPage />)
           )}
         />
         <Route
           path="/management/settings"
           element={(
-            <ProtectedRoute minimumRole="ADMIN">
-              <SystemSettingsPage />
-            </ProtectedRoute>
+            adminOnly(<SystemSettingsPage />)
           )}
         />
         <Route
           path="/management/docs"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <DocumentationHubPage />
-            </ProtectedRoute>
+            managerOnly(<DocumentationHubPage />)
           )}
         />
         <Route path="/pos" element={<PosPage />} />
+        <Route
+          path="/sales-history/transactions"
+          element={(
+            <NavigationPlaceholderPage
+              title="Sales History · Transaction List"
+              description="Use this route as the future list/search workspace for completed sales, receipt lookup, and transaction review."
+              links={[
+                { label: "Open POS", to: "/pos" },
+                { label: "Sales reports", to: "/reports/sales" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/sales-history/receipt-view"
+          element={(
+            <NavigationPlaceholderPage
+              title="Sales History · Receipt View"
+              description="Receipt lookup and reprint workflow will expand here. Current receipt opening still happens from completed sale flows."
+              links={[
+                { label: "Transaction List", to: "/sales-history/transactions" },
+                { label: "Open POS", to: "/pos" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/sales-history/refund"
+          element={managerOnly(<RefundOversightPage />)}
+        />
+        <Route
+          path="/sales-history/exchange"
+          element={(
+            <NavigationPlaceholderPage
+              title="Sales History · Exchange"
+              description="Exchange handling will build on the same sales-history workflow family without changing the current validated sale and refund rules yet."
+              links={[
+                { label: "Refund overview", to: "/sales-history/refund" },
+                { label: "Transaction List", to: "/sales-history/transactions" },
+              ]}
+            />
+          )}
+        />
         <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/workshop/new" element={<WorkshopCheckInPage />} />
         <Route path="/workshop/check-in" element={<WorkshopCheckInPage />} />
+        <Route path="/workshop/technician" element={<InternalTasksPage />} />
+        <Route
+          path="/workshop/analytics"
+          element={managerOnly(<WorkshopPerformancePage />)}
+        />
         <Route path="/workshop/bookings" element={<WorkshopBookingsPage />} />
         <Route path="/workshop/collection" element={<WorkshopCollectionPage />} />
         <Route path="/workshop/print" element={<WorkshopPrintCentrePage />} />
@@ -377,87 +364,334 @@ const AuthedApp = () => (
         <Route
           path="/management/calendar"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <WorkshopCalendarPage />
-            </ProtectedRoute>
+            managerOnly(<WorkshopCalendarPage />)
           )}
         />
         <Route
           path="/management/communications"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <CustomerCommunicationQueuePage />
-            </ProtectedRoute>
+            managerOnly(<CustomerCommunicationQueuePage />)
           )}
         />
         <Route
           path="/management/warranty"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <WarrantyTrackingPage />
-            </ProtectedRoute>
+            managerOnly(<WarrantyTrackingPage />)
           )}
         />
         <Route
           path="/management/stock-exceptions"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <StockExceptionsPage />
-            </ProtectedRoute>
+            managerOnly(<StockExceptionsPage />)
           )}
         />
         <Route
           path="/management/transfers"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <TransferQueuePage />
-            </ProtectedRoute>
+            managerOnly(<TransferQueuePage />)
           )}
         />
         <Route
           path="/management/hire"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <BikeHirePage />
-            </ProtectedRoute>
+            managerOnly(<BikeHirePage />)
           )}
         />
         <Route
           path="/management/workshop-ageing"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <WorkshopAgeingPage />
-            </ProtectedRoute>
+            managerOnly(<WorkshopAgeingPage />)
           )}
         />
         <Route
           path="/management/staff-performance"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <StaffPerformancePage />
-            </ProtectedRoute>
+            managerOnly(<StaffPerformancePage />)
           )}
         />
         <Route path="/tasks" element={<InternalTasksPage />} />
         <Route path="/customers" element={<CustomersPage />} />
+        <Route
+          path="/customers/bikes"
+          element={(
+            <NavigationPlaceholderPage
+              title="Customers · Customer Bikes"
+              description="Customer-bike profiles and registration detail will live here once the dedicated customer equipment workflow is promoted beyond the current profile foundation."
+              links={[
+                { label: "Customer List", to: "/customers" },
+                { label: "Service History", to: "/customers/service-history" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/customers/service-history"
+          element={(
+            <NavigationPlaceholderPage
+              title="Customers · Service History"
+              description="This route will become the cross-customer service-history lookup. Individual customer timelines remain available from each customer profile."
+              links={[
+                { label: "Customer List", to: "/customers" },
+                { label: "Loyalty", to: "/customers/loyalty" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/customers/loyalty"
+          element={(
+            <NavigationPlaceholderPage
+              title="Customers · Loyalty"
+              description="Loyalty and repeat-customer incentives are scaffolded here for the UX roadmap without changing current customer or sale behavior."
+              links={[
+                { label: "Customer List", to: "/customers" },
+                { label: "Service History", to: "/customers/service-history" },
+              ]}
+            />
+          )}
+        />
         <Route path="/customers/:id" element={<CustomerProfilePage />} />
         <Route path="/customers/:id/timeline" element={<CustomerTimelinePage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route
+          path="/inventory/products"
+          element={(
+            <NavigationPlaceholderPage
+              title="Inventory · Product List"
+              description="Product-list browsing and catalogue maintenance will consolidate here. Current inventory lookup and stock visibility remain available from Stock Levels."
+              links={[
+                { label: "Stock Levels", to: "/inventory" },
+                { label: "Product Data", to: "/management/product-data" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/inventory/products/categories"
+          element={(
+            <NavigationPlaceholderPage
+              title="Inventory · Categories"
+              description="Category structure and product grouping will live here as the inventory UX expands beyond raw stock lookup."
+              links={[
+                { label: "Product List", to: "/inventory/products" },
+                { label: "Brands", to: "/inventory/products/brands" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/inventory/products/brands"
+          element={(
+            <NavigationPlaceholderPage
+              title="Inventory · Brands"
+              description="Brand-level catalogue navigation and filtering are scaffolded here for the finalized inventory navigation tree."
+              links={[
+                { label: "Product List", to: "/inventory/products" },
+                { label: "Attributes", to: "/inventory/products/attributes" },
+              ]}
+            />
+          )}
+        />
+        <Route
+          path="/inventory/products/attributes"
+          element={(
+            <NavigationPlaceholderPage
+              title="Inventory · Attributes"
+              description="Variant attributes, option families, and future merchandising metadata will be surfaced here when the deeper product UX lands."
+              links={[
+                { label: "Product List", to: "/inventory/products" },
+                { label: "Categories", to: "/inventory/products/categories" },
+              ]}
+            />
+          )}
+        />
+        <Route
           path="/inventory/stocktakes"
           element={(
-            <ProtectedRoute minimumRole="MANAGER">
-              <InventoryStocktakesPage />
-            </ProtectedRoute>
+            managerOnly(<InventoryStocktakesPage />)
+          )}
+        />
+        <Route
+          path="/inventory/transfers"
+          element={managerOnly(<TransferQueuePage />)}
+        />
+        <Route
+          path="/inventory/adjustments"
+          element={managerOnly(
+            <NavigationPlaceholderPage
+              title="Inventory · Adjustments"
+              description="Adjustment history and bulk adjustment entry will live here. Existing stock correctness remains enforced through the current inventory workflows."
+              links={[
+                { label: "Stock Levels", to: "/inventory" },
+                { label: "Stocktake", to: "/inventory/stocktakes" },
+              ]}
+            />,
           )}
         />
         <Route path="/inventory/locations" element={<InventoryLocationsPage />} />
         <Route path="/inventory/:variantId" element={<InventoryItemPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
         <Route path="/purchasing" element={<PurchasingPage />} />
+        <Route path="/purchasing/receive-deliveries" element={<SupplierReceivingPage />} />
         <Route path="/purchasing/receiving" element={<SupplierReceivingPage />} />
         <Route path="/purchasing/:id" element={<PurchaseOrderPage />} />
-        <Route path="*" element={<Navigate to="/pos" replace />} />
+        <Route path="/reports/sales" element={managerOnly(<SalesAnalyticsPage />)} />
+        <Route path="/reports/inventory" element={managerOnly(<InventoryVelocityPage />)} />
+        <Route path="/reports/workshop" element={managerOnly(<WorkshopPerformancePage />)} />
+        <Route path="/reports/staff-performance" element={managerOnly(<StaffPerformancePage />)} />
+        <Route path="/rental/calendar" element={managerOnly(<BikeHirePage />)} />
+        <Route path="/rental/new" element={managerOnly(<BikeHirePage />)} />
+        <Route path="/rental/active" element={managerOnly(<BikeHirePage />)} />
+        <Route path="/rental/returns" element={managerOnly(<BikeHirePage />)} />
+        <Route path="/rental/history" element={managerOnly(<BikeHirePage />)} />
+        <Route
+          path="/online-store/orders"
+          element={managerOnly(
+            <NavigationPlaceholderPage
+              title="Online Store · Orders"
+              description="Online order intake and review will live here when the customer-facing commerce flow moves beyond the current brochure-site foundation."
+              links={[
+                { label: "Products", to: "/online-store/products" },
+                { label: "Website Builder", to: "/online-store/website-builder" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/online-store/products"
+          element={managerOnly(
+            <NavigationPlaceholderPage
+              title="Online Store · Products"
+              description="Online catalogue publishing controls are scaffolded here for future website and e-commerce expansion."
+              links={[
+                { label: "Orders", to: "/online-store/orders" },
+                { label: "Click & Collect", to: "/online-store/click-collect" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/online-store/click-collect"
+          element={managerOnly(
+            <NavigationPlaceholderPage
+              title="Online Store · Click & Collect"
+              description="Click & collect flow setup will be wired here once online orders and fulfilment workflows are promoted into active product work."
+              links={[
+                { label: "Orders", to: "/online-store/orders" },
+                { label: "Website Builder", to: "/online-store/website-builder" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/online-store/website-builder"
+          element={managerOnly(
+            <NavigationPlaceholderPage
+              title="Online Store · Website Builder"
+              description="Website structure, customer-facing content, and future booking or marketing surfaces are scaffolded here for later expansion."
+              links={[
+                { label: "Orders", to: "/online-store/orders" },
+                { label: "Customer site preview", to: "/site" },
+              ]}
+            />,
+          )}
+        />
+        <Route path="/settings/store-info" element={adminOnly(<SystemSettingsPage />)} />
+        <Route path="/settings/staff-list" element={adminOnly(<StaffManagementPage />)} />
+        <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
+        <Route
+          path="/settings/staff-rota"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · Staff Rota"
+              description="Staff rota planning is scaffolded here so dashboard and navigation flows can point to the future rota workspace without adding rota business logic yet."
+              links={[
+                { label: "Staff List", to: "/settings/staff-list" },
+                { label: "Roles & Permissions", to: "/settings/roles-permissions" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/settings/pos"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · POS Settings"
+              description="POS behavior defaults and operational controls will expand here while the current persisted settings stay available through Store Info."
+              links={[
+                { label: "Store Info", to: "/settings/store-info" },
+                { label: "Receipts", to: "/settings/receipts" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/settings/workshop"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · Workshop Settings"
+              description="Workshop defaults and workflow controls will live here as the settings UX grows around the existing workshop service behavior."
+              links={[
+                { label: "Store Info", to: "/settings/store-info" },
+                { label: "Inventory Settings", to: "/settings/inventory" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/settings/inventory"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · Inventory Settings"
+              description="Inventory thresholds, handling defaults, and later stock-control preferences are scaffolded here for the finalized settings tree."
+              links={[
+                { label: "Store Info", to: "/settings/store-info" },
+                { label: "Payments", to: "/settings/payments" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/settings/payments"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · Payments"
+              description="Payment processor and tender configuration will be exposed here without changing the current validated tender and till workflows."
+              links={[
+                { label: "Store Info", to: "/settings/store-info" },
+                { label: "Integrations", to: "/settings/integrations" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/settings/integrations"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · Integrations"
+              description="External integration controls and connection status will be surfaced here as operational integrations mature."
+              links={[
+                { label: "Store Info", to: "/settings/store-info" },
+                { label: "System / Diagnostics", to: "/settings/system-diagnostics" },
+              ]}
+            />,
+          )}
+        />
+        <Route
+          path="/settings/receipts"
+          element={adminOnly(
+            <NavigationPlaceholderPage
+              title="Settings · Receipts"
+              description="Receipt formatting and print-output configuration are scaffolded here while current receipt generation remains unchanged."
+              links={[
+                { label: "Store Info", to: "/settings/store-info" },
+                { label: "POS Settings", to: "/settings/pos" },
+              ]}
+            />,
+          )}
+        />
+        <Route path="/settings/system-diagnostics" element={adminOnly(<OpsHealthPage />)} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Layout>
   </ProtectedRoute>

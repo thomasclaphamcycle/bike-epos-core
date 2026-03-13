@@ -1,24 +1,17 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
 import CorePosLogo from "./branding/CorePosLogo";
 import { appVersionLabel } from "../utils/buildInfo";
-
-const roleRank = {
-  STAFF: 1,
-  MANAGER: 2,
-  ADMIN: 3,
-} as const;
+import {
+  canAccessNavigationRole,
+  matchesNavigationPath,
+  navigationSections,
+} from "../navigation/navigationConfig";
 
 const envLabel = import.meta.env.MODE || "development";
-
-type SidebarNavItem = {
-  to: string;
-  label: string;
-  minimumRole: keyof typeof roleRank;
-  matches: (path: string) => boolean;
-};
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
@@ -38,99 +31,47 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
-  const sidebarNavItems: SidebarNavItem[] = [
-    {
-      to: "/dashboard",
-      label: "Dashboard",
-      minimumRole: "STAFF",
-      matches: (path) => path === "/dashboard" || path === "/home",
-    },
-    {
-      to: "/pos",
-      label: "POS",
-      minimumRole: "STAFF",
-      matches: (path) => path === "/pos",
-    },
-    {
-      to: "/workshop",
-      label: "Workshop",
-      minimumRole: "STAFF",
-      matches: (path) => path === "/workshop" || path.startsWith("/workshop/"),
-    },
-    {
-      to: "/management/cash",
-      label: "Cash Management",
-      minimumRole: "MANAGER",
-      matches: (path) =>
-        path === "/till" ||
-        path.startsWith("/management/cash") ||
-        path.startsWith("/management/refunds"),
-    },
-    {
-      to: "/inventory",
-      label: "Stock Control",
-      minimumRole: "STAFF",
-      matches: (path) => path === "/inventory" || path.startsWith("/inventory/"),
-    },
-    {
-      to: "/customers",
-      label: "Customers",
-      minimumRole: "STAFF",
-      matches: (path) => path === "/customers" || path.startsWith("/customers/"),
-    },
-    {
-      to: "/management",
-      label: "Back Office",
-      minimumRole: "MANAGER",
-      matches: (path) =>
-        path === "/reports" ||
-        path === "/suppliers" ||
-        path.startsWith("/purchasing") ||
-        path.startsWith("/management")
-          && !path.startsWith("/management/cash")
-          && !path.startsWith("/management/refunds")
-          && !path.startsWith("/management/settings")
-          && !path.startsWith("/management/staff")
-          && !path.startsWith("/management/admin-review")
-          && !path.startsWith("/management/backups")
-          && !path.startsWith("/management/onboarding")
-          && !path.startsWith("/management/docs"),
-    },
-    {
-      to: "/management/settings",
-      label: "Settings",
-      minimumRole: "ADMIN",
-      matches: (path) =>
-        path.startsWith("/management/settings") ||
-        path.startsWith("/management/staff") ||
-        path.startsWith("/management/admin-review") ||
-        path.startsWith("/management/backups") ||
-        path.startsWith("/management/onboarding") ||
-        path.startsWith("/management/docs"),
-    },
-  ];
-  const visibleSidebarNavItems = sidebarNavItems.filter(
-    (item) => user && roleRank[user.role] >= roleRank[item.minimumRole],
-  );
-  const activeArea = currentPath.startsWith("/management")
-    ? "Management"
-    : currentPath.startsWith("/workshop")
-      ? "Workshop"
-      : currentPath.startsWith("/inventory")
-        ? "Inventory"
-        : currentPath.startsWith("/purchasing") || currentPath.startsWith("/suppliers")
-          ? "Purchasing"
-          : currentPath.startsWith("/customers")
-            ? "Customers"
-            : currentPath.startsWith("/pos")
-              ? "POS"
-              : "Home";
+  const visibleSections = useMemo(() => (
+    navigationSections
+      .filter((section) => canAccessNavigationRole(user?.role, section.minimumRole))
+      .map((section) => ({
+        ...section,
+        items: section.items?.filter((item) => canAccessNavigationRole(user?.role, item.minimumRole)),
+      }))
+  ), [user?.role]);
+
+  const isSectionActive = (section: typeof visibleSections[number]) =>
+    matchesNavigationPath(currentPath, section)
+    || Boolean(section.items?.some((item) => item.kind === "link" && matchesNavigationPath(currentPath, item)));
+
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setOpenSections((current) => {
+      const next = { ...current };
+      for (const section of visibleSections) {
+        if (!section.items?.length) {
+          continue;
+        }
+        if (next[section.id] === undefined) {
+          next[section.id] = Boolean(section.defaultExpanded || isSectionActive(section));
+          continue;
+        }
+        if (isSectionActive(section)) {
+          next[section.id] = true;
+        }
+      }
+      return next;
+    });
+  }, [currentPath, visibleSections]);
+
+  const activeArea = visibleSections.find((section) => isSectionActive(section))?.label ?? "Dashboard";
 
   return (
     <div className="layout-root">
       <aside className="app-sidebar">
         <div className="sidebar-brand-block">
-          <Link to="/home" className="brand" aria-label="CorePOS home">
+          <Link to="/dashboard" className="brand" aria-label="CorePOS dashboard">
             <CorePosLogo variant="full" size={60} className="sidebar-brand-logo" />
           </Link>
         </div>
@@ -138,20 +79,74 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <section className="sidebar-section">
             <div className="sidebar-link-list">
-              {visibleSidebarNavItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === "/dashboard" || item.to === "/pos"}
-                  className={() =>
-                    item.matches(currentPath)
-                      ? "sidebar-link sidebar-link--active"
-                      : "sidebar-link"
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+              {visibleSections.map((section) => {
+                const hasChildren = Boolean(section.items?.length);
+                const isActive = isSectionActive(section);
+                const isOpen = hasChildren ? Boolean(openSections[section.id]) : false;
+
+                return (
+                  <div
+                    key={section.id}
+                    className={isActive ? "sidebar-section-item sidebar-section-item--active" : "sidebar-section-item"}
+                  >
+                    <div className="sidebar-section-row">
+                      <NavLink
+                        to={section.to}
+                        end={!hasChildren}
+                        className={isActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                      >
+                        {section.label}
+                      </NavLink>
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          className="sidebar-toggle-button"
+                          aria-label={`Toggle ${section.label} navigation`}
+                          aria-expanded={isOpen}
+                          data-testid={`nav-toggle-${section.id}`}
+                          onClick={() => {
+                            setOpenSections((current) => ({
+                              ...current,
+                              [section.id]: !current[section.id],
+                            }));
+                          }}
+                        >
+                          <span className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}>
+                            ▸
+                          </span>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {hasChildren && isOpen ? (
+                      <div className="sidebar-submenu">
+                        {section.items?.map((item) => {
+                          if (item.kind === "label") {
+                            return (
+                              <div key={`${section.id}-${item.label}`} className="sidebar-subgroup-label">
+                                {item.label}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <NavLink
+                              key={item.to}
+                              to={item.to}
+                              end
+                              className={matchesNavigationPath(currentPath, item)
+                                ? "sidebar-submenu-link sidebar-submenu-link--active"
+                                : "sidebar-submenu-link"}
+                            >
+                              {item.label}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </section>
         </nav>

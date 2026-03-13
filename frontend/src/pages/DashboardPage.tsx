@@ -191,8 +191,8 @@ export const DashboardPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
-            <h1>Staff Dashboard</h1>
-            <p className="muted-text">Operational overview for today across sales, workshop, stock, and activity.</p>
+            <h1>Dashboard</h1>
+            <p className="muted-text">Shared operational overview across sales, workshop, stock, and activity.</p>
           </div>
           <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
@@ -241,6 +241,9 @@ export const DashboardPage = () => {
             <Link className="button-link dashboard-link-card" to="/workshop">Workshop Board</Link>
             <Link className="button-link dashboard-link-card" to="/inventory">Inventory</Link>
             <Link className="button-link dashboard-link-card" to="/customers">Customers</Link>
+            {user?.role === "ADMIN" ? (
+              <Link className="button-link dashboard-link-card" to="/settings/staff-rota">Staff Rota</Link>
+            ) : null}
           </div>
         </section>
 

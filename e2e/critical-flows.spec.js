@@ -44,6 +44,7 @@ test.describe.configure({ mode: "serial" });
 
 test("Auth routing redirects and navigation visibility follows role", async ({ page, request }) => {
   const primaryNav = page.getByRole("navigation", { name: "Primary navigation" });
+  const posToggle = page.getByTestId("nav-toggle-pos");
 
   await page.context().clearCookies();
   await page.goto("/workshop");
@@ -55,8 +56,14 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   });
   await loginViaUi(page, staffCredentials, "/pos", { surface: "frontend" });
   await expect(primaryNav.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Sales History", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
+  await posToggle.click();
+  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toHaveCount(0);
+  await posToggle.click();
+  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toHaveCount(0);
-  await expect(primaryNav.getByRole("link", { name: "Back Office", exact: true })).toHaveCount(0);
+  await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toHaveCount(0);
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
   await page.goto("/workshop");
   await expect(page).toHaveURL(/\/workshop/);
@@ -71,11 +78,12 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await page.context().clearCookies();
   await loginViaUi(page, managerCredentials, null, {
     surface: "frontend",
-    expectedPath: "/management",
+    expectedPath: "/dashboard",
   });
-  await expect(primaryNav.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Sales History", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Back Office", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
   await page.goto("/management/cash");
   await expect(page).toHaveURL(/\/management\/cash/);
@@ -87,9 +95,10 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await page.context().clearCookies();
   await loginViaUi(page, adminCredentials, null, {
     surface: "frontend",
-    expectedPath: "/management/staff",
+    expectedPath: "/dashboard",
   });
   await expect(primaryNav.getByRole("link", { name: "POS", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
   await page.goto("/management/staff");
   await expect(page).toHaveURL(/\/management\/staff/);

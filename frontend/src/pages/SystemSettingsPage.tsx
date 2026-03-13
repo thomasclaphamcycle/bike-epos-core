@@ -67,7 +67,7 @@ export const SystemSettingsPage = () => {
     {
       label: "Role-tailored home routing",
       currentState: "In app",
-      detail: "Staff lands on /dashboard, managers on /management, admins on /management/staff.",
+      detail: "All signed-in roles now land on /dashboard first, with sidebar navigation driving the next workflow step.",
       path: "/home",
     },
     {
@@ -320,13 +320,13 @@ export const SystemSettingsPage = () => {
                 </tr>
                 <tr>
                   <td>MANAGER</td>
-                  <td className="mono-text">/management</td>
-                  <td>Management dashboard for oversight, reporting, and planning.</td>
+                  <td className="mono-text">/dashboard</td>
+                  <td>Shared operational landing page with sidebar access to reports, purchasing, and workshop analytics.</td>
                 </tr>
                 <tr>
                   <td>ADMIN</td>
-                  <td className="mono-text">/management/staff</td>
-                  <td>Immediate access to account, role, and governance operations.</td>
+                  <td className="mono-text">/dashboard</td>
+                  <td>Shared operational landing page with sidebar access to settings, governance, and diagnostics.</td>
                 </tr>
               </tbody>
             </table>
