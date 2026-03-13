@@ -83,43 +83,49 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 const hasChildren = Boolean(section.items?.length);
                 const isActive = isSectionActive(section);
                 const isOpen = hasChildren ? Boolean(openSections[section.id]) : false;
+                const submenuId = `sidebar-submenu-${section.id}`;
 
                 return (
                   <div
                     key={section.id}
                     className={isActive ? "sidebar-section-item sidebar-section-item--active" : "sidebar-section-item"}
                   >
-                    <div className="sidebar-section-row">
-                      <NavLink
-                        to={section.to}
-                        end={!hasChildren}
-                        className={isActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                    {hasChildren ? (
+                      <button
+                        type="button"
+                        className={isActive ? "sidebar-link sidebar-link--active sidebar-link--expandable" : "sidebar-link sidebar-link--expandable"}
+                        aria-expanded={isOpen}
+                        aria-controls={submenuId}
+                        data-testid={`nav-toggle-${section.id}`}
+                        onClick={() => {
+                          setOpenSections((current) => ({
+                            ...current,
+                            [section.id]: !current[section.id],
+                          }));
+                        }}
                       >
-                        {section.label}
-                      </NavLink>
-                      {hasChildren ? (
-                        <button
-                          type="button"
-                          className="sidebar-toggle-button"
-                          aria-label={`Toggle ${section.label} navigation`}
-                          aria-expanded={isOpen}
-                          data-testid={`nav-toggle-${section.id}`}
-                          onClick={() => {
-                            setOpenSections((current) => ({
-                              ...current,
-                              [section.id]: !current[section.id],
-                            }));
-                          }}
+                        <span className="sidebar-link-label">{section.label}</span>
+                        <span
+                          aria-hidden="true"
+                          className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}
                         >
-                          <span className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}>
-                            ▸
-                          </span>
-                        </button>
-                      ) : null}
-                    </div>
+                          ▸
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="sidebar-section-row">
+                        <NavLink
+                          to={section.to}
+                          end
+                          className={isActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                        >
+                          {section.label}
+                        </NavLink>
+                      </div>
+                    )}
 
                     {hasChildren && isOpen ? (
-                      <div className="sidebar-submenu">
+                      <div id={submenuId} className="sidebar-submenu">
                         {section.items?.map((item) => {
                           if (item.kind === "label") {
                             return (

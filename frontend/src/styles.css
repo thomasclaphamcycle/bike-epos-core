@@ -147,9 +147,9 @@ textarea {
 
 .sidebar-section-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
-  gap: 6px;
+  gap: 0;
 }
 
 .app-shell {
@@ -214,11 +214,22 @@ textarea {
   border-radius: 10px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
   background: transparent;
   flex: 0 0 auto;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   transition:
     background-color 120ms ease,
     color 120ms ease;
+}
+
+.sidebar-link-label {
+  min-width: 0;
 }
 
 .sidebar-link:hover {
@@ -236,24 +247,9 @@ textarea {
   color: #041334;
 }
 
-.sidebar-toggle-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 38px;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: transparent;
-  color: #ffffff;
-}
-
-.sidebar-toggle-button:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
 .sidebar-toggle-chevron {
   display: inline-block;
+  flex: 0 0 auto;
   transition: transform 120ms ease;
 }
 

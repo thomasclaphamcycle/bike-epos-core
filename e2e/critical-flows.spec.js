@@ -55,16 +55,16 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
     prefix: "nav-staff",
   });
   await loginViaUi(page, staffCredentials, "/pos", { surface: "frontend" });
-  await expect(primaryNav.getByRole("link", { name: "POS", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Sales History", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "POS", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "Sales History", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await posToggle.click();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toHaveCount(0);
   await posToggle.click();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toHaveCount(0);
-  await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toHaveCount(0);
-  await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
+  await expect(primaryNav.getByRole("button", { name: "Reports", exact: true })).toHaveCount(0);
+  await expect(primaryNav.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0);
   await page.goto("/workshop");
   await expect(page).toHaveURL(/\/workshop/);
   await page.goto(`${frontendBaseUrl}/home`);
@@ -81,10 +81,10 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
     expectedPath: "/dashboard",
   });
   await expect(primaryNav.getByRole("link", { name: "Dashboard", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Sales History", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "Sales History", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
+  await expect(primaryNav.getByRole("button", { name: "Reports", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0);
   await page.goto("/management/cash");
   await expect(page).toHaveURL(/\/management\/cash/);
 
@@ -97,9 +97,9 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
     surface: "frontend",
     expectedPath: "/dashboard",
   });
-  await expect(primaryNav.getByRole("link", { name: "POS", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "POS", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "Reports", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
   await page.goto("/management/staff");
   await expect(page).toHaveURL(/\/management\/staff/);
 });
