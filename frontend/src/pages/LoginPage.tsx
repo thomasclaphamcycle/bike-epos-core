@@ -5,7 +5,7 @@ import { apiGet, ApiError } from "../api/client";
 import { normalizeLoginRedirectTarget } from "../utils/authRedirect";
 import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "../components/branding/CorePosLogo";
-import { appBuildLabel } from "../utils/buildInfo";
+import { appVersionLabel } from "../utils/buildInfo";
 
 type ActiveLoginUser = {
   id: string;
@@ -301,7 +301,7 @@ export const LoginPage = () => {
           </div>
 
           {errorMessage ? <p className="error-banner">{errorMessage}</p> : null}
-          <p className="login-build-info">{appBuildLabel}</p>
+          <p className="login-build-info">{appVersionLabel}</p>
         </div>
       </div>
     </div>

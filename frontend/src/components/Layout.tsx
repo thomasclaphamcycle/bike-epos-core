@@ -3,7 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
 import CorePosLogo from "./branding/CorePosLogo";
-import { appBuildLabel } from "../utils/buildInfo";
+import { appVersionLabel } from "../utils/buildInfo";
 
 const roleRank = {
   STAFF: 1,
@@ -156,7 +156,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </section>
         </nav>
 
-        <div className="sidebar-build-info">{appBuildLabel}</div>
+        <div className="sidebar-build-info">{appVersionLabel}</div>
       </aside>
 
       <div className="app-shell">
