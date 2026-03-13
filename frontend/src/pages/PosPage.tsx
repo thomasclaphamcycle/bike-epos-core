@@ -117,6 +117,8 @@ export const PosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
@@ -148,6 +150,12 @@ export const PosPage = () => {
   const focusProductSearch = () => {
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
+    });
+  };
+
+  const focusCustomerSearch = () => {
+    window.requestAnimationFrame(() => {
+      customerSearchInputRef.current?.focus();
     });
   };
 
@@ -272,6 +280,17 @@ export const PosPage = () => {
       focusProductSearch();
     }
   }, [loading, basket, sale]);
+
+  useEffect(() => {
+    if (!sale || selectedTenderMethod !== "CASH") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      cashTenderedInputRef.current?.focus();
+      cashTenderedInputRef.current?.select();
+    });
+  }, [sale, selectedTenderMethod]);
 
   useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
@@ -404,6 +423,28 @@ export const PosPage = () => {
       window.requestAnimationFrame(() => {
         searchInputRef.current?.focus();
       });
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : "Failed to add item";
+      error(message);
+    }
+  };
+
+  const addMultipleItems = async (variantId: string, quantity: number) => {
+    if (!basketId) {
+      error("No active basket.");
+      return;
+    }
+
+    try {
+      const payload = await apiPost<BasketResponse>(`/api/baskets/${encodeURIComponent(basketId)}/items`, {
+        variantId,
+        quantity,
+      });
+      setBasket(payload);
+      setSearchText("");
+      setSearchRows([]);
+      success(`${quantity} item${quantity === 1 ? "" : "s"} added`);
+      focusProductSearch();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
       error(message);
@@ -593,6 +634,59 @@ export const PosPage = () => {
     await createBasket();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isEditableTarget = target instanceof HTMLElement
+        && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (isEditableTarget) {
+          return;
+        }
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === "F2") {
+        event.preventDefault();
+        focusCustomerSearch();
+        return;
+      }
+
+      if (isEditableTarget) {
+        return;
+      }
+
+      if (event.key === "F4") {
+        event.preventDefault();
+        setCompletedSale(null);
+        setSelectedTenderMethod("CARD");
+        setCashTenderedAmount("");
+        void createBasket();
+        return;
+      }
+
+      if (event.key === "F8" && basket && basket.items.length > 0 && !sale) {
+        event.preventDefault();
+        void checkoutBasket();
+        return;
+      }
+
+      if (event.key === "F9" && sale && !completing && !cashValidationMessage) {
+        event.preventDefault();
+        void completeSale();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [basket, cashValidationMessage, completing, sale]);
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -601,6 +695,10 @@ export const PosPage = () => {
             <h1>POS</h1>
             <p className="muted-text">
               Start a sale, attach a customer when needed, then take payment and open the receipt.
+            </p>
+            <p className="muted-text pos-shortcuts">
+              Shortcuts: <kbd>/</kbd> product search, <kbd>F2</kbd> customer search, <kbd>F4</kbd> new sale,{" "}
+              <kbd>F8</kbd> checkout basket, <kbd>F9</kbd> complete sale.
             </p>
           </div>
           <div className="actions-inline">
@@ -728,6 +826,7 @@ export const PosPage = () => {
           <label className="grow">
             Search customers
             <input
+              ref={customerSearchInputRef}
               data-testid="pos-customer-search"
               value={customerSearchText}
               onChange={(event) => setCustomerSearchText(event.target.value)}
@@ -819,7 +918,9 @@ export const PosPage = () => {
 
       <section className="card">
         <h2>Product Search</h2>
-        <p className="muted-text">Scan a barcode or search by SKU or product name. Press Enter to add the first match.</p>
+        <p className="muted-text">
+          Scan a barcode or search by SKU or product name. Press Enter to add the first match, or Shift+Enter to add five.
+        </p>
         <label className="grow">
           Search / Barcode
           <input
@@ -837,6 +938,10 @@ export const PosPage = () => {
               }
 
               event.preventDefault();
+              if (event.shiftKey) {
+                void addMultipleItems(searchRows[0].id, 5);
+                return;
+              }
               void addItem(searchRows[0].id);
             }}
             placeholder="sku, barcode, name"
@@ -889,17 +994,29 @@ export const PosPage = () => {
                     <td>{formatMoney(row.pricePence)}</td>
                     <td>{row.onHandQty}</td>
                     <td>
-                      <button
-                        type="button"
-                        data-testid={`pos-product-add-${row.id}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void addItem(row.id);
-                        }}
-                        disabled={!canAdd}
-                      >
-                        Add
-                      </button>
+                      <div className="actions-inline">
+                        <button
+                          type="button"
+                          data-testid={`pos-product-add-${row.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void addItem(row.id);
+                          }}
+                          disabled={!canAdd}
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void addMultipleItems(row.id, 5);
+                          }}
+                          disabled={!canAdd}
+                        >
+                          Add 5
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )})
@@ -944,7 +1061,7 @@ export const PosPage = () => {
                       {item.sku}
                     </td>
                     <td>
-                      <div className="actions-inline">
+                      <div className="actions-inline pos-qty-controls">
                         <button
                           type="button"
                           onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
@@ -956,11 +1073,27 @@ export const PosPage = () => {
                         <strong>{item.quantity}</strong>
                         <button
                           type="button"
+                          onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
+                          disabled={Boolean(saleId) || item.quantity < 6}
+                          aria-label={`Decrease quantity by five for ${item.productName}`}
+                        >
+                          -5
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
                           disabled={Boolean(saleId)}
                           aria-label={`Increase quantity for ${item.productName}`}
                         >
                           +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
+                          disabled={Boolean(saleId)}
+                          aria-label={`Increase quantity by five for ${item.productName}`}
+                        >
+                          +5
                         </button>
                       </div>
                     </td>
@@ -1017,6 +1150,7 @@ export const PosPage = () => {
                 <label style={{ maxWidth: "180px" }}>
                   Amount tendered
                   <input
+                    ref={cashTenderedInputRef}
                     data-testid="pos-cash-tendered"
                     inputMode="decimal"
                     value={cashTenderedAmount}

@@ -298,6 +298,25 @@ textarea {
   flex-wrap: wrap;
 }
 
+.pos-shortcuts {
+  margin: 8px 0 0;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 0.08rem 0.38rem;
+  border-radius: 6px;
+  border: 1px solid #d5dee8;
+  background: #f8fbfe;
+  box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.08);
+  font-size: 0.8rem;
+  font-family: "SFMono-Regular", "Menlo", monospace;
+  color: #243746;
+}
+
 .filter-row {
   display: flex;
   gap: 10px;
@@ -1662,6 +1681,10 @@ th {
   display: flex;
   gap: 12px;
   align-items: end;
+}
+
+.pos-qty-controls {
+  gap: 6px;
 }
 
 .quick-create-panel {
