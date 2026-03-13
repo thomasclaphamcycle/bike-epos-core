@@ -103,11 +103,15 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     className={isOpen ? "sidebar-section-item sidebar-section-item--open" : "sidebar-section-item"}
                   >
                     {hasChildren ? (
-                      <div className="sidebar-section-row sidebar-section-row--split">
+                      <div
+                        className={isActive
+                          ? "sidebar-section-row sidebar-section-row--split sidebar-section-row--group sidebar-section-row--group-active"
+                          : "sidebar-section-row sidebar-section-row--split sidebar-section-row--group"}
+                      >
                         <NavLink
                           to={section.to}
                           end
-                          className={isActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                          className="sidebar-link sidebar-link--group"
                         >
                           <span className="sidebar-link-label">{section.label}</span>
                         </NavLink>

@@ -158,6 +158,22 @@ textarea {
   border-radius: 10px;
 }
 
+.sidebar-section-row--group {
+  overflow: hidden;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.sidebar-section-row--group:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-section-row--group-active {
+  background: #ff7a00;
+  color: #041334;
+}
+
 .app-shell {
   min-width: 0;
   display: grid;
@@ -275,8 +291,32 @@ textarea {
     color 120ms ease;
 }
 
+.sidebar-link--group,
+.sidebar-group-toggle {
+  border-radius: 0;
+}
+
+.sidebar-link--group:hover,
+.sidebar-group-toggle:hover {
+  background: transparent;
+}
+
+.sidebar-section-row--group:hover .sidebar-link--group,
+.sidebar-section-row--group:hover .sidebar-group-toggle {
+  color: #ffffff;
+}
+
+.sidebar-section-row--group-active .sidebar-link--group,
+.sidebar-section-row--group-active .sidebar-group-toggle {
+  color: #041334;
+}
+
 .sidebar-section-item--open > .sidebar-section-row--split .sidebar-group-toggle {
   color: #ffffff;
+}
+
+.sidebar-section-item--open > .sidebar-section-row--group.sidebar-section-row--group-active .sidebar-group-toggle {
+  color: #041334;
 }
 
 .sidebar-toggle-chevron--open {
