@@ -934,6 +934,10 @@ th {
   align-items: start;
 }
 
+.workshop-summary-grid {
+  margin-bottom: 14px;
+}
+
 .workshop-column {
   border: 1px solid #d7e0ea;
   border-radius: 14px;
@@ -1005,6 +1009,12 @@ th {
 
 .workshop-note-preview {
   margin: 0;
+}
+
+.workshop-action-hint {
+  margin: 0;
+  padding-top: 2px;
+  border-top: 1px dashed #dbe5ee;
 }
 
 .detail-grid {

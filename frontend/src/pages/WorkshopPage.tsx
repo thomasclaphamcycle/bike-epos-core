@@ -87,6 +87,38 @@ const formatMoney = (pence: number | null) => {
   return `£${(pence / 100).toFixed(2)}`;
 };
 
+const formatDate = (value: string | null) => {
+  if (!value) {
+    return "-";
+  }
+  return new Date(value).toLocaleDateString();
+};
+
+const toStatusLabel = (status: string) => {
+  switch (status) {
+    case "BOOKING_MADE":
+      return "Booked In";
+    case "BIKE_ARRIVED":
+      return "Bike Arrived";
+    case "WAITING_FOR_APPROVAL":
+      return "Awaiting Approval";
+    case "APPROVED":
+      return "Approved";
+    case "WAITING_FOR_PARTS":
+      return "Waiting for Parts";
+    case "ON_HOLD":
+      return "On Hold";
+    case "BIKE_READY":
+      return "Ready for Collection";
+    case "COMPLETED":
+      return "Completed";
+    case "CANCELLED":
+      return "Cancelled";
+    default:
+      return status;
+  }
+};
+
 const toBucketLabel = (bucket: DisplayBucket | null) => {
   if (!bucket) {
     return "-";
@@ -134,6 +166,78 @@ const getApprovalLabel = (status: string) => {
     return "Approved Estimate";
   }
   return null;
+};
+
+const getNextStepHint = (job: DashboardJob) => {
+  switch (job.status) {
+    case "BOOKING_MADE":
+      return "Confirm the estimate or start workshop work.";
+    case "WAITING_FOR_APPROVAL":
+      return "Chase approval before booking bench time.";
+    case "BIKE_ARRIVED":
+      return "Bike is on site and ready to move into active work.";
+    case "APPROVED":
+      return "Estimate is approved. Keep the job moving toward ready.";
+    case "WAITING_FOR_PARTS":
+      return "Check the parts gap before promising collection.";
+    case "ON_HOLD":
+      return "Resolve the hold reason before resuming work.";
+    case "BIKE_READY":
+      return job.finalizedBasketId ? "Handoff is ready in the collection queue." : "Open the collection handoff when the customer arrives.";
+    case "COMPLETED":
+      return "Job is finished and can be reviewed for any follow-up.";
+    default:
+      return "Open the job for full details and actions.";
+  }
+};
+
+const getUrgency = (job: DashboardJob) => {
+  if (!job.scheduledDate || job.status === "COMPLETED" || job.status === "CANCELLED") {
+    return null;
+  }
+
+  const scheduled = new Date(job.scheduledDate);
+  const due = new Date(scheduled.getFullYear(), scheduled.getMonth(), scheduled.getDate()).getTime();
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
+  if (due < todayStart) {
+    return {
+      label: "Overdue",
+      className: "status-badge status-cancelled",
+      rank: 0,
+    };
+  }
+
+  if (due === todayStart) {
+    return {
+      label: "Due Today",
+      className: "status-badge status-warning",
+      rank: 1,
+    };
+  }
+
+  return {
+    label: "Upcoming",
+    className: "status-badge",
+    rank: 2,
+  };
+};
+
+const compareJobs = (left: DashboardJob, right: DashboardJob) => {
+  const leftUrgency = getUrgency(left)?.rank ?? 3;
+  const rightUrgency = getUrgency(right)?.rank ?? 3;
+  if (leftUrgency !== rightUrgency) {
+    return leftUrgency - rightUrgency;
+  }
+
+  const leftScheduled = left.scheduledDate ? new Date(left.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER;
+  const rightScheduled = right.scheduledDate ? new Date(right.scheduledDate).getTime() : Number.MAX_SAFE_INTEGER;
+  if (leftScheduled !== rightScheduled) {
+    return leftScheduled - rightScheduled;
+  }
+
+  return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
 };
 
 const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
@@ -286,7 +390,7 @@ export const WorkshopPage = () => {
     () =>
       boardColumns.map((column) => ({
         ...column,
-        jobs: jobs.filter((job) => toDisplayBucket(job) === column.key),
+        jobs: jobs.filter((job) => toDisplayBucket(job) === column.key).sort(compareJobs),
       })),
     [jobs],
   );
@@ -295,6 +399,20 @@ export const WorkshopPage = () => {
     () => jobs.filter((job) => toDisplayBucket(job) === null).length,
     [jobs],
   );
+
+  const queueSummary = useMemo(() => {
+    const overdueCount = jobs.filter((job) => getUrgency(job)?.label === "Overdue").length;
+    const dueTodayCount = jobs.filter((job) => getUrgency(job)?.label === "Due Today").length;
+    const readyCount = jobs.filter((job) => toDisplayBucket(job) === "ready").length;
+    const partsBlockedCount = jobs.filter((job) => toPartsStatus(job) === "SHORT").length;
+
+    return {
+      overdueCount,
+      dueTodayCount,
+      readyCount,
+      partsBlockedCount,
+    };
+  }, [jobs]);
 
   return (
     <div className="page-shell">
@@ -351,6 +469,29 @@ export const WorkshopPage = () => {
           </label>
         </div>
 
+        <div className="dashboard-summary-grid workshop-summary-grid">
+          <article className="metric-card">
+            <span className="metric-label">Overdue Jobs</span>
+            <strong>{queueSummary.overdueCount}</strong>
+            <span className="dashboard-metric-detail">Promised date has already passed.</span>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">Due Today</span>
+            <strong>{queueSummary.dueTodayCount}</strong>
+            <span className="dashboard-metric-detail">Useful front-desk follow-up list for today.</span>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">Ready For Collection</span>
+            <strong>{queueSummary.readyCount}</strong>
+            <span className="dashboard-metric-detail">Bikes ready to hand over or send to collection.</span>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">Parts Blocked</span>
+            <strong>{queueSummary.partsBlockedCount}</strong>
+            <span className="dashboard-metric-detail">Jobs that still need parts attention.</span>
+          </article>
+        </div>
+
         {viewMode === "board" ? (
           <>
             {hiddenFromBoardCount > 0 ? (
@@ -393,9 +534,12 @@ export const WorkshopPage = () => {
                                 <div className="table-secondary mono-text">{job.id.slice(0, 8)}</div>
                               </div>
                               <div className="status-stack">
-                                <span className={toStatusBadgeClass(job.status)}>{job.status}</span>
+                                <span className={toStatusBadgeClass(job.status)}>{toStatusLabel(job.status)}</span>
                                 {getApprovalLabel(job.status) ? (
                                   <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
+                                ) : null}
+                                {getUrgency(job) ? (
+                                  <span className={getUrgency(job)?.className}>{getUrgency(job)?.label}</span>
                                 ) : null}
                               </div>
                             </div>
@@ -403,7 +547,7 @@ export const WorkshopPage = () => {
                             <div className="workshop-job-meta">
                               <span>Customer: {getCustomerName(job)}</span>
                               <span>
-                                Promised: {job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}
+                                Promised: {formatDate(job.scheduledDate)}
                               </span>
                               <span>Value: {formatMoney(job.sale?.totalPence ?? null)}</span>
                               <span
@@ -425,6 +569,7 @@ export const WorkshopPage = () => {
                                 Missing parts: {job.partsSummary.missingQty}
                               </p>
                             ) : null}
+                            <p className="muted-text workshop-action-hint">{getNextStepHint(job)}</p>
 
                             <div
                               className="action-wrap"
@@ -484,13 +629,16 @@ export const WorkshopPage = () => {
                       <td>{toBucketLabel(toDisplayBucket(job))}</td>
                       <td>
                         <div className="status-stack">
-                          <span className={toStatusBadgeClass(job.status)}>{job.status}</span>
+                          <span className={toStatusBadgeClass(job.status)}>{toStatusLabel(job.status)}</span>
                           {getApprovalLabel(job.status) ? (
                             <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
                           ) : null}
+                          {getUrgency(job) ? (
+                            <span className={getUrgency(job)?.className}>{getUrgency(job)?.label}</span>
+                          ) : null}
                         </div>
                       </td>
-                      <td>{job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : "-"}</td>
+                      <td>{formatDate(job.scheduledDate)}</td>
                       <td>{getCustomerName(job)}</td>
                       <td>{formatMoney(job.sale?.totalPence ?? null)}</td>
                       <td>
