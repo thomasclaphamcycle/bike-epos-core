@@ -3,6 +3,7 @@ import { emit } from "../core/events";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { createAuditEventTx } from "./auditService";
 
 type CreateSupplierInput = {
   name?: string;
@@ -1293,13 +1294,32 @@ export const receivePurchaseOrder = async (
       });
     }
 
+    const quantityReceived = parsedLines.reduce((sum, line) => sum + line.quantity, 0);
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "PURCHASE_ORDER_RECEIVED",
+        entityType: "PURCHASE_ORDER",
+        entityId: purchaseOrderId,
+        metadata: {
+          locationId,
+          lineCount: parsedLines.length,
+          quantityReceived,
+          previousStatus: po.status,
+          nextStatus,
+        },
+      },
+      normalizedCreatedByStaffId ? { actorId: normalizedCreatedByStaffId } : undefined,
+    );
+
     return {
       purchaseOrder: await getPurchaseOrderOrThrow(tx, purchaseOrderId),
       event: {
         purchaseOrderId,
         locationId,
         lineCount: parsedLines.length,
-        quantityReceived: parsedLines.reduce((sum, line) => sum + line.quantity, 0),
+        quantityReceived,
       },
     };
   });

@@ -2,6 +2,7 @@ import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/c
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { createAuditEventTx } from "./auditService";
 import {
   recordCashRefundMovementForPaymentTx,
   recordCashSaleMovementForSaleTx,
@@ -166,6 +167,58 @@ const getWorkshopJobForBasketTx = async (
   }
 
   return matches[0] ?? null;
+};
+
+const completeWorkshopJobForBasketCheckoutTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    workshopJob: {
+      id: string;
+      status: string;
+      completedAt: Date | null;
+    };
+    saleId: string;
+    createdByStaffId: string | undefined;
+  },
+) => {
+  if (
+    input.workshopJob.status === "COMPLETED" ||
+    input.workshopJob.status === "CANCELLED"
+  ) {
+    return {
+      completedAt: input.workshopJob.completedAt,
+      emittedWorkshopCompletion: false,
+    };
+  }
+
+  const completedAt = input.workshopJob.completedAt ?? new Date();
+  await tx.workshopJob.update({
+    where: { id: input.workshopJob.id },
+    data: {
+      status: "COMPLETED",
+      completedAt,
+    },
+  });
+
+  await createAuditEventTx(
+    tx,
+    {
+      action: "WORKSHOP_CHECKOUT_COMPLETED",
+      entityType: "WORKSHOP_JOB",
+      entityId: input.workshopJob.id,
+      metadata: {
+        saleId: input.saleId,
+        completionSource: "BASKET_CHECKOUT",
+        completedAt: completedAt.toISOString(),
+      },
+    },
+    input.createdByStaffId ? { actorId: input.createdByStaffId } : undefined,
+  );
+
+  return {
+    completedAt,
+    emittedWorkshopCompletion: true,
+  };
 };
 
 const toSaleResponse = async (saleId: string) => {
@@ -814,17 +867,13 @@ export const checkoutBasketToSale = async (
           });
         }
 
-        if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-          workshopCompletedAt = workshopJob.completedAt ?? new Date();
-          await tx.workshopJob.update({
-            where: { id: workshopJob.id },
-            data: {
-              status: "COMPLETED",
-              completedAt: workshopCompletedAt,
-            },
-          });
-          emittedWorkshopCompletion = true;
-        }
+        const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
+          workshopJob,
+          saleId: existingSale.id,
+          createdByStaffId: normalizedCreatedByStaffId,
+        });
+        workshopCompletedAt = completionResult.completedAt;
+        emittedWorkshopCompletion = completionResult.emittedWorkshopCompletion;
       }
 
       return {
@@ -867,26 +916,18 @@ export const checkoutBasketToSale = async (
           data: { status: BasketStatus.CHECKED_OUT },
         });
 
-        let workshopCompletedAt = workshopJob.completedAt;
-        let emittedWorkshopCompletion = false;
-        if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-          workshopCompletedAt = workshopJob.completedAt ?? new Date();
-          await tx.workshopJob.update({
-            where: { id: workshopJob.id },
-            data: {
-              status: "COMPLETED",
-              completedAt: workshopCompletedAt,
-            },
-          });
-          emittedWorkshopCompletion = true;
-        }
+        const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
+          workshopJob,
+          saleId: existingWorkshopSale.id,
+          createdByStaffId: normalizedCreatedByStaffId,
+        });
 
         return {
           saleId: existingWorkshopSale.id,
           created: false,
-          emittedWorkshopCompletion,
+          emittedWorkshopCompletion: completionResult.emittedWorkshopCompletion,
           workshopJobId: workshopJob.id,
-          workshopCompletedAt,
+          workshopCompletedAt: completionResult.completedAt,
         };
       }
     }
@@ -981,16 +1022,14 @@ export const checkoutBasketToSale = async (
     let workshopCompletedAt: Date | null = null;
     let emittedWorkshopCompletion = false;
 
-    if (workshopJob && workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-      workshopCompletedAt = workshopJob.completedAt ?? new Date();
-      await tx.workshopJob.update({
-        where: { id: workshopJob.id },
-        data: {
-          status: "COMPLETED",
-          completedAt: workshopCompletedAt,
-        },
+    if (workshopJob) {
+      const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
+        workshopJob,
+        saleId: sale.id,
+        createdByStaffId: normalizedCreatedByStaffId,
       });
-      emittedWorkshopCompletion = true;
+      workshopCompletedAt = completionResult.completedAt;
+      emittedWorkshopCompletion = completionResult.emittedWorkshopCompletion;
     }
 
     return {

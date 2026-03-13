@@ -187,6 +187,15 @@ const cleanup = async (state) => {
   }
 
   if (purchaseOrderIds.length > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityType: "PURCHASE_ORDER",
+        entityId: {
+          in: purchaseOrderIds,
+        },
+      },
+    });
+
     await prisma.purchaseOrderItem.deleteMany({
       where: {
         purchaseOrderId: {
@@ -565,6 +574,16 @@ const run = async () => {
     assert.equal(receiveFinalRes.json.status, "RECEIVED");
     assert.equal(receiveFinalRes.json.items[0].quantityReceived, 12);
     assert.equal(receiveFinalRes.json.items[0].quantityRemaining, 0);
+
+    const auditRes = await fetchJson(
+      `/api/audit?entityType=PURCHASE_ORDER&entityId=${encodeURIComponent(poRes.json.id)}&action=PURCHASE_ORDER_RECEIVED&limit=10`,
+      {
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(auditRes.status, 200, JSON.stringify(auditRes.json));
+    assert.ok(Array.isArray(auditRes.json.events), JSON.stringify(auditRes.json));
+    assert.ok(auditRes.json.events.length >= 2, JSON.stringify(auditRes.json));
 
     const onHandAfterFinalRes = await fetchJson(
       `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,

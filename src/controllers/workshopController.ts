@@ -290,7 +290,7 @@ export const finalizeWorkshopJobHandler = async (req: Request, res: Response) =>
 };
 
 export const closeWorkshopJobHandler = async (req: Request, res: Response) => {
-  const result = await closeWorkshopJob(req.params.id);
+  const result = await closeWorkshopJob(req.params.id, getRequestAuditActor(req));
   res.status(result.idempotent ? 200 : 201).json(result);
 };
 

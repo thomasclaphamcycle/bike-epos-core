@@ -296,6 +296,14 @@ const run = async () => {
     assert.equal(completedRefund.status, 201, JSON.stringify(completedRefund.payload));
     assert.equal(completedRefund.payload.refund.status, "COMPLETED");
 
+    const audit = await apiJson({
+      path: `/api/audit?entityType=REFUND&entityId=${encodeURIComponent(refundId)}&action=REFUND_COMPLETED&limit=20`,
+      cookie,
+    });
+    assert.equal(audit.status, 200, JSON.stringify(audit.payload));
+    assert.ok(Array.isArray(audit.payload.events), JSON.stringify(audit.payload));
+    assert.ok(audit.payload.events.length >= 1, JSON.stringify(audit.payload));
+
     const issuedReceipt = await apiJson({
       path: "/api/receipts/issue",
       method: "POST",
@@ -355,6 +363,9 @@ const run = async () => {
 
     const refundIds = Array.from(created.refundIds);
     if (refundIds.length > 0) {
+      await prisma.auditEvent.deleteMany({
+        where: { entityType: "REFUND", entityId: { in: refundIds } },
+      });
       await prisma.refund.deleteMany({
         where: { id: { in: refundIds } },
       });

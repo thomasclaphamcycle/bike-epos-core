@@ -2,6 +2,7 @@ import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@p
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { createAuditEventTx, type AuditActor } from "./auditService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 
@@ -1148,7 +1149,10 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
   });
 };
 
-export const closeWorkshopJob = async (workshopJobId: string) => {
+export const closeWorkshopJob = async (
+  workshopJobId: string,
+  auditActor?: AuditActor,
+) => {
   if (!isUuid(workshopJobId)) {
     throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
   }
@@ -1185,6 +1189,23 @@ export const closeWorkshopJob = async (workshopJobId: string) => {
         closedAt: new Date(),
       },
     });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WORKSHOP_JOB_CLOSED",
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopJobId,
+        metadata: {
+          saleId: existingSale.id,
+          fromStatus: job.status,
+          toStatus: closed.status,
+          completedAt: closed.completedAt?.toISOString() ?? null,
+          closedAt: closed.closedAt?.toISOString() ?? null,
+        },
+      },
+      auditActor,
+    );
 
     return {
       job: toJobResponse(closed),

@@ -4,6 +4,7 @@ import { emit } from "../core/events";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { assertNonNegativeProjectedStockTx } from "./inventoryLedgerService";
 import { ensureVariantExistsById } from "./productService";
 
 type CreateStockAdjustmentInput = {
@@ -14,6 +15,7 @@ type CreateStockAdjustmentInput = {
   referenceType?: string;
   referenceId?: string;
   createdByStaffId?: string;
+  allowNegativeStock?: boolean;
 };
 
 export type StockAdjustmentResult = {
@@ -225,6 +227,7 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
       referenceType,
       referenceId,
       createdByStaffId,
+      allowNegativeStock: input.allowNegativeStock,
     }),
   );
 
@@ -243,6 +246,7 @@ export const createStockAdjustmentTx = async (
     referenceType: string;
     referenceId: string;
     createdByStaffId?: string;
+    allowNegativeStock?: boolean;
   },
 ): Promise<StockAdjustmentResult> => {
   const note = normalizeOptionalText(input.note) ?? null;
@@ -258,6 +262,14 @@ export const createStockAdjustmentTx = async (
   }
 
   const location = await resolveLocationTx(tx, input.locationId);
+
+  await assertNonNegativeProjectedStockTx(tx, {
+    variantId: input.variantId,
+    locationId: location.id,
+    quantityDelta: input.quantityDelta,
+    allowNegativeStock: input.allowNegativeStock,
+    message: "Stock adjustment would reduce stock below zero",
+  });
 
   const entry = await tx.stockLedgerEntry.create({
     data: {

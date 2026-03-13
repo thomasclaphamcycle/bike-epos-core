@@ -1,6 +1,7 @@
 import { Prisma, RefundRecordStatus, RefundTenderType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { createAuditEventTx } from "./auditService";
 import { recordCashRefundMovementForSaleRefundTx } from "./tillService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -802,6 +803,27 @@ export const completeRefund = async (refundId: string, completedByStaffId?: stri
       cashTenderedPence,
       createdByStaffId: normalizedCompletedByStaffId ?? refund.createdByStaffId ?? undefined,
     });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "REFUND_COMPLETED",
+        entityType: "REFUND",
+        entityId: refund.id,
+        metadata: {
+          saleId: refund.saleId,
+          lineCount: refund.lines.length,
+          totalPence: totals.totalPence,
+          tenderedPence,
+          cashTenderedPence,
+        },
+      },
+      normalizedCompletedByStaffId
+        ? { actorId: normalizedCompletedByStaffId }
+        : refund.createdByStaffId
+          ? { actorId: refund.createdByStaffId }
+          : undefined,
+    );
 
     return {
       ...(await getRefundSummaryTx(tx, refund.id)),

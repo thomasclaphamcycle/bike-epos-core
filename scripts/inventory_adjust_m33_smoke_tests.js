@@ -76,7 +76,19 @@ const waitForServer = async () => {
 const cleanup = async (state) => {
   const variantIds = Array.from(state.variantIds);
   const productIds = Array.from(state.productIds);
+  const movementIds = Array.from(state.movementIds);
   const userIds = Array.from(state.userIds);
+
+  if (movementIds.length > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityType: "INVENTORY_MOVEMENT",
+        entityId: {
+          in: movementIds,
+        },
+      },
+    });
+  }
 
   if (variantIds.length > 0) {
     await prisma.stockLedgerEntry.deleteMany({
@@ -134,6 +146,7 @@ const run = async () => {
   const state = {
     variantIds: new Set(),
     productIds: new Set(),
+    movementIds: new Set(),
     userIds: new Set(),
   };
 
@@ -240,6 +253,7 @@ const run = async () => {
     assert.equal(plusFiveRes.json.movement.quantity, 5);
     assert.equal(plusFiveRes.json.movement.reason, "COUNT_CORRECTION");
     assert.equal(plusFiveRes.json.onHand, 5);
+    state.movementIds.add(plusFiveRes.json.movement.id);
 
     const minusTwoRes = await fetchJson("/api/inventory/adjustments", {
       method: "POST",
@@ -256,6 +270,34 @@ const run = async () => {
     assert.equal(minusTwoRes.json.movement.quantity, -2);
     assert.equal(minusTwoRes.json.movement.reason, "DAMAGED");
     assert.equal(minusTwoRes.json.onHand, 3);
+    state.movementIds.add(minusTwoRes.json.movement.id);
+
+    const auditRes = await fetchJson(
+      `/api/audit?entityType=INVENTORY_MOVEMENT&entityId=${encodeURIComponent(minusTwoRes.json.movement.id)}&action=INVENTORY_ADJUSTMENT_RECORDED&limit=10`,
+      {
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(auditRes.status, 200, JSON.stringify(auditRes.json));
+    assert.ok(Array.isArray(auditRes.json.events), JSON.stringify(auditRes.json));
+    assert.ok(auditRes.json.events.length >= 1, JSON.stringify(auditRes.json));
+
+    const blockedOverdrawRes = await fetchJson("/api/inventory/adjustments", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        variantId,
+        quantityDelta: -4,
+        reason: "DAMAGED",
+        note: "Would overdraw stock",
+      }),
+    });
+    assert.equal(blockedOverdrawRes.status, 409, JSON.stringify(blockedOverdrawRes.json));
+    assert.equal(
+      blockedOverdrawRes.json.error?.code,
+      "NEGATIVE_STOCK_NOT_ALLOWED",
+      JSON.stringify(blockedOverdrawRes.json),
+    );
 
     const onHandRes = await fetchJson(`/api/inventory/on-hand?variantId=${encodeURIComponent(variantId)}`, {
       headers: staffHeaders,

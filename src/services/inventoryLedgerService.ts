@@ -1,6 +1,7 @@
 import { InventoryMovementType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { createAuditEventTx } from "./auditService";
 import { ensureVariantExistsById } from "./productService";
 
 type RecordMovementInput = {
@@ -13,6 +14,7 @@ type RecordMovementInput = {
   referenceId?: string;
   note?: string;
   createdByStaffId?: string;
+  allowNegativeStock?: boolean;
 };
 
 type ListMovementFilters = {
@@ -45,6 +47,7 @@ type RecordAdjustmentInput = {
   reason?: InventoryAdjustmentReason;
   note?: string;
   createdByStaffId?: string;
+  allowNegativeStock?: boolean;
 };
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -284,6 +287,144 @@ const VALID_ADJUSTMENT_REASONS = new Set<InventoryAdjustmentReason>([
   "OTHER",
 ]);
 
+const getOnHandAtLocationTx = async (
+  tx: Prisma.TransactionClient,
+  variantId: string,
+  locationId: string,
+) => {
+  const aggregate = await tx.stockLedgerEntry.aggregate({
+    where: {
+      variantId,
+      locationId,
+    },
+    _sum: {
+      quantityDelta: true,
+    },
+  });
+
+  return aggregate._sum.quantityDelta ?? 0;
+};
+
+const getTotalOnHandTx = async (
+  tx: Prisma.TransactionClient,
+  variantId: string,
+) => {
+  const aggregate = await tx.stockLedgerEntry.aggregate({
+    where: {
+      variantId,
+    },
+    _sum: {
+      quantityDelta: true,
+    },
+  });
+
+  return aggregate._sum.quantityDelta ?? 0;
+};
+
+export const assertNonNegativeProjectedStockTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    variantId: string;
+    locationId: string;
+    quantityDelta: number;
+    allowNegativeStock?: boolean;
+    message?: string;
+    code?: string;
+  },
+) => {
+  if (input.allowNegativeStock || input.quantityDelta >= 0) {
+    return;
+  }
+
+  const onHandAtLocation = await getOnHandAtLocationTx(
+    tx,
+    input.variantId,
+    input.locationId,
+  );
+  const projectedOnHand = onHandAtLocation + input.quantityDelta;
+
+  if (projectedOnHand < 0) {
+    throw new HttpError(
+      409,
+      input.message ?? "Inventory movement would reduce stock below zero",
+      input.code ?? "NEGATIVE_STOCK_NOT_ALLOWED",
+    );
+  }
+};
+
+const recordMovementTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    variantId: string;
+    locationId?: string;
+    type: InventoryMovementType;
+    quantity: number;
+    unitCost?: string | number | null;
+    referenceType?: string;
+    referenceId?: string;
+    note?: string;
+    createdByStaffId?: string;
+    allowNegativeStock?: boolean;
+  },
+) => {
+  await ensureVariantExistsById(tx, input.variantId);
+
+  const referenceType = normalizeOptionalText(input.referenceType) ?? null;
+  const referenceId = normalizeOptionalText(input.referenceId) ?? null;
+  const note = normalizeOptionalText(input.note) ?? null;
+  const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
+  const unitCost = parseUnitCost(input.unitCost);
+  const location = await resolveStockLocationTx(tx, input.locationId);
+
+  await assertNonNegativeProjectedStockTx(tx, {
+    variantId: input.variantId,
+    locationId: location.id,
+    quantityDelta: input.quantity,
+    allowNegativeStock: input.allowNegativeStock,
+  });
+
+  const movement = await tx.inventoryMovement.create({
+    data: {
+      variantId: input.variantId,
+      locationId: location.id,
+      type: input.type,
+      quantity: input.quantity,
+      unitCost: unitCost === undefined ? null : unitCost,
+      referenceType,
+      referenceId,
+      note,
+      createdByStaffId,
+    },
+    include: {
+      location: {
+        select: {
+          id: true,
+          name: true,
+          isDefault: true,
+        },
+      },
+    },
+  });
+
+  const ledgerCreatedByStaffId = await resolveLedgerCreatedByStaffIdTx(tx, createdByStaffId);
+
+  await tx.stockLedgerEntry.create({
+    data: {
+      variantId: input.variantId,
+      locationId: location.id,
+      type: toStockLedgerEntryType(input.type),
+      quantityDelta: input.quantity,
+      unitCostPence: toStockLedgerUnitCostPence(unitCost),
+      referenceType: referenceType ?? "INVENTORY_MOVEMENT",
+      referenceId: referenceId ?? movement.id,
+      note,
+      createdByStaffId: ledgerCreatedByStaffId,
+    },
+  });
+
+  return movement;
+};
+
 export const recordMovement = async (input: RecordMovementInput) => {
   const variantId = normalizeOptionalText(input.variantId);
   if (!variantId) {
@@ -302,58 +443,20 @@ export const recordMovement = async (input: RecordMovementInput) => {
     );
   }
 
-  const unitCost = parseUnitCost(input.unitCost);
-
-  const movement = await prisma.$transaction(async (tx) => {
-    await ensureVariantExistsById(tx, variantId);
-
-    const referenceType = normalizeOptionalText(input.referenceType) ?? null;
-    const referenceId = normalizeOptionalText(input.referenceId) ?? null;
-    const note = normalizeOptionalText(input.note) ?? null;
-    const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
-    const location = await resolveStockLocationTx(tx, input.locationId);
-
-    const movement = await tx.inventoryMovement.create({
-      data: {
-        variantId,
-        locationId: location.id,
-        type: input.type,
-        quantity: input.quantity,
-        unitCost: unitCost === undefined ? null : unitCost,
-        referenceType,
-        referenceId,
-        note,
-        createdByStaffId,
-      },
-      include: {
-        location: {
-          select: {
-            id: true,
-            name: true,
-            isDefault: true,
-          },
-        },
-      },
-    });
-
-    const ledgerCreatedByStaffId = await resolveLedgerCreatedByStaffIdTx(tx, createdByStaffId);
-
-    await tx.stockLedgerEntry.create({
-      data: {
-        variantId,
-        locationId: location.id,
-        type: toStockLedgerEntryType(input.type),
-        quantityDelta: input.quantity,
-        unitCostPence: toStockLedgerUnitCostPence(unitCost),
-        referenceType: referenceType ?? "INVENTORY_MOVEMENT",
-        referenceId: referenceId ?? movement.id,
-        note,
-        createdByStaffId: ledgerCreatedByStaffId,
-      },
-    });
-
-    return movement;
-  });
+  const movement = await prisma.$transaction((tx) =>
+    recordMovementTx(tx, {
+      variantId,
+      locationId: input.locationId,
+      type: input.type,
+      quantity: input.quantity,
+      unitCost: input.unitCost,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note: input.note,
+      createdByStaffId: input.createdByStaffId,
+      allowNegativeStock: input.allowNegativeStock,
+    }),
+  );
 
   return toMovementResponse(movement);
 };
@@ -378,25 +481,52 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
     );
   }
 
-  const movement = await recordMovement({
-    variantId,
-    locationId: normalizeOptionalText(input.locationId),
-    type: "ADJUSTMENT",
-    quantity: input.quantityDelta,
-    referenceType: "ADJUSTMENT",
-    referenceId: input.reason,
-    note: normalizeOptionalText(input.note) ?? undefined,
-    createdByStaffId: normalizeOptionalText(input.createdByStaffId),
-  });
+  const createdByStaffId = normalizeOptionalText(input.createdByStaffId);
 
-  const onHand = await getOnHand(variantId);
+  const result = await prisma.$transaction(async (tx) => {
+    const movement = await recordMovementTx(tx, {
+      variantId,
+      locationId: normalizeOptionalText(input.locationId),
+      type: "ADJUSTMENT",
+      quantity: input.quantityDelta,
+      referenceType: "ADJUSTMENT",
+      referenceId: input.reason,
+      note: normalizeOptionalText(input.note) ?? undefined,
+      createdByStaffId,
+      allowNegativeStock: input.allowNegativeStock,
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "INVENTORY_ADJUSTMENT_RECORDED",
+        entityType: "INVENTORY_MOVEMENT",
+        entityId: movement.id,
+        metadata: {
+          variantId,
+          locationId: movement.locationId,
+          quantityDelta: movement.quantity,
+          reason: input.reason,
+          referenceType: movement.referenceType,
+          referenceId: movement.referenceId,
+          note: movement.note,
+        },
+      },
+      createdByStaffId ? { actorId: createdByStaffId } : undefined,
+    );
+
+    return {
+      movement: toMovementResponse(movement),
+      onHand: await getTotalOnHandTx(tx, variantId),
+    };
+  });
 
   return {
     movement: {
-      ...movement,
+      ...result.movement,
       reason: input.reason,
     },
-    onHand: onHand.onHand,
+    onHand: result.onHand,
   };
 };
 
