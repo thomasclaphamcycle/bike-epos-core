@@ -303,9 +303,10 @@ textarea {
 .sidebar-submenu-link {
   color: rgba(237, 245, 251, 0.88);
   text-decoration: none;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 12px;
   border-radius: 8px;
   font-size: 0.94rem;
+  border-left: 3px solid transparent;
 }
 
 .sidebar-submenu-link:hover {
@@ -314,13 +315,14 @@ textarea {
 }
 
 .sidebar-submenu-link--active {
-  background: #ff7a00;
-  color: #041334;
+  background: rgba(255, 122, 0, 0.12);
+  border-left-color: #ff7a00;
+  color: #fff4e8;
 }
 
 .sidebar-submenu-link--active:hover {
-  background: #ff7a00;
-  color: #041334;
+  background: rgba(255, 122, 0, 0.16);
+  color: #fff4e8;
 }
 
 .header-right {
