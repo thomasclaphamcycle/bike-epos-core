@@ -145,6 +145,8 @@ const toStockLedgerEntryType = (type: InventoryMovementType) => {
       return "WORKSHOP" as const;
     case "RETURN":
       return "RETURN" as const;
+    case "TRANSFER":
+      return "TRANSFER" as const;
     default: {
       const exhaustiveCheck: never = type;
       return exhaustiveCheck;

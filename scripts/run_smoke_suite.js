@@ -33,6 +33,7 @@ const baselineSteps = [
   "test:m128",
   "test:supplier-product-links",
   "test:product-import",
+  "test:stock-transfers",
 ];
 
 const env = {

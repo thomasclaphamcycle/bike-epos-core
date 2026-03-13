@@ -127,6 +127,7 @@ model Variant {
   supplierLinks      SupplierProductLink[]
   stocktakeLines     StocktakeLine[]
   workshopLines      WorkshopJobLine[]
+  stockTransferLines StockTransferLine[]
 }
 
 model SupplierProductLink {
@@ -217,8 +218,58 @@ model StockLocation {
   stocktakes         Stocktake[]
   workshopParts      WorkshopJobPart[]
   inventoryMovements InventoryMovement[]
+  transfersFrom      StockTransfer[] @relation("StockTransferFromLocation")
+  transfersTo        StockTransfer[] @relation("StockTransferToLocation")
 
   @@index([name])
+}
+
+enum StockTransferStatus {
+  DRAFT
+  SENT
+  RECEIVED
+  CANCELLED
+}
+
+model StockTransfer {
+  id                String              @id @default(uuid()) @db.Uuid
+  fromLocationId    String              @db.Uuid
+  toLocationId      String              @db.Uuid
+  status            StockTransferStatus @default(DRAFT)
+  notes             String?
+  createdByStaffId  String?
+  sentByStaffId     String?
+  receivedByStaffId String?
+  sentAt            DateTime?
+  receivedAt        DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  fromLocation    StockLocation @relation("StockTransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation      StockLocation @relation("StockTransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  createdByStaff  User?         @relation("StockTransferCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  sentByStaff     User?         @relation("StockTransferSentByStaff", fields: [sentByStaffId], references: [id], onDelete: SetNull)
+  receivedByStaff User?         @relation("StockTransferReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
+  lines           StockTransferLine[]
+
+  @@index([status, createdAt])
+  @@index([fromLocationId, status])
+  @@index([toLocationId, status])
+}
+
+model StockTransferLine {
+  id              String   @id @default(uuid()) @db.Uuid
+  stockTransferId String   @db.Uuid
+  variantId       String
+  quantity        Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stockTransfer StockTransfer @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
+  variant       Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([stockTransferId, variantId])
+  @@index([variantId])
 }
 
 enum StockLedgerEntryType {
@@ -594,6 +645,7 @@ enum InventoryMovementType {
   ADJUSTMENT
   WORKSHOP_USE
   RETURN
+  TRANSFER
 }
 
 model InventoryMovement {
@@ -947,6 +999,9 @@ model User {
   closedCashSessions   CashSession[]      @relation("CashSessionClosedBy")
   cashMovements        CashMovement[]     @relation("CashMovementCreatedBy")
   cashCounts           CashCount[]        @relation("CashCountCountedBy")
+  createdStockTransfers  StockTransfer[]  @relation("StockTransferCreatedByStaff")
+  sentStockTransfers     StockTransfer[]  @relation("StockTransferSentByStaff")
+  receivedStockTransfers StockTransfer[]  @relation("StockTransferReceivedByStaff")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

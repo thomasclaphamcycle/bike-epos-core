@@ -28,7 +28,7 @@ const parseMovementTypeOrThrow = (
   if (!INVENTORY_MOVEMENT_TYPES.has(normalized as InventoryMovementType)) {
     throw new HttpError(
       400,
-      "type must be one of PURCHASE, SALE, ADJUSTMENT, WORKSHOP_USE, RETURN",
+      "type must be one of PURCHASE, SALE, ADJUSTMENT, WORKSHOP_USE, RETURN, TRANSFER",
       code,
     );
   }

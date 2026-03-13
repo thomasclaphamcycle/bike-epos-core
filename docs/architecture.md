@@ -45,9 +45,13 @@ Inventory groundwork now treats stock as location-aware while preserving existin
 - `StockLedgerEntry` is the authoritative on-hand ledger and carries `locationId` on every stock-affecting entry
 - `InventoryMovement` remains as the compatible movement/history surface and now also carries `locationId` where available
 - existing inventory flows still default to the primary stock location when no explicit `locationId` is provided
-- purchasing receiving, stock adjustments, workshop part usage, and sales/returns continue to work without API breakage while remaining compatible with future transfer/location workflows
+- purchasing receiving, stock adjustments, workshop part usage, and sales/returns continue to work without API breakage while remaining compatible with transfer/location workflows
+- stock transfers now exist as an additive operational workflow through `StockTransfer` and `StockTransferLine`
+  - transfers move through `DRAFT -> SENT -> RECEIVED`
+  - stock only moves on transfer receipt
+  - receipt posts paired `TRANSFER` ledger/movement records out of the source location and into the target location
 
-This is foundation only. It does not yet introduce full transfer operations, location-specific replenishment rules, or location-aware POS picking UX.
+This remains intentionally narrow. It does not yet introduce transfer reservations, in-transit valuation, location-specific replenishment rules, or location-aware POS picking UX.
 
 ## Workshop Handoff Safety
 

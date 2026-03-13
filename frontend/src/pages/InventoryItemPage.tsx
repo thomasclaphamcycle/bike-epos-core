@@ -84,6 +84,7 @@ const MOVEMENT_TYPE_OPTIONS = [
   "ADJUSTMENT",
   "WORKSHOP_USE",
   "RETURN",
+  "TRANSFER",
 ] as const;
 
 const LOW_STOCK_THRESHOLD = 3;
@@ -126,6 +127,20 @@ const formatMovementReferenceLabel = (referenceType: string | null, referenceId:
     };
   }
 
+  if (referenceType === "STOCK_TRANSFER_OUT") {
+    return {
+      primary: "Transfer out",
+      secondary: referenceId,
+    };
+  }
+
+  if (referenceType === "STOCK_TRANSFER_IN") {
+    return {
+      primary: "Transfer in",
+      secondary: referenceId,
+    };
+  }
+
   return {
     primary: referenceType ? formatMovementTypeLabel(referenceType) : "-",
     secondary: referenceId,
@@ -155,6 +170,12 @@ const getMovementStory = (movement: MovementResponse["movements"][number]) => {
 
   if (movement.type === "ADJUSTMENT") {
     return "Manual correction or count adjustment.";
+  }
+
+  if (movement.type === "TRANSFER") {
+    return movement.referenceType === "STOCK_TRANSFER_OUT"
+      ? "Moved out to another stock location."
+      : "Received in from another stock location.";
   }
 
   return movement.note || "Inventory movement recorded.";
