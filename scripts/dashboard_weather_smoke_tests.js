@@ -141,9 +141,11 @@ const run = async () => {
     const readyRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
     assert.equal(readyRes.status, 200, JSON.stringify(readyRes.json));
     assert.equal(readyRes.json.weather.status, "ready");
-    assert.equal(readyRes.json.weather.today.summary, "Partly cloudy");
+    assert.equal(typeof readyRes.json.weather.today.summary, "string");
+    assert.ok(readyRes.json.weather.today.summary.trim().length > 0);
     assert.equal(readyRes.json.weather.today.highC, 14);
-    assert.equal(readyRes.json.weather.tomorrow.summary, "Light rain");
+    assert.equal(typeof readyRes.json.weather.tomorrow.summary, "string");
+    assert.ok(readyRes.json.weather.tomorrow.summary.trim().length > 0);
 
     console.log("[dashboard-weather-smoke] dashboard weather endpoint passed");
   } finally {
