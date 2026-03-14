@@ -77,6 +77,28 @@ type DashboardWeatherPayload = {
   };
 };
 
+type DashboardStaffTodayPayload = {
+  staffToday: {
+    summary: {
+      date: string;
+      isClosed: boolean;
+      closedReason: string | null;
+      opensAt: string | null;
+      closesAt: string | null;
+      scheduledStaffCount: number;
+      holidayStaffCount: number;
+    };
+    staff: Array<{
+      staffId: string;
+      name: string;
+      role: "STAFF" | "MANAGER" | "ADMIN";
+      shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
+      note: string | null;
+      source: "MANUAL" | "IMPORT";
+    }>;
+  };
+};
+
 type MetricCardProps = {
   label: string;
   value: string;
@@ -247,6 +269,7 @@ export const DashboardPage = () => {
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [hireBookings, setHireBookings] = useState<HireBooking[]>([]);
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
+  const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -274,10 +297,20 @@ export const DashboardPage = () => {
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=12"),
       canViewManagerWidgets ? apiGet<ActionCentreResponse>("/api/reports/operations/actions") : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<HireBookingListResponse>("/api/hire/bookings?take=200") : Promise.resolve(null),
+      apiGet<DashboardStaffTodayPayload>("/api/dashboard/staff-today"),
       apiGet<DashboardWeatherPayload>("/api/dashboard/weather"),
     ]);
 
-    const [salesTodayResult, monthResult, lastYearResult, workshopResult, actionResult, hireResult, weatherResult] = requests;
+    const [
+      salesTodayResult,
+      monthResult,
+      lastYearResult,
+      workshopResult,
+      actionResult,
+      hireResult,
+      staffTodayResult,
+      weatherResult,
+    ] = requests;
 
     if (salesTodayResult.status === "fulfilled") {
       setSalesToday(
@@ -348,6 +381,12 @@ export const DashboardPage = () => {
       error(hireResult.reason instanceof Error ? hireResult.reason.message : "Failed to load rentals snapshot");
     } else {
       setHireBookings([]);
+    }
+
+    if (staffTodayResult.status === "fulfilled" && staffTodayResult.value) {
+      setStaffToday(staffTodayResult.value.staffToday);
+    } else {
+      setStaffToday(null);
     }
 
     if (weatherResult.status === "fulfilled" && weatherResult.value) {
@@ -541,6 +580,16 @@ export const DashboardPage = () => {
     workshopWaitingCount,
   ]);
 
+  const staffTodayWindow = useMemo(() => {
+    if (!staffToday?.summary || staffToday.summary.isClosed) {
+      return null;
+    }
+    if (!staffToday.summary.opensAt || !staffToday.summary.closesAt) {
+      return null;
+    }
+    return `${staffToday.summary.opensAt} - ${staffToday.summary.closesAt}`;
+  }, [staffToday]);
+
   return (
     <div className="page-shell dashboard-v1">
       <section className="card dashboard-v1-header">
@@ -730,17 +779,48 @@ export const DashboardPage = () => {
           <div className="card-header-row">
             <div>
               <h2>Staff Today</h2>
-              <p className="muted-text">Today’s team coverage will live here once rota data is connected to the dashboard.</p>
+              <p className="muted-text">Today’s rota coverage from imported schedule data and Store Info opening hours.</p>
             </div>
             {quickActions.find((action) => action.label === "View Rota")?.to ? (
               <Link to={quickActions.find((action) => action.label === "View Rota")?.to ?? "/dashboard"}>View Rota</Link>
             ) : null}
           </div>
 
-          <div className="restricted-panel info-panel">
-            <strong>Signed in now:</strong> {user?.name?.trim() || user?.username || "Current user"}
-            <div className="muted-text">Staff rota data is not yet wired to the dashboard, so use the rota/calendar destination for the planned workspace.</div>
-          </div>
+          {!staffToday ? (
+            <div className="restricted-panel info-panel">Loading today&apos;s rota...</div>
+          ) : staffToday.summary.isClosed ? (
+            <div className="restricted-panel info-panel">
+              <strong>Store closed today.</strong>
+              <div className="muted-text">{staffToday.summary.closedReason || "No scheduled trading hours today."}</div>
+            </div>
+          ) : staffToday.staff.length ? (
+            <div className="dashboard-action-list">
+              {staffToday.staff.map((entry) => (
+                <div key={`${entry.staffId}-${entry.shiftType}`} className="dashboard-action-item">
+                  <div className="dashboard-action-copy">
+                    <strong>{entry.name}</strong>
+                    <span className="muted-text">
+                      {entry.shiftType === "FULL_DAY" ? "Full day" : entry.shiftType === "HALF_DAY_AM" ? "Half day (AM)" : "Half day (PM)"}
+                      {entry.note ? ` · ${entry.note}` : ""}
+                    </span>
+                  </div>
+                  <span className="status-badge status-info">{entry.role}</span>
+                </div>
+              ))}
+              <div className="restricted-panel info-panel">
+                {staffToday.summary.scheduledStaffCount} scheduled
+                {staffTodayWindow ? ` · ${staffTodayWindow}` : ""}
+                {staffToday.summary.holidayStaffCount ? ` · ${staffToday.summary.holidayStaffCount} on holiday` : ""}
+              </div>
+            </div>
+          ) : (
+            <div className="restricted-panel info-panel">
+              <strong>No staff scheduled today.</strong>
+              <div className="muted-text">
+                {staffTodayWindow ? `Trading hours ${staffTodayWindow}.` : "Trading hours available in Store Info."}
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="card dashboard-v1-widget">

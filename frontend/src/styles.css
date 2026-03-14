@@ -1515,6 +1515,33 @@ th {
   resize: vertical;
 }
 
+.store-opening-hours {
+  display: grid;
+  gap: 10px;
+}
+
+.store-opening-hours-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 140px) auto minmax(120px, 1fr) auto minmax(120px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.store-opening-hours-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.store-opening-hours-error {
+  grid-column: 1 / -1;
+}
+
 .store-info-support {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2775,6 +2802,11 @@ th {
 
   .store-info-grid-span {
     grid-column: span 1;
+  }
+
+  .store-opening-hours-row {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .purchase-form-wide {

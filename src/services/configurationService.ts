@@ -1,6 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import {
+  clockTimeToMinutes,
+  DEFAULT_STORE_OPENING_HOURS,
+  normalizeStoreClockTime,
+  STORE_WEEKDAY_KEYS,
+  type StoreOpeningHoursSettings,
+} from "../utils/storeHours";
 
 type SettingsClient = Prisma.TransactionClient | typeof prisma;
 
@@ -29,6 +36,7 @@ export type ShopSettings = {
     timeZone: string;
     logoUrl: string;
     footerText: string;
+    openingHours: StoreOpeningHoursSettings;
     latitude: number | null;
     longitude: number | null;
   };
@@ -112,6 +120,69 @@ const normalizePostcodeSetting = (value: unknown, field: string) =>
   normalizeTextSetting(value, field, { allowEmpty: false, maxLength: 32 })
     .replace(/\s+/g, " ")
     .toUpperCase();
+
+const normalizeStoreOpeningHoursSetting = (
+  value: unknown,
+  field: string,
+): StoreOpeningHoursSettings => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(400, `${field} must be an object`, "INVALID_SETTINGS");
+  }
+
+  const record = value as Record<string, unknown>;
+  const normalized = {} as StoreOpeningHoursSettings;
+
+  for (const weekday of STORE_WEEKDAY_KEYS) {
+    const rawDay = record[weekday];
+    if (!rawDay || typeof rawDay !== "object" || Array.isArray(rawDay)) {
+      throw new HttpError(400, `${field}.${weekday} must be an object`, "INVALID_SETTINGS");
+    }
+
+    const dayRecord = rawDay as Record<string, unknown>;
+    if (typeof dayRecord.isClosed !== "boolean") {
+      throw new HttpError(400, `${field}.${weekday}.isClosed must be a boolean`, "INVALID_SETTINGS");
+    }
+
+    const opensAtRaw = typeof dayRecord.opensAt === "string" ? dayRecord.opensAt : "";
+    const closesAtRaw = typeof dayRecord.closesAt === "string" ? dayRecord.closesAt : "";
+    const opensAt = normalizeStoreClockTime(opensAtRaw);
+    const closesAt = normalizeStoreClockTime(closesAtRaw);
+
+    if (dayRecord.isClosed) {
+      normalized[weekday] = {
+        isClosed: true,
+        opensAt: "",
+        closesAt: "",
+      };
+      continue;
+    }
+
+    if (!opensAt) {
+      throw new HttpError(400, `${field}.${weekday}.opensAt must be HH:MM`, "INVALID_SETTINGS");
+    }
+    if (!closesAt) {
+      throw new HttpError(400, `${field}.${weekday}.closesAt must be HH:MM`, "INVALID_SETTINGS");
+    }
+
+    const opensAtMinutes = clockTimeToMinutes(opensAt);
+    const closesAtMinutes = clockTimeToMinutes(closesAt);
+    if (opensAtMinutes === null || closesAtMinutes === null || opensAtMinutes >= closesAtMinutes) {
+      throw new HttpError(
+        400,
+        `${field}.${weekday} must have opensAt earlier than closesAt`,
+        "INVALID_SETTINGS",
+      );
+    }
+
+    normalized[weekday] = {
+      isClosed: false,
+      opensAt,
+      closesAt,
+    };
+  }
+
+  return normalized;
+};
 
 const normalizeCurrencySetting = (value: unknown, field: string) => {
   const normalized = normalizeTextSetting(value, field, {
@@ -254,6 +325,11 @@ const SETTINGS_DEFINITIONS = {
     validate: (value: unknown) =>
       normalizeTextSetting(value, "store.country", { allowEmpty: false, maxLength: 120 }),
   },
+  "store.openingHours": {
+    key: "store.openingHours",
+    defaultValue: DEFAULT_STORE_OPENING_HOURS,
+    validate: (value: unknown) => normalizeStoreOpeningHoursSetting(value, "store.openingHours"),
+  },
   "store.vatNumber": {
     key: "store.vatNumber",
     defaultValue: "",
@@ -357,6 +433,10 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
       region: getSettingValue(valueByKey.get("store.region"), SETTINGS_DEFINITIONS["store.region"]),
       postcode: getSettingValue(valueByKey.get("store.postcode"), SETTINGS_DEFINITIONS["store.postcode"]),
       country: getSettingValue(valueByKey.get("store.country"), SETTINGS_DEFINITIONS["store.country"]),
+      openingHours: getSettingValue(
+        valueByKey.get("store.openingHours"),
+        SETTINGS_DEFINITIONS["store.openingHours"],
+      ),
       vatNumber: getSettingValue(valueByKey.get("store.vatNumber"), SETTINGS_DEFINITIONS["store.vatNumber"]),
       companyNumber: getSettingValue(
         valueByKey.get("store.companyNumber"),

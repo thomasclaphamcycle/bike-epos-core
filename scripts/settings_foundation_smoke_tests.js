@@ -49,6 +49,7 @@ const SETTINGS_KEYS = [
   "store.region",
   "store.postcode",
   "store.country",
+  "store.openingHours",
   "store.vatNumber",
   "store.companyNumber",
   "store.defaultCurrency",
@@ -131,6 +132,9 @@ const run = async () => {
     assert.equal(defaultRes.json.settings.store.city, "");
     assert.equal(defaultRes.json.settings.store.postcode, "");
     assert.equal(defaultRes.json.settings.store.country, "United Kingdom");
+    assert.equal(defaultRes.json.settings.store.openingHours.MONDAY.opensAt, "10:00");
+    assert.equal(defaultRes.json.settings.store.openingHours.SATURDAY.closesAt, "16:30");
+    assert.equal(defaultRes.json.settings.store.openingHours.SUNDAY.isClosed, true);
     assert.equal(defaultRes.json.settings.store.defaultCurrency, "GBP");
     assert.equal(defaultRes.json.settings.store.timeZone, "Europe/London");
     assert.equal(defaultRes.json.settings.store.footerText, "Thank you for your custom.");
@@ -159,6 +163,15 @@ const run = async () => {
           region: "Greater London",
           postcode: "SW4 0HY",
           country: "United Kingdom",
+          openingHours: {
+            MONDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+            TUESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+            WEDNESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+            THURSDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+            FRIDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+            SATURDAY: { isClosed: false, opensAt: "09:00", closesAt: "16:30" },
+            SUNDAY: { isClosed: true, opensAt: "", closesAt: "" },
+          },
           vatNumber: "GB123456789",
           companyNumber: "01234567",
           defaultCurrency: "GBP",
@@ -192,6 +205,9 @@ const run = async () => {
     assert.equal(patchRes.json.settings.store.region, "Greater London");
     assert.equal(patchRes.json.settings.store.postcode, "SW4 0HY");
     assert.equal(patchRes.json.settings.store.country, "United Kingdom");
+    assert.equal(patchRes.json.settings.store.openingHours.MONDAY.opensAt, "10:00");
+    assert.equal(patchRes.json.settings.store.openingHours.SATURDAY.opensAt, "09:00");
+    assert.equal(patchRes.json.settings.store.openingHours.SUNDAY.isClosed, true);
     assert.equal(patchRes.json.settings.store.vatNumber, "GB123456789");
     assert.equal(patchRes.json.settings.store.companyNumber, "01234567");
     assert.equal(patchRes.json.settings.store.defaultCurrency, "GBP");
@@ -233,6 +249,15 @@ const run = async () => {
         region: "Greater London",
         postcode: "SW4 0HY",
         country: "United Kingdom",
+        openingHours: {
+          MONDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+          TUESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+          WEDNESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+          THURSDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+          FRIDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+          SATURDAY: { isClosed: false, opensAt: "09:00", closesAt: "16:30" },
+          SUNDAY: { isClosed: true, opensAt: "", closesAt: "" },
+        },
         vatNumber: "GB987654321",
         companyNumber: "76543210",
         defaultCurrency: "GBP",
@@ -247,6 +272,8 @@ const run = async () => {
     assert.equal(storeInfoPatchRes.json.store.name, "CorePOS Workshop & Retail");
     assert.equal(storeInfoPatchRes.json.store.email, "store-info@corepos.local");
     assert.equal(storeInfoPatchRes.json.store.footerText, "See you in the workshop soon.");
+    assert.equal(storeInfoPatchRes.json.store.openingHours.MONDAY.opensAt, "10:00");
+    assert.equal(storeInfoPatchRes.json.store.openingHours.SUNDAY.isClosed, true);
 
     const receiptSettings = await prisma.receiptSettings.findUnique({
       where: { id: 1 },

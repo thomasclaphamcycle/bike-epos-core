@@ -456,6 +456,30 @@ enum SaleTenderMethod {
   VOUCHER
 }
 
+enum RotaPeriodStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum RotaShiftType {
+  FULL_DAY
+  HALF_DAY_AM
+  HALF_DAY_PM
+  HOLIDAY
+}
+
+enum RotaAssignmentSource {
+  MANUAL
+  IMPORT
+}
+
+enum RotaClosedDayType {
+  SCHEDULED_CLOSED
+  BANK_HOLIDAY
+  CUSTOM
+}
+
 enum RefundRecordStatus {
   DRAFT
   COMPLETED
@@ -573,6 +597,54 @@ model AppConfig {
   value     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RotaPeriod {
+  id        String           @id @default(uuid()) @db.Uuid
+  label     String
+  startsOn  String
+  endsOn    String
+  status    RotaPeriodStatus @default(DRAFT)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  assignments RotaAssignment[]
+
+  @@unique([startsOn, endsOn])
+  @@index([status, startsOn])
+}
+
+model RotaAssignment {
+  id             String               @id @default(uuid()) @db.Uuid
+  rotaPeriodId   String               @db.Uuid
+  staffId        String
+  date           String
+  shiftType      RotaShiftType
+  source         RotaAssignmentSource @default(MANUAL)
+  note           String?
+  rawValue       String?
+  importBatchKey String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  rotaPeriod RotaPeriod @relation(fields: [rotaPeriodId], references: [id], onDelete: Restrict)
+  staff      User       @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, date])
+  @@index([date, shiftType])
+  @@index([rotaPeriodId, date])
+}
+
+model RotaClosedDay {
+  id        String            @id @default(uuid()) @db.Uuid
+  date      String            @unique
+  type      RotaClosedDayType @default(CUSTOM)
+  note      String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([type, date])
 }
 
 model Receipt {
@@ -1084,6 +1156,7 @@ model User {
   createdHireBookings    HireBooking[]    @relation("HireBookingCreatedByStaff")
   checkedOutHireBookings HireBooking[]    @relation("HireBookingCheckedOutByStaff")
   returnedHireBookings   HireBooking[]    @relation("HireBookingReturnedByStaff")
+  rotaAssignments        RotaAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

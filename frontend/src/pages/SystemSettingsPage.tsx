@@ -3,6 +3,36 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 
+const STORE_WEEKDAYS = [
+  { key: "MONDAY", label: "Monday" },
+  { key: "TUESDAY", label: "Tuesday" },
+  { key: "WEDNESDAY", label: "Wednesday" },
+  { key: "THURSDAY", label: "Thursday" },
+  { key: "FRIDAY", label: "Friday" },
+  { key: "SATURDAY", label: "Saturday" },
+  { key: "SUNDAY", label: "Sunday" },
+] as const;
+
+type StoreWeekdayKey = typeof STORE_WEEKDAYS[number]["key"];
+
+type StoreDailyOpeningHours = {
+  isClosed: boolean;
+  opensAt: string;
+  closesAt: string;
+};
+
+type StoreOpeningHours = Record<StoreWeekdayKey, StoreDailyOpeningHours>;
+
+const DEFAULT_OPENING_HOURS: StoreOpeningHours = {
+  MONDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  TUESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  WEDNESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  THURSDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  FRIDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  SATURDAY: { isClosed: false, opensAt: "09:00", closesAt: "16:30" },
+  SUNDAY: { isClosed: true, opensAt: "", closesAt: "" },
+};
+
 type StoreInfo = {
   name: string;
   businessName: string;
@@ -21,6 +51,7 @@ type StoreInfo = {
   timeZone: string;
   logoUrl: string;
   footerText: string;
+  openingHours: StoreOpeningHours;
 };
 
 type StoreInfoResponse = {
@@ -57,6 +88,20 @@ const isValidUrl = (value: string) => {
 
 const normalizeTextInput = (value: string) => value.replace(/\s+/g, " ").trim();
 const normalizePostcodeInput = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
+const normalizeOpeningHoursTime = (value: string) => value.trim();
+
+const normalizeOpeningHours = (openingHours: StoreOpeningHours): StoreOpeningHours =>
+  STORE_WEEKDAYS.reduce((result, weekday) => {
+    const day = openingHours[weekday.key];
+    result[weekday.key] = day.isClosed
+      ? { isClosed: true, opensAt: "", closesAt: "" }
+      : {
+        isClosed: false,
+        opensAt: normalizeOpeningHoursTime(day.opensAt),
+        closesAt: normalizeOpeningHoursTime(day.closesAt),
+      };
+    return result;
+  }, {} as StoreOpeningHours);
 
 const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
   name: normalizeTextInput(store.name),
@@ -76,7 +121,31 @@ const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
   timeZone: store.timeZone.trim(),
   logoUrl: store.logoUrl.trim(),
   footerText: store.footerText.trim(),
+  openingHours: normalizeOpeningHours(store.openingHours),
 });
+
+const toOpeningHoursFormState = (value: unknown): StoreOpeningHours => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_OPENING_HOURS;
+  }
+
+  const record = value as Record<string, unknown>;
+  return STORE_WEEKDAYS.reduce((result, weekday) => {
+    const rawDay = record[weekday.key];
+    if (!rawDay || typeof rawDay !== "object" || Array.isArray(rawDay)) {
+      result[weekday.key] = DEFAULT_OPENING_HOURS[weekday.key];
+      return result;
+    }
+
+    const dayRecord = rawDay as Record<string, unknown>;
+    result[weekday.key] = {
+      isClosed: typeof dayRecord.isClosed === "boolean" ? dayRecord.isClosed : DEFAULT_OPENING_HOURS[weekday.key].isClosed,
+      opensAt: typeof dayRecord.opensAt === "string" ? dayRecord.opensAt : DEFAULT_OPENING_HOURS[weekday.key].opensAt,
+      closesAt: typeof dayRecord.closesAt === "string" ? dayRecord.closesAt : DEFAULT_OPENING_HOURS[weekday.key].closesAt,
+    };
+    return result;
+  }, {} as StoreOpeningHours);
+};
 
 const toStoreInfoFormState = (store: Record<string, unknown>): StoreInfo => ({
   name: typeof store.name === "string" ? store.name : "",
@@ -96,6 +165,7 @@ const toStoreInfoFormState = (store: Record<string, unknown>): StoreInfo => ({
   timeZone: typeof store.timeZone === "string" ? store.timeZone : "",
   logoUrl: typeof store.logoUrl === "string" ? store.logoUrl : "",
   footerText: typeof store.footerText === "string" ? store.footerText : "",
+  openingHours: toOpeningHoursFormState(store.openingHours),
 });
 
 export const SystemSettingsPage = () => {
@@ -137,10 +207,14 @@ export const SystemSettingsPage = () => {
 
   const validationErrors = useMemo(() => {
     if (!store) {
-      return {};
+      return {
+        fields: {},
+        openingHours: {},
+      };
     }
 
     const errors: Partial<Record<keyof StoreInfo, string>> = {};
+    const openingHoursErrors: Partial<Record<StoreWeekdayKey, string>> = {};
 
     if (!store.name.trim()) {
       errors.name = "Store name is required.";
@@ -175,7 +249,25 @@ export const SystemSettingsPage = () => {
     if (store.logoUrl.trim() && !isValidUrl(store.logoUrl)) {
       errors.logoUrl = "Logo URL must start with http:// or https://";
     }
-    return errors;
+
+    for (const weekday of STORE_WEEKDAYS) {
+      const day = store.openingHours[weekday.key];
+      if (day.isClosed) {
+        continue;
+      }
+      if (!day.opensAt || !day.closesAt) {
+        openingHoursErrors[weekday.key] = "Opening and closing times are required.";
+        continue;
+      }
+      if (day.opensAt >= day.closesAt) {
+        openingHoursErrors[weekday.key] = "Opening time must be earlier than closing time.";
+      }
+    }
+
+    return {
+      fields: errors,
+      openingHours: openingHoursErrors,
+    };
   }, [store]);
 
   const isDirty = useMemo(() => {
@@ -186,10 +278,39 @@ export const SystemSettingsPage = () => {
     return JSON.stringify(store) !== JSON.stringify(initialStore);
   }, [initialStore, store]);
 
-  const hasValidationErrors = Object.keys(validationErrors).length > 0;
+  const hasValidationErrors = Object.keys(validationErrors.fields).length > 0
+    || Object.keys(validationErrors.openingHours).length > 0;
 
   const setField = <K extends keyof StoreInfo>(key: K, value: StoreInfo[K]) => {
     setStore((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const setOpeningHours = (weekday: StoreWeekdayKey, patch: Partial<StoreDailyOpeningHours>) => {
+    setStore((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const currentDay = current.openingHours[weekday];
+      const nextDay = {
+        ...currentDay,
+        ...patch,
+      };
+
+      return {
+        ...current,
+        openingHours: {
+          ...current.openingHours,
+          [weekday]: nextDay.isClosed
+            ? { isClosed: true, opensAt: "", closesAt: "" }
+            : {
+              isClosed: false,
+              opensAt: nextDay.opensAt || DEFAULT_OPENING_HOURS[weekday].opensAt,
+              closesAt: nextDay.closesAt || DEFAULT_OPENING_HOURS[weekday].closesAt,
+            },
+        },
+      };
+    });
   };
 
   const saveStoreInfo = async () => {
@@ -253,7 +374,7 @@ export const SystemSettingsPage = () => {
         </div>
 
         <div className="restricted-panel info-panel">
-          Store Info is the app-level source of truth for the shop&apos;s identity. Receipt settings stay compatible automatically, and dashboard weather now uses the saved store postcode.
+          Store Info is the app-level source of truth for the shop&apos;s identity, opening hours, and other shared operational settings. Receipt settings stay compatible automatically, and weather plus rota features use the saved store schedule data.
         </div>
       </section>
 
@@ -287,7 +408,7 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("name", event.target.value)}
                     placeholder="CorePOS Cycles"
                   />
-                  {validationErrors.name ? <span className="field-error">{validationErrors.name}</span> : null}
+                  {validationErrors.fields.name ? <span className="field-error">{validationErrors.fields.name}</span> : null}
                 </label>
                 <label>
                   Business / trading name
@@ -296,8 +417,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("businessName", event.target.value)}
                     placeholder="CorePOS Cycles Ltd"
                   />
-                  {validationErrors.businessName ? (
-                    <span className="field-error">{validationErrors.businessName}</span>
+                  {validationErrors.fields.businessName ? (
+                    <span className="field-error">{validationErrors.fields.businessName}</span>
                   ) : null}
                 </label>
                 <label>
@@ -308,8 +429,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("defaultCurrency", event.target.value)}
                     placeholder="GBP"
                   />
-                  {validationErrors.defaultCurrency ? (
-                    <span className="field-error">{validationErrors.defaultCurrency}</span>
+                  {validationErrors.fields.defaultCurrency ? (
+                    <span className="field-error">{validationErrors.fields.defaultCurrency}</span>
                   ) : null}
                 </label>
                 <label>
@@ -320,8 +441,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("timeZone", event.target.value)}
                     placeholder="Europe/London"
                   />
-                  {validationErrors.timeZone ? (
-                    <span className="field-error">{validationErrors.timeZone}</span>
+                  {validationErrors.fields.timeZone ? (
+                    <span className="field-error">{validationErrors.fields.timeZone}</span>
                   ) : null}
                 </label>
               </div>
@@ -337,7 +458,7 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("email", event.target.value)}
                     placeholder="hello@corepos.local"
                   />
-                  {validationErrors.email ? <span className="field-error">{validationErrors.email}</span> : null}
+                  {validationErrors.fields.email ? <span className="field-error">{validationErrors.fields.email}</span> : null}
                 </label>
                 <label>
                   Phone number
@@ -354,10 +475,53 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("website", event.target.value)}
                     placeholder="https://www.corepos.example"
                   />
-                  {validationErrors.website ? (
-                    <span className="field-error">{validationErrors.website}</span>
+                  {validationErrors.fields.website ? (
+                    <span className="field-error">{validationErrors.fields.website}</span>
                   ) : null}
                 </label>
+              </div>
+            </section>
+
+            <section className="store-info-section">
+              <h3>Opening Hours</h3>
+              <p className="muted-text">Used as the source of truth for full-day rota imports and dashboard schedule interpretation.</p>
+              <div className="store-opening-hours">
+                {STORE_WEEKDAYS.map((weekday) => {
+                  const day = store.openingHours[weekday.key];
+                  return (
+                    <div key={weekday.key} className="store-opening-hours-row">
+                      <div>
+                        <strong>{weekday.label}</strong>
+                      </div>
+                      <label className="store-opening-hours-toggle">
+                        <input
+                          type="checkbox"
+                          checked={day.isClosed}
+                          onChange={(event) => setOpeningHours(weekday.key, { isClosed: event.target.checked })}
+                        />
+                        Closed
+                      </label>
+                      <input
+                        type="time"
+                        value={day.opensAt}
+                        disabled={day.isClosed}
+                        onChange={(event) => setOpeningHours(weekday.key, { opensAt: event.target.value })}
+                      />
+                      <span className="muted-text">to</span>
+                      <input
+                        type="time"
+                        value={day.closesAt}
+                        disabled={day.isClosed}
+                        onChange={(event) => setOpeningHours(weekday.key, { closesAt: event.target.value })}
+                      />
+                      {validationErrors.openingHours[weekday.key] ? (
+                        <span className="field-error store-opening-hours-error">
+                          {validationErrors.openingHours[weekday.key]}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -371,8 +535,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("addressLine1", event.target.value)}
                     placeholder="123 Service Lane"
                   />
-                  {validationErrors.addressLine1 ? (
-                    <span className="field-error">{validationErrors.addressLine1}</span>
+                  {validationErrors.fields.addressLine1 ? (
+                    <span className="field-error">{validationErrors.fields.addressLine1}</span>
                   ) : null}
                 </label>
                 <label className="store-info-grid-span">
@@ -390,7 +554,7 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("city", event.target.value)}
                     placeholder="Clapham"
                   />
-                  {validationErrors.city ? <span className="field-error">{validationErrors.city}</span> : null}
+                  {validationErrors.fields.city ? <span className="field-error">{validationErrors.fields.city}</span> : null}
                 </label>
                 <label>
                   County / region
@@ -407,8 +571,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("postcode", event.target.value)}
                     placeholder="SW4 0HY"
                   />
-                  {validationErrors.postcode ? (
-                    <span className="field-error">{validationErrors.postcode}</span>
+                  {validationErrors.fields.postcode ? (
+                    <span className="field-error">{validationErrors.fields.postcode}</span>
                   ) : null}
                 </label>
                 <label>
@@ -418,8 +582,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("country", event.target.value)}
                     placeholder="United Kingdom"
                   />
-                  {validationErrors.country ? (
-                    <span className="field-error">{validationErrors.country}</span>
+                  {validationErrors.fields.country ? (
+                    <span className="field-error">{validationErrors.fields.country}</span>
                   ) : null}
                 </label>
               </div>
@@ -457,8 +621,8 @@ export const SystemSettingsPage = () => {
                     onChange={(event) => setField("logoUrl", event.target.value)}
                     placeholder="https://cdn.example.com/logo.png"
                   />
-                  {validationErrors.logoUrl ? (
-                    <span className="field-error">{validationErrors.logoUrl}</span>
+                  {validationErrors.fields.logoUrl ? (
+                    <span className="field-error">{validationErrors.fields.logoUrl}</span>
                   ) : null}
                 </label>
                 <label className="store-info-grid-span">
@@ -491,6 +655,10 @@ export const SystemSettingsPage = () => {
           <div className="metric-card">
             <span className="metric-label">Customer Communications</span>
             <span className="dashboard-metric-detail">Email, phone, website, and store name are ready for reminders, updates, and later outbound templates.</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Operational Scheduling</span>
+            <span className="dashboard-metric-detail">Opening hours now feed rota imports and dashboard staffing interpretation from the same Store Info source.</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Website / Storefront</span>

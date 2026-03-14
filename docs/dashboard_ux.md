@@ -134,12 +134,13 @@ Rules:
 
 ## Staff Today
 
-Dashboard v1 staff widget should show who is in today when rota data becomes available.
+Dashboard v1 staff widget now shows who is scheduled today from imported rota data.
 
-Until then:
+Rules:
 
-- keep the widget in place
-- show the intended purpose clearly
+- use imported rota assignments as the source of staff coverage
+- respect store-closed days from Store Info opening hours and rota closed-day overrides
+- keep the widget simple and operational rather than turning it into a full rota planner
 - provide a View Rota action
 
 ## Weather

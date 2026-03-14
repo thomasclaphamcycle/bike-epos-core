@@ -278,8 +278,10 @@ Features:
 - user roles
 - PIN login
 - Store Info / business identity settings
+- Store Info opening hours / shared trading schedule
 - activity logs
 - rota planning
+- rota import foundations
 - workshop capacity planning
 - sales performance tracking
 - mechanic performance tracking
@@ -298,6 +300,8 @@ Managers and admins can operate, supervise, and measure the shop effectively.
 Implementation status:
 - substantially implemented on the current working line, with ongoing hardening and policy refinement
 - persisted Store Info now provides a central business-identity source for receipts, location-aware features, and future customer-facing profile surfaces
+- Store Info now also provides the shared trading-hours source used by rota import and dashboard staffing interpretation
+- dashboard Staff Today can now surface imported rota assignments for the current day
 
 ---
 

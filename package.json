@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -10,6 +10,7 @@
     "start:prod": "NODE_ENV=production node src/server.ts",
     "db:seed:dev": "ts-node --transpile-only scripts/seed_demo_data.ts",
     "db:seed:test": "node scripts/run_with_test_env.js ts-node --transpile-only scripts/seed_demo_data.ts",
+    "import:rota-spreadsheet": "ts-node --transpile-only scripts/import_rota_spreadsheet.ts",
     "typecheck:reports": "tsc -p tsconfig.reports.json --noEmit",
     "test": "npm run typecheck:reports && npm run test:smoke",
     "test:smoke": "node scripts/run_smoke_suite.js",
@@ -77,6 +78,7 @@
     "test:stock-transfers": "node scripts/run_smoke_test.js scripts/stock_transfers_smoke_tests.js",
     "test:bike-hire": "node scripts/run_smoke_test.js scripts/bike_hire_foundation_smoke_tests.js",
     "test:settings": "node scripts/run_smoke_test.js scripts/settings_foundation_smoke_tests.js",
+    "test:rota-foundation": "node scripts/run_smoke_test.js scripts/rota_foundation_smoke_tests.js",
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
     "verify": "NODE_ENV=test npm run test:m11 && NODE_ENV=test npm test && npm run build && NODE_ENV=test npm run e2e && NODE_ENV=test npm run test:m38 && NODE_ENV=test npm run test:m24 && NODE_ENV=test npm run test:m27 && NODE_ENV=test npm run test:m30 && npm run db:seed:dev",

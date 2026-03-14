@@ -29,6 +29,15 @@ X-Staff-Id: demo-manager
     "region": "Greater London",
     "postcode": "SW4 0HY",
     "country": "United Kingdom",
+    "openingHours": {
+      "MONDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+      "TUESDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+      "WEDNESDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+      "THURSDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+      "FRIDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+      "SATURDAY": { "isClosed": false, "opensAt": "09:00", "closesAt": "16:30" },
+      "SUNDAY": { "isClosed": true, "opensAt": "", "closesAt": "" }
+    },
     "vatNumber": "GB123456789",
     "companyNumber": "01234567",
     "defaultCurrency": "GBP",
@@ -67,6 +76,15 @@ X-Staff-Id: demo-admin
   "region": "Greater London",
   "postcode": "SW4 0HY",
   "country": "United Kingdom",
+  "openingHours": {
+    "MONDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+    "TUESDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+    "WEDNESDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+    "THURSDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+    "FRIDAY": { "isClosed": false, "opensAt": "10:00", "closesAt": "18:30" },
+    "SATURDAY": { "isClosed": false, "opensAt": "09:00", "closesAt": "16:30" },
+    "SUNDAY": { "isClosed": true, "opensAt": "", "closesAt": "" }
+  },
   "vatNumber": "GB123456789",
   "companyNumber": "01234567",
   "defaultCurrency": "GBP",

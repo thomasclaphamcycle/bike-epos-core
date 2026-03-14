@@ -1,0 +1,11 @@
+@baseUrl = http://localhost:3000
+
+### Dashboard Staff Today (STAFF+)
+GET {{baseUrl}}/api/dashboard/staff-today
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
+### Dashboard Staff Summary for Explicit Date (STAFF+)
+GET {{baseUrl}}/api/dashboard/staff-today?date=2026-03-10
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
