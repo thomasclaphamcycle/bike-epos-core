@@ -16,6 +16,10 @@ const ADMIN_HEADERS = {
   "X-Staff-Role": "ADMIN",
   "X-Staff-Id": "rota-smoke-admin",
 };
+const MANAGER_HEADERS = {
+  "X-Staff-Role": "MANAGER",
+  "X-Staff-Id": "rota-smoke-manager",
+};
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!DATABASE_URL) {
@@ -200,9 +204,52 @@ const run = async () => {
     assert.match(dryRun.stdout, /mode=dry-run/);
     assert.equal(await prisma.rotaAssignment.count(), 0);
 
-    const applyRun = runImporter(tempFilePath, { apply: true });
-    assert.equal(applyRun.status, 0, applyRun.stderr || applyRun.stdout);
-    assert.match(applyRun.stdout, /createdAssignments=7/);
+    const spreadsheetText = fs.readFileSync(tempFilePath, "utf8");
+
+    const previewRes = await fetchJson("/api/rota/import/preview", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        spreadsheetText,
+        fileName: path.basename(tempFilePath),
+      }),
+    });
+    assert.equal(previewRes.status, 200, JSON.stringify(previewRes.json));
+    assert.equal(previewRes.json.summary.parsedAssignments, 7);
+    assert.equal(previewRes.json.summary.weekBlocks, 1);
+    assert.ok(typeof previewRes.json.previewKey === "string" && previewRes.json.previewKey.length > 20);
+
+    const managerImportRes = await fetchJson("/api/rota/import/preview", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        spreadsheetText,
+        fileName: path.basename(tempFilePath),
+      }),
+    });
+    assert.equal(managerImportRes.status, 403);
+
+    const confirmRes = await fetchJson("/api/rota/import/confirm", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        spreadsheetText,
+        fileName: path.basename(tempFilePath),
+        previewKey: previewRes.json.previewKey,
+      }),
+    });
+    assert.equal(confirmRes.status, 201, JSON.stringify(confirmRes.json));
+    assert.equal(confirmRes.json.createdAssignments, 7);
+    assert.equal(confirmRes.json.updatedAssignments, 0);
 
     const rotaPeriod = await prisma.rotaPeriod.findFirst();
     assert.ok(rotaPeriod, "Expected a rota period to be created");
@@ -213,6 +260,15 @@ const run = async () => {
       orderBy: [{ date: "asc" }, { staffId: "asc" }],
     });
     assert.equal(importedAssignments.length, 7);
+
+    const rotaOverviewRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
+    assert.equal(rotaOverviewRes.status, 200, JSON.stringify(rotaOverviewRes.json));
+    assert.equal(rotaOverviewRes.json.selectedPeriodId, rotaPeriod.id);
+    assert.equal(rotaOverviewRes.json.period.summary.assignedStaffCount, 2);
+    assert.equal(rotaOverviewRes.json.period.summary.importedAssignments, 7);
+    assert.equal(rotaOverviewRes.json.period.staffRows.length, 2);
+    assert.equal(rotaOverviewRes.json.period.days.length, 36);
+    assert.equal(rotaOverviewRes.json.period.days[0].weekday, "MONDAY");
 
     const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));

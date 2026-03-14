@@ -1845,6 +1845,201 @@ th {
   letter-spacing: 0.18em;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rota-page {
+  gap: 18px;
+}
+
+.rota-period-controls {
+  align-items: center;
+}
+
+.rota-period-select select {
+  min-width: 260px;
+}
+
+.rota-period-summary,
+.rota-import-feedback {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.rota-period-summary-item {
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.rota-grid-wrap {
+  overflow-x: auto;
+}
+
+.rota-review-grid {
+  min-width: 1540px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.rota-review-grid thead th {
+  background: #f5f8fc;
+}
+
+.rota-sticky {
+  position: sticky;
+  z-index: 3;
+  background: #fff;
+}
+
+.rota-sticky-name {
+  left: 0;
+  min-width: 190px;
+  max-width: 190px;
+}
+
+.rota-sticky-role {
+  left: 190px;
+  min-width: 110px;
+  max-width: 110px;
+}
+
+.rota-review-grid thead .rota-sticky {
+  background: #f5f8fc;
+}
+
+.rota-week-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.rota-week-heading strong {
+  font-size: 0.88rem;
+}
+
+.rota-week-heading span {
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.rota-day-heading {
+  min-width: 110px;
+}
+
+.rota-day-heading-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.rota-day-heading-copy strong {
+  font-size: 0.86rem;
+}
+
+.rota-day-heading-copy span {
+  font-size: 0.8rem;
+}
+
+.rota-day-heading-closed {
+  background: #fff7e8;
+}
+
+.rota-day-hours {
+  white-space: nowrap;
+}
+
+.rota-staff-name {
+  font-weight: 700;
+}
+
+.rota-staff-role {
+  vertical-align: top;
+}
+
+.rota-cell {
+  vertical-align: top;
+  min-width: 110px;
+  background: #fff;
+}
+
+.rota-cell-closed {
+  background: #fffaf0;
+}
+
+.rota-cell-content {
+  display: grid;
+  gap: 6px;
+}
+
+.rota-cell-note {
+  font-size: 0.82rem;
+}
+
+.rota-shift-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid #d7e0ea;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.rota-shift-pill-full {
+  background: #edf9f1;
+  border-color: #bfe6cb;
+  color: #155f39;
+}
+
+.rota-shift-pill-am {
+  background: #eef6ff;
+  border-color: #bfd9f3;
+  color: #175377;
+}
+
+.rota-shift-pill-pm {
+  background: #fff7e8;
+  border-color: #f0d8a1;
+  color: #8a6500;
+}
+
+.rota-shift-pill-holiday {
+  background: #fff0f0;
+  border-color: #efc3c3;
+  color: #8b1f1f;
+}
+
+.rota-warning-card {
+  margin-top: 12px;
+}
+
+.rota-warning-card h3 {
+  margin: 0 0 10px;
+}
+
+.rota-warning-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
 @media (max-width: 1280px) {
   .staff-create-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1852,6 +2047,14 @@ th {
 
   .staff-editor-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rota-sticky {
+    position: static;
+  }
+
+  .rota-review-grid {
+    min-width: 1240px;
   }
 }
 
@@ -1882,6 +2085,11 @@ th {
   .staff-password-input,
   .staff-pin-input {
     max-width: none;
+    width: 100%;
+  }
+
+  .rota-period-select select {
+    min-width: 0;
     width: 100%;
   }
 }

@@ -302,6 +302,7 @@ Implementation status:
 - persisted Store Info now provides a central business-identity source for receipts, location-aware features, and future customer-facing profile surfaces
 - Store Info now also provides the shared trading-hours source used by rota import and dashboard staffing interpretation
 - dashboard Staff Today can now surface imported rota assignments for the current day
+- Staff Rota now has a real admin review/import page for imported six-week rota periods, giving the dashboard View Rota action a live in-app destination
 
 ---
 

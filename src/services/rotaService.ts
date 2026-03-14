@@ -1,7 +1,9 @@
-import { Prisma, RotaAssignmentSource, RotaPeriodStatus, RotaShiftType } from "@prisma/client";
+import { Prisma, RotaAssignmentSource, RotaClosedDayType, RotaPeriodStatus, RotaShiftType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import { listShopSettings } from "./configurationService";
 import { resolveStoreDaySchedule } from "./storeScheduleService";
+import { formatDateKeyInTimeZone, getStoreWeekdayKeyForDate, STORE_WEEKDAY_LABELS } from "../utils/storeHours";
 
 type RotaClient = Prisma.TransactionClient | typeof prisma;
 
@@ -23,6 +25,87 @@ export type DashboardStaffTodayResponse = {
     note: string | null;
     source: RotaAssignmentSource;
   }>;
+};
+
+export type RotaPeriodListItem = {
+  id: string;
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  isCurrent: boolean;
+  summary: {
+    assignedStaffCount: number;
+    assignedDays: number;
+    holidayDays: number;
+    importedAssignments: number;
+    latestImportAt: string | null;
+    latestImportBatchKey: string | null;
+    latestImportFileName: string | null;
+  };
+};
+
+export type RotaPeriodDayColumn = {
+  date: string;
+  weekIndex: number;
+  weekLabel: string;
+  weekday: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY";
+  weekdayLabel: string;
+  shortDateLabel: string;
+  isClosed: boolean;
+  closedReason: string | null;
+  opensAt: string | null;
+  closesAt: string | null;
+};
+
+export type RotaPeriodStaffCell = {
+  date: string;
+  shiftType: RotaShiftType | null;
+  note: string | null;
+  source: RotaAssignmentSource | null;
+  rawValue: string | null;
+  isClosed: boolean;
+  closedReason: string | null;
+};
+
+export type RotaPeriodDetail = {
+  id: string;
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  days: RotaPeriodDayColumn[];
+  weeks: Array<{
+    weekIndex: number;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+  }>;
+  summary: {
+    assignedStaffCount: number;
+    assignedDays: number;
+    holidayDays: number;
+    importedAssignments: number;
+    closedDays: number;
+    latestImportAt: string | null;
+    latestImportBatchKey: string | null;
+    latestImportFileName: string | null;
+  };
+  staffRows: Array<{
+    staffId: string;
+    name: string;
+    role: "STAFF" | "MANAGER" | "ADMIN";
+    cells: RotaPeriodStaffCell[];
+  }>;
+};
+
+export type RotaOverviewResponse = {
+  selectedPeriodId: string | null;
+  periods: RotaPeriodListItem[];
+  period: RotaPeriodDetail | null;
 };
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -48,6 +131,76 @@ const toDateFromDateKey = (date: string) => new Date(`${date}T12:00:00.000Z`);
 
 const toStaffDisplayName = (staff: { name: string | null; username: string }) =>
   staff.name?.trim() || staff.username;
+
+const addDaysToDateKey = (date: string, days: number) => {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+};
+
+const toClosedReasonLabel = (type: RotaClosedDayType, note: string | null) => {
+  if (note?.trim()) {
+    return note.trim();
+  }
+  if (type === "BANK_HOLIDAY") {
+    return "Store closed for bank holiday.";
+  }
+  return "Store closed today.";
+};
+
+const toPeriodWeekLabel = (startsOn: string, endsOn: string, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    day: "numeric",
+    month: "short",
+  });
+  const start = formatter.format(toDateFromDateKey(startsOn));
+  const end = formatter.format(toDateFromDateKey(endsOn));
+  return `${start} - ${end}`;
+};
+
+const toShortDateLabel = (date: string, timeZone: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    day: "2-digit",
+    month: "short",
+  }).format(toDateFromDateKey(date));
+
+const getRelevantRotaPeriodId = (periods: Array<{ id: string; startsOn: string; endsOn: string; status: "DRAFT" | "ACTIVE" | "ARCHIVED" }>, today: string) => {
+  const current = periods.find((period) => period.startsOn <= today && period.endsOn >= today);
+  if (current) {
+    return current.id;
+  }
+
+  const upcomingActive = periods
+    .filter((period) => period.status === "ACTIVE" && period.startsOn > today)
+    .sort((left, right) => left.startsOn.localeCompare(right.startsOn))[0];
+  if (upcomingActive) {
+    return upcomingActive.id;
+  }
+
+  return periods[0]?.id ?? null;
+};
+
+const getLatestImportSummary = (
+  assignments: Array<{
+    source: RotaAssignmentSource;
+    importBatchKey: string | null;
+    updatedAt: Date;
+  }>,
+) => {
+  const importedAssignments = assignments.filter((assignment) => assignment.source === "IMPORT");
+  const latestImport = importedAssignments
+    .filter((assignment) => assignment.importBatchKey)
+    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
+
+  return {
+    importedAssignments: importedAssignments.length,
+    latestImportAt: latestImport?.updatedAt.toISOString() ?? null,
+    latestImportBatchKey: latestImport?.importBatchKey ?? null,
+    latestImportFileName: latestImport?.importBatchKey?.split(":")[0] ?? null,
+  };
+};
 
 export const buildSixWeekRotaWindow = (startsOn: string) => {
   const normalizedStartsOn = normalizeDateKeyOrThrow(startsOn);
@@ -150,5 +303,258 @@ export const getDashboardStaffToday = async (
       holidayStaffCount,
     },
     staff: scheduledStaff,
+  };
+};
+
+export const getRotaOverview = async (
+  input: { periodId?: string } = {},
+  db: RotaClient = prisma,
+): Promise<RotaOverviewResponse> => {
+  const [settings, periods] = await Promise.all([
+    listShopSettings(db),
+    db.rotaPeriod.findMany({
+      orderBy: [
+        { startsOn: "desc" },
+        { createdAt: "desc" },
+      ],
+      select: {
+        id: true,
+        label: true,
+        startsOn: true,
+        endsOn: true,
+        status: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+  ]);
+
+  if (!periods.length) {
+    return {
+      selectedPeriodId: null,
+      periods: [],
+      period: null,
+    };
+  }
+
+  const today = formatDateKeyInTimeZone(new Date(), settings.store.timeZone);
+  const selectedPeriodId = input.periodId?.trim()
+    ? periods.find((period) => period.id === input.periodId.trim())?.id ?? null
+    : getRelevantRotaPeriodId(periods, today);
+
+  if (!selectedPeriodId) {
+    return {
+      selectedPeriodId: null,
+      periods: [],
+      period: null,
+    };
+  }
+
+  const periodIds = periods.map((period) => period.id);
+  const assignmentSummaries = await db.rotaAssignment.findMany({
+    where: {
+      rotaPeriodId: {
+        in: periodIds,
+      },
+    },
+    select: {
+      rotaPeriodId: true,
+      staffId: true,
+      shiftType: true,
+      source: true,
+      importBatchKey: true,
+      updatedAt: true,
+    },
+  });
+
+  const assignmentsByPeriod = new Map<string, typeof assignmentSummaries>();
+  for (const assignment of assignmentSummaries) {
+    const bucket = assignmentsByPeriod.get(assignment.rotaPeriodId) ?? [];
+    bucket.push(assignment);
+    assignmentsByPeriod.set(assignment.rotaPeriodId, bucket);
+  }
+
+  const periodList: RotaPeriodListItem[] = periods.map((period) => {
+    const periodAssignments = assignmentsByPeriod.get(period.id) ?? [];
+    const latestImport = getLatestImportSummary(periodAssignments);
+
+    return {
+      id: period.id,
+      label: period.label,
+      startsOn: period.startsOn,
+      endsOn: period.endsOn,
+      status: period.status,
+      isCurrent: period.startsOn <= today && period.endsOn >= today,
+      summary: {
+        assignedStaffCount: new Set(periodAssignments.map((assignment) => assignment.staffId)).size,
+        assignedDays: periodAssignments.filter((assignment) => assignment.shiftType !== "HOLIDAY").length,
+        holidayDays: periodAssignments.filter((assignment) => assignment.shiftType === "HOLIDAY").length,
+        importedAssignments: latestImport.importedAssignments,
+        latestImportAt: latestImport.latestImportAt,
+        latestImportBatchKey: latestImport.latestImportBatchKey,
+        latestImportFileName: latestImport.latestImportFileName,
+      },
+    };
+  });
+
+  const selectedPeriod = periods.find((period) => period.id === selectedPeriodId);
+  if (!selectedPeriod) {
+    throw new HttpError(404, "Rota period not found", "ROTA_PERIOD_NOT_FOUND");
+  }
+
+  const [periodAssignments, closedDays] = await Promise.all([
+    db.rotaAssignment.findMany({
+      where: {
+        rotaPeriodId: selectedPeriod.id,
+      },
+      orderBy: [
+        { staff: { name: "asc" } },
+        { staff: { username: "asc" } },
+        { date: "asc" },
+      ],
+      select: {
+        date: true,
+        shiftType: true,
+        note: true,
+        source: true,
+        rawValue: true,
+        importBatchKey: true,
+        updatedAt: true,
+        staff: {
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            role: true,
+          },
+        },
+      },
+    }),
+    db.rotaClosedDay.findMany({
+      where: {
+        date: {
+          gte: selectedPeriod.startsOn,
+          lte: selectedPeriod.endsOn,
+        },
+      },
+      select: {
+        date: true,
+        type: true,
+        note: true,
+      },
+    }),
+  ]);
+
+  const closedDayMap = new Map(
+    closedDays.map((closedDay) => [closedDay.date, closedDay]),
+  );
+
+  const dayColumns: RotaPeriodDayColumn[] = [];
+  const weeks: RotaPeriodDetail["weeks"] = [];
+  for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
+    const weekStart = addDaysToDateKey(selectedPeriod.startsOn, weekIndex * 7);
+    const weekEnd = addDaysToDateKey(weekStart, 5);
+    weeks.push({
+      weekIndex,
+      label: toPeriodWeekLabel(weekStart, weekEnd, settings.store.timeZone),
+      startsOn: weekStart,
+      endsOn: weekEnd,
+    });
+
+    for (let dayOffset = 0; dayOffset < 6; dayOffset += 1) {
+      const date = addDaysToDateKey(weekStart, dayOffset);
+      const weekday = getStoreWeekdayKeyForDate(toDateFromDateKey(date), settings.store.timeZone);
+      const dayHours = settings.store.openingHours[weekday];
+      const closedDay = closedDayMap.get(date);
+      const isClosed = Boolean(closedDay) || dayHours.isClosed;
+
+      dayColumns.push({
+        date,
+        weekIndex,
+        weekLabel: weeks[weekIndex].label,
+        weekday: weekday as RotaPeriodDayColumn["weekday"],
+        weekdayLabel: STORE_WEEKDAY_LABELS[weekday],
+        shortDateLabel: toShortDateLabel(date, settings.store.timeZone),
+        isClosed,
+        closedReason: closedDay ? toClosedReasonLabel(closedDay.type, closedDay.note ?? null) : null,
+        opensAt: isClosed ? null : dayHours.opensAt,
+        closesAt: isClosed ? null : dayHours.closesAt,
+      });
+    }
+  }
+
+  const dayMap = new Map(dayColumns.map((day) => [day.date, day]));
+  const assignmentsByStaff = new Map<string, {
+    staffId: string;
+    name: string;
+    role: "STAFF" | "MANAGER" | "ADMIN";
+    byDate: Map<string, Omit<RotaPeriodStaffCell, "isClosed" | "closedReason">>;
+  }>();
+
+  for (const assignment of periodAssignments) {
+    const key = assignment.staff.id;
+    const existing = assignmentsByStaff.get(key) ?? {
+      staffId: assignment.staff.id,
+      name: toStaffDisplayName(assignment.staff),
+      role: assignment.staff.role,
+      byDate: new Map(),
+    };
+
+    existing.byDate.set(assignment.date, {
+      date: assignment.date,
+      shiftType: assignment.shiftType,
+      note: assignment.note ?? null,
+      source: assignment.source,
+      rawValue: assignment.rawValue ?? null,
+    });
+    assignmentsByStaff.set(key, existing);
+  }
+
+  const latestImport = getLatestImportSummary(periodAssignments);
+  const staffRows = [...assignmentsByStaff.values()].map((staffRow) => ({
+    staffId: staffRow.staffId,
+    name: staffRow.name,
+    role: staffRow.role,
+    cells: dayColumns.map((day) => {
+      const assignment = staffRow.byDate.get(day.date);
+      return {
+        date: day.date,
+        shiftType: assignment?.shiftType ?? null,
+        note: assignment?.note ?? null,
+        source: assignment?.source ?? null,
+        rawValue: assignment?.rawValue ?? null,
+        isClosed: day.isClosed,
+        closedReason: day.closedReason,
+      };
+    }),
+  }));
+
+  return {
+    selectedPeriodId,
+    periods: periodList,
+    period: {
+      id: selectedPeriod.id,
+      label: selectedPeriod.label,
+      startsOn: selectedPeriod.startsOn,
+      endsOn: selectedPeriod.endsOn,
+      status: selectedPeriod.status,
+      notes: selectedPeriod.notes ?? null,
+      createdAt: selectedPeriod.createdAt.toISOString(),
+      updatedAt: selectedPeriod.updatedAt.toISOString(),
+      days: dayColumns,
+      weeks,
+      summary: {
+        assignedStaffCount: staffRows.length,
+        assignedDays: periodAssignments.filter((assignment) => assignment.shiftType !== "HOLIDAY").length,
+        holidayDays: periodAssignments.filter((assignment) => assignment.shiftType === "HOLIDAY").length,
+        importedAssignments: latestImport.importedAssignments,
+        closedDays: dayColumns.filter((day) => day.isClosed).length,
+        latestImportAt: latestImport.latestImportAt,
+        latestImportBatchKey: latestImport.latestImportBatchKey,
+        latestImportFileName: latestImport.latestImportFileName,
+      },
+      staffRows,
+    },
   };
 };

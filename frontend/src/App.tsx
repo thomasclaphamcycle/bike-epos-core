@@ -66,6 +66,7 @@ import { StaffPerformancePage } from "./pages/StaffPerformancePage";
 import { DataIntegrityPage } from "./pages/DataIntegrityPage";
 import { BackupToolkitPage } from "./pages/BackupToolkitPage";
 import { SystemSettingsPage } from "./pages/SystemSettingsPage";
+import { StaffRotaPage } from "./pages/StaffRotaPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { DocumentationHubPage } from "./pages/DocumentationHubPage";
 import { PinSettingsPage } from "./pages/PinSettingsPage";
@@ -368,6 +369,12 @@ const AuthedApp = () => (
           )}
         />
         <Route
+          path="/management/staff-rota"
+          element={(
+            managerOnly(<StaffRotaPage />)
+          )}
+        />
+        <Route
           path="/management/communications"
           element={(
             managerOnly(<CustomerCommunicationQueuePage />)
@@ -599,19 +606,7 @@ const AuthedApp = () => (
         <Route path="/settings/store-info" element={adminOnly(<SystemSettingsPage />)} />
         <Route path="/settings/staff-list" element={adminOnly(<StaffManagementPage />)} />
         <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
-        <Route
-          path="/settings/staff-rota"
-          element={adminOnly(
-            <NavigationPlaceholderPage
-              title="Settings · Staff Rota"
-              description="Staff rota planning is scaffolded here so dashboard and navigation flows can point to the future rota workspace without adding rota business logic yet."
-              links={[
-                { label: "Staff List", to: "/settings/staff-list" },
-                { label: "Roles & Permissions", to: "/settings/roles-permissions" },
-              ]}
-            />,
-          )}
-        />
+        <Route path="/settings/staff-rota" element={adminOnly(<StaffRotaPage />)} />
         <Route
           path="/settings/pos"
           element={adminOnly(

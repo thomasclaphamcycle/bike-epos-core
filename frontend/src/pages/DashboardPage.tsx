@@ -495,7 +495,7 @@ export const DashboardPage = () => {
     const rotaLink = user?.role === "ADMIN"
       ? "/settings/staff-rota"
       : user?.role === "MANAGER"
-        ? "/management/calendar"
+        ? "/management/staff-rota"
         : undefined;
 
     return [
