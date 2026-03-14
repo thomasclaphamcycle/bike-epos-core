@@ -116,6 +116,30 @@ type RotaImportResult = RotaImportPreview & {
   };
 };
 
+type BankHolidaySyncStatus = {
+  region: "england-and-wales";
+  sourceUrl: string;
+  lastSyncedAt: string | null;
+  lastSyncedByStaffId: string | null;
+  lastResult: null | {
+    createdCount: number;
+    updatedCount: number;
+    removedCount: number;
+    unchangedCount: number;
+    skippedManualCount: number;
+    warningCount: number;
+  };
+  storedCount: number;
+  upcoming: Array<{
+    date: string;
+    name: string;
+  }>;
+};
+
+type BankHolidaySyncResult = BankHolidaySyncStatus & {
+  warnings: string[];
+};
+
 type HolidayRequestsPayload = {
   scope: "mine" | "all";
   statusFilter: "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
@@ -235,6 +259,10 @@ export const StaffRotaPage = () => {
   const [importResult, setImportResult] = useState<RotaImportResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [bankHolidayStatus, setBankHolidayStatus] = useState<BankHolidaySyncStatus | null>(null);
+  const [bankHolidayStatusLoading, setBankHolidayStatusLoading] = useState(true);
+  const [bankHolidaySyncLoading, setBankHolidaySyncLoading] = useState(false);
+  const [bankHolidayWarnings, setBankHolidayWarnings] = useState<string[]>([]);
   const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
   const [holidayRequestsLoading, setHolidayRequestsLoading] = useState(true);
   const [holidayRequestFilter, setHolidayRequestFilter] = useState<HolidayRequestFilter>("PENDING");
@@ -314,6 +342,21 @@ export const StaffRotaPage = () => {
     }
   };
 
+  const loadBankHolidayStatus = async (silent = false) => {
+    if (!silent) {
+      setBankHolidayStatusLoading(true);
+    }
+
+    try {
+      const payload = await apiGet<BankHolidaySyncStatus>("/api/rota/bank-holidays/status");
+      setBankHolidayStatus(payload);
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load bank holiday status");
+    } finally {
+      setBankHolidayStatusLoading(false);
+    }
+  };
+
   useEffect(() => {
     setOpenEditorCellKey(null);
     void loadOverview(selectedPeriodId);
@@ -324,6 +367,11 @@ export const StaffRotaPage = () => {
     void loadHolidayRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holidayRequestFilter]);
+
+  useEffect(() => {
+    void loadBankHolidayStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentPeriod = overview?.period ?? null;
   const currentPeriodIndex = useMemo(() => (
@@ -424,6 +472,21 @@ export const StaffRotaPage = () => {
       ? `${filter.label} (${holidayRequests.length})`
       : filter.label,
   })), [holidayRequestFilter, holidayRequests.length]);
+
+  const syncBankHolidays = async () => {
+    setBankHolidaySyncLoading(true);
+    try {
+      const result = await apiPost<BankHolidaySyncResult>("/api/rota/bank-holidays/sync");
+      setBankHolidayStatus(result);
+      setBankHolidayWarnings(result.warnings);
+      success(`UK bank holidays synced. ${result.lastResult?.createdCount ?? 0} created, ${result.lastResult?.updatedCount ?? 0} updated.`);
+      await loadOverview(selectedPeriodId, true);
+    } catch (syncError) {
+      error(syncError instanceof Error ? syncError.message : "Failed to sync UK bank holidays");
+    } finally {
+      setBankHolidaySyncLoading(false);
+    }
+  };
 
   const submitDecision = async (decisionNotes: string) => {
     if (!decisionModalState) {
@@ -619,11 +682,11 @@ export const StaffRotaPage = () => {
                 <span className="metric-label">Store Hours Source</span>
                 <strong>Store Info opening hours</strong>
               </div>
-              <div className="rota-period-summary-item">
-                <span className="metric-label">Visible Staff</span>
-                <strong>{visibleStaffCount}</strong>
-              </div>
+            <div className="rota-period-summary-item">
+              <span className="metric-label">Visible Staff</span>
+              <strong>{visibleStaffCount}</strong>
             </div>
+          </div>
 
             <div className="filter-row rota-filter-row">
               <label className="grow">
@@ -690,7 +753,12 @@ export const StaffRotaPage = () => {
                           <strong>{day.weekdayLabel.slice(0, 3)}</strong>
                           <span>{day.shortDateLabel}</span>
                           {day.isClosed ? (
-                            <span className="status-badge status-warning">Closed</span>
+                            <>
+                              <span className="status-badge status-warning">Closed</span>
+                              {day.closedReason ? (
+                                <span className="table-secondary rota-day-closed-reason">{day.closedReason}</span>
+                              ) : null}
+                            </>
                           ) : day.opensAt && day.closesAt ? (
                             <span className="muted-text rota-day-hours">{day.opensAt} - {day.closesAt}</span>
                           ) : null}
@@ -844,6 +912,113 @@ export const StaffRotaPage = () => {
             </div>
           </>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>UK Bank Holidays</h2>
+            <p className="muted-text">
+              Synced bank holidays are stored in the existing closed-day layer so rota editing, imports, holiday approvals, and Staff Today all treat them as store closures.
+            </p>
+          </div>
+          <div className="actions-inline">
+            <button type="button" onClick={() => void loadBankHolidayStatus(true)} disabled={bankHolidayStatusLoading || bankHolidaySyncLoading}>
+              {bankHolidayStatusLoading ? "Refreshing..." : "Refresh status"}
+            </button>
+            {isAdmin ? (
+              <button type="button" className="primary" onClick={() => void syncBankHolidays()} disabled={bankHolidaySyncLoading}>
+                {bankHolidaySyncLoading ? "Syncing..." : "Sync UK Bank Holidays"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {bankHolidayStatusLoading && !bankHolidayStatus ? (
+          <div className="restricted-panel info-panel">Loading bank holiday status...</div>
+        ) : bankHolidayStatus ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Region</span>
+                <strong className="metric-value">England &amp; Wales</strong>
+                <span className="dashboard-metric-detail">Current store target for official GOV.UK bank holiday sync.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Last Synced</span>
+                <strong className="metric-value">{formatDateTime(bankHolidayStatus.lastSyncedAt)}</strong>
+                <span className="dashboard-metric-detail">
+                  {bankHolidayStatus.lastSyncedByStaffId
+                    ? `Triggered by ${bankHolidayStatus.lastSyncedByStaffId}.`
+                    : "No sync has been recorded yet."}
+                </span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Stored Holidays</span>
+                <strong className="metric-value">{bankHolidayStatus.storedCount}</strong>
+                <span className="dashboard-metric-detail">Future bank-holiday closures currently stored in RotaClosedDay.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Next Holiday</span>
+                <strong className="metric-value">{bankHolidayStatus.upcoming[0]?.name ?? "None stored"}</strong>
+                <span className="dashboard-metric-detail">
+                  {bankHolidayStatus.upcoming[0]?.date ?? "Run sync to load the current GOV.UK list."}
+                </span>
+              </div>
+            </div>
+
+            {bankHolidayStatus.lastResult ? (
+              <div className="rota-period-summary">
+                <div className="rota-period-summary-item">
+                  <span className="metric-label">Created</span>
+                  <strong>{bankHolidayStatus.lastResult.createdCount}</strong>
+                </div>
+                <div className="rota-period-summary-item">
+                  <span className="metric-label">Updated</span>
+                  <strong>{bankHolidayStatus.lastResult.updatedCount}</strong>
+                </div>
+                <div className="rota-period-summary-item">
+                  <span className="metric-label">Removed</span>
+                  <strong>{bankHolidayStatus.lastResult.removedCount}</strong>
+                </div>
+                <div className="rota-period-summary-item">
+                  <span className="metric-label">Skipped Manual</span>
+                  <strong>{bankHolidayStatus.lastResult.skippedManualCount}</strong>
+                </div>
+              </div>
+            ) : null}
+
+            {bankHolidayStatus.upcoming.length ? (
+              <div className="holiday-request-list">
+                {bankHolidayStatus.upcoming.slice(0, 4).map((holiday) => (
+                  <article key={holiday.date} className="holiday-request-card">
+                    <div className="holiday-request-main">
+                      <div className="holiday-request-title-row">
+                        <strong>{holiday.name}</strong>
+                        <span className="status-badge status-warning">BANK HOLIDAY</span>
+                      </div>
+                      <div className="holiday-request-meta">
+                        <span>{holiday.date}</span>
+                        <span>Closed via RotaClosedDay</span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
+            {bankHolidayWarnings.length ? (
+              <div className="restricted-panel info-panel">
+                <strong>Sync warnings</strong>
+                <div className="muted-text">{bankHolidayWarnings.join(" ")}</div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="restricted-panel info-panel">
+            Bank holiday status is unavailable right now.
+          </div>
+        )}
       </section>
 
       <section className="card">

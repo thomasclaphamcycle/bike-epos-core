@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getBankHolidaySyncStatus, syncUkBankHolidays } from "../services/bankHolidayService";
 import { confirmRotaSpreadsheetImport, previewRotaSpreadsheetImport } from "../services/rotaImportService";
 import { clearRotaAssignment, getRotaOverview, saveManualRotaAssignment } from "../services/rotaService";
 import { HttpError } from "../utils/http";
@@ -114,5 +115,17 @@ export const saveRotaAssignmentHandler = async (req: Request, res: Response) => 
 export const clearRotaAssignmentHandler = async (req: Request, res: Response) => {
   const assignmentId = typeof req.params.assignmentId === "string" ? req.params.assignmentId.trim() : "";
   const result = await clearRotaAssignment({ assignmentId });
+  res.json(result);
+};
+
+export const bankHolidayStatusHandler = async (_req: Request, res: Response) => {
+  const status = await getBankHolidaySyncStatus();
+  res.json(status);
+};
+
+export const syncBankHolidaysHandler = async (req: Request, res: Response) => {
+  const result = await syncUkBankHolidays({
+    syncedByStaffId: getRequestStaffActorId(req) ?? undefined,
+  });
   res.json(result);
 };

@@ -3,6 +3,7 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
@@ -37,6 +38,7 @@ const prisma = new PrismaClient({
 });
 
 const STORE_OPENING_HOURS_KEY = "store.openingHours";
+const BANK_HOLIDAY_STATUS_KEY = "rota.bankHolidaySync";
 const ALEX_STAFF_ID = "rota-alex-id";
 const JORDAN_STAFF_ID = "rota-jordan-id";
 const CASEY_STAFF_ID = "rota-casey-id";
@@ -47,6 +49,7 @@ const IMPORTED_FRIDAY = "2026-03-13";
 const IMPORTED_SUNDAY = "2026-03-15";
 const FUTURE_MONDAY = "2026-03-23";
 const FUTURE_TUESDAY = "2026-03-24";
+const LONG_RANGE_BANK_HOLIDAY = "2099-03-24";
 
 const ALEX_HEADERS = {
   "X-Staff-Role": "STAFF",
@@ -122,12 +125,56 @@ const runImporter = (filePath, { apply = false } = {}) => {
   });
 };
 
+const startBankHolidayFeedServer = async () =>
+  new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      if (req.url !== "/bank-holidays.json") {
+        res.writeHead(404);
+        res.end("not found");
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        "england-and-wales": {
+          division: "england-and-wales",
+          events: [
+            {
+              title: "Special bank holiday",
+              date: IMPORTED_FRIDAY,
+              notes: "",
+              bunting: true,
+            },
+            {
+              title: "Long-range bank holiday",
+              date: LONG_RANGE_BANK_HOLIDAY,
+              notes: "",
+              bunting: true,
+            },
+          ],
+        },
+      }));
+    });
+
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      resolve({
+        server,
+        url: `http://127.0.0.1:${address.port}/bank-holidays.json`,
+      });
+    });
+  });
+
 const run = async () => {
   let startedServer = false;
   let serverProcess = null;
+  let bankHolidayFeedServer = null;
   const tempFilePath = path.join(os.tmpdir(), `corepos-rota-import-${Date.now()}.csv`);
 
   try {
+    bankHolidayFeedServer = await startBankHolidayFeedServer();
+    process.env.BANK_HOLIDAY_FEED_URL = bankHolidayFeedServer.url;
+
     const existing = await serverIsHealthy();
     if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
       throw new Error(
@@ -155,7 +202,7 @@ const run = async () => {
     await prisma.appConfig.deleteMany({
       where: {
         key: {
-          in: [STORE_OPENING_HOURS_KEY],
+          in: [STORE_OPENING_HOURS_KEY, BANK_HOLIDAY_STATUS_KEY],
         },
       },
     });
@@ -214,6 +261,24 @@ const run = async () => {
       ],
     });
 
+    const bankHolidayStatusBeforeSyncRes = await fetchJson("/api/rota/bank-holidays/status", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(bankHolidayStatusBeforeSyncRes.status, 200, JSON.stringify(bankHolidayStatusBeforeSyncRes.json));
+    assert.equal(bankHolidayStatusBeforeSyncRes.json.lastSyncedAt, null);
+    assert.equal(bankHolidayStatusBeforeSyncRes.json.storedCount, 0);
+
+    const bankHolidaySyncRes = await fetchJson("/api/rota/bank-holidays/sync", {
+      method: "POST",
+      headers: ADMIN_HEADERS,
+    });
+    assert.equal(bankHolidaySyncRes.status, 200, JSON.stringify(bankHolidaySyncRes.json));
+    assert.equal(bankHolidaySyncRes.json.lastResult.createdCount, 2);
+    assert.equal(bankHolidaySyncRes.json.lastResult.updatedCount, 0);
+    assert.equal(bankHolidaySyncRes.json.lastResult.skippedManualCount, 0);
+    assert.equal(bankHolidaySyncRes.json.storedCount, 1);
+    assert.equal(bankHolidaySyncRes.json.upcoming[0].name, "Long-range bank holiday");
+
     fs.writeFileSync(
       tempFilePath,
       [
@@ -244,8 +309,9 @@ const run = async () => {
       }),
     });
     assert.equal(previewRes.status, 200, JSON.stringify(previewRes.json));
-    assert.equal(previewRes.json.summary.parsedAssignments, 7);
+    assert.equal(previewRes.json.summary.parsedAssignments, 6);
     assert.equal(previewRes.json.summary.weekBlocks, 1);
+    assert.ok(previewRes.json.warnings.some((warning) => warning.includes("Special bank holiday")));
     assert.ok(typeof previewRes.json.previewKey === "string" && previewRes.json.previewKey.length > 20);
 
     const managerImportRes = await fetchJson("/api/rota/import/preview", {
@@ -274,7 +340,7 @@ const run = async () => {
       }),
     });
     assert.equal(confirmRes.status, 201, JSON.stringify(confirmRes.json));
-    assert.equal(confirmRes.json.createdAssignments, 7);
+    assert.equal(confirmRes.json.createdAssignments, 6);
     assert.equal(confirmRes.json.updatedAssignments, 0);
 
     const rotaPeriod = await prisma.rotaPeriod.findFirst();
@@ -285,16 +351,19 @@ const run = async () => {
     const importedAssignments = await prisma.rotaAssignment.findMany({
       orderBy: [{ date: "asc" }, { staffId: "asc" }],
     });
-    assert.equal(importedAssignments.length, 7);
+    assert.equal(importedAssignments.length, 6);
 
     const rotaOverviewRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
     assert.equal(rotaOverviewRes.status, 200, JSON.stringify(rotaOverviewRes.json));
     assert.equal(rotaOverviewRes.json.selectedPeriodId, rotaPeriod.id);
     assert.equal(rotaOverviewRes.json.period.summary.assignedStaffCount, 2);
-    assert.equal(rotaOverviewRes.json.period.summary.importedAssignments, 7);
+    assert.equal(rotaOverviewRes.json.period.summary.importedAssignments, 6);
     assert.equal(rotaOverviewRes.json.period.staffRows.length, 2);
     assert.equal(rotaOverviewRes.json.period.days.length, 36);
     assert.equal(rotaOverviewRes.json.period.days[0].weekday, "MONDAY");
+    const fridayColumn = rotaOverviewRes.json.period.days.find((day) => day.date === IMPORTED_FRIDAY);
+    assert.equal(fridayColumn.isClosed, true);
+    assert.equal(fridayColumn.closedReason, "Special bank holiday");
 
     const filteredAllStaffRes = await fetchJson("/api/rota?staffScope=all&role=STAFF&search=Casey", { headers: MANAGER_HEADERS });
     assert.equal(filteredAllStaffRes.status, 200, JSON.stringify(filteredAllStaffRes.json));
@@ -326,14 +395,6 @@ const run = async () => {
       futureMondayRes.json.staffToday.staff.map((entry) => entry.name),
       ["Casey Hudson"],
     );
-
-    await prisma.rotaClosedDay.create({
-      data: {
-        date: IMPORTED_FRIDAY,
-        type: "BANK_HOLIDAY",
-        note: "Bank holiday closure",
-      },
-    });
 
     const alexHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
       method: "POST",
@@ -456,7 +517,7 @@ const run = async () => {
     );
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.source === "HOLIDAY_APPROVED"));
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.note === "Family trip"));
-    assert.equal(await prisma.rotaAssignment.count(), 9);
+    assert.equal(await prisma.rotaAssignment.count(), 8);
 
     const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));
@@ -581,7 +642,7 @@ const run = async () => {
     const closedDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_FRIDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(closedDayRes.status, 200, JSON.stringify(closedDayRes.json));
     assert.equal(closedDayRes.json.staffToday.summary.isClosed, true);
-    assert.equal(closedDayRes.json.staffToday.summary.closedReason, "Bank holiday closure");
+    assert.equal(closedDayRes.json.staffToday.summary.closedReason, "Special bank holiday");
     assert.equal(closedDayRes.json.staffToday.staff.length, 0);
 
     console.log("[rota-foundation-smoke] rota import and dashboard staff summary passed");
@@ -596,6 +657,10 @@ const run = async () => {
         serverProcess.kill("SIGKILL");
         await waitForExit(serverProcess, 500);
       }
+    }
+
+    if (bankHolidayFeedServer) {
+      await new Promise((resolve) => bankHolidayFeedServer.server.close(resolve));
     }
   }
 };

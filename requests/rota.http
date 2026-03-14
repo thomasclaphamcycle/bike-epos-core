@@ -8,6 +8,16 @@ GET http://localhost:3000/api/rota?staffScope=all&role=STAFF&search=Casey
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
+### Bank holiday sync status
+GET http://localhost:3000/api/rota/bank-holidays/status
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Sync UK bank holidays
+POST http://localhost:3000/api/rota/bank-holidays/sync
+X-Staff-Role: ADMIN
+X-Staff-Id: rota-admin
+
 ### Save rota assignment
 POST http://localhost:3000/api/rota/assignments
 Content-Type: application/json

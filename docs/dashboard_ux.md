@@ -143,6 +143,7 @@ Rules:
 - surface a clear My Holiday Requests view on the dashboard so staff can see pending, approved, rejected, and cancelled request history plus any manager decision notes
 - reflect approved holiday directly from rota HOLIDAY assignments, including a light on-holiday summary when relevant
 - respect store-closed days from Store Info opening hours and rota closed-day overrides
+- treat synced UK bank holidays as explicit closed days through `RotaClosedDay`, so the widget can explain bank-holiday closures with the same reason seen in Staff Rota
 - keep the widget simple and operational rather than turning it into a full rota planner
 - provide a View Rota action that opens the live rota review/import/edit page rather than a placeholder route
 - keep rota review manager-readable, import actions admin-controlled, and holiday approval actions manager/admin-controlled

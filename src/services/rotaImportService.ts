@@ -4,6 +4,7 @@ import { RotaAssignmentSource, RotaShiftType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { listShopSettings } from "./configurationService";
 import { buildSixWeekRotaWindow, getOrCreateSixWeekRotaPeriod } from "./rotaService";
+import { resolveStoreDaySchedule } from "./storeScheduleService";
 import {
   clockTimeToMinutes,
   formatDateKeyInTimeZone,
@@ -662,6 +663,44 @@ const buildPreviewKey = (fileName: string, delimiter: string, spreadsheetText: s
 const buildImportBatchKey = (fileName: string, timeZone: string) =>
   `${path.basename(fileName)}:${formatDateKeyInTimeZone(new Date(), timeZone)}`;
 
+const filterAssignmentsAgainstClosedDays = async (
+  assignments: ParsedImportAssignment[],
+  db: typeof prisma,
+): Promise<ParsedAssignmentsResult> => {
+  const uniqueDates = [...new Set(assignments.map((assignment) => assignment.date))];
+  const schedules = new Map<string, Awaited<ReturnType<typeof resolveStoreDaySchedule>>>();
+
+  for (const date of uniqueDates) {
+    schedules.set(
+      date,
+      await resolveStoreDaySchedule(new Date(`${date}T12:00:00.000Z`), db),
+    );
+  }
+
+  const filteredAssignments: ParsedImportAssignment[] = [];
+  const warnings: string[] = [];
+  let skippedCells = 0;
+
+  for (const assignment of assignments) {
+    const schedule = schedules.get(assignment.date);
+    if (schedule?.isClosed) {
+      warnings.push(
+        `Skipping ${assignment.staffName} on ${assignment.date} because the store is closed${schedule.closedReason ? ` (${schedule.closedReason})` : ""}.`,
+      );
+      skippedCells += 1;
+      continue;
+    }
+
+    filteredAssignments.push(assignment);
+  }
+
+  return {
+    assignments: filteredAssignments,
+    warnings,
+    skippedCells,
+  };
+};
+
 const previewParsedSpreadsheet = async (
   input: PreviewOptions,
 ): Promise<RotaSpreadsheetImportPreview> => {
@@ -694,8 +733,11 @@ const previewParsedSpreadsheet = async (
 
   const staffLookup = buildStaffLookup(staff);
   const parsed = parseAssignmentsFromRows(rows, blocks, settings.store.openingHours, staffLookup);
+  const closedDayFiltered = await filterAssignmentsAgainstClosedDays(parsed.assignments, db);
+  const filteredWarnings = [...parsed.warnings, ...closedDayFiltered.warnings];
+  const filteredSkippedCells = parsed.skippedCells + closedDayFiltered.skippedCells;
 
-  if (!parsed.assignments.length) {
+  if (!closedDayFiltered.assignments.length) {
     throw new HttpError(
       400,
       "No valid rota assignments were parsed from the spreadsheet export.",
@@ -703,7 +745,7 @@ const previewParsedSpreadsheet = async (
     );
   }
 
-  const importedDates = [...new Set(parsed.assignments.map((assignment) => assignment.date))].sort();
+  const importedDates = [...new Set(closedDayFiltered.assignments.map((assignment) => assignment.date))].sort();
   const earliestDate = importedDates[0];
   const latestDate = importedDates[importedDates.length - 1];
   const rotaWindow = buildSixWeekRotaWindow(earliestDate);
@@ -722,12 +764,12 @@ const previewParsedSpreadsheet = async (
     period: rotaWindow,
     summary: {
       weekBlocks: blocks.length,
-      parsedAssignments: parsed.assignments.length,
-      skippedCells: parsed.skippedCells,
-      warningCount: parsed.warnings.length,
-      matchedStaffCount: new Set(parsed.assignments.map((assignment) => assignment.staffId)).size,
+      parsedAssignments: closedDayFiltered.assignments.length,
+      skippedCells: filteredSkippedCells,
+      warningCount: filteredWarnings.length,
+      matchedStaffCount: new Set(closedDayFiltered.assignments.map((assignment) => assignment.staffId)).size,
     },
-    warnings: parsed.warnings,
+    warnings: filteredWarnings,
   };
 };
 
@@ -772,7 +814,8 @@ export const confirmRotaSpreadsheetImport = async (
 
   const staffLookup = buildStaffLookup(staff);
   const parsed = parseAssignmentsFromRows(rows, blocks, settings.store.openingHours, staffLookup);
-  const earliestDate = [...new Set(parsed.assignments.map((assignment) => assignment.date))].sort()[0];
+  const filteredAssignments = await filterAssignmentsAgainstClosedDays(parsed.assignments, db);
+  const earliestDate = [...new Set(filteredAssignments.assignments.map((assignment) => assignment.date))].sort()[0];
   const importBatchKey = buildImportBatchKey(fileName, settings.store.timeZone);
 
   let createdAssignments = 0;
@@ -781,7 +824,7 @@ export const confirmRotaSpreadsheetImport = async (
   const rotaPeriod = await db.$transaction(async (tx) => {
     const selectedPeriod = await getOrCreateSixWeekRotaPeriod(earliestDate, tx);
 
-    for (const assignment of parsed.assignments) {
+    for (const assignment of filteredAssignments.assignments) {
       const existing = await tx.rotaAssignment.findUnique({
         where: {
           staffId_date: {
