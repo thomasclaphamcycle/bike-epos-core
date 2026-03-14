@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 
@@ -67,12 +68,19 @@ type DashboardResponse = {
       closesAt: string | null;
       scheduledStaffCount: number;
       holidayStaffCount: number;
+      totalScheduledStaffCount: number;
+      totalHolidayStaffCount: number;
       coverageStatus: "closed" | "none" | "thin" | "covered";
+    };
+    context: {
+      usesOperationalRoleTags: boolean;
+      fallbackToBroadStaffing: boolean;
     };
     scheduledStaff: Array<{
       staffId: string;
       name: string;
       role: "STAFF" | "MANAGER" | "ADMIN";
+      operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
       shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
       note: string | null;
       source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
@@ -81,6 +89,7 @@ type DashboardResponse = {
       staffId: string;
       name: string;
       role: "STAFF" | "MANAGER" | "ADMIN";
+      operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
       shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
       note: string | null;
       source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
@@ -351,6 +360,7 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
 };
 
 export const WorkshopPage = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { success, error } = useToasts();
 
@@ -469,6 +479,7 @@ export const WorkshopPage = () => {
   const staffingWindow = staffingToday
     ? formatTradingWindow(staffingToday.summary.opensAt, staffingToday.summary.closesAt)
     : null;
+  const canManageStaffTags = user?.role === "MANAGER" || user?.role === "ADMIN";
 
   return (
     <div className="page-shell">
@@ -521,9 +532,13 @@ export const WorkshopPage = () => {
                 <div className="muted-text">
                   {staffingToday.summary.isClosed
                     ? staffingToday.summary.closedReason || "Store closed today."
+                    : staffingToday.context.usesOperationalRoleTags
+                      ? staffingWindow
+                        ? `Using workshop role tags · Trading hours ${staffingWindow}.`
+                        : "Using workshop role tags for today’s rota coverage."
                     : staffingWindow
-                      ? `Trading hours ${staffingWindow}.`
-                      : "Using rota coverage for today."}
+                      ? `Using broader rota cover until workshop tags are set · Trading hours ${staffingWindow}.`
+                      : "Using broader rota cover until workshop tags are set."}
                 </div>
               </div>
               <div className="status-stack">
@@ -549,6 +564,9 @@ export const WorkshopPage = () => {
                     {staffingToday.summary.holidayStaffCount} on holiday
                   </span>
                 ) : null}
+                {staffingToday.context.usesOperationalRoleTags ? (
+                  <span className="status-badge status-info">Workshop-tagged</span>
+                ) : null}
               </div>
             </div>
 
@@ -570,9 +588,28 @@ export const WorkshopPage = () => {
               </div>
             )}
 
+            {!staffingToday.summary.isClosed && staffingToday.context.fallbackToBroadStaffing ? (
+              <div className="workshop-staffing-subline muted-text">
+                Showing all scheduled staff because no workshop operational tags are set for today&apos;s rota.
+                {canManageStaffTags ? (
+                  <>
+                    {" "}
+                    <Link to="/management/staff">Tag staff roles</Link>.
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
             {staffingToday.holidayStaff.length ? (
               <div className="workshop-staffing-subline muted-text">
                 On holiday: {staffingToday.holidayStaff.map((entry) => entry.name).join(", ")}.
+              </div>
+            ) : null}
+
+            {staffingToday.context.usesOperationalRoleTags
+              && staffingToday.summary.totalScheduledStaffCount > staffingToday.summary.scheduledStaffCount ? (
+              <div className="workshop-staffing-subline muted-text">
+                {staffingToday.summary.totalScheduledStaffCount - staffingToday.summary.scheduledStaffCount} other scheduled staff are outside the workshop tag filter.
               </div>
             ) : null}
           </section>

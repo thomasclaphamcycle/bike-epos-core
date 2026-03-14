@@ -169,6 +169,25 @@ const run = async () => {
     assert.equal(promoteStaff.status, 200, JSON.stringify(promoteStaff.json));
     assert.equal(promoteStaff.json.user.role, "MANAGER");
 
+    const managerCookie = await loginAs(staffEmail, staffPassword);
+
+    const managerDirectory = await fetchJson("/api/staff-directory", {
+      headers: { Cookie: managerCookie },
+    });
+    assert.equal(managerDirectory.status, 200, JSON.stringify(managerDirectory.json));
+    assert.ok(
+      managerDirectory.json.users.some((user) => user.id === staffId),
+      "Expected promoted manager in staff directory",
+    );
+
+    const tagWorkshop = await fetchJson(`/api/staff-directory/${staffId}/operational-role`, {
+      method: "PATCH",
+      headers: { Cookie: managerCookie },
+      body: JSON.stringify({ operationalRole: "WORKSHOP" }),
+    });
+    assert.equal(tagWorkshop.status, 200, JSON.stringify(tagWorkshop.json));
+    assert.equal(tagWorkshop.json.user.operationalRole, "WORKSHOP");
+
     const resetPassword = await fetchJson(`/api/admin/users/${staffId}/reset-password`, {
       method: "POST",
       headers: { Cookie: adminCookie },
@@ -203,6 +222,13 @@ const run = async () => {
       headers: { Cookie: staffCookie },
     });
     assert.equal(deniedAdminAccess.status, 403, JSON.stringify(deniedAdminAccess.json));
+
+    const deniedDirectoryUpdate = await fetchJson(`/api/staff-directory/${encodeURIComponent(staffId)}/operational-role`, {
+      method: "PATCH",
+      headers: { Cookie: staffCookie },
+      body: JSON.stringify({ operationalRole: "SALES" }),
+    });
+    assert.equal(deniedDirectoryUpdate.status, 403, JSON.stringify(deniedDirectoryUpdate.json));
 
     const selfDisable = await fetchJson(`/api/admin/users/${createStaff.json.user.id}`, {
       method: "PATCH",

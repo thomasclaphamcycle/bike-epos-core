@@ -1,4 +1,11 @@
-import { Prisma, RotaAssignmentSource, RotaClosedDayType, RotaPeriodStatus, RotaShiftType } from "@prisma/client";
+import {
+  Prisma,
+  RotaAssignmentSource,
+  RotaClosedDayType,
+  RotaPeriodStatus,
+  RotaShiftType,
+  UserOperationalRole,
+} from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { listShopSettings } from "./configurationService";
@@ -25,6 +32,7 @@ export type DashboardStaffEntry = {
   staffId: string;
   name: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
+  operationalRole: UserOperationalRole | null;
   shiftType: RotaShiftType;
   note: string | null;
   source: RotaAssignmentSource;
@@ -39,7 +47,13 @@ export type WorkshopStaffingTodayResponse = {
     closesAt: string | null;
     scheduledStaffCount: number;
     holidayStaffCount: number;
+    totalScheduledStaffCount: number;
+    totalHolidayStaffCount: number;
     coverageStatus: "closed" | "none" | "thin" | "covered";
+  };
+  context: {
+    usesOperationalRoleTags: boolean;
+    fallbackToBroadStaffing: boolean;
   };
   scheduledStaff: DashboardStaffEntry[];
   holidayStaff: DashboardStaffEntry[];
@@ -178,6 +192,9 @@ const addDaysToDateKey = (date: string, days: number) => {
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 };
+
+const isWorkshopOperationalRole = (operationalRole: UserOperationalRole | null) =>
+  operationalRole === "WORKSHOP" || operationalRole === "MIXED";
 
 const HEADER_ACTOR_PASSWORD_HASH = "__header_actor__";
 
@@ -522,6 +539,7 @@ export const getDashboardStaffToday = async (
           username: true,
           name: true,
           role: true,
+          operationalRole: true,
         },
       },
     },
@@ -533,6 +551,7 @@ export const getDashboardStaffToday = async (
       staffId: assignment.staff.id,
       name: toStaffDisplayName(assignment.staff),
       role: assignment.staff.role,
+      operationalRole: assignment.staff.operationalRole,
       shiftType: assignment.shiftType,
       note: assignment.note ?? null,
       source: assignment.source,
@@ -545,6 +564,7 @@ export const getDashboardStaffToday = async (
         staffId: assignment.staff.id,
         name: toStaffDisplayName(assignment.staff),
         role: assignment.staff.role,
+        operationalRole: assignment.staff.operationalRole,
         shiftType: assignment.shiftType,
         note: assignment.note ?? null,
         source: assignment.source,
@@ -570,21 +590,38 @@ export const getWorkshopStaffingToday = async (
   db: RotaClient = prisma,
 ): Promise<WorkshopStaffingTodayResponse> => {
   const staffToday = await getDashboardStaffToday(input, db);
+  const usesOperationalRoleTags =
+    staffToday.staff.some((entry) => isWorkshopOperationalRole(entry.operationalRole))
+    || staffToday.holidayStaff.some((entry) => isWorkshopOperationalRole(entry.operationalRole));
+  const scheduledStaff = usesOperationalRoleTags
+    ? staffToday.staff.filter((entry) => isWorkshopOperationalRole(entry.operationalRole))
+    : staffToday.staff;
+  const holidayStaff = usesOperationalRoleTags
+    ? staffToday.holidayStaff.filter((entry) => isWorkshopOperationalRole(entry.operationalRole))
+    : staffToday.holidayStaff;
   const coverageStatus = staffToday.summary.isClosed
     ? "closed"
-    : staffToday.summary.scheduledStaffCount === 0
+    : scheduledStaff.length === 0
       ? "none"
-      : staffToday.summary.scheduledStaffCount === 1
+      : scheduledStaff.length === 1
         ? "thin"
         : "covered";
 
   return {
     summary: {
       ...staffToday.summary,
+      scheduledStaffCount: scheduledStaff.length,
+      holidayStaffCount: holidayStaff.length,
+      totalScheduledStaffCount: staffToday.summary.scheduledStaffCount,
+      totalHolidayStaffCount: staffToday.summary.holidayStaffCount,
       coverageStatus,
     },
-    scheduledStaff: staffToday.staff,
-    holidayStaff: staffToday.holidayStaff,
+    context: {
+      usesOperationalRoleTags,
+      fallbackToBroadStaffing: !usesOperationalRoleTags,
+    },
+    scheduledStaff,
+    holidayStaff,
   };
 };
 

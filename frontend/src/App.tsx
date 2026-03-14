@@ -273,7 +273,7 @@ const AuthedApp = () => (
         <Route
           path="/management/staff"
           element={(
-            adminOnly(<StaffManagementPage />)
+            managerOnly(<StaffManagementPage />)
           )}
         />
         <Route
@@ -604,7 +604,7 @@ const AuthedApp = () => (
           )}
         />
         <Route path="/settings/store-info" element={adminOnly(<SystemSettingsPage />)} />
-        <Route path="/settings/staff-list" element={adminOnly(<StaffManagementPage />)} />
+        <Route path="/settings/staff-list" element={managerOnly(<StaffManagementPage />)} />
         <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
         <Route path="/settings/staff-rota" element={adminOnly(<StaffRotaPage />)} />
         <Route

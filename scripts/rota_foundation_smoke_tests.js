@@ -537,6 +537,8 @@ const run = async () => {
       headers: ALEX_HEADERS,
     });
     assert.equal(workshopTuesdayRes.status, 200, JSON.stringify(workshopTuesdayRes.json));
+    assert.equal(workshopTuesdayRes.json.staffingToday.context.usesOperationalRoleTags, false);
+    assert.equal(workshopTuesdayRes.json.staffingToday.context.fallbackToBroadStaffing, true);
     assert.equal(workshopTuesdayRes.json.staffingToday.summary.coverageStatus, "thin");
     assert.equal(workshopTuesdayRes.json.staffingToday.summary.scheduledStaffCount, 1);
     assert.equal(workshopTuesdayRes.json.staffingToday.summary.holidayStaffCount, 1);
@@ -548,6 +550,48 @@ const run = async () => {
       workshopTuesdayRes.json.staffingToday.holidayStaff.map((entry) => entry.name),
       ["Alex Turner"],
     );
+
+    const tagJordanWorkshopRes = await fetchJson(`/api/staff-directory/${JORDAN_STAFF_ID}/operational-role`, {
+      method: "PATCH",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        operationalRole: "WORKSHOP",
+      }),
+    });
+    assert.equal(tagJordanWorkshopRes.status, 200, JSON.stringify(tagJordanWorkshopRes.json));
+    assert.equal(tagJordanWorkshopRes.json.user.operationalRole, "WORKSHOP");
+
+    const tagAlexSalesRes = await fetchJson(`/api/staff-directory/${ALEX_STAFF_ID}/operational-role`, {
+      method: "PATCH",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        operationalRole: "SALES",
+      }),
+    });
+    assert.equal(tagAlexSalesRes.status, 200, JSON.stringify(tagAlexSalesRes.json));
+    assert.equal(tagAlexSalesRes.json.user.operationalRole, "SALES");
+
+    const taggedWorkshopTuesdayRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${IMPORTED_TUESDAY}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(taggedWorkshopTuesdayRes.status, 200, JSON.stringify(taggedWorkshopTuesdayRes.json));
+    assert.equal(taggedWorkshopTuesdayRes.json.staffingToday.context.usesOperationalRoleTags, true);
+    assert.equal(taggedWorkshopTuesdayRes.json.staffingToday.context.fallbackToBroadStaffing, false);
+    assert.equal(taggedWorkshopTuesdayRes.json.staffingToday.summary.scheduledStaffCount, 1);
+    assert.equal(taggedWorkshopTuesdayRes.json.staffingToday.summary.totalScheduledStaffCount, 1);
+    assert.equal(taggedWorkshopTuesdayRes.json.staffingToday.summary.holidayStaffCount, 0);
+    assert.equal(taggedWorkshopTuesdayRes.json.staffingToday.summary.totalHolidayStaffCount, 1);
+    assert.deepEqual(
+      taggedWorkshopTuesdayRes.json.staffingToday.scheduledStaff.map((entry) => entry.name),
+      ["Jordan Patel"],
+    );
+    assert.deepEqual(taggedWorkshopTuesdayRes.json.staffingToday.holidayStaff, []);
 
     const mondayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_MONDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(mondayRes.status, 200, JSON.stringify(mondayRes.json));

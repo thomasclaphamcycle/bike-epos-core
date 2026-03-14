@@ -1158,15 +1158,23 @@ enum UserRole {
   ADMIN
 }
 
+enum UserOperationalRole {
+  WORKSHOP
+  SALES
+  ADMIN
+  MIXED
+}
+
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String?  @unique
-  name         String?
-  passwordHash String
-  pinHash      String?
-  role         UserRole @default(STAFF)
-  isActive     Boolean  @default(true)
+  id              String               @id @default(cuid())
+  username        String               @unique
+  email           String?              @unique
+  name            String?
+  passwordHash    String
+  pinHash         String?
+  role            UserRole             @default(STAFF)
+  operationalRole UserOperationalRole?
+  isActive        Boolean              @default(true)
 
   assignedWorkshopJobs WorkshopJob[]      @relation("WorkshopJobAssignedStaff")
   workshopJobNotes     WorkshopJobNote[]  @relation("WorkshopJobNoteAuthor")

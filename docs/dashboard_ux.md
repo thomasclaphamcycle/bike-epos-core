@@ -115,6 +115,7 @@ Rules:
 - these counts should come from existing workshop dashboard data
 - include direct links into the workshop board or collection workflow
 - keep it summary-first, not job-table-first
+- workshop staffing visibility should prefer workshop-tagged rota staff when those tags exist, while falling back to broader scheduled staff so the view stays useful during rollout
 
 ## Rentals Widget
 
