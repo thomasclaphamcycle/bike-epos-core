@@ -184,11 +184,22 @@ const run = async () => {
     const missingRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
     assert.equal(missingRes.status, 200, JSON.stringify(missingRes.json));
     assert.equal(missingRes.json.weather.status, "missing_location");
+    assert.equal(missingRes.json.weather.message, "Weather unavailable. Set the store postcode in Settings.");
 
     await prisma.appConfig.upsert({
       where: { key: "store.postcode" },
       create: { key: "store.postcode", value: "SW11 1JD" },
       update: { value: "SW11 1JD" },
+    });
+    await prisma.appConfig.upsert({
+      where: { key: "store.latitude" },
+      create: { key: "store.latitude", value: 51.4526 },
+      update: { value: 51.4526 },
+    });
+    await prisma.appConfig.upsert({
+      where: { key: "store.longitude" },
+      create: { key: "store.longitude", value: -0.1477 },
+      update: { value: -0.1477 },
     });
 
     const readyRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
@@ -208,8 +219,10 @@ const run = async () => {
     const unresolvedRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
     assert.equal(unresolvedRes.status, 200, JSON.stringify(unresolvedRes.json));
     assert.equal(unresolvedRes.json.weather.status, "unavailable");
-    assert.equal(typeof unresolvedRes.json.weather.message, "string");
-    assert.ok(unresolvedRes.json.weather.message.trim().length > 0);
+    assert.equal(
+      unresolvedRes.json.weather.message,
+      "Weather location could not be resolved from the store postcode. Check Store Info.",
+    );
 
     console.log("[dashboard-weather-smoke] dashboard weather endpoint passed");
   } finally {

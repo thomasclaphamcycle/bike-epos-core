@@ -747,7 +747,7 @@ export const DashboardPage = () => {
           <div className="card-header-row">
             <div>
               <h2>Weather</h2>
-              <p className="muted-text">A compact forecast for today, based on the current Store Info location.</p>
+              <p className="muted-text">A compact forecast for today, based on the store postcode in Store Info.</p>
             </div>
           </div>
 
@@ -783,10 +783,10 @@ export const DashboardPage = () => {
             <div className="restricted-panel info-panel">
               {user?.role === "ADMIN" ? (
                 <>
-                  Store postcode or coordinates are missing. Update <Link to="/settings/store-info">Store Info</Link> to enable dashboard weather.
+                  Weather unavailable. Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
                 </>
               ) : (
-                "Store weather location is not configured yet. Ask an admin to update Store Info with a postcode or coordinates."
+                "Weather unavailable. Ask an admin to set the store postcode in Settings."
               )}
             </div>
           ) : (

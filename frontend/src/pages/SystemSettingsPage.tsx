@@ -21,8 +21,6 @@ type StoreInfo = {
   timeZone: string;
   logoUrl: string;
   footerText: string;
-  latitude: number | null;
-  longitude: number | null;
 };
 
 type StoreInfoResponse = {
@@ -60,7 +58,6 @@ const isValidUrl = (value: string) => {
 const normalizeTextInput = (value: string) => value.replace(/\s+/g, " ").trim();
 
 const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
-  ...store,
   name: normalizeTextInput(store.name),
   businessName: normalizeTextInput(store.businessName),
   email: store.email.trim().toLowerCase(),
@@ -80,6 +77,26 @@ const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
   footerText: store.footerText.trim(),
 });
 
+const toStoreInfoFormState = (store: Record<string, unknown>): StoreInfo => ({
+  name: typeof store.name === "string" ? store.name : "",
+  businessName: typeof store.businessName === "string" ? store.businessName : "",
+  email: typeof store.email === "string" ? store.email : "",
+  phone: typeof store.phone === "string" ? store.phone : "",
+  website: typeof store.website === "string" ? store.website : "",
+  addressLine1: typeof store.addressLine1 === "string" ? store.addressLine1 : "",
+  addressLine2: typeof store.addressLine2 === "string" ? store.addressLine2 : "",
+  city: typeof store.city === "string" ? store.city : "",
+  region: typeof store.region === "string" ? store.region : "",
+  postcode: typeof store.postcode === "string" ? store.postcode : "",
+  country: typeof store.country === "string" ? store.country : "",
+  vatNumber: typeof store.vatNumber === "string" ? store.vatNumber : "",
+  companyNumber: typeof store.companyNumber === "string" ? store.companyNumber : "",
+  defaultCurrency: typeof store.defaultCurrency === "string" ? store.defaultCurrency : "",
+  timeZone: typeof store.timeZone === "string" ? store.timeZone : "",
+  logoUrl: typeof store.logoUrl === "string" ? store.logoUrl : "",
+  footerText: typeof store.footerText === "string" ? store.footerText : "",
+});
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -97,8 +114,9 @@ export const SystemSettingsPage = () => {
         if (cancelled) {
           return;
         }
-        setStore(payload.store);
-        setInitialStore(payload.store);
+        const normalizedStore = toStoreInfoFormState(payload.store as unknown as Record<string, unknown>);
+        setStore(normalizedStore);
+        setInitialStore(normalizedStore);
       } catch (loadError) {
         if (!cancelled) {
           error(loadError instanceof Error ? loadError.message : "Failed to load Store Info");
@@ -156,16 +174,6 @@ export const SystemSettingsPage = () => {
     if (store.logoUrl.trim() && !isValidUrl(store.logoUrl)) {
       errors.logoUrl = "Logo URL must start with http:// or https://";
     }
-    if (store.latitude !== null && (Number.isNaN(store.latitude) || store.latitude < -90 || store.latitude > 90)) {
-      errors.latitude = "Latitude must be between -90 and 90.";
-    }
-    if (
-      store.longitude !== null &&
-      (Number.isNaN(store.longitude) || store.longitude < -180 || store.longitude > 180)
-    ) {
-      errors.longitude = "Longitude must be between -180 and 180.";
-    }
-
     return errors;
   }, [store]);
 
@@ -196,8 +204,9 @@ export const SystemSettingsPage = () => {
     setSaving(true);
     try {
       const payload = await apiPatch<StoreInfoResponse>("/api/settings/store-info", normalized);
-      setStore(payload.store);
-      setInitialStore(payload.store);
+      const normalizedStore = toStoreInfoFormState(payload.store as unknown as Record<string, unknown>);
+      setStore(normalizedStore);
+      setInitialStore(normalizedStore);
       success("Store Info updated.");
     } catch (saveError) {
       error(saveError instanceof Error ? saveError.message : "Failed to update Store Info");
@@ -243,7 +252,7 @@ export const SystemSettingsPage = () => {
         </div>
 
         <div className="restricted-panel info-panel">
-          Store Info is the app-level source of truth for the shop&apos;s identity. Receipt settings are kept compatible automatically, and dashboard weather still uses the same saved location fields.
+          Store Info is the app-level source of truth for the shop&apos;s identity. Receipt settings stay compatible automatically, and dashboard weather now uses the saved store postcode.
         </div>
       </section>
 
@@ -410,40 +419,6 @@ export const SystemSettingsPage = () => {
                   />
                   {validationErrors.country ? (
                     <span className="field-error">{validationErrors.country}</span>
-                  ) : null}
-                </label>
-                <label>
-                  Latitude
-                  <input
-                    type="number"
-                    min="-90"
-                    max="90"
-                    step="0.000001"
-                    value={store.latitude ?? ""}
-                    onChange={(event) =>
-                      setField("latitude", event.target.value === "" ? null : Number(event.target.value))
-                    }
-                    placeholder="51.452600"
-                  />
-                  {validationErrors.latitude ? (
-                    <span className="field-error">{validationErrors.latitude}</span>
-                  ) : null}
-                </label>
-                <label>
-                  Longitude
-                  <input
-                    type="number"
-                    min="-180"
-                    max="180"
-                    step="0.000001"
-                    value={store.longitude ?? ""}
-                    onChange={(event) =>
-                      setField("longitude", event.target.value === "" ? null : Number(event.target.value))
-                    }
-                    placeholder="-0.147700"
-                  />
-                  {validationErrors.longitude ? (
-                    <span className="field-error">{validationErrors.longitude}</span>
                   ) : null}
                 </label>
               </div>

@@ -173,19 +173,7 @@ const resolveGeocodedLocation = async (query: string): Promise<ResolvedStoreLoca
 
 const resolveStoreLocation = async (): Promise<StoreLocationResolution> => {
   const settings = await listShopSettings();
-  const { city, latitude, longitude, postcode } = settings.store;
-
-  if (latitude !== null && longitude !== null) {
-    const labelParts = [city, postcode].filter(Boolean);
-    return {
-      status: "ready",
-      location: {
-        latitude,
-        longitude,
-        label: labelParts.join(" · ") || settings.store.name,
-      },
-    };
-  }
+  const { postcode } = settings.store;
 
   if (!postcode) {
     return { status: "missing" };
@@ -205,13 +193,13 @@ const resolveStoreLocation = async (): Promise<StoreLocationResolution> => {
 const buildMissingLocationResponse = (): DashboardWeatherResponse => ({
   status: "missing_location",
   source: "open-meteo",
-  message: "Store postcode or coordinates are missing. Update Store Info to enable dashboard weather.",
+  message: "Weather unavailable. Set the store postcode in Settings.",
 });
 
 const buildUnresolvableLocationResponse = (): DashboardWeatherResponse => ({
   status: "unavailable",
   source: "open-meteo",
-  message: "Weather location could not be resolved from Store Info. Check the postcode or coordinates.",
+  message: "Weather location could not be resolved from the store postcode. Check Store Info.",
 });
 
 const getStubWeather = async (): Promise<DashboardWeatherResponse> => {

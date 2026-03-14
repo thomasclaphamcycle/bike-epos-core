@@ -34,9 +34,7 @@ X-Staff-Id: demo-manager
     "defaultCurrency": "GBP",
     "timeZone": "Europe/London",
     "logoUrl": "https://cdn.corepos.local/logo.png",
-    "footerText": "Thanks for riding with CorePOS.",
-    "latitude": 51.4526,
-    "longitude": -0.1477
+    "footerText": "Thanks for riding with CorePOS."
   },
   "pos": {
     "defaultTaxRatePercent": 20,
@@ -74,7 +72,5 @@ X-Staff-Id: demo-admin
   "defaultCurrency": "GBP",
   "timeZone": "Europe/London",
   "logoUrl": "https://cdn.corepos.local/logo.png",
-  "footerText": "Thanks for riding with CorePOS.",
-  "latitude": 51.4526,
-  "longitude": -0.1477
+  "footerText": "Thanks for riding with CorePOS."
 }
