@@ -58,6 +58,34 @@ type DashboardJob = {
 };
 
 type DashboardResponse = {
+  staffingToday: {
+    summary: {
+      date: string;
+      isClosed: boolean;
+      closedReason: string | null;
+      opensAt: string | null;
+      closesAt: string | null;
+      scheduledStaffCount: number;
+      holidayStaffCount: number;
+      coverageStatus: "closed" | "none" | "thin" | "covered";
+    };
+    scheduledStaff: Array<{
+      staffId: string;
+      name: string;
+      role: "STAFF" | "MANAGER" | "ADMIN";
+      shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
+      note: string | null;
+      source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
+    }>;
+    holidayStaff: Array<{
+      staffId: string;
+      name: string;
+      role: "STAFF" | "MANAGER" | "ADMIN";
+      shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
+      note: string | null;
+      source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
+    }>;
+  };
   jobs: DashboardJob[];
 };
 
@@ -92,6 +120,13 @@ const formatDate = (value: string | null) => {
     return "-";
   }
   return new Date(value).toLocaleDateString();
+};
+
+const formatTradingWindow = (opensAt: string | null, closesAt: string | null) => {
+  if (!opensAt || !closesAt) {
+    return null;
+  }
+  return `${opensAt}-${closesAt}`;
 };
 
 const toStatusLabel = (status: string) => {
@@ -149,6 +184,21 @@ const toStatusBadgeClass = (status: string) => {
     return "status-badge status-info";
   }
   return "status-badge";
+};
+
+const toShiftLabel = (shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY") => {
+  switch (shiftType) {
+    case "FULL_DAY":
+      return "Full day";
+    case "HALF_DAY_AM":
+      return "AM";
+    case "HALF_DAY_PM":
+      return "PM";
+    case "HOLIDAY":
+      return "Holiday";
+    default:
+      return shiftType;
+  }
 };
 
 const toPartsStatus = (job: DashboardJob) => {
@@ -310,6 +360,7 @@ export const WorkshopPage = () => {
   const debouncedSearch = useDebouncedValue(search, 250);
 
   const [jobs, setJobs] = useState<DashboardJob[]>([]);
+  const [staffingToday, setStaffingToday] = useState<DashboardResponse["staffingToday"] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const listQuery = useMemo(() => {
@@ -330,6 +381,7 @@ export const WorkshopPage = () => {
     try {
       const payload = await apiGet<DashboardResponse>(`/api/workshop/dashboard?${listQuery}`);
       setJobs(payload.jobs || []);
+      setStaffingToday(payload.staffingToday ?? null);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load workshop jobs";
       error(message);
@@ -414,6 +466,10 @@ export const WorkshopPage = () => {
     };
   }, [jobs]);
 
+  const staffingWindow = staffingToday
+    ? formatTradingWindow(staffingToday.summary.opensAt, staffingToday.summary.closesAt)
+    : null;
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -446,6 +502,81 @@ export const WorkshopPage = () => {
             </button>
           </div>
         </div>
+
+        {staffingToday ? (
+          <section
+            className={[
+              "restricted-panel",
+              "workshop-staffing-panel",
+              staffingToday.summary.coverageStatus === "closed"
+                ? "info-panel"
+                : staffingToday.summary.coverageStatus === "thin" || staffingToday.summary.coverageStatus === "none"
+                  ? "warning-panel"
+                  : "info-panel",
+            ].join(" ")}
+          >
+            <div className="workshop-staffing-header">
+              <div>
+                <strong>Workshop staffing today</strong>
+                <div className="muted-text">
+                  {staffingToday.summary.isClosed
+                    ? staffingToday.summary.closedReason || "Store closed today."
+                    : staffingWindow
+                      ? `Trading hours ${staffingWindow}.`
+                      : "Using rota coverage for today."}
+                </div>
+              </div>
+              <div className="status-stack">
+                <span
+                  className={
+                    staffingToday.summary.coverageStatus === "closed"
+                      ? "status-badge status-info"
+                      : staffingToday.summary.coverageStatus === "thin" || staffingToday.summary.coverageStatus === "none"
+                        ? "status-badge status-warning"
+                        : "status-badge status-info"
+                  }
+                >
+                  {staffingToday.summary.coverageStatus === "closed"
+                    ? "Closed"
+                    : staffingToday.summary.coverageStatus === "thin"
+                      ? "Thin cover"
+                      : staffingToday.summary.coverageStatus === "none"
+                        ? "No cover"
+                        : "Covered"}
+                </span>
+                {staffingToday.summary.holidayStaffCount ? (
+                  <span className="status-badge">
+                    {staffingToday.summary.holidayStaffCount} on holiday
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {staffingToday.summary.isClosed ? null : staffingToday.scheduledStaff.length ? (
+              <div className="workshop-staffing-list">
+                {staffingToday.scheduledStaff.map((entry) => (
+                  <span
+                    key={`${entry.staffId}-${entry.shiftType}`}
+                    className="stock-badge workshop-staffing-chip"
+                    title={`${entry.name} · ${toShiftLabel(entry.shiftType)}${entry.note ? ` · ${entry.note}` : ""}`}
+                  >
+                    {entry.name} · {toShiftLabel(entry.shiftType)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="muted-text workshop-staffing-empty">
+                No staff scheduled today.
+              </div>
+            )}
+
+            {staffingToday.holidayStaff.length ? (
+              <div className="workshop-staffing-subline muted-text">
+                On holiday: {staffingToday.holidayStaff.map((entry) => entry.name).join(", ")}.
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <div className="filter-row">
           <label>

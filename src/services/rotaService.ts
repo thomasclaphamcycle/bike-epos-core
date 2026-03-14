@@ -17,14 +17,32 @@ export type DashboardStaffTodayResponse = {
     scheduledStaffCount: number;
     holidayStaffCount: number;
   };
-  staff: Array<{
-    staffId: string;
-    name: string;
-    role: "STAFF" | "MANAGER" | "ADMIN";
-    shiftType: RotaShiftType;
-    note: string | null;
-    source: RotaAssignmentSource;
-  }>;
+  staff: DashboardStaffEntry[];
+  holidayStaff: DashboardStaffEntry[];
+};
+
+export type DashboardStaffEntry = {
+  staffId: string;
+  name: string;
+  role: "STAFF" | "MANAGER" | "ADMIN";
+  shiftType: RotaShiftType;
+  note: string | null;
+  source: RotaAssignmentSource;
+};
+
+export type WorkshopStaffingTodayResponse = {
+  summary: {
+    date: string;
+    isClosed: boolean;
+    closedReason: string | null;
+    opensAt: string | null;
+    closesAt: string | null;
+    scheduledStaffCount: number;
+    holidayStaffCount: number;
+    coverageStatus: "closed" | "none" | "thin" | "covered";
+  };
+  scheduledStaff: DashboardStaffEntry[];
+  holidayStaff: DashboardStaffEntry[];
 };
 
 export type RotaPeriodListItem = {
@@ -509,7 +527,16 @@ export const getDashboardStaffToday = async (
     },
   });
 
-  const holidayStaffCount = assignments.filter((assignment) => assignment.shiftType === "HOLIDAY").length;
+  const holidayStaff = assignments
+    .filter((assignment) => assignment.shiftType === "HOLIDAY")
+    .map((assignment) => ({
+      staffId: assignment.staff.id,
+      name: toStaffDisplayName(assignment.staff),
+      role: assignment.staff.role,
+      shiftType: assignment.shiftType,
+      note: assignment.note ?? null,
+      source: assignment.source,
+    }));
   const scheduledStaff = schedule.isClosed
     ? []
     : assignments
@@ -531,9 +558,33 @@ export const getDashboardStaffToday = async (
       opensAt: schedule.isClosed ? null : schedule.hours.opensAt,
       closesAt: schedule.isClosed ? null : schedule.hours.closesAt,
       scheduledStaffCount: scheduledStaff.length,
-      holidayStaffCount,
+      holidayStaffCount: holidayStaff.length,
     },
     staff: scheduledStaff,
+    holidayStaff,
+  };
+};
+
+export const getWorkshopStaffingToday = async (
+  input: { date?: string } = {},
+  db: RotaClient = prisma,
+): Promise<WorkshopStaffingTodayResponse> => {
+  const staffToday = await getDashboardStaffToday(input, db);
+  const coverageStatus = staffToday.summary.isClosed
+    ? "closed"
+    : staffToday.summary.scheduledStaffCount === 0
+      ? "none"
+      : staffToday.summary.scheduledStaffCount === 1
+        ? "thin"
+        : "covered";
+
+  return {
+    summary: {
+      ...staffToday.summary,
+      coverageStatus,
+    },
+    scheduledStaff: staffToday.staff,
+    holidayStaff: staffToday.holidayStaff,
   };
 };
 

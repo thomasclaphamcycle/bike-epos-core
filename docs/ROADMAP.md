@@ -308,6 +308,7 @@ Implementation status:
 - Staff Rota now supports inline manager/admin day-level editing, keeping `RotaAssignment` as the live source of truth for imported, holiday-approved, and manually adjusted coverage
 - Staff Rota now supports practical daily-use filters, print-friendly output, and active-staff visibility beyond imported spreadsheet rows so managers can schedule missing staff directly in-app
 - UK bank holidays can now be synced from the official GOV.UK feed into `RotaClosedDay`, so rota import, editing, holiday approvals, and dashboard staffing all respect the same exceptional-closure layer
+- workshop operations now surface rota-backed staffing visibility for the day, including scheduled cover, holiday absences, and closed-day reasons without introducing a separate attendance model
 
 ---
 

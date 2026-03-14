@@ -2,8 +2,10 @@ import { Prisma, WorkshopJobSource, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
+import { getWorkshopStaffingToday } from "./rotaService";
 
 type WorkshopDashboardInput = {
+  staffDate?: string;
   status?: string;
   source?: string;
   from?: string;
@@ -246,7 +248,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
 
   const { dayStart, nextDayStart } = getUtcDayBounds();
 
-  const [jobs, totalJobs, statusCounts, sourceCounts, depositRequired, depositPaidCount, dueToday, overdue] =
+  const [jobs, totalJobs, statusCounts, sourceCounts, depositRequired, depositPaidCount, dueToday, overdue, staffingToday] =
     await Promise.all([
       prisma.workshopJob.findMany({
         where,
@@ -309,6 +311,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
           },
         },
       }),
+      getWorkshopStaffingToday({ date: input.staffDate }, prisma),
     ]);
 
   const noteAggregates =
@@ -386,6 +389,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
         unpaidCount: Math.max(0, depositRequired._count._all - depositPaidCount),
       },
     },
+    staffingToday,
     jobs: jobs.map((job) => {
       const partsOverview = partsOverviewByJobId.get(job.id);
       return {

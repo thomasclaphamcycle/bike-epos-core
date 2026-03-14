@@ -528,11 +528,39 @@ const run = async () => {
       tuesdayRes.json.staffToday.staff.map((entry) => entry.name).sort(),
       ["Jordan Patel"],
     );
+    assert.deepEqual(
+      tuesdayRes.json.staffToday.holidayStaff.map((entry) => entry.name),
+      ["Alex Turner"],
+    );
+
+    const workshopTuesdayRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${IMPORTED_TUESDAY}`, {
+      headers: ALEX_HEADERS,
+    });
+    assert.equal(workshopTuesdayRes.status, 200, JSON.stringify(workshopTuesdayRes.json));
+    assert.equal(workshopTuesdayRes.json.staffingToday.summary.coverageStatus, "thin");
+    assert.equal(workshopTuesdayRes.json.staffingToday.summary.scheduledStaffCount, 1);
+    assert.equal(workshopTuesdayRes.json.staffingToday.summary.holidayStaffCount, 1);
+    assert.deepEqual(
+      workshopTuesdayRes.json.staffingToday.scheduledStaff.map((entry) => entry.name),
+      ["Jordan Patel"],
+    );
+    assert.deepEqual(
+      workshopTuesdayRes.json.staffingToday.holidayStaff.map((entry) => entry.name),
+      ["Alex Turner"],
+    );
 
     const mondayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_MONDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(mondayRes.status, 200, JSON.stringify(mondayRes.json));
     assert.equal(mondayRes.json.staffToday.summary.scheduledStaffCount, 0);
     assert.equal(mondayRes.json.staffToday.summary.holidayStaffCount, 1);
+
+    const workshopMondayRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${IMPORTED_MONDAY}`, {
+      headers: ALEX_HEADERS,
+    });
+    assert.equal(workshopMondayRes.status, 200, JSON.stringify(workshopMondayRes.json));
+    assert.equal(workshopMondayRes.json.staffingToday.summary.coverageStatus, "none");
+    assert.equal(workshopMondayRes.json.staffingToday.summary.scheduledStaffCount, 0);
+    assert.equal(workshopMondayRes.json.staffingToday.summary.holidayStaffCount, 1);
 
     const trainingDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_WEDNESDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(trainingDayRes.status, 200, JSON.stringify(trainingDayRes.json));
@@ -644,6 +672,15 @@ const run = async () => {
     assert.equal(closedDayRes.json.staffToday.summary.isClosed, true);
     assert.equal(closedDayRes.json.staffToday.summary.closedReason, "Special bank holiday");
     assert.equal(closedDayRes.json.staffToday.staff.length, 0);
+
+    const workshopClosedDayRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${IMPORTED_FRIDAY}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(workshopClosedDayRes.status, 200, JSON.stringify(workshopClosedDayRes.json));
+    assert.equal(workshopClosedDayRes.json.staffingToday.summary.isClosed, true);
+    assert.equal(workshopClosedDayRes.json.staffingToday.summary.coverageStatus, "closed");
+    assert.equal(workshopClosedDayRes.json.staffingToday.summary.closedReason, "Special bank holiday");
+    assert.equal(workshopClosedDayRes.json.staffingToday.scheduledStaff.length, 0);
 
     console.log("[rota-foundation-smoke] rota import and dashboard staff summary passed");
   } finally {

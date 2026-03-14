@@ -10,6 +10,7 @@ import {
   getRequestAuditActor,
   getRequestStaffRole,
 } from "../middleware/staffRole";
+import { normalizeDateKeyOrThrow } from "../services/rotaService";
 import { getWorkshopDashboard } from "../services/workshopDashboardService";
 import { getWorkshopAvailability } from "../services/workshopAvailabilityService";
 import {
@@ -307,6 +308,9 @@ export const getWorkshopAvailabilityHandler = async (req: Request, res: Response
 };
 
 export const getWorkshopDashboardHandler = async (req: Request, res: Response) => {
+  const staffDate = typeof req.query.staffDate === "string"
+    ? normalizeDateKeyOrThrow(req.query.staffDate, "INVALID_WORKSHOP_STAFF_DATE")
+    : undefined;
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const source = typeof req.query.source === "string" ? req.query.source : undefined;
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
@@ -320,6 +324,7 @@ export const getWorkshopDashboardHandler = async (req: Request, res: Response) =
   const limit = parseOptionalIntegerQuery(req.query.limit, "limit");
 
   const result = await getWorkshopDashboard({
+    staffDate,
     status,
     source,
     from,

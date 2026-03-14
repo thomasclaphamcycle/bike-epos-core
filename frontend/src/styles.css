@@ -1374,6 +1374,34 @@ th {
   margin-bottom: 14px;
 }
 
+.workshop-staffing-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.workshop-staffing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.workshop-staffing-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-staffing-chip {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.workshop-staffing-empty,
+.workshop-staffing-subline {
+  margin: 0;
+}
+
 .workshop-column {
   border: 1px solid #d7e0ea;
   border-radius: 14px;
@@ -3296,5 +3324,9 @@ th {
 
   .workshop-board {
     grid-template-columns: 1fr;
+  }
+
+  .workshop-staffing-header {
+    flex-direction: column;
   }
 }
