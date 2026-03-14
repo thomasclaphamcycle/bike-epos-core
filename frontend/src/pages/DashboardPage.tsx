@@ -163,11 +163,27 @@ const actionSeverityBadgeClass: Record<ActionItem["severity"], string> = {
   INFO: "status-badge status-info",
 };
 
+const actionIconLabel = (item: ActionItem) => {
+  const haystack = `${item.type} ${item.title} ${item.reason}`.toLowerCase();
+
+  if (haystack.includes("overdue")) {
+    return { glyph: "!", label: "Overdue alert", tone: "critical" };
+  }
+  if (haystack.includes("pickup") || haystack.includes("ready")) {
+    return { glyph: "↗", label: "Ready for collection", tone: "ready" };
+  }
+  if (haystack.includes("outstanding") || haystack.includes("waiting") || haystack.includes("stock")) {
+    return { glyph: "•", label: "Needs attention", tone: "warning" };
+  }
+
+  return { glyph: "i", label: "Operational information", tone: "info" };
+};
+
 const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }: MetricCardProps) => {
   const content = (
     <>
-      <span className="metric-label">{label}</span>
-      <strong className={`metric-value${placeholder ? " dashboard-metric-value-muted" : ""}`}>{value}</strong>
+      <span className="metric-label dashboard-metric-label">{label}</span>
+      <strong className={`metric-value dashboard-metric-value${placeholder ? " dashboard-metric-value-muted" : ""}`}>{value}</strong>
       <span className="dashboard-metric-detail">{detail}</span>
     </>
   );
@@ -570,15 +586,26 @@ export const DashboardPage = () => {
           {canViewManagerWidgets ? (
             dashboardActionItems.length ? (
               <div className="dashboard-action-list">
-                {dashboardActionItems.map((item) => (
-                  <Link key={`${item.type}-${item.entityId}`} className="dashboard-action-item" to={item.link}>
-                    <div className="dashboard-action-copy">
-                      <strong>{item.title}</strong>
-                      <span className="muted-text">{item.reason}</span>
-                    </div>
-                    <span className={actionSeverityBadgeClass[item.severity]}>{item.severity}</span>
-                  </Link>
-                ))}
+                {dashboardActionItems.map((item) => {
+                  const icon = actionIconLabel(item);
+
+                  return (
+                    <Link key={`${item.type}-${item.entityId}`} className="dashboard-action-item" to={item.link}>
+                      <span
+                        className={`dashboard-action-icon dashboard-action-icon--${icon.tone}`}
+                        aria-hidden="true"
+                        title={icon.label}
+                      >
+                        {icon.glyph}
+                      </span>
+                      <div className="dashboard-action-copy">
+                        <strong>{item.title}</strong>
+                        <span className="muted-text">{item.reason}</span>
+                      </div>
+                      <span className={actionSeverityBadgeClass[item.severity]}>{item.severity}</span>
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="restricted-panel info-panel">
@@ -604,19 +631,19 @@ export const DashboardPage = () => {
             </div>
           </div>
 
-          <div className="dashboard-v1-stat-grid">
+            <div className="dashboard-v1-stat-grid">
             <div className="dashboard-v1-stat-card">
-              <span className="metric-label">Waiting</span>
+              <span className="metric-label dashboard-metric-label">Waiting</span>
               <strong className="metric-value">{workshopSummary ? workshopWaitingCount : "—"}</strong>
               <span className="dashboard-metric-detail">Jobs waiting for approval, parts, or scheduling decisions.</span>
             </div>
             <div className="dashboard-v1-stat-card">
-              <span className="metric-label">In Progress</span>
+              <span className="metric-label dashboard-metric-label">In Progress</span>
               <strong className="metric-value">{workshopSummary ? workshopInProgressCount : "—"}</strong>
               <span className="dashboard-metric-detail">Active bench work already underway.</span>
             </div>
             <div className="dashboard-v1-stat-card">
-              <span className="metric-label">Ready for Pickup</span>
+              <span className="metric-label dashboard-metric-label">Ready for Pickup</span>
               <strong className="metric-value">{workshopSummary ? workshopReadyCount : "—"}</strong>
               <span className="dashboard-metric-detail">Completed jobs ready for customer handover.</span>
             </div>
@@ -635,27 +662,27 @@ export const DashboardPage = () => {
           {canViewManagerWidgets ? (
             <div className="dashboard-v1-stat-grid">
               <div className="dashboard-v1-stat-card">
-                <span className="metric-label">Pickups Today</span>
+                <span className="metric-label dashboard-metric-label">Pickups Today</span>
                 <strong className="metric-value">{rentalSnapshot.pickupsToday}</strong>
                 <span className="dashboard-metric-detail">Reserved bikes due out today.</span>
               </div>
               <div className="dashboard-v1-stat-card">
-                <span className="metric-label">Pickups Tomorrow</span>
+                <span className="metric-label dashboard-metric-label">Pickups Tomorrow</span>
                 <strong className="metric-value">{rentalSnapshot.pickupsTomorrow}</strong>
                 <span className="dashboard-metric-detail">Reserved bikes due out tomorrow.</span>
               </div>
               <div className="dashboard-v1-stat-card">
-                <span className="metric-label">Returns Today</span>
+                <span className="metric-label dashboard-metric-label">Returns Today</span>
                 <strong className="metric-value">{rentalSnapshot.returnsToday}</strong>
                 <span className="dashboard-metric-detail">Checked-out bikes expected back today.</span>
               </div>
               <div className="dashboard-v1-stat-card">
-                <span className="metric-label">Returns Tomorrow</span>
+                <span className="metric-label dashboard-metric-label">Returns Tomorrow</span>
                 <strong className="metric-value">{rentalSnapshot.returnsTomorrow}</strong>
                 <span className="dashboard-metric-detail">Checked-out bikes expected back tomorrow.</span>
               </div>
               <div className="dashboard-v1-stat-card">
-                <span className="metric-label">Overdue</span>
+                <span className="metric-label dashboard-metric-label">Overdue</span>
                 <strong className="metric-value">{rentalSnapshot.overdue}</strong>
                 <span className="dashboard-metric-detail">Checked-out rentals already past due back time.</span>
               </div>
