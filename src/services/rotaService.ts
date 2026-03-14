@@ -59,6 +59,7 @@ export type RotaPeriodDayColumn = {
 };
 
 export type RotaPeriodStaffCell = {
+  assignmentId: string | null;
   date: string;
   shiftType: RotaShiftType | null;
   note: string | null;
@@ -108,6 +109,26 @@ export type RotaOverviewResponse = {
   period: RotaPeriodDetail | null;
 };
 
+export type SaveRotaAssignmentResult = {
+  assignment: {
+    id: string;
+    rotaPeriodId: string;
+    staffId: string;
+    date: string;
+    shiftType: RotaShiftType;
+    source: RotaAssignmentSource;
+  };
+  previousSource: RotaAssignmentSource | null;
+  replacedHolidayApproved: boolean;
+};
+
+export type ClearRotaAssignmentResult = {
+  clearedAssignmentId: string;
+  staffId: string;
+  date: string;
+  previousSource: RotaAssignmentSource;
+};
+
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const isValidDateKey = (value: string) => {
@@ -137,6 +158,8 @@ const addDaysToDateKey = (date: string, days: number) => {
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 };
+
+const HEADER_ACTOR_PASSWORD_HASH = "__header_actor__";
 
 const toClosedReasonLabel = (type: RotaClosedDayType, note: string | null) => {
   if (note?.trim()) {
@@ -244,6 +267,178 @@ export const getOrCreateSixWeekRotaPeriod = async (
       status: RotaPeriodStatus.ACTIVE,
     },
   });
+};
+
+const getEditableRotaPeriodOrThrow = async (
+  rotaPeriodId: string,
+  date: string,
+  db: RotaClient,
+) => {
+  const period = await db.rotaPeriod.findUnique({
+    where: { id: rotaPeriodId },
+    select: {
+      id: true,
+      startsOn: true,
+      endsOn: true,
+    },
+  });
+
+  if (!period) {
+    throw new HttpError(404, "Rota period not found", "ROTA_PERIOD_NOT_FOUND");
+  }
+
+  if (date < period.startsOn || date > period.endsOn) {
+    throw new HttpError(
+      400,
+      "Assignment date must fall within the selected rota period",
+      "INVALID_ROTA_ASSIGNMENT",
+    );
+  }
+
+  return period;
+};
+
+const assertEditableRotaDate = async (date: string, db: RotaClient) => {
+  const schedule = await resolveStoreDaySchedule(toDateFromDateKey(date), db);
+  if (schedule.isClosed) {
+    throw new HttpError(
+      409,
+      schedule.closedReason ?? "Assignments cannot be edited on closed days.",
+      "ROTA_DAY_CLOSED",
+    );
+  }
+};
+
+const getSchedulableStaffOrThrow = async (staffId: string, db: RotaClient) => {
+  const staff = await db.user.findUnique({
+    where: { id: staffId },
+    select: {
+      id: true,
+      isActive: true,
+      passwordHash: true,
+    },
+  });
+
+  if (!staff || !staff.isActive || staff.passwordHash === HEADER_ACTOR_PASSWORD_HASH) {
+    throw new HttpError(404, "Staff member not found", "ROTA_STAFF_NOT_FOUND");
+  }
+};
+
+export const saveManualRotaAssignment = async (
+  input: {
+    rotaPeriodId?: string;
+    staffId?: string;
+    date?: string;
+    shiftType: RotaShiftType;
+  },
+  db: RotaClient = prisma,
+): Promise<SaveRotaAssignmentResult> => {
+  const rotaPeriodId = typeof input.rotaPeriodId === "string" ? input.rotaPeriodId.trim() : "";
+  if (!rotaPeriodId) {
+    throw new HttpError(400, "rotaPeriodId is required", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const staffId = typeof input.staffId === "string" ? input.staffId.trim() : "";
+  if (!staffId) {
+    throw new HttpError(400, "staffId is required", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const date = normalizeDateKeyOrThrow(input.date, "INVALID_ROTA_ASSIGNMENT");
+
+  await Promise.all([
+    getEditableRotaPeriodOrThrow(rotaPeriodId, date, db),
+    getSchedulableStaffOrThrow(staffId, db),
+    assertEditableRotaDate(date, db),
+  ]);
+
+  const existing = await db.rotaAssignment.findUnique({
+    where: {
+      staffId_date: {
+        staffId,
+        date,
+      },
+    },
+    select: {
+      source: true,
+    },
+  });
+
+  const assignment = await db.rotaAssignment.upsert({
+    where: {
+      staffId_date: {
+        staffId,
+        date,
+      },
+    },
+    create: {
+      rotaPeriodId,
+      staffId,
+      date,
+      shiftType: input.shiftType,
+      source: RotaAssignmentSource.MANUAL,
+      note: null,
+      rawValue: null,
+      importBatchKey: null,
+    },
+    update: {
+      rotaPeriodId,
+      shiftType: input.shiftType,
+      source: RotaAssignmentSource.MANUAL,
+      note: null,
+      rawValue: null,
+      importBatchKey: null,
+    },
+    select: {
+      id: true,
+      rotaPeriodId: true,
+      staffId: true,
+      date: true,
+      shiftType: true,
+      source: true,
+    },
+  });
+
+  return {
+    assignment,
+    previousSource: existing?.source ?? null,
+    replacedHolidayApproved: existing?.source === RotaAssignmentSource.HOLIDAY_APPROVED,
+  };
+};
+
+export const clearRotaAssignment = async (
+  input: { assignmentId?: string },
+  db: RotaClient = prisma,
+): Promise<ClearRotaAssignmentResult> => {
+  const assignmentId = typeof input.assignmentId === "string" ? input.assignmentId.trim() : "";
+  if (!assignmentId) {
+    throw new HttpError(400, "assignmentId is required", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const assignment = await db.rotaAssignment.findUnique({
+    where: { id: assignmentId },
+    select: {
+      id: true,
+      staffId: true,
+      date: true,
+      source: true,
+    },
+  });
+
+  if (!assignment) {
+    throw new HttpError(404, "Rota assignment not found", "ROTA_ASSIGNMENT_NOT_FOUND");
+  }
+
+  await assertEditableRotaDate(assignment.date, db);
+  await db.rotaAssignment.delete({
+    where: { id: assignment.id },
+  });
+
+  return {
+    clearedAssignmentId: assignment.id,
+    staffId: assignment.staffId,
+    date: assignment.date,
+    previousSource: assignment.source,
+  };
 };
 
 export const getDashboardStaffToday = async (
@@ -414,6 +609,7 @@ export const getRotaOverview = async (
         { date: "asc" },
       ],
       select: {
+        id: true,
         date: true,
         shiftType: true,
         note: true,
@@ -484,7 +680,6 @@ export const getRotaOverview = async (
     }
   }
 
-  const dayMap = new Map(dayColumns.map((day) => [day.date, day]));
   const assignmentsByStaff = new Map<string, {
     staffId: string;
     name: string;
@@ -502,6 +697,7 @@ export const getRotaOverview = async (
     };
 
     existing.byDate.set(assignment.date, {
+      assignmentId: assignment.id,
       date: assignment.date,
       shiftType: assignment.shiftType,
       note: assignment.note ?? null,
@@ -512,23 +708,37 @@ export const getRotaOverview = async (
   }
 
   const latestImport = getLatestImportSummary(periodAssignments);
-  const staffRows = [...assignmentsByStaff.values()].map((staffRow) => ({
-    staffId: staffRow.staffId,
-    name: staffRow.name,
-    role: staffRow.role,
-    cells: dayColumns.map((day) => {
-      const assignment = staffRow.byDate.get(day.date);
-      return {
-        date: day.date,
-        shiftType: assignment?.shiftType ?? null,
-        note: assignment?.note ?? null,
-        source: assignment?.source ?? null,
-        rawValue: assignment?.rawValue ?? null,
-        isClosed: day.isClosed,
-        closedReason: day.closedReason,
-      };
-    }),
-  }));
+  const roleRank = {
+    STAFF: 1,
+    MANAGER: 2,
+    ADMIN: 3,
+  } satisfies Record<"STAFF" | "MANAGER" | "ADMIN", number>;
+  const staffRows = [...assignmentsByStaff.values()]
+    .sort((left, right) => {
+      const roleDifference = roleRank[left.role] - roleRank[right.role];
+      if (roleDifference !== 0) {
+        return roleDifference;
+      }
+      return left.name.localeCompare(right.name, "en-GB");
+    })
+    .map((staffRow) => ({
+      staffId: staffRow.staffId,
+      name: staffRow.name,
+      role: staffRow.role,
+      cells: dayColumns.map((day) => {
+        const assignment = staffRow.byDate.get(day.date);
+        return {
+          assignmentId: assignment?.assignmentId ?? null,
+          date: day.date,
+          shiftType: assignment?.shiftType ?? null,
+          note: assignment?.note ?? null,
+          source: assignment?.source ?? null,
+          rawValue: assignment?.rawValue ?? null,
+          isClosed: day.isClosed,
+          closedReason: day.closedReason,
+        };
+      }),
+    }));
 
   return {
     selectedPeriodId,
@@ -545,7 +755,7 @@ export const getRotaOverview = async (
       days: dayColumns,
       weeks,
       summary: {
-        assignedStaffCount: staffRows.length,
+        assignedStaffCount: new Set(periodAssignments.map((assignment) => assignment.staff.id)).size,
         assignedDays: periodAssignments.filter((assignment) => assignment.shiftType !== "HOLIDAY").length,
         holidayDays: periodAssignments.filter((assignment) => assignment.shiftType === "HOLIDAY").length,
         importedAssignments: latestImport.importedAssignments,

@@ -3,6 +3,24 @@ GET http://localhost:3000/api/rota
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
+### Save rota assignment
+POST http://localhost:3000/api/rota/assignments
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "rotaPeriodId": "{{rotaPeriodId}}",
+  "staffId": "rota-alex-id",
+  "date": "2026-03-10",
+  "shiftType": "FULL_DAY"
+}
+
+### Clear rota assignment
+DELETE http://localhost:3000/api/rota/assignments/{{assignmentId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
 ### Holiday requests list (mine)
 GET http://localhost:3000/api/rota/holiday-requests?scope=mine
 X-Staff-Role: STAFF

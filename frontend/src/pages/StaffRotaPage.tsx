@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api/client";
+import { apiDelete, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
@@ -70,6 +70,7 @@ type RotaOverviewResponse = {
       name: string;
       role: UserRole;
       cells: Array<{
+        assignmentId: string | null;
         date: string;
         shiftType: RotaShiftType | null;
         note: string | null;
@@ -119,20 +120,55 @@ type HolidayRequestsPayload = {
   requests: HolidayRequestItem[];
 };
 
-const shiftLabel = (shiftType: RotaShiftType | null) => {
+type RotaGridCell = NonNullable<RotaOverviewResponse["period"]>["staffRows"][number]["cells"][number];
+
+type SaveRotaAssignmentResponse = {
+  assignment: {
+    id: string;
+    rotaPeriodId: string;
+    staffId: string;
+    date: string;
+    shiftType: RotaShiftType;
+    source: RotaAssignmentSource;
+  };
+  previousSource: RotaAssignmentSource | null;
+  replacedHolidayApproved: boolean;
+};
+
+type ClearRotaAssignmentResponse = {
+  clearedAssignmentId: string;
+  staffId: string;
+  date: string;
+  previousSource: RotaAssignmentSource;
+};
+
+const shiftShortLabel = (shiftType: RotaShiftType | null) => {
   if (shiftType === "FULL_DAY") {
-    return "Full day";
+    return "F";
   }
   if (shiftType === "HALF_DAY_AM") {
-    return "Half day AM";
+    return "AM";
   }
   if (shiftType === "HALF_DAY_PM") {
-    return "Half day PM";
+    return "PM";
   }
   if (shiftType === "HOLIDAY") {
-    return "Holiday";
+    return "H";
   }
-  return "";
+  return "—";
+};
+
+const sourceLabel = (source: RotaAssignmentSource | null) => {
+  if (source === "IMPORT") {
+    return "Imported";
+  }
+  if (source === "HOLIDAY_APPROVED") {
+    return "Holiday approved";
+  }
+  if (source === "MANUAL") {
+    return "Manual";
+  }
+  return null;
 };
 
 const shiftClassName = (shiftType: RotaShiftType | null) => {
@@ -180,9 +216,12 @@ export const StaffRotaPage = () => {
   const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
   const [holidayRequestsLoading, setHolidayRequestsLoading] = useState(true);
   const [holidayRequestBusyId, setHolidayRequestBusyId] = useState<string | null>(null);
+  const [openEditorCellKey, setOpenEditorCellKey] = useState<string | null>(null);
+  const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
   const isAdmin = user?.role === "ADMIN";
+  const canEditGrid = user?.role === "MANAGER" || user?.role === "ADMIN";
   const isSettingsRoute = location.pathname.startsWith("/settings");
 
   const loadOverview = async (periodId?: string, silent = false) => {
@@ -223,6 +262,7 @@ export const StaffRotaPage = () => {
   };
 
   useEffect(() => {
+    setOpenEditorCellKey(null);
     void loadOverview(selectedPeriodId);
     void loadHolidayRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -354,6 +394,59 @@ export const StaffRotaPage = () => {
     }
   };
 
+  const confirmHolidayApprovedOverride = (
+    cell: RotaGridCell,
+    actionLabel: string,
+  ) => {
+    if (cell.source !== "HOLIDAY_APPROVED") {
+      return true;
+    }
+
+    return window.confirm(
+      `${actionLabel}?\n\nThis rota cell came from an approved holiday request. The request record will stay approved, but the live rota assignment will be replaced manually.`,
+    );
+  };
+
+  const saveCellAssignment = async (
+    input: {
+      rotaPeriodId: string;
+      staffId: string;
+      date: string;
+      shiftType: RotaShiftType;
+    },
+    cellKey: string,
+  ) => {
+    setSavingCellKey(cellKey);
+    try {
+      const result = await apiPost<SaveRotaAssignmentResponse>("/api/rota/assignments", input);
+      setOpenEditorCellKey(null);
+      await loadOverview(selectedPeriodId, true);
+      success(
+        result.replacedHolidayApproved
+          ? "Saved manual rota override."
+          : "Rota assignment saved.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save rota assignment");
+    } finally {
+      setSavingCellKey(null);
+    }
+  };
+
+  const clearCellAssignment = async (assignmentId: string, cellKey: string) => {
+    setSavingCellKey(cellKey);
+    try {
+      await apiDelete<ClearRotaAssignmentResponse>(`/api/rota/assignments/${encodeURIComponent(assignmentId)}`);
+      setOpenEditorCellKey(null);
+      await loadOverview(selectedPeriodId, true);
+      success("Rota assignment cleared.");
+    } catch (clearError) {
+      error(clearError instanceof Error ? clearError.message : "Failed to clear rota assignment");
+    } finally {
+      setSavingCellKey(null);
+    }
+  };
+
   return (
     <div className="page-shell rota-page">
       <section className="card">
@@ -362,7 +455,7 @@ export const StaffRotaPage = () => {
             <p className="dashboard-v1-kicker">{breadcrumbLabel}</p>
             <h1>Staff Rota</h1>
             <p className="muted-text">
-              Review imported rota periods, check who is scheduled across the six-week block, and use the same Store Info opening hours that power the dashboard Staff Today widget.
+              Review imported rota periods, make live day-level scheduling edits, and use the same Store Info opening hours that power the dashboard Staff Today widget.
             </p>
           </div>
           <div className="actions-inline">
@@ -407,7 +500,7 @@ export const StaffRotaPage = () => {
         <div className="card-header-row">
           <div>
             <h2>Period Review</h2>
-            <p className="muted-text">Week-grouped rota review with imported assignments and closed-day context.</p>
+            <p className="muted-text">Week-grouped rota review with imported assignments, inline manager edits, and closed-day context.</p>
           </div>
           <div className="actions-inline rota-period-controls">
             <button type="button" onClick={() => previousPeriod && goToPeriod(previousPeriod.id)} disabled={!previousPeriod}>
@@ -503,28 +596,121 @@ export const StaffRotaPage = () => {
                       <td className="rota-sticky rota-sticky-role rota-staff-role">
                         <span className="status-badge status-info">{row.role}</span>
                       </td>
-                      {row.cells.map((cell) => (
-                        <td
-                          key={`${row.staffId}-${cell.date}`}
-                          className={cell.isClosed ? "rota-cell rota-cell-closed" : "rota-cell"}
-                          title={cell.note || cell.rawValue || cell.closedReason || undefined}
-                        >
-                          {cell.shiftType ? (
-                            <div className="rota-cell-content">
-                              <span className={shiftClassName(cell.shiftType)}>
-                                {cell.shiftType === "HOLIDAY" ? "H" : shiftLabel(cell.shiftType)}
-                              </span>
-                              {cell.note ? <span className="muted-text rota-cell-note">{cell.note}</span> : null}
-                              {cell.source === "IMPORT" ? <span className="table-secondary">Imported</span> : null}
-                              {cell.source === "HOLIDAY_APPROVED" ? <span className="table-secondary">Holiday approved</span> : null}
-                            </div>
-                          ) : cell.isClosed ? (
-                            <span className="table-secondary">{cell.closedReason ?? "Closed"}</span>
-                          ) : (
-                            <span className="table-secondary">—</span>
-                          )}
-                        </td>
-                      ))}
+                      {row.cells.map((cell) => {
+                        const cellKey = `${row.staffId}-${cell.date}`;
+                        const isEditorOpen = openEditorCellKey === cellKey;
+                        const isSavingCell = savingCellKey === cellKey;
+                        const cellSourceLabel = sourceLabel(cell.source);
+                        const triggerTitle = cell.isClosed
+                          ? cell.closedReason || "Closed"
+                          : canEditGrid
+                            ? `Edit ${row.name} on ${cell.date}`
+                            : cell.note || cell.rawValue || cellSourceLabel || "Rota assignment";
+
+                        return (
+                          <td
+                            key={cellKey}
+                            className={[
+                              "rota-cell",
+                              cell.isClosed ? "rota-cell-closed" : "",
+                              canEditGrid && !cell.isClosed ? "rota-cell-editable" : "",
+                              isEditorOpen ? "rota-cell-open" : "",
+                            ].filter(Boolean).join(" ")}
+                            title={triggerTitle}
+                          >
+                            {cell.isClosed ? (
+                              <span className="table-secondary">{cell.closedReason ?? "Closed"}</span>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="rota-cell-trigger"
+                                  onClick={() => setOpenEditorCellKey((current) => current === cellKey ? null : cellKey)}
+                                  disabled={!canEditGrid || isSavingCell}
+                                >
+                                  <div className="rota-cell-content">
+                                    {cell.shiftType ? (
+                                      <span className={shiftClassName(cell.shiftType)}>
+                                        {shiftShortLabel(cell.shiftType)}
+                                      </span>
+                                    ) : (
+                                      <span className="table-secondary">—</span>
+                                    )}
+                                    {cell.note ? <span className="muted-text rota-cell-note">{cell.note}</span> : null}
+                                    {cellSourceLabel ? <span className="table-secondary">{cellSourceLabel}</span> : null}
+                                  </div>
+                                </button>
+
+                                {isEditorOpen ? (
+                                  <div className="rota-cell-popover">
+                                    <div className="rota-cell-popover-copy">
+                                      <strong>{row.name}</strong>
+                                      <span>{cell.date}</span>
+                                      {cellSourceLabel ? <span className="table-secondary">Current source: {cellSourceLabel}</span> : null}
+                                    </div>
+                                    <div className="rota-cell-popover-actions">
+                                      {([
+                                        ["FULL_DAY", "Full Day"],
+                                        ["HALF_DAY_AM", "Half Day AM"],
+                                        ["HALF_DAY_PM", "Half Day PM"],
+                                        ["HOLIDAY", "Holiday"],
+                                      ] as Array<[RotaShiftType, string]>).map(([shiftType, label]) => (
+                                        <button
+                                          key={shiftType}
+                                          type="button"
+                                          disabled={isSavingCell}
+                                          onClick={() => {
+                                            if (!currentPeriod) {
+                                              return;
+                                            }
+                                            if (!confirmHolidayApprovedOverride(cell, `Replace with ${label}`)) {
+                                              return;
+                                            }
+                                            void saveCellAssignment(
+                                              {
+                                                rotaPeriodId: currentPeriod.id,
+                                                staffId: row.staffId,
+                                                date: cell.date,
+                                                shiftType,
+                                              },
+                                              cellKey,
+                                            );
+                                          }}
+                                        >
+                                          {label}
+                                        </button>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        disabled={!cell.assignmentId || isSavingCell}
+                                        onClick={() => {
+                                          if (!cell.assignmentId) {
+                                            return;
+                                          }
+                                          if (!confirmHolidayApprovedOverride(cell, "Clear this assignment")) {
+                                            return;
+                                          }
+                                          void clearCellAssignment(cell.assignmentId, cellKey);
+                                        }}
+                                      >
+                                        Clear
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isSavingCell}
+                                        onClick={() => setOpenEditorCellKey(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                    {isSavingCell ? <span className="muted-text">Saving...</span> : null}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   )) : (
                     <tr>

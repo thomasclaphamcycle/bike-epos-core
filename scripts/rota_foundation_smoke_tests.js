@@ -431,6 +431,92 @@ const run = async () => {
     assert.equal(tuesdayCell.source, "HOLIDAY_APPROVED");
     assert.equal(tuesdayCell.note, "Family trip");
 
+    const manualAssignRes = await fetchJson("/api/rota/assignments", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: JORDAN_STAFF_ID,
+        date: IMPORTED_MONDAY,
+        shiftType: "HALF_DAY_AM",
+      }),
+    });
+    assert.equal(manualAssignRes.status, 201, JSON.stringify(manualAssignRes.json));
+    assert.equal(manualAssignRes.json.assignment.source, "MANUAL");
+    assert.equal(manualAssignRes.json.assignment.shiftType, "HALF_DAY_AM");
+
+    const mondayAfterManualEditRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_MONDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(mondayAfterManualEditRes.status, 200, JSON.stringify(mondayAfterManualEditRes.json));
+    assert.equal(mondayAfterManualEditRes.json.staffToday.summary.scheduledStaffCount, 1);
+    assert.equal(mondayAfterManualEditRes.json.staffToday.summary.holidayStaffCount, 1);
+    assert.deepEqual(
+      mondayAfterManualEditRes.json.staffToday.staff.map((entry) => entry.name),
+      ["Jordan Patel"],
+    );
+
+    const overwriteHolidayApprovedRes = await fetchJson("/api/rota/assignments", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: ALEX_STAFF_ID,
+        date: IMPORTED_TUESDAY,
+        shiftType: "FULL_DAY",
+      }),
+    });
+    assert.equal(overwriteHolidayApprovedRes.status, 201, JSON.stringify(overwriteHolidayApprovedRes.json));
+    assert.equal(overwriteHolidayApprovedRes.json.assignment.source, "MANUAL");
+    assert.equal(overwriteHolidayApprovedRes.json.replacedHolidayApproved, true);
+
+    const overviewAfterOverwriteRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
+    assert.equal(overviewAfterOverwriteRes.status, 200, JSON.stringify(overviewAfterOverwriteRes.json));
+    const alexRowAfterOverwrite = overviewAfterOverwriteRes.json.period.staffRows.find((row) => row.name === "Alex Turner");
+    const tuesdayCellAfterOverwrite = alexRowAfterOverwrite.cells.find((cell) => cell.date === IMPORTED_TUESDAY);
+    assert.equal(tuesdayCellAfterOverwrite.shiftType, "FULL_DAY");
+    assert.equal(tuesdayCellAfterOverwrite.source, "MANUAL");
+
+    const tuesdayAfterOverwriteRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(tuesdayAfterOverwriteRes.status, 200, JSON.stringify(tuesdayAfterOverwriteRes.json));
+    assert.equal(tuesdayAfterOverwriteRes.json.staffToday.summary.scheduledStaffCount, 2);
+    assert.equal(tuesdayAfterOverwriteRes.json.staffToday.summary.holidayStaffCount, 0);
+    assert.deepEqual(
+      tuesdayAfterOverwriteRes.json.staffToday.staff.map((entry) => entry.name).sort(),
+      ["Alex Turner", "Jordan Patel"],
+    );
+
+    const closedDayEditRes = await fetchJson("/api/rota/assignments", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: JORDAN_STAFF_ID,
+        date: IMPORTED_FRIDAY,
+        shiftType: "FULL_DAY",
+      }),
+    });
+    assert.equal(closedDayEditRes.status, 409, JSON.stringify(closedDayEditRes.json));
+
+    const clearManualAssignRes = await fetchJson(`/api/rota/assignments/${manualAssignRes.json.assignment.id}`, {
+      method: "DELETE",
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(clearManualAssignRes.status, 200, JSON.stringify(clearManualAssignRes.json));
+    assert.equal(clearManualAssignRes.json.clearedAssignmentId, manualAssignRes.json.assignment.id);
+
+    const mondayAfterClearRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_MONDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(mondayAfterClearRes.status, 200, JSON.stringify(mondayAfterClearRes.json));
+    assert.equal(mondayAfterClearRes.json.staffToday.summary.scheduledStaffCount, 0);
+    assert.equal(mondayAfterClearRes.json.staffToday.summary.holidayStaffCount, 1);
+
     const closedDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_FRIDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(closedDayRes.status, 200, JSON.stringify(closedDayRes.json));
     assert.equal(closedDayRes.json.staffToday.summary.isClosed, true);

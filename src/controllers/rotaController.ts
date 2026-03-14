@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import { confirmRotaSpreadsheetImport, previewRotaSpreadsheetImport } from "../services/rotaImportService";
-import { getRotaOverview } from "../services/rotaService";
+import { clearRotaAssignment, getRotaOverview, saveManualRotaAssignment } from "../services/rotaService";
 import { HttpError } from "../utils/http";
+import { RotaShiftType } from "@prisma/client";
 
 const parseImportBody = (body: unknown, requirePreviewKey = false) => {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -37,6 +38,49 @@ const parseImportBody = (body: unknown, requirePreviewKey = false) => {
   };
 };
 
+const isRotaShiftType = (value: string): value is RotaShiftType =>
+  value === "FULL_DAY" ||
+  value === "HALF_DAY_AM" ||
+  value === "HALF_DAY_PM" ||
+  value === "HOLIDAY";
+
+const parseAssignmentBody = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "rota assignment body must be an object", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const record = body as {
+    rotaPeriodId?: unknown;
+    staffId?: unknown;
+    date?: unknown;
+    shiftType?: unknown;
+  };
+
+  if (typeof record.rotaPeriodId !== "string" || !record.rotaPeriodId.trim()) {
+    throw new HttpError(400, "rotaPeriodId must be a string", "INVALID_ROTA_ASSIGNMENT");
+  }
+  if (typeof record.staffId !== "string" || !record.staffId.trim()) {
+    throw new HttpError(400, "staffId must be a string", "INVALID_ROTA_ASSIGNMENT");
+  }
+  if (typeof record.date !== "string" || !record.date.trim()) {
+    throw new HttpError(400, "date must be a string", "INVALID_ROTA_ASSIGNMENT");
+  }
+  if (typeof record.shiftType !== "string" || !isRotaShiftType(record.shiftType.trim().toUpperCase())) {
+    throw new HttpError(
+      400,
+      "shiftType must be FULL_DAY, HALF_DAY_AM, HALF_DAY_PM, or HOLIDAY",
+      "INVALID_ROTA_ASSIGNMENT",
+    );
+  }
+
+  return {
+    rotaPeriodId: record.rotaPeriodId.trim(),
+    staffId: record.staffId.trim(),
+    date: record.date.trim(),
+    shiftType: record.shiftType.trim().toUpperCase() as RotaShiftType,
+  };
+};
+
 export const listRotaOverviewHandler = async (req: Request, res: Response) => {
   const periodId = typeof req.query.periodId === "string" ? req.query.periodId.trim() : undefined;
   const overview = await getRotaOverview({ periodId });
@@ -56,4 +100,16 @@ export const confirmRotaImportHandler = async (req: Request, res: Response) => {
     createdByStaffId: getRequestStaffActorId(req),
   });
   res.status(201).json(result);
+};
+
+export const saveRotaAssignmentHandler = async (req: Request, res: Response) => {
+  const body = parseAssignmentBody(req.body);
+  const result = await saveManualRotaAssignment(body);
+  res.status(201).json(result);
+};
+
+export const clearRotaAssignmentHandler = async (req: Request, res: Response) => {
+  const assignmentId = typeof req.params.assignmentId === "string" ? req.params.assignmentId.trim() : "";
+  const result = await clearRotaAssignment({ assignmentId });
+  res.json(result);
 };

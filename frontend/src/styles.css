@@ -1970,13 +1970,46 @@ th {
 }
 
 .rota-cell {
+  position: relative;
   vertical-align: top;
   min-width: 110px;
   background: #fff;
 }
 
+.rota-cell-editable {
+  background: #fbfdff;
+}
+
+.rota-cell-open {
+  z-index: 2;
+}
+
 .rota-cell-closed {
   background: #fffaf0;
+}
+
+.rota-cell-trigger {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rota-cell-trigger:disabled {
+  cursor: default;
+}
+
+.rota-cell-editable .rota-cell-trigger:hover {
+  background: #f4f8ff;
+}
+
+.rota-cell-editable .rota-cell-trigger:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+  border-radius: 10px;
 }
 
 .rota-cell-content {
@@ -1986,6 +2019,43 @@ th {
 
 .rota-cell-note {
   font-size: 0.82rem;
+}
+
+.rota-cell-popover {
+  position: absolute;
+  left: 8px;
+  top: calc(100% + 6px);
+  z-index: 10;
+  width: 180px;
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.rota-cell-popover-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.rota-cell-popover-copy strong {
+  font-size: 0.85rem;
+}
+
+.rota-cell-popover-copy span {
+  font-size: 0.78rem;
+}
+
+.rota-cell-popover-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.rota-cell-popover-actions button {
+  justify-content: flex-start;
 }
 
 .rota-shift-pill {
