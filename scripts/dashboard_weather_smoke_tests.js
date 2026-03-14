@@ -3,6 +3,7 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
+const { createServer } = require("node:http");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 
@@ -95,9 +96,55 @@ const waitForExit = (child, timeoutMs) =>
     });
   });
 
+const startGeocodeStubServer = () =>
+  new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const url = new URL(req.url, "http://127.0.0.1");
+
+      if (url.pathname !== "/geocode") {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "not_found" }));
+        return;
+      }
+
+      const query = (url.searchParams.get("name") || "").trim().toUpperCase();
+      const body = query === "SW11 1JD"
+        ? {
+            results: [
+              {
+                latitude: 51.4643,
+                longitude: -0.1703,
+                name: "Battersea",
+                admin1: "England",
+                country: "United Kingdom",
+              },
+            ],
+          }
+        : { results: [] };
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(body));
+    });
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("Could not determine stub geocode server address."));
+        return;
+      }
+
+      resolve({
+        server,
+        url: `http://127.0.0.1:${address.port}/geocode`,
+      });
+    });
+  });
+
 const run = async () => {
   let startedServer = false;
   let serverProcess = null;
+  let geocodeStubServer = null;
 
   try {
     const existing = await serverIsHealthy();
@@ -108,6 +155,9 @@ const run = async () => {
     }
 
     if (!existing) {
+      const geocodeStub = await startGeocodeStubServer();
+      geocodeStubServer = geocodeStub.server;
+
       serverProcess = spawn("npx", ["ts-node", "--transpile-only", "src/server.ts"], {
         stdio: ["ignore", "pipe", "pipe"],
         env: {
@@ -116,6 +166,7 @@ const run = async () => {
           DATABASE_URL,
           PORT: new URL(BASE_URL).port || "3100",
           COREPOS_WEATHER_STUB: "1",
+          OPEN_METEO_GEOCODE_URL: geocodeStub.url,
         },
       });
       startedServer = true;
@@ -135,19 +186,9 @@ const run = async () => {
     assert.equal(missingRes.json.weather.status, "missing_location");
 
     await prisma.appConfig.upsert({
-      where: { key: "store.city" },
-      create: { key: "store.city", value: "Clapham" },
-      update: { value: "Clapham" },
-    });
-    await prisma.appConfig.upsert({
-      where: { key: "store.latitude" },
-      create: { key: "store.latitude", value: 51.4526 },
-      update: { value: 51.4526 },
-    });
-    await prisma.appConfig.upsert({
-      where: { key: "store.longitude" },
-      create: { key: "store.longitude", value: -0.1477 },
-      update: { value: -0.1477 },
+      where: { key: "store.postcode" },
+      create: { key: "store.postcode", value: "SW11 1JD" },
+      update: { value: "SW11 1JD" },
     });
 
     const readyRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
@@ -157,6 +198,18 @@ const run = async () => {
     assert.ok(readyRes.json.weather.locationLabel.trim().length > 0);
     assertDailyWeatherSnapshot(readyRes.json.weather.today, "today");
     assertDailyWeatherSnapshot(readyRes.json.weather.tomorrow, "tomorrow");
+
+    await prisma.appConfig.upsert({
+      where: { key: "store.postcode" },
+      create: { key: "store.postcode", value: "INVALID POSTCODE" },
+      update: { value: "INVALID POSTCODE" },
+    });
+
+    const unresolvedRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
+    assert.equal(unresolvedRes.status, 200, JSON.stringify(unresolvedRes.json));
+    assert.equal(unresolvedRes.json.weather.status, "unavailable");
+    assert.equal(typeof unresolvedRes.json.weather.message, "string");
+    assert.ok(unresolvedRes.json.weather.message.trim().length > 0);
 
     console.log("[dashboard-weather-smoke] dashboard weather endpoint passed");
   } finally {
@@ -169,6 +222,10 @@ const run = async () => {
         serverProcess.kill("SIGKILL");
         await waitForExit(serverProcess, 500);
       }
+    }
+
+    if (geocodeStubServer) {
+      await new Promise((resolve) => geocodeStubServer.close(resolve));
     }
   }
 };

@@ -781,12 +781,12 @@ export const DashboardPage = () => {
             </div>
           ) : weather.status === "missing_location" ? (
             <div className="restricted-panel info-panel">
-              {canViewManagerWidgets ? (
+              {user?.role === "ADMIN" ? (
                 <>
-                  Store location is missing. Update <Link to="/management/settings">Store Info</Link> with a postcode or coordinates to enable dashboard weather.
+                  Store postcode or coordinates are missing. Update <Link to="/settings/store-info">Store Info</Link> to enable dashboard weather.
                 </>
               ) : (
-                "Store location is not configured yet. Ask a manager to update Store Info to enable dashboard weather."
+                "Store weather location is not configured yet. Ask an admin to update Store Info with a postcode or coordinates."
               )}
             </div>
           ) : (

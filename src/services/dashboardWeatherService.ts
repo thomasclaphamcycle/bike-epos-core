@@ -43,6 +43,11 @@ type ResolvedStoreLocation = {
   label: string;
 };
 
+type StoreLocationResolution =
+  | { status: "ready"; location: ResolvedStoreLocation }
+  | { status: "missing" }
+  | { status: "unresolvable" };
+
 const FORECAST_BASE_URL = process.env.OPEN_METEO_FORECAST_URL?.trim() || "https://api.open-meteo.com/v1/forecast";
 const GEOCODE_BASE_URL = process.env.OPEN_METEO_GEOCODE_URL?.trim() || "https://geocoding-api.open-meteo.com/v1/search";
 const WEATHER_FETCH_TIMEOUT_MS = Number(process.env.COREPOS_WEATHER_TIMEOUT_MS || 5000);
@@ -162,40 +167,62 @@ const resolveGeocodedLocation = async (query: string): Promise<ResolvedStoreLoca
   return {
     latitude: result.latitude,
     longitude: result.longitude,
-    label: labelParts.join(", "),
+    label: labelParts.join(", ") || query,
   };
 };
 
-const resolveStoreLocation = async (): Promise<ResolvedStoreLocation | null> => {
+const resolveStoreLocation = async (): Promise<StoreLocationResolution> => {
   const settings = await listShopSettings();
   const { city, latitude, longitude, postcode } = settings.store;
 
   if (latitude !== null && longitude !== null) {
     const labelParts = [city, postcode].filter(Boolean);
     return {
-      latitude,
-      longitude,
-      label: labelParts.join(" · ") || settings.store.name,
+      status: "ready",
+      location: {
+        latitude,
+        longitude,
+        label: labelParts.join(" · ") || settings.store.name,
+      },
     };
   }
 
-  const query = postcode || city;
-  if (!query) {
-    return null;
+  if (!postcode) {
+    return { status: "missing" };
   }
 
-  return resolveGeocodedLocation(query);
+  const geocoded = await resolveGeocodedLocation(postcode);
+  if (!geocoded) {
+    return { status: "unresolvable" };
+  }
+
+  return {
+    status: "ready",
+    location: geocoded,
+  };
 };
 
+const buildMissingLocationResponse = (): DashboardWeatherResponse => ({
+  status: "missing_location",
+  source: "open-meteo",
+  message: "Store postcode or coordinates are missing. Update Store Info to enable dashboard weather.",
+});
+
+const buildUnresolvableLocationResponse = (): DashboardWeatherResponse => ({
+  status: "unavailable",
+  source: "open-meteo",
+  message: "Weather location could not be resolved from Store Info. Check the postcode or coordinates.",
+});
+
 const getStubWeather = async (): Promise<DashboardWeatherResponse> => {
-  const location = await resolveStoreLocation();
-  if (!location) {
-    return {
-      status: "missing_location",
-      source: "open-meteo",
-      message: "Store location is missing. Update Store Info to enable dashboard weather.",
-    };
+  const resolution = await resolveStoreLocation();
+  if (resolution.status === "missing") {
+    return buildMissingLocationResponse();
   }
+  if (resolution.status === "unresolvable") {
+    return buildUnresolvableLocationResponse();
+  }
+  const { location } = resolution;
 
   return {
     status: "ready",
@@ -224,20 +251,19 @@ export const getDashboardWeather = async (): Promise<DashboardWeatherResponse> =
   let location: ResolvedStoreLocation | null = null;
 
   try {
-    location = await resolveStoreLocation();
+    const resolution = await resolveStoreLocation();
+    if (resolution.status === "missing") {
+      return buildMissingLocationResponse();
+    }
+    if (resolution.status === "unresolvable") {
+      return buildUnresolvableLocationResponse();
+    }
+    location = resolution.location;
   } catch {
     return {
       status: "unavailable",
       source: "open-meteo",
       message: "Weather temporarily unavailable.",
-    };
-  }
-
-  if (!location) {
-    return {
-      status: "missing_location",
-      source: "open-meteo",
-      message: "Store location is missing. Update Store Info to enable dashboard weather.",
     };
   }
 
