@@ -277,6 +277,7 @@ Manage staff access, oversight, daily operations, and business reporting.
 Features:
 - user roles
 - PIN login
+- Store Info / business identity settings
 - activity logs
 - rota planning
 - workshop capacity planning
@@ -296,6 +297,7 @@ Managers and admins can operate, supervise, and measure the shop effectively.
 
 Implementation status:
 - substantially implemented on the current working line, with ongoing hardening and policy refinement
+- persisted Store Info now provides a central business-identity source for receipts, location-aware features, and future customer-facing profile surfaces
 
 ---
 

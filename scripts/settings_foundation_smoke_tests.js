@@ -13,6 +13,10 @@ const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": "settings-smoke-manager",
 };
+const ADMIN_HEADERS = {
+  "X-Staff-Role": "ADMIN",
+  "X-Staff-Id": "settings-smoke-admin",
+};
 const STAFF_HEADERS = {
   "X-Staff-Role": "STAFF",
   "X-Staff-Id": "settings-smoke-staff",
@@ -35,10 +39,22 @@ const prisma = new PrismaClient({
 
 const SETTINGS_KEYS = [
   "store.name",
+  "store.businessName",
   "store.email",
   "store.phone",
+  "store.website",
+  "store.addressLine1",
+  "store.addressLine2",
   "store.city",
+  "store.region",
   "store.postcode",
+  "store.country",
+  "store.vatNumber",
+  "store.companyNumber",
+  "store.defaultCurrency",
+  "store.timeZone",
+  "store.logoUrl",
+  "store.footerText",
   "store.latitude",
   "store.longitude",
   "pos.defaultTaxRatePercent",
@@ -110,8 +126,14 @@ const run = async () => {
     const defaultRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(defaultRes.status, 200, JSON.stringify(defaultRes.json));
     assert.equal(defaultRes.json.settings.store.name, "Bike EPOS");
+    assert.equal(defaultRes.json.settings.store.businessName, "Bike EPOS");
+    assert.equal(defaultRes.json.settings.store.addressLine1, "");
     assert.equal(defaultRes.json.settings.store.city, "");
     assert.equal(defaultRes.json.settings.store.postcode, "");
+    assert.equal(defaultRes.json.settings.store.country, "United Kingdom");
+    assert.equal(defaultRes.json.settings.store.defaultCurrency, "GBP");
+    assert.equal(defaultRes.json.settings.store.timeZone, "Europe/London");
+    assert.equal(defaultRes.json.settings.store.footerText, "Thank you for your custom.");
     assert.equal(defaultRes.json.settings.store.latitude, null);
     assert.equal(defaultRes.json.settings.store.longitude, null);
     assert.equal(defaultRes.json.settings.pos.defaultTaxRatePercent, 20);
@@ -127,9 +149,22 @@ const run = async () => {
       body: JSON.stringify({
         store: {
           name: "CorePOS Cycles",
+          businessName: "CorePOS Cycles Ltd",
           email: "support@corepos.local",
+          phone: "01234 567890",
+          website: "https://www.corepos.local",
+          addressLine1: "123 Service Lane",
+          addressLine2: "Unit 4",
           city: "Clapham",
+          region: "Greater London",
           postcode: "SW4 0HY",
+          country: "United Kingdom",
+          vatNumber: "GB123456789",
+          companyNumber: "01234567",
+          defaultCurrency: "GBP",
+          timeZone: "Europe/London",
+          logoUrl: "https://cdn.corepos.local/logo.png",
+          footerText: "Thanks for riding with CorePOS.",
           latitude: 51.4526,
           longitude: -0.1477,
         },
@@ -147,10 +182,22 @@ const run = async () => {
     });
     assert.equal(patchRes.status, 200, JSON.stringify(patchRes.json));
     assert.equal(patchRes.json.settings.store.name, "CorePOS Cycles");
+    assert.equal(patchRes.json.settings.store.businessName, "CorePOS Cycles Ltd");
     assert.equal(patchRes.json.settings.store.email, "support@corepos.local");
-    assert.equal(patchRes.json.settings.store.phone, "");
+    assert.equal(patchRes.json.settings.store.phone, "01234 567890");
+    assert.equal(patchRes.json.settings.store.website, "https://www.corepos.local");
+    assert.equal(patchRes.json.settings.store.addressLine1, "123 Service Lane");
+    assert.equal(patchRes.json.settings.store.addressLine2, "Unit 4");
     assert.equal(patchRes.json.settings.store.city, "Clapham");
+    assert.equal(patchRes.json.settings.store.region, "Greater London");
     assert.equal(patchRes.json.settings.store.postcode, "SW4 0HY");
+    assert.equal(patchRes.json.settings.store.country, "United Kingdom");
+    assert.equal(patchRes.json.settings.store.vatNumber, "GB123456789");
+    assert.equal(patchRes.json.settings.store.companyNumber, "01234567");
+    assert.equal(patchRes.json.settings.store.defaultCurrency, "GBP");
+    assert.equal(patchRes.json.settings.store.timeZone, "Europe/London");
+    assert.equal(patchRes.json.settings.store.logoUrl, "https://cdn.corepos.local/logo.png");
+    assert.equal(patchRes.json.settings.store.footerText, "Thanks for riding with CorePOS.");
     assert.equal(patchRes.json.settings.store.latitude, 51.4526);
     assert.equal(patchRes.json.settings.store.longitude, -0.1477);
     assert.equal(patchRes.json.settings.pos.defaultTaxRatePercent, 17.5);
@@ -163,9 +210,59 @@ const run = async () => {
     assert.equal(persistedRes.status, 200, JSON.stringify(persistedRes.json));
     assert.equal(persistedRes.json.settings.store.name, "CorePOS Cycles");
 
+    const storeInfoRes = await fetchJson("/api/settings/store-info", { headers: ADMIN_HEADERS });
+    assert.equal(storeInfoRes.status, 200, JSON.stringify(storeInfoRes.json));
+    assert.equal(storeInfoRes.json.store.businessName, "CorePOS Cycles Ltd");
+    assert.equal(storeInfoRes.json.store.footerText, "Thanks for riding with CorePOS.");
+
+    const storeInfoPatchRes = await fetchJson("/api/settings/store-info", {
+      method: "PATCH",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "CorePOS Workshop & Retail",
+        businessName: "CorePOS Workshop & Retail Ltd",
+        email: "store-info@corepos.local",
+        phone: "020 7946 0958",
+        website: "https://shop.corepos.local",
+        addressLine1: "200 High Street",
+        addressLine2: "",
+        city: "London",
+        region: "Greater London",
+        postcode: "SW4 0HY",
+        country: "United Kingdom",
+        vatNumber: "GB987654321",
+        companyNumber: "76543210",
+        defaultCurrency: "GBP",
+        timeZone: "Europe/London",
+        logoUrl: "",
+        footerText: "See you in the workshop soon.",
+        latitude: 51.4526,
+        longitude: -0.1477,
+      }),
+    });
+    assert.equal(storeInfoPatchRes.status, 200, JSON.stringify(storeInfoPatchRes.json));
+    assert.equal(storeInfoPatchRes.json.store.name, "CorePOS Workshop & Retail");
+    assert.equal(storeInfoPatchRes.json.store.email, "store-info@corepos.local");
+    assert.equal(storeInfoPatchRes.json.store.footerText, "See you in the workshop soon.");
+
+    const receiptSettings = await prisma.receiptSettings.findUnique({
+      where: { id: 1 },
+    });
+    assert.ok(receiptSettings, "Expected receipt settings compatibility record to exist");
+    assert.equal(receiptSettings.shopName, "CorePOS Workshop & Retail");
+    assert.equal(receiptSettings.vatNumber, "GB987654321");
+    assert.equal(receiptSettings.footerText, "See you in the workshop soon.");
+
     const staffRes = await fetchJson("/api/settings", { headers: STAFF_HEADERS });
     assert.equal(staffRes.status, 403, JSON.stringify(staffRes.json));
     assert.equal(staffRes.json.error.code, "INSUFFICIENT_ROLE");
+
+    const managerStoreInfoRes = await fetchJson("/api/settings/store-info", { headers: MANAGER_HEADERS });
+    assert.equal(managerStoreInfoRes.status, 403, JSON.stringify(managerStoreInfoRes.json));
+    assert.equal(managerStoreInfoRes.json.error.code, "INSUFFICIENT_ROLE");
 
     console.log("[settings-smoke] persisted settings API passed");
   } finally {

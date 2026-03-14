@@ -13,10 +13,22 @@ type SettingDefinition<T> = {
 export type ShopSettings = {
   store: {
     name: string;
+    businessName: string;
     email: string;
     phone: string;
+    website: string;
+    addressLine1: string;
+    addressLine2: string;
     city: string;
+    region: string;
     postcode: string;
+    country: string;
+    vatNumber: string;
+    companyNumber: string;
+    defaultCurrency: string;
+    timeZone: string;
+    logoUrl: string;
+    footerText: string;
     latitude: number | null;
     longitude: number | null;
   };
@@ -37,6 +49,8 @@ export type ShopSettingsPatch = Partial<{
   [Section in keyof ShopSettings]: Partial<ShopSettings[Section]>;
 }>;
 
+export type StoreInfoSettings = ShopSettings["store"];
+
 const normalizeTextSetting = (
   value: unknown,
   field: string,
@@ -55,6 +69,68 @@ const normalizeTextSetting = (
   }
   if (normalized.length > maxLength) {
     throw new HttpError(400, `${field} must be ${maxLength} characters or fewer`, "INVALID_SETTINGS");
+  }
+
+  return normalized;
+};
+
+const normalizeEmailSetting = (value: unknown, field: string) => {
+  const normalized = normalizeTextSetting(value, field, { maxLength: 160 });
+  if (normalized.length === 0) {
+    return normalized;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalized)) {
+    throw new HttpError(400, `${field} must be a valid email address`, "INVALID_SETTINGS");
+  }
+
+  return normalized.toLowerCase();
+};
+
+const normalizeUrlSetting = (value: unknown, field: string) => {
+  const normalized = normalizeTextSetting(value, field, { maxLength: 240 });
+  if (normalized.length === 0) {
+    return normalized;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new HttpError(400, `${field} must be a valid URL`, "INVALID_SETTINGS");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new HttpError(400, `${field} must start with http:// or https://`, "INVALID_SETTINGS");
+  }
+
+  return normalized;
+};
+
+const normalizeCurrencySetting = (value: unknown, field: string) => {
+  const normalized = normalizeTextSetting(value, field, {
+    allowEmpty: false,
+    maxLength: 3,
+  }).toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    throw new HttpError(400, `${field} must be a 3-letter currency code`, "INVALID_SETTINGS");
+  }
+
+  return normalized;
+};
+
+const normalizeTimeZoneSetting = (value: unknown, field: string) => {
+  const normalized = normalizeTextSetting(value, field, {
+    allowEmpty: false,
+    maxLength: 120,
+  });
+
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: normalized }).format(new Date());
+  } catch {
+    throw new HttpError(400, `${field} must be a valid IANA time zone`, "INVALID_SETTINGS");
   }
 
   return normalized;
@@ -119,25 +195,90 @@ const SETTINGS_DEFINITIONS = {
     defaultValue: "Bike EPOS",
     validate: (value: unknown) => normalizeTextSetting(value, "store.name", { allowEmpty: false, maxLength: 120 }),
   },
+  "store.businessName": {
+    key: "store.businessName",
+    defaultValue: "Bike EPOS",
+    validate: (value: unknown) =>
+      normalizeTextSetting(value, "store.businessName", { allowEmpty: false, maxLength: 160 }),
+  },
   "store.email": {
     key: "store.email",
     defaultValue: "",
-    validate: (value: unknown) => normalizeTextSetting(value, "store.email", { maxLength: 160 }),
+    validate: (value: unknown) => normalizeEmailSetting(value, "store.email"),
   },
   "store.phone": {
     key: "store.phone",
     defaultValue: "",
     validate: (value: unknown) => normalizeTextSetting(value, "store.phone", { maxLength: 40 }),
   },
+  "store.website": {
+    key: "store.website",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeUrlSetting(value, "store.website"),
+  },
+  "store.addressLine1": {
+    key: "store.addressLine1",
+    defaultValue: "",
+    validate: (value: unknown) =>
+      normalizeTextSetting(value, "store.addressLine1", { allowEmpty: false, maxLength: 160 }),
+  },
+  "store.addressLine2": {
+    key: "store.addressLine2",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.addressLine2", { maxLength: 160 }),
+  },
   "store.city": {
     key: "store.city",
     defaultValue: "",
-    validate: (value: unknown) => normalizeTextSetting(value, "store.city", { maxLength: 120 }),
+    validate: (value: unknown) =>
+      normalizeTextSetting(value, "store.city", { allowEmpty: false, maxLength: 120 }),
+  },
+  "store.region": {
+    key: "store.region",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.region", { maxLength: 120 }),
   },
   "store.postcode": {
     key: "store.postcode",
     defaultValue: "",
-    validate: (value: unknown) => normalizeTextSetting(value, "store.postcode", { maxLength: 32 }),
+    validate: (value: unknown) =>
+      normalizeTextSetting(value, "store.postcode", { allowEmpty: false, maxLength: 32 }),
+  },
+  "store.country": {
+    key: "store.country",
+    defaultValue: "United Kingdom",
+    validate: (value: unknown) =>
+      normalizeTextSetting(value, "store.country", { allowEmpty: false, maxLength: 120 }),
+  },
+  "store.vatNumber": {
+    key: "store.vatNumber",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.vatNumber", { maxLength: 64 }),
+  },
+  "store.companyNumber": {
+    key: "store.companyNumber",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.companyNumber", { maxLength: 64 }),
+  },
+  "store.defaultCurrency": {
+    key: "store.defaultCurrency",
+    defaultValue: "GBP",
+    validate: (value: unknown) => normalizeCurrencySetting(value, "store.defaultCurrency"),
+  },
+  "store.timeZone": {
+    key: "store.timeZone",
+    defaultValue: "Europe/London",
+    validate: (value: unknown) => normalizeTimeZoneSetting(value, "store.timeZone"),
+  },
+  "store.logoUrl": {
+    key: "store.logoUrl",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeUrlSetting(value, "store.logoUrl"),
+  },
+  "store.footerText": {
+    key: "store.footerText",
+    defaultValue: "Thank you for your custom.",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.footerText", { maxLength: 400 }),
   },
   "store.latitude": {
     key: "store.latitude",
@@ -193,10 +334,37 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
   return {
     store: {
       name: getSettingValue(valueByKey.get("store.name"), SETTINGS_DEFINITIONS["store.name"]),
+      businessName: getSettingValue(
+        valueByKey.get("store.businessName"),
+        SETTINGS_DEFINITIONS["store.businessName"],
+      ),
       email: getSettingValue(valueByKey.get("store.email"), SETTINGS_DEFINITIONS["store.email"]),
       phone: getSettingValue(valueByKey.get("store.phone"), SETTINGS_DEFINITIONS["store.phone"]),
+      website: getSettingValue(valueByKey.get("store.website"), SETTINGS_DEFINITIONS["store.website"]),
+      addressLine1: getSettingValue(
+        valueByKey.get("store.addressLine1"),
+        SETTINGS_DEFINITIONS["store.addressLine1"],
+      ),
+      addressLine2: getSettingValue(
+        valueByKey.get("store.addressLine2"),
+        SETTINGS_DEFINITIONS["store.addressLine2"],
+      ),
       city: getSettingValue(valueByKey.get("store.city"), SETTINGS_DEFINITIONS["store.city"]),
+      region: getSettingValue(valueByKey.get("store.region"), SETTINGS_DEFINITIONS["store.region"]),
       postcode: getSettingValue(valueByKey.get("store.postcode"), SETTINGS_DEFINITIONS["store.postcode"]),
+      country: getSettingValue(valueByKey.get("store.country"), SETTINGS_DEFINITIONS["store.country"]),
+      vatNumber: getSettingValue(valueByKey.get("store.vatNumber"), SETTINGS_DEFINITIONS["store.vatNumber"]),
+      companyNumber: getSettingValue(
+        valueByKey.get("store.companyNumber"),
+        SETTINGS_DEFINITIONS["store.companyNumber"],
+      ),
+      defaultCurrency: getSettingValue(
+        valueByKey.get("store.defaultCurrency"),
+        SETTINGS_DEFINITIONS["store.defaultCurrency"],
+      ),
+      timeZone: getSettingValue(valueByKey.get("store.timeZone"), SETTINGS_DEFINITIONS["store.timeZone"]),
+      logoUrl: getSettingValue(valueByKey.get("store.logoUrl"), SETTINGS_DEFINITIONS["store.logoUrl"]),
+      footerText: getSettingValue(valueByKey.get("store.footerText"), SETTINGS_DEFINITIONS["store.footerText"]),
       latitude: getSettingValue(valueByKey.get("store.latitude"), SETTINGS_DEFINITIONS["store.latitude"]),
       longitude: getSettingValue(valueByKey.get("store.longitude"), SETTINGS_DEFINITIONS["store.longitude"]),
     },
@@ -250,6 +418,39 @@ const flattenPatch = (patch: ShopSettingsPatch) => {
   return updates;
 };
 
+const buildReceiptAddress = (store: StoreInfoSettings) =>
+  [
+    store.addressLine1,
+    store.addressLine2,
+    [store.city, store.region].filter(Boolean).join(", "),
+    [store.postcode, store.country].filter(Boolean).join(" "),
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join(", ");
+
+const syncLegacyReceiptSettingsTx = async (
+  tx: Prisma.TransactionClient,
+  store: StoreInfoSettings,
+) => {
+  await tx.receiptSettings.upsert({
+    where: { id: 1 },
+    create: {
+      id: 1,
+      shopName: store.name,
+      shopAddress: buildReceiptAddress(store) || "123 Service Lane",
+      vatNumber: store.vatNumber || null,
+      footerText: store.footerText || "Thank you for your custom.",
+    },
+    update: {
+      shopName: store.name,
+      shopAddress: buildReceiptAddress(store) || "123 Service Lane",
+      vatNumber: store.vatNumber || null,
+      footerText: store.footerText || "Thank you for your custom.",
+    },
+  });
+};
+
 export const listShopSettings = async (db: SettingsClient = prisma): Promise<ShopSettings> => {
   const rows = await db.appConfig.findMany({
     where: {
@@ -275,15 +476,47 @@ export const updateShopSettings = async (
     throw new HttpError(400, "At least one setting update is required", "INVALID_SETTINGS");
   }
 
-  await db.$transaction(
-    Array.from(updates.entries()).map(([key, value]) =>
-      db.appConfig.upsert({
-        where: { key },
-        create: { key, value },
-        update: { value },
-      }),
-    ),
-  );
+  if (db === prisma) {
+    return prisma.$transaction(async (tx) => {
+      for (const [key, value] of updates.entries()) {
+        await tx.appConfig.upsert({
+          where: { key },
+          create: { key, value },
+          update: { value },
+        });
+      }
+
+      const settings = await listShopSettings(tx);
+      if (patch.store) {
+        await syncLegacyReceiptSettingsTx(tx, settings.store);
+      }
+
+      return settings;
+    });
+  }
+
+  for (const [key, value] of updates.entries()) {
+    await db.appConfig.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value },
+    });
+  }
 
   return listShopSettings(db);
+};
+
+export const listStoreInfoSettings = async (
+  db: SettingsClient = prisma,
+): Promise<StoreInfoSettings> => {
+  const settings = await listShopSettings(db);
+  return settings.store;
+};
+
+export const updateStoreInfoSettings = async (
+  patch: Partial<StoreInfoSettings>,
+  db: SettingsClient = prisma,
+): Promise<StoreInfoSettings> => {
+  const settings = await updateShopSettings({ store: patch }, db);
+  return settings.store;
 };

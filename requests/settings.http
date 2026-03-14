@@ -5,6 +5,11 @@ GET {{baseUrl}}/api/settings
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Get Store Info (ADMIN)
+GET {{baseUrl}}/api/settings/store-info
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
 ### Update persisted shop settings (MANAGER+)
 PATCH {{baseUrl}}/api/settings
 Content-Type: application/json
@@ -14,10 +19,22 @@ X-Staff-Id: demo-manager
 {
   "store": {
     "name": "CorePOS Cycles",
+    "businessName": "CorePOS Cycles Ltd",
     "email": "hello@corepos.local",
     "phone": "01234 567890",
+    "website": "https://www.corepos.local",
+    "addressLine1": "123 Service Lane",
+    "addressLine2": "Unit 4",
     "city": "Clapham",
+    "region": "Greater London",
     "postcode": "SW4 0HY",
+    "country": "United Kingdom",
+    "vatNumber": "GB123456789",
+    "companyNumber": "01234567",
+    "defaultCurrency": "GBP",
+    "timeZone": "Europe/London",
+    "logoUrl": "https://cdn.corepos.local/logo.png",
+    "footerText": "Thanks for riding with CorePOS.",
     "latitude": 51.4526,
     "longitude": -0.1477
   },
@@ -32,4 +49,32 @@ X-Staff-Id: demo-manager
   "operations": {
     "lowStockThreshold": 5
   }
+}
+
+### Update Store Info only (ADMIN)
+PATCH {{baseUrl}}/api/settings/store-info
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "name": "CorePOS Cycles",
+  "businessName": "CorePOS Cycles Ltd",
+  "email": "store@corepos.local",
+  "phone": "01234 567890",
+  "website": "https://www.corepos.local",
+  "addressLine1": "123 Service Lane",
+  "addressLine2": "Unit 4",
+  "city": "Clapham",
+  "region": "Greater London",
+  "postcode": "SW4 0HY",
+  "country": "United Kingdom",
+  "vatNumber": "GB123456789",
+  "companyNumber": "01234567",
+  "defaultCurrency": "GBP",
+  "timeZone": "Europe/London",
+  "logoUrl": "https://cdn.corepos.local/logo.png",
+  "footerText": "Thanks for riding with CorePOS.",
+  "latitude": 51.4526,
+  "longitude": -0.1477
 }

@@ -1480,6 +1480,52 @@ th {
   gap: 4px;
 }
 
+.store-info-hero {
+  gap: 16px;
+}
+
+.store-info-sections {
+  display: grid;
+  gap: 18px;
+}
+
+.store-info-section {
+  border: 1px solid #d8e1ec;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fcfdff 0%, #f6f9fc 100%);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.store-info-section h3 {
+  margin: 0;
+}
+
+.store-info-grid {
+  align-items: start;
+}
+
+.store-info-grid-span {
+  grid-column: span 2;
+}
+
+.store-info-grid textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.store-info-support {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.field-error {
+  color: #9f1239;
+  font-size: 0.84rem;
+}
+
 .purchase-form-wide {
   grid-column: span 2;
 }
@@ -2725,6 +2771,10 @@ th {
 
   .purchase-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .store-info-grid-span {
+    grid-column: span 1;
   }
 
   .purchase-form-wide {
