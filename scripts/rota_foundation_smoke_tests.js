@@ -353,11 +353,13 @@ const run = async () => {
     const alexOwnRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=mine", { headers: ALEX_HEADERS });
     assert.equal(alexOwnRequestsRes.status, 200, JSON.stringify(alexOwnRequestsRes.json));
     assert.equal(alexOwnRequestsRes.json.scope, "mine");
+    assert.equal(alexOwnRequestsRes.json.statusFilter, "ALL");
     assert.equal(alexOwnRequestsRes.json.requests.length, 1);
 
-    const managerHolidayRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=all", { headers: MANAGER_HEADERS });
+    const managerHolidayRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=all&status=PENDING", { headers: MANAGER_HEADERS });
     assert.equal(managerHolidayRequestsRes.status, 200, JSON.stringify(managerHolidayRequestsRes.json));
     assert.equal(managerHolidayRequestsRes.json.scope, "all");
+    assert.equal(managerHolidayRequestsRes.json.statusFilter, "PENDING");
     assert.equal(managerHolidayRequestsRes.json.requests.length, 1);
 
     const approveHolidayRes = await fetchJson(`/api/rota/holiday-requests/${alexHolidaySubmitRes.json.request.id}/approve`, {
@@ -366,14 +368,23 @@ const run = async () => {
         ...MANAGER_HEADERS,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        decisionNotes: "Approved and covered on the workshop bench.",
+      }),
     });
     assert.equal(approveHolidayRes.status, 200, JSON.stringify(approveHolidayRes.json));
     assert.equal(approveHolidayRes.json.request.status, "APPROVED");
+    assert.equal(approveHolidayRes.json.request.decisionNotes, "Approved and covered on the workshop bench.");
     assert.deepEqual(
       approveHolidayRes.json.appliedDates,
       ["2026-03-09", "2026-03-10", "2026-03-11", "2026-03-12", "2026-03-14"],
     );
+
+    const alexApprovedRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=mine&status=APPROVED", { headers: ALEX_HEADERS });
+    assert.equal(alexApprovedRequestsRes.status, 200, JSON.stringify(alexApprovedRequestsRes.json));
+    assert.equal(alexApprovedRequestsRes.json.requests.length, 1);
+    assert.equal(alexApprovedRequestsRes.json.requests[0].decisionNotes, "Approved and covered on the workshop bench.");
+    assert.equal(alexApprovedRequestsRes.json.requests[0].reviewedByUserId, MANAGER_HEADERS["X-Staff-Id"]);
 
     const jordanHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
       method: "POST",
@@ -395,10 +406,19 @@ const run = async () => {
         ...ADMIN_HEADERS,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        decisionNotes: "Too many people away that weekend.",
+      }),
     });
     assert.equal(rejectHolidayRes.status, 200, JSON.stringify(rejectHolidayRes.json));
     assert.equal(rejectHolidayRes.json.request.status, "REJECTED");
+    assert.equal(rejectHolidayRes.json.request.decisionNotes, "Too many people away that weekend.");
+
+    const managerRejectedRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=all&status=REJECTED", { headers: MANAGER_HEADERS });
+    assert.equal(managerRejectedRequestsRes.status, 200, JSON.stringify(managerRejectedRequestsRes.json));
+    assert.equal(managerRejectedRequestsRes.json.requests.length, 1);
+    assert.equal(managerRejectedRequestsRes.json.requests[0].staffName, "Jordan Patel");
+    assert.equal(managerRejectedRequestsRes.json.requests[0].decisionNotes, "Too many people away that weekend.");
 
     const cancelHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
       method: "POST",

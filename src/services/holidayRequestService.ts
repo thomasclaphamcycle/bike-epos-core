@@ -55,6 +55,8 @@ export type HolidayRequestListItem = {
   requestedDayCount: number;
 };
 
+export type HolidayRequestStatusFilter = HolidayRequestStatus | "ALL";
+
 const HOLIDAY_REQUEST_SELECT = {
   id: true,
   staffId: true,
@@ -280,17 +282,26 @@ export const listHolidayRequests = async (
   input: {
     actor: HolidayRequestActor;
     scope?: "mine" | "all";
+    status?: HolidayRequestStatusFilter;
   },
   db: HolidayRequestClient = prisma,
 ) => {
   const effectiveScope = input.actor.role === "STAFF" || input.scope === "mine" ? "mine" : "all";
+  const effectiveStatus = input.status && input.status !== "ALL" ? input.status : null;
 
   const requests = await db.holidayRequest.findMany({
-    where: effectiveScope === "mine"
-      ? {
-          staffId: input.actor.actorId,
-        }
-      : undefined,
+    where: {
+      ...(effectiveScope === "mine"
+        ? {
+            staffId: input.actor.actorId,
+          }
+        : {}),
+      ...(effectiveStatus
+        ? {
+            status: effectiveStatus,
+          }
+        : {}),
+    },
     orderBy: [
       { status: "asc" },
       { startDate: "asc" },
@@ -301,6 +312,7 @@ export const listHolidayRequests = async (
 
   return {
     scope: effectiveScope,
+    statusFilter: effectiveStatus ?? "ALL",
     requests: requests.map((request) => toHolidayRequestListItem(request as HolidayRequestRecord)),
   };
 };

@@ -31,6 +31,11 @@ GET http://localhost:3000/api/rota/holiday-requests?scope=mine
 X-Staff-Role: STAFF
 X-Staff-Id: rota-alex-id
 
+### Holiday requests list (mine, approved only)
+GET http://localhost:3000/api/rota/holiday-requests?scope=mine&status=APPROVED
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
 ### Holiday requests list (all)
 GET http://localhost:3000/api/rota/holiday-requests?scope=all
 X-Staff-Role: MANAGER
@@ -54,7 +59,9 @@ Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
-{}
+{
+  "decisionNotes": "Approved and covered on the workshop bench."
+}
 
 ### Reject holiday request
 POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/reject
@@ -62,7 +69,9 @@ Content-Type: application/json
 X-Staff-Role: ADMIN
 X-Staff-Id: rota-admin
 
-{}
+{
+  "decisionNotes": "Too many people away that weekend."
+}
 
 ### Cancel holiday request
 POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/cancel

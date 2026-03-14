@@ -3,11 +3,20 @@ import { getRequestStaffActorId, getRequestStaffRole } from "../middleware/staff
 import {
   approveHolidayRequest,
   cancelHolidayRequest,
+  type HolidayRequestStatusFilter,
   listHolidayRequests,
   rejectHolidayRequest,
   submitHolidayRequest,
 } from "../services/holidayRequestService";
 import { HttpError } from "../utils/http";
+
+const HOLIDAY_STATUS_FILTERS = new Set<HolidayRequestStatusFilter>([
+  "ALL",
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "CANCELLED",
+]);
 
 const getHolidayActor = (req: Request) => {
   const actorId = getRequestStaffActorId(req);
@@ -55,9 +64,19 @@ export const submitHolidayRequestHandler = async (req: Request, res: Response) =
 
 export const listHolidayRequestsHandler = async (req: Request, res: Response) => {
   const scope = req.query.scope === "mine" ? "mine" : req.query.scope === "all" ? "all" : undefined;
+  let status: HolidayRequestStatusFilter | undefined;
+  if (typeof req.query.status === "string") {
+    const normalizedStatus = req.query.status.trim().toUpperCase() as HolidayRequestStatusFilter;
+    if (!HOLIDAY_STATUS_FILTERS.has(normalizedStatus)) {
+      throw new HttpError(400, "status must be one of ALL, PENDING, APPROVED, REJECTED, or CANCELLED", "INVALID_HOLIDAY_REQUEST");
+    }
+    status = normalizedStatus;
+  }
+
   const payload = await listHolidayRequests({
     actor: getHolidayActor(req),
     scope,
+    status,
   });
 
   res.json(payload);

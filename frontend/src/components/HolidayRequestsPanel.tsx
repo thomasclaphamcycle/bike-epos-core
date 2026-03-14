@@ -17,16 +17,25 @@ export type HolidayRequestItem = {
   requestedDayCount: number;
 };
 
+type HolidayRequestFilterOption = {
+  value: string;
+  label: string;
+};
+
 type HolidayRequestsPanelProps = {
   title: string;
   subtitle: string;
   requests: HolidayRequestItem[];
   loading?: boolean;
+  showStaffName?: boolean;
+  filterValue?: string;
+  filterOptions?: HolidayRequestFilterOption[];
+  onFilterChange?: (value: string) => void;
   requestButtonLabel?: string;
   onRequestHoliday?: () => void;
-  onApprove?: (requestId: string) => Promise<void>;
-  onReject?: (requestId: string) => Promise<void>;
-  onCancel?: (requestId: string) => Promise<void>;
+  onApprove?: (request: HolidayRequestItem) => Promise<void>;
+  onReject?: (request: HolidayRequestItem) => Promise<void>;
+  onCancel?: (request: HolidayRequestItem) => Promise<void>;
   busyRequestId?: string | null;
   emptyMessage: string;
 };
@@ -64,6 +73,10 @@ export const HolidayRequestsPanel = ({
   subtitle,
   requests,
   loading = false,
+  showStaffName = true,
+  filterValue,
+  filterOptions,
+  onFilterChange,
   requestButtonLabel,
   onRequestHoliday,
   onApprove,
@@ -86,6 +99,25 @@ export const HolidayRequestsPanel = ({
         ) : null}
       </div>
 
+      {filterOptions?.length && onFilterChange ? (
+        <div className="holiday-request-filter-bar" aria-label={`${title} filter`}>
+          {filterOptions.map((option) => {
+            const isSelected = option.value === filterValue;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={isSelected ? "holiday-request-filter-button holiday-request-filter-button-active" : "holiday-request-filter-button"}
+                onClick={() => onFilterChange(option.value)}
+                aria-pressed={isSelected}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="restricted-panel info-panel">Loading holiday requests...</div>
       ) : requests.length ? (
@@ -98,37 +130,50 @@ export const HolidayRequestsPanel = ({
               <article key={request.id} className="holiday-request-card">
                 <div className="holiday-request-main">
                   <div className="holiday-request-title-row">
-                    <strong>{request.staffName}</strong>
+                    <strong>
+                      {showStaffName
+                        ? request.staffName
+                        : `${formatDate(request.startDate)} to ${formatDate(request.endDate)}`}
+                    </strong>
                     <span className={statusBadgeClassName(request.status)}>{request.status}</span>
                   </div>
                   <div className="holiday-request-meta">
-                    <span>{formatDate(request.startDate)} to {formatDate(request.endDate)}</span>
+                    {showStaffName ? <span>{formatDate(request.startDate)} to {formatDate(request.endDate)}</span> : null}
+                    {showStaffName ? <span>{request.staffRole}</span> : null}
                     <span>{request.requestedDayCount} requested day{request.requestedDayCount === 1 ? "" : "s"}</span>
                     <span>Submitted {formatDateTime(request.submittedAt)}</span>
                   </div>
-                  {request.requestNotes ? <p className="muted-text">{request.requestNotes}</p> : null}
-                  {request.reviewedByName || request.decisionNotes ? (
+                  {request.requestNotes ? (
+                    <p className="holiday-request-note">
+                      <strong>Request note:</strong> {request.requestNotes}
+                    </p>
+                  ) : null}
+                  {request.decisionNotes ? (
+                    <p className="holiday-request-note">
+                      <strong>Decision note:</strong> {request.decisionNotes}
+                    </p>
+                  ) : null}
+                  {request.reviewedByName || request.reviewedAt ? (
                     <p className="muted-text">
                       {request.reviewedByName ? `Reviewed by ${request.reviewedByName}` : "Reviewed"}
                       {request.reviewedAt ? ` · ${formatDateTime(request.reviewedAt)}` : ""}
-                      {request.decisionNotes ? ` · ${request.decisionNotes}` : ""}
                     </p>
                   ) : null}
                 </div>
                 {isPending && (onApprove || onReject || onCancel) ? (
                   <div className="holiday-request-actions-inline">
                     {onApprove ? (
-                      <button type="button" className="primary" onClick={() => void onApprove(request.id)} disabled={isBusy}>
+                      <button type="button" className="primary" onClick={() => void onApprove(request)} disabled={isBusy}>
                         {isBusy ? "Saving..." : "Approve"}
                       </button>
                     ) : null}
                     {onReject ? (
-                      <button type="button" onClick={() => void onReject(request.id)} disabled={isBusy}>
+                      <button type="button" onClick={() => void onReject(request)} disabled={isBusy}>
                         Reject
                       </button>
                     ) : null}
                     {onCancel ? (
-                      <button type="button" onClick={() => void onCancel(request.id)} disabled={isBusy}>
+                      <button type="button" onClick={() => void onCancel(request)} disabled={isBusy}>
                         Cancel
                       </button>
                     ) : null}

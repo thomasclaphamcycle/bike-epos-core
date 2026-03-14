@@ -140,6 +140,7 @@ Rules:
 
 - use imported rota assignments as the source of staff coverage
 - allow staff to submit simple holiday requests without turning the dashboard into a rota planner
+- surface a clear My Holiday Requests view on the dashboard so staff can see pending, approved, rejected, and cancelled request history plus any manager decision notes
 - reflect approved holiday directly from rota HOLIDAY assignments, including a light on-holiday summary when relevant
 - respect store-closed days from Store Info opening hours and rota closed-day overrides
 - keep the widget simple and operational rather than turning it into a full rota planner

@@ -3,6 +3,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import { HolidayDecisionModal } from "../components/HolidayDecisionModal";
 import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
 
 type RotaShiftType = "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
@@ -117,8 +118,11 @@ type RotaImportResult = RotaImportPreview & {
 
 type HolidayRequestsPayload = {
   scope: "mine" | "all";
+  statusFilter: "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   requests: HolidayRequestItem[];
 };
+
+type HolidayRequestFilter = HolidayRequestsPayload["statusFilter"];
 
 type RotaGridCell = NonNullable<RotaOverviewResponse["period"]>["staffRows"][number]["cells"][number];
 
@@ -209,6 +213,14 @@ const formatDateTime = (value: string | null) => {
   });
 };
 
+const HOLIDAY_REQUEST_FILTERS: Array<{ value: HolidayRequestFilter; label: string }> = [
+  { value: "PENDING", label: "Pending" },
+  { value: "ALL", label: "All" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
 export const StaffRotaPage = () => {
   const { user } = useAuth();
   const { error, success } = useToasts();
@@ -225,7 +237,12 @@ export const StaffRotaPage = () => {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
   const [holidayRequestsLoading, setHolidayRequestsLoading] = useState(true);
+  const [holidayRequestFilter, setHolidayRequestFilter] = useState<HolidayRequestFilter>("PENDING");
   const [holidayRequestBusyId, setHolidayRequestBusyId] = useState<string | null>(null);
+  const [decisionModalState, setDecisionModalState] = useState<{
+    mode: "approve" | "reject";
+    request: HolidayRequestItem;
+  } | null>(null);
   const [openEditorCellKey, setOpenEditorCellKey] = useState<string | null>(null);
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
 
@@ -284,7 +301,11 @@ export const StaffRotaPage = () => {
     }
 
     try {
-      const payload = await apiGet<HolidayRequestsPayload>("/api/rota/holiday-requests?scope=all");
+      const query = new URLSearchParams({
+        scope: "all",
+        status: holidayRequestFilter,
+      });
+      const payload = await apiGet<HolidayRequestsPayload>(`/api/rota/holiday-requests?${query.toString()}`);
       setHolidayRequests(payload.requests ?? []);
     } catch (loadError) {
       error(loadError instanceof Error ? loadError.message : "Failed to load holiday requests");
@@ -296,9 +317,13 @@ export const StaffRotaPage = () => {
   useEffect(() => {
     setOpenEditorCellKey(null);
     void loadOverview(selectedPeriodId);
-    void loadHolidayRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriodId, staffScope, roleFilter, searchFilter]);
+
+  useEffect(() => {
+    void loadHolidayRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holidayRequestFilter]);
 
   const currentPeriod = overview?.period ?? null;
   const currentPeriodIndex = useMemo(() => (
@@ -393,39 +418,39 @@ export const StaffRotaPage = () => {
 
   const emptyState = !loading && !currentPeriod;
   const breadcrumbLabel = isSettingsRoute ? "Settings / Staff & Roles" : "Management / Staff";
-  const pendingHolidayRequests = useMemo(
-    () => holidayRequests.filter((request) => request.status === "PENDING"),
-    [holidayRequests],
-  );
-  const recentHolidayRequests = useMemo(
-    () => holidayRequests.filter((request) => request.status !== "PENDING").slice(0, 6),
-    [holidayRequests],
-  );
+  const holidayRequestFilterOptions = useMemo(() => HOLIDAY_REQUEST_FILTERS.map((filter) => ({
+    value: filter.value,
+    label: filter.value === holidayRequestFilter
+      ? `${filter.label} (${holidayRequests.length})`
+      : filter.label,
+  })), [holidayRequestFilter, holidayRequests.length]);
 
-  const approveRequest = async (requestId: string) => {
-    setHolidayRequestBusyId(requestId);
-    try {
-      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(requestId)}/approve`);
-      success("Holiday request approved.");
-      await Promise.all([
-        loadHolidayRequests(true),
-        loadOverview(selectedPeriodId, true),
-      ]);
-    } catch (approveError) {
-      error(approveError instanceof Error ? approveError.message : "Failed to approve holiday request");
-    } finally {
-      setHolidayRequestBusyId(null);
+  const submitDecision = async (decisionNotes: string) => {
+    if (!decisionModalState) {
+      return;
     }
-  };
 
-  const rejectRequest = async (requestId: string) => {
-    setHolidayRequestBusyId(requestId);
+    setHolidayRequestBusyId(decisionModalState.request.id);
     try {
-      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(requestId)}/reject`);
-      success("Holiday request rejected.");
-      await loadHolidayRequests(true);
-    } catch (rejectError) {
-      error(rejectError instanceof Error ? rejectError.message : "Failed to reject holiday request");
+      if (decisionModalState.mode === "approve") {
+        await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(decisionModalState.request.id)}/approve`, {
+          decisionNotes,
+        });
+        success("Holiday request approved.");
+        await Promise.all([
+          loadHolidayRequests(true),
+          loadOverview(selectedPeriodId, true),
+        ]);
+      } else {
+        await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(decisionModalState.request.id)}/reject`, {
+          decisionNotes,
+        });
+        success("Holiday request rejected.");
+        await loadHolidayRequests(true);
+      }
+      setDecisionModalState(null);
+    } catch (decisionError) {
+      error(decisionError instanceof Error ? decisionError.message : "Failed to update holiday request");
     } finally {
       setHolidayRequestBusyId(null);
     }
@@ -969,25 +994,46 @@ export const StaffRotaPage = () => {
         </div>
 
         <HolidayRequestsPanel
-          title="Pending Requests"
-          subtitle="Use this queue to keep rota coverage current without leaving the rota workspace."
-          requests={pendingHolidayRequests}
+          title="Holiday Requests"
+          subtitle="Review pending items first, then switch into broader request history without leaving the rota workspace."
+          requests={holidayRequests}
+          filterValue={holidayRequestFilter}
+          filterOptions={holidayRequestFilterOptions}
+          onFilterChange={(value) => setHolidayRequestFilter(value as HolidayRequestFilter)}
           loading={holidayRequestsLoading}
-          onApprove={approveRequest}
-          onReject={rejectRequest}
+          onApprove={async (request) => {
+            setDecisionModalState({
+              mode: "approve",
+              request,
+            });
+          }}
+          onReject={async (request) => {
+            setDecisionModalState({
+              mode: "reject",
+              request,
+            });
+          }}
           busyRequestId={holidayRequestBusyId}
-          emptyMessage="No pending holiday requests need review right now."
-        />
-
-        <HolidayRequestsPanel
-          title="Recently Reviewed"
-          subtitle="Recent approved, rejected, or cancelled requests for reference."
-          requests={recentHolidayRequests}
-          loading={holidayRequestsLoading}
-          busyRequestId={holidayRequestBusyId}
-          emptyMessage="No reviewed holiday requests yet."
+          emptyMessage={
+            holidayRequestFilter === "PENDING"
+              ? "No pending holiday requests need review right now."
+              : `No ${holidayRequestFilter.toLowerCase()} holiday requests in this view yet.`
+          }
         />
       </section>
+
+      <HolidayDecisionModal
+        open={Boolean(decisionModalState)}
+        mode={decisionModalState?.mode ?? "approve"}
+        request={decisionModalState?.request ?? null}
+        submitting={Boolean(holidayRequestBusyId)}
+        onClose={() => {
+          if (!holidayRequestBusyId) {
+            setDecisionModalState(null);
+          }
+        }}
+        onSubmit={submitDecision}
+      />
     </div>
   );
 };

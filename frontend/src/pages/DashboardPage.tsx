@@ -103,8 +103,11 @@ type DashboardStaffTodayPayload = {
 
 type HolidayRequestsPayload = {
   scope: "mine" | "all";
+  statusFilter: "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   requests: HolidayRequestItem[];
 };
+
+type HolidayRequestFilter = HolidayRequestsPayload["statusFilter"];
 
 type MetricCardProps = {
   label: string;
@@ -210,6 +213,14 @@ const actionSeverityBadgeClass: Record<ActionItem["severity"], string> = {
   INFO: "status-badge status-info",
 };
 
+const HOLIDAY_REQUEST_FILTERS: Array<{ value: HolidayRequestFilter; label: string }> = [
+  { value: "ALL", label: "All" },
+  { value: "PENDING", label: "Pending" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "CANCELLED", label: "Cancelled" },
+];
+
 const actionIconLabel = (item: ActionItem) => {
   const haystack = `${item.type} ${item.title} ${item.reason}`.toLowerCase();
 
@@ -278,6 +289,7 @@ export const DashboardPage = () => {
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
   const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
   const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
+  const [holidayRequestFilter, setHolidayRequestFilter] = useState<HolidayRequestFilter>("ALL");
   const [holidayRequestModalOpen, setHolidayRequestModalOpen] = useState(false);
   const [holidayRequestSubmitting, setHolidayRequestSubmitting] = useState(false);
   const [holidayRequestBusyId, setHolidayRequestBusyId] = useState<string | null>(null);
@@ -609,7 +621,20 @@ export const DashboardPage = () => {
     return `${staffToday.summary.opensAt} - ${staffToday.summary.closesAt}`;
   }, [staffToday]);
 
-  const visibleHolidayRequests = useMemo(() => holidayRequests.slice(0, 4), [holidayRequests]);
+  const visibleHolidayRequests = useMemo(() => (
+    holidayRequestFilter === "ALL"
+      ? holidayRequests
+      : holidayRequests.filter((request) => request.status === holidayRequestFilter)
+  ), [holidayRequestFilter, holidayRequests]);
+  const holidayRequestFilterOptions = useMemo(() => HOLIDAY_REQUEST_FILTERS.map((filter) => {
+    const count = filter.value === "ALL"
+      ? holidayRequests.length
+      : holidayRequests.filter((request) => request.status === filter.value).length;
+    return {
+      value: filter.value,
+      label: `${filter.label} (${count})`,
+    };
+  }), [holidayRequests]);
 
   const submitHolidayRequest = async (values: {
     startDate: string;
@@ -629,10 +654,10 @@ export const DashboardPage = () => {
     }
   };
 
-  const cancelHolidayRequest = async (requestId: string) => {
-    setHolidayRequestBusyId(requestId);
+  const cancelHolidayRequest = async (request: HolidayRequestItem) => {
+    setHolidayRequestBusyId(request.id);
     try {
-      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(requestId)}/cancel`);
+      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(request.id)}/cancel`);
       success("Holiday request cancelled.");
       await loadDashboard();
     } catch (cancelError) {
@@ -881,14 +906,22 @@ export const DashboardPage = () => {
 
           <HolidayRequestsPanel
             title="My Holiday Requests"
-            subtitle="Submit simple rota holiday requests and track approval status."
+            subtitle="Track your holiday history, current status, and any manager decision notes without leaving the dashboard."
             requests={visibleHolidayRequests}
+            showStaffName={false}
+            filterValue={holidayRequestFilter}
+            filterOptions={holidayRequestFilterOptions}
+            onFilterChange={(value) => setHolidayRequestFilter(value as HolidayRequestFilter)}
             loading={loading && holidayRequests.length === 0}
             requestButtonLabel="Request holiday"
             onRequestHoliday={() => setHolidayRequestModalOpen(true)}
             onCancel={cancelHolidayRequest}
             busyRequestId={holidayRequestBusyId}
-            emptyMessage="No holiday requests submitted yet."
+            emptyMessage={
+              holidayRequestFilter === "ALL"
+                ? "No holiday requests submitted yet."
+                : `No ${holidayRequestFilter.toLowerCase()} holiday requests yet.`
+            }
           />
         </section>
 

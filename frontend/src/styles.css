@@ -2226,6 +2226,27 @@ th {
   gap: 12px;
 }
 
+.holiday-request-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.holiday-request-filter-button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: inherit;
+}
+
+.holiday-request-filter-button-active {
+  border-color: #0f766e;
+  background: #ccfbf1;
+  color: #115e59;
+}
+
 .holiday-request-list {
   display: grid;
   gap: 12px;
@@ -2243,6 +2264,11 @@ th {
 .holiday-request-main {
   display: grid;
   gap: 8px;
+}
+
+.holiday-request-note {
+  margin: 0;
+  color: #334155;
 }
 
 .holiday-request-title-row {
