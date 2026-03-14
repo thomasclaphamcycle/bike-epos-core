@@ -71,6 +71,7 @@ type DashboardActionLink = {
   label: string;
   to?: string;
   disabledReason?: string;
+  emphasize?: boolean;
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
@@ -182,17 +183,19 @@ const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }
   );
 };
 
-const DashboardActionButton = ({ label, to, disabledReason }: DashboardActionLink) => {
+const DashboardActionButton = ({ label, to, disabledReason, emphasize = false }: DashboardActionLink) => {
+  const className = `button-link dashboard-link-card${emphasize ? " dashboard-link-card-primary" : ""}`;
+
   if (!to) {
     return (
-      <span className="button-link dashboard-link-card dashboard-link-card-disabled" aria-disabled="true" title={disabledReason}>
+      <span className={`${className} dashboard-link-card-disabled`} aria-disabled="true" title={disabledReason}>
         {label}
       </span>
     );
   }
 
   return (
-    <Link className="button-link dashboard-link-card" to={to}>
+    <Link className={className} to={to}>
       {label}
     </Link>
   );
@@ -411,7 +414,7 @@ export const DashboardPage = () => {
         : undefined;
 
     return [
-      { label: "New Sale", to: "/pos" },
+      { label: "New Sale", to: "/pos", emphasize: true },
       { label: "New Workshop Job", to: "/workshop/check-in" },
       { label: "Customer Search", to: "/customers" },
       {
@@ -420,6 +423,77 @@ export const DashboardPage = () => {
       },
     ];
   }, [user?.role]);
+
+  const dashboardActionItems = useMemo<ActionItem[]>(() => {
+    const items: ActionItem[] = [];
+
+    if (workshopSummary?.overdue) {
+      items.push({
+        type: "OVERDUE_WORKSHOP_JOBS",
+        entityId: "dashboard-overdue-workshop-jobs",
+        title: "Overdue workshop jobs",
+        reason: `${workshopSummary.overdue} workshop job${workshopSummary.overdue === 1 ? "" : "s"} overdue and needing attention.`,
+        severity: "CRITICAL",
+        link: "/workshop",
+      });
+    }
+
+    if (outstandingWorkshopJobs) {
+      items.push({
+        type: "OUTSTANDING_WORKSHOP_JOBS",
+        entityId: "dashboard-outstanding-workshop-jobs",
+        title: "Outstanding workshop jobs",
+        reason: `${outstandingWorkshopJobs} open workshop job${outstandingWorkshopJobs === 1 ? "" : "s"} still moving through the queue.`,
+        severity: workshopWaitingCount > 0 ? "WARNING" : "INFO",
+        link: "/workshop",
+      });
+    }
+
+    if (workshopReadyCount) {
+      items.push({
+        type: "JOBS_READY_FOR_PICKUP",
+        entityId: "dashboard-ready-for-pickup",
+        title: "Jobs ready for pickup",
+        reason: `${workshopReadyCount} bike${workshopReadyCount === 1 ? "" : "s"} waiting for customer collection.`,
+        severity: "WARNING",
+        link: "/workshop/collection",
+      });
+    }
+
+    if (rentalSnapshot.overdue) {
+      items.push({
+        type: "OVERDUE_RENTALS",
+        entityId: "dashboard-overdue-rentals",
+        title: "Overdue rentals",
+        reason: `${rentalSnapshot.overdue} hire booking${rentalSnapshot.overdue === 1 ? "" : "s"} overdue for return.`,
+        severity: "WARNING",
+        link: "/rental/returns",
+      });
+    }
+
+    items.push(...actionItems.filter((item) => item.type === "OVERDUE_PURCHASE_ORDER"));
+
+    return items
+      .sort((left, right) => {
+        const priorityDelta = actionPriority(left) - actionPriority(right);
+        if (priorityDelta !== 0) {
+          return priorityDelta;
+        }
+        const severityDelta = severityRank[left.severity] - severityRank[right.severity];
+        if (severityDelta !== 0) {
+          return severityDelta;
+        }
+        return left.title.localeCompare(right.title);
+      })
+      .slice(0, 6);
+  }, [
+    actionItems,
+    outstandingWorkshopJobs,
+    rentalSnapshot.overdue,
+    workshopReadyCount,
+    workshopSummary?.overdue,
+    workshopWaitingCount,
+  ]);
 
   return (
     <div className="page-shell dashboard-v1">
@@ -494,9 +568,9 @@ export const DashboardPage = () => {
           </div>
 
           {canViewManagerWidgets ? (
-            actionItems.length ? (
+            dashboardActionItems.length ? (
               <div className="dashboard-action-list">
-                {actionItems.map((item) => (
+                {dashboardActionItems.map((item) => (
                   <Link key={`${item.type}-${item.entityId}`} className="dashboard-action-item" to={item.link}>
                     <div className="dashboard-action-copy">
                       <strong>{item.title}</strong>
@@ -508,7 +582,7 @@ export const DashboardPage = () => {
               </div>
             ) : (
               <div className="restricted-panel info-panel">
-                No operational alerts need action right now. Open the full action centre if you still want to review grouped manager queues.
+                No operational alerts need action right now. The full management action centre still holds broader grouped oversight queues outside this dashboard.
               </div>
             )
           ) : (

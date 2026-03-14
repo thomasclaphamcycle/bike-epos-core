@@ -731,12 +731,12 @@ th {
 
 .dashboard-v1 {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .dashboard-v1-header {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .dashboard-v1-header-main {
@@ -776,13 +776,13 @@ th {
 .dashboard-v1-main-row {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .dashboard-v1-lower-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .dashboard-v1-widget {
@@ -835,6 +835,18 @@ th {
   padding: 12px;
   display: grid;
   gap: 4px;
+}
+
+.dashboard-link-card-primary {
+  background: #f39527;
+  border-color: #d97c10;
+  color: #ffffff;
+}
+
+.dashboard-link-card-primary:hover {
+  background: #dc861e;
+  border-color: #c96f0b;
+  color: #ffffff;
 }
 
 .dashboard-link-card-disabled {
