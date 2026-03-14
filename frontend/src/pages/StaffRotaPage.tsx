@@ -3,9 +3,10 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
 
 type RotaShiftType = "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
-type RotaAssignmentSource = "MANUAL" | "IMPORT";
+type RotaAssignmentSource = "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
 type UserRole = "STAFF" | "MANAGER" | "ADMIN";
 
 type RotaOverviewResponse = {
@@ -113,6 +114,11 @@ type RotaImportResult = RotaImportPreview & {
   };
 };
 
+type HolidayRequestsPayload = {
+  scope: "mine" | "all";
+  requests: HolidayRequestItem[];
+};
+
 const shiftLabel = (shiftType: RotaShiftType | null) => {
   if (shiftType === "FULL_DAY") {
     return "Full day";
@@ -171,6 +177,9 @@ export const StaffRotaPage = () => {
   const [importResult, setImportResult] = useState<RotaImportResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
+  const [holidayRequestsLoading, setHolidayRequestsLoading] = useState(true);
+  const [holidayRequestBusyId, setHolidayRequestBusyId] = useState<string | null>(null);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
   const isAdmin = user?.role === "ADMIN";
@@ -198,8 +207,24 @@ export const StaffRotaPage = () => {
     }
   };
 
+  const loadHolidayRequests = async (silent = false) => {
+    if (!silent) {
+      setHolidayRequestsLoading(true);
+    }
+
+    try {
+      const payload = await apiGet<HolidayRequestsPayload>("/api/rota/holiday-requests?scope=all");
+      setHolidayRequests(payload.requests ?? []);
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load holiday requests");
+    } finally {
+      setHolidayRequestsLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadOverview(selectedPeriodId);
+    void loadHolidayRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriodId]);
 
@@ -291,6 +316,43 @@ export const StaffRotaPage = () => {
 
   const emptyState = !loading && !currentPeriod;
   const breadcrumbLabel = isSettingsRoute ? "Settings / Staff & Roles" : "Management / Staff";
+  const pendingHolidayRequests = useMemo(
+    () => holidayRequests.filter((request) => request.status === "PENDING"),
+    [holidayRequests],
+  );
+  const recentHolidayRequests = useMemo(
+    () => holidayRequests.filter((request) => request.status !== "PENDING").slice(0, 6),
+    [holidayRequests],
+  );
+
+  const approveRequest = async (requestId: string) => {
+    setHolidayRequestBusyId(requestId);
+    try {
+      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(requestId)}/approve`);
+      success("Holiday request approved.");
+      await Promise.all([
+        loadHolidayRequests(true),
+        loadOverview(selectedPeriodId, true),
+      ]);
+    } catch (approveError) {
+      error(approveError instanceof Error ? approveError.message : "Failed to approve holiday request");
+    } finally {
+      setHolidayRequestBusyId(null);
+    }
+  };
+
+  const rejectRequest = async (requestId: string) => {
+    setHolidayRequestBusyId(requestId);
+    try {
+      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(requestId)}/reject`);
+      success("Holiday request rejected.");
+      await loadHolidayRequests(true);
+    } catch (rejectError) {
+      error(rejectError instanceof Error ? rejectError.message : "Failed to reject holiday request");
+    } finally {
+      setHolidayRequestBusyId(null);
+    }
+  };
 
   return (
     <div className="page-shell rota-page">
@@ -449,9 +511,12 @@ export const StaffRotaPage = () => {
                         >
                           {cell.shiftType ? (
                             <div className="rota-cell-content">
-                              <span className={shiftClassName(cell.shiftType)}>{shiftLabel(cell.shiftType)}</span>
+                              <span className={shiftClassName(cell.shiftType)}>
+                                {cell.shiftType === "HOLIDAY" ? "H" : shiftLabel(cell.shiftType)}
+                              </span>
                               {cell.note ? <span className="muted-text rota-cell-note">{cell.note}</span> : null}
                               {cell.source === "IMPORT" ? <span className="table-secondary">Imported</span> : null}
+                              {cell.source === "HOLIDAY_APPROVED" ? <span className="table-secondary">Holiday approved</span> : null}
                             </div>
                           ) : cell.isClosed ? (
                             <span className="table-secondary">{cell.closedReason ?? "Closed"}</span>
@@ -614,6 +679,35 @@ export const StaffRotaPage = () => {
             </span>
           </div>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Holiday Requests</h2>
+            <p className="muted-text">Approve or reject staff holiday requests. Approved requests are written back into the live rota as HOLIDAY assignments.</p>
+          </div>
+        </div>
+
+        <HolidayRequestsPanel
+          title="Pending Requests"
+          subtitle="Use this queue to keep rota coverage current without leaving the rota workspace."
+          requests={pendingHolidayRequests}
+          loading={holidayRequestsLoading}
+          onApprove={approveRequest}
+          onReject={rejectRequest}
+          busyRequestId={holidayRequestBusyId}
+          emptyMessage="No pending holiday requests need review right now."
+        />
+
+        <HolidayRequestsPanel
+          title="Recently Reviewed"
+          subtitle="Recent approved, rejected, or cancelled requests for reference."
+          requests={recentHolidayRequests}
+          loading={holidayRequestsLoading}
+          busyRequestId={holidayRequestBusyId}
+          emptyMessage="No reviewed holiday requests yet."
+        />
       </section>
     </div>
   );

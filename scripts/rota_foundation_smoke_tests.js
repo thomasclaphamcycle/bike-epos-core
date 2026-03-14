@@ -37,11 +37,25 @@ const prisma = new PrismaClient({
 });
 
 const STORE_OPENING_HOURS_KEY = "store.openingHours";
+const ALEX_STAFF_ID = "rota-alex-id";
+const JORDAN_STAFF_ID = "rota-jordan-id";
 const IMPORTED_MONDAY = "2026-03-09";
 const IMPORTED_TUESDAY = "2026-03-10";
 const IMPORTED_WEDNESDAY = "2026-03-11";
 const IMPORTED_FRIDAY = "2026-03-13";
 const IMPORTED_SUNDAY = "2026-03-15";
+const FUTURE_MONDAY = "2026-03-23";
+const FUTURE_TUESDAY = "2026-03-24";
+
+const ALEX_HEADERS = {
+  "X-Staff-Role": "STAFF",
+  "X-Staff-Id": ALEX_STAFF_ID,
+};
+
+const JORDAN_HEADERS = {
+  "X-Staff-Role": "STAFF",
+  "X-Staff-Id": JORDAN_STAFF_ID,
+};
 
 const fetchJson = async (pathName, options = {}) => {
   const response = await fetch(`${BASE_URL}${pathName}`, options);
@@ -170,6 +184,7 @@ const run = async () => {
     await prisma.user.createMany({
       data: [
         {
+          id: ALEX_STAFF_ID,
           username: "rota-alex",
           email: "rota-alex@corepos.local",
           name: "Alex Turner",
@@ -178,6 +193,7 @@ const run = async () => {
           isActive: true,
         },
         {
+          id: JORDAN_STAFF_ID,
           username: "rota-jordan",
           email: "rota-jordan@corepos.local",
           name: "Jordan Patel",
@@ -270,25 +286,6 @@ const run = async () => {
     assert.equal(rotaOverviewRes.json.period.days.length, 36);
     assert.equal(rotaOverviewRes.json.period.days[0].weekday, "MONDAY");
 
-    const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
-    assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));
-    assert.equal(tuesdayRes.json.staffToday.summary.isClosed, false);
-    assert.equal(tuesdayRes.json.staffToday.summary.scheduledStaffCount, 2);
-    assert.deepEqual(
-      tuesdayRes.json.staffToday.staff.map((entry) => entry.name).sort(),
-      ["Alex Turner", "Jordan Patel"],
-    );
-
-    const trainingDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_WEDNESDAY}`, { headers: ADMIN_HEADERS });
-    assert.equal(trainingDayRes.status, 200, JSON.stringify(trainingDayRes.json));
-    assert.equal(trainingDayRes.json.staffToday.summary.scheduledStaffCount, 1);
-    assert.equal(trainingDayRes.json.staffToday.staff[0].note, "Training day");
-
-    const sundayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_SUNDAY}`, { headers: ADMIN_HEADERS });
-    assert.equal(sundayRes.status, 200, JSON.stringify(sundayRes.json));
-    assert.equal(sundayRes.json.staffToday.summary.isClosed, true);
-    assert.match(sundayRes.json.staffToday.summary.closedReason, /closed/i);
-
     await prisma.rotaClosedDay.create({
       data: {
         date: IMPORTED_FRIDAY,
@@ -296,6 +293,143 @@ const run = async () => {
         note: "Bank holiday closure",
       },
     });
+
+    const alexHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
+      method: "POST",
+      headers: {
+        ...ALEX_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startDate: IMPORTED_MONDAY,
+        endDate: IMPORTED_SUNDAY,
+        requestNotes: "Family trip",
+      }),
+    });
+    assert.equal(alexHolidaySubmitRes.status, 201, JSON.stringify(alexHolidaySubmitRes.json));
+    assert.equal(alexHolidaySubmitRes.json.request.status, "PENDING");
+
+    const alexOwnRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=mine", { headers: ALEX_HEADERS });
+    assert.equal(alexOwnRequestsRes.status, 200, JSON.stringify(alexOwnRequestsRes.json));
+    assert.equal(alexOwnRequestsRes.json.scope, "mine");
+    assert.equal(alexOwnRequestsRes.json.requests.length, 1);
+
+    const managerHolidayRequestsRes = await fetchJson("/api/rota/holiday-requests?scope=all", { headers: MANAGER_HEADERS });
+    assert.equal(managerHolidayRequestsRes.status, 200, JSON.stringify(managerHolidayRequestsRes.json));
+    assert.equal(managerHolidayRequestsRes.json.scope, "all");
+    assert.equal(managerHolidayRequestsRes.json.requests.length, 1);
+
+    const approveHolidayRes = await fetchJson(`/api/rota/holiday-requests/${alexHolidaySubmitRes.json.request.id}/approve`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    assert.equal(approveHolidayRes.status, 200, JSON.stringify(approveHolidayRes.json));
+    assert.equal(approveHolidayRes.json.request.status, "APPROVED");
+    assert.deepEqual(
+      approveHolidayRes.json.appliedDates,
+      ["2026-03-09", "2026-03-10", "2026-03-11", "2026-03-12", "2026-03-14"],
+    );
+
+    const jordanHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
+      method: "POST",
+      headers: {
+        ...JORDAN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startDate: "2026-03-12",
+        endDate: "2026-03-14",
+        requestNotes: "Short break",
+      }),
+    });
+    assert.equal(jordanHolidaySubmitRes.status, 201, JSON.stringify(jordanHolidaySubmitRes.json));
+
+    const rejectHolidayRes = await fetchJson(`/api/rota/holiday-requests/${jordanHolidaySubmitRes.json.request.id}/reject`, {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    assert.equal(rejectHolidayRes.status, 200, JSON.stringify(rejectHolidayRes.json));
+    assert.equal(rejectHolidayRes.json.request.status, "REJECTED");
+
+    const cancelHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
+      method: "POST",
+      headers: {
+        ...JORDAN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startDate: FUTURE_MONDAY,
+        endDate: FUTURE_TUESDAY,
+        requestNotes: "Cancel me",
+      }),
+    });
+    assert.equal(cancelHolidaySubmitRes.status, 201, JSON.stringify(cancelHolidaySubmitRes.json));
+
+    const cancelHolidayRes = await fetchJson(`/api/rota/holiday-requests/${cancelHolidaySubmitRes.json.request.id}/cancel`, {
+      method: "POST",
+      headers: JORDAN_HEADERS,
+    });
+    assert.equal(cancelHolidayRes.status, 200, JSON.stringify(cancelHolidayRes.json));
+    assert.equal(cancelHolidayRes.json.request.status, "CANCELLED");
+
+    const approvedHolidayAssignments = await prisma.rotaAssignment.findMany({
+      where: {
+        staffId: ALEX_STAFF_ID,
+        shiftType: "HOLIDAY",
+      },
+      orderBy: {
+        date: "asc",
+      },
+    });
+    assert.deepEqual(
+      approvedHolidayAssignments.map((assignment) => assignment.date),
+      ["2026-03-09", "2026-03-10", "2026-03-11", "2026-03-12", "2026-03-14"],
+    );
+    assert.ok(approvedHolidayAssignments.every((assignment) => assignment.source === "HOLIDAY_APPROVED"));
+    assert.ok(approvedHolidayAssignments.every((assignment) => assignment.note === "Family trip"));
+    assert.equal(await prisma.rotaAssignment.count(), 8);
+
+    const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));
+    assert.equal(tuesdayRes.json.staffToday.summary.isClosed, false);
+    assert.equal(tuesdayRes.json.staffToday.summary.scheduledStaffCount, 1);
+    assert.equal(tuesdayRes.json.staffToday.summary.holidayStaffCount, 1);
+    assert.deepEqual(
+      tuesdayRes.json.staffToday.staff.map((entry) => entry.name).sort(),
+      ["Jordan Patel"],
+    );
+
+    const mondayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_MONDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(mondayRes.status, 200, JSON.stringify(mondayRes.json));
+    assert.equal(mondayRes.json.staffToday.summary.scheduledStaffCount, 0);
+    assert.equal(mondayRes.json.staffToday.summary.holidayStaffCount, 1);
+
+    const trainingDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_WEDNESDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(trainingDayRes.status, 200, JSON.stringify(trainingDayRes.json));
+    assert.equal(trainingDayRes.json.staffToday.summary.scheduledStaffCount, 0);
+    assert.equal(trainingDayRes.json.staffToday.summary.holidayStaffCount, 1);
+
+    const sundayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_SUNDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(sundayRes.status, 200, JSON.stringify(sundayRes.json));
+    assert.equal(sundayRes.json.staffToday.summary.isClosed, true);
+    assert.match(sundayRes.json.staffToday.summary.closedReason, /closed/i);
+
+    const updatedRotaOverviewRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
+    assert.equal(updatedRotaOverviewRes.status, 200, JSON.stringify(updatedRotaOverviewRes.json));
+    const alexRow = updatedRotaOverviewRes.json.period.staffRows.find((row) => row.name === "Alex Turner");
+    assert.ok(alexRow, "Expected Alex Turner to be present in rota overview");
+    const tuesdayCell = alexRow.cells.find((cell) => cell.date === IMPORTED_TUESDAY);
+    assert.equal(tuesdayCell.shiftType, "HOLIDAY");
+    assert.equal(tuesdayCell.source, "HOLIDAY_APPROVED");
+    assert.equal(tuesdayCell.note, "Family trip");
 
     const closedDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_FRIDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(closedDayRes.status, 200, JSON.stringify(closedDayRes.json));

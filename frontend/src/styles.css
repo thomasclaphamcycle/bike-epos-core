@@ -2040,6 +2040,101 @@ th {
   gap: 6px;
 }
 
+.holiday-request-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(10, 18, 28, 0.56);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.holiday-request-modal {
+  width: min(640px, 100%);
+  border-radius: 18px;
+  border: 1px solid #d6e0ea;
+  background: #ffffff;
+  box-shadow: 0 24px 48px rgba(4, 22, 41, 0.28);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.holiday-request-form {
+  display: grid;
+  gap: 14px;
+}
+
+.holiday-request-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.holiday-request-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.holiday-request-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.holiday-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.holiday-requests-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.holiday-request-list {
+  display: grid;
+  gap: 12px;
+}
+
+.holiday-request-card {
+  border: 1px solid #d8e1ec;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fcfdff 0%, #f6f9fc 100%);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.holiday-request-main {
+  display: grid;
+  gap: 8px;
+}
+
+.holiday-request-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.holiday-request-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+.holiday-request-actions-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 1280px) {
   .staff-create-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2055,6 +2150,10 @@ th {
 
   .rota-review-grid {
     min-width: 1240px;
+  }
+
+  .holiday-request-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 

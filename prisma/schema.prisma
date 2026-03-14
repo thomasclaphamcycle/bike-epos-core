@@ -472,12 +472,20 @@ enum RotaShiftType {
 enum RotaAssignmentSource {
   MANUAL
   IMPORT
+  HOLIDAY_APPROVED
 }
 
 enum RotaClosedDayType {
   SCHEDULED_CLOSED
   BANK_HOLIDAY
   CUSTOM
+}
+
+enum HolidayRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum RefundRecordStatus {
@@ -645,6 +653,28 @@ model RotaClosedDay {
   updatedAt DateTime          @updatedAt
 
   @@index([type, date])
+}
+
+model HolidayRequest {
+  id               String               @id @default(uuid()) @db.Uuid
+  staffId          String
+  startDate        String
+  endDate          String
+  status           HolidayRequestStatus @default(PENDING)
+  requestNotes     String?
+  decisionNotes    String?
+  submittedAt      DateTime             @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  staff          User  @relation("HolidayRequestStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  reviewedByUser User? @relation("HolidayRequestReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([staffId, status, startDate])
+  @@index([status, startDate])
+  @@index([reviewedByUserId])
 }
 
 model Receipt {
@@ -1157,6 +1187,8 @@ model User {
   checkedOutHireBookings HireBooking[]    @relation("HireBookingCheckedOutByStaff")
   returnedHireBookings   HireBooking[]    @relation("HireBookingReturnedByStaff")
   rotaAssignments        RotaAssignment[]
+  holidayRequests        HolidayRequest[] @relation("HolidayRequestStaff")
+  reviewedHolidayRequests HolidayRequest[] @relation("HolidayRequestReviewedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

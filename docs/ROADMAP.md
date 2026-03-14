@@ -303,6 +303,7 @@ Implementation status:
 - Store Info now also provides the shared trading-hours source used by rota import and dashboard staffing interpretation
 - dashboard Staff Today can now surface imported rota assignments for the current day
 - Staff Rota now has a real admin review/import page for imported six-week rota periods, giving the dashboard View Rota action a live in-app destination
+- rota holiday requests now provide a lightweight staff-to-manager workflow that writes approved leave back into the live rota as HOLIDAY assignments
 
 ---
 

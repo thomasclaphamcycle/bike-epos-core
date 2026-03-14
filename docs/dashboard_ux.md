@@ -139,10 +139,12 @@ Dashboard v1 staff widget now shows who is scheduled today from imported rota da
 Rules:
 
 - use imported rota assignments as the source of staff coverage
+- allow staff to submit simple holiday requests without turning the dashboard into a rota planner
+- reflect approved holiday directly from rota HOLIDAY assignments, including a light on-holiday summary when relevant
 - respect store-closed days from Store Info opening hours and rota closed-day overrides
 - keep the widget simple and operational rather than turning it into a full rota planner
 - provide a View Rota action that opens the rota review/import page rather than a placeholder route
-- keep rota review manager-readable and import actions admin-controlled
+- keep rota review manager-readable, import actions admin-controlled, and holiday approval actions manager/admin-controlled
 
 ## Weather
 

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import { HolidayRequestModal } from "../components/HolidayRequestModal";
+import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
 
 type SalesDailyRow = {
   date: string;
@@ -97,6 +99,11 @@ type DashboardStaffTodayPayload = {
       source: "MANUAL" | "IMPORT";
     }>;
   };
+};
+
+type HolidayRequestsPayload = {
+  scope: "mine" | "all";
+  requests: HolidayRequestItem[];
 };
 
 type MetricCardProps = {
@@ -259,7 +266,7 @@ const DashboardActionButton = ({ label, to, disabledReason, emphasize = false }:
 
 export const DashboardPage = () => {
   const { user } = useAuth();
-  const { error } = useToasts();
+  const { error, success } = useToasts();
   const [clock, setClock] = useState(() => new Date());
   const [loading, setLoading] = useState(false);
   const [salesToday, setSalesToday] = useState<SalesDailyRow | null>(null);
@@ -270,6 +277,10 @@ export const DashboardPage = () => {
   const [hireBookings, setHireBookings] = useState<HireBooking[]>([]);
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
   const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
+  const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
+  const [holidayRequestModalOpen, setHolidayRequestModalOpen] = useState(false);
+  const [holidayRequestSubmitting, setHolidayRequestSubmitting] = useState(false);
+  const [holidayRequestBusyId, setHolidayRequestBusyId] = useState<string | null>(null);
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -299,6 +310,7 @@ export const DashboardPage = () => {
       canViewManagerWidgets ? apiGet<HireBookingListResponse>("/api/hire/bookings?take=200") : Promise.resolve(null),
       apiGet<DashboardStaffTodayPayload>("/api/dashboard/staff-today"),
       apiGet<DashboardWeatherPayload>("/api/dashboard/weather"),
+      apiGet<HolidayRequestsPayload>("/api/rota/holiday-requests?scope=mine"),
     ]);
 
     const [
@@ -310,6 +322,7 @@ export const DashboardPage = () => {
       hireResult,
       staffTodayResult,
       weatherResult,
+      holidayRequestsResult,
     ] = requests;
 
     if (salesTodayResult.status === "fulfilled") {
@@ -397,6 +410,12 @@ export const DashboardPage = () => {
         source: "open-meteo",
         message: "Weather temporarily unavailable.",
       });
+    }
+
+    if (holidayRequestsResult.status === "fulfilled" && holidayRequestsResult.value) {
+      setHolidayRequests(holidayRequestsResult.value.requests ?? []);
+    } else {
+      setHolidayRequests([]);
     }
 
     setLoading(false);
@@ -590,6 +609,39 @@ export const DashboardPage = () => {
     return `${staffToday.summary.opensAt} - ${staffToday.summary.closesAt}`;
   }, [staffToday]);
 
+  const visibleHolidayRequests = useMemo(() => holidayRequests.slice(0, 4), [holidayRequests]);
+
+  const submitHolidayRequest = async (values: {
+    startDate: string;
+    endDate: string;
+    requestNotes: string;
+  }) => {
+    setHolidayRequestSubmitting(true);
+    try {
+      await apiPost("/api/rota/holiday-requests", values);
+      success("Holiday request submitted.");
+      setHolidayRequestModalOpen(false);
+      await loadDashboard();
+    } catch (submitError) {
+      error(submitError instanceof Error ? submitError.message : "Failed to submit holiday request");
+    } finally {
+      setHolidayRequestSubmitting(false);
+    }
+  };
+
+  const cancelHolidayRequest = async (requestId: string) => {
+    setHolidayRequestBusyId(requestId);
+    try {
+      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(requestId)}/cancel`);
+      success("Holiday request cancelled.");
+      await loadDashboard();
+    } catch (cancelError) {
+      error(cancelError instanceof Error ? cancelError.message : "Failed to cancel holiday request");
+    } finally {
+      setHolidayRequestBusyId(null);
+    }
+  };
+
   return (
     <div className="page-shell dashboard-v1">
       <section className="card dashboard-v1-header">
@@ -781,9 +833,12 @@ export const DashboardPage = () => {
               <h2>Staff Today</h2>
               <p className="muted-text">Today’s rota coverage from imported schedule data and Store Info opening hours.</p>
             </div>
-            {quickActions.find((action) => action.label === "View Rota")?.to ? (
-              <Link to={quickActions.find((action) => action.label === "View Rota")?.to ?? "/dashboard"}>View Rota</Link>
-            ) : null}
+            <div className="actions-inline">
+              <button type="button" onClick={() => setHolidayRequestModalOpen(true)}>Request Holiday</button>
+              {quickActions.find((action) => action.label === "View Rota")?.to ? (
+                <Link to={quickActions.find((action) => action.label === "View Rota")?.to ?? "/dashboard"}>View Rota</Link>
+              ) : null}
+            </div>
           </div>
 
           {!staffToday ? (
@@ -817,10 +872,24 @@ export const DashboardPage = () => {
             <div className="restricted-panel info-panel">
               <strong>No staff scheduled today.</strong>
               <div className="muted-text">
-                {staffTodayWindow ? `Trading hours ${staffTodayWindow}.` : "Trading hours available in Store Info."}
+                {staffToday.summary.holidayStaffCount
+                  ? `${staffToday.summary.holidayStaffCount} on holiday${staffTodayWindow ? ` · Trading hours ${staffTodayWindow}.` : ""}`
+                  : staffTodayWindow ? `Trading hours ${staffTodayWindow}.` : "Trading hours available in Store Info."}
               </div>
             </div>
           )}
+
+          <HolidayRequestsPanel
+            title="My Holiday Requests"
+            subtitle="Submit simple rota holiday requests and track approval status."
+            requests={visibleHolidayRequests}
+            loading={loading && holidayRequests.length === 0}
+            requestButtonLabel="Request holiday"
+            onRequestHoliday={() => setHolidayRequestModalOpen(true)}
+            onCancel={cancelHolidayRequest}
+            busyRequestId={holidayRequestBusyId}
+            emptyMessage="No holiday requests submitted yet."
+          />
         </section>
 
         <section className="card dashboard-v1-widget">
@@ -876,6 +945,17 @@ export const DashboardPage = () => {
           )}
         </section>
       </div>
+
+      <HolidayRequestModal
+        open={holidayRequestModalOpen}
+        submitting={holidayRequestSubmitting}
+        onClose={() => {
+          if (!holidayRequestSubmitting) {
+            setHolidayRequestModalOpen(false);
+          }
+        }}
+        onSubmit={submitHolidayRequest}
+      />
     </div>
   );
 };

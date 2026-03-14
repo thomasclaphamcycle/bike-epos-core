@@ -3,6 +3,49 @@ GET http://localhost:3000/api/rota
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
+### Holiday requests list (mine)
+GET http://localhost:3000/api/rota/holiday-requests?scope=mine
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
+### Holiday requests list (all)
+GET http://localhost:3000/api/rota/holiday-requests?scope=all
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Submit holiday request
+POST http://localhost:3000/api/rota/holiday-requests
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
+{
+  "startDate": "2026-03-09",
+  "endDate": "2026-03-15",
+  "requestNotes": "Family trip"
+}
+
+### Approve holiday request
+POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/approve
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{}
+
+### Reject holiday request
+POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/reject
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: rota-admin
+
+{}
+
+### Cancel holiday request
+POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/cancel
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
 ### Rota import preview
 POST http://localhost:3000/api/rota/import/preview
 Content-Type: application/json
