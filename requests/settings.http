@@ -15,7 +15,11 @@ X-Staff-Id: demo-manager
   "store": {
     "name": "CorePOS Cycles",
     "email": "hello@corepos.local",
-    "phone": "01234 567890"
+    "phone": "01234 567890",
+    "city": "Clapham",
+    "postcode": "SW4 0HY",
+    "latitude": 51.4526,
+    "longitude": -0.1477
   },
   "pos": {
     "defaultTaxRatePercent": 20,

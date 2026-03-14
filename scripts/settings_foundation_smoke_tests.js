@@ -37,6 +37,10 @@ const SETTINGS_KEYS = [
   "store.name",
   "store.email",
   "store.phone",
+  "store.city",
+  "store.postcode",
+  "store.latitude",
+  "store.longitude",
   "pos.defaultTaxRatePercent",
   "pos.barcodeSearchAutoFocus",
   "workshop.defaultJobDurationMinutes",
@@ -106,6 +110,10 @@ const run = async () => {
     const defaultRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(defaultRes.status, 200, JSON.stringify(defaultRes.json));
     assert.equal(defaultRes.json.settings.store.name, "Bike EPOS");
+    assert.equal(defaultRes.json.settings.store.city, "");
+    assert.equal(defaultRes.json.settings.store.postcode, "");
+    assert.equal(defaultRes.json.settings.store.latitude, null);
+    assert.equal(defaultRes.json.settings.store.longitude, null);
     assert.equal(defaultRes.json.settings.pos.defaultTaxRatePercent, 20);
     assert.equal(defaultRes.json.settings.workshop.defaultDepositPence, 1000);
     assert.equal(defaultRes.json.settings.operations.lowStockThreshold, 3);
@@ -120,6 +128,10 @@ const run = async () => {
         store: {
           name: "CorePOS Cycles",
           email: "support@corepos.local",
+          city: "Clapham",
+          postcode: "SW4 0HY",
+          latitude: 51.4526,
+          longitude: -0.1477,
         },
         pos: {
           defaultTaxRatePercent: 17.5,
@@ -137,6 +149,10 @@ const run = async () => {
     assert.equal(patchRes.json.settings.store.name, "CorePOS Cycles");
     assert.equal(patchRes.json.settings.store.email, "support@corepos.local");
     assert.equal(patchRes.json.settings.store.phone, "");
+    assert.equal(patchRes.json.settings.store.city, "Clapham");
+    assert.equal(patchRes.json.settings.store.postcode, "SW4 0HY");
+    assert.equal(patchRes.json.settings.store.latitude, 51.4526);
+    assert.equal(patchRes.json.settings.store.longitude, -0.1477);
     assert.equal(patchRes.json.settings.pos.defaultTaxRatePercent, 17.5);
     assert.equal(patchRes.json.settings.pos.barcodeSearchAutoFocus, false);
     assert.equal(patchRes.json.settings.workshop.defaultJobDurationMinutes, 75);

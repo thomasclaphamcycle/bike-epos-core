@@ -77,6 +77,7 @@
     "test:stock-transfers": "node scripts/run_smoke_test.js scripts/stock_transfers_smoke_tests.js",
     "test:bike-hire": "node scripts/run_smoke_test.js scripts/bike_hire_foundation_smoke_tests.js",
     "test:settings": "node scripts/run_smoke_test.js scripts/settings_foundation_smoke_tests.js",
+    "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
     "verify": "NODE_ENV=test npm run test:m11 && NODE_ENV=test npm test && npm run build && NODE_ENV=test npm run e2e && NODE_ENV=test npm run test:m38 && NODE_ENV=test npm run test:m24 && NODE_ENV=test npm run test:m27 && NODE_ENV=test npm run test:m30 && npm run db:seed:dev",
     "roadmap": "node scripts/roadmap/report.js",

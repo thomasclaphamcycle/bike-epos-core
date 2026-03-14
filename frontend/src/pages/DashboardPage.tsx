@@ -59,6 +59,24 @@ type HireBookingListResponse = {
   bookings: HireBooking[];
 };
 
+type DashboardWeatherSnapshot = {
+  summary: string;
+  highC: number;
+  lowC: number;
+  precipitationMm: number;
+};
+
+type DashboardWeatherPayload = {
+  weather: {
+    status: "ready" | "missing_location" | "unavailable";
+    source: "open-meteo";
+    locationLabel?: string;
+    message?: string;
+    today?: DashboardWeatherSnapshot;
+    tomorrow?: DashboardWeatherSnapshot;
+  };
+};
+
 type MetricCardProps = {
   label: string;
   value: string;
@@ -228,6 +246,7 @@ export const DashboardPage = () => {
   const [workshopSummary, setWorkshopSummary] = useState<WorkshopDashboardResponse["summary"] | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [hireBookings, setHireBookings] = useState<HireBooking[]>([]);
+  const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -255,9 +274,10 @@ export const DashboardPage = () => {
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=12"),
       canViewManagerWidgets ? apiGet<ActionCentreResponse>("/api/reports/operations/actions") : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<HireBookingListResponse>("/api/hire/bookings?take=200") : Promise.resolve(null),
+      apiGet<DashboardWeatherPayload>("/api/dashboard/weather"),
     ]);
 
-    const [salesTodayResult, monthResult, lastYearResult, workshopResult, actionResult, hireResult] = requests;
+    const [salesTodayResult, monthResult, lastYearResult, workshopResult, actionResult, hireResult, weatherResult] = requests;
 
     if (salesTodayResult.status === "fulfilled") {
       setSalesToday(
@@ -328,6 +348,16 @@ export const DashboardPage = () => {
       error(hireResult.reason instanceof Error ? hireResult.reason.message : "Failed to load rentals snapshot");
     } else {
       setHireBookings([]);
+    }
+
+    if (weatherResult.status === "fulfilled" && weatherResult.value) {
+      setWeather(weatherResult.value.weather);
+    } else {
+      setWeather({
+        status: "unavailable",
+        source: "open-meteo",
+        message: "Weather temporarily unavailable.",
+      });
     }
 
     setLoading(false);
@@ -717,13 +747,53 @@ export const DashboardPage = () => {
           <div className="card-header-row">
             <div>
               <h2>Weather</h2>
-              <p className="muted-text">Today’s forecast will appear here when a weather feed is connected.</p>
+              <p className="muted-text">A compact forecast for today, based on the current Store Info location.</p>
             </div>
           </div>
 
-          <div className="restricted-panel info-panel">
-            Weather is intentionally shown as a clean placeholder in Dashboard v1. The widget is ready for a real forecast feed without changing the overall dashboard layout.
-          </div>
+          {!weather ? (
+            <div className="restricted-panel info-panel">Loading weather...</div>
+          ) : weather.status === "ready" && weather.today ? (
+            <div className="dashboard-weather-card">
+              <div className="dashboard-weather-headline">
+                <div>
+                  <span className="metric-label dashboard-metric-label">Today</span>
+                  <strong className="dashboard-weather-summary">{weather.today.summary}</strong>
+                </div>
+                <div className="dashboard-weather-temps">
+                  <strong>{weather.today.highC}°</strong>
+                  <span>{weather.today.lowC}°</span>
+                </div>
+              </div>
+              <div className="dashboard-weather-meta">
+                <span>Rain {weather.today.precipitationMm} mm</span>
+                {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
+              </div>
+              {weather.tomorrow ? (
+                <div className="dashboard-weather-tomorrow">
+                  <span className="metric-label dashboard-metric-label">Tomorrow</span>
+                  <strong>{weather.tomorrow.summary}</strong>
+                  <span>
+                    {weather.tomorrow.highC}° / {weather.tomorrow.lowC}° · Rain {weather.tomorrow.precipitationMm} mm
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ) : weather.status === "missing_location" ? (
+            <div className="restricted-panel info-panel">
+              {canViewManagerWidgets ? (
+                <>
+                  Store location is missing. Update <Link to="/management/settings">Store Info</Link> with a postcode or coordinates to enable dashboard weather.
+                </>
+              ) : (
+                "Store location is not configured yet. Ask a manager to update Store Info to enable dashboard weather."
+              )}
+            </div>
+          ) : (
+            <div className="restricted-panel info-panel">
+              {weather.message || "Weather temporarily unavailable."}
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -146,11 +146,20 @@ Until then:
 
 Dashboard v1 weather widget should show today’s predicted weather when a feed exists.
 
-Until then:
+Dashboard v1 weather now:
 
-- keep the widget in place
-- show a clean placeholder state
-- do not fabricate weather data
+- uses Open-Meteo through a backend weather service
+- reads store location from Store Info settings
+- prefers stored latitude/longitude when present
+- falls back to store town/postcode lookup when coordinates are not set
+
+If store location is missing:
+
+- show a clear empty state telling the user to update Store Info
+
+If the provider is temporarily unavailable:
+
+- show a calm unavailable state instead of stale or fabricated data
 
 ## Dashboard UX Principles
 

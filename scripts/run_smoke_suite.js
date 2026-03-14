@@ -36,6 +36,7 @@ const baselineSteps = [
   "test:stock-transfers",
   "test:bike-hire",
   "test:settings",
+  "test:dashboard-weather",
 ];
 
 const env = {

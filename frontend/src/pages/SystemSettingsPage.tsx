@@ -15,6 +15,10 @@ type ShopSettings = {
     name: string;
     email: string;
     phone: string;
+    city: string;
+    postcode: string;
+    latitude: number | null;
+    longitude: number | null;
   };
   pos: {
     defaultTaxRatePercent: number;
@@ -191,6 +195,9 @@ export const SystemSettingsPage = () => {
         <div className="restricted-panel info-panel">
           CorePOS now stores a small persisted settings set for shop metadata and operational defaults. Existing specialist controls such as dashboard widgets, saved views, staff admin, bookings, and backups still keep their current dedicated surfaces.
         </div>
+        <div className="restricted-panel info-panel">
+          Dashboard weather reads the location from Store Info. Set latitude/longitude directly for the most reliable forecast, or leave them blank and provide a town or postcode for automatic lookup.
+        </div>
       </section>
 
       <section className="card">
@@ -239,6 +246,46 @@ export const SystemSettingsPage = () => {
                 value={settings.store.phone}
                 onChange={(event) => setStoreField("phone", event.target.value)}
                 placeholder="01234 567890"
+              />
+            </label>
+            <label>
+              Store Town / City
+              <input
+                value={settings.store.city}
+                onChange={(event) => setStoreField("city", event.target.value)}
+                placeholder="Clapham"
+              />
+            </label>
+            <label>
+              Store Postcode
+              <input
+                value={settings.store.postcode}
+                onChange={(event) => setStoreField("postcode", event.target.value)}
+                placeholder="SW4 0HY"
+              />
+            </label>
+            <label>
+              Latitude
+              <input
+                type="number"
+                min="-90"
+                max="90"
+                step="0.000001"
+                value={settings.store.latitude ?? ""}
+                onChange={(event) => setStoreField("latitude", event.target.value === "" ? null : Number(event.target.value))}
+                placeholder="51.452600"
+              />
+            </label>
+            <label>
+              Longitude
+              <input
+                type="number"
+                min="-180"
+                max="180"
+                step="0.000001"
+                value={settings.store.longitude ?? ""}
+                onChange={(event) => setStoreField("longitude", event.target.value === "" ? null : Number(event.target.value))}
+                placeholder="-0.147700"
               />
             </label>
             <label>

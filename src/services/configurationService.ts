@@ -15,6 +15,10 @@ export type ShopSettings = {
     name: string;
     email: string;
     phone: string;
+    city: string;
+    postcode: string;
+    latitude: number | null;
+    longitude: number | null;
   };
   pos: {
     defaultTaxRatePercent: number;
@@ -92,6 +96,23 @@ const normalizePercentSetting = (value: unknown, field: string) => {
   return Math.round(value * 100) / 100;
 };
 
+const normalizeNullableCoordinateSetting = (
+  value: unknown,
+  field: string,
+  { min, max }: { min: number; max: number },
+) => {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new HttpError(400, `${field} must be a number or null`, "INVALID_SETTINGS");
+  }
+  if (value < min || value > max) {
+    throw new HttpError(400, `${field} must be between ${min} and ${max}`, "INVALID_SETTINGS");
+  }
+  return Math.round(value * 1_000_000) / 1_000_000;
+};
+
 const SETTINGS_DEFINITIONS = {
   "store.name": {
     key: "store.name",
@@ -107,6 +128,26 @@ const SETTINGS_DEFINITIONS = {
     key: "store.phone",
     defaultValue: "",
     validate: (value: unknown) => normalizeTextSetting(value, "store.phone", { maxLength: 40 }),
+  },
+  "store.city": {
+    key: "store.city",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.city", { maxLength: 120 }),
+  },
+  "store.postcode": {
+    key: "store.postcode",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeTextSetting(value, "store.postcode", { maxLength: 32 }),
+  },
+  "store.latitude": {
+    key: "store.latitude",
+    defaultValue: null,
+    validate: (value: unknown) => normalizeNullableCoordinateSetting(value, "store.latitude", { min: -90, max: 90 }),
+  },
+  "store.longitude": {
+    key: "store.longitude",
+    defaultValue: null,
+    validate: (value: unknown) => normalizeNullableCoordinateSetting(value, "store.longitude", { min: -180, max: 180 }),
   },
   "pos.defaultTaxRatePercent": {
     key: "pos.defaultTaxRatePercent",
@@ -154,6 +195,10 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
       name: getSettingValue(valueByKey.get("store.name"), SETTINGS_DEFINITIONS["store.name"]),
       email: getSettingValue(valueByKey.get("store.email"), SETTINGS_DEFINITIONS["store.email"]),
       phone: getSettingValue(valueByKey.get("store.phone"), SETTINGS_DEFINITIONS["store.phone"]),
+      city: getSettingValue(valueByKey.get("store.city"), SETTINGS_DEFINITIONS["store.city"]),
+      postcode: getSettingValue(valueByKey.get("store.postcode"), SETTINGS_DEFINITIONS["store.postcode"]),
+      latitude: getSettingValue(valueByKey.get("store.latitude"), SETTINGS_DEFINITIONS["store.latitude"]),
+      longitude: getSettingValue(valueByKey.get("store.longitude"), SETTINGS_DEFINITIONS["store.longitude"]),
     },
     pos: {
       defaultTaxRatePercent: getSettingValue(
