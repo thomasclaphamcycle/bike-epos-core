@@ -109,6 +109,8 @@ export type RotaOverviewResponse = {
   period: RotaPeriodDetail | null;
 };
 
+export type RotaStaffScope = "assigned" | "all";
+
 export type SaveRotaAssignmentResult = {
   assignment: {
     id: string;
@@ -203,6 +205,40 @@ const getRelevantRotaPeriodId = (periods: Array<{ id: string; startsOn: string; 
   }
 
   return periods[0]?.id ?? null;
+};
+
+const normalizeRotaStaffScope = (value: string | undefined): RotaStaffScope => {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === "assigned") {
+    return "assigned";
+  }
+  if (normalized === "all") {
+    return "all";
+  }
+  throw new HttpError(400, "staffScope must be 'assigned' or 'all'", "INVALID_ROTA_FILTER");
+};
+
+const normalizeOptionalUserRoleFilter = (value: string | undefined) => {
+  const normalized = value?.trim().toUpperCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "STAFF" || normalized === "MANAGER" || normalized === "ADMIN") {
+    return normalized;
+  }
+  throw new HttpError(400, "role must be STAFF, MANAGER, or ADMIN", "INVALID_ROTA_FILTER");
+};
+
+const normalizeOptionalSearch = (value: string | undefined) => {
+  const normalized = value?.trim();
+  return normalized ? normalized.slice(0, 80) : undefined;
+};
+
+const matchesRotaSearch = (value: string, search: string | undefined) => {
+  if (!search) {
+    return true;
+  }
+  return value.toLocaleLowerCase("en-GB").includes(search.toLocaleLowerCase("en-GB"));
 };
 
 const getLatestImportSummary = (
@@ -502,9 +538,17 @@ export const getDashboardStaffToday = async (
 };
 
 export const getRotaOverview = async (
-  input: { periodId?: string } = {},
+  input: {
+    periodId?: string;
+    staffScope?: string;
+    role?: string;
+    search?: string;
+  } = {},
   db: RotaClient = prisma,
 ): Promise<RotaOverviewResponse> => {
+  const staffScope = normalizeRotaStaffScope(input.staffScope);
+  const roleFilter = normalizeOptionalUserRoleFilter(input.role);
+  const searchFilter = normalizeOptionalSearch(input.search);
   const [settings, periods] = await Promise.all([
     listShopSettings(db),
     db.rotaPeriod.findMany({
@@ -598,7 +642,7 @@ export const getRotaOverview = async (
     throw new HttpError(404, "Rota period not found", "ROTA_PERIOD_NOT_FOUND");
   }
 
-  const [periodAssignments, closedDays] = await Promise.all([
+  const [periodAssignments, closedDays, activeStaff] = await Promise.all([
     db.rotaAssignment.findMany({
       where: {
         rotaPeriodId: selectedPeriod.id,
@@ -640,6 +684,46 @@ export const getRotaOverview = async (
         note: true,
       },
     }),
+    staffScope === "all"
+      ? db.user.findMany({
+        where: {
+          isActive: true,
+          passwordHash: {
+            not: HEADER_ACTOR_PASSWORD_HASH,
+          },
+          ...(roleFilter ? { role: roleFilter } : {}),
+          ...(searchFilter
+            ? {
+              OR: [
+                {
+                  name: {
+                    contains: searchFilter,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  username: {
+                    contains: searchFilter,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            }
+            : {}),
+        },
+        orderBy: [
+          { role: "asc" },
+          { name: "asc" },
+          { username: "asc" },
+        ],
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          role: true,
+        },
+      })
+      : Promise.resolve([]),
   ]);
 
   const closedDayMap = new Map(
@@ -707,6 +791,19 @@ export const getRotaOverview = async (
     assignmentsByStaff.set(key, existing);
   }
 
+  for (const staff of activeStaff) {
+    if (assignmentsByStaff.has(staff.id)) {
+      continue;
+    }
+
+    assignmentsByStaff.set(staff.id, {
+      staffId: staff.id,
+      name: toStaffDisplayName(staff),
+      role: staff.role,
+      byDate: new Map(),
+    });
+  }
+
   const latestImport = getLatestImportSummary(periodAssignments);
   const roleRank = {
     STAFF: 1,
@@ -714,6 +811,15 @@ export const getRotaOverview = async (
     ADMIN: 3,
   } satisfies Record<"STAFF" | "MANAGER" | "ADMIN", number>;
   const staffRows = [...assignmentsByStaff.values()]
+    .filter((staffRow) => {
+      if (roleFilter && staffRow.role !== roleFilter) {
+        return false;
+      }
+      if (!matchesRotaSearch(staffRow.name, searchFilter)) {
+        return false;
+      }
+      return true;
+    })
     .sort((left, right) => {
       const roleDifference = roleRank[left.role] - roleRank[right.role];
       if (roleDifference !== 0) {

@@ -1886,6 +1886,14 @@ th {
   gap: 4px;
 }
 
+.rota-filter-row {
+  margin-bottom: 10px;
+}
+
+.rota-filter-summary {
+  margin: 0 0 12px;
+}
+
 .rota-grid-wrap {
   overflow-x: auto;
 }
@@ -1963,6 +1971,11 @@ th {
 
 .rota-staff-name {
   font-weight: 700;
+}
+
+.rota-staff-name-copy {
+  display: grid;
+  gap: 4px;
 }
 
 .rota-staff-role {
@@ -2108,6 +2121,55 @@ th {
   padding-left: 18px;
   display: grid;
   gap: 6px;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .rota-page .actions-inline,
+  .rota-page .rota-filter-row,
+  .rota-page > .card:not(:nth-child(-n+2)),
+  .rota-page button,
+  .rota-page a {
+    display: none !important;
+  }
+
+  .rota-page {
+    padding: 0;
+    gap: 12px;
+  }
+
+  .rota-page .card {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .rota-page .rota-grid-wrap {
+    overflow: visible;
+  }
+
+  .rota-page .rota-review-grid {
+    min-width: 0;
+    width: 100%;
+    font-size: 11px;
+  }
+
+  .rota-page .rota-sticky {
+    position: static;
+  }
+
+  .rota-page .rota-cell-popover {
+    display: none !important;
+  }
+
+  .rota-page .rota-review-grid th,
+  .rota-page .rota-review-grid td {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }
 
 .holiday-request-overlay {

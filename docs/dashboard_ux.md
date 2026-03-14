@@ -145,6 +145,7 @@ Rules:
 - keep the widget simple and operational rather than turning it into a full rota planner
 - provide a View Rota action that opens the live rota review/import/edit page rather than a placeholder route
 - keep rota review manager-readable, import actions admin-controlled, and holiday approval actions manager/admin-controlled
+- keep the rota destination usable for daily ops with filters, missing-staff visibility, and a print-friendly period view rather than forcing a full planner rewrite
 
 ## Weather
 

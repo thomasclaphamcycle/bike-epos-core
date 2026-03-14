@@ -39,6 +39,7 @@ const prisma = new PrismaClient({
 const STORE_OPENING_HOURS_KEY = "store.openingHours";
 const ALEX_STAFF_ID = "rota-alex-id";
 const JORDAN_STAFF_ID = "rota-jordan-id";
+const CASEY_STAFF_ID = "rota-casey-id";
 const IMPORTED_MONDAY = "2026-03-09";
 const IMPORTED_TUESDAY = "2026-03-10";
 const IMPORTED_WEDNESDAY = "2026-03-11";
@@ -161,7 +162,7 @@ const run = async () => {
     await prisma.user.deleteMany({
       where: {
         username: {
-          in: ["rota-alex", "rota-jordan"],
+          in: ["rota-alex", "rota-jordan", "rota-casey"],
         },
       },
     });
@@ -199,6 +200,15 @@ const run = async () => {
           name: "Jordan Patel",
           passwordHash: "hash",
           role: "MANAGER",
+          isActive: true,
+        },
+        {
+          id: CASEY_STAFF_ID,
+          username: "rota-casey",
+          email: "rota-casey@corepos.local",
+          name: "Casey Hudson",
+          passwordHash: "hash",
+          role: "STAFF",
           isActive: true,
         },
       ],
@@ -285,6 +295,37 @@ const run = async () => {
     assert.equal(rotaOverviewRes.json.period.staffRows.length, 2);
     assert.equal(rotaOverviewRes.json.period.days.length, 36);
     assert.equal(rotaOverviewRes.json.period.days[0].weekday, "MONDAY");
+
+    const filteredAllStaffRes = await fetchJson("/api/rota?staffScope=all&role=STAFF&search=Casey", { headers: MANAGER_HEADERS });
+    assert.equal(filteredAllStaffRes.status, 200, JSON.stringify(filteredAllStaffRes.json));
+    assert.equal(filteredAllStaffRes.json.period.staffRows.length, 1);
+    assert.equal(filteredAllStaffRes.json.period.staffRows[0].name, "Casey Hudson");
+    assert.ok(filteredAllStaffRes.json.period.staffRows[0].cells.every((cell) => cell.shiftType === null));
+
+    const caseyManualAssignRes = await fetchJson("/api/rota/assignments", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: CASEY_STAFF_ID,
+        date: FUTURE_MONDAY,
+        shiftType: "FULL_DAY",
+      }),
+    });
+    assert.equal(caseyManualAssignRes.status, 201, JSON.stringify(caseyManualAssignRes.json));
+    assert.equal(caseyManualAssignRes.json.assignment.source, "MANUAL");
+
+    const futureMondayRes = await fetchJson(`/api/dashboard/staff-today?date=${FUTURE_MONDAY}`, { headers: ADMIN_HEADERS });
+    assert.equal(futureMondayRes.status, 200, JSON.stringify(futureMondayRes.json));
+    assert.equal(futureMondayRes.json.staffToday.summary.scheduledStaffCount, 1);
+    assert.equal(futureMondayRes.json.staffToday.summary.holidayStaffCount, 0);
+    assert.deepEqual(
+      futureMondayRes.json.staffToday.staff.map((entry) => entry.name),
+      ["Casey Hudson"],
+    );
 
     await prisma.rotaClosedDay.create({
       data: {
@@ -395,7 +436,7 @@ const run = async () => {
     );
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.source === "HOLIDAY_APPROVED"));
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.note === "Family trip"));
-    assert.equal(await prisma.rotaAssignment.count(), 8);
+    assert.equal(await prisma.rotaAssignment.count(), 9);
 
     const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));

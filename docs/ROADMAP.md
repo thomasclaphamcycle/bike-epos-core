@@ -305,6 +305,7 @@ Implementation status:
 - Staff Rota now has a real admin review/import page for imported six-week rota periods, giving the dashboard View Rota action a live in-app destination
 - rota holiday requests now provide a lightweight staff-to-manager workflow that writes approved leave back into the live rota as HOLIDAY assignments
 - Staff Rota now supports inline manager/admin day-level editing, keeping `RotaAssignment` as the live source of truth for imported, holiday-approved, and manually adjusted coverage
+- Staff Rota now supports practical daily-use filters, print-friendly output, and active-staff visibility beyond imported spreadsheet rows so managers can schedule missing staff directly in-app
 
 ---
 

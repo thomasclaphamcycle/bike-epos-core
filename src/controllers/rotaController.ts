@@ -83,7 +83,10 @@ const parseAssignmentBody = (body: unknown) => {
 
 export const listRotaOverviewHandler = async (req: Request, res: Response) => {
   const periodId = typeof req.query.periodId === "string" ? req.query.periodId.trim() : undefined;
-  const overview = await getRotaOverview({ periodId });
+  const staffScope = typeof req.query.staffScope === "string" ? req.query.staffScope.trim() : undefined;
+  const role = typeof req.query.role === "string" ? req.query.role.trim() : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : undefined;
+  const overview = await getRotaOverview({ periodId, staffScope, role, search });
   res.json(overview);
 };
 

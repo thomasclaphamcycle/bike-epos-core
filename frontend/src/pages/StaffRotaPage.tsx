@@ -171,6 +171,16 @@ const sourceLabel = (source: RotaAssignmentSource | null) => {
   return null;
 };
 
+const visibleSourceLabel = (source: RotaAssignmentSource | null) => {
+  if (source === "IMPORT") {
+    return "Imported";
+  }
+  if (source === "HOLIDAY_APPROVED") {
+    return "Holiday approved";
+  }
+  return null;
+};
+
 const shiftClassName = (shiftType: RotaShiftType | null) => {
   if (shiftType === "FULL_DAY") {
     return "rota-shift-pill rota-shift-pill-full";
@@ -220,9 +230,22 @@ export const StaffRotaPage = () => {
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
+  const staffScope = searchParams.get("staffScope") === "all" ? "all" : "assigned";
+  const roleFilter = searchParams.get("role") ?? "ALL";
+  const searchFilter = searchParams.get("search") ?? "";
   const isAdmin = user?.role === "ADMIN";
   const canEditGrid = user?.role === "MANAGER" || user?.role === "ADMIN";
   const isSettingsRoute = location.pathname.startsWith("/settings");
+
+  const updateQueryParam = (key: string, value: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (!value.trim() || value === "ALL" || value === "assigned") {
+      nextParams.delete(key);
+    } else {
+      nextParams.set(key, value);
+    }
+    setSearchParams(nextParams);
+  };
 
   const loadOverview = async (periodId?: string, silent = false) => {
     if (silent) {
@@ -235,6 +258,15 @@ export const StaffRotaPage = () => {
       const query = new URLSearchParams();
       if (periodId?.trim()) {
         query.set("periodId", periodId.trim());
+      }
+      if (staffScope === "all") {
+        query.set("staffScope", "all");
+      }
+      if (roleFilter !== "ALL") {
+        query.set("role", roleFilter);
+      }
+      if (searchFilter.trim()) {
+        query.set("search", searchFilter.trim());
       }
       const payload = await apiGet<RotaOverviewResponse>(`/api/rota${query.toString() ? `?${query.toString()}` : ""}`);
       setOverview(payload);
@@ -266,12 +298,17 @@ export const StaffRotaPage = () => {
     void loadOverview(selectedPeriodId);
     void loadHolidayRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPeriodId]);
+  }, [selectedPeriodId, staffScope, roleFilter, searchFilter]);
 
   const currentPeriod = overview?.period ?? null;
   const currentPeriodIndex = useMemo(() => (
     overview?.periods.findIndex((period) => period.id === (currentPeriod?.id ?? overview?.selectedPeriodId)) ?? -1
   ), [currentPeriod?.id, overview?.periods, overview?.selectedPeriodId]);
+  const visibleStaffCount = currentPeriod?.staffRows.length ?? 0;
+  const unassignedVisibleStaffCount = useMemo(
+    () => currentPeriod?.staffRows.filter((row) => !row.cells.some((cell) => cell.shiftType)).length ?? 0,
+    [currentPeriod],
+  );
 
   const previousPeriod = currentPeriodIndex > 0 ? overview?.periods[currentPeriodIndex - 1] ?? null : null;
   const nextPeriod = currentPeriodIndex >= 0 && overview ? overview.periods[currentPeriodIndex + 1] ?? null : null;
@@ -462,6 +499,7 @@ export const StaffRotaPage = () => {
             <button type="button" onClick={() => void loadOverview(selectedPeriodId, true)} disabled={loading || refreshing}>
               {refreshing ? "Refreshing..." : "Refresh"}
             </button>
+            <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
             <Link to="/dashboard">Dashboard</Link>
             {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
             {isAdmin ? <Link to="/settings/roles-permissions">Roles & Permissions</Link> : null}
@@ -556,7 +594,54 @@ export const StaffRotaPage = () => {
                 <span className="metric-label">Store Hours Source</span>
                 <strong>Store Info opening hours</strong>
               </div>
+              <div className="rota-period-summary-item">
+                <span className="metric-label">Visible Staff</span>
+                <strong>{visibleStaffCount}</strong>
+              </div>
             </div>
+
+            <div className="filter-row rota-filter-row">
+              <label className="grow">
+                Staff view
+                <select
+                  value={staffScope}
+                  onChange={(event) => updateQueryParam("staffScope", event.target.value)}
+                >
+                  <option value="assigned">With assignments</option>
+                  <option value="all">All active staff</option>
+                </select>
+              </label>
+              <label className="grow">
+                Role
+                <select
+                  value={roleFilter}
+                  onChange={(event) => updateQueryParam("role", event.target.value)}
+                >
+                  <option value="ALL">All roles</option>
+                  <option value="STAFF">Staff</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </label>
+              <label className="grow">
+                Search staff
+                <input
+                  type="search"
+                  value={searchFilter}
+                  placeholder="Search by name"
+                  onChange={(event) => updateQueryParam("search", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <p className="muted-text rota-filter-summary">
+              {staffScope === "all"
+                ? "Showing active staff plus existing assignments for this period."
+                : "Showing staff who already have assignments in this period."}
+              {unassignedVisibleStaffCount
+                ? ` ${unassignedVisibleStaffCount} visible ${unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.`
+                : ""}
+            </p>
 
             <div className="table-wrap rota-grid-wrap">
               <table className="table-primary rota-review-grid">
@@ -592,7 +677,14 @@ export const StaffRotaPage = () => {
                 <tbody>
                   {currentPeriod.staffRows.length ? currentPeriod.staffRows.map((row) => (
                     <tr key={row.staffId}>
-                      <th className="rota-sticky rota-sticky-name rota-staff-name" scope="row">{row.name}</th>
+                      <th className="rota-sticky rota-sticky-name rota-staff-name" scope="row">
+                        <div className="rota-staff-name-copy">
+                          <span>{row.name}</span>
+                          {!row.cells.some((cell) => cell.shiftType) ? (
+                            <span className="table-secondary">No shifts in this view yet</span>
+                          ) : null}
+                        </div>
+                      </th>
                       <td className="rota-sticky rota-sticky-role rota-staff-role">
                         <span className="status-badge status-info">{row.role}</span>
                       </td>
@@ -601,10 +693,11 @@ export const StaffRotaPage = () => {
                         const isEditorOpen = openEditorCellKey === cellKey;
                         const isSavingCell = savingCellKey === cellKey;
                         const cellSourceLabel = sourceLabel(cell.source);
+                        const cellVisibleSourceLabel = visibleSourceLabel(cell.source);
                         const triggerTitle = cell.isClosed
                           ? cell.closedReason || "Closed"
                           : canEditGrid
-                            ? `Edit ${row.name} on ${cell.date}`
+                            ? `Edit ${row.name} on ${cell.date}${cellSourceLabel ? ` · ${cellSourceLabel}` : ""}`
                             : cell.note || cell.rawValue || cellSourceLabel || "Rota assignment";
 
                         return (
@@ -637,7 +730,7 @@ export const StaffRotaPage = () => {
                                       <span className="table-secondary">—</span>
                                     )}
                                     {cell.note ? <span className="muted-text rota-cell-note">{cell.note}</span> : null}
-                                    {cellSourceLabel ? <span className="table-secondary">{cellSourceLabel}</span> : null}
+                                    {cellVisibleSourceLabel ? <span className="table-secondary">{cellVisibleSourceLabel}</span> : null}
                                   </div>
                                 </button>
 
@@ -716,7 +809,7 @@ export const StaffRotaPage = () => {
                     <tr>
                       <td colSpan={currentPeriod.days.length + 2}>
                         <div className="restricted-panel info-panel">
-                          No assignments are stored for this period yet.
+                          No staff match the current rota filters.
                         </div>
                       </td>
                     </tr>
