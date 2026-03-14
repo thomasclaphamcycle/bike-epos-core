@@ -37,6 +37,19 @@ type OpenMeteoGeocodeResponse = {
   }>;
 };
 
+type PostcodesIoLookupResponse = {
+  status?: number;
+  result?: {
+    postcode: string;
+    latitude: number;
+    longitude: number;
+    country?: string;
+    admin_district?: string;
+    admin_ward?: string;
+    region?: string;
+  } | null;
+};
+
 type ResolvedStoreLocation = {
   latitude: number;
   longitude: number;
@@ -50,7 +63,9 @@ type StoreLocationResolution =
 
 const FORECAST_BASE_URL = process.env.OPEN_METEO_FORECAST_URL?.trim() || "https://api.open-meteo.com/v1/forecast";
 const GEOCODE_BASE_URL = process.env.OPEN_METEO_GEOCODE_URL?.trim() || "https://geocoding-api.open-meteo.com/v1/search";
+const POSTCODES_IO_BASE_URL = process.env.POSTCODES_IO_BASE_URL?.trim() || "https://api.postcodes.io/postcodes";
 const WEATHER_FETCH_TIMEOUT_MS = Number(process.env.COREPOS_WEATHER_TIMEOUT_MS || 5000);
+const UK_POSTCODE_REGEX = /^([A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}|GIR 0AA)$/i;
 
 const weatherCodeSummary = (code: number) => {
   switch (code) {
@@ -127,26 +142,64 @@ const buildSnapshot = (
   };
 };
 
-const fetchJson = async <T>(url: URL): Promise<T> => {
+const normalizePostcode = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
+
+const isLikelyUkPostcode = (value: string) => UK_POSTCODE_REGEX.test(value);
+
+const fetchResponse = async (url: URL): Promise<Response> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEATHER_FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
+    return await fetch(url, {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
       },
     });
-
-    if (!response.ok) {
-      throw new Error(`Weather provider request failed (${response.status})`);
-    }
-
-    return await response.json() as T;
   } finally {
     clearTimeout(timeout);
   }
+};
+
+const fetchJson = async <T>(url: URL): Promise<T> => {
+  const response = await fetchResponse(url);
+  if (!response.ok) {
+    throw new Error(`Weather provider request failed (${response.status})`);
+  }
+  return await response.json() as T;
+};
+
+const buildLocationLabel = (primary: string, secondary?: string, country?: string) =>
+  [primary, secondary, country].filter(Boolean).join(", ");
+
+const resolveUkPostcodeLocation = async (postcode: string): Promise<ResolvedStoreLocation | null> => {
+  const trimmedBaseUrl = POSTCODES_IO_BASE_URL.replace(/\/+$/, "");
+  const url = new URL(`${trimmedBaseUrl}/${encodeURIComponent(postcode)}`);
+  const response = await fetchResponse(url);
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`Postcode lookup request failed (${response.status})`);
+  }
+
+  const payload = await response.json() as PostcodesIoLookupResponse;
+  const result = payload.result;
+  if (!result) {
+    return null;
+  }
+
+  return {
+    latitude: result.latitude,
+    longitude: result.longitude,
+    label: buildLocationLabel(
+      result.postcode || postcode,
+      result.admin_district || result.admin_ward || result.region,
+      result.country,
+    ) || postcode,
+  };
 };
 
 const resolveGeocodedLocation = async (query: string): Promise<ResolvedStoreLocation | null> => {
@@ -162,21 +215,29 @@ const resolveGeocodedLocation = async (query: string): Promise<ResolvedStoreLoca
     return null;
   }
 
-  const labelParts = [result.name, result.admin1, result.country].filter(Boolean);
-
   return {
     latitude: result.latitude,
     longitude: result.longitude,
-    label: labelParts.join(", ") || query,
+    label: buildLocationLabel(result.name, result.admin1, result.country) || query,
   };
 };
 
 const resolveStoreLocation = async (): Promise<StoreLocationResolution> => {
   const settings = await listShopSettings();
-  const { postcode } = settings.store;
+  const postcode = normalizePostcode(settings.store.postcode);
 
   if (!postcode) {
     return { status: "missing" };
+  }
+
+  if (isLikelyUkPostcode(postcode)) {
+    const resolvedUkPostcode = await resolveUkPostcodeLocation(postcode);
+    if (resolvedUkPostcode) {
+      return {
+        status: "ready",
+        location: resolvedUkPostcode,
+      };
+    }
   }
 
   const geocoded = await resolveGeocodedLocation(postcode);

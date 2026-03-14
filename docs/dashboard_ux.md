@@ -150,8 +150,8 @@ Dashboard v1 weather now:
 
 - uses Open-Meteo through a backend weather service
 - reads store location from Store Info settings
-- prefers stored latitude/longitude when present
-- falls back to store town/postcode lookup when coordinates are not set
+- uses the saved store postcode as the location source of truth
+- geocodes the postcode internally before requesting the forecast
 
 If store location is missing:
 

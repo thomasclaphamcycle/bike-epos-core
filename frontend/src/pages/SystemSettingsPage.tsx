@@ -56,6 +56,7 @@ const isValidUrl = (value: string) => {
 };
 
 const normalizeTextInput = (value: string) => value.replace(/\s+/g, " ").trim();
+const normalizePostcodeInput = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
 
 const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
   name: normalizeTextInput(store.name),
@@ -67,7 +68,7 @@ const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
   addressLine2: normalizeTextInput(store.addressLine2),
   city: normalizeTextInput(store.city),
   region: normalizeTextInput(store.region),
-  postcode: store.postcode.trim(),
+  postcode: normalizePostcodeInput(store.postcode),
   country: normalizeTextInput(store.country),
   vatNumber: store.vatNumber.trim(),
   companyNumber: store.companyNumber.trim(),

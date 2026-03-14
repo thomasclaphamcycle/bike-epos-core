@@ -96,10 +96,37 @@ const waitForExit = (child, timeoutMs) =>
     });
   });
 
-const startGeocodeStubServer = () =>
+const startLocationLookupStubServer = () =>
   new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const url = new URL(req.url, "http://127.0.0.1");
+
+      if (url.pathname.startsWith("/postcodes/")) {
+        const encodedPostcode = url.pathname.replace(/^\/postcodes\//, "");
+        const postcode = decodeURIComponent(encodedPostcode).replace(/\s+/g, " ").trim().toUpperCase();
+        if (postcode === "SW11 1JD") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            status: 200,
+            result: {
+              postcode: "SW11 1JD",
+              latitude: 51.464095,
+              longitude: -0.163837,
+              admin_district: "Wandsworth",
+              region: "London",
+              country: "England",
+            },
+          }));
+          return;
+        }
+
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          status: 404,
+          error: "Invalid postcode",
+        }));
+        return;
+      }
 
       if (url.pathname !== "/geocode") {
         res.writeHead(404, { "Content-Type": "application/json" });
@@ -144,7 +171,7 @@ const startGeocodeStubServer = () =>
 const run = async () => {
   let startedServer = false;
   let serverProcess = null;
-  let geocodeStubServer = null;
+  let locationLookupStubServer = null;
 
   try {
     const existing = await serverIsHealthy();
@@ -155,8 +182,8 @@ const run = async () => {
     }
 
     if (!existing) {
-      const geocodeStub = await startGeocodeStubServer();
-      geocodeStubServer = geocodeStub.server;
+      const locationLookupStub = await startLocationLookupStubServer();
+      locationLookupStubServer = locationLookupStub.server;
 
       serverProcess = spawn("npx", ["ts-node", "--transpile-only", "src/server.ts"], {
         stdio: ["ignore", "pipe", "pipe"],
@@ -166,7 +193,8 @@ const run = async () => {
           DATABASE_URL,
           PORT: new URL(BASE_URL).port || "3100",
           COREPOS_WEATHER_STUB: "1",
-          OPEN_METEO_GEOCODE_URL: geocodeStub.url,
+          POSTCODES_IO_BASE_URL: `${locationLookupStub.url.replace(/\/geocode$/, "")}/postcodes`,
+          OPEN_METEO_GEOCODE_URL: locationLookupStub.url,
         },
       });
       startedServer = true;
@@ -188,18 +216,8 @@ const run = async () => {
 
     await prisma.appConfig.upsert({
       where: { key: "store.postcode" },
-      create: { key: "store.postcode", value: "SW11 1JD" },
-      update: { value: "SW11 1JD" },
-    });
-    await prisma.appConfig.upsert({
-      where: { key: "store.latitude" },
-      create: { key: "store.latitude", value: 51.4526 },
-      update: { value: 51.4526 },
-    });
-    await prisma.appConfig.upsert({
-      where: { key: "store.longitude" },
-      create: { key: "store.longitude", value: -0.1477 },
-      update: { value: -0.1477 },
+      create: { key: "store.postcode", value: " sw11   1jd " },
+      update: { value: " sw11   1jd " },
     });
 
     const readyRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
@@ -207,6 +225,7 @@ const run = async () => {
     assert.equal(readyRes.json.weather.status, "ready");
     assert.equal(typeof readyRes.json.weather.locationLabel, "string");
     assert.ok(readyRes.json.weather.locationLabel.trim().length > 0);
+    assert.match(readyRes.json.weather.locationLabel, /SW11 1JD/i);
     assertDailyWeatherSnapshot(readyRes.json.weather.today, "today");
     assertDailyWeatherSnapshot(readyRes.json.weather.tomorrow, "tomorrow");
 
@@ -237,8 +256,8 @@ const run = async () => {
       }
     }
 
-    if (geocodeStubServer) {
-      await new Promise((resolve) => geocodeStubServer.close(resolve));
+    if (locationLookupStubServer) {
+      await new Promise((resolve) => locationLookupStubServer.close(resolve));
     }
   }
 };

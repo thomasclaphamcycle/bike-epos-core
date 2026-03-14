@@ -108,6 +108,11 @@ const normalizeUrlSetting = (value: unknown, field: string) => {
   return normalized;
 };
 
+const normalizePostcodeSetting = (value: unknown, field: string) =>
+  normalizeTextSetting(value, field, { allowEmpty: false, maxLength: 32 })
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
 const normalizeCurrencySetting = (value: unknown, field: string) => {
   const normalized = normalizeTextSetting(value, field, {
     allowEmpty: false,
@@ -241,8 +246,7 @@ const SETTINGS_DEFINITIONS = {
   "store.postcode": {
     key: "store.postcode",
     defaultValue: "",
-    validate: (value: unknown) =>
-      normalizeTextSetting(value, "store.postcode", { allowEmpty: false, maxLength: 32 }),
+    validate: (value: unknown) => normalizePostcodeSetting(value, "store.postcode"),
   },
   "store.country": {
     key: "store.country",
