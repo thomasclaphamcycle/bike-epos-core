@@ -36,6 +36,18 @@ const WEATHER_KEYS = [
   "store.longitude",
 ];
 
+const assertDailyWeatherSnapshot = (snapshot, label) => {
+  assert.ok(snapshot, `${label} weather snapshot should exist`);
+  assert.equal(typeof snapshot.summary, "string");
+  assert.ok(snapshot.summary.trim().length > 0);
+  assert.equal(typeof snapshot.highC, "number");
+  assert.ok(Number.isFinite(snapshot.highC));
+  assert.equal(typeof snapshot.lowC, "number");
+  assert.ok(Number.isFinite(snapshot.lowC));
+  assert.equal(typeof snapshot.precipitationMm, "number");
+  assert.ok(Number.isFinite(snapshot.precipitationMm));
+};
+
 const fetchJson = async (path, options = {}) => {
   const response = await fetch(`${BASE_URL}${path}`, options);
   const text = await response.text();
@@ -141,11 +153,10 @@ const run = async () => {
     const readyRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
     assert.equal(readyRes.status, 200, JSON.stringify(readyRes.json));
     assert.equal(readyRes.json.weather.status, "ready");
-    assert.equal(typeof readyRes.json.weather.today.summary, "string");
-    assert.ok(readyRes.json.weather.today.summary.trim().length > 0);
-    assert.equal(readyRes.json.weather.today.highC, 14);
-    assert.equal(typeof readyRes.json.weather.tomorrow.summary, "string");
-    assert.ok(readyRes.json.weather.tomorrow.summary.trim().length > 0);
+    assert.equal(typeof readyRes.json.weather.locationLabel, "string");
+    assert.ok(readyRes.json.weather.locationLabel.trim().length > 0);
+    assertDailyWeatherSnapshot(readyRes.json.weather.today, "today");
+    assertDailyWeatherSnapshot(readyRes.json.weather.tomorrow, "tomorrow");
 
     console.log("[dashboard-weather-smoke] dashboard weather endpoint passed");
   } finally {
