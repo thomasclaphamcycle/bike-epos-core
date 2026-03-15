@@ -3,7 +3,7 @@ import path from "node:path";
 import { RotaAssignmentSource, RotaShiftType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { listShopSettings } from "./configurationService";
-import { buildSixWeekRotaWindow, getOrCreateSixWeekRotaPeriod } from "./rotaService";
+import { buildSixWeekRotaWindow, getOrCreateSixWeekRotaPeriod, normalizeDateKeyOrThrow } from "./rotaService";
 import { resolveStoreDaySchedule } from "./storeScheduleService";
 import {
   clockTimeToMinutes,
@@ -18,6 +18,7 @@ import { HttpError } from "../utils/http";
 export type LegacyRotaImportDelimiter = "auto" | "," | "\t" | ";";
 
 type SpreadsheetBlock = {
+  blockStartRowIndex: number;
   headerRowIndex: number;
   startCol: number;
   dates: Record<StoreWeekdayKey, string>;
@@ -30,19 +31,22 @@ type StaffRecord = {
   isActive: boolean;
 };
 
-type ParsedImportAssignment = {
+type ParsedImportCell = {
   staffId: string;
   staffName: string;
   date: string;
-  shiftType: RotaShiftType;
+  shiftType: RotaShiftType | null;
   note: string | null;
   rawValue: string;
+  rowNumber: number;
 };
 
 type ParsedAssignmentsResult = {
-  assignments: ParsedImportAssignment[];
+  cells: ParsedImportCell[];
   warnings: string[];
+  blockingIssues: string[];
   skippedCells: number;
+  matchedStaffIds: string[];
 };
 
 type PreviewOptions = {
@@ -57,6 +61,35 @@ type ConfirmOptions = PreviewOptions & {
   createdByStaffId?: string;
 };
 
+type TemplateOptions = {
+  startsOn?: string;
+  db?: typeof prisma;
+};
+
+type ExportOptions = {
+  rotaPeriodId: string;
+  db?: typeof prisma;
+};
+
+type ImportChangeType = "CREATE" | "UPDATE" | "CLEAR" | "UNCHANGED";
+
+type ImportChangePreview = {
+  staffId: string;
+  staffName: string;
+  date: string;
+  action: ImportChangeType;
+  previousValue: string;
+  nextValue: string;
+};
+
+type ExistingAssignmentSnapshot = {
+  id: string;
+  staffId: string;
+  date: string;
+  shiftType: RotaShiftType;
+  note: string | null;
+};
+
 export type RotaSpreadsheetImportPreview = {
   previewKey: string;
   fileName: string;
@@ -64,21 +97,35 @@ export type RotaSpreadsheetImportPreview = {
   period: {
     startsOn: string;
     endsOn: string;
+    rotaPeriodId: string | null;
+    label: string | null;
+    exists: boolean;
   };
   summary: {
     weekBlocks: number;
     parsedAssignments: number;
+    parsedOffDays: number;
     skippedCells: number;
     warningCount: number;
+    blockingIssueCount: number;
     matchedStaffCount: number;
+    createCount: number;
+    updateCount: number;
+    clearCount: number;
+    unchangedCount: number;
   };
   warnings: string[];
+  blockingIssues: string[];
+  canConfirm: boolean;
+  changes: ImportChangePreview[];
 };
 
 export type RotaSpreadsheetImportResult = RotaSpreadsheetImportPreview & {
   importBatchKey: string;
   createdAssignments: number;
   updatedAssignments: number;
+  clearedAssignments: number;
+  unchangedAssignments: number;
   createdByStaffId: string | null;
   rotaPeriod: {
     id: string;
@@ -88,6 +135,21 @@ export type RotaSpreadsheetImportResult = RotaSpreadsheetImportPreview & {
     status: "DRAFT" | "ACTIVE" | "ARCHIVED";
   };
 };
+
+export type RotaSpreadsheetDownload = {
+  fileName: string;
+  content: string;
+};
+
+const ROUND_TRIP_SHIFT_LABELS: Record<RotaShiftType, string> = {
+  FULL_DAY: "Full",
+  HALF_DAY_AM: "AM",
+  HALF_DAY_PM: "PM",
+  HOLIDAY: "Holiday",
+};
+
+const MONDAY_TO_SATURDAY: StoreWeekdayKey[] = STORE_WEEKDAY_KEYS.slice(0, 6);
+const MAX_PREVIEW_CHANGES = 24;
 
 const normalizeSpreadsheetText = (value: string) =>
   value.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -111,9 +173,9 @@ const ensureSpreadsheetText = (value: string | undefined) => {
   return normalized;
 };
 
-const normalizeFileName = (value: string | undefined) => {
+const normalizeFileName = (value: string | undefined, fallback = "rota-import.csv") => {
   const trimmed = typeof value === "string" ? value.trim() : "";
-  return trimmed || "rota-import.csv";
+  return trimmed || fallback;
 };
 
 const detectDelimiter = (content: string, preferred: LegacyRotaImportDelimiter) => {
@@ -379,6 +441,7 @@ const detectWeekBlock = (rows: string[][], rowIndex: number, weekStart: string |
     }
 
     return {
+      blockStartRowIndex: rowIndex,
       headerRowIndex: rowIndex,
       startCol,
       dates: {
@@ -408,6 +471,7 @@ const detectSpreadsheetBlocks = (rows: string[][]) => {
         }
         const block = detectWeekBlock(rows, cursor, weekStart);
         if (block) {
+          block.blockStartRowIndex = rowIndex;
           blocks.push(block);
         }
         break;
@@ -455,41 +519,79 @@ const parseLegacyTimeRange = (rawValue: string) => {
   };
 };
 
+type InterpretedImportCell =
+  | { kind: "skip" }
+  | { kind: "clear" }
+  | { kind: "set"; shiftType: RotaShiftType; note: string | null }
+  | { kind: "issue"; message: string };
+
 const interpretCellValue = (
   rawValue: string,
   weekday: StoreWeekdayKey,
   openingHours: StoreOpeningHoursSettings,
-): { shiftType: RotaShiftType; note: string | null } | null | { warning: string } => {
+): InterpretedImportCell => {
   const normalized = normalizeCell(rawValue);
   if (!normalized || normalized.toLowerCase() === "x") {
-    return null;
+    return { kind: "skip" };
   }
 
-  if (/^training day$/i.test(normalized)) {
-    return {
-      shiftType: "FULL_DAY",
-      note: "Training day",
-    };
+  if (/^off$/i.test(normalized)) {
+    return { kind: "clear" };
   }
 
   if (/^(holiday|annual leave)$/i.test(normalized)) {
     return {
+      kind: "set",
       shiftType: "HOLIDAY",
       note: normalized,
+    };
+  }
+
+  if (/^full$/i.test(normalized)) {
+    return {
+      kind: "set",
+      shiftType: "FULL_DAY",
+      note: null,
+    };
+  }
+
+  if (/^am$/i.test(normalized)) {
+    return {
+      kind: "set",
+      shiftType: "HALF_DAY_AM",
+      note: null,
+    };
+  }
+
+  if (/^pm$/i.test(normalized)) {
+    return {
+      kind: "set",
+      shiftType: "HALF_DAY_PM",
+      note: null,
+    };
+  }
+
+  if (/^training day$/i.test(normalized)) {
+    return {
+      kind: "set",
+      shiftType: "FULL_DAY",
+      note: "Training day",
     };
   }
 
   const timeRange = parseLegacyTimeRange(normalized);
   if (!timeRange) {
     return {
-      warning: `Unexpected rota value "${normalized}" for ${STORE_WEEKDAY_LABELS[weekday]}.`,
+      kind: "issue",
+      message: `Unexpected rota value "${normalized}" for ${STORE_WEEKDAY_LABELS[weekday]}. Use Full, AM, PM, Off, Holiday, or the legacy full-day time range.`,
     };
   }
 
   const dayHours = openingHours[weekday];
   if (dayHours.isClosed) {
     return {
-      warning: `Found "${normalized}" on ${STORE_WEEKDAY_LABELS[weekday]}, but Store Info marks that day as closed.`,
+      kind: "issue",
+      message: `Found "${normalized}" on ${STORE_WEEKDAY_LABELS[weekday]}, but Store Info marks that day as closed.`,
     };
   }
 
@@ -507,13 +609,15 @@ const interpretCellValue = (
     && importedCloses === expectedCloses
   ) {
     return {
+      kind: "set",
       shiftType: "FULL_DAY",
       note: null,
     };
   }
 
   return {
-    warning: `Unexpected rota time "${normalized}" for ${STORE_WEEKDAY_LABELS[weekday]}; expected ${dayHours.opensAt}-${dayHours.closesAt} for FULL_DAY.`,
+    kind: "issue",
+    message: `Unexpected rota time "${normalized}" for ${STORE_WEEKDAY_LABELS[weekday]}; expected ${dayHours.opensAt}-${dayHours.closesAt} for FULL_DAY.`,
   };
 };
 
@@ -587,13 +691,15 @@ const parseAssignmentsFromRows = (
   openingHours: StoreOpeningHoursSettings,
   staffLookup: Map<string, StaffRecord[]>,
 ): ParsedAssignmentsResult => {
-  const assignments: ParsedImportAssignment[] = [];
+  const cells: ParsedImportCell[] = [];
   const warnings: string[] = [];
+  const blockingIssues: string[] = [];
+  const matchedStaffIds = new Set<string>();
   let skippedCells = 0;
 
   for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
     const block = blocks[blockIndex];
-    const nextBlockRowIndex = blocks[blockIndex + 1]?.headerRowIndex ?? rows.length;
+    const nextBlockRowIndex = blocks[blockIndex + 1]?.blockStartRowIndex ?? rows.length;
 
     for (let rowIndex = block.headerRowIndex + 1; rowIndex < nextBlockRowIndex; rowIndex += 1) {
       const row = rows[rowIndex];
@@ -606,15 +712,24 @@ const parseAssignmentsFromRows = (
       if (!staffName || /^(name|staff|employee)$/i.test(staffName)) {
         continue;
       }
+      if (/^(closed day|closed|store closed)$/i.test(staffName)) {
+        continue;
+      }
 
       const staffMatch = findMatchingStaff(staffName, staffLookup);
       if (staffMatch.warning) {
-        warnings.push(`Row ${rowIndex + 1}: ${staffMatch.warning}`);
+        if (staffMatch.staff) {
+          warnings.push(`Row ${rowIndex + 1}: ${staffMatch.warning}`);
+        } else {
+          blockingIssues.push(`Row ${rowIndex + 1}: ${staffMatch.warning}`);
+        }
       }
       if (!staffMatch.staff) {
         skippedCells += 6;
         continue;
       }
+
+      matchedStaffIds.add(staffMatch.staff.id);
 
       for (let offset = 0; offset < 6; offset += 1) {
         const weekday = weekdayForIndex(offset);
@@ -622,32 +737,52 @@ const parseAssignmentsFromRows = (
         const rawValue = row[block.startCol + offset] ?? "";
         const interpreted = interpretCellValue(rawValue, weekday, openingHours);
 
-        if (interpreted === null) {
-          skippedCells += 1;
-          continue;
-        }
-        if ("warning" in interpreted) {
-          warnings.push(`Row ${rowIndex + 1} ${STORE_WEEKDAY_LABELS[weekday]} ${date}: ${interpreted.warning}`);
+        if (interpreted.kind === "skip") {
           skippedCells += 1;
           continue;
         }
 
-        assignments.push({
+        if (interpreted.kind === "issue") {
+          blockingIssues.push(`Row ${rowIndex + 1} ${STORE_WEEKDAY_LABELS[weekday]} ${date}: ${interpreted.message}`);
+          skippedCells += 1;
+          continue;
+        }
+
+        cells.push({
           staffId: staffMatch.staff.id,
           staffName: staffMatch.staff.name?.trim() || staffMatch.staff.username,
           date,
-          shiftType: interpreted.shiftType,
-          note: interpreted.note,
+          shiftType: interpreted.kind === "clear" ? null : interpreted.shiftType,
+          note: interpreted.kind === "clear" ? null : interpreted.note,
           rawValue: normalizeCell(rawValue),
+          rowNumber: rowIndex + 1,
         });
       }
     }
   }
 
+  const dedupedCells: ParsedImportCell[] = [];
+  const seenKeys = new Map<string, ParsedImportCell>();
+  for (const cell of cells) {
+    const key = `${cell.staffId}:${cell.date}`;
+    const existing = seenKeys.get(key);
+    if (existing) {
+      blockingIssues.push(
+        `Duplicate spreadsheet entry for ${cell.staffName} on ${cell.date} (rows ${existing.rowNumber} and ${cell.rowNumber}). Keep one row per staff member per week.`,
+      );
+      skippedCells += 1;
+      continue;
+    }
+    seenKeys.set(key, cell);
+    dedupedCells.push(cell);
+  }
+
   return {
-    assignments,
+    cells: dedupedCells,
     warnings,
+    blockingIssues,
     skippedCells,
+    matchedStaffIds: [...matchedStaffIds],
   };
 };
 
@@ -664,10 +799,10 @@ const buildImportBatchKey = (fileName: string, timeZone: string) =>
   `${path.basename(fileName)}:${formatDateKeyInTimeZone(new Date(), timeZone)}`;
 
 const filterAssignmentsAgainstClosedDays = async (
-  assignments: ParsedImportAssignment[],
+  cells: ParsedImportCell[],
   db: typeof prisma,
 ): Promise<ParsedAssignmentsResult> => {
-  const uniqueDates = [...new Set(assignments.map((assignment) => assignment.date))];
+  const uniqueDates = [...new Set(cells.map((cell) => cell.date))];
   const schedules = new Map<string, Awaited<ReturnType<typeof resolveStoreDaySchedule>>>();
 
   for (const date of uniqueDates) {
@@ -677,29 +812,252 @@ const filterAssignmentsAgainstClosedDays = async (
     );
   }
 
-  const filteredAssignments: ParsedImportAssignment[] = [];
+  const filteredCells: ParsedImportCell[] = [];
   const warnings: string[] = [];
+  const blockingIssues: string[] = [];
   let skippedCells = 0;
 
-  for (const assignment of assignments) {
-    const schedule = schedules.get(assignment.date);
+  for (const cell of cells) {
+    const schedule = schedules.get(cell.date);
     if (schedule?.isClosed) {
-      warnings.push(
-        `Skipping ${assignment.staffName} on ${assignment.date} because the store is closed${schedule.closedReason ? ` (${schedule.closedReason})` : ""}.`,
-      );
+      if (cell.shiftType === null) {
+        warnings.push(
+          `Ignoring Off for ${cell.staffName} on ${cell.date} because the store is closed${schedule.closedReason ? ` (${schedule.closedReason})` : ""}.`,
+        );
+      } else {
+        blockingIssues.push(
+          `Cannot schedule ${cell.staffName} on ${cell.date} because the store is closed${schedule.closedReason ? ` (${schedule.closedReason})` : ""}.`,
+        );
+      }
       skippedCells += 1;
       continue;
     }
 
-    filteredAssignments.push(assignment);
+    filteredCells.push(cell);
   }
 
   return {
-    assignments: filteredAssignments,
+    cells: filteredCells,
     warnings,
+    blockingIssues,
     skippedCells,
+    matchedStaffIds: [...new Set(filteredCells.map((cell) => cell.staffId))],
   };
 };
+
+const shiftTypeToImportLabel = (shiftType: RotaShiftType | null, note: string | null = null) => {
+  if (!shiftType) {
+    return "Off";
+  }
+  if (shiftType === "FULL_DAY" && note?.trim() === "Training day") {
+    return "Full";
+  }
+  return ROUND_TRIP_SHIFT_LABELS[shiftType];
+};
+
+const loadExistingAssignmentsForCells = async (
+  cells: ParsedImportCell[],
+  db: typeof prisma,
+) => {
+  if (!cells.length) {
+    return new Map<string, ExistingAssignmentSnapshot>();
+  }
+
+  const staffIds = [...new Set(cells.map((cell) => cell.staffId))];
+  const dates = [...new Set(cells.map((cell) => cell.date))];
+  const existingAssignments = await db.rotaAssignment.findMany({
+    where: {
+      staffId: {
+        in: staffIds,
+      },
+      date: {
+        in: dates,
+      },
+    },
+    select: {
+      id: true,
+      staffId: true,
+      date: true,
+      shiftType: true,
+      note: true,
+    },
+  });
+
+  return new Map(existingAssignments.map((assignment) => [`${assignment.staffId}:${assignment.date}`, assignment]));
+};
+
+const compareImportCells = (
+  cells: ParsedImportCell[],
+  existingAssignments: Map<string, ExistingAssignmentSnapshot>,
+) => {
+  const changes: ImportChangePreview[] = [];
+  let createCount = 0;
+  let updateCount = 0;
+  let clearCount = 0;
+  let unchangedCount = 0;
+
+  for (const cell of cells) {
+    const existing = existingAssignments.get(`${cell.staffId}:${cell.date}`) ?? null;
+    const previousValue = existing ? shiftTypeToImportLabel(existing.shiftType, existing.note) : "Off";
+    const nextValue = shiftTypeToImportLabel(cell.shiftType, cell.note);
+
+    let action: ImportChangeType = "UNCHANGED";
+    if (cell.shiftType === null) {
+      action = existing ? "CLEAR" : "UNCHANGED";
+    } else if (!existing) {
+      action = "CREATE";
+    } else if (
+      existing.shiftType === cell.shiftType
+      && (
+        !normalizeCell(cell.note ?? "")
+        || normalizeCell(existing.note ?? "") === normalizeCell(cell.note ?? "")
+      )
+    ) {
+      action = "UNCHANGED";
+    } else {
+      action = "UPDATE";
+    }
+
+    if (action === "CREATE") {
+      createCount += 1;
+    } else if (action === "UPDATE") {
+      updateCount += 1;
+    } else if (action === "CLEAR") {
+      clearCount += 1;
+    } else {
+      unchangedCount += 1;
+    }
+
+    if (changes.length < MAX_PREVIEW_CHANGES) {
+      changes.push({
+        staffId: cell.staffId,
+        staffName: cell.staffName,
+        date: cell.date,
+        action,
+        previousValue,
+        nextValue,
+      });
+    }
+  }
+
+  return {
+    changes,
+    createCount,
+    updateCount,
+    clearCount,
+    unchangedCount,
+  };
+};
+
+const escapeCsvCell = (value: string) => {
+  if (value.includes(",") || value.includes("\"") || value.includes("\n") || value.includes("\r")) {
+    return `"${value.replaceAll("\"", "\"\"")}"`;
+  }
+  return value;
+};
+
+const rowsToCsv = (rows: string[][]) => rows.map((row) => row.map((cell) => escapeCsvCell(cell)).join(",")).join("\n");
+
+const formatSpreadsheetDate = (date: string) => {
+  const [year, month, day] = date.split("-");
+  return `${day}/${month}/${year}`;
+};
+
+const formatTimestampForCsv = (value: Date, timeZone: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+
+const formatSpreadsheetWeekdayHeader = (weekday: StoreWeekdayKey, date: string) =>
+  `${STORE_WEEKDAY_LABELS[weekday].slice(0, 3)} ${formatSpreadsheetDate(date).slice(0, 5)}`;
+
+const resolveTemplateStartsOn = (startsOn?: string) => {
+  if (startsOn) {
+    return normalizeDateKeyOrThrow(startsOn, "INVALID_ROTA_TEMPLATE_DATE");
+  }
+
+  const now = new Date();
+  const utcDay = now.getUTCDay();
+  const mondayOffset = utcDay === 0 ? -6 : 1 - utcDay;
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() + mondayOffset);
+  return monday.toISOString().slice(0, 10);
+};
+
+const buildSpreadsheetRows = async (
+  startsOn: string,
+  staffRows: Array<{ name: string; values: Record<string, string> }>,
+  db: typeof prisma,
+  title: string,
+) => {
+  const rows: string[][] = [
+    [title],
+    ["Supported shifts", "Full", "AM", "PM", "Off", "Holiday"],
+    ["Notes", "Monday-Saturday only", "Use Off to clear a shift on re-import", "Closed days are shown below when relevant"],
+    [],
+  ];
+
+  for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
+    const weekStartsOn = addDays(startsOn, weekIndex * 7);
+    const weekDates = MONDAY_TO_SATURDAY.map((weekday, offset) => ({
+      weekday,
+      date: addDays(weekStartsOn, offset),
+    }));
+
+    rows.push(["Week commencing", formatSpreadsheetDate(weekStartsOn)]);
+    rows.push(["Name", ...weekDates.map(({ weekday, date }) => formatSpreadsheetWeekdayHeader(weekday, date))]);
+
+    const closedLabels = await Promise.all(
+      weekDates.map(async ({ date }) => {
+        const schedule = await resolveStoreDaySchedule(new Date(`${date}T12:00:00.000Z`), db);
+        if (!schedule.isClosed) {
+          return "";
+        }
+        return schedule.closedReason?.trim() ? `Closed: ${schedule.closedReason.trim()}` : "Closed";
+      }),
+    );
+
+    if (closedLabels.some(Boolean)) {
+      rows.push(["Closed day", ...closedLabels]);
+    }
+
+    for (const staffRow of staffRows) {
+      rows.push([
+        staffRow.name,
+        ...weekDates.map(({ date }) => staffRow.values[date] ?? "Off"),
+      ]);
+    }
+
+    if (weekIndex < 5) {
+      rows.push([]);
+    }
+  }
+
+  return rows;
+};
+
+const resolvePeriodForWindow = async (
+  startsOn: string,
+  endsOn: string,
+  db: typeof prisma,
+) => db.rotaPeriod.findFirst({
+  where: {
+    startsOn,
+    endsOn,
+  },
+  select: {
+    id: true,
+    label: true,
+    startsOn: true,
+    endsOn: true,
+    status: true,
+  },
+});
 
 const previewParsedSpreadsheet = async (
   input: PreviewOptions,
@@ -733,19 +1091,21 @@ const previewParsedSpreadsheet = async (
 
   const staffLookup = buildStaffLookup(staff);
   const parsed = parseAssignmentsFromRows(rows, blocks, settings.store.openingHours, staffLookup);
-  const closedDayFiltered = await filterAssignmentsAgainstClosedDays(parsed.assignments, db);
-  const filteredWarnings = [...parsed.warnings, ...closedDayFiltered.warnings];
-  const filteredSkippedCells = parsed.skippedCells + closedDayFiltered.skippedCells;
+  const closedDayFiltered = await filterAssignmentsAgainstClosedDays(parsed.cells, db);
+  const warnings = [...parsed.warnings, ...closedDayFiltered.warnings];
+  const blockingIssues = [...parsed.blockingIssues, ...closedDayFiltered.blockingIssues];
+  const actionableCells = closedDayFiltered.cells;
+  const skippedCells = parsed.skippedCells + closedDayFiltered.skippedCells;
 
-  if (!closedDayFiltered.assignments.length) {
+  if (!actionableCells.length) {
     throw new HttpError(
       400,
-      "No valid rota assignments were parsed from the spreadsheet export.",
+      "No actionable rota changes were parsed from the spreadsheet export.",
       "INVALID_ROTA_IMPORT",
     );
   }
 
-  const importedDates = [...new Set(closedDayFiltered.assignments.map((assignment) => assignment.date))].sort();
+  const importedDates = [...new Set(actionableCells.map((cell) => cell.date))].sort();
   const earliestDate = importedDates[0];
   const latestDate = importedDates[importedDates.length - 1];
   const rotaWindow = buildSixWeekRotaWindow(earliestDate);
@@ -757,19 +1117,40 @@ const previewParsedSpreadsheet = async (
     );
   }
 
+  const [existingAssignments, existingPeriod] = await Promise.all([
+    loadExistingAssignmentsForCells(actionableCells, db),
+    resolvePeriodForWindow(rotaWindow.startsOn, rotaWindow.endsOn, db),
+  ]);
+  const comparison = compareImportCells(actionableCells, existingAssignments);
+
   return {
     previewKey: buildPreviewKey(fileName, delimiter, spreadsheetText),
     fileName,
     detectedDelimiter: delimiter,
-    period: rotaWindow,
+    period: {
+      startsOn: rotaWindow.startsOn,
+      endsOn: rotaWindow.endsOn,
+      rotaPeriodId: existingPeriod?.id ?? null,
+      label: existingPeriod?.label ?? null,
+      exists: Boolean(existingPeriod),
+    },
     summary: {
       weekBlocks: blocks.length,
-      parsedAssignments: closedDayFiltered.assignments.length,
-      skippedCells: filteredSkippedCells,
-      warningCount: filteredWarnings.length,
-      matchedStaffCount: new Set(closedDayFiltered.assignments.map((assignment) => assignment.staffId)).size,
+      parsedAssignments: actionableCells.filter((cell) => cell.shiftType !== null).length,
+      parsedOffDays: actionableCells.filter((cell) => cell.shiftType === null).length,
+      skippedCells,
+      warningCount: warnings.length,
+      blockingIssueCount: blockingIssues.length,
+      matchedStaffCount: new Set(actionableCells.map((cell) => cell.staffId)).size,
+      createCount: comparison.createCount,
+      updateCount: comparison.updateCount,
+      clearCount: comparison.clearCount,
+      unchangedCount: comparison.unchangedCount,
     },
-    warnings: filteredWarnings,
+    warnings,
+    blockingIssues,
+    canConfirm: blockingIssues.length === 0,
+    changes: comparison.changes,
   };
 };
 
@@ -796,6 +1177,13 @@ export const confirmRotaSpreadsheetImport = async (
       "STALE_ROTA_IMPORT_PREVIEW",
     );
   }
+  if (!preview.canConfirm) {
+    throw new HttpError(
+      400,
+      `Fix the spreadsheet issues before importing: ${preview.blockingIssues.join(" ")}`,
+      "INVALID_ROTA_IMPORT",
+    );
+  }
 
   const delimiter = detectDelimiter(spreadsheetText, parseDelimiter(input.delimiter));
   const rows = parseDelimitedText(spreadsheetText, delimiter);
@@ -814,58 +1202,84 @@ export const confirmRotaSpreadsheetImport = async (
 
   const staffLookup = buildStaffLookup(staff);
   const parsed = parseAssignmentsFromRows(rows, blocks, settings.store.openingHours, staffLookup);
-  const filteredAssignments = await filterAssignmentsAgainstClosedDays(parsed.assignments, db);
-  const earliestDate = [...new Set(filteredAssignments.assignments.map((assignment) => assignment.date))].sort()[0];
+  const filteredAssignments = await filterAssignmentsAgainstClosedDays(parsed.cells, db);
+  const actionableCells = filteredAssignments.cells;
+  const earliestDate = [...new Set(actionableCells.map((cell) => cell.date))].sort()[0];
   const importBatchKey = buildImportBatchKey(fileName, settings.store.timeZone);
 
   let createdAssignments = 0;
   let updatedAssignments = 0;
+  let clearedAssignments = 0;
+  let unchangedAssignments = 0;
 
   const rotaPeriod = await db.$transaction(async (tx) => {
     const selectedPeriod = await getOrCreateSixWeekRotaPeriod(earliestDate, tx);
+    const existingAssignments = await loadExistingAssignmentsForCells(actionableCells, tx as typeof prisma);
+    const comparison = compareImportCells(actionableCells, existingAssignments);
 
-    for (const assignment of filteredAssignments.assignments) {
-      const existing = await tx.rotaAssignment.findUnique({
-        where: {
-          staffId_date: {
-            staffId: assignment.staffId,
-            date: assignment.date,
-          },
-        },
-        select: { id: true },
-      });
+    for (const cell of actionableCells) {
+      const existing = existingAssignments.get(`${cell.staffId}:${cell.date}`) ?? null;
+      const matchedChange = comparison.changes.find(
+        (change) => change.staffId === cell.staffId && change.date === cell.date,
+      );
+      const action = matchedChange?.action
+        ?? (cell.shiftType === null ? (existing ? "CLEAR" : "UNCHANGED") : existing ? "UPDATE" : "CREATE");
+
+      if (action === "UNCHANGED") {
+        unchangedAssignments += 1;
+        continue;
+      }
+
+      if (action === "CLEAR") {
+        if (existing) {
+          await tx.rotaAssignment.delete({
+            where: {
+              id: existing.id,
+            },
+          });
+          clearedAssignments += 1;
+        } else {
+          unchangedAssignments += 1;
+        }
+        continue;
+      }
+
+      if (cell.shiftType === null) {
+        unchangedAssignments += 1;
+        continue;
+      }
 
       await tx.rotaAssignment.upsert({
         where: {
           staffId_date: {
-            staffId: assignment.staffId,
-            date: assignment.date,
+            staffId: cell.staffId,
+            date: cell.date,
           },
         },
         create: {
           rotaPeriodId: selectedPeriod.id,
-          staffId: assignment.staffId,
-          date: assignment.date,
-          shiftType: assignment.shiftType,
+          staffId: cell.staffId,
+          date: cell.date,
+          shiftType: cell.shiftType,
           source: RotaAssignmentSource.IMPORT,
-          note: assignment.note,
-          rawValue: assignment.rawValue,
+          note: cell.note,
+          rawValue: cell.rawValue,
           importBatchKey,
         },
         update: {
           rotaPeriodId: selectedPeriod.id,
-          shiftType: assignment.shiftType,
+          shiftType: cell.shiftType,
           source: RotaAssignmentSource.IMPORT,
-          note: assignment.note,
-          rawValue: assignment.rawValue,
+          note: cell.note ?? existing?.note ?? null,
+          rawValue: cell.rawValue,
           importBatchKey,
         },
       });
 
-      if (existing) {
-        updatedAssignments += 1;
-      } else {
+      if (action === "CREATE") {
         createdAssignments += 1;
+      } else {
+        updatedAssignments += 1;
       }
     }
 
@@ -877,6 +1291,8 @@ export const confirmRotaSpreadsheetImport = async (
     importBatchKey,
     createdAssignments,
     updatedAssignments,
+    clearedAssignments,
+    unchangedAssignments,
     createdByStaffId: input.createdByStaffId?.trim() || null,
     rotaPeriod: {
       id: rotaPeriod.id,
@@ -885,5 +1301,142 @@ export const confirmRotaSpreadsheetImport = async (
       endsOn: rotaPeriod.endsOn,
       status: rotaPeriod.status,
     },
+  };
+};
+
+export const downloadRotaTemplate = async (
+  input: TemplateOptions = {},
+): Promise<RotaSpreadsheetDownload> => {
+  const db = input.db ?? prisma;
+  const startsOn = resolveTemplateStartsOn(input.startsOn);
+  const rotaWindow = buildSixWeekRotaWindow(startsOn);
+  const staff = await db.user.findMany({
+    where: {
+      isActive: true,
+    },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+    },
+    orderBy: [
+      { name: "asc" },
+      { username: "asc" },
+    ],
+  });
+
+  const rows = await buildSpreadsheetRows(
+    rotaWindow.startsOn,
+    staff.map((member) => ({
+      name: member.name?.trim() || member.username,
+      values: {},
+    })),
+    db,
+    `CorePOS rota template · ${rotaWindow.startsOn} to ${rotaWindow.endsOn}`,
+  );
+
+  return {
+    fileName: `corepos-rota-template-${rotaWindow.startsOn}.csv`,
+    content: `${rowsToCsv(rows)}\n`,
+  };
+};
+
+export const exportRotaPeriodSpreadsheet = async (
+  input: ExportOptions,
+): Promise<RotaSpreadsheetDownload> => {
+  const db = input.db ?? prisma;
+  const rotaPeriodId = typeof input.rotaPeriodId === "string" ? input.rotaPeriodId.trim() : "";
+  if (!rotaPeriodId) {
+    throw new HttpError(400, "rotaPeriodId is required", "INVALID_ROTA_EXPORT");
+  }
+
+  const rotaPeriod = await db.rotaPeriod.findUnique({
+    where: {
+      id: rotaPeriodId,
+    },
+    select: {
+      id: true,
+      label: true,
+      startsOn: true,
+      endsOn: true,
+      createdAt: true,
+    },
+  });
+
+  if (!rotaPeriod) {
+    throw new HttpError(404, "Rota period not found", "ROTA_PERIOD_NOT_FOUND");
+  }
+
+  const [assignments, settings] = await Promise.all([
+    db.rotaAssignment.findMany({
+      where: {
+        rotaPeriodId: rotaPeriod.id,
+      },
+      select: {
+        staffId: true,
+        date: true,
+        shiftType: true,
+        note: true,
+      },
+    }),
+    listShopSettings(db),
+  ]);
+
+  const assignedStaffIds = [...new Set(assignments.map((assignment) => assignment.staffId))];
+  const staff = await db.user.findMany({
+    where: assignedStaffIds.length
+      ? {
+        id: {
+          in: assignedStaffIds,
+        },
+      }
+      : {
+        isActive: true,
+      },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+    },
+    orderBy: [
+      { name: "asc" },
+      { username: "asc" },
+    ],
+  });
+
+  const assignmentMap = new Map<string, { shiftType: RotaShiftType; note: string | null }>();
+  for (const assignment of assignments) {
+    assignmentMap.set(`${assignment.staffId}:${assignment.date}`, {
+      shiftType: assignment.shiftType,
+      note: assignment.note,
+    });
+  }
+
+  const rows = await buildSpreadsheetRows(
+    rotaPeriod.startsOn,
+    staff.map((member) => {
+      const values: Record<string, string> = {};
+      for (let offset = 0; offset < 42; offset += 1) {
+        const date = addDays(rotaPeriod.startsOn, offset);
+        const weekday = new Date(`${date}T12:00:00.000Z`).getUTCDay();
+        if (weekday === 0) {
+          continue;
+        }
+        const assignment = assignmentMap.get(`${member.id}:${date}`);
+        values[date] = assignment ? shiftTypeToImportLabel(assignment.shiftType, assignment.note) : "Off";
+      }
+
+      return {
+        name: member.name?.trim() || member.username,
+        values,
+      };
+    }),
+    db,
+    `CorePOS rota export · ${rotaPeriod.label} · generated ${formatTimestampForCsv(rotaPeriod.createdAt, settings.store.timeZone)}`,
+  );
+
+  return {
+    fileName: `corepos-rota-${rotaPeriod.startsOn}.csv`,
+    content: `${rowsToCsv(rows)}\n`,
   };
 };

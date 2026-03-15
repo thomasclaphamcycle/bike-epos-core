@@ -308,6 +308,7 @@ Implementation status:
 - holiday requests now include staff-facing request history plus manager decision notes, so the operational leave workflow is trackable without turning CorePOS into a leave-entitlement system
 - Staff Rota now supports inline manager/admin day-level editing, keeping `RotaAssignment` as the live source of truth for imported, holiday-approved, and manually adjusted coverage
 - Staff Rota now supports practical daily-use filters, print-friendly output, and active-staff visibility beyond imported spreadsheet rows so managers can schedule missing staff directly in-app
+- rota spreadsheet workflow now supports manager-safe round-tripping with template download, current-period export, previewed update counts, and explicit `Off` clearing before any spreadsheet changes are applied
 - UK bank holidays can now be synced from the official GOV.UK feed into `RotaClosedDay`, so rota import, editing, holiday approvals, and dashboard staffing all respect the same exceptional-closure layer
 - workshop operations now surface rota-backed staffing visibility for the day, including scheduled cover, holiday absences, and closed-day reasons without introducing a separate attendance model
 - staff management now includes lightweight operational role tagging so workshop views can prefer workshop-capable rota staff without changing auth roles or introducing a second scheduling model

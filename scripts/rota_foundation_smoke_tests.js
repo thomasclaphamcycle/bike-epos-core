@@ -84,6 +84,12 @@ const fetchJson = async (pathName, options = {}) => {
   return { status: response.status, json };
 };
 
+const fetchText = async (pathName, options = {}) => {
+  const response = await fetch(`${BASE_URL}${pathName}`, options);
+  const text = await response.text();
+  return { status: response.status, text, headers: response.headers };
+};
+
 const runImporter = (filePath, { apply = false } = {}) => {
   const args = ["ts-node", "--transpile-only", "scripts/import_rota_spreadsheet.ts", "--file", filePath];
   if (apply) {
@@ -477,6 +483,15 @@ const run = async () => {
     assert.equal(bankHolidayStatusBeforeSyncRes.json.lastSyncedAt, null);
     assert.equal(bankHolidayStatusBeforeSyncRes.json.storedCount, 0);
 
+    const templateRes = await fetchText(`/api/rota/template?startsOn=${IMPORTED_MONDAY}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(templateRes.status, 200, templateRes.text);
+    assert.match(templateRes.headers.get("content-type") ?? "", /text\/csv/i);
+    assert.match(templateRes.text, /Supported shifts,Full,AM,PM,Off,Holiday/);
+    assert.match(templateRes.text, /Week commencing,09\/03\/2026/);
+    assert.doesNotMatch(templateRes.text, /Sun 15\/03/);
+
     const bankHolidaySyncRes = await fetchJson("/api/rota/bank-holidays/sync", {
       method: "POST",
       headers: ADMIN_HEADERS,
@@ -530,8 +545,8 @@ const run = async () => {
       [
         "Week commencing,09/03/2026,,,,,,",
         "Name,Mon 09/03,Tue 10/03,Wed 11/03,Thu 12/03,Fri 13/03,Sat 14/03,Sun 15/03",
-        "Alex Turner,10-6:30,10-6:30,Training day,x,,9-4:30,",
-        "Jordan Patel,,10-6:30,,10-6:30,10-6:30,x,",
+        "Alex Turner,10-6:30,10-6:30,Training day,x,x,9-4:30,",
+        "Jordan Patel,x,10-6:30,x,10-6:30,x,x,",
       ].join("\n"),
       "utf8",
     );
@@ -546,7 +561,7 @@ const run = async () => {
     const previewRes = await fetchJson("/api/rota/import/preview", {
       method: "POST",
       headers: {
-        ...ADMIN_HEADERS,
+        ...MANAGER_HEADERS,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -556,8 +571,10 @@ const run = async () => {
     });
     assert.equal(previewRes.status, 200, JSON.stringify(previewRes.json));
     assert.equal(previewRes.json.summary.parsedAssignments, 6);
+    assert.equal(previewRes.json.summary.parsedOffDays, 0);
     assert.equal(previewRes.json.summary.weekBlocks, 1);
-    assert.ok(previewRes.json.warnings.some((warning) => warning.includes("Special bank holiday")));
+    assert.equal(previewRes.json.canConfirm, true);
+    assert.equal(previewRes.json.blockingIssues.length, 0);
     assert.ok(typeof previewRes.json.previewKey === "string" && previewRes.json.previewKey.length > 20);
 
     const managerImportRes = await fetchJson("/api/rota/import/preview", {
@@ -571,12 +588,13 @@ const run = async () => {
         fileName: path.basename(tempFilePath),
       }),
     });
-    assert.equal(managerImportRes.status, 403);
+    assert.equal(managerImportRes.status, 200, JSON.stringify(managerImportRes.json));
+    assert.equal(managerImportRes.json.canConfirm, true);
 
     const confirmRes = await fetchJson("/api/rota/import/confirm", {
       method: "POST",
       headers: {
-        ...ADMIN_HEADERS,
+        ...MANAGER_HEADERS,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -588,6 +606,8 @@ const run = async () => {
     assert.equal(confirmRes.status, 201, JSON.stringify(confirmRes.json));
     assert.equal(confirmRes.json.createdAssignments, 6);
     assert.equal(confirmRes.json.updatedAssignments, 0);
+    assert.equal(confirmRes.json.clearedAssignments, 0);
+    assert.equal(confirmRes.json.unchangedAssignments, 0);
 
     const rotaPeriod = await prisma.rotaPeriod.findFirst();
     assert.ok(rotaPeriod, "Expected a rota period to be created");
@@ -599,17 +619,73 @@ const run = async () => {
     });
     assert.equal(importedAssignments.length, 6);
 
+    const exportRes = await fetchText(`/api/rota/periods/${rotaPeriod.id}/export`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(exportRes.status, 200, exportRes.text);
+    assert.match(exportRes.headers.get("content-type") ?? "", /text\/csv/i);
+    assert.match(exportRes.text, /Supported shifts,Full,AM,PM,Off,Holiday/);
+    assert.match(exportRes.text, /Alex Turner,Full,Full,Full,Off,Off,Full/);
+    assert.match(exportRes.text, /Jordan Patel,Off,Full,Off,Full,Off,Off/);
+    assert.doesNotMatch(exportRes.text, /Sun 15\/03/);
+
+    const updatedSpreadsheetText = exportRes.text
+      .replace("Alex Turner,Full,Full,Full,Off,Off,Full", "Alex Turner,Full,AM,Full,Off,Off,Full")
+      .replace("Jordan Patel,Off,Full,Off,Full,Off,Off", "Jordan Patel,Off,Full,Off,Off,Off,Off");
+
+    const roundTripPreviewRes = await fetchJson("/api/rota/import/preview", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        spreadsheetText: updatedSpreadsheetText,
+        fileName: "corepos-rota-roundtrip.csv",
+      }),
+    });
+    assert.equal(roundTripPreviewRes.status, 200, JSON.stringify(roundTripPreviewRes.json));
+    assert.equal(roundTripPreviewRes.json.canConfirm, true, JSON.stringify(roundTripPreviewRes.json));
+    assert.equal(roundTripPreviewRes.json.summary.createCount, 0);
+    assert.equal(roundTripPreviewRes.json.summary.updateCount, 1);
+    assert.equal(roundTripPreviewRes.json.summary.clearCount, 1);
+    assert.ok(roundTripPreviewRes.json.summary.unchangedCount > 0);
+    assert.ok(roundTripPreviewRes.json.changes.some((change) => change.staffName === "Alex Turner" && change.action === "UPDATE" && change.nextValue === "AM"));
+    assert.ok(roundTripPreviewRes.json.changes.some((change) => change.staffName === "Jordan Patel" && change.action === "CLEAR"));
+
+    const roundTripConfirmRes = await fetchJson("/api/rota/import/confirm", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        spreadsheetText: updatedSpreadsheetText,
+        fileName: "corepos-rota-roundtrip.csv",
+        previewKey: roundTripPreviewRes.json.previewKey,
+      }),
+    });
+    assert.equal(roundTripConfirmRes.status, 201, JSON.stringify(roundTripConfirmRes.json));
+    assert.equal(roundTripConfirmRes.json.createdAssignments, 0);
+    assert.equal(roundTripConfirmRes.json.updatedAssignments, 1);
+    assert.equal(roundTripConfirmRes.json.clearedAssignments, 1);
+    assert.ok(roundTripConfirmRes.json.unchangedAssignments > 0);
+
     const rotaOverviewRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
     assert.equal(rotaOverviewRes.status, 200, JSON.stringify(rotaOverviewRes.json));
     assert.equal(rotaOverviewRes.json.selectedPeriodId, rotaPeriod.id);
     assert.equal(rotaOverviewRes.json.period.summary.assignedStaffCount, 2);
-    assert.equal(rotaOverviewRes.json.period.summary.importedAssignments, 6);
+    assert.equal(rotaOverviewRes.json.period.summary.importedAssignments, 5);
     assert.equal(rotaOverviewRes.json.period.staffRows.length, 2);
     assert.equal(rotaOverviewRes.json.period.days.length, 36);
     assert.equal(rotaOverviewRes.json.period.days[0].weekday, "MONDAY");
     const fridayColumn = rotaOverviewRes.json.period.days.find((day) => day.date === IMPORTED_FRIDAY);
     assert.equal(fridayColumn.isClosed, true);
     assert.equal(fridayColumn.closedReason, "Special bank holiday");
+    const alexRoundTripRow = rotaOverviewRes.json.period.staffRows.find((row) => row.staffId === ALEX_STAFF_ID);
+    const jordanRoundTripRow = rotaOverviewRes.json.period.staffRows.find((row) => row.staffId === JORDAN_STAFF_ID);
+    assert.equal(alexRoundTripRow.cells.find((cell) => cell.date === IMPORTED_TUESDAY).shiftType, "HALF_DAY_AM");
+    assert.equal(jordanRoundTripRow.cells.find((cell) => cell.date === "2026-03-12").shiftType, null);
 
     const filteredAllStaffRes = await fetchJson("/api/rota?staffScope=all&role=STAFF&search=Casey", { headers: MANAGER_HEADERS });
     assert.equal(filteredAllStaffRes.status, 200, JSON.stringify(filteredAllStaffRes.json));
@@ -899,7 +975,7 @@ const run = async () => {
     );
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.source === "HOLIDAY_APPROVED"));
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.note === "Family trip"));
-    assert.equal(await prisma.rotaAssignment.count(), 11);
+    assert.equal(await prisma.rotaAssignment.count(), 10);
 
     const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));

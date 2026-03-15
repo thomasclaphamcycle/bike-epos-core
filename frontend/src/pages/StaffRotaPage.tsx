@@ -576,7 +576,7 @@ export const StaffRotaPage = () => {
             </button>
             <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
             <Link to="/dashboard">Dashboard</Link>
-            {isAdmin ? <Link to="/settings/staff-rota">Rota Tools</Link> : null}
+            {canEditGrid ? <Link to="/management/staff-rota/tools">Rota Tools</Link> : null}
             {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
             {isAdmin ? <Link to="/settings/roles-permissions">Roles & Permissions</Link> : null}
           </div>
@@ -672,7 +672,7 @@ export const StaffRotaPage = () => {
             <strong>No rota period exists yet.</strong>
             <div className="muted-text">
               {canEditGrid
-                ? "Create the first six-week period above, then fill in weekly assignments directly here. Import remains available below if you want to bring in a spreadsheet first."
+                ? "Create the first six-week period above, then fill in weekly assignments directly here. Spreadsheet template, export, and update tools are available from Rota Tools."
                 : "Ask a manager or admin to create the first rota period so live staffing can appear on the dashboard and rota pages."}
             </div>
           </div>

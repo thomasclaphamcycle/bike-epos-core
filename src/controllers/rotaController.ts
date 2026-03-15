@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import { getBankHolidaySyncStatus, syncUkBankHolidays } from "../services/bankHolidayService";
-import { confirmRotaSpreadsheetImport, previewRotaSpreadsheetImport } from "../services/rotaImportService";
+import {
+  confirmRotaSpreadsheetImport,
+  downloadRotaTemplate,
+  exportRotaPeriodSpreadsheet,
+  previewRotaSpreadsheetImport,
+} from "../services/rotaImportService";
 import { clearRotaAssignment, createRotaPeriod, getRotaOverview, saveManualRotaAssignment } from "../services/rotaService";
 import { HttpError } from "../utils/http";
 import { RotaShiftType } from "@prisma/client";
@@ -123,6 +128,22 @@ export const previewRotaImportHandler = async (req: Request, res: Response) => {
   const body = parseImportBody(req.body);
   const preview = await previewRotaSpreadsheetImport(body);
   res.json(preview);
+};
+
+export const downloadRotaTemplateHandler = async (req: Request, res: Response) => {
+  const startsOn = typeof req.query.startsOn === "string" ? req.query.startsOn.trim() : undefined;
+  const result = await downloadRotaTemplate({ startsOn });
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${result.fileName}"`);
+  res.send(result.content);
+};
+
+export const exportRotaPeriodHandler = async (req: Request, res: Response) => {
+  const rotaPeriodId = typeof req.params.periodId === "string" ? req.params.periodId.trim() : "";
+  const result = await exportRotaPeriodSpreadsheet({ rotaPeriodId });
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${result.fileName}"`);
+  res.send(result.content);
 };
 
 export const confirmRotaImportHandler = async (req: Request, res: Response) => {

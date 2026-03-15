@@ -1,6 +1,7 @@
-import { type ChangeEvent, useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
 
 type RotaImportPreview = {
@@ -10,21 +11,42 @@ type RotaImportPreview = {
   period: {
     startsOn: string;
     endsOn: string;
+    rotaPeriodId: string | null;
+    label: string | null;
+    exists: boolean;
   };
   summary: {
     weekBlocks: number;
     parsedAssignments: number;
+    parsedOffDays: number;
     skippedCells: number;
     warningCount: number;
+    blockingIssueCount: number;
     matchedStaffCount: number;
+    createCount: number;
+    updateCount: number;
+    clearCount: number;
+    unchangedCount: number;
   };
   warnings: string[];
+  blockingIssues: string[];
+  canConfirm: boolean;
+  changes: Array<{
+    staffId: string;
+    staffName: string;
+    date: string;
+    action: "CREATE" | "UPDATE" | "CLEAR" | "UNCHANGED";
+    previousValue: string;
+    nextValue: string;
+  }>;
 };
 
 type RotaImportResult = RotaImportPreview & {
   importBatchKey: string;
   createdAssignments: number;
   updatedAssignments: number;
+  clearedAssignments: number;
+  unchangedAssignments: number;
   createdByStaffId: string | null;
   rotaPeriod: {
     id: string;
@@ -33,6 +55,18 @@ type RotaImportResult = RotaImportPreview & {
     endsOn: string;
     status: "DRAFT" | "ACTIVE" | "ARCHIVED";
   };
+};
+
+type RotaOverviewResponse = {
+  selectedPeriodId: string | null;
+  periods: Array<{
+    id: string;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+    status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+    isCurrent: boolean;
+  }>;
 };
 
 type BankHolidaySyncStatus = {
@@ -59,6 +93,15 @@ type BankHolidaySyncResult = BankHolidaySyncStatus & {
   warnings: string[];
 };
 
+const getCurrentMonday = () => {
+  const now = new Date();
+  const weekday = now.getUTCDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() + mondayOffset);
+  return monday.toISOString().slice(0, 10);
+};
+
 const formatDateTime = (value: string | null) => {
   if (!value) {
     return "—";
@@ -71,7 +114,18 @@ const formatDateTime = (value: string | null) => {
   });
 };
 
+const delimiterLabel = (value: "," | "\t" | ";") => {
+  if (value === "\t") {
+    return "Tab";
+  }
+  if (value === ";") {
+    return "Semicolon";
+  }
+  return "Comma";
+};
+
 export const StaffRotaToolsPage = () => {
+  const { user } = useAuth();
   const { error, success } = useToasts();
   const [importFileName, setImportFileName] = useState("");
   const [importText, setImportText] = useState("");
@@ -79,10 +133,29 @@ export const StaffRotaToolsPage = () => {
   const [importResult, setImportResult] = useState<RotaImportResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [periodsLoading, setPeriodsLoading] = useState(true);
+  const [periods, setPeriods] = useState<RotaOverviewResponse["periods"]>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = useState("");
+  const [templateStartsOn, setTemplateStartsOn] = useState(getCurrentMonday());
   const [bankHolidayStatus, setBankHolidayStatus] = useState<BankHolidaySyncStatus | null>(null);
   const [bankHolidayStatusLoading, setBankHolidayStatusLoading] = useState(true);
   const [bankHolidaySyncLoading, setBankHolidaySyncLoading] = useState(false);
   const [bankHolidayWarnings, setBankHolidayWarnings] = useState<string[]>([]);
+
+  const isAdmin = user?.role === "ADMIN";
+
+  const loadPeriods = async () => {
+    setPeriodsLoading(true);
+    try {
+      const payload = await apiGet<RotaOverviewResponse>("/api/rota?staffScope=all");
+      setPeriods(payload.periods);
+      setSelectedPeriodId((current) => current || payload.selectedPeriodId || payload.periods[0]?.id || "");
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load rota periods");
+    } finally {
+      setPeriodsLoading(false);
+    }
+  };
 
   const loadBankHolidayStatus = async (silent = false) => {
     if (!silent) {
@@ -100,6 +173,7 @@ export const StaffRotaToolsPage = () => {
   };
 
   useEffect(() => {
+    void loadPeriods();
     void loadBankHolidayStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -130,7 +204,7 @@ export const StaffRotaToolsPage = () => {
 
   const previewImport = async () => {
     if (!importText.trim()) {
-      error("Choose a rota export before previewing");
+      error("Choose a rota spreadsheet before previewing");
       return;
     }
 
@@ -142,7 +216,7 @@ export const StaffRotaToolsPage = () => {
       });
       setImportPreview(preview);
       setImportResult(null);
-      success("Rota import preview ready");
+      success(preview.canConfirm ? "Rota update preview ready" : "Preview found spreadsheet issues to fix");
     } catch (previewError) {
       setImportPreview(null);
       error(previewError instanceof Error ? previewError.message : "Failed to preview rota import");
@@ -156,6 +230,10 @@ export const StaffRotaToolsPage = () => {
       error("Run preview before importing");
       return;
     }
+    if (!importPreview.canConfirm) {
+      error("Fix the spreadsheet issues shown in preview before applying changes");
+      return;
+    }
 
     setConfirmLoading(true);
     try {
@@ -166,7 +244,11 @@ export const StaffRotaToolsPage = () => {
       });
       setImportResult(result);
       setImportPreview(null);
-      success(`Imported ${result.createdAssignments + result.updatedAssignments} rota assignment${result.createdAssignments + result.updatedAssignments === 1 ? "" : "s"}`);
+      setSelectedPeriodId(result.rotaPeriod.id);
+      await loadPeriods();
+      success(
+        `Applied rota update: ${result.createdAssignments} created, ${result.updatedAssignments} updated, ${result.clearedAssignments} cleared.`,
+      );
     } catch (confirmError) {
       error(confirmError instanceof Error ? confirmError.message : "Failed to import rota");
     } finally {
@@ -188,39 +270,49 @@ export const StaffRotaToolsPage = () => {
     }
   };
 
+  const templateHref = useMemo(
+    () => `/api/rota/template?startsOn=${encodeURIComponent(templateStartsOn || getCurrentMonday())}`,
+    [templateStartsOn],
+  );
+
+  const exportHref = selectedPeriodId
+    ? `/api/rota/periods/${encodeURIComponent(selectedPeriodId)}/export`
+    : "";
+
   return (
     <div className="page-shell rota-tools-page">
       <section className="card">
         <div className="card-header-row">
           <div>
-            <p className="dashboard-v1-kicker">Settings / Staff &amp; Roles</p>
+            <p className="dashboard-v1-kicker">Management / Staff</p>
             <h1>Rota Tools</h1>
             <p className="muted-text">
-              Keep setup and migration tasks here so the planner stays focused on live scheduling. These controls still use the same canonical rota, closed-day, and Store Info rules.
+              Keep spreadsheet workflow and closure admin here so the planner stays focused on live scheduling. These tools still use the same canonical rota, closed-day, and Store Info rules as the weekly editor.
             </p>
           </div>
           <div className="actions-inline">
             <Link to="/management/staff-rota">Open planner</Link>
-            <Link to="/settings/store-info">Store Info</Link>
-            <Link to="/settings/staff-list">Staff List</Link>
+            <Link to="/dashboard">Dashboard</Link>
+            {isAdmin ? <Link to="/settings/store-info">Store Info</Link> : null}
+            {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
           </div>
         </div>
 
         <div className="dashboard-summary-grid">
           <div className="metric-card">
-            <span className="metric-label">Planner focus</span>
-            <strong className="metric-value">Scheduling stays separate</strong>
-            <span className="dashboard-metric-detail">Use the planner for weekly rota editing and keep migration/admin tools here.</span>
+            <span className="metric-label">Spreadsheet path</span>
+            <strong className="metric-value">Template → Export → Preview</strong>
+            <span className="dashboard-metric-detail">Managers can round-trip rota periods through one spreadsheet structure instead of using a migration-only import.</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Current periods</span>
+            <strong className="metric-value">{periods.length}</strong>
+            <span className="dashboard-metric-detail">Export an existing six-week block or start from a fresh template for the next one.</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Bank holiday source</span>
             <strong className="metric-value">GOV.UK sync</strong>
-            <span className="dashboard-metric-detail">Synced closures feed the shared RotaClosedDay layer used by planning and dashboard staffing.</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Import path</span>
-            <strong className="metric-value">Preview then confirm</strong>
-            <span className="dashboard-metric-detail">Spreadsheet imports stay available for migration or bulk loading without crowding the planner.</span>
+            <span className="dashboard-metric-detail">Closed days still feed the same RotaClosedDay layer used by planning, holiday approvals, and dashboard staffing.</span>
           </div>
         </div>
       </section>
@@ -228,18 +320,258 @@ export const StaffRotaToolsPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
+            <h2>Spreadsheet Workflow</h2>
+            <p className="muted-text">
+              Download a Monday-Saturday template, export an existing six-week period, then preview updates safely before CorePOS applies them.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-summary-grid">
+          <div className="metric-card">
+            <span className="metric-label">1. Template</span>
+            <strong className="metric-value">Start a clean block</strong>
+            <span className="dashboard-metric-detail">Use Full, AM, PM, Off, and Holiday only. Sundays are omitted.</span>
+            <label className="grow">
+              Start Monday
+              <input
+                type="date"
+                value={templateStartsOn}
+                onChange={(event) => setTemplateStartsOn(event.target.value)}
+              />
+            </label>
+            <a className="button-link" href={templateHref}>
+              Download template
+            </a>
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">2. Export</span>
+            <strong className="metric-value">Round-trip a live period</strong>
+            <span className="dashboard-metric-detail">Exports current rota values as Full, AM, PM, Off, and Holiday so managers can edit and re-import cleanly.</span>
+            <label className="grow">
+              Current period
+              <select
+                value={selectedPeriodId}
+                onChange={(event) => setSelectedPeriodId(event.target.value)}
+                disabled={periodsLoading || periods.length === 0}
+              >
+                {periods.length ? periods.map((period) => (
+                  <option key={period.id} value={period.id}>
+                    {period.label}{period.isCurrent ? " · Current" : ""}
+                  </option>
+                )) : (
+                  <option value="">{periodsLoading ? "Loading periods..." : "No periods"}</option>
+                )}
+              </select>
+            </label>
+            {selectedPeriodId ? (
+              <a className="button-link" href={exportHref}>
+                Export rota period
+              </a>
+            ) : (
+              <span className="muted-text">Create a rota period in the planner before exporting.</span>
+            )}
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">3. Update safely</span>
+            <strong className="metric-value">Preview before apply</strong>
+            <span className="dashboard-metric-detail">Preview shows creates, updates, clears, unchanged cells, and spreadsheet issues before anything is written.</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Import Update Preview</h2>
+            <p className="muted-text">
+              Import is now a safe update flow: preview validates staff, dates, shifts, and closed days before CorePOS touches the rota period.
+            </p>
+          </div>
+        </div>
+
+        <div className="filter-row">
+          <label className="grow">
+            Spreadsheet file
+            <input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => void handleImportFileSelected(event)} />
+          </label>
+          <label className="grow">
+            Loaded file
+            <input value={importFileName || "No file selected"} readOnly />
+          </label>
+        </div>
+
+        <div className="actions-inline">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void previewImport()}
+            disabled={previewLoading || confirmLoading || !importText.trim()}
+          >
+            {previewLoading ? "Previewing..." : "Preview update"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void confirmImport()}
+            disabled={confirmLoading || previewLoading || !importPreview || !importPreview.canConfirm}
+          >
+            {confirmLoading ? "Applying..." : "Apply update"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setImportFileName("");
+              setImportText("");
+              setImportPreview(null);
+              setImportResult(null);
+            }}
+            disabled={previewLoading || confirmLoading}
+          >
+            Clear
+          </button>
+        </div>
+
+        <p className="muted-text">
+          {importFileName
+            ? `Loaded file: ${importFileName}`
+            : "Choose a template or exported period. Blank cells remain ignored for legacy files; explicit Off clears an existing assignment during safe re-import."}
+        </p>
+
+        {importPreview ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Target Period</span>
+                <strong className="metric-value">{importPreview.period.label ?? `${importPreview.period.startsOn} to ${importPreview.period.endsOn}`}</strong>
+                <span className="dashboard-metric-detail">
+                  {importPreview.period.exists ? "Existing six-week period will be updated." : "A new six-week period will be created on apply."}
+                </span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Creates</span>
+                <strong className="metric-value">{importPreview.summary.createCount}</strong>
+                <span className="dashboard-metric-detail">New shifts added from the spreadsheet.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Updates</span>
+                <strong className="metric-value">{importPreview.summary.updateCount}</strong>
+                <span className="dashboard-metric-detail">Existing shifts that will change state.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Clears</span>
+                <strong className="metric-value">{importPreview.summary.clearCount}</strong>
+                <span className="dashboard-metric-detail">Existing assignments that Off will clear.</span>
+              </div>
+            </div>
+
+            <div className="rota-import-feedback">
+              <div className="metric-card">
+                <span className="metric-label">Delimiter</span>
+                <strong className="metric-value">{delimiterLabel(importPreview.detectedDelimiter)}</strong>
+                <span className="dashboard-metric-detail">Detected from the uploaded sheet.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Matched staff</span>
+                <strong className="metric-value">{importPreview.summary.matchedStaffCount}</strong>
+                <span className="dashboard-metric-detail">Staff resolved without guessing.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Off cells</span>
+                <strong className="metric-value">{importPreview.summary.parsedOffDays}</strong>
+                <span className="dashboard-metric-detail">Explicit Off values parsed as safe clear instructions.</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Unchanged</span>
+                <strong className="metric-value">{importPreview.summary.unchangedCount}</strong>
+                <span className="dashboard-metric-detail">Cells already matching CorePOS.</span>
+              </div>
+            </div>
+
+            {importPreview.blockingIssues.length ? (
+              <div className="card rota-warning-card">
+                <h3>Fix Before Applying</h3>
+                <ul className="muted-text rota-warning-list">
+                  {importPreview.blockingIssues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="success-panel">
+                <strong>Spreadsheet passed validation.</strong>
+                <span>The update can be applied safely when ready.</span>
+              </div>
+            )}
+
+            {importPreview.warnings.length ? (
+              <div className="card rota-warning-card">
+                <h3>Preview Notes</h3>
+                <ul className="muted-text rota-warning-list">
+                  {importPreview.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Change Preview</h3>
+                  <p className="muted-text">A compact sample of the spreadsheet changes CorePOS detected before apply.</p>
+                </div>
+              </div>
+              <div className="holiday-request-list">
+                {importPreview.changes.map((change) => (
+                  <article key={`${change.staffId}-${change.date}`} className="holiday-request-card">
+                    <div className="holiday-request-main">
+                      <div className="holiday-request-title-row">
+                        <strong>{change.staffName}</strong>
+                        <span className={`status-badge ${change.action === "CREATE" ? "status-complete" : change.action === "UPDATE" ? "status-warning" : change.action === "CLEAR" ? "status-ready" : "status-info"}`}>
+                          {change.action}
+                        </span>
+                      </div>
+                      <div className="holiday-request-meta">
+                        <span>{change.date}</span>
+                        <span>{change.previousValue} → {change.nextValue}</span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        {importResult ? (
+          <div className="success-panel">
+            <strong>Rota update applied.</strong>
+            <span>
+              {importResult.createdAssignments} created, {importResult.updatedAssignments} updated, {importResult.clearedAssignments} cleared, {importResult.unchangedAssignments} unchanged in {importResult.rotaPeriod.label}.
+            </span>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
             <h2>UK Bank Holidays</h2>
             <p className="muted-text">
-              Sync official closures into the rota closed-day layer so planning, holiday approvals, and dashboard staffing all use the same store closure data.
+              Sync official closures into the rota closed-day layer so planning, holiday approvals, dashboard staffing, and spreadsheet preview all use the same closure data.
             </p>
           </div>
           <div className="actions-inline">
             <button type="button" onClick={() => void loadBankHolidayStatus(true)} disabled={bankHolidayStatusLoading || bankHolidaySyncLoading}>
               {bankHolidayStatusLoading ? "Refreshing..." : "Refresh status"}
             </button>
-            <button type="button" className="primary" onClick={() => void syncBankHolidays()} disabled={bankHolidaySyncLoading}>
-              {bankHolidaySyncLoading ? "Syncing..." : "Sync UK Bank Holidays"}
-            </button>
+            {isAdmin ? (
+              <button type="button" className="primary" onClick={() => void syncBankHolidays()} disabled={bankHolidaySyncLoading}>
+                {bankHolidaySyncLoading ? "Syncing..." : "Sync UK Bank Holidays"}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -314,6 +646,12 @@ export const StaffRotaToolsPage = () => {
               </div>
             ) : null}
 
+            {!isAdmin ? (
+              <div className="restricted-panel info-panel">
+                Bank holiday sync remains admin-controlled. Managers can still plan against the synced closure data here and in the rota editor.
+              </div>
+            ) : null}
+
             {bankHolidayWarnings.length ? (
               <div className="restricted-panel info-panel">
                 <strong>Sync warnings</strong>
@@ -326,134 +664,6 @@ export const StaffRotaToolsPage = () => {
             Bank holiday status is unavailable right now.
           </div>
         )}
-      </section>
-
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Rota Import</h2>
-            <p className="muted-text">
-              Use this when migrating or bulk loading a legacy spreadsheet. Imported periods stay editable in the planner once they land in CorePOS.
-            </p>
-          </div>
-        </div>
-
-        <div className="filter-row">
-          <label className="grow">
-            Legacy rota export
-            <input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => void handleImportFileSelected(event)} />
-          </label>
-          <label className="grow">
-            Import path
-            <input value="Preview first, then confirm import" readOnly />
-          </label>
-        </div>
-
-        <div className="actions-inline">
-          <button
-            type="button"
-            className="primary"
-            onClick={() => void previewImport()}
-            disabled={previewLoading || confirmLoading || !importText.trim()}
-          >
-            {previewLoading ? "Previewing..." : "Preview import"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void confirmImport()}
-            disabled={confirmLoading || previewLoading || !importPreview}
-          >
-            {confirmLoading ? "Importing..." : "Confirm import"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setImportFileName("");
-              setImportText("");
-              setImportPreview(null);
-              setImportResult(null);
-            }}
-            disabled={previewLoading || confirmLoading}
-          >
-            Clear
-          </button>
-        </div>
-
-        <p className="muted-text">
-          {importFileName
-            ? `Loaded file: ${importFileName}`
-            : "Choose the exported rota sheet as CSV or TSV. The preview warns about unmatched staff or unexpected values and only imports exact supported patterns."}
-        </p>
-
-        {importPreview ? (
-          <>
-            <div className="dashboard-summary-grid">
-              <div className="metric-card">
-                <span className="metric-label">Target Period</span>
-                <strong className="metric-value">{importPreview.period.startsOn} to {importPreview.period.endsOn}</strong>
-                <span className="dashboard-metric-detail">Single six-week period required for this import.</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-label">Week Blocks</span>
-                <strong className="metric-value">{importPreview.summary.weekBlocks}</strong>
-                <span className="dashboard-metric-detail">Weekly spreadsheet blocks detected.</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-label">Parsed Assignments</span>
-                <strong className="metric-value">{importPreview.summary.parsedAssignments}</strong>
-                <span className="dashboard-metric-detail">Assignments ready to import after normalization.</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-label">Warnings</span>
-                <strong className="metric-value">{importPreview.summary.warningCount}</strong>
-                <span className="dashboard-metric-detail">Unexpected values or staff matching issues to review.</span>
-              </div>
-            </div>
-
-            <div className="rota-import-feedback">
-              <div className="metric-card">
-                <span className="metric-label">Detected delimiter</span>
-                <strong className="metric-value">{importPreview.detectedDelimiter === "\t" ? "Tab" : importPreview.detectedDelimiter === ";" ? "Semicolon" : "Comma"}</strong>
-                <span className="dashboard-metric-detail">Auto-detected from the uploaded export.</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-label">Matched staff</span>
-                <strong className="metric-value">{importPreview.summary.matchedStaffCount}</strong>
-                <span className="dashboard-metric-detail">CorePOS staff records matched without guessing.</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-label">Skipped cells</span>
-                <strong className="metric-value">{importPreview.summary.skippedCells}</strong>
-                <span className="dashboard-metric-detail">Blank, x, or warning rows excluded from import.</span>
-              </div>
-            </div>
-
-            {importPreview.warnings.length ? (
-              <div className="card rota-warning-card">
-                <h3>Import Warnings</h3>
-                <ul className="muted-text rota-warning-list">
-                  {importPreview.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <div className="success-panel">
-                <strong>Preview passed cleanly.</strong>
-                <span>No warnings were found. You can confirm the import when ready.</span>
-              </div>
-            )}
-          </>
-        ) : null}
-
-        {importResult ? (
-          <div className="success-panel">
-            <strong>Rota imported.</strong>
-            <span>
-              {importResult.createdAssignments} created, {importResult.updatedAssignments} updated in {importResult.rotaPeriod.label}.
-            </span>
-          </div>
-        ) : null}
       </section>
     </div>
   );
