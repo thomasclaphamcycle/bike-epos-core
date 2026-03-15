@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import { getBankHolidaySyncStatus, syncUkBankHolidays } from "../services/bankHolidayService";
 import { confirmRotaSpreadsheetImport, previewRotaSpreadsheetImport } from "../services/rotaImportService";
-import { clearRotaAssignment, getRotaOverview, saveManualRotaAssignment } from "../services/rotaService";
+import { clearRotaAssignment, createRotaPeriod, getRotaOverview, saveManualRotaAssignment } from "../services/rotaService";
 import { HttpError } from "../utils/http";
 import { RotaShiftType } from "@prisma/client";
 
@@ -82,6 +82,34 @@ const parseAssignmentBody = (body: unknown) => {
   };
 };
 
+const parseCreatePeriodBody = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "rota period body must be an object", "INVALID_ROTA_PERIOD");
+  }
+
+  const record = body as {
+    startsOn?: unknown;
+    label?: unknown;
+    notes?: unknown;
+  };
+
+  if (typeof record.startsOn !== "string" || !record.startsOn.trim()) {
+    throw new HttpError(400, "startsOn must be a string", "INVALID_ROTA_PERIOD");
+  }
+  if (record.label !== undefined && typeof record.label !== "string") {
+    throw new HttpError(400, "label must be a string", "INVALID_ROTA_PERIOD");
+  }
+  if (record.notes !== undefined && record.notes !== null && typeof record.notes !== "string") {
+    throw new HttpError(400, "notes must be a string or null", "INVALID_ROTA_PERIOD");
+  }
+
+  return {
+    startsOn: record.startsOn.trim(),
+    label: typeof record.label === "string" ? record.label.trim() : undefined,
+    notes: typeof record.notes === "string" ? record.notes : record.notes ?? undefined,
+  };
+};
+
 export const listRotaOverviewHandler = async (req: Request, res: Response) => {
   const periodId = typeof req.query.periodId === "string" ? req.query.periodId.trim() : undefined;
   const staffScope = typeof req.query.staffScope === "string" ? req.query.staffScope.trim() : undefined;
@@ -110,6 +138,12 @@ export const saveRotaAssignmentHandler = async (req: Request, res: Response) => 
   const body = parseAssignmentBody(req.body);
   const result = await saveManualRotaAssignment(body);
   res.status(201).json(result);
+};
+
+export const createRotaPeriodHandler = async (req: Request, res: Response) => {
+  const body = parseCreatePeriodBody(req.body);
+  const result = await createRotaPeriod(body);
+  res.status(result.created ? 201 : 200).json(result);
 };
 
 export const clearRotaAssignmentHandler = async (req: Request, res: Response) => {

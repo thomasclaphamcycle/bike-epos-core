@@ -8,6 +8,17 @@ GET http://localhost:3000/api/rota?staffScope=all&role=STAFF&search=Casey
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
+### Create six-week rota period
+POST http://localhost:3000/api/rota/periods
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "startsOn": "2026-03-09",
+  "label": "Spring rota block"
+}
+
 ### Bank holiday sync status
 GET http://localhost:3000/api/rota/bank-holidays/status
 X-Staff-Role: MANAGER

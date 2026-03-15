@@ -7,6 +7,7 @@ import { HolidayDecisionModal } from "../components/HolidayDecisionModal";
 import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
 
 type RotaShiftType = "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
+type RotaEditorShiftValue = RotaShiftType | "OFF";
 type RotaAssignmentSource = "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
 type UserRole = "STAFF" | "MANAGER" | "ADMIN";
 
@@ -170,9 +171,21 @@ type ClearRotaAssignmentResponse = {
   previousSource: RotaAssignmentSource;
 };
 
+type CreateRotaPeriodResponse = {
+  created: boolean;
+  rotaPeriod: {
+    id: string;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+    status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+    notes: string | null;
+  };
+};
+
 const shiftShortLabel = (shiftType: RotaShiftType | null) => {
   if (shiftType === "FULL_DAY") {
-    return "F";
+    return "Full";
   }
   if (shiftType === "HALF_DAY_AM") {
     return "AM";
@@ -181,10 +194,18 @@ const shiftShortLabel = (shiftType: RotaShiftType | null) => {
     return "PM";
   }
   if (shiftType === "HOLIDAY") {
-    return "H";
+    return "Holiday";
   }
-  return "—";
+  return "Off";
 };
+
+const SHIFT_OPTIONS: Array<{ value: RotaEditorShiftValue; label: string; shortLabel: string }> = [
+  { value: "FULL_DAY", label: "Full Day", shortLabel: "Full" },
+  { value: "HALF_DAY_AM", label: "AM", shortLabel: "AM" },
+  { value: "HALF_DAY_PM", label: "PM", shortLabel: "PM" },
+  { value: "OFF", label: "Off", shortLabel: "Off" },
+  { value: "HOLIDAY", label: "Holiday", shortLabel: "Holiday" },
+];
 
 const sourceLabel = (source: RotaAssignmentSource | null) => {
   if (source === "IMPORT") {
@@ -222,7 +243,45 @@ const shiftClassName = (shiftType: RotaShiftType | null) => {
   if (shiftType === "HOLIDAY") {
     return "rota-shift-pill rota-shift-pill-holiday";
   }
-  return "rota-shift-pill";
+  return "rota-shift-pill rota-shift-pill-off";
+};
+
+const addDaysToDateKey = (date: string, days: number) => {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+};
+
+const toMondayDateKey = (date: string) => {
+  const value = new Date(`${date}T12:00:00.000Z`);
+  const weekday = value.getUTCDay();
+  const mondayDelta = weekday === 0 ? -6 : 1 - weekday;
+  value.setUTCDate(value.getUTCDate() + mondayDelta);
+  return value.toISOString().slice(0, 10);
+};
+
+const getDefaultCreatePeriodStart = (periods: RotaOverviewResponse["periods"] | undefined) => {
+  if (!periods?.length) {
+    return toMondayDateKey(new Date().toISOString().slice(0, 10));
+  }
+
+  const latestEndsOn = periods.reduce((current, period) => (
+    period.endsOn > current ? period.endsOn : current
+  ), periods[0].endsOn);
+
+  return addDaysToDateKey(latestEndsOn, 1);
+};
+
+const getDefaultWeekIndex = (period: NonNullable<RotaOverviewResponse["period"]>) => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today < period.startsOn || today > period.endsOn) {
+    return 0;
+  }
+
+  const start = new Date(`${period.startsOn}T00:00:00.000Z`);
+  const current = new Date(`${today}T00:00:00.000Z`);
+  const diffDays = Math.floor((current.getTime() - start.getTime()) / 86_400_000);
+  return Math.max(0, Math.min(period.weeks.length - 1, Math.floor(diffDays / 7)));
 };
 
 const formatDateTime = (value: string | null) => {
@@ -273,6 +332,9 @@ export const StaffRotaPage = () => {
   } | null>(null);
   const [openEditorCellKey, setOpenEditorCellKey] = useState<string | null>(null);
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
+  const [createPeriodStartsOn, setCreatePeriodStartsOn] = useState("");
+  const [createPeriodLoading, setCreatePeriodLoading] = useState(false);
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
   const staffScope = searchParams.get("staffScope") === "all" ? "all" : "assigned";
@@ -373,7 +435,22 @@ export const StaffRotaPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setCreatePeriodStartsOn(getDefaultCreatePeriodStart(overview?.periods));
+  }, [overview?.periods]);
+
   const currentPeriod = overview?.period ?? null;
+  useEffect(() => {
+    if (!currentPeriod) {
+      setSelectedWeekIndex(0);
+      return;
+    }
+
+    setSelectedWeekIndex((current) => (
+      currentPeriod.weeks[current] ? current : getDefaultWeekIndex(currentPeriod)
+    ));
+  }, [currentPeriod]);
+
   const currentPeriodIndex = useMemo(() => (
     overview?.periods.findIndex((period) => period.id === (currentPeriod?.id ?? overview?.selectedPeriodId)) ?? -1
   ), [currentPeriod?.id, overview?.periods, overview?.selectedPeriodId]);
@@ -385,11 +462,47 @@ export const StaffRotaPage = () => {
 
   const previousPeriod = currentPeriodIndex > 0 ? overview?.periods[currentPeriodIndex - 1] ?? null : null;
   const nextPeriod = currentPeriodIndex >= 0 && overview ? overview.periods[currentPeriodIndex + 1] ?? null : null;
+  const selectedWeek = currentPeriod?.weeks[selectedWeekIndex] ?? null;
+  const visibleDayIndices = useMemo(() => (
+    currentPeriod?.days.reduce<number[]>((indices, day, index) => {
+      if (day.weekIndex === selectedWeekIndex) {
+        indices.push(index);
+      }
+      return indices;
+    }, []) ?? []
+  ), [currentPeriod?.days, selectedWeekIndex]);
+  const visibleDays = useMemo(
+    () => visibleDayIndices
+      .map((index) => currentPeriod?.days[index] ?? null)
+      .filter((day): day is NonNullable<RotaOverviewResponse["period"]>["days"][number] => day !== null),
+    [currentPeriod?.days, visibleDayIndices],
+  );
 
   const goToPeriod = (periodId: string) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("periodId", periodId);
     setSearchParams(nextParams);
+  };
+
+  const createPeriod = async () => {
+    if (!createPeriodStartsOn.trim()) {
+      error("Choose a Monday start date for the rota period");
+      return;
+    }
+
+    setCreatePeriodLoading(true);
+    try {
+      const result = await apiPost<CreateRotaPeriodResponse>("/api/rota/periods", {
+        startsOn: createPeriodStartsOn,
+      });
+      success(result.created ? "Rota period created." : "Rota period already existed.");
+      goToPeriod(result.rotaPeriod.id);
+      await loadOverview(result.rotaPeriod.id, true);
+    } catch (createError) {
+      error(createError instanceof Error ? createError.message : "Failed to create rota period");
+    } finally {
+      setCreatePeriodLoading(false);
+    }
   };
 
   const handleImportFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -572,6 +685,41 @@ export const StaffRotaPage = () => {
     }
   };
 
+  const applyEditorShift = async (
+    input: {
+      rotaPeriodId: string;
+      staffId: string;
+      date: string;
+    },
+    cell: RotaGridCell,
+    cellKey: string,
+    value: RotaEditorShiftValue,
+  ) => {
+    if (value === "OFF") {
+      if (!cell.assignmentId) {
+        setOpenEditorCellKey(null);
+        return;
+      }
+      if (!confirmHolidayApprovedOverride(cell, "Mark this day as Off")) {
+        return;
+      }
+      await clearCellAssignment(cell.assignmentId, cellKey);
+      return;
+    }
+
+    if (!confirmHolidayApprovedOverride(cell, `Replace with ${SHIFT_OPTIONS.find((option) => option.value === value)?.label ?? value}`)) {
+      return;
+    }
+
+    await saveCellAssignment(
+      {
+        ...input,
+        shiftType: value,
+      },
+      cellKey,
+    );
+  };
+
   return (
     <div className="page-shell rota-page">
       <section className="card">
@@ -580,7 +728,7 @@ export const StaffRotaPage = () => {
             <p className="dashboard-v1-kicker">{breadcrumbLabel}</p>
             <h1>Staff Rota</h1>
             <p className="muted-text">
-              Review imported rota periods, make live day-level scheduling edits, and use the same Store Info opening hours that power the dashboard Staff Today widget.
+              Plan rota coverage inside CorePOS with a simple Monday to Saturday weekly editor. Store Info opening hours and closed-day rules stay as the source of truth for what can be scheduled.
             </p>
           </div>
           <div className="actions-inline">
@@ -598,7 +746,7 @@ export const StaffRotaPage = () => {
           <div className="metric-card">
             <span className="metric-label">Selected Period</span>
             <strong className="metric-value">{currentPeriod ? currentPeriod.label : "No rota loaded"}</strong>
-            <span className="dashboard-metric-detail">Defaults to the current or latest available rota period.</span>
+            <span className="dashboard-metric-detail">Six-week rota periods stay reusable whether they were created in-app or imported.</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Assigned Staff</span>
@@ -608,15 +756,15 @@ export const StaffRotaPage = () => {
           <div className="metric-card">
             <span className="metric-label">Assigned Days</span>
             <strong className="metric-value">{currentPeriod ? currentPeriod.summary.assignedDays : 0}</strong>
-            <span className="dashboard-metric-detail">Scheduled non-holiday assignments across Monday to Saturday.</span>
+            <span className="dashboard-metric-detail">Scheduled non-holiday assignments across editable Monday to Saturday trading days.</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Latest Import</span>
-            <strong className="metric-value">{currentPeriod?.summary.latestImportFileName ?? "Not imported yet"}</strong>
+            <span className="metric-label">Planning Source</span>
+            <strong className="metric-value">{currentPeriod?.summary.latestImportFileName ?? "Created in CorePOS"}</strong>
             <span className="dashboard-metric-detail">
               {currentPeriod?.summary.latestImportAt
-                ? `Updated ${formatDateTime(currentPeriod.summary.latestImportAt)}`
-                : "Use the import panel below to load the legacy weekly spreadsheet export."}
+                ? `Latest import updated ${formatDateTime(currentPeriod.summary.latestImportAt)}`
+                : "Cells default to Off until you assign Full Day, AM, PM, or Holiday."}
             </span>
           </div>
         </div>
@@ -625,8 +773,8 @@ export const StaffRotaPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
-            <h2>Period Review</h2>
-            <p className="muted-text">Week-grouped rota review with imported assignments, inline manager edits, and closed-day context.</p>
+            <h2>Weekly Editor</h2>
+            <p className="muted-text">Rows are staff, columns are Monday to Saturday, and Off remains the default state until a live assignment is added.</p>
           </div>
           <div className="actions-inline rota-period-controls">
             <button type="button" onClick={() => previousPeriod && goToPeriod(previousPeriod.id)} disabled={!previousPeriod}>
@@ -654,13 +802,38 @@ export const StaffRotaPage = () => {
           </div>
         </div>
 
+        {canEditGrid ? (
+          <div className="rota-create-panel">
+            <div>
+              <strong>Create six-week rota period</strong>
+              <p className="muted-text">
+                Start on a Monday. Sunday stays closed, and store opening hours plus bank-holiday closures are reused automatically.
+              </p>
+            </div>
+            <div className="rota-create-controls">
+              <label>
+                Start Monday
+                <input
+                  type="date"
+                  value={createPeriodStartsOn}
+                  onChange={(event) => setCreatePeriodStartsOn(event.target.value)}
+                  disabled={createPeriodLoading}
+                />
+              </label>
+              <button type="button" className="primary" onClick={() => void createPeriod()} disabled={createPeriodLoading}>
+                {createPeriodLoading ? "Creating..." : "Create period"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {emptyState ? (
           <div className="restricted-panel info-panel">
-            <strong>No rota periods imported yet.</strong>
+            <strong>No rota period exists yet.</strong>
             <div className="muted-text">
-              {isAdmin
-                ? "Upload a legacy rota spreadsheet export below to create the first reviewable rota period in CorePOS."
-                : "Ask an admin to import the current rota spreadsheet export so the dashboard and rota review page can show live staffing coverage."}
+              {canEditGrid
+                ? "Create the first six-week period above, then fill in weekly assignments directly here. Import remains available below if you want to bring in a spreadsheet first."
+                : "Ask a manager or admin to create the first rota period so live staffing can appear on the dashboard and rota pages."}
             </div>
           </div>
         ) : currentPeriod ? (
@@ -682,13 +855,30 @@ export const StaffRotaPage = () => {
                 <span className="metric-label">Store Hours Source</span>
                 <strong>Store Info opening hours</strong>
               </div>
-            <div className="rota-period-summary-item">
-              <span className="metric-label">Visible Staff</span>
-              <strong>{visibleStaffCount}</strong>
+              <div className="rota-period-summary-item">
+                <span className="metric-label">Visible Staff</span>
+                <strong>{visibleStaffCount}</strong>
+              </div>
+              <div className="rota-period-summary-item">
+                <span className="metric-label">Editing Week</span>
+                <strong>{selectedWeek?.label ?? "—"}</strong>
+              </div>
             </div>
-          </div>
 
             <div className="filter-row rota-filter-row">
+              <label className="grow">
+                Week
+                <select
+                  value={selectedWeekIndex}
+                  onChange={(event) => setSelectedWeekIndex(Number.parseInt(event.target.value, 10))}
+                >
+                  {currentPeriod.weeks.map((week) => (
+                    <option key={week.weekIndex} value={week.weekIndex}>
+                      Week {week.weekIndex + 1} · {week.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="grow">
                 Staff view
                 <select
@@ -725,7 +915,7 @@ export const StaffRotaPage = () => {
             <p className="muted-text rota-filter-summary">
               {staffScope === "all"
                 ? "Showing active staff plus existing assignments for this period."
-                : "Showing staff who already have assignments in this period."}
+                : "Showing staff who already have assignments somewhere in this six-week period."}
               {unassignedVisibleStaffCount
                 ? ` ${unassignedVisibleStaffCount} visible ${unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.`
                 : ""}
@@ -737,17 +927,15 @@ export const StaffRotaPage = () => {
                   <tr>
                     <th className="rota-sticky rota-sticky-name" rowSpan={2}>Staff</th>
                     <th className="rota-sticky rota-sticky-role" rowSpan={2}>Role</th>
-                    {currentPeriod.weeks.map((week) => (
-                      <th key={week.weekIndex} colSpan={currentPeriod.days.filter((day) => day.weekIndex === week.weekIndex).length}>
-                        <div className="rota-week-heading">
-                          <strong>Week {week.weekIndex + 1}</strong>
-                          <span>{week.label}</span>
-                        </div>
-                      </th>
-                    ))}
+                    <th colSpan={visibleDays.length}>
+                      <div className="rota-week-heading">
+                        <strong>Week {selectedWeekIndex + 1}</strong>
+                        <span>{selectedWeek?.label ?? "Selected week"}</span>
+                      </div>
+                    </th>
                   </tr>
                   <tr>
-                    {currentPeriod.days.map((day) => (
+                    {visibleDays.map((day) => (
                       <th key={day.date} className={day.isClosed ? "rota-day-heading rota-day-heading-closed" : "rota-day-heading"}>
                         <div className="rota-day-heading-copy">
                           <strong>{day.weekdayLabel.slice(0, 3)}</strong>
@@ -773,15 +961,16 @@ export const StaffRotaPage = () => {
                       <th className="rota-sticky rota-sticky-name rota-staff-name" scope="row">
                         <div className="rota-staff-name-copy">
                           <span>{row.name}</span>
-                          {!row.cells.some((cell) => cell.shiftType) ? (
-                            <span className="table-secondary">No shifts in this view yet</span>
+                          {!visibleDayIndices.some((index) => row.cells[index]?.shiftType) ? (
+                            <span className="table-secondary">Off all week in this view</span>
                           ) : null}
                         </div>
                       </th>
                       <td className="rota-sticky rota-sticky-role rota-staff-role">
                         <span className="status-badge status-info">{row.role}</span>
                       </td>
-                      {row.cells.map((cell) => {
+                      {visibleDayIndices.map((dayIndex) => {
+                        const cell = row.cells[dayIndex];
                         const cellKey = `${row.staffId}-${cell.date}`;
                         const isEditorOpen = openEditorCellKey === cellKey;
                         const isSavingCell = savingCellKey === cellKey;
@@ -815,13 +1004,9 @@ export const StaffRotaPage = () => {
                                   disabled={!canEditGrid || isSavingCell}
                                 >
                                   <div className="rota-cell-content">
-                                    {cell.shiftType ? (
-                                      <span className={shiftClassName(cell.shiftType)}>
-                                        {shiftShortLabel(cell.shiftType)}
-                                      </span>
-                                    ) : (
-                                      <span className="table-secondary">—</span>
-                                    )}
+                                    <span className={shiftClassName(cell.shiftType)}>
+                                      {shiftShortLabel(cell.shiftType)}
+                                    </span>
                                     {cell.note ? <span className="muted-text rota-cell-note">{cell.note}</span> : null}
                                     {cellVisibleSourceLabel ? <span className="table-secondary">{cellVisibleSourceLabel}</span> : null}
                                   </div>
@@ -835,52 +1020,30 @@ export const StaffRotaPage = () => {
                                       {cellSourceLabel ? <span className="table-secondary">Current source: {cellSourceLabel}</span> : null}
                                     </div>
                                     <div className="rota-cell-popover-actions">
-                                      {([
-                                        ["FULL_DAY", "Full Day"],
-                                        ["HALF_DAY_AM", "Half Day AM"],
-                                        ["HALF_DAY_PM", "Half Day PM"],
-                                        ["HOLIDAY", "Holiday"],
-                                      ] as Array<[RotaShiftType, string]>).map(([shiftType, label]) => (
+                                      {SHIFT_OPTIONS.map(({ value, label }) => (
                                         <button
-                                          key={shiftType}
+                                          key={value}
                                           type="button"
                                           disabled={isSavingCell}
                                           onClick={() => {
                                             if (!currentPeriod) {
                                               return;
                                             }
-                                            if (!confirmHolidayApprovedOverride(cell, `Replace with ${label}`)) {
-                                              return;
-                                            }
-                                            void saveCellAssignment(
+                                            void applyEditorShift(
                                               {
                                                 rotaPeriodId: currentPeriod.id,
                                                 staffId: row.staffId,
                                                 date: cell.date,
-                                                shiftType,
                                               },
+                                              cell,
                                               cellKey,
+                                              value,
                                             );
                                           }}
                                         >
                                           {label}
                                         </button>
                                       ))}
-                                      <button
-                                        type="button"
-                                        disabled={!cell.assignmentId || isSavingCell}
-                                        onClick={() => {
-                                          if (!cell.assignmentId) {
-                                            return;
-                                          }
-                                          if (!confirmHolidayApprovedOverride(cell, "Clear this assignment")) {
-                                            return;
-                                          }
-                                          void clearCellAssignment(cell.assignmentId, cellKey);
-                                        }}
-                                      >
-                                        Clear
-                                      </button>
                                       <button
                                         type="button"
                                         disabled={isSavingCell}
@@ -900,7 +1063,7 @@ export const StaffRotaPage = () => {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={currentPeriod.days.length + 2}>
+                      <td colSpan={visibleDays.length + 2}>
                         <div className="restricted-panel info-panel">
                           No staff match the current rota filters.
                         </div>
@@ -1026,7 +1189,7 @@ export const StaffRotaPage = () => {
           <div>
             <h2>Import</h2>
             <p className="muted-text">
-              Load the existing weekly-block spreadsheet export. Full-day interpretation is validated against Store Info opening hours instead of rota-only constants.
+              Keep the spreadsheet import path for bulk loading, then review and edit the same rota period inside CorePOS. Full-day interpretation is still validated against Store Info opening hours.
             </p>
           </div>
         </div>

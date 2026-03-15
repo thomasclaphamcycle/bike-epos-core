@@ -163,6 +163,18 @@ export type ClearRotaAssignmentResult = {
   previousSource: RotaAssignmentSource;
 };
 
+export type CreateRotaPeriodResult = {
+  created: boolean;
+  rotaPeriod: {
+    id: string;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+    status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+    notes: string | null;
+  };
+};
+
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const isValidDateKey = (value: string) => {
@@ -338,6 +350,110 @@ export const getOrCreateSixWeekRotaPeriod = async (
       status: RotaPeriodStatus.ACTIVE,
     },
   });
+};
+
+export const createRotaPeriod = async (
+  input: {
+    startsOn?: string;
+    label?: string;
+    notes?: string | null;
+  },
+  db: RotaClient = prisma,
+): Promise<CreateRotaPeriodResult> => {
+  const startsOn = normalizeDateKeyOrThrow(input.startsOn, "INVALID_ROTA_PERIOD");
+  const window = buildSixWeekRotaWindow(startsOn);
+  const label = typeof input.label === "string" && input.label.trim()
+    ? input.label.trim()
+    : `${window.startsOn} to ${window.endsOn}`;
+  const notes = typeof input.notes === "string" && input.notes.trim()
+    ? input.notes.trim()
+    : null;
+
+  const exactMatch = await db.rotaPeriod.findUnique({
+    where: {
+      startsOn_endsOn: {
+        startsOn: window.startsOn,
+        endsOn: window.endsOn,
+      },
+    },
+    select: {
+      id: true,
+      label: true,
+      startsOn: true,
+      endsOn: true,
+      status: true,
+      notes: true,
+    },
+  });
+
+  if (exactMatch) {
+    return {
+      created: false,
+      rotaPeriod: {
+        id: exactMatch.id,
+        label: exactMatch.label,
+        startsOn: exactMatch.startsOn,
+        endsOn: exactMatch.endsOn,
+        status: exactMatch.status,
+        notes: exactMatch.notes ?? null,
+      },
+    };
+  }
+
+  const overlappingPeriod = await db.rotaPeriod.findFirst({
+    where: {
+      startsOn: {
+        lte: window.endsOn,
+      },
+      endsOn: {
+        gte: window.startsOn,
+      },
+    },
+    select: {
+      id: true,
+      label: true,
+      startsOn: true,
+      endsOn: true,
+    },
+  });
+
+  if (overlappingPeriod) {
+    throw new HttpError(
+      409,
+      `This six-week block overlaps the existing rota period ${overlappingPeriod.label}.`,
+      "ROTA_PERIOD_OVERLAP",
+    );
+  }
+
+  const rotaPeriod = await db.rotaPeriod.create({
+    data: {
+      startsOn: window.startsOn,
+      endsOn: window.endsOn,
+      label,
+      notes,
+      status: RotaPeriodStatus.ACTIVE,
+    },
+    select: {
+      id: true,
+      label: true,
+      startsOn: true,
+      endsOn: true,
+      status: true,
+      notes: true,
+    },
+  });
+
+  return {
+    created: true,
+    rotaPeriod: {
+      id: rotaPeriod.id,
+      label: rotaPeriod.label,
+      startsOn: rotaPeriod.startsOn,
+      endsOn: rotaPeriod.endsOn,
+      status: rotaPeriod.status,
+      notes: rotaPeriod.notes ?? null,
+    },
+  };
 };
 
 const getEditableRotaPeriodOrThrow = async (

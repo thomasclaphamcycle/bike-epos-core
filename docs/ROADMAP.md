@@ -301,8 +301,8 @@ Implementation status:
 - substantially implemented on the current working line, with ongoing hardening and policy refinement
 - persisted Store Info now provides a central business-identity source for receipts, location-aware features, and future customer-facing profile surfaces
 - Store Info now also provides the shared trading-hours source used by rota import and dashboard staffing interpretation
-- dashboard Staff Today can now surface imported rota assignments for the current day
-- Staff Rota now has a real admin review/import page for imported six-week rota periods, giving the dashboard View Rota action a live in-app destination
+- dashboard Staff Today now reads from the live rota assignment layer for today and tomorrow coverage rather than depending on spreadsheet import as the only practical source
+- Staff Rota now supports in-app six-week period creation plus week-by-week manager editing, while keeping spreadsheet import available for bulk loading and review
 - rota holiday requests now provide a lightweight staff-to-manager workflow that writes approved leave back into the live rota as HOLIDAY assignments
 - holiday requests now include staff-facing request history plus manager decision notes, so the operational leave workflow is trackable without turning CorePOS into a leave-entitlement system
 - Staff Rota now supports inline manager/admin day-level editing, keeping `RotaAssignment` as the live source of truth for imported, holiday-approved, and manually adjusted coverage

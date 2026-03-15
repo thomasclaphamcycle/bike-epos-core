@@ -447,6 +447,12 @@ const run = async () => {
       ],
     });
 
+    const emptyOverviewRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
+    assert.equal(emptyOverviewRes.status, 200, JSON.stringify(emptyOverviewRes.json));
+    assert.equal(emptyOverviewRes.json.selectedPeriodId, null);
+    assert.equal(emptyOverviewRes.json.periods.length, 0);
+    assert.equal(emptyOverviewRes.json.period, null);
+
     const mainLocationId = await ensureMainLocationId(prisma);
     const createWorkshopJob = async ({ scheduledDate, status, notes }) => {
       const createdJob = await prisma.workshopJob.create({
@@ -481,6 +487,43 @@ const run = async () => {
     assert.equal(bankHolidaySyncRes.json.lastResult.skippedManualCount, 0);
     assert.equal(bankHolidaySyncRes.json.storedCount, 1);
     assert.equal(bankHolidaySyncRes.json.upcoming[0].name, "Long-range bank holiday");
+
+    const createPeriodRes = await fetchJson("/api/rota/periods", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startsOn: IMPORTED_MONDAY,
+      }),
+    });
+    assert.equal(createPeriodRes.status, 201, JSON.stringify(createPeriodRes.json));
+    assert.equal(createPeriodRes.json.created, true);
+    assert.equal(createPeriodRes.json.rotaPeriod.startsOn, IMPORTED_MONDAY);
+    assert.equal(createPeriodRes.json.rotaPeriod.endsOn, "2026-04-19");
+
+    const duplicatePeriodRes = await fetchJson("/api/rota/periods", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startsOn: IMPORTED_MONDAY,
+      }),
+    });
+    assert.equal(duplicatePeriodRes.status, 200, JSON.stringify(duplicatePeriodRes.json));
+    assert.equal(duplicatePeriodRes.json.created, false);
+
+    const seededOverviewRes = await fetchJson("/api/rota?staffScope=all", { headers: MANAGER_HEADERS });
+    assert.equal(seededOverviewRes.status, 200, JSON.stringify(seededOverviewRes.json));
+    assert.equal(seededOverviewRes.json.periods.length, 1);
+    assert.ok(seededOverviewRes.json.period.staffRows.length >= 3);
+    const seededNames = new Set(seededOverviewRes.json.period.staffRows.map((row) => row.name));
+    assert.ok(seededNames.has("Alex Turner"));
+    assert.ok(seededNames.has("Jordan Patel"));
+    assert.ok(seededNames.has("Casey Hudson"));
 
     fs.writeFileSync(
       tempFilePath,
