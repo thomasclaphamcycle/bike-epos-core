@@ -2,18 +2,12 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
-
-const portFromBaseUrl = () => {
-  const url = new URL(BASE_URL);
-  return url.port || (url.protocol === "https:" ? "443" : "80");
-};
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -59,68 +53,30 @@ const appBaseUrlCandidates = (() => {
   return urls;
 })();
 let activeAppBaseUrl = appBaseUrlCandidates[0];
-let lastProbeDetail = "";
 const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
-const trimStartupLog = (value) =>
-  value.length > MAX_STARTUP_LOG_CHARS
-    ? value.slice(value.length - MAX_STARTUP_LOG_CHARS)
-    : value;
-const probeHealthyBaseUrl = async () => {
-  for (const baseUrl of appBaseUrlCandidates) {
-    try {
-      const response = await fetch(`${baseUrl}/health`);
-      if (response.ok) {
-        lastProbeDetail = `${baseUrl}/health -> ${response.status}`;
-        return baseUrl;
-      }
-      lastProbeDetail = `${baseUrl}/health -> ${response.status}`;
-    } catch (error) {
-      lastProbeDetail = `${baseUrl}/health -> ${error instanceof Error ? error.message : String(error)}`;
-      // Try the next candidate.
-    }
-  }
-
-  return null;
-};
-
-const waitForServer = async (serverProcess, getStartupLog) => {
-  for (let i = 0; i < 60; i += 1) {
-    const startupLog = getStartupLog();
-    if (serverProcess && serverProcess.exitCode !== null) {
-      throw new Error(
-        startupLog.trim()
-          ? `Server exited before becoming healthy:\n${startupLog.trim()}`
-          : "Server exited before becoming healthy.",
-      );
-    }
-
-    const healthyBaseUrl = await probeHealthyBaseUrl();
-    if (healthyBaseUrl) {
-      activeAppBaseUrl = healthyBaseUrl;
-      return;
-    }
-
-    await sleep(serverStartedPattern.test(startupLog) ? 250 : 500);
-  }
-
-  const startupLog = getStartupLog().trim();
-  throw new Error(
-    startupLog
-      ? `Server did not become healthy on /health.\n${startupLog}\nlast probe: ${lastProbeDetail}`
-      : `Server did not become healthy on /health${lastProbeDetail ? `\nlast probe: ${lastProbeDetail}` : ""}`,
-  );
-};
+const serverController = createSmokeServerController({
+  label: "m24-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupLogCharLimit: MAX_STARTUP_LOG_CHARS,
+  startupReadyPattern: serverStartedPattern,
+  envOverrides: {
+    PORT: new URL(BASE_URL).port || "3100",
+  },
+});
 
 const fetchFromApp = async (path, options = {}) => {
   let lastError = null;
 
   for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
     try {
+      activeAppBaseUrl = serverController.getBaseUrl();
       return await fetch(`${activeAppBaseUrl}${path}`, options);
     } catch (error) {
       lastError = error;
 
-      const healthyBaseUrl = await probeHealthyBaseUrl();
+      const healthyBaseUrl = await serverController.probeHealthyBaseUrl();
       if (healthyBaseUrl) {
         activeAppBaseUrl = healthyBaseUrl;
       }
@@ -226,39 +182,9 @@ const run = async () => {
     locationIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-  let serverStartupLog = "";
-
   try {
-    const existing = await probeHealthyBaseUrl();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: portFromBaseUrl(),
-        },
-      });
-      serverProcess.stdout.on("data", (chunk) => {
-        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
-      });
-      serverProcess.stderr.on("data", (chunk) => {
-        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
-      });
-      startedServer = true;
-      await waitForServer(serverProcess, () => serverStartupLog);
-    } else {
-      activeAppBaseUrl = existing;
-    }
+    await serverController.startIfNeeded();
+    activeAppBaseUrl = serverController.getBaseUrl();
 
     const managerHeaders = {
       "X-Staff-Role": "MANAGER",
@@ -483,15 +409,7 @@ const run = async () => {
     console.log("PASS m24 inventory movement ledger smoke tests");
   } finally {
     await cleanup(state);
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(300);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
-
+    await serverController.stop();
     await prisma.$disconnect();
   }
 };
