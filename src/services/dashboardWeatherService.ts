@@ -9,6 +9,18 @@ type DailyWeatherSnapshot = {
   precipitationMm: number;
 };
 
+type TradingWeatherPointKind = "sun" | "part-sun" | "cloud" | "rain" | "showers";
+
+type TradingWeatherPoint = {
+  time: string;
+  label: string;
+  summary: string;
+  kind: TradingWeatherPointKind;
+  temperatureC: number;
+  precipitationMm: number;
+  precipitationProbabilityPercent: number;
+};
+
 export type DashboardWeatherResponse = {
   status: WeatherStatus;
   source: "open-meteo";
@@ -16,6 +28,7 @@ export type DashboardWeatherResponse = {
   message?: string;
   today?: DailyWeatherSnapshot;
   tomorrow?: DailyWeatherSnapshot;
+  tradingDayTimeline?: TradingWeatherPoint[];
 };
 
 type OpenMeteoForecastResponse = {
@@ -24,6 +37,13 @@ type OpenMeteoForecastResponse = {
     temperature_2m_max?: number[];
     temperature_2m_min?: number[];
     precipitation_sum?: number[];
+  };
+  hourly?: {
+    time?: string[];
+    weather_code?: number[];
+    temperature_2m?: number[];
+    precipitation?: number[];
+    precipitation_probability?: number[];
   };
 };
 
@@ -119,6 +139,22 @@ const weatherCodeSummary = (code: number) => {
 
 const roundWeatherValue = (value: number) => Math.round(value * 10) / 10;
 
+const weatherCodeKind = (code: number): TradingWeatherPointKind => {
+  if (code === 0) {
+    return "sun";
+  }
+  if (code === 1 || code === 2) {
+    return "part-sun";
+  }
+  if (code === 3 || code === 45 || code === 48) {
+    return "cloud";
+  }
+  if (code >= 80 && code <= 82) {
+    return "showers";
+  }
+  return "rain";
+};
+
 const buildSnapshot = (
   weatherCode: number | undefined,
   highC: number | undefined,
@@ -140,6 +176,96 @@ const buildSnapshot = (
     lowC: roundWeatherValue(lowC),
     precipitationMm: roundWeatherValue(precipitationMm),
   };
+};
+
+const isTradingHour = (timeValue: string) => {
+  const date = new Date(timeValue);
+  const hour = date.getHours();
+  return hour >= 9 && hour <= 19;
+};
+
+const formatTradingTimeLabel = (timeValue: string) =>
+  new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timeValue));
+
+const buildTradingTimelinePoint = (
+  timeValue: string | undefined,
+  weatherCode: number | undefined,
+  temperatureC: number | undefined,
+  precipitationMm: number | undefined,
+  precipitationProbabilityPercent: number | undefined,
+): TradingWeatherPoint | undefined => {
+  if (
+    !timeValue
+    || weatherCode === undefined
+    || temperatureC === undefined
+    || precipitationMm === undefined
+    || precipitationProbabilityPercent === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    time: timeValue,
+    label: formatTradingTimeLabel(timeValue),
+    summary: weatherCodeSummary(weatherCode),
+    kind: weatherCodeKind(weatherCode),
+    temperatureC: roundWeatherValue(temperatureC),
+    precipitationMm: roundWeatherValue(precipitationMm),
+    precipitationProbabilityPercent: Math.round(precipitationProbabilityPercent),
+  };
+};
+
+const shouldKeepTradingPoint = (current: TradingWeatherPoint, previous: TradingWeatherPoint) => {
+  if (current.kind !== previous.kind) {
+    return true;
+  }
+
+  const currentWet = current.precipitationMm > 0.1 || current.precipitationProbabilityPercent >= 35;
+  const previousWet = previous.precipitationMm > 0.1 || previous.precipitationProbabilityPercent >= 35;
+  if (currentWet !== previousWet) {
+    return true;
+  }
+
+  return Math.abs(current.temperatureC - previous.temperatureC) >= 4;
+};
+
+const buildTradingDayTimeline = (
+  times: string[] | undefined,
+  weatherCodes: number[] | undefined,
+  temperatures: number[] | undefined,
+  precipitation: number[] | undefined,
+  precipitationProbability: number[] | undefined,
+): TradingWeatherPoint[] => {
+  if (!times?.length) {
+    return [];
+  }
+
+  const tradingPoints = times
+    .map((timeValue, index) => buildTradingTimelinePoint(
+      timeValue,
+      weatherCodes?.[index],
+      temperatures?.[index],
+      precipitation?.[index],
+      precipitationProbability?.[index],
+    ))
+    .filter((point): point is TradingWeatherPoint => Boolean(point))
+    .filter((point) => isTradingHour(point.time));
+
+  if (!tradingPoints.length) {
+    return [];
+  }
+
+  const condensed = tradingPoints.filter((point, index) => {
+    if (index === 0 || index === tradingPoints.length - 1) {
+      return true;
+    }
+    return shouldKeepTradingPoint(point, tradingPoints[index - 1]);
+  });
+
+  return condensed.slice(0, 6);
 };
 
 const normalizePostcode = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
@@ -289,6 +415,44 @@ const getStubWeather = async (): Promise<DashboardWeatherResponse> => {
       lowC: 6,
       precipitationMm: 2.4,
     },
+    tradingDayTimeline: [
+      {
+        time: "2026-03-15T09:00",
+        label: "09:00",
+        summary: "Partly cloudy",
+        kind: "part-sun",
+        temperatureC: 9,
+        precipitationMm: 0,
+        precipitationProbabilityPercent: 10,
+      },
+      {
+        time: "2026-03-15T12:00",
+        label: "12:00",
+        summary: "Clear",
+        kind: "sun",
+        temperatureC: 13,
+        precipitationMm: 0,
+        precipitationProbabilityPercent: 5,
+      },
+      {
+        time: "2026-03-15T16:00",
+        label: "16:00",
+        summary: "Rain showers",
+        kind: "showers",
+        temperatureC: 12,
+        precipitationMm: 0.6,
+        precipitationProbabilityPercent: 60,
+      },
+      {
+        time: "2026-03-15T19:00",
+        label: "19:00",
+        summary: "Overcast",
+        kind: "cloud",
+        temperatureC: 8,
+        precipitationMm: 0,
+        precipitationProbabilityPercent: 15,
+      },
+    ],
   };
 };
 
@@ -321,6 +485,7 @@ export const getDashboardWeather = async (): Promise<DashboardWeatherResponse> =
     url.searchParams.set("latitude", `${location.latitude}`);
     url.searchParams.set("longitude", `${location.longitude}`);
     url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum");
+    url.searchParams.set("hourly", "weather_code,temperature_2m,precipitation,precipitation_probability");
     url.searchParams.set("forecast_days", "2");
     url.searchParams.set("timezone", "auto");
 
@@ -337,6 +502,13 @@ export const getDashboardWeather = async (): Promise<DashboardWeatherResponse> =
       response.daily?.temperature_2m_min?.[1],
       response.daily?.precipitation_sum?.[1],
     );
+    const tradingDayTimeline = buildTradingDayTimeline(
+      response.hourly?.time,
+      response.hourly?.weather_code,
+      response.hourly?.temperature_2m,
+      response.hourly?.precipitation,
+      response.hourly?.precipitation_probability,
+    );
 
     if (!today) {
       throw new Error("Weather provider returned incomplete daily data");
@@ -348,6 +520,7 @@ export const getDashboardWeather = async (): Promise<DashboardWeatherResponse> =
       locationLabel: location.label,
       today,
       ...(tomorrow ? { tomorrow } : {}),
+      ...(tradingDayTimeline.length ? { tradingDayTimeline } : {}),
     };
   } catch {
     return {

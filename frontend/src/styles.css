@@ -750,6 +750,121 @@ th {
   gap: 18px;
 }
 
+.dashboard-weather-strip {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-weather-strip-content {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-weather-strip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+}
+
+.dashboard-weather-strip-title {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.05rem;
+  color: #14293f;
+}
+
+.dashboard-weather-strip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+  font-size: 0.88rem;
+  color: #5f7185;
+}
+
+.dashboard-weather-tomorrow-chip {
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid #d9e3ec;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
+  color: #14293f;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-weather-tomorrow-chip-active {
+  border-color: #bfd1e4;
+  box-shadow: 0 8px 20px rgba(12, 27, 43, 0.08);
+}
+
+.dashboard-weather-tomorrow-chip strong {
+  font-size: 0.95rem;
+}
+
+.dashboard-weather-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+  gap: 10px;
+}
+
+.dashboard-weather-timeline-point {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d9e3ec;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
+}
+
+.dashboard-weather-timeline-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.dashboard-weather-timeline-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-weather-timeline-copy strong {
+  color: #14293f;
+}
+
+.dashboard-weather-timeline-copy span {
+  color: #5f7185;
+  font-size: 0.84rem;
+}
+
+.dashboard-weather-timeline-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #5f7185;
+  font-size: 0.82rem;
+}
+
+.dashboard-weather-tomorrow-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding-top: 2px;
+  color: #5f7185;
+  font-size: 0.88rem;
+}
+
+.dashboard-weather-tomorrow-panel strong {
+  color: #14293f;
+}
+
+.dashboard-weather-strip-empty {
+  color: #5f7185;
+  font-size: 0.88rem;
+}
+
 .dashboard-v1-group {
   display: grid;
   gap: 12px;
@@ -1096,6 +1211,10 @@ th {
     flex-direction: column;
     align-items: start;
   }
+
+  .dashboard-weather-strip-head {
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1110,14 +1229,6 @@ th {
   .dashboard-staff-day-header {
     flex-direction: column;
     align-items: start;
-  }
-
-  .dashboard-weather-headline {
-    flex-direction: column;
-  }
-
-  .dashboard-weather-temps {
-    justify-items: start;
   }
 }
 

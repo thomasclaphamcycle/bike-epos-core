@@ -47,6 +47,20 @@ const assertDailyWeatherSnapshot = (snapshot, label) => {
   assert.ok(Number.isFinite(snapshot.precipitationMm));
 };
 
+const assertTradingTimelinePoint = (point, label) => {
+  assert.ok(point, `${label} trading timeline point should exist`);
+  assert.equal(typeof point.time, "string");
+  assert.ok(point.time.length > 0);
+  assert.equal(typeof point.label, "string");
+  assert.ok(point.label.length > 0);
+  assert.equal(typeof point.summary, "string");
+  assert.ok(point.summary.length > 0);
+  assert.ok(["sun", "part-sun", "cloud", "rain", "showers"].includes(point.kind));
+  assert.equal(typeof point.temperatureC, "number");
+  assert.equal(typeof point.precipitationMm, "number");
+  assert.equal(typeof point.precipitationProbabilityPercent, "number");
+};
+
 const fetchJson = async (path, options = {}) => {
   const response = await fetch(`${BASE_URL}${path}`, options);
   const text = await response.text();
@@ -177,6 +191,11 @@ const run = async () => {
     assert.match(readyRes.json.weather.locationLabel, /SW11 1JD/i);
     assertDailyWeatherSnapshot(readyRes.json.weather.today, "today");
     assertDailyWeatherSnapshot(readyRes.json.weather.tomorrow, "tomorrow");
+    assert.ok(Array.isArray(readyRes.json.weather.tradingDayTimeline));
+    assert.ok(readyRes.json.weather.tradingDayTimeline.length >= 2);
+    readyRes.json.weather.tradingDayTimeline.forEach((point, index) => {
+      assertTradingTimelinePoint(point, `trading timeline ${index}`);
+    });
 
     await prisma.appConfig.upsert({
       where: { key: "store.postcode" },

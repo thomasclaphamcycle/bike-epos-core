@@ -72,6 +72,16 @@ type DashboardWeatherSnapshot = {
   precipitationMm: number;
 };
 
+type DashboardWeatherTimelinePoint = {
+  time: string;
+  label: string;
+  summary: string;
+  kind: "sun" | "part-sun" | "cloud" | "rain" | "showers";
+  temperatureC: number;
+  precipitationMm: number;
+  precipitationProbabilityPercent: number;
+};
+
 type DashboardWeatherPayload = {
   weather: {
     status: "ready" | "missing_location" | "unavailable";
@@ -80,6 +90,7 @@ type DashboardWeatherPayload = {
     message?: string;
     today?: DashboardWeatherSnapshot;
     tomorrow?: DashboardWeatherSnapshot;
+    tradingDayTimeline?: DashboardWeatherTimelinePoint[];
   };
 };
 
@@ -256,6 +267,31 @@ const getShiftBadgeLabel = (shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM
   }
 };
 
+const weatherGlyph: Record<DashboardWeatherTimelinePoint["kind"], string> = {
+  sun: "☀",
+  "part-sun": "⛅",
+  cloud: "☁",
+  rain: "☂",
+  showers: "☔",
+};
+
+const buildWeatherChangeSummary = (timeline: DashboardWeatherTimelinePoint[]) => {
+  if (!timeline.length) {
+    return "No trading-hour weather changes available.";
+  }
+
+  const wetPoint = timeline.find((point) => point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35);
+  if (wetPoint) {
+    return `Rain risk from ${wetPoint.label}.`;
+  }
+
+  if (timeline.length > 1) {
+    return `${timeline[0].summary} turning ${timeline[timeline.length - 1].summary.toLowerCase()} by ${timeline[timeline.length - 1].label}.`;
+  }
+
+  return `${timeline[0].summary} through trading hours.`;
+};
+
 const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }: MetricCardProps) => {
   const content = (
     <>
@@ -337,6 +373,7 @@ export const DashboardPage = () => {
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
   const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
   const [staffTomorrow, setStaffTomorrow] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
+  const [weatherTomorrowExpanded, setWeatherTomorrowExpanded] = useState(false);
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -708,6 +745,8 @@ export const DashboardPage = () => {
   }, [clock]);
 
   const rotaLink = quickActions.find((action) => action.label === "View Rota")?.to;
+  const tradingWeatherTimeline = weather?.tradingDayTimeline ?? [];
+  const weatherSummaryLine = useMemo(() => buildWeatherChangeSummary(tradingWeatherTimeline), [tradingWeatherTimeline]);
 
   return (
     <div className="page-shell dashboard-v1">
@@ -737,6 +776,90 @@ export const DashboardPage = () => {
             <DashboardActionButton key={action.label} {...action} />
           ))}
         </div>
+      </section>
+
+      <section className="card dashboard-weather-strip" aria-label="Trading weather">
+        {!weather ? (
+          <div className="restricted-panel info-panel">Loading weather…</div>
+        ) : weather.status === "ready" && weather.today ? (
+          <div className="dashboard-weather-strip-content">
+            <div className="dashboard-weather-strip-head">
+              <div>
+                <p className="dashboard-v1-section-kicker">Trading Weather</p>
+                <strong className="dashboard-weather-strip-title">
+                  {weatherSummaryLine}
+                </strong>
+                <div className="dashboard-weather-strip-meta">
+                  <span>{weather.today.summary}</span>
+                  <span>
+                    {weather.today.highC}° / {weather.today.lowC}°
+                  </span>
+                  <span>Rain {weather.today.precipitationMm} mm</span>
+                  {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
+                </div>
+              </div>
+              {weather.tomorrow ? (
+                <button
+                  type="button"
+                  className={`dashboard-weather-tomorrow-chip${weatherTomorrowExpanded ? " dashboard-weather-tomorrow-chip-active" : ""}`}
+                  onClick={() => setWeatherTomorrowExpanded((value) => !value)}
+                  aria-expanded={weatherTomorrowExpanded}
+                >
+                  <span className="metric-label dashboard-metric-label">Tomorrow</span>
+                  <strong>{weather.tomorrow.summary}</strong>
+                  <span>{weather.tomorrow.highC}° / {weather.tomorrow.lowC}°</span>
+                </button>
+              ) : null}
+            </div>
+
+            {tradingWeatherTimeline.length ? (
+              <div className="dashboard-weather-timeline" role="list" aria-label="Trading hour weather change points">
+                {tradingWeatherTimeline.map((point) => (
+                  <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
+                    <span className="dashboard-weather-timeline-icon" aria-hidden="true">{weatherGlyph[point.kind]}</span>
+                    <div className="dashboard-weather-timeline-copy">
+                      <strong>{point.label}</strong>
+                      <span>{point.summary}</span>
+                    </div>
+                    <div className="dashboard-weather-timeline-meta">
+                      <span>{point.temperatureC}°</span>
+                      {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
+                        <span>{point.precipitationProbabilityPercent}% rain</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="dashboard-weather-strip-empty">
+                Trading-hour change points are unavailable right now.
+              </div>
+            )}
+
+            {weatherTomorrowExpanded && weather.tomorrow ? (
+              <div className="dashboard-weather-tomorrow-panel">
+                <strong>Tomorrow</strong>
+                <span>
+                  {weather.tomorrow.summary} · {weather.tomorrow.highC}° / {weather.tomorrow.lowC}° · Rain {weather.tomorrow.precipitationMm} mm
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : weather.status === "missing_location" ? (
+          <div className="restricted-panel info-panel">
+            {user?.role === "ADMIN" ? (
+              <>
+                Weather unavailable. Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
+              </>
+            ) : (
+              "Weather unavailable. Ask an admin to set the store postcode in Settings."
+            )}
+          </div>
+        ) : (
+          <div className="restricted-panel info-panel">
+            {weather.message || "Weather temporarily unavailable."}
+          </div>
+        )}
       </section>
 
       <section className="dashboard-v1-group">
@@ -1007,59 +1130,6 @@ export const DashboardPage = () => {
                   )}
                 </section>
               ))}
-            </div>
-          )}
-        </section>
-
-        <section className="card dashboard-v1-widget">
-          <div className="card-header-row">
-            <div>
-              <h2>Weather</h2>
-              <p className="muted-text">A compact forecast for today, based on the store postcode in Store Info.</p>
-            </div>
-          </div>
-
-          {!weather ? (
-            <div className="restricted-panel info-panel">Loading weather...</div>
-          ) : weather.status === "ready" && weather.today ? (
-            <div className="dashboard-weather-card">
-              <div className="dashboard-weather-headline">
-                <div>
-                  <span className="metric-label dashboard-metric-label">Today</span>
-                  <strong className="dashboard-weather-summary">{weather.today.summary}</strong>
-                </div>
-                <div className="dashboard-weather-temps">
-                  <strong>{weather.today.highC}°</strong>
-                  <span>{weather.today.lowC}°</span>
-                </div>
-              </div>
-              <div className="dashboard-weather-meta">
-                <span>Rain {weather.today.precipitationMm} mm</span>
-                {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
-              </div>
-              {weather.tomorrow ? (
-                <div className="dashboard-weather-tomorrow">
-                  <span className="metric-label dashboard-metric-label">Tomorrow</span>
-                  <strong>{weather.tomorrow.summary}</strong>
-                  <span>
-                    {weather.tomorrow.highC}° / {weather.tomorrow.lowC}° · Rain {weather.tomorrow.precipitationMm} mm
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          ) : weather.status === "missing_location" ? (
-            <div className="restricted-panel info-panel">
-              {user?.role === "ADMIN" ? (
-                <>
-                  Weather unavailable. Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
-                </>
-              ) : (
-                "Weather unavailable. Ask an admin to set the store postcode in Settings."
-              )}
-            </div>
-          ) : (
-            <div className="restricted-panel info-panel">
-              {weather.message || "Weather temporarily unavailable."}
             </div>
           )}
         </section>
