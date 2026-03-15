@@ -59,6 +59,12 @@ Optional local staff restore:
 npm run auth:seed-local-staff
 ```
 
+Full local dev reset + reseed:
+
+```bash
+npm run db:reset-and-seed:dev
+```
+
 Option 2: bootstrap endpoint (only when DB has no users)
 
 ```http
@@ -84,6 +90,10 @@ After `npm run db:seed:dev`, the demo seed preserves existing active staff users
 The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows. For a fresh local setup, create an initial admin with `npm run auth:seed-admin`, then create or manage the rest of the staff accounts from `/management/staff`.
 
 If the local dev database has been reduced back to only the admin account, `npm run auth:seed-local-staff` will upsert a small PIN-enabled manager/staff set for development use.
+
+If the local dev database is messy or untrustworthy, `npm run db:reset-and-seed:dev` is the clean recovery path. It resets only the dev DB from `DATABASE_URL`, reapplies migrations, reseeds the base demo data, restores the local admin, and restores the intended local staff roster (`Dom`, `Eric`, `Mike`, `Thomas`).
+
+This does not prepare the test database. Continue using `npm run test:db:up` and `.env.test`/`TEST_DATABASE_URL` for test and verification flows.
 
 Inactive or disabled users are not shown in the active-user login list and cannot authenticate through either the PIN or password flow.
 

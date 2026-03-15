@@ -119,7 +119,7 @@ createdb bike_epos
 If `prisma migrate dev` reports drift against an old local dev database, reset only the local development DB and recreate it:
 
 ```bash
-node scripts/reset_local_dev_db.js
+npm run db:reset:dev
 ```
 
 3. Prepare the local development database:
@@ -129,6 +129,23 @@ npx prisma generate
 npx prisma migrate dev
 npm run db:seed:dev
 ```
+
+For a clean repeatable local reset plus reseed, use:
+
+```bash
+npm run db:reset-and-seed:dev
+```
+
+That workflow will:
+
+- reset only the local dev database from `DATABASE_URL`
+- regenerate Prisma client
+- apply all existing migrations
+- seed the base operational demo data
+- ensure the local admin exists
+- restore the intended local staff roster: `Dom`, `Eric`, `Mike`, `Thomas`
+
+It does not prepare the test database. Keep using `npm run test:db:up` for test/e2e setup.
 
 4. Start the backend:
 
@@ -211,6 +228,12 @@ Optional local staff restore:
 
 ```bash
 npm run auth:seed-local-staff
+```
+
+Full local reset + reseed:
+
+```bash
+npm run db:reset-and-seed:dev
 ```
 
 Alternative (only when DB has no users): `POST /api/auth/bootstrap`.

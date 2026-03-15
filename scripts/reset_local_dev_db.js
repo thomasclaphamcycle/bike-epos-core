@@ -52,8 +52,12 @@ const run = async () => {
     await client.query(`CREATE DATABASE ${quotedDatabaseName}`);
     console.log(`Reset local database: ${databaseName}`);
     console.log("Next steps:");
+    console.log("  npm run db:reset-and-seed:dev");
+    console.log("or run manually:");
     console.log("  npx prisma migrate dev");
     console.log("  npm run db:seed:dev");
+    console.log("  npm run auth:seed-admin");
+    console.log("  npm run auth:seed-local-staff");
   } finally {
     await client.end().catch(() => {});
   }
