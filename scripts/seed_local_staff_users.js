@@ -40,16 +40,17 @@ const LOCAL_STAFF_FIXTURES = [
   {
     name: "Thomas",
     email: "thomas@corepos.local",
-    role: "MANAGER",
+    role: "ADMIN",
     operationalRole: "MIXED",
     pin: "8642",
   },
 ];
 
-const LEGACY_LOCAL_STAFF_EMAILS = [
+const LEGACY_LOCAL_DEV_EMAILS = [
   "jordan.patel@corepos.local",
   "alex.turner@corepos.local",
   "casey.hudson@corepos.local",
+  "admin@example.com",
 ];
 
 const prisma = new PrismaClient({
@@ -78,7 +79,7 @@ const run = async () => {
       await tx.user.deleteMany({
         where: {
           email: {
-            in: LEGACY_LOCAL_STAFF_EMAILS,
+            in: LEGACY_LOCAL_DEV_EMAILS,
           },
         },
       });

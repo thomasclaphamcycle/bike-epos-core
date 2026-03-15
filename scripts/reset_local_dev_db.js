@@ -56,8 +56,9 @@ const run = async () => {
     console.log("or run manually:");
     console.log("  npx prisma migrate dev");
     console.log("  npm run db:seed:dev");
-    console.log("  npm run auth:seed-admin");
     console.log("  npm run auth:seed-local-staff");
+    console.log("optional fallback admin:");
+    console.log("  npm run auth:seed-admin");
   } finally {
     await client.end().catch(() => {});
   }

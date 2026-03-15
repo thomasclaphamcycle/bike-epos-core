@@ -44,7 +44,7 @@ Safety rules:
 
 ## Initial Admin Setup
 
-Option 1 (recommended): script
+Option 1: standalone admin script
 
 ```bash
 ADMIN_NAME="Admin User" \
@@ -53,11 +53,18 @@ ADMIN_PASSWORD="ChangeMe123!" \
 npm run auth:seed-admin
 ```
 
-Optional local staff restore:
+Standard local roster restore:
 
 ```bash
 npm run auth:seed-local-staff
 ```
+
+This upserts the intended local dev roster and makes `Thomas` the admin user:
+
+- `Thomas` / `thomas@corepos.local` / PIN `8642`
+- `Dom` / `dom@corepos.local` / PIN `2468`
+- `Eric` / `eric@corepos.local` / PIN `1357`
+- `Mike` / `mike@corepos.local` / PIN `4321`
 
 Full local dev reset + reseed:
 
@@ -87,11 +94,11 @@ If the React frontend is not running, the backend-only login surface remains ava
 
 After `npm run db:seed:dev`, the demo seed preserves existing active staff users instead of creating demo auth accounts.
 
-The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows. For a fresh local setup, create an initial admin with `npm run auth:seed-admin`, then create or manage the rest of the staff accounts from `/management/staff`.
+The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows. For the intended local setup, use `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` so Thomas is restored as the admin user.
 
-If the local dev database has been reduced back to only the admin account, `npm run auth:seed-local-staff` will upsert a small PIN-enabled manager/staff set for development use.
+If the local dev database has drifted or only contains partial users, `npm run auth:seed-local-staff` will upsert the intended PIN-enabled local roster and remove the old generic local admin seed at `admin@example.com`.
 
-If the local dev database is messy or untrustworthy, `npm run db:reset-and-seed:dev` is the clean recovery path. It resets only the dev DB from `DATABASE_URL`, reapplies migrations, reseeds the base demo data, restores the local admin, and restores the intended local staff roster (`Dom`, `Eric`, `Mike`, `Thomas`).
+If the local dev database is messy or untrustworthy, `npm run db:reset-and-seed:dev` is the clean recovery path. It resets only the dev DB from `DATABASE_URL`, reapplies migrations, reseeds the base demo data, and restores the intended local staff roster with Thomas as the admin user.
 
 This does not prepare the test database. Continue using `npm run test:db:up` and `.env.test`/`TEST_DATABASE_URL` for test and verification flows.
 

@@ -32,7 +32,7 @@ npm --prefix frontend run dev
 
 4. Log in with an existing active staff account.
 
-If this is a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create any additional operator accounts from `/management/staff`.
+If this is a fresh local setup, restore the intended local roster with `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev`. That makes Thomas the local admin account.
 
 5. Walk the core operational flows below in order.
 

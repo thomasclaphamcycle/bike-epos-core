@@ -142,8 +142,8 @@ That workflow will:
 - regenerate Prisma client
 - apply all existing migrations
 - seed the base operational demo data
-- ensure the local admin exists
 - restore the intended local staff roster: `Dom`, `Eric`, `Mike`, `Thomas`
+- make `Thomas` the intended local admin login for the reset dev environment
 
 It does not prepare the test database. Keep using `npm run test:db:up` for test/e2e setup.
 
@@ -201,9 +201,9 @@ Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 
 `scripts/seed_demo_data.ts` no longer creates demo auth users.
 
-The login screen remains PIN-first and lists whatever active staff accounts already exist in the local database. For a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create or manage the remaining staff accounts from `/management/staff`.
+The login screen remains PIN-first and lists whatever active staff accounts already exist in the local database. For a fresh local setup, use `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` to restore the intended local roster with Thomas as the admin user.
 
-If you need a quick local staff roster after restoring only the admin account, run `npm run auth:seed-local-staff` to upsert a small PIN-enabled manager/staff set into the dev database.
+For the intended local dev roster, run `npm run auth:seed-local-staff` to upsert the standard PIN-enabled staff set and make `Thomas` the admin user.
 
 `npm run db:seed:dev` now keeps the demo environment intentionally small:
 
@@ -215,7 +215,7 @@ If you need a quick local staff roster after restoring only the admin account, r
 
 ### Create initial admin
 
-Recommended:
+Optional standalone admin seed:
 
 ```bash
 ADMIN_NAME="Admin User" \
@@ -229,6 +229,10 @@ Optional local staff restore:
 ```bash
 npm run auth:seed-local-staff
 ```
+
+The standard local dev admin after `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` is:
+
+- `Thomas` / `thomas@corepos.local` / PIN `8642`
 
 Full local reset + reseed:
 

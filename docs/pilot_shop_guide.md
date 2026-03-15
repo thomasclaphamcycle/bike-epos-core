@@ -96,7 +96,7 @@ http://localhost:5173/login
 
 Use an existing active staff account.
 
-If this is a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create any additional staff users from `/management/staff`.
+If this is a fresh local setup, restore the intended local roster with `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev`. That makes Thomas the local admin account.
 
 The React login screen is intentionally PIN-first and lists active users from the database. Password login remains available as a fallback.
 
