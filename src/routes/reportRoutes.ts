@@ -3,6 +3,9 @@ import {
   dismissReminderCandidateHandler,
   getActionCentreReportHandler,
   getCustomerServiceRemindersReportHandler,
+  getFinancialMonthlyMarginReportHandler,
+  getFinancialMonthlySalesReportHandler,
+  getFinancialSalesByCategoryReportHandler,
   getInventoryInvestigationsReportHandler,
   getInventoryOnHandReportHandler,
   getInventoryOnHandReportCsvHandler,
@@ -35,6 +38,9 @@ export const reportRouter = Router();
 
 reportRouter.get("/sales/daily", getSalesDailyReportHandler);
 reportRouter.get("/sales/daily.csv", requireRoleAtLeast("MANAGER"), getSalesDailyReportCsvHandler);
+reportRouter.get("/financial/monthly-margin", requireRoleAtLeast("MANAGER"), getFinancialMonthlyMarginReportHandler);
+reportRouter.get("/financial/monthly-sales", requireRoleAtLeast("MANAGER"), getFinancialMonthlySalesReportHandler);
+reportRouter.get("/financial/sales-by-category", requireRoleAtLeast("MANAGER"), getFinancialSalesByCategoryReportHandler);
 reportRouter.get("/workshop/daily", getWorkshopDailyReportHandler);
 reportRouter.get(
   "/workshop/daily.csv",

@@ -21,6 +21,26 @@ GET {{baseUrl}}/api/reports/sales/daily.csv?from=2026-03-01&to=2026-03-31
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Financial monthly margin (MANAGER+)
+### Defaults to current month-to-date when from/to are omitted.
+### Revenue is net of completed refunds. Retail COGS use current Variant.costPricePence;
+### workshop used-part COGS use WorkshopJobPart.costPriceAtTime when present.
+GET {{baseUrl}}/api/reports/financial/monthly-margin
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Financial monthly sales summary (MANAGER+)
+### Returns current month-to-date gross sales, refunds, net revenue, and average sale value.
+GET {{baseUrl}}/api/reports/financial/monthly-sales
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Financial sales by category (MANAGER+)
+### Product categories come from Product.category. Workshop labour is surfaced as its own synthetic category.
+GET {{baseUrl}}/api/reports/financial/sales-by-category
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
 ### Workshop daily report
 ### Uses WorkshopJob.completedAt as completion date.
 ### Date bucketing is Europe/London.

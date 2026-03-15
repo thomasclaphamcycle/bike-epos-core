@@ -7,6 +7,9 @@ import {
   getInventoryVelocityReport,
   getInventoryValueReport,
   getInventoryValueSnapshotReport,
+  getFinancialMonthlyMarginReport,
+  getFinancialMonthlySalesSummaryReport,
+  getFinancialSalesByCategoryReport,
   getPaymentsReport,
   getCustomerInsightsReport,
   getInventoryLocationSummaryReport,
@@ -95,6 +98,24 @@ export const getWorkshopDailyReportHandler = async (req: Request, res: Response)
 
 export const getWorkshopCapacityReportHandler = async (_req: Request, res: Response) => {
   const report = await getWorkshopCapacityReport();
+  res.json(report);
+};
+
+export const getFinancialMonthlyMarginReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getFinancialMonthlyMarginReport(from, to);
+  res.json(report);
+};
+
+export const getFinancialMonthlySalesReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getFinancialMonthlySalesSummaryReport(from, to);
+  res.json(report);
+};
+
+export const getFinancialSalesByCategoryReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getFinancialSalesByCategoryReport(from, to);
   res.json(report);
 };
 
