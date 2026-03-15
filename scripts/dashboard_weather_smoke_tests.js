@@ -2,19 +2,17 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { createServer } = require("node:http");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 const STAFF_HEADERS = {
   "X-Staff-Role": "STAFF",
   "X-Staff-Id": "weather-smoke-staff",
 };
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -55,46 +53,6 @@ const fetchJson = async (path, options = {}) => {
   const json = text ? JSON.parse(text) : null;
   return { status: response.status, json };
 };
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
-};
-
-const waitForExit = (child, timeoutMs) =>
-  new Promise((resolve) => {
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve();
-    }, timeoutMs);
-
-    child.once("exit", () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
 
 const startLocationLookupStubServer = () =>
   new Promise((resolve, reject) => {
@@ -169,37 +127,28 @@ const startLocationLookupStubServer = () =>
   });
 
 const run = async () => {
-  let startedServer = false;
-  let serverProcess = null;
   let locationLookupStubServer = null;
+  let serverController = null;
 
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      const locationLookupStub = await startLocationLookupStubServer();
-      locationLookupStubServer = locationLookupStub.server;
-
-      serverProcess = spawn("npx", ["ts-node", "--transpile-only", "src/server.ts"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: new URL(BASE_URL).port || "3100",
-          COREPOS_WEATHER_STUB: "1",
-          POSTCODES_IO_BASE_URL: `${locationLookupStub.url.replace(/\/geocode$/, "")}/postcodes`,
-          OPEN_METEO_GEOCODE_URL: locationLookupStub.url,
-        },
-      });
-      startedServer = true;
-      await waitForServer();
-    }
+    const locationLookupStub = await startLocationLookupStubServer();
+    locationLookupStubServer = locationLookupStub.server;
+    serverController = createSmokeServerController({
+      label: "dashboard-weather-smoke",
+      baseUrl: BASE_URL,
+      databaseUrl: DATABASE_URL,
+      startup: {
+        command: "npx",
+        args: ["ts-node", "--transpile-only", "src/server.ts"],
+      },
+      envOverrides: {
+        PORT: new URL(BASE_URL).port || "3100",
+        COREPOS_WEATHER_STUB: "1",
+        POSTCODES_IO_BASE_URL: `${locationLookupStub.url.replace(/\/geocode$/, "")}/postcodes`,
+        OPEN_METEO_GEOCODE_URL: locationLookupStub.url,
+      },
+    });
+    await serverController.startIfNeeded();
 
     await prisma.appConfig.deleteMany({
       where: {
@@ -246,14 +195,8 @@ const run = async () => {
     console.log("[dashboard-weather-smoke] dashboard weather endpoint passed");
   } finally {
     await prisma.$disconnect();
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await waitForExit(serverProcess, 1500);
-      if (serverProcess.exitCode === null) {
-        serverProcess.kill("SIGKILL");
-        await waitForExit(serverProcess, 500);
-      }
+    if (serverController) {
+      await serverController.stop();
     }
 
     if (locationLookupStubServer) {
