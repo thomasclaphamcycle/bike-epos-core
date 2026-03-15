@@ -463,6 +463,11 @@ CI runs with:
 - `AUTH_MODE=real`
 - `TEST_DATABASE_URL` + `DATABASE_URL` pointed at CI Postgres
 
+## CI Verification Note
+
+This repository uses local verification and GitHub Actions to confirm branch health.
+This note exists to trigger a fresh CI run for the current verified branch state.
+
 ## Cleanup Test DB
 
 ```bash
