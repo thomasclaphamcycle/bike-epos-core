@@ -2,12 +2,11 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -32,69 +31,11 @@ console.log(`[m28-smoke] DATABASE_URL=${safeDbUrl}`);
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 });
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const log = (message) => {
-  console.log(`[m28-smoke] ${message}`);
-};
-const waitForProcessExit = (child, timeoutMs) =>
-  new Promise((resolve, reject) => {
-    if (!child || child.exitCode !== null || child.signalCode !== null) {
-      resolve();
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`Child process did not exit within ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      child.removeListener("exit", handleExit);
-      child.removeListener("error", handleError);
-    };
-
-    const handleExit = () => {
-      cleanup();
-      resolve();
-    };
-
-    const handleError = (error) => {
-      cleanup();
-      reject(error);
-    };
-
-    child.once("exit", handleExit);
-    child.once("error", handleError);
-  });
-const waitForServerShutdown = async (timeoutMs) => {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (!(await serverIsHealthy())) {
-      return Date.now() - startedAt;
-    }
-    await sleep(250);
-  }
-
-  throw new Error(`Server still responded on /health after ${timeoutMs}ms`);
-};
-const sendSignal = (child, signal, useProcessGroup) => {
-  if (!child?.pid) {
-    return;
-  }
-
-  const target = useProcessGroup ? -child.pid : child.pid;
-  try {
-    process.kill(target, signal);
-  } catch (error) {
-    if (error && typeof error === "object" && error.code === "ESRCH") {
-      return;
-    }
-    throw error;
-  }
-};
+const serverController = createSmokeServerController({
+  label: "m28-smoke",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+});
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
 
@@ -116,25 +57,6 @@ const fetchJson = async (path, options = {}) => {
   }
 
   return { status: response.status, json };
-};
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
 };
 
 const cleanup = async (state) => {
@@ -282,32 +204,8 @@ const run = async () => {
     userIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-  let serverUsesProcessGroup = false;
-
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: "ignore",
-        detached: process.platform !== "win32",
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      serverUsesProcessGroup = process.platform !== "win32";
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const managerUser = await prisma.user.create({
       data: {
@@ -458,28 +356,7 @@ const run = async () => {
     console.log("PASS m28 POS basket + checkout smoke tests");
   } finally {
     await cleanup(state);
-
-    if (startedServer && serverProcess) {
-      log("Starting API server cleanup");
-      try {
-        log(`Sending SIGTERM to ${serverUsesProcessGroup ? "process group" : "server process"} ${serverProcess.pid}`);
-        sendSignal(serverProcess, "SIGTERM", serverUsesProcessGroup);
-        await waitForProcessExit(serverProcess, 5_000);
-        log("Server process exited after SIGTERM");
-      } catch (error) {
-        log(
-          `Server did not exit cleanly after SIGTERM (${error instanceof Error ? error.message : String(error)})`,
-        );
-        log(`Sending SIGKILL to ${serverUsesProcessGroup ? "process group" : "server process"} ${serverProcess.pid}`);
-        sendSignal(serverProcess, "SIGKILL", serverUsesProcessGroup);
-        await waitForProcessExit(serverProcess, 2_000);
-        log("Server process exited after SIGKILL");
-      }
-
-      const shutdownMs = await waitForServerShutdown(5_000);
-      log(`API server shutdown confirmed after cleanup (${shutdownMs}ms)`);
-    }
-
+    await serverController.stop();
     await prisma.$disconnect();
   }
 };

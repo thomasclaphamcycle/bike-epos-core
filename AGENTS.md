@@ -308,11 +308,14 @@ Agents may check for processes using the shared test port before verification. E
 
 Current baseline smoke runner: `scripts/run_smoke_suite.js`
 
+Shared smoke server lifecycle helper: `scripts/smoke_server_helper.js`
+
 Smoke runner expectations:
 
 - smoke tests should run against their own test-mode server and should not silently reuse a live local dev server
 - default smoke base URL is `http://localhost:3100` unless explicitly overridden
 - if an existing server must be reused intentionally, set `ALLOW_EXISTING_SERVER=1`
+- smoke scripts that start their own API server should use the shared helper instead of bespoke spawn/cleanup logic
 
 Current baseline smoke steps:
 
