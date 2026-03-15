@@ -17,26 +17,39 @@ if (DEFAULT_PASSWORD.length < 8) {
 
 const LOCAL_STAFF_FIXTURES = [
   {
-    name: "Jordan Patel",
-    email: "jordan.patel@corepos.local",
-    role: "MANAGER",
-    operationalRole: "MIXED",
+    name: "Dom",
+    email: "dom@corepos.local",
+    role: "STAFF",
+    operationalRole: "WORKSHOP",
     pin: "2468",
   },
   {
-    name: "Alex Turner",
-    email: "alex.turner@corepos.local",
+    name: "Eric",
+    email: "eric@corepos.local",
     role: "STAFF",
-    operationalRole: "WORKSHOP",
+    operationalRole: "SALES",
     pin: "1357",
   },
   {
-    name: "Casey Hudson",
-    email: "casey.hudson@corepos.local",
+    name: "Mike",
+    email: "mike@corepos.local",
     role: "STAFF",
-    operationalRole: "SALES",
+    operationalRole: "WORKSHOP",
     pin: "4321",
   },
+  {
+    name: "Thomas",
+    email: "thomas@corepos.local",
+    role: "MANAGER",
+    operationalRole: "MIXED",
+    pin: "8642",
+  },
+];
+
+const LEGACY_LOCAL_STAFF_EMAILS = [
+  "jordan.patel@corepos.local",
+  "alex.turner@corepos.local",
+  "casey.hudson@corepos.local",
 ];
 
 const prisma = new PrismaClient({
@@ -62,6 +75,14 @@ const run = async () => {
     const results = [];
 
     await prisma.$transaction(async (tx) => {
+      await tx.user.deleteMany({
+        where: {
+          email: {
+            in: LEGACY_LOCAL_STAFF_EMAILS,
+          },
+        },
+      });
+
       for (const fixture of LOCAL_STAFF_FIXTURES) {
         const normalizedEmail = fixture.email.toLowerCase();
         const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
