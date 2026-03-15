@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
-import { getFinancialMonthlyMarginReport, type FinancialMonthlyMarginReport } from "../api/financialReports";
+import {
+  getFinancialMonthlyMarginReport,
+  getFinancialMonthlySalesSummaryReport,
+  type FinancialMonthlyMarginReport,
+  type FinancialMonthlySalesSummaryReport,
+} from "../api/financialReports";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { HolidayRequestModal } from "../components/HolidayRequestModal";
@@ -297,6 +302,19 @@ const buildMonthlyMarginTileDetail = (report: FinancialMonthlyMarginReport) => {
   return parts.join(" · ");
 };
 
+const buildMonthlySalesTileDetail = (report: FinancialMonthlySalesSummaryReport) => {
+  const parts = [
+    `${report.summary.transactions} transaction${report.summary.transactions === 1 ? "" : "s"}`,
+    `Avg ${formatDashboardCurrencyFromPence(report.summary.averageSaleValuePence)}`,
+  ];
+
+  if (report.summary.refundsPence > 0) {
+    parts.push(`Refunds ${formatDashboardCurrencyFromPence(report.summary.refundsPence)}`);
+  }
+
+  return parts.join(" · ");
+};
+
 export const DashboardPage = () => {
   const { user } = useAuth();
   const { error, success } = useToasts();
@@ -306,6 +324,7 @@ export const DashboardPage = () => {
   const [monthToDateNetPence, setMonthToDateNetPence] = useState<number | null>(null);
   const [lastYearMonthToDateNetPence, setLastYearMonthToDateNetPence] = useState<number | null>(null);
   const [monthlyMarginReport, setMonthlyMarginReport] = useState<FinancialMonthlyMarginReport | null>(null);
+  const [monthlySalesReport, setMonthlySalesReport] = useState<FinancialMonthlySalesSummaryReport | null>(null);
   const [workshopSummary, setWorkshopSummary] = useState<WorkshopDashboardResponse["summary"] | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [hireBookings, setHireBookings] = useState<HireBooking[]>([]);
@@ -342,6 +361,7 @@ export const DashboardPage = () => {
       ),
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=12"),
       canViewManagerWidgets ? getFinancialMonthlyMarginReport() : Promise.resolve(null),
+      canViewManagerWidgets ? getFinancialMonthlySalesSummaryReport() : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<ActionCentreResponse>("/api/reports/operations/actions") : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<HireBookingListResponse>("/api/hire/bookings?take=200") : Promise.resolve(null),
       apiGet<DashboardStaffTodayPayload>("/api/dashboard/staff-today"),
@@ -355,6 +375,7 @@ export const DashboardPage = () => {
       lastYearResult,
       workshopResult,
       monthlyMarginResult,
+      monthlySalesResult,
       actionResult,
       hireResult,
       staffTodayResult,
@@ -405,6 +426,15 @@ export const DashboardPage = () => {
       error(monthlyMarginResult.reason instanceof Error ? monthlyMarginResult.reason.message : "Failed to load monthly margin");
     } else {
       setMonthlyMarginReport(null);
+    }
+
+    if (monthlySalesResult.status === "fulfilled") {
+      setMonthlySalesReport(monthlySalesResult.value);
+    } else if (monthlySalesResult.status === "rejected") {
+      setMonthlySalesReport(null);
+      error(monthlySalesResult.reason instanceof Error ? monthlySalesResult.reason.message : "Failed to load monthly sales");
+    } else {
+      setMonthlySalesReport(null);
     }
 
     if (actionResult.status === "fulfilled" && actionResult.value) {
@@ -741,6 +771,22 @@ export const DashboardPage = () => {
           // TODO: Link this KPI to a dedicated financial reports destination once that route exists.
           href={undefined}
           placeholder={!monthlyMarginReport}
+        />
+        <DashboardMetricCard
+          label="Monthly Sales"
+          value={monthlySalesReport
+            ? formatDashboardCurrencyFromPence(monthlySalesReport.summary.revenuePence)
+            : canViewManagerWidgets
+              ? "—"
+              : "Manager only"}
+          detail={monthlySalesReport
+            ? buildMonthlySalesTileDetail(monthlySalesReport)
+            : canViewManagerWidgets
+              ? "Current-month sales summary is unavailable."
+              : "Financial analytics are visible to managers and admins."}
+          // TODO: Link this KPI to a dedicated financial reports destination once that route exists.
+          href={undefined}
+          placeholder={!monthlySalesReport}
         />
         <DashboardMetricCard
           label="vs Last Year"
