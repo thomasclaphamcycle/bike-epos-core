@@ -1402,6 +1402,42 @@ th {
   margin: 0;
 }
 
+.workshop-capacity-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.workshop-capacity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.workshop-capacity-copy {
+  margin: 4px 0 0;
+}
+
+.workshop-capacity-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.workshop-capacity-metric {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-capacity-metric strong {
+  font-size: 1.2rem;
+}
+
 .workshop-column {
   border: 1px solid #d7e0ea;
   border-radius: 14px;
@@ -3390,6 +3426,10 @@ th {
   }
 
   .workshop-staffing-header {
+    flex-direction: column;
+  }
+
+  .workshop-capacity-header {
     flex-direction: column;
   }
 }

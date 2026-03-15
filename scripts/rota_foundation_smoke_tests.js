@@ -9,6 +9,7 @@ const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
@@ -49,7 +50,11 @@ const IMPORTED_FRIDAY = "2026-03-13";
 const IMPORTED_SUNDAY = "2026-03-15";
 const FUTURE_MONDAY = "2026-03-23";
 const FUTURE_TUESDAY = "2026-03-24";
+const CAPACITY_LIGHT_DATE = "2099-04-01";
+const CAPACITY_OVERLOADED_DATE = "2099-04-02";
+const CAPACITY_NOCOVER_DATE = "2099-04-03";
 const LONG_RANGE_BANK_HOLIDAY = "2099-03-24";
+const WORKSHOP_CAPACITY_REF = `rota-capacity-${Date.now()}`;
 
 const ALEX_HEADERS = {
   "X-Staff-Role": "STAFF",
@@ -125,6 +130,235 @@ const runImporter = (filePath, { apply = false } = {}) => {
   });
 };
 
+const clearWorkshopState = async () => {
+  const workshopJobIds = (
+    await prisma.workshopJob.findMany({
+      select: { id: true },
+    })
+  ).map((job) => job.id);
+
+  if (workshopJobIds.length === 0) {
+    return;
+  }
+
+  const saleIds = (
+    await prisma.sale.findMany({
+      where: {
+        workshopJobId: {
+          in: workshopJobIds,
+        },
+      },
+      select: { id: true },
+    })
+  ).map((sale) => sale.id);
+
+  const paymentRows = await prisma.payment.findMany({
+    where: {
+      OR: [
+        {
+          workshopJobId: {
+            in: workshopJobIds,
+          },
+        },
+        saleIds.length > 0
+          ? {
+            saleId: {
+              in: saleIds,
+            },
+          }
+          : undefined,
+      ].filter(Boolean),
+    },
+    select: { id: true },
+  });
+  const paymentIds = paymentRows.map((payment) => payment.id);
+
+  const refundIds = paymentIds.length
+    ? (
+      await prisma.paymentRefund.findMany({
+        where: {
+          paymentId: {
+            in: paymentIds,
+          },
+        },
+        select: { id: true },
+      })
+    ).map((refund) => refund.id)
+    : [];
+
+  const creditEntryRows = paymentIds.length
+    ? await prisma.creditLedgerEntry.findMany({
+      where: {
+        paymentId: {
+          in: paymentIds,
+        },
+      },
+      select: { id: true, creditAccountId: true },
+    })
+    : [];
+  const creditEntryIds = creditEntryRows.map((entry) => entry.id);
+  const creditAccountIds = [...new Set(creditEntryRows.map((entry) => entry.creditAccountId))];
+
+  await prisma.reminderCandidate.deleteMany({
+    where: {
+      workshopJobId: {
+        in: workshopJobIds,
+      },
+    },
+  });
+  await prisma.workshopJobNote.deleteMany({
+    where: {
+      workshopJobId: {
+        in: workshopJobIds,
+      },
+    },
+  });
+  await prisma.workshopJobPart.deleteMany({
+    where: {
+      workshopJobId: {
+        in: workshopJobIds,
+      },
+    },
+  });
+  await prisma.workshopJobLine.deleteMany({
+    where: {
+      jobId: {
+        in: workshopJobIds,
+      },
+    },
+  });
+  await prisma.workshopCancellation.deleteMany({
+    where: {
+      OR: [
+        {
+          workshopJobId: {
+            in: workshopJobIds,
+          },
+        },
+        refundIds.length > 0
+          ? {
+            paymentRefundId: {
+              in: refundIds,
+            },
+          }
+          : undefined,
+        creditEntryIds.length > 0
+          ? {
+            creditLedgerEntryId: {
+              in: creditEntryIds,
+            },
+          }
+          : undefined,
+        creditAccountIds.length > 0
+          ? {
+            creditAccountId: {
+              in: creditAccountIds,
+            },
+          }
+          : undefined,
+      ].filter(Boolean),
+    },
+  });
+
+  if (refundIds.length > 0) {
+    await prisma.paymentRefund.deleteMany({
+      where: {
+        id: {
+          in: refundIds,
+        },
+      },
+    });
+  }
+
+  if (creditEntryIds.length > 0) {
+    await prisma.creditLedgerEntry.deleteMany({
+      where: {
+        id: {
+          in: creditEntryIds,
+        },
+      },
+    });
+  }
+
+  if (creditAccountIds.length > 0) {
+    await prisma.creditAccount.deleteMany({
+      where: {
+        id: {
+          in: creditAccountIds,
+        },
+      },
+    });
+  }
+
+  if (saleIds.length > 0) {
+    await prisma.paymentIntent.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
+    await prisma.saleReturnItem.deleteMany({
+      where: {
+        saleReturn: {
+          saleId: {
+            in: saleIds,
+          },
+        },
+      },
+    });
+    await prisma.saleReturn.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
+    await prisma.saleTender.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
+    await prisma.saleItem.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
+  }
+
+  if (paymentIds.length > 0) {
+    await prisma.payment.deleteMany({
+      where: {
+        id: {
+          in: paymentIds,
+        },
+      },
+    });
+  }
+
+  if (saleIds.length > 0) {
+    await prisma.sale.deleteMany({
+      where: {
+        id: {
+          in: saleIds,
+        },
+      },
+    });
+  }
+
+  await prisma.workshopJob.deleteMany({
+    where: {
+      id: {
+        in: workshopJobIds,
+      },
+    },
+  });
+};
+
 const startBankHolidayFeedServer = async () =>
   new Promise((resolve) => {
     const server = http.createServer((req, res) => {
@@ -170,6 +404,7 @@ const run = async () => {
   let serverProcess = null;
   let bankHolidayFeedServer = null;
   const tempFilePath = path.join(os.tmpdir(), `corepos-rota-import-${Date.now()}.csv`);
+  const createdWorkshopJobIds = [];
 
   try {
     bankHolidayFeedServer = await startBankHolidayFeedServer();
@@ -195,6 +430,8 @@ const run = async () => {
       startedServer = true;
       await waitForServer();
     }
+
+    await clearWorkshopState();
 
     await prisma.rotaAssignment.deleteMany();
     await prisma.rotaPeriod.deleteMany();
@@ -260,6 +497,23 @@ const run = async () => {
         },
       ],
     });
+
+    const mainLocationId = await ensureMainLocationId(prisma);
+    const createWorkshopJob = async ({ scheduledDate, status, notes }) => {
+      const createdJob = await prisma.workshopJob.create({
+        data: {
+          locationId: mainLocationId,
+          customerName: "Workshop Capacity Smoke",
+          bikeDescription: "Workshop capacity coverage test",
+          scheduledDate: new Date(`${scheduledDate}T10:00:00.000Z`),
+          status,
+          source: "IN_STORE",
+          notes: `${WORKSHOP_CAPACITY_REF} ${notes}`,
+        },
+      });
+      createdWorkshopJobIds.push(createdJob.id);
+      return createdJob;
+    };
 
     const bankHolidayStatusBeforeSyncRes = await fetchJson("/api/rota/bank-holidays/status", {
       headers: MANAGER_HEADERS,
@@ -387,6 +641,77 @@ const run = async () => {
     assert.equal(caseyManualAssignRes.status, 201, JSON.stringify(caseyManualAssignRes.json));
     assert.equal(caseyManualAssignRes.json.assignment.source, "MANUAL");
 
+    const caseyFutureTuesdayAssignRes = await fetchJson("/api/rota/assignments", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: CASEY_STAFF_ID,
+        date: FUTURE_TUESDAY,
+        shiftType: "FULL_DAY",
+      }),
+    });
+    assert.equal(caseyFutureTuesdayAssignRes.status, 201, JSON.stringify(caseyFutureTuesdayAssignRes.json));
+
+    const tagCaseyWorkshopRes = await fetchJson(`/api/staff-directory/${CASEY_STAFF_ID}/operational-role`, {
+      method: "PATCH",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        operationalRole: "WORKSHOP",
+      }),
+    });
+    assert.equal(tagCaseyWorkshopRes.status, 200, JSON.stringify(tagCaseyWorkshopRes.json));
+    assert.equal(tagCaseyWorkshopRes.json.user.operationalRole, "WORKSHOP");
+
+    await prisma.rotaAssignment.upsert({
+      where: {
+        staffId_date: {
+          staffId: CASEY_STAFF_ID,
+          date: CAPACITY_LIGHT_DATE,
+        },
+      },
+      update: {
+        shiftType: "FULL_DAY",
+        source: "MANUAL",
+        note: "Capacity coverage",
+      },
+      create: {
+        rotaPeriodId: rotaPeriod.id,
+        staffId: CASEY_STAFF_ID,
+        date: CAPACITY_LIGHT_DATE,
+        shiftType: "FULL_DAY",
+        source: "MANUAL",
+        note: "Capacity coverage",
+      },
+    });
+    await prisma.rotaAssignment.upsert({
+      where: {
+        staffId_date: {
+          staffId: CASEY_STAFF_ID,
+          date: CAPACITY_OVERLOADED_DATE,
+        },
+      },
+      update: {
+        shiftType: "FULL_DAY",
+        source: "MANUAL",
+        note: "Capacity coverage",
+      },
+      create: {
+        rotaPeriodId: rotaPeriod.id,
+        staffId: CASEY_STAFF_ID,
+        date: CAPACITY_OVERLOADED_DATE,
+        shiftType: "FULL_DAY",
+        source: "MANUAL",
+        note: "Capacity coverage",
+      },
+    });
+
     const futureMondayRes = await fetchJson(`/api/dashboard/staff-today?date=${FUTURE_MONDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(futureMondayRes.status, 200, JSON.stringify(futureMondayRes.json));
     assert.equal(futureMondayRes.json.staffToday.summary.scheduledStaffCount, 1);
@@ -395,6 +720,71 @@ const run = async () => {
       futureMondayRes.json.staffToday.staff.map((entry) => entry.name),
       ["Casey Hudson"],
     );
+
+    const workshopFutureLightRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${CAPACITY_LIGHT_DATE}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(workshopFutureLightRes.status, 200, JSON.stringify(workshopFutureLightRes.json));
+    assert.equal(workshopFutureLightRes.json.staffingToday.context.usesOperationalRoleTags, true);
+    assert.equal(workshopFutureLightRes.json.staffingToday.summary.scheduledStaffCount, 1);
+    assert.equal(workshopFutureLightRes.json.capacityToday.status, "LIGHT");
+    assert.match(workshopFutureLightRes.json.capacityToday.explanation, /ahead of the current queue/i);
+
+    await createWorkshopJob({
+      scheduledDate: CAPACITY_LIGHT_DATE,
+      status: "BOOKING_MADE",
+      notes: "manageable due-today job",
+    });
+
+    const workshopFutureNormalRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${CAPACITY_LIGHT_DATE}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(workshopFutureNormalRes.status, 200, JSON.stringify(workshopFutureNormalRes.json));
+    assert.equal(workshopFutureNormalRes.json.capacityToday.status, "NORMAL");
+    assert.equal(workshopFutureNormalRes.json.capacityToday.metrics.scheduledStaffCount, 1);
+    assert.equal(workshopFutureNormalRes.json.capacityToday.metrics.dueTodayJobs, 1);
+    assert.equal(workshopFutureNormalRes.json.capacityToday.metrics.overdueJobs, 0);
+
+    await createWorkshopJob({
+      scheduledDate: CAPACITY_LIGHT_DATE,
+      status: "APPROVED",
+      notes: "overdue active job one",
+    });
+    await createWorkshopJob({
+      scheduledDate: CAPACITY_LIGHT_DATE,
+      status: "WAITING_FOR_PARTS",
+      notes: "overdue active job two",
+    });
+    await createWorkshopJob({
+      scheduledDate: CAPACITY_OVERLOADED_DATE,
+      status: "BOOKING_MADE",
+      notes: "busy due-today job",
+    });
+
+    const workshopFutureOverloadedRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${CAPACITY_OVERLOADED_DATE}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(workshopFutureOverloadedRes.status, 200, JSON.stringify(workshopFutureOverloadedRes.json));
+    assert.equal(workshopFutureOverloadedRes.json.capacityToday.status, "OVERLOADED");
+    assert.equal(workshopFutureOverloadedRes.json.capacityToday.metrics.scheduledStaffCount, 1);
+    assert.equal(workshopFutureOverloadedRes.json.capacityToday.metrics.dueTodayJobs, 1);
+    assert.equal(workshopFutureOverloadedRes.json.capacityToday.metrics.overdueJobs, 3);
+    assert.equal(workshopFutureOverloadedRes.json.capacityToday.metrics.activeWorkloadJobs, 2);
+
+    await createWorkshopJob({
+      scheduledDate: CAPACITY_NOCOVER_DATE,
+      status: "BOOKING_MADE",
+      notes: "no-cover due-today job",
+    });
+
+    const workshopFutureNoCoverRes = await fetchJson(`/api/workshop/dashboard?limit=20&staffDate=${CAPACITY_NOCOVER_DATE}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(workshopFutureNoCoverRes.status, 200, JSON.stringify(workshopFutureNoCoverRes.json));
+    assert.equal(workshopFutureNoCoverRes.json.staffingToday.summary.isClosed, false);
+    assert.equal(workshopFutureNoCoverRes.json.staffingToday.summary.scheduledStaffCount, 0);
+    assert.equal(workshopFutureNoCoverRes.json.capacityToday.status, "NO_COVER");
+    assert.equal(workshopFutureNoCoverRes.json.capacityToday.metrics.dueTodayJobs, 1);
 
     const alexHolidaySubmitRes = await fetchJson("/api/rota/holiday-requests", {
       method: "POST",
@@ -517,7 +907,7 @@ const run = async () => {
     );
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.source === "HOLIDAY_APPROVED"));
     assert.ok(approvedHolidayAssignments.every((assignment) => assignment.note === "Family trip"));
-    assert.equal(await prisma.rotaAssignment.count(), 8);
+    assert.equal(await prisma.rotaAssignment.count(), 11);
 
     const tuesdayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_TUESDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(tuesdayRes.status, 200, JSON.stringify(tuesdayRes.json));
@@ -542,6 +932,7 @@ const run = async () => {
     assert.equal(workshopTuesdayRes.json.staffingToday.summary.coverageStatus, "thin");
     assert.equal(workshopTuesdayRes.json.staffingToday.summary.scheduledStaffCount, 1);
     assert.equal(workshopTuesdayRes.json.staffingToday.summary.holidayStaffCount, 1);
+    assert.equal(workshopTuesdayRes.json.capacityToday.metrics.scheduledStaffCount, 1);
     assert.deepEqual(
       workshopTuesdayRes.json.staffingToday.scheduledStaff.map((entry) => entry.name),
       ["Jordan Patel"],
@@ -725,10 +1116,22 @@ const run = async () => {
     assert.equal(workshopClosedDayRes.json.staffingToday.summary.coverageStatus, "closed");
     assert.equal(workshopClosedDayRes.json.staffingToday.summary.closedReason, "Special bank holiday");
     assert.equal(workshopClosedDayRes.json.staffingToday.scheduledStaff.length, 0);
+    assert.equal(workshopClosedDayRes.json.capacityToday.status, "CLOSED");
+    assert.equal(workshopClosedDayRes.json.capacityToday.label, "Closed");
+    assert.match(workshopClosedDayRes.json.capacityToday.explanation, /Special bank holiday/);
 
     console.log("[rota-foundation-smoke] rota import and dashboard staff summary passed");
   } finally {
     fs.rmSync(tempFilePath, { force: true });
+    if (createdWorkshopJobIds.length > 0) {
+      await prisma.workshopJob.deleteMany({
+        where: {
+          id: {
+            in: createdWorkshopJobIds,
+          },
+        },
+      });
+    }
     await prisma.$disconnect();
 
     if (startedServer && serverProcess) {

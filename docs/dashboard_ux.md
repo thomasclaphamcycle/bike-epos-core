@@ -116,6 +116,7 @@ Rules:
 - include direct links into the workshop board or collection workflow
 - keep it summary-first, not job-table-first
 - workshop staffing visibility should prefer workshop-tagged rota staff when those tags exist, while falling back to broader scheduled staff so the view stays useful during rollout
+- workshop should also surface a lightweight capacity signal using rota-backed staffing plus due/overdue workshop workload, with clear states such as Closed, No cover, Light, Normal, Busy, and Overloaded
 
 ## Rentals Widget
 

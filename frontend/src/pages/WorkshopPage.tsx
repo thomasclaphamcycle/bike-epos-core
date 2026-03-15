@@ -95,6 +95,19 @@ type DashboardResponse = {
       source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
     }>;
   };
+  capacityToday: {
+    status: "CLOSED" | "NO_COVER" | "LIGHT" | "NORMAL" | "BUSY" | "OVERLOADED";
+    label: string;
+    explanation: string;
+    metrics: {
+      scheduledStaffCount: number;
+      totalScheduledStaffCount: number;
+      dueTodayJobs: number;
+      overdueJobs: number;
+      openJobs: number;
+      activeWorkloadJobs: number;
+    };
+  };
   jobs: DashboardJob[];
 };
 
@@ -136,6 +149,24 @@ const formatTradingWindow = (opensAt: string | null, closesAt: string | null) =>
     return null;
   }
   return `${opensAt}-${closesAt}`;
+};
+
+const toCapacityBadgeClass = (
+  status: DashboardResponse["capacityToday"]["status"],
+) => {
+  switch (status) {
+    case "CLOSED":
+      return "status-badge status-info";
+    case "NO_COVER":
+    case "OVERLOADED":
+      return "status-badge status-cancelled";
+    case "BUSY":
+      return "status-badge status-warning";
+    case "LIGHT":
+      return "status-badge status-complete";
+    default:
+      return "status-badge status-info";
+  }
 };
 
 const toStatusLabel = (status: string) => {
@@ -371,6 +402,7 @@ export const WorkshopPage = () => {
 
   const [jobs, setJobs] = useState<DashboardJob[]>([]);
   const [staffingToday, setStaffingToday] = useState<DashboardResponse["staffingToday"] | null>(null);
+  const [capacityToday, setCapacityToday] = useState<DashboardResponse["capacityToday"] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const listQuery = useMemo(() => {
@@ -392,6 +424,7 @@ export const WorkshopPage = () => {
       const payload = await apiGet<DashboardResponse>(`/api/workshop/dashboard?${listQuery}`);
       setJobs(payload.jobs || []);
       setStaffingToday(payload.staffingToday ?? null);
+      setCapacityToday(payload.capacityToday ?? null);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load workshop jobs";
       error(message);
@@ -611,6 +644,55 @@ export const WorkshopPage = () => {
               <div className="workshop-staffing-subline muted-text">
                 {staffingToday.summary.totalScheduledStaffCount - staffingToday.summary.scheduledStaffCount} other scheduled staff are outside the workshop tag filter.
               </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {capacityToday ? (
+          <section
+            className={[
+              "restricted-panel",
+              "workshop-capacity-panel",
+              capacityToday.status === "CLOSED" || capacityToday.status === "NORMAL" || capacityToday.status === "LIGHT"
+                ? "info-panel"
+                : "warning-panel",
+            ].join(" ")}
+          >
+            <div className="workshop-capacity-header">
+              <div>
+                <strong>Workshop capacity today</strong>
+                <p className="muted-text workshop-capacity-copy">{capacityToday.explanation}</p>
+              </div>
+              <span className={toCapacityBadgeClass(capacityToday.status)}>
+                {capacityToday.label}
+              </span>
+            </div>
+
+            <div className="workshop-capacity-metrics">
+              <div className="workshop-capacity-metric">
+                <span className="table-secondary">Staff in today</span>
+                <strong>{capacityToday.metrics.scheduledStaffCount}</strong>
+              </div>
+              <div className="workshop-capacity-metric">
+                <span className="table-secondary">Jobs due today</span>
+                <strong>{capacityToday.metrics.dueTodayJobs}</strong>
+              </div>
+              <div className="workshop-capacity-metric">
+                <span className="table-secondary">Overdue</span>
+                <strong>{capacityToday.metrics.overdueJobs}</strong>
+              </div>
+              <div className="workshop-capacity-metric">
+                <span className="table-secondary">Active queue</span>
+                <strong>{capacityToday.metrics.activeWorkloadJobs}</strong>
+              </div>
+            </div>
+
+            {!staffingToday?.summary.isClosed
+              && staffingToday?.context.usesOperationalRoleTags
+              && capacityToday.metrics.totalScheduledStaffCount > capacityToday.metrics.scheduledStaffCount ? (
+              <p className="muted-text workshop-capacity-copy">
+                Capacity is based on workshop-tagged cover. {capacityToday.metrics.totalScheduledStaffCount - capacityToday.metrics.scheduledStaffCount} other scheduled staff are outside the workshop filter.
+              </p>
             ) : null}
           </section>
         ) : null}

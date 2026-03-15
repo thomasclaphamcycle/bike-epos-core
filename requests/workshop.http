@@ -9,10 +9,15 @@
 GET {{baseUrl}}/api/workshop/availability?from=2026-03-06&to=2026-03-10
 
 ### Workshop dashboard (STAFF+)
-### includes rota-backed staffingToday summary for workshop visibility
+### includes rota-backed staffingToday summary and capacityToday awareness
 GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
+
+### Workshop staffing/capacity for an operational date
+GET {{baseUrl}}/api/workshop/dashboard?limit=20&staffDate=2026-03-10
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
 
 ### Workshop dashboard filters (M14)
 ### assignedTo, unassigned, hasNotes
