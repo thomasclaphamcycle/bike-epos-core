@@ -2902,6 +2902,32 @@ th {
   color: #243746;
 }
 
+.capture-link-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.capture-link-panel label,
+.customer-capture-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-capture-card {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.customer-capture-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-capture-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -3253,6 +3279,10 @@ th {
   }
 
   .quick-create-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-capture-grid {
     grid-template-columns: 1fr;
   }
 

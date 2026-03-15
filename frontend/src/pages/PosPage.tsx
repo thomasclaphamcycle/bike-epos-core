@@ -98,7 +98,24 @@ type CompletedSaleState = {
   totalPaidPence: number;
 };
 
+type SaleCustomerCaptureSessionResponse = {
+  session: {
+    id: string;
+    saleId: string;
+    token: string;
+    status: "ACTIVE";
+    expiresAt: string;
+    createdAt: string;
+    publicPath: string;
+  };
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const getPublicAppOrigin = () => {
+  const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN?.trim();
+  return configuredOrigin ? configuredOrigin.replace(/\/$/, "") : window.location.origin;
+};
 
 const parseCurrencyInputToPence = (value: string): number | null => {
   const normalized = value.trim().replace(/[^0-9.]/g, "");
@@ -141,6 +158,8 @@ export const PosPage = () => {
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
+  const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSessionResponse["session"] | null>(null);
+  const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -196,6 +215,7 @@ export const PosPage = () => {
     const payload = await apiGet<SaleResponse>(`/api/sales/${encodeURIComponent(id)}`);
     setSale(payload);
     setSelectedCustomer(payload.sale.customer ?? null);
+    setCaptureSession(null);
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
   };
 
@@ -209,6 +229,7 @@ export const PosPage = () => {
     setCustomerSearchText("");
     setCustomerResults([]);
     setShowCreateCustomer(false);
+    setCaptureSession(null);
     syncQuery({ basketId: created.id, saleId: null });
     success("New sale created");
     focusProductSearch();
@@ -600,6 +621,7 @@ export const PosPage = () => {
 
     try {
       setCompletedSale(null);
+      setCaptureSession(null);
       const payload = await apiPost<{ sale: { id: string } }>(
         `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
         {},
@@ -616,6 +638,49 @@ export const PosPage = () => {
     } catch (checkoutError) {
       const message = checkoutError instanceof Error ? checkoutError.message : "Checkout failed";
       error(message);
+    }
+  };
+
+  const captureUrl = useMemo(() => {
+    if (!captureSession) {
+      return null;
+    }
+
+    return `${getPublicAppOrigin()}${captureSession.publicPath}`;
+  }, [captureSession]);
+
+  const createCustomerCaptureSession = async () => {
+    if (!sale?.sale.id) {
+      error("Create a sale before generating a customer capture link.");
+      return;
+    }
+
+    setCreatingCaptureSession(true);
+    try {
+      const payload = await apiPost<SaleCustomerCaptureSessionResponse>(
+        `/api/sales/${encodeURIComponent(sale.sale.id)}/customer-capture-sessions`,
+        {},
+      );
+      setCaptureSession(payload.session);
+      success("Customer capture link ready.");
+    } catch (captureError) {
+      const message = captureError instanceof Error ? captureError.message : "Failed to create capture link";
+      error(message);
+    } finally {
+      setCreatingCaptureSession(false);
+    }
+  };
+
+  const copyCaptureUrl = async () => {
+    if (!captureUrl) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(captureUrl);
+      success("Capture link copied.");
+    } catch {
+      error("Could not copy the capture link.");
     }
   };
 
@@ -899,6 +964,54 @@ export const PosPage = () => {
         ) : (
           <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
         )}
+
+        <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
+          <div className="card-header-row">
+            <div>
+              <div className="table-primary">Customer self-capture</div>
+              <p className="muted-text">
+                Generate a temporary public link for the current sale so the customer can enter their own contact details.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary"
+              data-testid="pos-customer-capture-generate"
+              onClick={() => void createCustomerCaptureSession()}
+              disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession}
+            >
+              {creatingCaptureSession ? "Generating..." : "Generate Link"}
+            </button>
+          </div>
+
+          {captureSession && captureUrl ? (
+            <div className="capture-link-panel">
+              <label>
+                Public capture URL
+                <input
+                  data-testid="pos-customer-capture-url"
+                  value={captureUrl}
+                  readOnly
+                />
+              </label>
+              <div className="actions-inline">
+                <button type="button" onClick={() => void copyCaptureUrl()}>
+                  Copy Link
+                </button>
+                <a href={captureUrl} target="_blank" rel="noreferrer">
+                  Open Link
+                </a>
+              </div>
+              <p className="muted-text">
+                Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+              </p>
+            </div>
+          ) : (
+            <p className="muted-text">
+              Available after basket checkout creates a sale.
+            </p>
+          )}
+        </div>
 
         <div className="customer-search-panel">
           <label className="grow">

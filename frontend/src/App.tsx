@@ -72,6 +72,7 @@ import { DocumentationHubPage } from "./pages/DocumentationHubPage";
 import { PinSettingsPage } from "./pages/PinSettingsPage";
 import { CashReceiptUploadPage } from "./pages/CashReceiptUploadPage";
 import { CustomerSitePage } from "./pages/CustomerSitePage";
+import { CustomerCapturePage } from "./pages/CustomerCapturePage";
 import { NavigationPlaceholderPage } from "./pages/NavigationPlaceholderPage";
 
 const managerOnly = (element: ReactNode) => (
@@ -696,6 +697,7 @@ export const App = () => {
   return (
     <Routes>
       <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
+      <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
       <Route path="/site" element={<CustomerSitePage variant="home" />} />
       <Route path="/site/services" element={<CustomerSitePage variant="services" />} />
       <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
