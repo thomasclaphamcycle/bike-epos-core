@@ -2,11 +2,10 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { once } = require("node:events");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -45,7 +44,6 @@ const STAFF_HEADERS = {
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const MAX_STARTUP_LOG_CHARS = 4000;
 const APP_REQUEST_RETRIES = 8;
 const appBaseUrlCandidates = (() => {
   const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
@@ -64,12 +62,20 @@ const appBaseUrlCandidates = (() => {
   return urls;
 })();
 let activeAppBaseUrl = appBaseUrlCandidates[0];
-let lastProbeDetail = "";
-const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
-const trimStartupLog = (value) =>
-  value.length > MAX_STARTUP_LOG_CHARS
-    ? value.slice(value.length - MAX_STARTUP_LOG_CHARS)
-    : value;
+const serverController = createSmokeServerController({
+  label: "m11-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  startup: {
+    command: "npx",
+    args: ["ts-node", "--transpile-only", "src/server.ts"],
+  },
+  captureStartupLog: true,
+  startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
+  envOverrides: {
+    PORT: portFromBaseUrl(),
+  },
+});
 
 const todayUtc = () => {
   const now = new Date();
@@ -84,33 +90,17 @@ const addDays = (date, days) => {
   return out;
 };
 
-const probeHealthyBaseUrl = async () => {
-  for (const baseUrl of appBaseUrlCandidates) {
-    try {
-      const response = await fetch(`${baseUrl}/health`);
-      if (response.ok) {
-        lastProbeDetail = `${baseUrl}/health -> ${response.status}`;
-        return baseUrl;
-      }
-      lastProbeDetail = `${baseUrl}/health -> ${response.status}`;
-    } catch (error) {
-      lastProbeDetail = `${baseUrl}/health -> ${error instanceof Error ? error.message : String(error)}`;
-    }
-  }
-
-  return null;
-};
-
 const fetchFromApp = async (path, options = {}) => {
   let lastError = null;
 
   for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
     try {
+      activeAppBaseUrl = serverController.getBaseUrl();
       return await fetch(`${activeAppBaseUrl}${path}`, options);
     } catch (error) {
       lastError = error;
 
-      const healthyBaseUrl = await probeHealthyBaseUrl();
+      const healthyBaseUrl = await serverController.probeHealthyBaseUrl();
       if (healthyBaseUrl) {
         activeAppBaseUrl = healthyBaseUrl;
       }
@@ -148,66 +138,6 @@ const fetchJson = async (path, options = {}) => {
 
   return { status: response.status, json };
 };
-
-const waitForServer = async (serverProcess, getStartupLog) => {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const startupLog = getStartupLog();
-    if (serverProcess && serverProcess.exitCode !== null) {
-      throw new Error(
-        startupLog.trim()
-          ? `Server exited before becoming healthy:\n${startupLog.trim()}`
-          : "Server exited before becoming healthy.",
-      );
-    }
-
-    const healthyBaseUrl = await probeHealthyBaseUrl();
-    if (healthyBaseUrl) {
-      activeAppBaseUrl = healthyBaseUrl;
-      return;
-    }
-
-    await sleep(serverStartedPattern.test(startupLog) ? 250 : 500);
-  }
-
-  const startupLog = getStartupLog().trim();
-  throw new Error(
-    startupLog
-      ? `Server did not become healthy on /health.\n${startupLog}\nlast probe: ${lastProbeDetail}`
-      : `Server did not become healthy on /health${lastProbeDetail ? `\nlast probe: ${lastProbeDetail}` : ""}`,
-  );
-};
-
-const stopServerProcess = async (serverProcess) => {
-  if (!serverProcess || serverProcess.exitCode !== null) {
-    return;
-  }
-
-  const exitPromise = once(serverProcess, "exit").catch(() => undefined);
-  serverProcess.kill("SIGTERM");
-  const exitedGracefully = await Promise.race([
-    exitPromise.then(() => true),
-    sleep(400).then(() => false),
-  ]);
-
-  if (!exitedGracefully && serverProcess.exitCode === null) {
-    serverProcess.kill("SIGKILL");
-    await exitPromise;
-  }
-};
-
-const spawnTestServer = () => spawn(
-  process.platform === "win32" ? "npx.cmd" : "npx",
-  ["ts-node", "--transpile-only", "src/server.ts"],
-  {
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      DATABASE_URL,
-      PORT: portFromBaseUrl(),
-    },
-  },
-);
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
@@ -313,9 +243,6 @@ const cleanupTestData = async (workshopJobIds, customerIds, saleIds) => {
 };
 
 const run = async () => {
-  let startedServer = false;
-  let serverProcess = null;
-  let serverStartupLog = "";
   const createdWorkshopJobIds = new Set();
   const createdCustomerIds = new Set();
   const createdSaleIds = new Set();
@@ -337,26 +264,8 @@ const run = async () => {
   };
 
   try {
-    const alreadyHealthy = await probeHealthyBaseUrl();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!alreadyHealthy) {
-      serverProcess = spawnTestServer();
-      serverProcess.stdout.on("data", (chunk) => {
-        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
-      });
-      serverProcess.stderr.on("data", (chunk) => {
-        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
-      });
-      startedServer = true;
-      await waitForServer(serverProcess, () => serverStartupLog);
-    } else {
-      activeAppBaseUrl = alreadyHealthy;
-    }
+    await serverController.startIfNeeded();
+    activeAppBaseUrl = serverController.getBaseUrl();
 
     await prisma.bookingSettings.upsert({
       where: { id: 1 },
@@ -524,9 +433,7 @@ const run = async () => {
   } finally {
     await cleanupTestData(createdWorkshopJobIds, createdCustomerIds, createdSaleIds);
     await prisma.$disconnect();
-    if (startedServer && serverProcess) {
-      await stopServerProcess(serverProcess);
-    }
+    await serverController.stop();
   }
 };
 

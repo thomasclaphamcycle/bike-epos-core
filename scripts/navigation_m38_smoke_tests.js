@@ -2,7 +2,7 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -23,8 +23,6 @@ const safeDbUrl = DATABASE_URL.replace(/(postgres(?:ql)?:\/\/[^:/@]+:)[^@]+@/i, 
 console.log(`[m38-smoke] BASE_URL=${BASE_URL}`);
 console.log(`[m38-smoke] DATABASE_URL=${safeDbUrl}`);
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const MAX_STARTUP_LOG_CHARS = 4000;
 const APP_REQUEST_RETRIES = 8;
 const appBaseUrlCandidates = (() => {
   const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
@@ -42,52 +40,13 @@ const appBaseUrlCandidates = (() => {
 
   return urls;
 })();
-let activeAppBaseUrl = appBaseUrlCandidates[0];
-
-const trimStartupLog = (value) =>
-  value.length > MAX_STARTUP_LOG_CHARS
-    ? value.slice(value.length - MAX_STARTUP_LOG_CHARS)
-    : value;
-const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
-
-const probeHealthyBaseUrl = async () => {
-  for (const baseUrl of appBaseUrlCandidates) {
-    try {
-      const response = await fetch(`${baseUrl}/health`);
-      if (response.ok) {
-        return baseUrl;
-      }
-    } catch {
-      // Try the next candidate URL before giving up on this poll cycle.
-    }
-  }
-  return null;
-};
-
-const waitForServer = async (serverProcess, getStartupLog) => {
-  for (let i = 0; i < 60; i++) {
-    const startupLog = getStartupLog();
-    if (serverProcess && serverProcess.exitCode !== null) {
-      throw new Error(
-        startupLog.trim()
-          ? `Server exited before becoming healthy:\n${startupLog.trim()}`
-          : "Server exited before becoming healthy.",
-      );
-    }
-    const healthyBaseUrl = await probeHealthyBaseUrl();
-    if (healthyBaseUrl) {
-      activeAppBaseUrl = healthyBaseUrl;
-      return;
-    }
-    await sleep(serverStartedPattern.test(startupLog) ? 250 : 500);
-  }
-  const startupLog = getStartupLog().trim();
-  throw new Error(
-    startupLog
-      ? `Server did not become healthy on /health.\n${startupLog}`
-      : "Server did not become healthy on /health",
-  );
-};
+const serverController = createSmokeServerController({
+  label: "m38-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
+});
 
 const parseJson = async (response) => {
   const text = await response.text();
@@ -106,13 +65,13 @@ const fetchFromApp = async (path, options = {}) => {
 
   for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
     try {
-      return await fetch(`${activeAppBaseUrl}${path}`, options);
+      return await fetch(`${serverController.getBaseUrl()}${path}`, options);
     } catch (error) {
       lastError = error;
+      await serverController.probeHealthyBaseUrl();
     }
-
     if (attempt < APP_REQUEST_RETRIES - 1) {
-      await sleep(250);
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
 
@@ -180,38 +139,8 @@ const run = async () => {
     userIds: [],
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-  let serverStartupLog = "";
-
   try {
-    const alreadyHealthy = await probeHealthyBaseUrl();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      serverProcess.stdout?.on("data", (chunk) => {
-        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
-      });
-      serverProcess.stderr?.on("data", (chunk) => {
-        serverStartupLog = trimStartupLog(`${serverStartupLog}${String(chunk)}`);
-      });
-      startedServer = true;
-      await waitForServer(serverProcess, () => serverStartupLog);
-    } else {
-      activeAppBaseUrl = alreadyHealthy;
-    }
+    await serverController.startIfNeeded();
 
     const managerCreate = await fetchJson("/api/admin/users", {
       method: "POST",
@@ -335,13 +264,7 @@ const run = async () => {
       }
     }
 
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(400);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
+    await serverController.stop();
   }
 };
 
