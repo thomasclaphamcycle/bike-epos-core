@@ -2398,6 +2398,21 @@ th {
   gap: 10px;
 }
 
+.rota-cell-popover-floating {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1200;
+}
+
+.rota-cell-popover-top {
+  transform-origin: bottom left;
+}
+
+.rota-cell-popover-bottom {
+  transform-origin: top left;
+}
+
 .rota-cell-popover-copy {
   display: grid;
   gap: 3px;

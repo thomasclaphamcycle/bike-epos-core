@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { apiDelete, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
@@ -125,6 +126,20 @@ type CreateRotaPeriodResponse = {
     status: "DRAFT" | "ACTIVE" | "ARCHIVED";
     notes: string | null;
   };
+};
+
+type OpenEditorContext = {
+  cellKey: string;
+  rowName: string;
+  staffId: string;
+  periodId: string;
+  cell: RotaGridCell;
+};
+
+type FloatingMenuPosition = {
+  top: number;
+  left: number;
+  placement: "top" | "bottom";
 };
 
 const shiftShortLabel = (shiftType: RotaShiftType | null) => {
@@ -268,6 +283,9 @@ export const StaffRotaPage = () => {
   const [createPeriodStartsOn, setCreatePeriodStartsOn] = useState("");
   const [createPeriodLoading, setCreatePeriodLoading] = useState(false);
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
+  const [floatingMenuPosition, setFloatingMenuPosition] = useState<FloatingMenuPosition | null>(null);
+  const cellTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const floatingMenuRef = useRef<HTMLDivElement | null>(null);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
   const staffScope = searchParams.get("staffScope") === "all" ? "all" : "assigned";
@@ -404,6 +422,117 @@ export const StaffRotaPage = () => {
       .filter((day): day is NonNullable<RotaOverviewResponse["period"]>["days"][number] => day !== null),
     [currentPeriod?.days, visibleDayIndices],
   );
+  const openEditorContext = useMemo<OpenEditorContext | null>(() => {
+    if (!currentPeriod || !openEditorCellKey) {
+      return null;
+    }
+
+    for (const row of currentPeriod.staffRows) {
+      for (const dayIndex of visibleDayIndices) {
+        const cell = row.cells[dayIndex];
+        const cellKey = `${row.staffId}-${cell.date}`;
+        if (cellKey === openEditorCellKey) {
+          return {
+            cellKey,
+            rowName: row.name,
+            staffId: row.staffId,
+            periodId: currentPeriod.id,
+            cell,
+          };
+        }
+      }
+    }
+
+    return null;
+  }, [currentPeriod, openEditorCellKey, visibleDayIndices]);
+
+  useEffect(() => {
+    setFloatingMenuPosition(null);
+  }, [openEditorCellKey]);
+
+  useEffect(() => {
+    if (!openEditorContext) {
+      setFloatingMenuPosition(null);
+      return;
+    }
+
+    const closeOnPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      const trigger = cellTriggerRefs.current.get(openEditorContext.cellKey) ?? null;
+      if (trigger?.contains(target) || floatingMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpenEditorCellKey(null);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenEditorCellKey(null);
+      }
+    };
+
+    document.addEventListener("mousedown", closeOnPointerDown);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointerDown);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openEditorContext]);
+
+  useLayoutEffect(() => {
+    if (!openEditorContext) {
+      return undefined;
+    }
+
+    let frameId = 0;
+
+    const updateFloatingMenuPosition = () => {
+      const trigger = cellTriggerRefs.current.get(openEditorContext.cellKey);
+      const menu = floatingMenuRef.current;
+      if (!trigger || !menu) {
+        return;
+      }
+
+      const triggerRect = trigger.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const gap = 6;
+      const margin = 8;
+      const spaceBelow = viewportHeight - triggerRect.bottom - margin;
+      const fitsBelow = spaceBelow >= menuRect.height || triggerRect.top < menuRect.height + gap + margin;
+      const placement: "top" | "bottom" = fitsBelow ? "bottom" : "top";
+      const top = placement === "bottom"
+        ? Math.min(viewportHeight - menuRect.height - margin, triggerRect.bottom + gap)
+        : Math.max(margin, triggerRect.top - menuRect.height - gap);
+      const unclampedLeft = triggerRect.left;
+      const left = Math.max(
+        margin,
+        Math.min(unclampedLeft, viewportWidth - menuRect.width - margin),
+      );
+
+      setFloatingMenuPosition({ top, left, placement });
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateFloatingMenuPosition);
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+    };
+  }, [openEditorContext]);
 
   const goToPeriod = (periodId: string) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -840,8 +969,17 @@ export const StaffRotaPage = () => {
                                 <button
                                   type="button"
                                   className="rota-cell-trigger"
+                                  ref={(node) => {
+                                    if (node) {
+                                      cellTriggerRefs.current.set(cellKey, node);
+                                    } else {
+                                      cellTriggerRefs.current.delete(cellKey);
+                                    }
+                                  }}
                                   onClick={() => setOpenEditorCellKey((current) => current === cellKey ? null : cellKey)}
                                   disabled={!canEditGrid || isSavingCell}
+                                  aria-expanded={isEditorOpen}
+                                  aria-haspopup="menu"
                                 >
                                   <div className="rota-cell-content">
                                     <span className={shiftClassName(cell.shiftType)}>
@@ -851,50 +989,6 @@ export const StaffRotaPage = () => {
                                     {cellVisibleSourceLabel ? <span className="table-secondary">{cellVisibleSourceLabel}</span> : null}
                                   </div>
                                 </button>
-
-                                {isEditorOpen ? (
-                                  <div className="rota-cell-popover">
-                                    <div className="rota-cell-popover-copy">
-                                      <strong>{row.name}</strong>
-                                      <span>{cell.date}</span>
-                                      {cellSourceLabel ? <span className="table-secondary">Current source: {cellSourceLabel}</span> : null}
-                                    </div>
-                                    <div className="rota-cell-popover-actions">
-                                      {SHIFT_OPTIONS.map(({ value, label }) => (
-                                        <button
-                                          key={value}
-                                          type="button"
-                                          disabled={isSavingCell}
-                                          onClick={() => {
-                                            if (!currentPeriod) {
-                                              return;
-                                            }
-                                            void applyEditorShift(
-                                              {
-                                                rotaPeriodId: currentPeriod.id,
-                                                staffId: row.staffId,
-                                                date: cell.date,
-                                              },
-                                              cell,
-                                              cellKey,
-                                              value,
-                                            );
-                                          }}
-                                        >
-                                          {label}
-                                        </button>
-                                      ))}
-                                      <button
-                                        type="button"
-                                        disabled={isSavingCell}
-                                        onClick={() => setOpenEditorCellKey(null)}
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                    {isSavingCell ? <span className="muted-text">Saving...</span> : null}
-                                  </div>
-                                ) : null}
                               </>
                             )}
                           </td>
@@ -966,6 +1060,61 @@ export const StaffRotaPage = () => {
         }}
         onSubmit={submitDecision}
       />
+      {openEditorContext ? createPortal(
+        <div
+          ref={floatingMenuRef}
+          className={`rota-cell-popover rota-cell-popover-floating rota-cell-popover-${floatingMenuPosition?.placement ?? "bottom"}`}
+          style={{
+            top: floatingMenuPosition ? `${floatingMenuPosition.top}px` : "0px",
+            left: floatingMenuPosition ? `${floatingMenuPosition.left}px` : "0px",
+            visibility: floatingMenuPosition ? "visible" : "hidden",
+          }}
+          role="menu"
+          aria-label={`Edit ${openEditorContext.rowName} on ${openEditorContext.cell.date}`}
+        >
+          <div className="rota-cell-popover-copy">
+            <strong>{openEditorContext.rowName}</strong>
+            <span>{openEditorContext.cell.date}</span>
+            {sourceLabel(openEditorContext.cell.source) ? (
+              <span className="table-secondary">Current source: {sourceLabel(openEditorContext.cell.source)}</span>
+            ) : null}
+          </div>
+          <div className="rota-cell-popover-actions">
+            {SHIFT_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                role="menuitem"
+                disabled={savingCellKey === openEditorContext.cellKey}
+                onClick={() => {
+                  void applyEditorShift(
+                    {
+                      rotaPeriodId: openEditorContext.periodId,
+                      staffId: openEditorContext.staffId,
+                      date: openEditorContext.cell.date,
+                    },
+                    openEditorContext.cell,
+                    openEditorContext.cellKey,
+                    value,
+                  );
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              role="menuitem"
+              disabled={savingCellKey === openEditorContext.cellKey}
+              onClick={() => setOpenEditorCellKey(null)}
+            >
+              Cancel
+            </button>
+          </div>
+          {savingCellKey === openEditorContext.cellKey ? <span className="muted-text">Saving...</span> : null}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 };
