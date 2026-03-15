@@ -15,8 +15,8 @@ export type WorkshopCheckoutInput = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS = 6;
-const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 3;
+const WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS = 10;
+const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 4;
 
 type WorkshopCheckoutResult = {
   sale: {
@@ -431,15 +431,16 @@ export const checkoutWorkshopJobToSale = async (
       lastRecoverableError = undefined;
       break;
     } catch (error) {
-      if (!isRecoverableWorkshopCheckoutRace(error)) {
-        throw error;
-      }
-
-      const recovered = await recoverWorkshopCheckoutRace(workshopJobId);
+      const recovered =
+        error instanceof HttpError ? null : await recoverWorkshopCheckoutRace(workshopJobId);
       if (recovered) {
         result = recovered;
         lastRecoverableError = undefined;
         break;
+      }
+
+      if (!isRecoverableWorkshopCheckoutRace(error)) {
+        throw error;
       }
 
       lastRecoverableError = error;
