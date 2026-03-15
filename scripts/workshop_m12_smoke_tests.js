@@ -35,6 +35,37 @@ const prisma = new PrismaClient({
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitForProcessExit = (child, timeoutMs) =>
+  new Promise((resolve, reject) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Child process did not exit within ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      child.removeListener("exit", handleExit);
+      child.removeListener("error", handleError);
+    };
+
+    const handleExit = () => {
+      cleanup();
+      resolve();
+    };
+
+    const handleError = (error) => {
+      cleanup();
+      reject(error);
+    };
+
+    child.once("exit", handleExit);
+    child.once("error", handleError);
+  });
 
 const todayUtc = () => {
   const now = new Date();
@@ -291,15 +322,13 @@ const run = async () => {
 
     if (!existing) {
       serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: "ignore",
         env: {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
         },
       });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
       startedServer = true;
       await waitForServer();
     }
@@ -574,6 +603,15 @@ const run = async () => {
     await prisma.$disconnect();
     if (startedServer && serverProcess) {
       serverProcess.kill("SIGTERM");
+      try {
+        await waitForProcessExit(serverProcess, 5_000);
+      } catch (error) {
+        console.warn(
+          `[m12-smoke] server did not exit cleanly after SIGTERM; forcing shutdown (${error instanceof Error ? error.message : String(error)})`,
+        );
+        serverProcess.kill("SIGKILL");
+        await waitForProcessExit(serverProcess, 2_000);
+      }
     }
   }
 };
