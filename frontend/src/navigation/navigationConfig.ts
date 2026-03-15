@@ -428,7 +428,7 @@ export const navigationSections: NavigationSection[] = [
       },
       {
         kind: "link",
-        label: "Staff Rota",
+        label: "Rota Tools",
         to: "/settings/staff-rota",
         minimumRole: "ADMIN",
       },

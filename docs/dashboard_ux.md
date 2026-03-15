@@ -147,8 +147,8 @@ Rules:
 - respect store-closed days from Store Info opening hours and rota closed-day overrides
 - treat synced UK bank holidays as explicit closed days through `RotaClosedDay`, so the widget can explain bank-holiday closures with the same reason seen in Staff Rota
 - keep the widget simple and operational rather than turning it into a full rota planner
-- provide a View Rota action that opens the live rota create/review/edit page rather than a placeholder route
-- keep rota review manager-readable, import actions admin-controlled, and holiday approval actions manager/admin-controlled
+- provide a View Rota action that opens the live planning workspace rather than a placeholder route
+- keep the planner focused on scheduling, with import and bank-holiday sync moved into admin-only rota tools under settings
 - keep the rota destination usable for daily ops with filters, missing-staff visibility, and a print-friendly period view rather than forcing a full planner rewrite
 
 ## Weather

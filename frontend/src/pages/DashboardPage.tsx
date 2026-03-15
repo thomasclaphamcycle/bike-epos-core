@@ -629,9 +629,7 @@ export const DashboardPage = () => {
   }, [hireBookings]);
 
   const quickActions = useMemo<DashboardActionLink[]>(() => {
-    const rotaLink = user?.role === "ADMIN"
-      ? "/settings/staff-rota"
-      : user?.role === "MANAGER"
+    const rotaLink = user?.role === "ADMIN" || user?.role === "MANAGER"
         ? "/management/staff-rota"
         : undefined;
 

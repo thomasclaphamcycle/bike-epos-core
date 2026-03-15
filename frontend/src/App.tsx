@@ -68,6 +68,7 @@ import { DataIntegrityPage } from "./pages/DataIntegrityPage";
 import { BackupToolkitPage } from "./pages/BackupToolkitPage";
 import { SystemSettingsPage } from "./pages/SystemSettingsPage";
 import { StaffRotaPage } from "./pages/StaffRotaPage";
+import { StaffRotaToolsPage } from "./pages/StaffRotaToolsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { DocumentationHubPage } from "./pages/DocumentationHubPage";
 import { PinSettingsPage } from "./pages/PinSettingsPage";
@@ -609,7 +610,7 @@ const AuthedApp = () => (
         <Route path="/settings/store-info" element={adminOnly(<SystemSettingsPage />)} />
         <Route path="/settings/staff-list" element={managerOnly(<StaffManagementPage />)} />
         <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
-        <Route path="/settings/staff-rota" element={adminOnly(<StaffRotaPage />)} />
+        <Route path="/settings/staff-rota" element={adminOnly(<StaffRotaToolsPage />)} />
         <Route
           path="/settings/pos"
           element={adminOnly(
