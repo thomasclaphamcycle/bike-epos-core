@@ -73,14 +73,56 @@ if (!env.PORT) {
   }
 }
 
-for (const step of baselineSteps) {
-  const result = spawnSync("npm", ["run", step], {
-    stdio: "inherit",
-    env,
-    shell: process.platform === "win32",
-  });
+const HEALTH_URL = `${env.TEST_BASE_URL.replace(/\/$/, "")}/health`;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  if ((result.status ?? 1) !== 0) {
-    process.exit(result.status ?? 1);
+const serverIsHealthy = async () => {
+  try {
+    const response = await fetch(HEALTH_URL);
+    return response.ok;
+  } catch {
+    return false;
   }
-}
+};
+
+const waitForServerShutdown = async () => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (!(await serverIsHealthy())) {
+      return;
+    }
+    await sleep(500);
+  }
+  throw new Error(
+    "Smoke suite detected an API server still running after a test finished. A smoke test likely did not shut its server down cleanly.",
+  );
+};
+
+const main = async () => {
+  const existing = await serverIsHealthy();
+  if (existing && env.ALLOW_EXISTING_SERVER !== "1") {
+    throw new Error(
+      "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
+    );
+  }
+
+  for (const step of baselineSteps) {
+    const result = spawnSync("npm", ["run", step], {
+      stdio: "inherit",
+      env,
+      shell: process.platform === "win32",
+    });
+
+    if ((result.status ?? 1) !== 0) {
+      process.exit(result.status ?? 1);
+    }
+
+    if (env.ALLOW_EXISTING_SERVER !== "1") {
+      await waitForServerShutdown();
+    }
+  }
+};
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
