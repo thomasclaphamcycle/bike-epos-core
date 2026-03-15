@@ -15,12 +15,59 @@ export type WorkshopCheckoutInput = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS = 6;
+const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 3;
 
-const isRecoverableWorkshopCheckoutRace = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  (error.code === "P2002" || error.code === "P2034");
+type WorkshopCheckoutResult = {
+  sale: {
+    id: string;
+    workshopJobId: string | null;
+    customerId: string | null;
+    totalPence: number;
+    createdAt: Date;
+  };
+  serviceTotalPence: number;
+  partsTotalPence: number;
+  saleTotalPence: number;
+  depositPaidPence: number;
+  creditPence: number;
+  outstandingPence: number;
+  payment: {
+    id: string;
+    method: PaymentMethod;
+    amountPence: number;
+    providerRef: string | null;
+    createdAt: Date;
+  } | null;
+  idempotent: boolean;
+  emittedWorkshopCompletion: boolean;
+  workshopJobStatus: string;
+  workshopCompletedAt: Date;
+};
 
-const loadExistingWorkshopCheckoutResult = async (workshopJobId: string) =>
+const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2002" || error.code === "P2034")
+  ) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("write conflict") ||
+    message.includes("deadlock") ||
+    message.includes("could not serialize") ||
+    (message.includes("duplicate key value") && message.includes("workshopjobid")) ||
+    (message.includes("unique constraint") && message.includes("workshopjobid"))
+  );
+};
+
+const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promise<WorkshopCheckoutResult | null> =>
   prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
 
@@ -95,13 +142,13 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string) =>
   });
 
 const recoverWorkshopCheckoutRace = async (workshopJobId: string) => {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS; attempt += 1) {
     const recovered = await loadExistingWorkshopCheckoutResult(workshopJobId);
     if (recovered) {
       return recovered;
     }
 
-    if (attempt < 3) {
+    if (attempt < WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS - 1) {
       await sleep(50 * (attempt + 1));
     }
   }
@@ -137,10 +184,12 @@ export const checkoutWorkshopJobToSale = async (
     throw new HttpError(400, "amountPence must be a non-negative integer", "INVALID_PAYMENT");
   }
 
-  let result;
+  let result: WorkshopCheckoutResult | undefined;
+  let lastRecoverableError: unknown;
 
-  try {
-    result = await prisma.$transaction(async (tx) => {
+  for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_TRANSACTION_RETRIES; attempt += 1) {
+    try {
+      result = await prisma.$transaction(async (tx) => {
       let workshopJob = await tx.workshopJob.findUnique({
         where: { id: workshopJobId },
         include: { customer: true },
@@ -378,18 +427,32 @@ export const checkoutWorkshopJobToSale = async (
         workshopJobStatus: "COMPLETED",
         workshopCompletedAt: workshopJob.completedAt ?? new Date(),
       };
-    });
-  } catch (error) {
-    if (!isRecoverableWorkshopCheckoutRace(error)) {
-      throw error;
-    }
+      });
+      lastRecoverableError = undefined;
+      break;
+    } catch (error) {
+      if (!isRecoverableWorkshopCheckoutRace(error)) {
+        throw error;
+      }
 
-    const recovered = await recoverWorkshopCheckoutRace(workshopJobId);
-    if (!recovered) {
-      throw error;
-    }
+      const recovered = await recoverWorkshopCheckoutRace(workshopJobId);
+      if (recovered) {
+        result = recovered;
+        lastRecoverableError = undefined;
+        break;
+      }
 
-    result = recovered;
+      lastRecoverableError = error;
+      if (attempt === WORKSHOP_CHECKOUT_TRANSACTION_RETRIES - 1) {
+        throw error;
+      }
+
+      await sleep(50 * (attempt + 1));
+    }
+  }
+
+  if (!result) {
+    throw lastRecoverableError ?? new Error("Workshop checkout transaction did not produce a result");
   }
 
   if (result.emittedWorkshopCompletion) {
