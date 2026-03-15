@@ -6,13 +6,13 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn, spawnSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 const ADMIN_HEADERS = {
   "X-Staff-Role": "ADMIN",
@@ -22,7 +22,6 @@ const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": "rota-smoke-manager",
 };
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -36,6 +35,18 @@ if (process.env.ALLOW_NON_TEST_DB !== "1" && !DATABASE_URL.toLowerCase().include
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+const serverController = createSmokeServerController({
+  label: "rota-foundation-smoke",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+  startup: {
+    command: "npx",
+    args: ["ts-node", "--transpile-only", "src/server.ts"],
+  },
+  envOverrides: {
+    PORT: new URL(BASE_URL).port || "3100",
+  },
 });
 
 const STORE_OPENING_HOURS_KEY = "store.openingHours";
@@ -72,46 +83,6 @@ const fetchJson = async (pathName, options = {}) => {
   const json = text ? JSON.parse(text) : null;
   return { status: response.status, json };
 };
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
-};
-
-const waitForExit = (child, timeoutMs) =>
-  new Promise((resolve) => {
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve();
-    }, timeoutMs);
-
-    child.once("exit", () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
 
 const runImporter = (filePath, { apply = false } = {}) => {
   const args = ["ts-node", "--transpile-only", "scripts/import_rota_spreadsheet.ts", "--file", filePath];
@@ -400,8 +371,6 @@ const startBankHolidayFeedServer = async () =>
   });
 
 const run = async () => {
-  let startedServer = false;
-  let serverProcess = null;
   let bankHolidayFeedServer = null;
   const tempFilePath = path.join(os.tmpdir(), `corepos-rota-import-${Date.now()}.csv`);
   const createdWorkshopJobIds = [];
@@ -409,27 +378,7 @@ const run = async () => {
   try {
     bankHolidayFeedServer = await startBankHolidayFeedServer();
     process.env.BANK_HOLIDAY_FEED_URL = bankHolidayFeedServer.url;
-
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npx", ["ts-node", "--transpile-only", "src/server.ts"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: new URL(BASE_URL).port || "3100",
-        },
-      });
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     await clearWorkshopState();
 
@@ -1133,15 +1082,7 @@ const run = async () => {
       });
     }
     await prisma.$disconnect();
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await waitForExit(serverProcess, 1500);
-      if (serverProcess.exitCode === null) {
-        serverProcess.kill("SIGKILL");
-        await waitForExit(serverProcess, 500);
-      }
-    }
+    await serverController.stop();
 
     if (bankHolidayFeedServer) {
       await new Promise((resolve) => bankHolidayFeedServer.server.close(resolve));
