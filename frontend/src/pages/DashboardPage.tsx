@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPost } from "../api/client";
+import { apiGet } from "../api/client";
 import {
   getFinancialMonthlyMarginReport,
   getFinancialMonthlySalesSummaryReport,
@@ -9,8 +9,6 @@ import {
 } from "../api/financialReports";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
-import { HolidayRequestModal } from "../components/HolidayRequestModal";
-import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
 
 type SalesDailyRow = {
   date: string;
@@ -104,16 +102,16 @@ type DashboardStaffTodayPayload = {
       note: string | null;
       source: "MANUAL" | "IMPORT";
     }>;
+    holidayStaff?: Array<{
+      staffId: string;
+      name: string;
+      role: "STAFF" | "MANAGER" | "ADMIN";
+      shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
+      note: string | null;
+      source: "MANUAL" | "IMPORT";
+    }>;
   };
 };
-
-type HolidayRequestsPayload = {
-  scope: "mine" | "all";
-  statusFilter: "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
-  requests: HolidayRequestItem[];
-};
-
-type HolidayRequestFilter = HolidayRequestsPayload["statusFilter"];
 
 type MetricCardProps = {
   label: string;
@@ -226,14 +224,6 @@ const actionSeverityBadgeClass: Record<ActionItem["severity"], string> = {
   INFO: "status-badge status-info",
 };
 
-const HOLIDAY_REQUEST_FILTERS: Array<{ value: HolidayRequestFilter; label: string }> = [
-  { value: "ALL", label: "All" },
-  { value: "PENDING", label: "Pending" },
-  { value: "APPROVED", label: "Approved" },
-  { value: "REJECTED", label: "Rejected" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
-
 const actionIconLabel = (item: ActionItem) => {
   const haystack = `${item.type} ${item.title} ${item.reason}`.toLowerCase();
 
@@ -248,6 +238,22 @@ const actionIconLabel = (item: ActionItem) => {
   }
 
   return { glyph: "i", label: "Operational information", tone: "info" };
+};
+
+const formatDashboardDayLabel = (value: Date) =>
+  new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" }).format(value);
+
+const getShiftBadgeLabel = (shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY") => {
+  switch (shiftType) {
+    case "HALF_DAY_AM":
+      return "AM";
+    case "HALF_DAY_PM":
+      return "PM";
+    case "HOLIDAY":
+      return "Holiday";
+    default:
+      return "All day";
+  }
 };
 
 const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }: MetricCardProps) => {
@@ -317,7 +323,7 @@ const buildMonthlySalesTileDetail = (report: FinancialMonthlySalesSummaryReport)
 
 export const DashboardPage = () => {
   const { user } = useAuth();
-  const { error, success } = useToasts();
+  const { error } = useToasts();
   const [clock, setClock] = useState(() => new Date());
   const [loading, setLoading] = useState(false);
   const [salesToday, setSalesToday] = useState<SalesDailyRow | null>(null);
@@ -330,11 +336,7 @@ export const DashboardPage = () => {
   const [hireBookings, setHireBookings] = useState<HireBooking[]>([]);
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
   const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
-  const [holidayRequests, setHolidayRequests] = useState<HolidayRequestItem[]>([]);
-  const [holidayRequestFilter, setHolidayRequestFilter] = useState<HolidayRequestFilter>("ALL");
-  const [holidayRequestModalOpen, setHolidayRequestModalOpen] = useState(false);
-  const [holidayRequestSubmitting, setHolidayRequestSubmitting] = useState(false);
-  const [holidayRequestBusyId, setHolidayRequestBusyId] = useState<string | null>(null);
+  const [staffTomorrow, setStaffTomorrow] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -348,6 +350,9 @@ export const DashboardPage = () => {
 
     const today = new Date();
     const todayKey = formatDateKey(today);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const tomorrowKey = formatDateKey(tomorrow);
     const monthStartKey = formatDateKey(startOfMonth(today));
     const lastYearToday = new Date(today);
     lastYearToday.setFullYear(today.getFullYear() - 1);
@@ -365,8 +370,8 @@ export const DashboardPage = () => {
       canViewManagerWidgets ? apiGet<ActionCentreResponse>("/api/reports/operations/actions") : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<HireBookingListResponse>("/api/hire/bookings?take=200") : Promise.resolve(null),
       apiGet<DashboardStaffTodayPayload>("/api/dashboard/staff-today"),
+      apiGet<DashboardStaffTodayPayload>(`/api/dashboard/staff-today?date=${tomorrowKey}`),
       apiGet<DashboardWeatherPayload>("/api/dashboard/weather"),
-      apiGet<HolidayRequestsPayload>("/api/rota/holiday-requests?scope=mine"),
     ]);
 
     const [
@@ -379,8 +384,8 @@ export const DashboardPage = () => {
       actionResult,
       hireResult,
       staffTodayResult,
+      staffTomorrowResult,
       weatherResult,
-      holidayRequestsResult,
     ] = requests;
 
     if (salesTodayResult.status === "fulfilled") {
@@ -478,6 +483,12 @@ export const DashboardPage = () => {
       setStaffToday(null);
     }
 
+    if (staffTomorrowResult.status === "fulfilled" && staffTomorrowResult.value) {
+      setStaffTomorrow(staffTomorrowResult.value.staffToday);
+    } else {
+      setStaffTomorrow(null);
+    }
+
     if (weatherResult.status === "fulfilled" && weatherResult.value) {
       setWeather(weatherResult.value.weather);
     } else {
@@ -486,12 +497,6 @@ export const DashboardPage = () => {
         source: "open-meteo",
         message: "Weather temporarily unavailable.",
       });
-    }
-
-    if (holidayRequestsResult.status === "fulfilled" && holidayRequestsResult.value) {
-      setHolidayRequests(holidayRequestsResult.value.requests ?? []);
-    } else {
-      setHolidayRequests([]);
     }
 
     setLoading(false);
@@ -685,51 +690,24 @@ export const DashboardPage = () => {
     return `${staffToday.summary.opensAt} - ${staffToday.summary.closesAt}`;
   }, [staffToday]);
 
-  const visibleHolidayRequests = useMemo(() => (
-    holidayRequestFilter === "ALL"
-      ? holidayRequests
-      : holidayRequests.filter((request) => request.status === holidayRequestFilter)
-  ), [holidayRequestFilter, holidayRequests]);
-  const holidayRequestFilterOptions = useMemo(() => HOLIDAY_REQUEST_FILTERS.map((filter) => {
-    const count = filter.value === "ALL"
-      ? holidayRequests.length
-      : holidayRequests.filter((request) => request.status === filter.value).length;
-    return {
-      value: filter.value,
-      label: `${filter.label} (${count})`,
-    };
-  }), [holidayRequests]);
-
-  const submitHolidayRequest = async (values: {
-    startDate: string;
-    endDate: string;
-    requestNotes: string;
-  }) => {
-    setHolidayRequestSubmitting(true);
-    try {
-      await apiPost("/api/rota/holiday-requests", values);
-      success("Holiday request submitted.");
-      setHolidayRequestModalOpen(false);
-      await loadDashboard();
-    } catch (submitError) {
-      error(submitError instanceof Error ? submitError.message : "Failed to submit holiday request");
-    } finally {
-      setHolidayRequestSubmitting(false);
+  const staffTomorrowWindow = useMemo(() => {
+    if (!staffTomorrow?.summary || staffTomorrow.summary.isClosed) {
+      return null;
     }
-  };
-
-  const cancelHolidayRequest = async (request: HolidayRequestItem) => {
-    setHolidayRequestBusyId(request.id);
-    try {
-      await apiPost(`/api/rota/holiday-requests/${encodeURIComponent(request.id)}/cancel`);
-      success("Holiday request cancelled.");
-      await loadDashboard();
-    } catch (cancelError) {
-      error(cancelError instanceof Error ? cancelError.message : "Failed to cancel holiday request");
-    } finally {
-      setHolidayRequestBusyId(null);
+    if (!staffTomorrow.summary.opensAt || !staffTomorrow.summary.closesAt) {
+      return null;
     }
-  };
+    return `${staffTomorrow.summary.opensAt} - ${staffTomorrow.summary.closesAt}`;
+  }, [staffTomorrow]);
+
+  const todayDate = useMemo(() => clock, [clock]);
+  const tomorrowDate = useMemo(() => {
+    const value = new Date(clock);
+    value.setDate(value.getDate() + 1);
+    return value;
+  }, [clock]);
+
+  const rotaLink = quickActions.find((action) => action.label === "View Rota")?.to;
 
   return (
     <div className="page-shell dashboard-v1">
@@ -970,73 +948,67 @@ export const DashboardPage = () => {
           <div className="card-header-row">
             <div>
               <h2>Staff Today</h2>
-              <p className="muted-text">Today’s rota coverage from imported schedule data and Store Info opening hours.</p>
+              <p className="muted-text">Today and tomorrow at a glance.</p>
             </div>
             <div className="actions-inline">
-              <button type="button" onClick={() => setHolidayRequestModalOpen(true)}>Request Holiday</button>
-              {quickActions.find((action) => action.label === "View Rota")?.to ? (
-                <Link to={quickActions.find((action) => action.label === "View Rota")?.to ?? "/dashboard"}>View Rota</Link>
+              {rotaLink ? (
+                <Link to={rotaLink}>View Rota</Link>
               ) : null}
             </div>
           </div>
 
-          {!staffToday ? (
-            <div className="restricted-panel info-panel">Loading today&apos;s rota...</div>
-          ) : staffToday.summary.isClosed ? (
-            <div className="restricted-panel info-panel">
-              <strong>Store closed today.</strong>
-              <div className="muted-text">{staffToday.summary.closedReason || "No scheduled trading hours today."}</div>
-            </div>
-          ) : staffToday.staff.length ? (
-            <div className="dashboard-action-list">
-              {staffToday.staff.map((entry) => (
-                <div key={`${entry.staffId}-${entry.shiftType}`} className="dashboard-action-item">
-                  <div className="dashboard-action-copy">
-                    <strong>{entry.name}</strong>
-                    <span className="muted-text">
-                      {entry.shiftType === "FULL_DAY" ? "Full day" : entry.shiftType === "HALF_DAY_AM" ? "Half day (AM)" : "Half day (PM)"}
-                      {entry.note ? ` · ${entry.note}` : ""}
-                    </span>
-                  </div>
-                  <span className="status-badge status-info">{entry.role}</span>
-                </div>
-              ))}
-              <div className="restricted-panel info-panel">
-                {staffToday.summary.scheduledStaffCount} scheduled
-                {staffTodayWindow ? ` · ${staffTodayWindow}` : ""}
-                {staffToday.summary.holidayStaffCount ? ` · ${staffToday.summary.holidayStaffCount} on holiday` : ""}
-              </div>
-            </div>
+          {!staffToday || !staffTomorrow ? (
+            <div className="restricted-panel info-panel">Loading rota summary...</div>
           ) : (
-            <div className="restricted-panel info-panel">
-              <strong>No staff scheduled today.</strong>
-              <div className="muted-text">
-                {staffToday.summary.holidayStaffCount
-                  ? `${staffToday.summary.holidayStaffCount} on holiday${staffTodayWindow ? ` · Trading hours ${staffTodayWindow}.` : ""}`
-                  : staffTodayWindow ? `Trading hours ${staffTodayWindow}.` : "Trading hours available in Store Info."}
-              </div>
+            <div className="dashboard-staff-summary">
+              {[
+                { label: "Today", dateLabel: formatDashboardDayLabel(todayDate), staffDay: staffToday, windowLabel: staffTodayWindow },
+                { label: "Tomorrow", dateLabel: formatDashboardDayLabel(tomorrowDate), staffDay: staffTomorrow, windowLabel: staffTomorrowWindow },
+              ].map(({ label, dateLabel, staffDay, windowLabel }) => (
+                <section key={label} className="dashboard-staff-day-card">
+                  <div className="dashboard-staff-day-header">
+                    <div>
+                      <span className="metric-label dashboard-metric-label">{label}</span>
+                      <strong>{dateLabel}</strong>
+                    </div>
+                    {!staffDay.summary.isClosed && windowLabel ? (
+                      <span className="dashboard-staff-day-hours">{windowLabel}</span>
+                    ) : null}
+                  </div>
+
+                  {staffDay.summary.isClosed ? (
+                    <div className="restricted-panel info-panel">Store closed</div>
+                  ) : staffDay.staff.length ? (
+                    <div className="dashboard-staff-chip-list">
+                      {staffDay.staff.map((entry) => (
+                        <div key={`${label}-${entry.staffId}-${entry.shiftType}`} className="dashboard-staff-chip">
+                          <span>{entry.name}</span>
+                          <span className="status-badge status-info">{getShiftBadgeLabel(entry.shiftType)}</span>
+                        </div>
+                      ))}
+                      {(staffDay.holidayStaff ?? []).map((entry) => (
+                        <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-chip dashboard-staff-chip-muted">
+                          <span>{entry.name}</span>
+                          <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (staffDay.holidayStaff ?? []).length ? (
+                    <div className="dashboard-staff-chip-list">
+                      {(staffDay.holidayStaff ?? []).map((entry) => (
+                        <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-chip dashboard-staff-chip-muted">
+                          <span>{entry.name}</span>
+                          <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="restricted-panel info-panel">No staff scheduled</div>
+                  )}
+                </section>
+              ))}
             </div>
           )}
-
-          <HolidayRequestsPanel
-            title="My Holiday Requests"
-            subtitle="Track your holiday history, current status, and any manager decision notes without leaving the dashboard."
-            requests={visibleHolidayRequests}
-            showStaffName={false}
-            filterValue={holidayRequestFilter}
-            filterOptions={holidayRequestFilterOptions}
-            onFilterChange={(value) => setHolidayRequestFilter(value as HolidayRequestFilter)}
-            loading={loading && holidayRequests.length === 0}
-            requestButtonLabel="Request holiday"
-            onRequestHoliday={() => setHolidayRequestModalOpen(true)}
-            onCancel={cancelHolidayRequest}
-            busyRequestId={holidayRequestBusyId}
-            emptyMessage={
-              holidayRequestFilter === "ALL"
-                ? "No holiday requests submitted yet."
-                : `No ${holidayRequestFilter.toLowerCase()} holiday requests yet.`
-            }
-          />
         </section>
 
         <section className="card dashboard-v1-widget">
@@ -1094,16 +1066,6 @@ export const DashboardPage = () => {
         </div>
       </section>
 
-      <HolidayRequestModal
-        open={holidayRequestModalOpen}
-        submitting={holidayRequestSubmitting}
-        onClose={() => {
-          if (!holidayRequestSubmitting) {
-            setHolidayRequestModalOpen(false);
-          }
-        }}
-        onSubmit={submitHolidayRequest}
-      />
     </div>
   );
 };
