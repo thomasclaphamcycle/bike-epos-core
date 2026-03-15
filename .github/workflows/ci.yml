@@ -58,7 +58,7 @@ jobs:
             ${{ runner.os }}-playwright-
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       - name: Apply migrations
         run: npx prisma migrate deploy
@@ -66,29 +66,5 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Start API server
-        run: |
-          PORT=3100 NODE_ENV=test npx ts-node --transpile-only src/server.ts &
-          echo $! > server.pid
-
-      - name: Wait for API health
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:3100/health > /dev/null; then
-              echo "API ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "API failed to start"
-          exit 1
-
       - name: Run release verification
-        run: TEST_BASE_URL=http://localhost:3100 ALLOW_EXISTING_SERVER=1 npm run verify
-
-      - name: Stop API server
-        if: always()
-        run: |
-          if [ -f server.pid ]; then
-            kill $(cat server.pid) || true
-          fi
+        run: npm run verify

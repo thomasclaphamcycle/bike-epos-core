@@ -59,7 +59,7 @@ jobs:
             ${{ runner.os }}-playwright-
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       - name: Run database migrations
         run: npx prisma migrate deploy
