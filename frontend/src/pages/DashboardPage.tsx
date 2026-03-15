@@ -5,6 +5,7 @@ import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { HolidayRequestModal } from "../components/HolidayRequestModal";
 import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
+import { getTemporaryDashboardMonthlyMargin } from "../utils/dashboardMonthlyMargin";
 
 type SalesDailyRow = {
   date: string;
@@ -125,6 +126,12 @@ type DashboardActionLink = {
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+const formatDashboardCurrency = (valueGbp: number) =>
+  new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: 0,
+  }).format(valueGbp);
 
 const formatPercentDelta = (current: number, previous: number) => {
   if (previous <= 0) {
@@ -278,6 +285,7 @@ const DashboardActionButton = ({ label, to, disabledReason, emphasize = false }:
 export const DashboardPage = () => {
   const { user } = useAuth();
   const { error, success } = useToasts();
+  const monthlyMargin = getTemporaryDashboardMonthlyMargin();
   const [clock, setClock] = useState(() => new Date());
   const [loading, setLoading] = useState(false);
   const [salesToday, setSalesToday] = useState<SalesDailyRow | null>(null);
@@ -694,10 +702,9 @@ export const DashboardPage = () => {
       <section className="dashboard-summary-grid dashboard-v1-kpis">
         <DashboardMetricCard
           label="Monthly Margin"
-          value="—"
-          detail="Awaiting a dedicated cost-aware margin feed for dashboard use."
+          value={formatDashboardCurrency(monthlyMargin.marginGbp)}
+          detail={`Revenue ${formatDashboardCurrency(monthlyMargin.revenueGbp)} · Cost ${formatDashboardCurrency(monthlyMargin.costGbp)} · ${monthlyMargin.marginPercent.toFixed(1)}% margin`}
           href={canViewManagerWidgets ? "/management/pricing" : undefined}
-          placeholder
         />
         <DashboardMetricCard
           label="vs Last Year"
