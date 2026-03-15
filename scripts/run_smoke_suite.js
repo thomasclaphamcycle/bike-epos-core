@@ -74,26 +74,64 @@ if (!env.PORT) {
 }
 
 const HEALTH_URL = `${env.TEST_BASE_URL.replace(/\/$/, "")}/health`;
+const WAIT_INTERVAL_MS = Number.parseInt(process.env.SMOKE_SERVER_WAIT_INTERVAL_MS || "500", 10);
+const HEALTH_CHECK_TIMEOUT_MS = Number.parseInt(
+  process.env.SMOKE_SERVER_HEALTH_TIMEOUT_MS || "1500",
+  10,
+);
+const SHUTDOWN_TIMEOUT_MS = Number.parseInt(
+  process.env.SMOKE_SERVER_SHUTDOWN_TIMEOUT_MS || "15000",
+  10,
+);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const log = (message) => {
+  console.log(`[smoke-suite] ${message}`);
+};
 
 const serverIsHealthy = async () => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+
   try {
-    const response = await fetch(HEALTH_URL);
+    const response = await fetch(HEALTH_URL, {
+      signal: controller.signal,
+    });
     return response.ok;
-  } catch {
+  } catch (error) {
+    if (error && typeof error === "object" && error.name === "AbortError") {
+      log(`Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms for ${HEALTH_URL}`);
+      return true;
+    }
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 };
 
-const waitForServerShutdown = async () => {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+const waitForServerShutdown = async (step) => {
+  const startedAt = Date.now();
+  let attempt = 0;
+
+  log(`Waiting for API server shutdown after ${step}`);
+
+  while (Date.now() - startedAt < SHUTDOWN_TIMEOUT_MS) {
+    attempt += 1;
     if (!(await serverIsHealthy())) {
+      log(`API server shutdown confirmed after ${step} (${Date.now() - startedAt}ms, ${attempt} checks)`);
       return;
     }
-    await sleep(500);
+
+    if (attempt === 1 || attempt % 5 === 0) {
+      log(`API server still responding after ${step}; waiting... (${Date.now() - startedAt}ms elapsed)`);
+    }
+
+    await sleep(WAIT_INTERVAL_MS);
   }
+
+  log(`Timed out waiting for API server shutdown after ${step}`);
   throw new Error(
-    "Smoke suite detected an API server still running after a test finished. A smoke test likely did not shut its server down cleanly.",
+    `Smoke suite timed out after ${SHUTDOWN_TIMEOUT_MS}ms waiting for API server shutdown after ${step}. A smoke test likely did not shut its server down cleanly.`,
   );
 };
 
@@ -106,6 +144,7 @@ const main = async () => {
   }
 
   for (const step of baselineSteps) {
+    log(`Starting ${step}`);
     const result = spawnSync("npm", ["run", step], {
       stdio: "inherit",
       env,
@@ -116,8 +155,10 @@ const main = async () => {
       process.exit(result.status ?? 1);
     }
 
+    log(`Completed ${step}`);
+
     if (env.ALLOW_EXISTING_SERVER !== "1") {
-      await waitForServerShutdown();
+      await waitForServerShutdown(step);
     }
   }
 };
