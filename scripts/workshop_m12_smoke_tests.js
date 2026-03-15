@@ -35,6 +35,9 @@ const prisma = new PrismaClient({
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const log = (message) => {
+  console.log(`[m12-smoke] ${message}`);
+};
 const waitForProcessExit = (child, timeoutMs) =>
   new Promise((resolve, reject) => {
     if (!child || child.exitCode !== null || child.signalCode !== null) {
@@ -66,6 +69,33 @@ const waitForProcessExit = (child, timeoutMs) =>
     child.once("exit", handleExit);
     child.once("error", handleError);
   });
+const waitForServerShutdown = async (timeoutMs) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!(await serverIsHealthy())) {
+      return Date.now() - startedAt;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Server still responded on /health after ${timeoutMs}ms`);
+};
+const sendSignal = (child, signal, useProcessGroup) => {
+  if (!child?.pid) {
+    return;
+  }
+
+  const target = useProcessGroup ? -child.pid : child.pid;
+  try {
+    process.kill(target, signal);
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ESRCH") {
+      return;
+    }
+    throw error;
+  }
+};
 
 const todayUtc = () => {
   const now = new Date();
@@ -299,6 +329,7 @@ const run = async () => {
 
   let startedServer = false;
   let serverProcess = null;
+  let serverUsesProcessGroup = false;
 
   const runTest = async (name, fn, results) => {
     try {
@@ -323,12 +354,14 @@ const run = async () => {
     if (!existing) {
       serverProcess = spawn("npm", ["run", "dev"], {
         stdio: "ignore",
+        detached: process.platform !== "win32",
         env: {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
         },
       });
+      serverUsesProcessGroup = process.platform !== "win32";
       startedServer = true;
       await waitForServer();
     }
@@ -602,16 +635,24 @@ const run = async () => {
     await cleanup(state);
     await prisma.$disconnect();
     if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
+      log("Starting API server cleanup");
       try {
+        log(`Sending SIGTERM to ${serverUsesProcessGroup ? "process group" : "server process"} ${serverProcess.pid}`);
+        sendSignal(serverProcess, "SIGTERM", serverUsesProcessGroup);
         await waitForProcessExit(serverProcess, 5_000);
+        log("Server process exited after SIGTERM");
       } catch (error) {
-        console.warn(
-          `[m12-smoke] server did not exit cleanly after SIGTERM; forcing shutdown (${error instanceof Error ? error.message : String(error)})`,
+        log(
+          `Server did not exit cleanly after SIGTERM (${error instanceof Error ? error.message : String(error)})`,
         );
-        serverProcess.kill("SIGKILL");
+        log(`Sending SIGKILL to ${serverUsesProcessGroup ? "process group" : "server process"} ${serverProcess.pid}`);
+        sendSignal(serverProcess, "SIGKILL", serverUsesProcessGroup);
         await waitForProcessExit(serverProcess, 2_000);
+        log("Server process exited after SIGKILL");
       }
+
+      const shutdownMs = await waitForServerShutdown(5_000);
+      log(`API server shutdown confirmed after cleanup (${shutdownMs}ms)`);
     }
   }
 };
