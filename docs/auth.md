@@ -53,6 +53,12 @@ ADMIN_PASSWORD="ChangeMe123!" \
 npm run auth:seed-admin
 ```
 
+Optional local staff restore:
+
+```bash
+npm run auth:seed-local-staff
+```
+
 Option 2: bootstrap endpoint (only when DB has no users)
 
 ```http
@@ -76,6 +82,8 @@ If the React frontend is not running, the backend-only login surface remains ava
 After `npm run db:seed:dev`, the demo seed preserves existing active staff users instead of creating demo auth accounts.
 
 The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows. For a fresh local setup, create an initial admin with `npm run auth:seed-admin`, then create or manage the rest of the staff accounts from `/management/staff`.
+
+If the local dev database has been reduced back to only the admin account, `npm run auth:seed-local-staff` will upsert a small PIN-enabled manager/staff set for development use.
 
 Inactive or disabled users are not shown in the active-user login list and cannot authenticate through either the PIN or password flow.
 

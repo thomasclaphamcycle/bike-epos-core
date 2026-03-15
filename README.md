@@ -186,6 +186,8 @@ Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 
 The login screen remains PIN-first and lists whatever active staff accounts already exist in the local database. For a fresh local setup, create an admin first with `npm run auth:seed-admin`, then create or manage the remaining staff accounts from `/management/staff`.
 
+If you need a quick local staff roster after restoring only the admin account, run `npm run auth:seed-local-staff` to upsert a small PIN-enabled manager/staff set into the dev database.
+
 `npm run db:seed:dev` now keeps the demo environment intentionally small:
 
 - no demo auth users
@@ -203,6 +205,12 @@ ADMIN_NAME="Admin User" \
 ADMIN_EMAIL="admin@example.com" \
 ADMIN_PASSWORD="ChangeMe123!" \
 npm run auth:seed-admin
+```
+
+Optional local staff restore:
+
+```bash
+npm run auth:seed-local-staff
 ```
 
 Alternative (only when DB has no users): `POST /api/auth/bootstrap`.
