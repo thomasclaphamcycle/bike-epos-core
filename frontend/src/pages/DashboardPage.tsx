@@ -768,8 +768,7 @@ export const DashboardPage = () => {
             : canViewManagerWidgets
               ? "Current-month financial summary is unavailable."
               : "Financial analytics are visible to managers and admins."}
-          // TODO: Link this KPI to a dedicated financial reports destination once that route exists.
-          href={undefined}
+          href={canViewManagerWidgets ? "/reports/financial" : undefined}
           placeholder={!monthlyMarginReport}
         />
         <DashboardMetricCard
@@ -784,8 +783,7 @@ export const DashboardPage = () => {
             : canViewManagerWidgets
               ? "Current-month sales summary is unavailable."
               : "Financial analytics are visible to managers and admins."}
-          // TODO: Link this KPI to a dedicated financial reports destination once that route exists.
-          href={undefined}
+          href={canViewManagerWidgets ? "/reports/financial" : undefined}
           placeholder={!monthlySalesReport}
         />
         <DashboardMetricCard
