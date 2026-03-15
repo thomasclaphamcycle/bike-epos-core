@@ -544,11 +544,12 @@ const inventoryInvestigationSeverityRank: Record<InventoryInvestigationSeverity,
   INFO: 1,
 };
 
-export const getInventoryReorderSuggestionsReport = async (take?: number) => {
+export const getInventoryReorderSuggestionsReport = async (take?: number, q?: string) => {
   const normalizedTake = take ?? 100;
   if (!Number.isInteger(normalizedTake) || normalizedTake < 1 || normalizedTake > 200) {
     throw new HttpError(400, "take must be an integer between 1 and 200", "INVALID_TAKE");
   }
+  const search = normalizeOptionalSearch(q);
 
   const toDate = new Date();
   const fromDate = new Date(toDate);
@@ -636,6 +637,18 @@ export const getInventoryReorderSuggestionsReport = async (take?: number) => {
           id: {
             in: variantIds,
           },
+          ...(search
+            ? {
+                OR: [
+                  { sku: { contains: search, mode: "insensitive" } },
+                  { barcode: { contains: search, mode: "insensitive" } },
+                  { name: { contains: search, mode: "insensitive" } },
+                  { option: { contains: search, mode: "insensitive" } },
+                  { product: { name: { contains: search, mode: "insensitive" } } },
+                  { product: { brand: { contains: search, mode: "insensitive" } } },
+                ],
+              }
+            : {}),
         },
         select: {
           id: true,

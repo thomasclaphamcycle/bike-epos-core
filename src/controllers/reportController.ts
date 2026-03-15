@@ -217,7 +217,8 @@ export const getInventoryVelocityHandler = async (_req: Request, res: Response) 
 };
 
 export const getInventoryReorderSuggestionsReportHandler = async (req: Request, res: Response) => {
-  const report = await getInventoryReorderSuggestionsReport(getTakeQuery(req));
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const report = await getInventoryReorderSuggestionsReport(getTakeQuery(req), q);
   res.json(report);
 };
 

@@ -2,12 +2,11 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -29,6 +28,11 @@ console.log(`[sale-customer-capture-smoke] DATABASE_URL=${safeDbUrl}`);
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 });
+const serverController = createSmokeServerController({
+  label: "sale-customer-capture-smoke",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+});
 
 const STAFF_HEADERS = {
   "Content-Type": "application/json",
@@ -36,7 +40,6 @@ const STAFF_HEADERS = {
   "X-Staff-Id": "sale-customer-capture-smoke-manager",
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
 
@@ -75,25 +78,6 @@ const apiJsonOrThrow = async (request) => {
     throw new Error(`${request.method || "GET"} ${request.path} failed (${result.status}): ${JSON.stringify(result.payload)}`);
   }
   return result.payload;
-};
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
 };
 
 const cleanup = async (created) => {
@@ -211,29 +195,8 @@ const run = async () => {
     userIds: new Set(["sale-customer-capture-smoke-manager"]),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   try {
-    const alreadyHealthy = await serverIsHealthy();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const token = uniqueRef();
     const product = await apiJsonOrThrow({
@@ -393,10 +356,7 @@ const run = async () => {
   } finally {
     await cleanup(created);
     await prisma.$disconnect();
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(500);
-    }
+    await serverController.stop();
   }
 };
 
