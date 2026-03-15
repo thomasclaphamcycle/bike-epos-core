@@ -22,40 +22,56 @@ const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 const formatCount = (value: number, singular: string, plural: string) =>
   `${value} ${value === 1 ? singular : plural}`;
 
+const formatRevenueShare = (valuePence: number, totalPence: number) => {
+  if (totalPence <= 0) {
+    return "—";
+  }
+
+  return formatPercent((valuePence / totalPence) * 100);
+};
+
 export const FinancialReportsPage = () => {
   const { error } = useToasts();
   const [loading, setLoading] = useState(false);
+  const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [monthlySales, setMonthlySales] = useState<FinancialMonthlySalesSummaryReport | null>(null);
   const [monthlyMargin, setMonthlyMargin] = useState<FinancialMonthlyMarginReport | null>(null);
   const [salesByCategory, setSalesByCategory] = useState<FinancialSalesByCategoryReport | null>(null);
 
   const loadReports = async () => {
     setLoading(true);
+    setLoadFailures([]);
     const [monthlySalesResult, monthlyMarginResult, salesByCategoryResult] = await Promise.allSettled([
       getFinancialMonthlySalesSummaryReport(),
       getFinancialMonthlyMarginReport(),
       getFinancialSalesByCategoryReport(),
     ]);
+    const nextFailures: string[] = [];
 
     if (monthlySalesResult.status === "fulfilled") {
       setMonthlySales(monthlySalesResult.value);
     } else {
       setMonthlySales(null);
-      error(monthlySalesResult.reason instanceof Error ? monthlySalesResult.reason.message : "Failed to load monthly sales");
+      nextFailures.push(monthlySalesResult.reason instanceof Error ? monthlySalesResult.reason.message : "Failed to load monthly sales");
     }
 
     if (monthlyMarginResult.status === "fulfilled") {
       setMonthlyMargin(monthlyMarginResult.value);
     } else {
       setMonthlyMargin(null);
-      error(monthlyMarginResult.reason instanceof Error ? monthlyMarginResult.reason.message : "Failed to load monthly margin");
+      nextFailures.push(monthlyMarginResult.reason instanceof Error ? monthlyMarginResult.reason.message : "Failed to load monthly margin");
     }
 
     if (salesByCategoryResult.status === "fulfilled") {
       setSalesByCategory(salesByCategoryResult.value);
     } else {
       setSalesByCategory(null);
-      error(salesByCategoryResult.reason instanceof Error ? salesByCategoryResult.reason.message : "Failed to load sales by category");
+      nextFailures.push(salesByCategoryResult.reason instanceof Error ? salesByCategoryResult.reason.message : "Failed to load sales by category");
+    }
+
+    if (nextFailures.length) {
+      setLoadFailures(nextFailures);
+      error(nextFailures[0]);
     }
 
     setLoading(false);
@@ -74,7 +90,60 @@ export const FinancialReportsPage = () => {
     return `${formatCurrencyFromPence(monthlyMargin.costBasis.revenueWithoutCostBasisPence)} of revenue currently has no recorded cost basis.`;
   }, [monthlyMargin]);
 
-  const categoryRows = salesByCategory?.categories ?? [];
+  const filtersLabel = useMemo(
+    () => monthlySales?.filters.label ?? monthlyMargin?.filters.label ?? salesByCategory?.filters.label ?? "Month to date",
+    [monthlyMargin?.filters.label, monthlySales?.filters.label, salesByCategory?.filters.label],
+  );
+
+  const hasAnyData = Boolean(monthlySales || monthlyMargin || salesByCategory);
+
+  const sortedCategoryRows = useMemo(() => (
+    [...(salesByCategory?.categories ?? [])].sort((left, right) =>
+      right.revenuePence - left.revenuePence
+      || right.grossMarginPence - left.grossMarginPence
+      || left.categoryName.localeCompare(right.categoryName))
+  ), [salesByCategory?.categories]);
+
+  const insightItems = useMemo(() => {
+    const items: Array<{ label: string; detail: string }> = [];
+
+    if (salesByCategory?.summary.topCategoryName) {
+      items.push({
+        label: "Top category",
+        detail: `${salesByCategory.summary.topCategoryName} leads with ${formatCurrencyFromPence(salesByCategory.summary.topCategoryRevenuePence)} (${formatRevenueShare(
+          salesByCategory.summary.topCategoryRevenuePence,
+          salesByCategory.summary.revenuePence,
+        )} of current-month revenue).`,
+      });
+    }
+
+    if (monthlyMargin) {
+      items.push({
+        label: "Margin signal",
+        detail: `${formatPercent(monthlyMargin.summary.grossMarginPercent)} gross margin on ${formatCurrencyFromPence(monthlyMargin.summary.revenuePence)} revenue month to date.`,
+      });
+    }
+
+    if (monthlySales) {
+      items.push({
+        label: "Refund signal",
+        detail: monthlySales.summary.refundCount > 0
+          ? `${formatCurrencyFromPence(monthlySales.summary.refundsPence)} refunded across ${formatCount(monthlySales.summary.refundCount, "refund", "refunds")}.`
+          : "No refunds have been recorded so far this month.",
+      });
+    }
+
+    if (monthlyMargin) {
+      items.push({
+        label: "Cost coverage",
+        detail: monthlyMargin.costBasis.revenueWithoutCostBasisPence > 0
+          ? `${formatPercent(monthlyMargin.costBasis.knownCostCoveragePercent)} of revenue has known cost basis, with ${formatCurrencyFromPence(monthlyMargin.costBasis.revenueWithoutCostBasisPence)} still awaiting cost coverage.`
+          : "All current-month revenue has a known recorded cost basis.",
+      });
+    }
+
+    return items;
+  }, [monthlyMargin, monthlySales, salesByCategory]);
 
   return (
     <div className="page-shell">
@@ -85,6 +154,7 @@ export const FinancialReportsPage = () => {
             <p className="muted-text">
               Current-month financial summary for managers using live sales, refund, and cost data already recorded in CorePOS.
             </p>
+            <p className="muted-text">{filtersLabel}</p>
           </div>
           <div className="actions-inline">
             <button type="button" onClick={() => void loadReports()} disabled={loading}>
@@ -94,6 +164,61 @@ export const FinancialReportsPage = () => {
           </div>
         </div>
       </section>
+
+      {loading && !hasAnyData ? (
+        <div className="restricted-panel info-panel">Loading current-month financial reports...</div>
+      ) : null}
+
+      {loadFailures.length ? (
+        <div className="restricted-panel info-panel">
+          <strong>Some financial data is unavailable.</strong>
+          <p className="muted-text">
+            The page will show any sections that did load successfully and keep the rest clearly marked as unavailable.
+          </p>
+        </div>
+      ) : null}
+
+      {hasAnyData ? (
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Month-to-Date Headline</h2>
+              <p className="muted-text">The clearest top-line view of revenue, margin, and category mix.</p>
+            </div>
+          </div>
+          <div className="dashboard-summary-grid">
+            <div className="metric-card">
+              <span className="metric-label">Revenue</span>
+              <strong className="metric-value">
+                {monthlySales ? formatCurrencyFromPence(monthlySales.summary.revenuePence) : monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.revenuePence) : "—"}
+              </strong>
+              <span className="dashboard-metric-detail">Current-month net sales revenue.</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Gross Margin</span>
+              <strong className="metric-value">{monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.grossMarginPence) : "—"}</strong>
+              <span className="dashboard-metric-detail">Revenue less known costs.</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Margin %</span>
+              <strong className="metric-value">{monthlyMargin ? formatPercent(monthlyMargin.summary.grossMarginPercent) : "—"}</strong>
+              <span className="dashboard-metric-detail">Gross margin as a share of revenue.</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Top Category</span>
+              <strong className="metric-value">{salesByCategory?.summary.topCategoryName ?? "—"}</strong>
+              <span className="dashboard-metric-detail">
+                {salesByCategory?.summary.topCategoryName
+                  ? `${formatCurrencyFromPence(salesByCategory.summary.topCategoryRevenuePence)} · ${formatRevenueShare(
+                    salesByCategory.summary.topCategoryRevenuePence,
+                    salesByCategory.summary.revenuePence,
+                  )} share`
+                  : "No category revenue recorded yet."}
+              </span>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="card">
         <div className="card-header-row">
@@ -107,7 +232,7 @@ export const FinancialReportsPage = () => {
             <span className="metric-label">Revenue</span>
             <strong className="metric-value">{monthlySales ? formatCurrencyFromPence(monthlySales.summary.revenuePence) : "—"}</strong>
             <span className="dashboard-metric-detail">
-              {monthlySales ? `Gross ${formatCurrencyFromPence(monthlySales.summary.grossSalesPence)}` : "Monthly sales summary unavailable."}
+              {monthlySales ? `Gross ${formatCurrencyFromPence(monthlySales.summary.grossSalesPence)} month to date.` : "Monthly sales summary unavailable."}
             </span>
           </div>
           <div className="metric-card">
@@ -130,6 +255,9 @@ export const FinancialReportsPage = () => {
             </span>
           </div>
         </div>
+        {!monthlySales && !loading ? (
+          <div className="restricted-panel info-panel">No monthly sales summary is available yet for this period.</div>
+        ) : null}
       </section>
 
       <section className="card">
@@ -163,24 +291,47 @@ export const FinancialReportsPage = () => {
             </span>
           </div>
         </div>
-        <div className="info-panel">
-          <strong>Cost coverage</strong>
-          <p className="muted-text">{monthlyMargin ? costCoverageMessage : "Cost coverage details are unavailable right now."}</p>
-          {monthlyMargin?.costBasis.notes.length ? (
-            <ul>
-              {monthlyMargin.costBasis.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        {monthlyMargin ? (
+          <div className="info-panel">
+            <strong>Cost coverage</strong>
+            <p className="muted-text">{costCoverageMessage}</p>
+            {monthlyMargin.costBasis.notes.length ? (
+              <ul>
+                {monthlyMargin.costBasis.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : !loading ? (
+          <div className="restricted-panel info-panel">No monthly margin summary is available yet for this period.</div>
+        ) : null}
       </section>
+
+      {insightItems.length ? (
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Insights</h2>
+              <p className="muted-text">Compact manager highlights derived directly from the live financial report responses.</p>
+            </div>
+          </div>
+          <div className="dashboard-summary-grid">
+            {insightItems.map((item) => (
+              <div key={item.label} className="metric-card">
+                <span className="metric-label">{item.label}</span>
+                <span className="dashboard-metric-detail">{item.detail}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="card">
         <div className="card-header-row">
           <div>
             <h2>Sales by Category</h2>
-            <p className="muted-text">Current-month category mix using the same live financial reporting dataset.</p>
+            <p className="muted-text">Current-month category mix, sorted by highest revenue first for quick manager review.</p>
           </div>
         </div>
 
@@ -216,6 +367,7 @@ export const FinancialReportsPage = () => {
             <thead>
               <tr>
                 <th>Category</th>
+                <th>Share</th>
                 <th>Revenue</th>
                 <th>Gross Margin</th>
                 <th>Margin %</th>
@@ -224,9 +376,17 @@ export const FinancialReportsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {categoryRows.length ? categoryRows.map((row) => (
+              {sortedCategoryRows.length ? sortedCategoryRows.map((row) => (
                 <tr key={row.categoryName}>
-                  <td>{row.categoryName}</td>
+                  <td>
+                    <div className="table-primary">{row.categoryName}</div>
+                    <div className="table-secondary">
+                      {row.revenueWithoutCostBasisPence > 0
+                        ? `${formatCurrencyFromPence(row.revenueWithoutCostBasisPence)} revenue missing cost basis`
+                        : "Complete cost basis for this category."}
+                    </div>
+                  </td>
+                  <td>{salesByCategory ? formatRevenueShare(row.revenuePence, salesByCategory.summary.revenuePence) : "—"}</td>
                   <td>{formatCurrencyFromPence(row.revenuePence)}</td>
                   <td>{formatCurrencyFromPence(row.grossMarginPence)}</td>
                   <td>{formatPercent(row.grossMarginPercent)}</td>
@@ -235,13 +395,29 @@ export const FinancialReportsPage = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6}>{loading ? "Loading category breakdown..." : "No category sales are available for the current month."}</td>
+                  <td colSpan={7}>{loading ? "Loading category breakdown..." : "No category sales are available for the current month."}</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {salesByCategory?.costBasis.notes.length ? (
+          <div className="info-panel">
+            <strong>Category cost notes</strong>
+            <ul>
+              {salesByCategory.costBasis.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
+
+      {!hasAnyData && !loading ? (
+        <div className="restricted-panel info-panel">
+          No financial report data is available for the current month yet.
+        </div>
+      ) : null}
     </div>
   );
 };
