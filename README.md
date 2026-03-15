@@ -471,6 +471,7 @@ CI runs with:
 
 This repository uses local verification and GitHub Actions to confirm branch health.
 This note exists to trigger a fresh CI run for the current verified branch state.
+The wording is intentionally non-functional and safe to replace in a later cleanup.
 
 ## Cleanup Test DB
 

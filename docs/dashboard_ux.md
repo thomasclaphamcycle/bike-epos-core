@@ -209,11 +209,11 @@ Where a suitable source does not yet exist:
 
 ## Evolution Notes
 
-Future dashboard iterations may add:
+Current dashboard follow-ons may still add:
 
 - real rota presence
 - weather feed integration
-- cost-aware monthly margin KPI
+- dedicated financial-report navigation from the live monthly margin KPI
 - richer cross-widget filtering
 
 Those additions should extend Dashboard v1 rather than replace its operational control-centre role.

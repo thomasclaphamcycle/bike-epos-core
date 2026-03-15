@@ -2,6 +2,7 @@
 
 ## Current API Families
 
+- `/api/reports/financial/*`
 - `/api/reports/sales/*`
 - `/api/reports/workshop/*`
 - `/api/reports/inventory/*`
@@ -13,6 +14,10 @@
 
 ## Current Manager-Facing Reporting Queue
 
+- Financial Reports
+  - monthly margin
+  - monthly sales summary
+  - sales by category
 - Action Centre
   - grouped operational sections for manager triage
 - Operations Exceptions
@@ -29,6 +34,26 @@
   - internal reminder-groundwork visibility from persisted workshop-completion candidates, including manager review and dismissal state
 - Workshop Capacity
   - backlog, throughput, and ageing pressure
+
+## Financial Reporting Notes
+
+- `GET /api/reports/financial/monthly-margin`
+  - current month-to-date summary
+  - returns gross sales, refunds, net revenue, known COGS, and gross margin
+- `GET /api/reports/financial/monthly-sales`
+  - current month-to-date sales summary
+  - returns gross sales, refunds, net revenue, transaction count, and average sale value
+- `GET /api/reports/financial/sales-by-category`
+  - current month-to-date category view
+  - groups product-linked sales by `Product.category`
+  - includes `Workshop Labour` as a synthetic category when workshop checkout revenue exists without sale-line detail
+
+Current cost-basis rules are intentionally conservative:
+
+- retail sale-line COGS uses the current `Variant.costPricePence`
+- workshop used parts use stored `WorkshopJobPart.costPriceAtTime` when present
+- workshop labour revenue is included in revenue but flagged as revenue without recorded cost basis
+- responses expose cost-coverage fields so incomplete costing is visible rather than silently invented
 
 ## Relationship Between Actions, Exceptions, and Investigations
 

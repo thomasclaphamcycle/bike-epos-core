@@ -1,4 +1,5 @@
 export * from "./customerReports";
+export * from "./financialReports";
 export * from "./inventoryReports";
 export * from "./operationsReports";
 export * from "./pricingReports";

@@ -39,6 +39,7 @@ const baselineSteps = [
   "test:settings",
   "test:rota-foundation",
   "test:dashboard-weather",
+  "test:financial-reports",
 ];
 
 const env = {

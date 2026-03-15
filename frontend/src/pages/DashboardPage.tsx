@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
+import {
+  getFinancialMonthlyMarginReport,
+  getFinancialMonthlySalesSummaryReport,
+  type FinancialMonthlyMarginReport,
+  type FinancialMonthlySalesSummaryReport,
+} from "../api/financialReports";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { HolidayRequestModal } from "../components/HolidayRequestModal";
 import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
-import { getTemporaryDashboardMonthlyMargin } from "../utils/dashboardMonthlyMargin";
 
 type SalesDailyRow = {
   date: string;
@@ -132,6 +137,7 @@ const formatDashboardCurrency = (valueGbp: number) =>
     currency: "GBP",
     maximumFractionDigits: 0,
   }).format(valueGbp);
+const formatDashboardCurrencyFromPence = (valuePence: number) => formatDashboardCurrency(valuePence / 100);
 
 const formatPercentDelta = (current: number, previous: number) => {
   if (previous <= 0) {
@@ -282,15 +288,43 @@ const DashboardActionButton = ({ label, to, disabledReason, emphasize = false }:
   );
 };
 
+const buildMonthlyMarginTileDetail = (report: FinancialMonthlyMarginReport) => {
+  const parts = [
+    `Revenue ${formatDashboardCurrencyFromPence(report.summary.revenuePence)}`,
+    `Cost ${formatDashboardCurrencyFromPence(report.summary.cogsPence)}`,
+    `${report.summary.grossMarginPercent.toFixed(1)}% margin`,
+  ];
+
+  if (report.costBasis.revenueWithoutCostBasisPence > 0) {
+    parts.push(`${report.costBasis.knownCostCoveragePercent.toFixed(1)}% cost coverage`);
+  }
+
+  return parts.join(" · ");
+};
+
+const buildMonthlySalesTileDetail = (report: FinancialMonthlySalesSummaryReport) => {
+  const parts = [
+    `${report.summary.transactions} transaction${report.summary.transactions === 1 ? "" : "s"}`,
+    `Avg ${formatDashboardCurrencyFromPence(report.summary.averageSaleValuePence)}`,
+  ];
+
+  if (report.summary.refundsPence > 0) {
+    parts.push(`Refunds ${formatDashboardCurrencyFromPence(report.summary.refundsPence)}`);
+  }
+
+  return parts.join(" · ");
+};
+
 export const DashboardPage = () => {
   const { user } = useAuth();
   const { error, success } = useToasts();
-  const monthlyMargin = getTemporaryDashboardMonthlyMargin();
   const [clock, setClock] = useState(() => new Date());
   const [loading, setLoading] = useState(false);
   const [salesToday, setSalesToday] = useState<SalesDailyRow | null>(null);
   const [monthToDateNetPence, setMonthToDateNetPence] = useState<number | null>(null);
   const [lastYearMonthToDateNetPence, setLastYearMonthToDateNetPence] = useState<number | null>(null);
+  const [monthlyMarginReport, setMonthlyMarginReport] = useState<FinancialMonthlyMarginReport | null>(null);
+  const [monthlySalesReport, setMonthlySalesReport] = useState<FinancialMonthlySalesSummaryReport | null>(null);
   const [workshopSummary, setWorkshopSummary] = useState<WorkshopDashboardResponse["summary"] | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [hireBookings, setHireBookings] = useState<HireBooking[]>([]);
@@ -326,6 +360,8 @@ export const DashboardPage = () => {
         `/api/reports/sales/daily?from=${formatDateKey(lastYearMonthStart)}&to=${formatDateKey(lastYearToday)}`,
       ),
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=12"),
+      canViewManagerWidgets ? getFinancialMonthlyMarginReport() : Promise.resolve(null),
+      canViewManagerWidgets ? getFinancialMonthlySalesSummaryReport() : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<ActionCentreResponse>("/api/reports/operations/actions") : Promise.resolve(null),
       canViewManagerWidgets ? apiGet<HireBookingListResponse>("/api/hire/bookings?take=200") : Promise.resolve(null),
       apiGet<DashboardStaffTodayPayload>("/api/dashboard/staff-today"),
@@ -338,6 +374,8 @@ export const DashboardPage = () => {
       monthResult,
       lastYearResult,
       workshopResult,
+      monthlyMarginResult,
+      monthlySalesResult,
       actionResult,
       hireResult,
       staffTodayResult,
@@ -379,6 +417,24 @@ export const DashboardPage = () => {
     } else {
       setWorkshopSummary(null);
       error(workshopResult.reason instanceof Error ? workshopResult.reason.message : "Failed to load workshop snapshot");
+    }
+
+    if (monthlyMarginResult.status === "fulfilled") {
+      setMonthlyMarginReport(monthlyMarginResult.value);
+    } else if (monthlyMarginResult.status === "rejected") {
+      setMonthlyMarginReport(null);
+      error(monthlyMarginResult.reason instanceof Error ? monthlyMarginResult.reason.message : "Failed to load monthly margin");
+    } else {
+      setMonthlyMarginReport(null);
+    }
+
+    if (monthlySalesResult.status === "fulfilled") {
+      setMonthlySalesReport(monthlySalesResult.value);
+    } else if (monthlySalesResult.status === "rejected") {
+      setMonthlySalesReport(null);
+      error(monthlySalesResult.reason instanceof Error ? monthlySalesResult.reason.message : "Failed to load monthly sales");
+    } else {
+      setMonthlySalesReport(null);
     }
 
     if (actionResult.status === "fulfilled" && actionResult.value) {
@@ -702,9 +758,33 @@ export const DashboardPage = () => {
       <section className="dashboard-summary-grid dashboard-v1-kpis">
         <DashboardMetricCard
           label="Monthly Margin"
-          value={formatDashboardCurrency(monthlyMargin.marginGbp)}
-          detail={`Revenue ${formatDashboardCurrency(monthlyMargin.revenueGbp)} · Cost ${formatDashboardCurrency(monthlyMargin.costGbp)} · ${monthlyMargin.marginPercent.toFixed(1)}% margin`}
-          href={canViewManagerWidgets ? "/management/pricing" : undefined}
+          value={monthlyMarginReport
+            ? formatDashboardCurrencyFromPence(monthlyMarginReport.summary.grossMarginPence)
+            : canViewManagerWidgets
+              ? "—"
+              : "Manager only"}
+          detail={monthlyMarginReport
+            ? buildMonthlyMarginTileDetail(monthlyMarginReport)
+            : canViewManagerWidgets
+              ? "Current-month financial summary is unavailable."
+              : "Financial analytics are visible to managers and admins."}
+          href={canViewManagerWidgets ? "/reports/financial" : undefined}
+          placeholder={!monthlyMarginReport}
+        />
+        <DashboardMetricCard
+          label="Monthly Sales"
+          value={monthlySalesReport
+            ? formatDashboardCurrencyFromPence(monthlySalesReport.summary.revenuePence)
+            : canViewManagerWidgets
+              ? "—"
+              : "Manager only"}
+          detail={monthlySalesReport
+            ? buildMonthlySalesTileDetail(monthlySalesReport)
+            : canViewManagerWidgets
+              ? "Current-month sales summary is unavailable."
+              : "Financial analytics are visible to managers and admins."}
+          href={canViewManagerWidgets ? "/reports/financial" : undefined}
+          placeholder={!monthlySalesReport}
         />
         <DashboardMetricCard
           label="vs Last Year"

@@ -63,6 +63,7 @@ import { OpsHealthPage } from "./pages/OpsHealthPage";
 import { DailyTradeClosePage } from "./pages/DailyTradeClosePage";
 import { LiabilitiesReviewPage } from "./pages/LiabilitiesReviewPage";
 import { StaffPerformancePage } from "./pages/StaffPerformancePage";
+import { FinancialReportsPage } from "./pages/FinancialReportsPage";
 import { DataIntegrityPage } from "./pages/DataIntegrityPage";
 import { BackupToolkitPage } from "./pages/BackupToolkitPage";
 import { SystemSettingsPage } from "./pages/SystemSettingsPage";
@@ -544,6 +545,7 @@ const AuthedApp = () => (
         <Route path="/purchasing/receiving" element={<SupplierReceivingPage />} />
         <Route path="/purchasing/:id" element={<PurchaseOrderPage />} />
         <Route path="/reports/sales" element={managerOnly(<SalesAnalyticsPage />)} />
+        <Route path="/reports/financial" element={managerOnly(<FinancialReportsPage />)} />
         <Route path="/reports/inventory" element={managerOnly(<InventoryVelocityPage />)} />
         <Route path="/reports/workshop" element={managerOnly(<WorkshopPerformancePage />)} />
         <Route path="/reports/staff-performance" element={managerOnly(<StaffPerformancePage />)} />
