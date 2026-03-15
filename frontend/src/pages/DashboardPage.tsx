@@ -742,10 +742,16 @@ export const DashboardPage = () => {
               {headerDateLabel} · {headerGreetingContext} · {headerTimeLabel}
             </p>
           </div>
-          <div className="actions-inline">
-            <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
-              {loading ? "Refreshing..." : "Refresh dashboard"}
-            </button>
+          <div className="dashboard-v1-header-actions">
+            <div>
+              <p className="dashboard-v1-section-kicker">Quick Actions</p>
+              <p className="muted-text">Open the core front-of-house tools without leaving the dashboard.</p>
+            </div>
+            <div className="actions-inline">
+              <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
+                {loading ? "Refreshing..." : "Refresh dashboard"}
+              </button>
+            </div>
           </div>
         </div>
         <div className="dashboard-link-grid">
@@ -755,68 +761,73 @@ export const DashboardPage = () => {
         </div>
       </section>
 
-      <section className="dashboard-summary-grid dashboard-v1-kpis">
-        <DashboardMetricCard
-          label="Monthly Margin"
-          value={monthlyMarginReport
-            ? formatDashboardCurrencyFromPence(monthlyMarginReport.summary.grossMarginPence)
-            : canViewManagerWidgets
-              ? "—"
-              : "Manager only"}
-          detail={monthlyMarginReport
-            ? buildMonthlyMarginTileDetail(monthlyMarginReport)
-            : canViewManagerWidgets
-              ? "Current-month financial summary is unavailable."
-              : "Financial analytics are visible to managers and admins."}
-          href={canViewManagerWidgets ? "/reports/financial" : undefined}
-          placeholder={!monthlyMarginReport}
-        />
-        <DashboardMetricCard
-          label="Monthly Sales"
-          value={monthlySalesReport
-            ? formatDashboardCurrencyFromPence(monthlySalesReport.summary.revenuePence)
-            : canViewManagerWidgets
-              ? "—"
-              : "Manager only"}
-          detail={monthlySalesReport
-            ? buildMonthlySalesTileDetail(monthlySalesReport)
-            : canViewManagerWidgets
-              ? "Current-month sales summary is unavailable."
-              : "Financial analytics are visible to managers and admins."}
-          href={canViewManagerWidgets ? "/reports/financial" : undefined}
-          placeholder={!monthlySalesReport}
-        />
-        <DashboardMetricCard
-          label="vs Last Year"
-          value={monthDeltaLabel}
-          detail="Month-to-date net sales versus the same period last year."
-          href={canViewManagerWidgets ? "/management/sales" : undefined}
-          placeholder={monthToDateNetPence === null || lastYearMonthToDateNetPence === null}
-        />
-        <DashboardMetricCard
-          label="Sales Today"
-          value={salesToday ? formatMoney(salesToday.netPence) : "—"}
-          detail={salesToday ? `Gross ${formatMoney(salesToday.grossPence)} · Refunds ${formatMoney(salesToday.refundsPence)}` : "Today’s sales feed is unavailable."}
-          href="/pos"
-          placeholder={!salesToday}
-        />
-        <DashboardMetricCard
-          label="Transactions Today"
-          value={salesToday ? `${salesToday.saleCount}` : "—"}
-          detail="Completed sales counted for today."
-          href="/sales-history/transactions"
-          placeholder={!salesToday}
-        />
-        <DashboardMetricCard
-          label="Outstanding Workshop Jobs"
-          value={outstandingWorkshopJobs === null ? "—" : `${outstandingWorkshopJobs}`}
-          detail={`Due today ${workshopSummary?.dueToday ?? 0} · Overdue ${workshopSummary?.overdue ?? 0}`}
-          href="/workshop"
-          placeholder={!workshopSummary}
-        />
+      <section className="dashboard-v1-group">
+        <div className="dashboard-v1-group-header">
+          <div>
+            <p className="dashboard-v1-section-kicker">Row 1</p>
+            <h2>Financial</h2>
+          </div>
+          <p className="muted-text">
+            Month to date versus last year {monthDeltaLabel}.
+          </p>
+        </div>
+        <div className="dashboard-summary-grid dashboard-v1-kpis">
+          <DashboardMetricCard
+            label="Sales Today"
+            value={salesToday ? formatMoney(salesToday.netPence) : "—"}
+            detail={salesToday ? `Gross ${formatMoney(salesToday.grossPence)} · Refunds ${formatMoney(salesToday.refundsPence)}` : "Today’s sales feed is unavailable."}
+            href="/pos"
+            placeholder={!salesToday}
+          />
+          <DashboardMetricCard
+            label="Transactions Today"
+            value={salesToday ? `${salesToday.saleCount}` : "—"}
+            detail="Completed sales counted for today."
+            href="/sales-history/transactions"
+            placeholder={!salesToday}
+          />
+          <DashboardMetricCard
+            label="Monthly Sales"
+            value={monthlySalesReport
+              ? formatDashboardCurrencyFromPence(monthlySalesReport.summary.revenuePence)
+              : canViewManagerWidgets
+                ? "—"
+                : "Manager only"}
+            detail={monthlySalesReport
+              ? buildMonthlySalesTileDetail(monthlySalesReport)
+              : canViewManagerWidgets
+                ? "Current-month sales summary is unavailable."
+                : "Financial analytics are visible to managers and admins."}
+            href={canViewManagerWidgets ? "/reports/financial" : undefined}
+            placeholder={!monthlySalesReport}
+          />
+          <DashboardMetricCard
+            label="Monthly Margin"
+            value={monthlyMarginReport
+              ? formatDashboardCurrencyFromPence(monthlyMarginReport.summary.grossMarginPence)
+              : canViewManagerWidgets
+                ? "—"
+                : "Manager only"}
+            detail={monthlyMarginReport
+              ? buildMonthlyMarginTileDetail(monthlyMarginReport)
+              : canViewManagerWidgets
+                ? "Current-month financial summary is unavailable."
+                : "Financial analytics are visible to managers and admins."}
+            href={canViewManagerWidgets ? "/reports/financial" : undefined}
+            placeholder={!monthlyMarginReport}
+          />
+        </div>
       </section>
 
-      <div className="dashboard-v1-main-row">
+      <section className="dashboard-v1-group">
+        <div className="dashboard-v1-group-header">
+          <div>
+            <p className="dashboard-v1-section-kicker">Row 2</p>
+            <h2>Operations</h2>
+          </div>
+          <p className="muted-text">Today’s operational flow across alerts, workshop load, and rentals.</p>
+        </div>
+        <div className="dashboard-v1-main-row">
         <section className="card dashboard-v1-widget dashboard-v1-action-centre">
           <div className="card-header-row">
             <div>
@@ -866,7 +877,7 @@ export const DashboardPage = () => {
           <div className="card-header-row">
             <div>
               <h2>Workshop Snapshot</h2>
-              <p className="muted-text">A fast count of jobs waiting, active, and ready for pickup.</p>
+              <p className="muted-text">A fast count of jobs waiting, active, ready for pickup, and still open.</p>
             </div>
             <div className="actions-inline">
               <Link to="/workshop">Job Board</Link>
@@ -874,7 +885,14 @@ export const DashboardPage = () => {
             </div>
           </div>
 
-            <div className="dashboard-v1-stat-grid">
+          <div className="dashboard-v1-stat-grid">
+            <div className="dashboard-v1-stat-card">
+              <span className="metric-label dashboard-metric-label">Outstanding</span>
+              <strong className="metric-value">{outstandingWorkshopJobs === null ? "—" : `${outstandingWorkshopJobs}`}</strong>
+              <span className="dashboard-metric-detail">
+                Due today {workshopSummary?.dueToday ?? 0} · Overdue {workshopSummary?.overdue ?? 0}
+              </span>
+            </div>
             <div className="dashboard-v1-stat-card">
               <span className="metric-label dashboard-metric-label">Waiting</span>
               <strong className="metric-value">{workshopSummary ? workshopWaitingCount : "—"}</strong>
@@ -936,9 +954,18 @@ export const DashboardPage = () => {
             </div>
           )}
         </section>
-      </div>
+        </div>
+      </section>
 
-      <div className="dashboard-v1-lower-row">
+      <section className="dashboard-v1-group">
+        <div className="dashboard-v1-group-header">
+          <div>
+            <p className="dashboard-v1-section-kicker">Row 3</p>
+            <h2>People</h2>
+          </div>
+          <p className="muted-text">Staff coverage and local trading context for the day ahead.</p>
+        </div>
+        <div className="dashboard-v1-lower-row">
         <section className="card dashboard-v1-widget">
           <div className="card-header-row">
             <div>
@@ -1064,7 +1091,8 @@ export const DashboardPage = () => {
             </div>
           )}
         </section>
-      </div>
+        </div>
+      </section>
 
       <HolidayRequestModal
         open={holidayRequestModalOpen}
