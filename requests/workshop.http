@@ -9,9 +9,15 @@
 GET {{baseUrl}}/api/workshop/availability?from=2026-03-06&to=2026-03-10
 
 ### Workshop dashboard (STAFF+)
+### includes rota-backed staffingToday summary and capacityToday awareness
 GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
+
+### Workshop staffing/capacity for an operational date
+GET {{baseUrl}}/api/workshop/dashboard?limit=20&staffDate=2026-03-10
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
 
 ### Workshop dashboard filters (M14)
 ### assignedTo, unassigned, hasNotes
@@ -255,6 +261,26 @@ X-Staff-Id: demo-staff
   "status": "READY"
 }
 
+### Mark estimate as waiting for approval (M83)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "WAITING_FOR_APPROVAL"
+}
+
+### Mark estimate approved (M83)
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "APPROVED"
+}
+
 ### Refund any payment by id
 ### Response: 201 created, 200 idempotent replay, 409 REFUND_EXCEEDS_PAYMENT
 ### Permissions: MANAGER+
@@ -378,3 +404,45 @@ X-Staff-Id: demo-staff
 {
   "saleTotalPence": 5000
 }
+
+### M84: workshop job detail now includes partsOverview summary
+GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### M84: parts list includes requirement summary, stock scope, and job parts status
+GET {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### M84: reserve stock to the workshop job without consuming it yet
+POST {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "variantId": "{{variantId}}",
+  "quantity": 1,
+  "status": "PLANNED",
+  "locationId": "{{locationId}}",
+  "note": "Reserve one item for the job"
+}
+
+### M84: consume a reserved workshop part
+PATCH {{baseUrl}}/api/workshop-jobs/{{bookingId}}/parts/{{partId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "USED",
+  "locationId": "{{locationId}}",
+  "note": "Part fitted"
+}
+
+### M84+: workshop dashboard exposes job-level partsStatus / partsSummary plus staffingToday
+### optional staffDate override is useful for deterministic rota/workshop checks
+GET {{baseUrl}}/api/workshop/dashboard?limit=20&staffDate=2026-03-10
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff

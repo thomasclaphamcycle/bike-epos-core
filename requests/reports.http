@@ -15,9 +15,51 @@ X-Staff-Id: demo-manager
 ### calculated from negative Payment rows by payment created date (Europe/London).
 ### netPence can be negative on high-refund/low-gross days.
 GET {{baseUrl}}/api/reports/sales/daily?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Sales daily CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/sales/daily.csv?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Financial monthly margin (MANAGER+)
+### Defaults to current month-to-date when from/to are omitted.
+### Revenue is net of completed refunds. Retail COGS use current Variant.costPricePence;
+### workshop used-part COGS use WorkshopJobPart.costPriceAtTime when present.
+GET {{baseUrl}}/api/reports/financial/monthly-margin
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Financial monthly sales summary (MANAGER+)
+### Returns current month-to-date gross sales, refunds, net revenue, and average sale value.
+GET {{baseUrl}}/api/reports/financial/monthly-sales
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Financial sales by category (MANAGER+)
+### Product categories come from Product.category. Workshop labour is surfaced as its own synthetic category.
+GET {{baseUrl}}/api/reports/financial/sales-by-category
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Historical financial summary CSV import (MANAGER+)
+POST {{baseUrl}}/api/reports/financial/historical-summary/import
+Content-Type: text/csv
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+date,gross_revenue,net_revenue,cost_of_goods,transaction_count
+2025-03-01,1340,1200,720,42
+2025-03-02,1580,1450,810,48
+
+### Month-to-date revenue summary with year-on-year comparison (MANAGER+)
+GET {{baseUrl}}/api/reports/financial/monthly-sales-summary?asOf=2026-03-16
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Month-to-date margin summary with year-on-year comparison (MANAGER+)
+GET {{baseUrl}}/api/reports/financial/monthly-margin-summary?asOf=2026-03-16
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
@@ -25,6 +67,8 @@ X-Staff-Id: demo-manager
 ### Uses WorkshopJob.completedAt as completion date.
 ### Date bucketing is Europe/London.
 GET {{baseUrl}}/api/reports/workshop/daily?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Workshop daily CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/workshop/daily.csv?from=2026-03-01&to=2026-03-31
@@ -33,6 +77,8 @@ X-Staff-Id: demo-manager
 
 ### Inventory on-hand by location
 GET {{baseUrl}}/api/reports/inventory/on-hand?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Inventory on-hand CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/inventory/on-hand.csv?locationId={{locationId}}
@@ -41,8 +87,40 @@ X-Staff-Id: demo-manager
 
 ### Inventory value by location (purchase average cost v1)
 GET {{baseUrl}}/api/reports/inventory/value?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Inventory valuation snapshot (MANAGER+)
+GET {{baseUrl}}/api/reports/inventory/value-snapshot
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Inventory value CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/inventory/value.csv?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Reminder candidates report (MANAGER+)
+GET {{baseUrl}}/api/reports/reminder-candidates?take=50
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Reminder candidates report including dismissed (MANAGER+)
+GET {{baseUrl}}/api/reports/reminder-candidates?take=50&includeDismissed=1
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Supplier cost history (MANAGER+)
+GET {{baseUrl}}/api/reports/suppliers/cost-history?take=10
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Mark reminder candidate reviewed (MANAGER+)
+POST {{baseUrl}}/api/reports/reminder-candidates/{{reminderCandidateId}}/review
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Dismiss reminder candidate (MANAGER+)
+POST {{baseUrl}}/api/reports/reminder-candidates/{{reminderCandidateId}}/dismiss
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager

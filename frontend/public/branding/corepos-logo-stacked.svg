@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="220" viewBox="0 0 200 220">
+  <defs>
+    <radialGradient id="coreposGlow2" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#FFD166"/>
+      <stop offset="60%" stop-color="#FF7A18"/>
+      <stop offset="100%" stop-color="#F05A00"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="80" r="32" fill="url(#coreposGlow2)"/>
+  <circle cx="55" cy="60" r="10" fill="#1F8CEB"/>
+  <circle cx="70" cy="120" r="10" fill="#1F8CEB"/>
+  <circle cx="145" cy="105" r="10" fill="#1F8CEB"/>
+  <circle cx="150" cy="40" r="10" fill="#FF7A18"/>
+  <circle cx="80" cy="30" r="10" fill="#FF7A18"/>
+  <line x1="100" y1="80" x2="55" y2="60" stroke="#1F8CEB" stroke-width="5"/>
+  <line x1="100" y1="80" x2="70" y2="120" stroke="#1F8CEB" stroke-width="5"/>
+  <line x1="100" y1="80" x2="145" y2="105" stroke="#1F8CEB" stroke-width="5"/>
+  <line x1="100" y1="80" x2="150" y2="40" stroke="#FF7A18" stroke-width="5"/>
+  <line x1="100" y1="80" x2="80" y2="30" stroke="#FF7A18" stroke-width="5"/>
+  <text x="35" y="190" font-size="42" font-family="Inter, Arial, sans-serif" fill="#6B7A99">Core</text>
+  <text x="120" y="190" font-size="42" font-family="Inter, Arial, sans-serif" fill="#FF7A18">POS</text>
+</svg>

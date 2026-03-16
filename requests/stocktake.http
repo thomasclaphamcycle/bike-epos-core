@@ -27,11 +27,34 @@ Content-Type: application/json
   "countedQty": 2
 }
 
-### Get stocktake (includes preview currentOnHand + deltaNeeded)
+### Scan-increment a stocktake line by barcode or SKU
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/scan
+Content-Type: application/json
+
+{
+  "code": "5000000000001",
+  "quantityDelta": 1
+}
+
+### Bulk import counted lines by barcode or SKU
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/bulk-lines
+Content-Type: application/json
+
+{
+  "lines": [
+    { "code": "5000000000001", "countedQty": 8 },
+    { "code": "TYRE-700X28-BLK", "countedQty": 2 }
+  ]
+}
+
+### Get stocktake (includes expected snapshot, currentOnHand, and live deltaNeeded)
 GET {{baseUrl}}/api/stocktakes/{{stocktakeId}}
 
 ### Remove a line
 DELETE {{baseUrl}}/api/stocktakes/{{stocktakeId}}/lines/{{stocktakeLineId}}
+
+### Request review before posting
+POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/review
 
 ### Post stocktake (writes ADJUSTMENT ledger deltas)
 POST {{baseUrl}}/api/stocktakes/{{stocktakeId}}/post

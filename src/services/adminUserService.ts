@@ -2,7 +2,7 @@ import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
-import { hashPassword } from "./passwordService";
+import { hashPassword, hashPin, normalizePinOrThrow } from "./passwordService";
 import {
   createUserAccountTx,
   normalizeEmailOrThrow,
@@ -15,6 +15,7 @@ type AdminCreateUserInput = {
   email?: string;
   role?: string;
   tempPassword?: string;
+  pin?: string;
 };
 
 type AdminUpdateUserInput = {
@@ -25,6 +26,12 @@ type AdminUpdateUserInput = {
 
 type AdminResetPasswordInput = {
   tempPassword?: string;
+};
+
+const roleRank: Record<UserRole, number> = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
 };
 
 const parseRoleOrThrow = (value: string | undefined, code: string): UserRole => {
@@ -68,15 +75,28 @@ export const adminCreateUser = async (input: AdminCreateUserInput, auditActor?: 
     input.tempPassword,
     "INVALID_ADMIN_USER_CREATE",
   );
+  const normalizedPin =
+    typeof input.pin === "string" && input.pin.trim().length > 0
+      ? normalizePinOrThrow(input.pin, "INVALID_ADMIN_USER_CREATE")
+      : undefined;
 
   return prisma.$transaction(async (tx) => {
-    const created = await createUserAccountTx(tx, {
+    let created = await createUserAccountTx(tx, {
       name,
       email,
       role,
       password: tempPassword,
       isActive: true,
     });
+
+    if (normalizedPin) {
+      created = await tx.user.update({
+        where: { id: created.id },
+        data: {
+          pinHash: await hashPin(normalizedPin),
+        },
+      });
+    }
 
     await createAuditEventTx(
       tx,
@@ -215,6 +235,99 @@ export const adminResetUserPassword = async (
       tx,
       {
         action: "ADMIN_USER_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: updated.id,
+        metadata: {
+          email: updated.email,
+          byActorId: actorId ?? null,
+        },
+      },
+      auditActor,
+    );
+
+    return toPublicUser(updated);
+  });
+};
+
+export const adminResetUserPin = async (
+  userId: string,
+  actorId: string | undefined,
+  actorRole: UserRole,
+  auditActor?: AuditActor,
+) => {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+    });
+    if (!existing) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+
+    if (existing.id === actorId) {
+      throw new HttpError(409, "Use self-service PIN change for your own account", "SELF_PIN_RESET_FORBIDDEN");
+    }
+
+    if (roleRank[actorRole] < roleRank[existing.role]) {
+      throw new HttpError(403, "Cannot reset PIN for a higher-privileged user", "INSUFFICIENT_ROLE");
+    }
+
+    const updated = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        pinHash: null,
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "ADMIN_USER_PIN_RESET",
+        entityType: "USER",
+        entityId: updated.id,
+        metadata: {
+          email: updated.email,
+          byActorId: actorId ?? null,
+        },
+      },
+      auditActor,
+    );
+
+    return toPublicUser(updated);
+  });
+};
+
+export const adminSetUserPin = async (
+  userId: string,
+  pin: string | undefined,
+  actorId: string | undefined,
+  actorRole: UserRole,
+  auditActor?: AuditActor,
+) => {
+  const normalizedPin = normalizePinOrThrow(pin, "INVALID_ADMIN_PIN_SET");
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+    });
+    if (!existing) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+
+    if (roleRank[actorRole] < roleRank[existing.role]) {
+      throw new HttpError(403, "Cannot set PIN for a higher-privileged user", "INSUFFICIENT_ROLE");
+    }
+
+    const updated = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        pinHash: await hashPin(normalizedPin),
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "ADMIN_USER_PIN_SET",
         entityType: "USER",
         entityId: updated.id,
         metadata: {

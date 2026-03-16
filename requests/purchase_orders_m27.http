@@ -19,9 +19,21 @@ X-Staff-Id: manager-1
 
 {
   "name": "M27 Supplier",
+  "contactName": "Jamie Buyer",
   "email": "m27@supplier.test",
   "phone": "02070000000",
   "notes": "Primary distributor"
+}
+
+### Update supplier (MANAGER+)
+PATCH {{baseUrl}}/api/suppliers/{{supplierId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "contactName": "Jamie Procurement",
+  "notes": "Updated supplier note"
 }
 
 ### Create purchase order (MANAGER+)
@@ -39,6 +51,10 @@ X-Staff-Id: manager-1
 
 ### List purchase orders with filters (STAFF+)
 GET {{baseUrl}}/api/purchase-orders?status=DRAFT&q=m27&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
+### List purchase orders by variant barcode (STAFF+)
+GET {{baseUrl}}/api/purchase-orders?status=DRAFT&q=5000000000001&take=50&skip=0
 X-Staff-Role: {{staffRole}}
 
 ### Update purchase order metadata/status (MANAGER+)

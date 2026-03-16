@@ -1,0 +1,2048 @@
+# CorePOS Plan
+
+## CorePOS Development Rule
+
+`PLAN.md` is the single source of truth for project roadmap, development phases, project direction, and implementation order.
+
+Agents must follow phases in order and must not begin work on later phases unless explicitly instructed.
+
+`AGENTS.md` defines how agents should behave.
+`TASK.md` defines the current task being worked on.
+
+## Summary
+
+CorePOS is a bike-shop staff platform spanning EPOS, workshop operations, stock control, receipts, refunds, till cash-up, reporting, and admin/auth workflows. The repo also contains a React frontend for key staff journeys while retaining server-rendered pages and printable HTML flows.
+
+This file tracks:
+
+- the exact historically evidenced milestone ledger through `M78`
+- the current `dev-next` working line through roadmap completion at `M135`
+- the forward-looking product direction documented in [docs/ROADMAP.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/ROADMAP.md) and [docs/architecture.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/architecture.md)
+
+Roadmap status:
+
+- the implemented roadmap on the current working line now runs through `M135`
+- the project is now in stabilization and release-readiness mode rather than roadmap expansion mode
+- the next phase is trial usage, verification, and operational hardening rather than new core roadmap delivery
+- the current `phase3-inventory-control` release line is focused on reporting cleanup, management-surface consistency, and low-risk structural housekeeping after `v0.9.0`
+- current UX branch focus: simplify the shell, reduce top-level nav clutter, and improve discoverability without changing the underlying feature set
+- completed login cleanup work remains classified as UX refinement:
+  - single centered login card
+  - simplified copy
+  - spacing and hierarchy polish
+- completed PIN work is not UX-only work:
+  - it is auth/product infrastructure
+  - it includes backend/API/schema/security changes
+  - it is the completed prerequisite for the new button-based 4-digit PIN login UI
+
+## Evidence Legend
+
+- `Confirmed`: explicit evidence exists in committed code, migrations, request files, smoke tests, frontend files, or commit history
+- `Inferred`: strong structural evidence exists, but the milestone label is not explicitly present in the current branch history
+
+## Current Checkpoints
+
+- Current local-working checkpoint: `v1.2-demo-running` / `stable-demo` / `c1fbf7c`
+- Repo-wide deploy/demo checkpoint visible in remote history: `v1.2-demo-ready` / `5e8fa54`
+- Current roadmap-complete checkpoint on `dev-next`: `v3.0-roadmap-complete` / `8c80fb1`
+- Current post-roadmap stabilization checkpoint on `dev-next`: `v3.1-stabilization-pass` / `5b817b6`
+- Current trial-readiness checkpoint on `dev-next`: `v3.2-trial-readiness` / `f7b974b`
+- Current UX shell/login checkpoint on `ux-saledock-alignment`: `v3.3-login-polish` / `9211c49`
+- Current UX admin/sidebar working line on `ux/staff-management-scan-pass`: local-only branch carrying sidebar/top-bar cleanup and staff-management UX refinement
+
+## Branch Reality
+
+The repo has diverged milestone lines:
+
+- `dev-next`
+  - current local working line
+  - confirmed local dev setup, React app, demo seed, and working migrations
+  - current roadmap-complete working line through `M135`
+- `origin/main`
+  - confirmed merged line through `M69`, `M70` to `M73`, and `M76` to `M78`
+- `origin/react-ui`
+  - confirmed React/demo line through `M69` and React UI work for `M76` to `M78`
+- `origin/backend-v1`
+  - confirmed backend/security/retail line including `M73` and `M76` to `M78`
+- historical milestone commits in repo history
+  - confirmed `M44` to `M60`
+- `ux-saledock-alignment`
+  - post-roadmap UX refinement branch
+  - completed login/shell usability cleanup remains UX work
+  - remains the upstream UX branch for post-roadmap shell/login polish
+- `ux/staff-management-scan-pass`
+  - current local UX branch
+  - carries follow-on sidebar, top-bar, login polish, and users-page refinement work on top of the upstream UX branch
+  - currently narrows visible sidebar navigation for iterative redesign while leaving protected routes intact
+- `feat/pin-auth-foundation`
+  - auth feature branch
+  - adds PIN auth infrastructure on top of the post-roadmap UX line
+  - should be tracked as backend/product-auth work, not as pure UX polish
+  - preserved password login while adding PIN auth support
+- `feat/pin-login-ui`
+  - current auth migration branch
+  - completes the main login-screen transition to active-user buttons plus always-visible 4-digit PIN
+  - keeps password auth available in backend as fallback while the UI migrates to PIN-first login
+
+Implication:
+
+- the repo history has confirmed milestone evidence through `M78`
+- the current `dev-next` branch continues the implemented product line through `M135`
+- earlier milestone ancestry is still fragmented, so historical provenance before the later roadmap-complete working line is not a single clean branch
+- post-roadmap work must now be classified by type:
+  - UX refinement on the UX branch
+  - auth/backend/security infrastructure on the PIN branch
+
+## Post-Roadmap Classification
+
+### Completed UX work
+
+Completed login-page cleanup on the UX branch includes:
+
+- single centered login card
+- removal of unnecessary login copy
+- spacing and hierarchy polish
+- CorePOS brand asset integration for login and shell
+
+This work remains classified as UX refinement.
+
+### Completed auth feature work
+
+Completed PIN-auth foundation work is classified as auth/product infrastructure, not UX:
+
+- `pinHash` support on `User`
+- PIN hashing and verification utilities
+- self-service set/change PIN
+- manager/admin reset of another user PIN
+- active user pre-login listing
+- `POST /api/auth/pin-login`
+- route-specific PIN login rate limiting
+- supporting migration, request examples, and smoke coverage
+
+This work is the backend-supported prerequisite that enabled the controlled login-screen transition to:
+
+- active staff buttons
+- always-visible 4-digit PIN entry
+
+Password login remains intentionally preserved during the foundation pass.
+
+### Completed login migration work
+
+Completed login migration work on `feat/pin-login-ui` includes:
+
+- main login page now uses active-user buttons plus 4-digit PIN
+- active users include admins
+- PIN field is always visible
+- PIN login preserves the normal session/authenticated app flow
+- password auth remains available in the backend as fallback
+- Playwright and supporting tests were updated and pass against the new login surface
+
+### Next / Future
+
+Post-migration follow-on work is now future auth/security hardening rather than migration work:
+
+- decide whether a manager-facing PIN reset UI is still needed beyond the existing endpoint/admin surface
+- add register lock / quick user switch if trial usage shows the need
+- refine long-term admin/security policy around PIN vs password usage
+
+## Exact Milestone Ledger
+
+| Milestone | Status | Evidence |
+| --- | --- | --- |
+| `M1` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M2` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M3` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M4` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M5` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M6` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M7` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M8` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M9` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M10` | Historical foundation milestone not individually evidenced | First repo milestones begin at `M11`; earliest commits `bf63797` and `3c85f10` already contain initialized project foundations without numbered milestone labels. |
+| `M11` | Confirmed | `scripts/workshop_checkout_deposit_tests.js`, `package.json` `test:m11`, `M12_CLOSEOUT.md`. |
+| `M12` | Confirmed | `scripts/workshop_m12_smoke_tests.js`, `package.json` `test:m12`, `M12_CLOSEOUT.md`. |
+| `M13` | Confirmed | `scripts/workshop_m13_smoke_tests.js`, auth/permission/report behavior in code and tests. |
+| `M14` | Confirmed | `scripts/workshop_m14_smoke_tests.js`, `requests/workshop.http` M14 sections, workflow code. |
+| `M15` | Confirmed | Commit `40bff02`, migration `20260304230000_m15_inventory_core`. |
+| `M16` | Confirmed | Commit `ca9b5b0`, migration `20260304233000_m16_workshop_parts`, `scripts/workshop_m16_smoke_tests.js`. |
+| `M17` | Confirmed via code evidence | Migration `20260304235500_m17_suppliers_purchase_orders`, `scripts/purchasing_m17_smoke_tests.js`, purchasing routes/services. |
+| `M18` | Confirmed | Migration `20260305002000_m18_stocktake_sessions`, `scripts/stocktake_m18_smoke_tests.js`. |
+| `M19` | Confirmed | `scripts/reports_m19_smoke_tests.js`, reporting services/routes. |
+| `M20` | Confirmed via code evidence | `docs/REPORTS_UI_MANUAL_TEST.md` titled `Reports UI (M20)`, `src/views/reportsPage.ts` M20 note. |
+| `M21` | Likely merged into another milestone | Commit `d312d5d` says `M25 product & variant catalog + M21 migration checksum fix`. |
+| `M22` | Confirmed | `scripts/reports_csv_m22_smoke_tests.js`, CSV reporting endpoints/utilities. |
+| `M23` | Likely merged into another milestone | No plain `M23` artifact found; `M23b` exists in smoke/docs as reports UI follow-on. |
+| `M24` | Confirmed | Migration `20260304222948_m24_inventory_ledger_single_location`, `scripts/inventory_m24_smoke_tests.js`. |
+| `M25` | Confirmed | Commit `d312d5d`, migration `20260305010000_m25_product_variant_catalog`, `scripts/catalog_m25_smoke_tests.js`. |
+| `M26` | Confirmed | `scripts/stocktake_m26_smoke_tests.js`, `requests/stocktake_ui_m26.http`. |
+| `M27` | Confirmed | `scripts/purchase_orders_m27_smoke_tests.js`, `requests/purchase_orders_m27.http`. |
+| `M28` | Confirmed | `scripts/pos_m28_smoke_tests.js`, `requests/pos_m28.http`, basket routes alias comments. |
+| `M29` | Confirmed | `scripts/products_m29_smoke_tests.js`, `requests/products_m29.http`. |
+| `M30` | Confirmed | Migration `20260305120000_m30_workshop_job_lines`, `scripts/workshop_m30_smoke_tests.js`. |
+| `M31` | Confirmed | Migration `20260305133000_m31_payment_intents`, `scripts/payments_m31_smoke_tests.js`. |
+| `M32` | Confirmed | Migration `20260305150000_m32_sale_completion_receipts`, `scripts/sales_m32_smoke_tests.js`. |
+| `M33` | Confirmed | `scripts/inventory_adjust_m33_smoke_tests.js`, `requests/inventory_adjust_m33.http`. |
+| `M34` | Confirmed | Migration `20260305160000_m34_customers`, `scripts/customers_m34_smoke_tests.js`, tag `v0.1-m34`. |
+| `M35` | Confirmed | Commit `82775b6`, migrations `20260305170000_m35_real_auth` and `20260305201000_m35_user_table_map`, `scripts/auth_m35_smoke_tests.js`. |
+| `M36` | Confirmed | Commit `82775b6`, `scripts/admin_m36_smoke_tests.js`, admin services/controllers/routes. |
+| `M37` | Confirmed | Commit `82775b6`, migration `20260305180000_m37_till_cashup`, `scripts/till_m37_smoke_tests.js`. |
+| `M38` | Confirmed | Commit `e815665`, `scripts/navigation_m38_smoke_tests.js`, `requests/navigation_m38.http`. |
+| `M39` | Confirmed | Commit `d24ecb0`, migration `20260305213000_m39_sale_tenders`, `scripts/pos_tenders_m39_smoke_tests.js`. |
+| `M40` | Confirmed | Commit `9fd50aa`, migration `20260305223000_m40_receipts_v1`, `scripts/receipts_m40_smoke_tests.js`. |
+| `M41` | Confirmed | Commit `e088b48`, migration `20260306010000_m41_refunds_v1`, `scripts/refunds_m41_smoke_tests.js`. |
+| `M42` | Confirmed | Commit `e6c7982`, migration `20260306020000_m42_cash_management_v1`, `scripts/cash_m42_smoke_tests.js`. |
+| `M43` | Confirmed | Commit `ab3ac47`, `scripts/manager_ui_m43_smoke_tests.js`, `requests/manager_ui_m43.http`. |
+| `M44` | Confirmed | Commit `e75d48f`, migration `20260306030000_m44_purchase_orders_v1`, request + smoke artifacts in commit history. |
+| `M45` | Confirmed | Commit `3592124`, migration `20260306040000_m45_goods_receiving_v1`, request + smoke artifacts in commit history. |
+| `M46` | Confirmed | Commit `854690c`, migration `20260306050000_m46_supplier_management_v1`, request + smoke artifacts in commit history. |
+| `M47` | Confirmed | Commit `5abf19b`, request `customers_m47.http`, smoke `customers_m47_smoke_tests.js` in commit history. |
+| `M48` | Confirmed | Commit `da4e7e2`, request `customer_sales_m48.http`, smoke `customer_sales_m48_smoke_tests.js` in commit history. |
+| `M49` | Confirmed | Commit `e47d541`, request `workshop_m49.http`, smoke `workshop_m49_smoke_tests.js` in commit history. |
+| `M50` | Confirmed | Commit `c2ee514`, request `workshop_lines_m50.http`, smoke `workshop_lines_m50_smoke_tests.js` in commit history. |
+| `M51` | Confirmed | Commit `4dfd32c`, request `workshop_convert_sale_m51.http`, smoke `workshop_convert_sale_m51_smoke_tests.js` in commit history. |
+| `M52` | Confirmed | Commit `9621c70`, migration `20260305174012_m52_stock_reservations`, request + smoke artifacts in commit history. |
+| `M53` | Confirmed | Commit `fd8352b`, request `workshop_reservation_consume_m53.http`, smoke `workshop_reservation_consume_m53_smoke_tests.js` in commit history. |
+| `M54` | Confirmed | Commit `49f3db6`, request `workshop_workflow_m54.http`, smoke `workshop_workflow_m54_smoke_tests.js` in commit history. |
+| `M55` | Confirmed | Commit `9700943`, request `workshop_print_m55.http`, smoke `workshop_print_m55_smoke_tests.js` in commit history. |
+| `M56` | Confirmed | Commit `009e6c3`, request `sale_receipt_m56.http`, smoke `sale_receipt_m56_smoke_tests.js` in commit history. |
+| `M57` | Confirmed | Commit `979481d`, migration `20260306060000_m57_audit_log`, request + smoke artifacts in commit history. |
+| `M58` | Confirmed | Commit `4cfd9ca`, request `data_export_m58.http`, smoke `data_export_m58_smoke_tests.js` in commit history. |
+| `M59` | Confirmed | Commit `4bce473`, request `health_check_m59.http`, smoke `health_check_m59_smoke_tests.js` in commit history. |
+| `M60` | Confirmed | Commit `b26f115`, docs `architecture/api_reference/database_schema/deployment` in commit history. |
+| `M61` | Obsolete or dropped from the plan | No `M61` artifact exists on any ref; commit history moves from `M60` into unnumbered security/infra/frontend work before milestone numbering resumes at `M63`. |
+| `M62` | Obsolete or dropped from the plan | No `M62` artifact exists on any ref; commit history moves from `M60` into unnumbered security/infra/frontend work before milestone numbering resumes at `M63`. |
+| `M63` | Confirmed via code evidence | React POS app exists in `frontend/src/pages/PosPage.tsx`, auth shell in `frontend/src/App.tsx` and `frontend/src/auth/AuthContext.tsx`. |
+| `M64` | Confirmed via code evidence | React workshop pages exist in `frontend/src/pages/WorkshopPage.tsx` and `frontend/src/pages/WorkshopJobPage.tsx`; backend support commit `e04ce92`. |
+| `M65` | Confirmed via code evidence | React inventory pages now exist in `frontend/src/pages/InventoryPage.tsx` and `frontend/src/pages/InventoryItemPage.tsx`, with routing/nav in `frontend/src/App.tsx` and `frontend/src/components/Layout.tsx`, backed by existing inventory/variant/stock endpoints. |
+| `M66` | Confirmed via code evidence | React customer pages exist in `frontend/src/pages/CustomersPage.tsx` and `frontend/src/pages/CustomerProfilePage.tsx`. |
+| `M67` | Confirmed | Commit `c6e014d`, demo seed system, `scripts/seed_demo_data.js` in commit history and current `scripts/seed_demo_data.ts`. |
+| `M68` | Confirmed | Commit `9cf227e`, docs/frontend + React demo UX polish in commit history. |
+| `M69` | Confirmed | Commit `5e8fa54`, backend serves `frontend/dist`, build/start scripts, deployment docs. |
+| `M70` | Confirmed | Commit `39ec3a5`, request IDs and API error hardening. |
+| `M71` | Confirmed | Commit `2d24646`, `docs/operations.md`, `scripts/db_backup.sh`, `scripts/db_restore.sh` in commit history. |
+| `M72` | Confirmed | Commit `577e401`, expanded security/auth regression automation. |
+| `M73` | Confirmed | Commit `c512370`, migration `20260305231237_m73_multilocation_groundwork`, `scripts/locations_m73_smoke_tests.js` in commit history. |
+| `M74` | Merged into another milestone | Planned cloud/deploy readiness concerns are covered across `M59` deployment hardening, `M69` production packaging, `M70` hardening, `M71` ops runbook, and `M72` CI/security automation; no separate `M74` artifact exists. |
+| `M75` | Merged into another milestone | Staff management and permission-hardening concerns are already implemented across `M36` admin user management, `M57` audit logging, and `M72` security regression work; no separate `M75` artifact exists. |
+| `M76` | Confirmed | Backend commit `1781647` plus frontend commit `a34fa49`; request + smoke + React POS scanner UX in commit history. |
+| `M77` | Confirmed | Backend commit `401c5e2` plus frontend commit `7938c31`; refund return-to-stock/exchange + manager UI in commit history. |
+| `M78` | Confirmed | Backend commit `47df647` plus frontend commit `7f06056`; daily close backend/print/UI in commit history. |
+
+## Phase Map
+
+### Phase 1 - Core Infrastructure
+
+Confirmed milestones:
+
+- `M11` workshop deposit checkout baseline
+- `M12` workshop money lifecycle
+- `M13` workshop ops dashboard, auditability, and permission shaping
+- `M14` workshop workflow follow-on
+- `M16` workshop parts linkage
+- `M17` suppliers and purchasing foundations
+- `M18` stocktake sessions
+- `M19` reporting
+- `M19.1` workshop completed-at regression/backfill
+- `M22` CSV reporting
+- `M23b` reports UI
+
+Confirmed evidence:
+
+- milestone smoke scripts under `scripts/`
+- migrations up through stocktake/catalog/auth/till eras
+- current backend controllers/services/routes
+
+### Phase 2 - Inventory + POS
+
+Confirmed milestones:
+
+- `M24` inventory ledger single-location support
+- `M25` product and variant catalog
+- `M26` stocktake follow-on UI/API
+- `M27` purchase orders baseline
+- `M28` POS basket and checkout
+- `M29` products APIs/search
+- `M30` workshop job lines
+- `M31` payment intents
+- `M32` sale completion and receipts groundwork
+- `M33` inventory adjustments
+
+Confirmed evidence:
+
+- `scripts/inventory_m24_smoke_tests.js`
+- `scripts/catalog_m25_smoke_tests.js`
+- `scripts/stocktake_m26_smoke_tests.js`
+- current working line refines the historical stocktake flow with expected quantity snapshots, review/finalize workflow state, and a React manager page under `/inventory/stocktakes`
+- `scripts/purchase_orders_m27_smoke_tests.js`
+- `scripts/pos_m28_smoke_tests.js`
+- `scripts/products_m29_smoke_tests.js`
+- `scripts/workshop_m30_smoke_tests.js`
+- `scripts/payments_m31_smoke_tests.js`
+- `scripts/sales_m32_smoke_tests.js`
+- `scripts/inventory_adjust_m33_smoke_tests.js`
+
+### Phase 3 - Sales + Customers
+
+Confirmed milestones:
+
+- `M34` customers core
+- `M39` sale tenders
+- `M40` receipts v1
+- `M41` refunds v1
+- `M42` cash management v1
+- `M43` manager cash/refunds views
+- `M44` purchase orders v1
+- `M45` goods receiving v1
+- `M46` supplier management v1
+- `M47` customers v1 UI/API
+- `M48` customer-to-sale linking and customer sales history
+- `M49` workshop jobs v1 board/job card
+- `M50` workshop estimate line items
+
+Confirmed evidence:
+
+- explicit milestone commits for `M44` to `M50`
+- current or historical request files and smoke scripts
+- commit history:
+  - `e75d48f` `M44`
+  - `3592124` `M45`
+  - `854690c` `M46`
+  - `5abf19b` `M47`
+  - `da4e7e2` `M48`
+  - `e47d541` `M49`
+  - `c2ee514` `M50`
+
+Inferred:
+
+- some M47 to M50 style capabilities remain visible in `dev-next` code even though the original milestone commits are not direct ancestors of that branch
+
+### Phase 4 - Authentication
+
+Confirmed milestones:
+
+- `M35` real auth
+- `M36` admin user management
+- `M37` till cash-up
+- `M38` authenticated app shell and routing
+
+Confirmed evidence:
+
+- `scripts/auth_m35_smoke_tests.js`
+- `scripts/admin_m36_smoke_tests.js`
+- `scripts/till_m37_smoke_tests.js`
+- `scripts/navigation_m38_smoke_tests.js`
+- current auth middleware, controllers, and routes
+
+### Phase 5 - React Frontend
+
+Confirmed milestones:
+
+- `M63` React POS v1
+  - confirmed in code, but not explicitly labeled by milestone commit on this branch
+- `M64` React workshop dashboard and job detail
+  - confirmed in code, plus backend support commit `e04ce92`
+- `M65` React inventory UI
+  - confirmed in code
+- `M66` React customers UI
+  - confirmed in code
+- `M79` React staff dashboard
+  - confirmed in code on the current working line
+- `M80` React inventory management tools
+  - confirmed in code on the current working line
+- `M81` React supplier and purchasing UI
+  - confirmed in code on the current working line
+- `M82` React workshop board
+  - confirmed in code on the current working line
+- `M83` React workshop estimates and approvals
+  - confirmed in code on the current working line
+- `M67` demo seed system
+- `M68` demo UX polish
+- `M69` production packaging with backend-served React build
+
+Confirmed evidence:
+
+- frontend app in `frontend/src/`
+- `frontend/src/pages/PosPage.tsx`
+- `frontend/src/pages/WorkshopPage.tsx`
+- `frontend/src/pages/WorkshopJobPage.tsx`
+- `frontend/src/pages/InventoryPage.tsx`
+- `frontend/src/pages/InventoryItemPage.tsx`
+- `frontend/src/pages/CustomersPage.tsx`
+- `frontend/src/pages/CustomerProfilePage.tsx`
+- `frontend/src/pages/DashboardPage.tsx`
+- `frontend/src/pages/SuppliersPage.tsx`
+- `frontend/src/pages/PurchasingPage.tsx`
+- `frontend/src/pages/PurchaseOrderPage.tsx`
+- `frontend/src/pages/WorkshopPage.tsx` board presentation
+- `scripts/seed_demo_data.ts`
+- `origin/main` / `origin/react-ui` commits:
+  - `c6e014d` `M67`
+  - `9cf227e` `M68`
+  - `5e8fa54` `M69`
+
+Confirmed but branch-specific:
+
+- `M76` React POS barcode/keyboard UX: `a34fa49`
+- `M77` React manager refunds UI: `7938c31`
+- `M78` React daily close UI: `7f06056`
+
+Confirmed on current working line without a historical milestone-labeled commit:
+
+- `M65` React inventory UI is now present on the current working line via code evidence, though it is not backed by a historical milestone-labeled commit
+- `M79` React staff dashboard is present on the current working line via code evidence
+- `M80` React inventory management tools are present on the current working line via code evidence
+- `M81` React supplier and purchasing UI is present on the current working line via code evidence
+- `M82` React workshop board is present on the current working line via code evidence
+- `M83` React workshop estimates and approvals are present on the current working line via code evidence
+
+### Phase 6 - Security / Infrastructure
+
+Confirmed milestones:
+
+- `M56` sale receipt printing
+- `M57` audit logging
+- `M58` admin data export
+- `M59` deployment readiness
+- `M60` architecture and deployment documentation
+- `M70` observability and API error hardening
+- `M71` operations runbook and DB backup/restore scripts
+- `M72` expanded auth/security regression automation
+- `M73` multi-location groundwork
+
+Confirmed evidence:
+
+- explicit milestone commits and associated files:
+  - `009e6c3` `M56`
+  - `979481d` `M57`
+  - `4cfd9ca` `M58`
+  - `4bce473` `M59`
+  - `b26f115` `M60`
+  - `39ec3a5` `M70`
+  - `2d24646` `M71`
+  - `577e401` `M72`
+  - `c512370` `M73`
+
+### Phase 7 - Retail Features
+
+Confirmed milestones:
+
+- `M51` workshop job to sale conversion
+- `M52` parts reservation for workshop jobs
+- `M53` consume reservations on sale completion
+- `M54` workshop lifecycle rules and reservation release
+- `M55` workshop printable estimate/job card
+- `M76` barcode endpoint and scanner-first POS UX
+- `M77` return-to-stock refunds, exchanges, and refund UI/backend
+- `M78` daily close report backend, print view, and manager UI
+
+Confirmed evidence:
+
+- explicit milestone commits:
+  - `4dfd32c` `M51`
+  - `9621c70` `M52`
+  - `fd8352b` `M53`
+  - `49f3db6` `M54`
+  - `9700943` `M55`
+  - `1781647` backend `M76`
+  - `a34fa49` frontend `M76`
+  - `401c5e2` backend `M77`
+  - `7938c31` frontend `M77`
+  - `47df647` backend `M78`
+  - `7f06056` frontend `M78`
+
+## Repo-Wide Milestone Summary
+
+### Confirmed Through Current Repo History
+
+- baseline implementation history reaches `M78`
+- strongest continuous evidence after `M43` exists via explicit commits for:
+  - `M44` to `M60`
+  - `M67` to `M69`
+  - `M70` to `M73`
+  - `M76` to `M78`
+
+### Confirmed In Code But Not Explicitly Labeled As Milestones On Current Branch
+
+- `M63` React POS v1
+- `M64` React workshop UI
+- `M66` React customers UI
+
+### Missing Or Not Yet Confirmed
+
+- The previously missing milestone set has been reconciled; `M65` is now implemented on the current working line
+- `M1` to `M10` are best treated as pre-ledger historical foundation work without individual surviving labels
+- `M61` to `M62` appear to be dropped milestone numbers rather than missing implementations
+- `M74` to `M75` are best treated as scope absorbed into neighboring milestones, not standalone missing deliveries
+
+## Near-Term Priorities
+
+1. Consolidate branch history so `dev-next` does not under-represent repo progress after `M43`.
+2. Decide whether `dev-next` should absorb:
+   - `M44` to `M60` historical milestone work
+   - `M70` to `M73`
+   - `M76` to `M78`
+3. Consolidate the now-complete React staff surface and add stronger end-to-end coverage for it.
+4. Expand automated coverage for the React frontend flows already present.
+5. Do a dedicated hygiene pass for tracked junk files and stale docs.
+
+## Next Development Phase - Management & Reporting Platform
+
+Current state:
+
+- the React staff platform now includes:
+  - POS
+  - Workshop
+  - Inventory
+  - Customers
+  - Suppliers
+  - Purchasing
+- the current working line now includes:
+  - `M79` staff dashboard
+  - `M80` inventory management tools
+  - `M81` supplier and purchasing UI
+  - `M82` workshop board
+  - `M83` estimates and approvals
+  - `M84` parts allocation workflow
+  - `M85` management dashboard
+- the workshop operations expansion batch is now complete through `M84`
+- the next planned phase is management-facing reporting and oversight:
+  - `M86` sales analytics
+  - `M87` workshop performance metrics
+
+### Next Milestones
+
+#### `M79` - Staff Dashboard
+
+Goal:
+
+- create a central React dashboard page for staff
+
+Planned scope:
+
+- today's sales summary
+- open workshop jobs
+- low stock alerts
+- quick navigation to POS, Workshop, Inventory, and Customers
+- recent system activity
+
+Planned frontend entry:
+
+- `frontend/src/pages/DashboardPage.tsx`
+
+Notes:
+
+- reuse existing report, workshop, inventory, and audit endpoints where practical
+- if recent activity or low-stock alert data is not exposed cleanly enough for the dashboard, add the smallest additive backend endpoint needed
+- implemented on the current working line via code evidence
+
+#### `M80` - Inventory Management Tools
+
+Goal:
+
+- extend the React inventory surface from browse/detail into practical stock operations
+
+Planned scope:
+
+- stock adjustments
+- inventory movement history improvements
+- reorder alerts
+- better filtering and sorting
+
+Notes:
+
+- build on top of the new React inventory pages from `M65`
+- prefer the existing inventory adjustment and movement APIs over new parallel contracts
+- implemented on the current working line via code evidence
+- uses raw on-hand stock-state indicators only; no reorder-threshold model has been introduced
+
+#### `M81` - Supplier And Purchasing UI
+
+Goal:
+
+- expose existing purchasing and receiving backend capabilities through the React UI
+
+Planned scope:
+
+- suppliers list
+- purchase orders
+- goods receiving
+
+Notes:
+
+- reuse the existing supplier, purchase-order, and receiving endpoints already present in repo history/current backend where available
+- keep the initial UI operational and additive rather than redesign-heavy
+- implemented on the current working line via code evidence
+- keeps receiving inside `/purchasing/:id` for v1
+
+#### `M82` - Workshop Board
+
+Goal:
+
+- create a React workshop board view for operational workflow
+
+Planned scope:
+
+- columns for booked / in progress / waiting parts / ready / completed
+- quick movement between states
+- quick job visibility
+- links into workshop job detail
+
+Planned frontend entry:
+
+- `frontend/src/pages/WorkshopBoardPage.tsx` or a board mode within `frontend/src/pages/WorkshopPage.tsx`
+
+Notes:
+
+- reuse the existing workshop dashboard and job status endpoints where possible
+- keep the first version operational rather than highly animated or Kanban-heavy
+- preserve the current workshop list/detail flows as a fallback, even if the board becomes the preferred view
+- implemented on the current working line via code evidence
+- uses frontend display buckets only and does not introduce new backend workshop statuses
+
+#### `M83` - Estimates And Approvals
+
+Goal:
+
+- add estimate and approval workflow to workshop jobs
+
+Implemented scope on the current working line:
+
+- estimate creation
+- labour + parts preview
+- approval status
+- quote notes
+
+Notes:
+
+- implemented on the current working line via code evidence
+- estimate contents reuse existing workshop job lines
+- quote messaging reuses existing internal and customer-visible workshop notes
+- waiting-for-approval visibility is now surfaced in workshop board/list and job detail views
+- the only backend extension added is the explicit additive approval endpoint:
+  - `POST /api/workshop/jobs/:id/approval`
+- approval state is persisted on the existing raw workshop job status, not a separate estimate entity
+
+#### `M84` - Parts Allocation Workflow
+
+Goal:
+
+- connect workshop jobs to stock allocation
+
+Implemented scope on the current working line:
+
+- reserve parts to job
+- consume parts to job
+- missing-parts visibility
+- waiting-for-parts state support
+
+Notes:
+
+- implemented on the current working line via code evidence
+- reuses the existing `WorkshopJobPart` + stock ledger + inventory movement primitives
+- adds location-aware reservation accounting by persisting `stockLocationId` on workshop parts
+- prevents over-reserving beyond available stock at the selected stock location
+- keeps waiting-for-parts workflow honest by surfacing shortage state in job detail and the workshop board without inventing new raw workshop statuses
+
+#### `M85` - Management Dashboard
+
+Goal:
+
+- create a high-level management dashboard for managers
+
+Implemented scope on the current working line:
+
+- daily revenue
+- workshop workload
+- open estimates awaiting approval
+- jobs waiting for parts
+- low stock alerts
+- today’s sales count
+- quick links to key operational pages
+
+Frontend entry:
+
+- `frontend/src/pages/ManagementDashboardPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- keeps this manager-focused and practical rather than presentation-heavy
+- reuses the existing sales daily report, workshop dashboard, and inventory on-hand search endpoints
+- preserves the current staff dashboard at `/dashboard` and introduces a separate manager-only route at `/management`
+
+#### `M86` - Sales Analytics
+
+Goal:
+
+- add manager-facing sales reporting and trend analysis
+
+Implemented scope on the current working line:
+
+- daily / weekly / monthly revenue
+- average basket size
+
+Frontend entry:
+
+- `frontend/src/pages/SalesAnalyticsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- keeps this manager-only and separate from `/management`
+- reuses `/api/reports/sales/daily` as the primary data source
+- derives weekly rollups, monthly rollups, and average basket size client-side
+- intentionally does not include revenue by category, product, or service in v1 because the current branch does not expose those breakdowns cleanly without widening backend scope
+
+#### `M87` - Workshop Performance Metrics
+
+Goal:
+
+- add manager-facing workshop performance reporting
+
+Implemented scope on the current working line:
+
+- jobs completed per day
+- average completion time
+- waiting-for-approval count
+- waiting-for-parts count
+- technician / staff workload where current data supports it
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopPerformancePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- keeps this manager-only and separate from `/management` and `/management/sales`
+- reuses `/api/reports/workshop/daily` and `/api/workshop/dashboard` only
+- keeps the page summary-first with compact cards and tables rather than charts
+- shows staff workload from existing assignment data and groups missing assignments under `Unassigned`
+
+## Long-Term Direction
+
+CorePOS is clearly evolving toward a unified staff platform with:
+
+- fast counter workflows
+- strong workshop operations
+- auditable money and stock flows
+- reliable local and deployment workflows
+- a React frontend backed by stable Express/Prisma services
+
+The next architectural goal should not be random feature addition. It should be consolidation: one coherent branch story, one up-to-date roadmap, and one clearly supported UI strategy.
+
+## Next Development Phase - Business Intelligence
+
+Current state:
+
+- the management and reporting platform now includes:
+  - `M85` management dashboard
+  - `M86` sales analytics
+  - `M87` workshop performance metrics
+- the current working line now also includes:
+  - `M88` product sales analytics
+  - `M89` inventory velocity
+  - `M90` supplier performance
+- this first business intelligence batch is now complete through `M90`
+- the next operational planning and administration batch is now complete through `M93`
+
+### Next Milestones
+
+#### `M88` - Product Sales Analytics
+
+Goal:
+
+- add a manager-facing product sales analytics surface
+
+Implemented scope on the current working line:
+
+- top selling products
+- lowest selling products
+- product sales totals over selected range
+
+Frontend entry:
+
+- `frontend/src/pages/ProductSalesAnalyticsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/products`
+- uses a focused additive backend report endpoint under `/api/reports/sales/products`
+- intentionally omits category-level product sales because the current branch does not expose a clean category model
+
+#### `M89` - Inventory Velocity
+
+Goal:
+
+- add manager-facing inventory intelligence
+
+Implemented scope on the current working line:
+
+- fast-moving products
+- slow-moving products
+- dead stock candidates
+- stock velocity / sell-through style signals
+
+Frontend entry:
+
+- `frontend/src/pages/InventoryVelocityPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/inventory`
+- uses a focused additive backend report endpoint under `/api/reports/inventory/velocity`
+- keeps the first version practical and table-based without forecasting or speculative replenishment logic
+
+#### `M90` - Supplier Performance
+
+Goal:
+
+- add manager-facing supplier performance reporting
+
+Implemented scope on the current working line:
+
+- supplier-linked purchasing summary
+- purchase order counts / receiving activity
+- honest overdue-open purchase order visibility
+
+Frontend entry:
+
+- `frontend/src/pages/SupplierPerformancePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/suppliers`
+- uses a focused additive backend report endpoint under `/api/reports/suppliers/performance`
+- intentionally omits supplier revenue contribution and lead-time analytics because the current branch does not support those honestly enough yet
+
+## Next Development Phase - Finance & Daily Operations Oversight
+
+Current state:
+
+- the current working line now also includes:
+  - `M91` reorder suggestions
+  - `M92` workshop capacity analytics
+  - `M93` staff / role management UI
+  - `M94` audit and activity UI
+  - `M95` customer insights / CRM summary
+  - `M96` purchase order action centre
+  - `M97` refunds / exceptions oversight
+  - `M98` cash / till oversight dashboard
+  - `M99` end-of-day / ops summary
+- this batch is now complete through `M99`
+
+### Next Milestones
+
+#### `M91` - Reorder Suggestions
+
+Goal:
+
+- add manager-facing reorder suggestions based on current stock and recent sales signals
+
+Implemented scope on the current working line:
+
+- suggested reorder candidates
+- current on-hand
+- recent sales over selected range
+- simple suggested reorder quantity
+- practical reorder urgency flags
+
+Frontend entry:
+
+- `frontend/src/pages/ReorderSuggestionsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/reordering`
+- reuses the existing inventory velocity report endpoint without widening backend scope
+- uses a simple 30-day coverage heuristic and does not pretend to model supplier lead time or automated purchasing
+
+#### `M92` - Workshop Capacity Analytics
+
+Goal:
+
+- add manager-facing workshop capacity visibility
+
+Implemented scope on the current working line:
+
+- jobs per day
+- current open queue
+- waiting for approval count
+- waiting for parts count
+- average jobs completed per day
+- estimated queue pressure / backlog days
+- assignment workload summary where existing data supports it
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCapacityPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/capacity`
+- reuses `/api/reports/workshop/daily` and `/api/workshop/dashboard` only
+- keeps backlog pressure estimates honest by deriving them directly from open queue and average daily completions, with a clear no-data fallback
+
+#### `M93` - Staff / Role Management UI
+
+Goal:
+
+- expose staff and role management in the React UI for admins according to the current backend rules
+
+Implemented scope on the current working line:
+
+- list staff users
+- create staff users
+- edit staff details
+- activate/deactivate users
+- assign roles
+
+Frontend entry:
+
+- `frontend/src/pages/StaffManagementPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds an admin-only route at `/management/staff`
+- reuses the existing `/api/admin/users` endpoints and preserves the current admin-only backend permission model
+- keeps the UI operational and does not redesign authentication or user lifecycle beyond the existing admin surface
+
+#### `M94` - Audit & Activity UI
+
+Goal:
+
+- add a manager-facing audit and recent activity surface in React
+
+Implemented scope on the current working line:
+
+- recent system activity list
+- date, entity, entity-id, and action filters using the existing audit API
+- local actor filtering over the returned rows
+- practical operational visibility rather than forensic audit tooling
+
+Frontend entry:
+
+- `frontend/src/pages/ActivityPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/activity`
+- reuses the existing `/api/audit` endpoint without widening backend scope
+- keeps actor filtering honest by applying it client-side because the current backend filter surface does not expose actor filtering
+
+#### `M95` - Customer Insights / CRM Summary
+
+Goal:
+
+- add manager-facing customer insights using existing customer, sales, workshop, and credit data
+
+Implemented scope on the current working line:
+
+- customer summary metrics
+- repeat customers
+- high-value customers
+- recent customer activity
+- workshop-active customers
+- credit / balance context
+
+Frontend entry:
+
+- `frontend/src/pages/CustomerInsightsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/customers`
+- uses a focused additive backend report endpoint under `/api/reports/customers/insights`
+- keeps the metrics practical and avoids speculative CRM scoring or marketing segmentation
+
+#### `M96` - Purchase Order Action Centre
+
+Goal:
+
+- add a manager-facing purchasing operations page focused on actionability, not just reporting
+
+Implemented scope on the current working line:
+
+- open purchase orders needing action
+- overdue purchase orders
+- partially received purchase orders
+- supplier, status, created date, and expected date visibility
+- prioritised operational queue rather than a replacement for the detailed purchasing UI
+
+Frontend entry:
+
+- `frontend/src/pages/PurchaseOrderActionPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/purchasing`
+- reuses the existing `/api/purchase-orders` endpoint without widening backend scope
+- complements the detailed purchasing workspace instead of replacing it
+
+#### `M97` - Refunds / Exceptions Oversight
+
+Goal:
+
+- add a manager-facing oversight page for refunds and exception-style refund activity
+
+Implemented scope on the current working line:
+
+- recent refunds
+- refund totals over selected range
+- refund count
+- large refund visibility derived from current totals
+- cash refund visibility using current tender mix
+
+Frontend entry:
+
+- `frontend/src/pages/RefundOversightPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/refunds`
+- reuses the existing `/api/refunds` endpoint without widening backend scope
+- keeps exception visibility honest by using current refund size and cash mix only, not unsupported anomaly scoring
+
+#### `M98` - Cash / Till Oversight Dashboard
+
+Goal:
+
+- add a manager-facing cash and till oversight dashboard
+
+Implemented scope on the current working line:
+
+- till sessions / cash-ups summary
+- open tills
+- recent cash movements
+- cash variance visibility where current data supports it
+
+Frontend entry:
+
+- `frontend/src/pages/CashOversightPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/cash`
+- reuses the existing `/api/till/sessions`, `/api/till/sessions/current`, `/api/till/sessions/:id/summary`, `/api/cash/summary`, and `/api/cash/movements` endpoints only
+- keeps this as an oversight surface and does not replace the operational till workflows
+
+#### `M99` - End-of-Day / Ops Summary
+
+Goal:
+
+- add a manager-facing end-of-day operational summary page
+
+Implemented scope on the current working line:
+
+- today sales summary
+- refund summary
+- workshop summary
+- purchasing summary
+- low stock / reorder attention items
+- open action items carried into tomorrow
+
+Frontend entry:
+
+- `frontend/src/pages/OperationsSummaryPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/summary`
+- reuses the existing sales, refunds, workshop dashboard, purchasing, and inventory endpoints without widening backend scope
+- keeps this as a readable daily control-centre page and does not introduce scheduling, notifications, or export logic
+
+#### `M100` - Notifications & Alerts Centre
+
+Goal:
+
+- add a manager-facing alerts and notifications centre that consolidates operational attention items already detectable from current data
+
+Implemented scope on the current working line:
+
+- low stock alerts
+- reorder-now candidates
+- jobs waiting for approval
+- jobs waiting for parts
+- overdue purchase orders
+- refund attention items derived from current refund totals
+
+Frontend entry:
+
+- `frontend/src/pages/AlertsCentrePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/alerts`
+- composes existing inventory velocity, workshop dashboard, purchasing, and refunds endpoints without widening backend scope
+- keeps the page operational and grouped by attention type rather than pretending to be a push-notification system
+
+#### `M101` - Saved Views / Manager Filters
+
+Goal:
+
+- add reusable saved filters and views for manager reporting and oversight pages
+
+Implemented scope on the current working line:
+
+- save current filter state for selected management pages
+- reload saved views
+- basic rename and delete support
+- manager-only scope
+- local per-user persistence without backend schema or auth changes
+
+Frontend entry:
+
+- `frontend/src/pages/SavedViewsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/views`
+- integrates saved-view controls into:
+  - `/management/sales`
+  - `/management/workshop`
+  - `/management/reordering`
+  - `/management/activity`
+  - `/management/purchasing`
+- uses browser-local persistence per signed-in user and does not introduce a backend personalization system in v1
+
+#### `M102` - Export Hub / Management Downloads
+
+Goal:
+
+- add a manager-facing export and download hub for operational and reporting outputs already supported by the system
+
+Implemented scope on the current working line:
+
+- central place to access available CSV/report exports
+- clear descriptions of each export
+- direct links to existing export endpoints
+- simple date-range and filter inputs where the existing endpoints already support them
+
+Frontend entry:
+
+- `frontend/src/pages/ExportHubPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/exports`
+- reuses the existing sales, workshop, inventory, payments, and till CSV endpoints only
+- keeps the first version practical and synchronous, with no export job queue or new export engine
+
+#### `M103` - Service Reminders / Follow-up Queue
+
+Goal:
+
+- add a manager-facing service reminders and follow-up queue using existing customer, sales, and workshop signals
+
+Implemented scope on the current working line:
+
+- customers who may be due a service follow-up
+- workshop customers with recent completed jobs
+- configurable time windows for due soon and overdue
+- practical follow-up queue with contact context and quick links
+
+Frontend entry:
+
+- `frontend/src/pages/ServiceRemindersPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/reminders`
+- adds a small additive backend reporting endpoint at `/api/reports/customers/reminders`
+- derives reminder candidates honestly from completed workshop jobs and current customer data only
+
+#### `M104` - Customer Contact Timeline
+
+Goal:
+
+- add a manager/staff-facing customer timeline view aggregating existing customer-related activity
+
+Implemented scope on the current working line:
+
+- chronological timeline for a selected customer
+- sales activity
+- workshop activity
+- workshop notes
+- credit activity where present
+
+Frontend entry:
+
+- `frontend/src/pages/CustomerTimelinePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/customers/:id/timeline`
+- adds a small additive backend endpoint at `/api/customers/:id/timeline`
+- keeps the timeline practical and internal, without inventing unsupported communication history
+
+#### `M105` - Supplier Catalogue / Intake Tools
+
+Goal:
+
+- add practical supplier-side intake tools to help managers prepare products for purchasing and catalogue workflows
+
+Implemented scope on the current working line:
+
+- simple supplier catalogue / intake page
+- supplier-linked purchasing history summary
+- frequently ordered supplier item view
+- intake attention rows for missing cost data and under-received items
+
+Frontend entry:
+
+- `frontend/src/pages/SupplierCataloguePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/catalogue`
+- stays frontend-only by reusing existing suppliers and purchase-order APIs
+- keeps this as an operational intake aid rather than inventing supplier feeds, EDI, or external sync
+
+#### `M106` - Booking / Appointment Board
+
+Goal:
+
+- add a practical booking and appointment board for workshop intake and upcoming service slots
+
+Implemented scope on the current working line:
+
+- upcoming workshop bookings and scheduled intake grouped into operational date buckets
+- overdue and unactioned booking visibility
+- booking status and deposit-status visibility
+- quick drill-down into related workshop job detail
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopBookingsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds an internal staff-facing route at `/workshop/bookings`
+- stays frontend-only by reusing `GET /api/workshop/dashboard`
+- keeps the first version as an internal intake board, not a public booking portal
+
+#### `M107` - Workshop Calendar & Capacity Scheduling
+
+Goal:
+
+- add a workshop calendar and capacity view for operational planning
+
+Implemented scope on the current working line:
+
+- rolling 7-day, 14-day, and 30-day planning view
+- bookings and jobs per day
+- simple capacity pressure indicators derived from recent throughput
+- per-day visibility into awaiting approval, waiting parts, and unassigned work
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCalendarPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/calendar`
+- stays frontend-only by reusing `GET /api/reports/workshop/daily` and `GET /api/workshop/dashboard`
+- keeps backlog and capacity logic explicitly derived and explainable rather than pretending to be a scheduling engine
+
+#### `M108` - Customer Communication Queue
+
+Goal:
+
+- add an internal communication queue for customer-contact tasks implied by workshop and reminder data
+
+Implemented scope on the current working line:
+
+- grouped communication reasons for:
+  - service reminders
+  - waiting-for-approval jobs
+  - ready-for-collection jobs
+- due and overdue visibility
+- quick links into customer timeline and workshop detail
+- local-only reviewed markers per signed-in user
+
+Frontend entry:
+
+- `frontend/src/pages/CustomerCommunicationQueuePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a dedicated manager-only route at `/management/communications`
+- stays frontend-only by reusing reminders and workshop dashboard endpoints
+- keeps this as an internal operations queue only, without adding email, SMS, or two-way messaging
+
+#### `M109` - Multi-step Job Check-in / Intake Form
+
+Goal:
+
+- add a practical multi-step workshop intake and check-in flow for creating workshop jobs consistently
+
+Implemented scope on the current working line:
+
+- step-based intake flow for:
+  - customer lookup or inline customer creation
+  - bike and requested-work capture
+  - review and confirmation
+- workshop job creation with optional customer attach after create
+- practical internal form for intake consistency rather than a public self-service flow
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCheckInPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/workshop/check-in`
+- stays frontend-only by reusing existing customer APIs and workshop job creation/attach flows
+- stores structured intake detail in existing workshop job notes rather than redesigning the workshop schema
+
+#### `M110` - Collection / Handover Workflow
+
+Goal:
+
+- add an internal collection and handover flow for completed workshop jobs
+
+Implemented scope on the current working line:
+
+- ready-for-collection queue for `BIKE_READY` jobs
+- linked sale visibility where already present
+- deposit and readiness visibility from existing workshop data
+- basic internal collection confirmation action
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopCollectionPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/workshop/collection`
+- stays frontend-only by reusing workshop dashboard data and the existing workshop status-change endpoint
+- keeps this as an internal handover queue, not a customer-facing collection portal
+
+#### `M111` - Warranty / Return Tracking
+
+Goal:
+
+- add internal tracking for warranty-related workshop and product return follow-up
+
+Implemented scope on the current working line:
+
+- internal warranty tracking queue
+- tagged warranty statuses:
+  - `OPEN`
+  - `FOLLOW_UP`
+  - `RETURNED`
+  - `RESOLVED`
+- drill-down into related customer, workshop, and sale context
+- manager-side form to add tagged internal warranty notes
+
+Frontend entry:
+
+- `frontend/src/pages/WarrantyTrackingPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a manager-only route at `/management/warranty`
+- adds a small additive backend endpoint at `/api/reports/workshop/warranty`
+- avoids schema changes by building warranty tracking from tagged internal workshop notes rather than inventing a larger RMA subsystem
+
+#### `M112` - Workshop Documents / Print Centre
+
+Goal:
+
+- add an internal workshop documents and print centre for staff
+
+Implemented scope on the current working line:
+
+- central workshop print hub for existing print/document outputs
+- workshop job lookup and status filtering
+- direct print/view links for:
+  - workshop job card print
+  - linked sale receipt print where a sale is visible
+- quick route back into workshop detail, check-in, and collection flows
+
+Frontend entry:
+
+- `frontend/src/pages/WorkshopPrintCentrePage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/workshop/print`
+- stays frontend-only by reusing the existing workshop dashboard payload plus current workshop and receipt print routes
+- keeps this as a workflow aid and access hub, not a new document engine
+
+#### `M113` - Internal Tasks / Follow-up Actions
+
+Goal:
+
+- add an internal task and follow-up queue for staff and managers
+
+Implemented scope on the current working line:
+
+- grouped operational tasks derived from:
+  - waiting-for-approval jobs
+  - waiting-for-parts jobs
+  - ready-for-collection jobs
+  - overdue purchase orders
+  - service reminders for manager-plus users
+- quick drill-down into workshop, customer, and purchasing records
+- local-only reviewed markers per signed-in user
+
+Frontend entry:
+
+- `frontend/src/pages/InternalTasksPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a staff-facing route at `/tasks`
+- stays frontend-only by composing workshop dashboard, purchase-order, and manager reminder endpoints
+- keeps reminder follow-up manager-only where the underlying reminder report is manager-only
+
+#### `M114` - Stock Exceptions / Investigation Queue
+
+Goal:
+
+- add a manager-facing stock exceptions and investigation queue
+
+Implemented scope on the current working line:
+
+- grouped exception sections for:
+  - negative stock
+  - zero stock with recent sales
+  - low stock with reorder pressure
+  - under-received or overdue PO-linked attention
+- quick drill-down into inventory and purchasing follow-up pages
+- practical investigation view without anomaly or ML-style detection
+
+Frontend entry:
+
+- `frontend/src/pages/StockExceptionsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a manager-only route at `/management/stock-exceptions`
+- stays frontend-only by reusing inventory velocity, reorder, and purchase-order data already present on the branch
+- avoids schema and backend changes by using honest existing stock and purchasing signals only
+
+## Next Development Phase - Shell Personalization & Navigation
+
+Current state:
+
+- the current working line now includes:
+  - `M115` role-tailored home screens
+  - `M116` KPI widgets / dashboard customization
+  - `M117` operational search / global command bar
+- the app shell now supports role-aware landing behavior, manager-local dashboard preferences, and global operational navigation shortcuts
+- no post-`M117` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M115` - Role-tailored Home Screens
+
+Goal:
+
+- improve the starting experience by routing users to role-appropriate home screens
+
+Implemented scope on the current working line:
+
+- lightweight `/home` route for role-aware landing
+- role-aware home mapping:
+  - staff -> `/dashboard`
+  - manager -> `/management`
+  - admin -> `/management/staff`
+- login redirect and unauthorized-role redirect alignment
+- preservation of existing deep links and bookmarked routes
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only and additive
+- keeps direct routes such as `/pos`, `/dashboard`, and `/management` intact
+
+#### `M116` - KPI Widgets / Dashboard Customization
+
+Goal:
+
+- add lightweight dashboard customization so managers can choose which KPI widgets matter most
+
+Implemented scope on the current working line:
+
+- manager dashboard widget visibility toggles
+- local ordering controls for management dashboard sections
+- local per-user persistence using browser storage
+- reset-to-default behavior
+
+Frontend entries:
+
+- `frontend/src/pages/ManagementDashboardPage.tsx`
+- `frontend/src/pages/DashboardSettingsPage.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds manager route `/management/dashboard-settings`
+- stays frontend-only with browser-local persistence in v1
+
+#### `M117` - Operational Search / Global Command Bar
+
+Goal:
+
+- add a fast operational search and command bar for staff and managers
+
+Implemented scope on the current working line:
+
+- shell-level command bar with keyboard access
+- grouped shortcuts and search results for:
+  - customers
+  - workshop jobs
+  - products
+  - suppliers
+  - purchase orders
+  - common operational routes
+- direct navigation into existing pages and records
+
+Frontend entry:
+
+- `frontend/src/components/GlobalCommandBar.tsx`
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing search APIs and existing page routes
+- uses `Ctrl/Cmd+K` and a header trigger button for access
+
+## Next Development Phase - Multi-location Operations & Workshop Attention
+
+Current state:
+
+- the current working line now includes:
+  - `M118` multi-location inventory views
+  - `M119` transfer / replenishment queue
+  - `M120` advanced workshop SLA / ageing views
+- the current working line now exposes location-aware inventory visibility, replenishment attention, and workshop bottleneck ageing views
+- no post-`M120` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M118` - Multi-location Inventory Views
+
+Goal:
+
+- expose clearer multi-location stock visibility in the React UI
+
+Implemented scope on the current working line:
+
+- staff-facing route `/inventory/locations`
+- location-aware stock summary built from the stock ledger
+- per-location stock split per tracked variant
+- location filter and stock-state visibility
+- links back into existing inventory detail pages
+
+Notes:
+
+- implemented on the current working line via code evidence
+- adds a small additive backend endpoint:
+  - `GET /api/reports/inventory/location-summary`
+- avoids schema changes by using existing `StockLocation` and `StockLedgerEntry` data
+
+#### `M119` - Transfer / Replenishment Queue
+
+Goal:
+
+- add an internal transfer and replenishment attention queue
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/transfers`
+- location-imbalance queue showing donor and target locations
+- replenishment queue derived from current reorder pressure
+- overdue open purchase order support section
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays queue-first and read-only rather than inventing transfer execution workflows
+- reuses the `M118` location summary endpoint plus existing inventory velocity and purchasing data
+
+#### `M120` - Advanced Workshop SLA / Ageing Views
+
+Goal:
+
+- add manager-facing workshop ageing and SLA visibility
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/workshop-ageing`
+- open-job ageing buckets
+- oldest open jobs view
+- waiting-for-approval attention view
+- waiting-for-parts attention view
+- explicit status-age proxy based on last update where exact stage-entry timestamps are unavailable
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing workshop dashboard payload
+- labels proxy-based stage ageing honestly rather than inventing unsupported SLA timestamps
+
+## Next Development Phase - Receiving Governance And Operational Readiness
+
+Current state:
+
+- the current working line now includes:
+  - `M121` supplier receiving workspace
+  - `M122` product data completion queue
+  - `M123` admin audit / permissions review
+  - `M124` pricing review / margin exceptions
+  - `M125` returns-to-supplier queue
+  - `M126` ops health / system readiness dashboard
+- the current working line now exposes receiving triage, master-data cleanup, admin review, pricing exception visibility, supplier return attention, and operational readiness oversight
+- no post-`M126` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M121` - Supplier Receiving Workspace
+
+Goal:
+
+- add a practical receiving workspace for supplier deliveries
+
+Implemented scope on the current working line:
+
+- staff-facing route `/purchasing/receiving`
+- grouped receiving workspace sections for:
+  - ready to receive
+  - partially received
+  - overdue awaiting delivery
+- quick drill-down into existing PO detail and receiving flows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the current purchase-order list endpoint
+- keeps direct receiving actions inside existing PO detail rather than replacing M81 purchasing flows
+
+#### `M122` - Product Data Completion Queue
+
+Goal:
+
+- add a manager-facing queue for products and variants with incomplete sell/purchase data
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/product-data`
+- grouped queues for:
+  - missing barcode
+  - missing cost
+  - missing retail price
+  - weak variant naming
+- links into existing inventory and purchasing workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing variant listing endpoint
+- intentionally omits supplier-linkage checks because the current branch does not model supplier linkage directly on variants
+
+#### `M123` - Admin Audit / Permissions Review
+
+Goal:
+
+- add an admin-facing review page for roles, sensitive areas, and recent admin activity
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/admin-review`
+- user and role overview
+- sensitive area checklist linked to current privileged routes
+- recent admin activity feed built from current audit events
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing admin-user and audit endpoints
+- complements rather than replaces the existing admin staff-management page
+
+## Next Development Phase - Trade Close, Liabilities, And Staff Throughput
+
+Current state:
+
+- the current working line now includes:
+  - `M127` daily trade close pack
+  - `M128` outstanding liabilities / deposits review
+  - `M129` staff activity & throughput views
+- the current working line now also includes:
+  - `M130` data integrity checks
+  - `M131` backup / export toolkit
+  - `M132` system configuration panel
+  - `M133` onboarding / first run setup
+  - `M134` UI polish / navigation consistency pass
+  - `M135` admin / operations documentation hub
+- the current working line now exposes manager-facing daily trade close, liabilities visibility, and staff throughput oversight
+- no post-`M135` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M127` - Daily Trade Close Pack
+
+Goal:
+
+- provide a manager-facing page summarizing the financial and operational results of the current day
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/trade-close`
+- daily close summary composed from:
+  - sales daily report
+  - refunds
+  - visible tender mix from sales records
+  - till sessions and visible variance
+  - workshop daily report and ready-for-collection count
+  - purchase-order receiving and overdue-delivery attention
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing sales, refunds, till, workshop, and purchasing endpoints
+- keeps receiving visibility honest by surfacing visible receiving activity rather than inventing a new close subsystem
+
+#### `M128` - Outstanding Liabilities / Deposits Review
+
+Goal:
+
+- give managers visibility into money owed or operational liabilities
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/liabilities`
+- visibility for:
+  - jobs ready for collection with visible remaining balance
+  - deposit exposure
+  - customer credit balances
+  - jobs awaiting approval with estimated cost
+- links into workshop, customer, collection, and POS flows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing workshop dashboard, workshop job detail, sales detail, and customer insights data
+- keeps liability visibility operational rather than introducing accounting features
+
+#### `M129` - Staff Activity & Throughput Views
+
+Goal:
+
+- provide manager insight into operational staff throughput
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/staff-performance`
+- visibility for:
+  - workshop throughput by staff
+  - current assigned jobs
+  - waiting-for-approval and waiting-for-parts ownership
+  - visible sales handled per staff where creator data exists
+  - unassigned workload
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing workshop dashboard plus existing sales list/detail endpoints
+- remains observational and operational, not an evaluative scoring system
+
+#### `M130` - Data Integrity Checks
+
+Goal:
+
+- add a manager/admin-facing data integrity page surfacing operational data problems already detectable from current data
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/integrity`
+- grouped sections for:
+  - stock problems
+  - pricing problems
+  - data quality problems
+  - workflow consistency problems
+- counts and drill-down links into existing stock, pricing, product-data, workshop, and purchasing queues
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing the existing exception, pricing, product-data, workshop, and purchasing signals
+- remains an operational investigation hub rather than a database validator or a new integrity engine
+
+#### `M131` - Backup / Export Toolkit
+
+Goal:
+
+- add an admin-facing toolkit for backup/export related operations already supported by the system
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/backups`
+- direct links to the existing CSV/export endpoints already used by the export hub
+- clear recovery and reset commands for the repo scripts currently present on this branch
+- links into export hub, admin review, staff management, and system settings
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only and guidance-driven; this branch still does not add a backup engine or backup API
+- intentionally presents the real tooling available on this branch instead of overstating in-app backup support
+
+#### `M132` - System Configuration Panel
+
+Goal:
+
+- add an admin-facing settings/configuration page for current defaults and operational settings where cleanly supported
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/settings`
+- overview of:
+  - role-aware home defaults
+  - visible location/store context
+  - operational control points
+  - admin and governance tools
+- explicit visibility into which controls are persisted in-app versus browser-local or documentation-driven
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by surfacing the configuration and control points that already exist on this branch
+- intentionally avoids inventing a broad persisted settings model where one does not yet exist
+
+#### `M133` - Onboarding / First Run Setup
+
+Goal:
+
+- add a practical first-run and onboarding flow so a new admin can understand how to get the system operational
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/onboarding`
+- structured checklist for:
+  - staff and users
+  - suppliers
+  - products and pricing
+  - inventory readiness
+  - workshop readiness
+  - till and cash readiness
+- quick links into the existing operational pages needed to complete setup
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing current users, suppliers, variants, inventory, workshop, and till signals
+- intentionally remains a guidance and checklist surface, not a provisioning wizard
+
+#### `M134` - UI Polish / Navigation Consistency Pass
+
+Goal:
+
+- improve UI consistency and polish across the app without changing the underlying architecture
+
+Implemented scope on the current working line:
+
+- management and operational navigation labels made more consistent and explicit
+- command bar wording aligned with the broader shell navigation
+- onboarding and documentation routes integrated into the existing shell cleanly
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only and intentionally avoids a broad UI refactor
+- focuses on navigation clarity and consistency rather than redesigning established workflows
+
+#### `M135` - Admin / Operations Documentation Hub
+
+Goal:
+
+- add an in-app documentation hub linking admins and managers to operational guidance already created across the system
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/docs`
+- categorized internal help hub for:
+  - retail and POS operations
+  - workshop operations
+  - purchasing and receiving
+  - reporting and exports
+  - backup, reset, and recovery guidance
+  - admin and governance tools
+- curated notes and quick links to the relevant in-app pages
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by summarizing the real workflows and guidance already present on this branch
+- intentionally acts as a structured internal help centre rather than a documentation engine or CMS
+
+#### `M124` - Pricing Review / Margin Exceptions
+
+Goal:
+
+- add a manager-facing pricing and margin review page for operational exceptions
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/pricing`
+- grouped sections for:
+  - missing retail price
+  - retail at or below cost
+  - very low apparent margin
+- visible cost, retail, and simple margin estimate
+- links into existing inventory detail and product-data workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing variant listing endpoint
+- keeps margin logic simple and explicit rather than inventing promotion or tax pricing engines
+
+#### `M125` - Returns-to-Supplier Queue
+
+Goal:
+
+- add an internal queue for supplier-facing returns and send-backs
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/supplier-returns`
+- grouped queue sections for:
+  - warranty return candidates
+  - warranty follow-up
+  - supplier receiving problems
+- local reviewed markers and drill-down links into warranty and purchasing workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing warranty and purchase-order data
+- intentionally remains a visibility tool rather than a full supplier RMA workflow
+
+#### `M126` - Ops Health / System Readiness Dashboard
+
+Goal:
+
+- add a manager/admin-facing operational readiness dashboard
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/health`
+- grouped readiness cards and tables for:
+  - open tills
+  - overdue purchase orders
+  - waiting-for-approval jobs
+  - waiting-for-parts jobs
+  - stock exception counts
+  - data-quality attention counts
+  - recent critical activity
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing current till, purchasing, workshop, stock, variant, and audit endpoints
+- intentionally focuses on shop-operability signals rather than infrastructure monitoring
+
+## Next Development Phase - Receiving, Data Quality, And Governance Review
+
+Current state:
+
+- the current working line now includes:
+  - `M121` supplier receiving workspace
+  - `M122` product data completion queue
+  - `M123` admin audit / permissions review
+- the current working line now exposes dedicated receiving triage, product-data cleanup visibility, and admin governance review surfaces
+- no post-`M123` milestone batch is yet defined in the canonical plan
+
+### Next Milestones
+
+#### `M121` - Supplier Receiving Workspace
+
+Goal:
+
+- add a practical receiving workspace for supplier deliveries
+
+Implemented scope on the current working line:
+
+- staff-facing route `/purchasing/receiving`
+- grouped receiving workspace sections for:
+  - ready to receive
+  - partially received
+  - overdue awaiting delivery
+- quick drill-down into existing purchase order detail and receiving flows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the current purchase-order list endpoint
+- keeps direct receiving actions inside existing PO detail instead of replacing M81 purchasing flows
+
+#### `M122` - Product Data Completion Queue
+
+Goal:
+
+- add a manager-facing queue for products and variants with incomplete sell/purchase data
+
+Implemented scope on the current working line:
+
+- manager-facing route `/management/product-data`
+- grouped queues for:
+  - missing barcode
+  - missing cost
+  - missing retail price
+  - weak variant naming
+- links into existing inventory and purchasing workflows
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by reusing the existing variant listing endpoint
+- intentionally omits supplier-linkage checks because the current branch does not model supplier linkage directly on variants
+
+#### `M123` - Admin Audit / Permissions Review
+
+Goal:
+
+- add an admin-facing review page for roles, sensitive areas, and recent admin activity
+
+Implemented scope on the current working line:
+
+- admin-only route `/management/admin-review`
+- user and role overview
+- sensitive area checklist linked to current privileged routes
+- recent admin activity feed built from current audit events
+
+Notes:
+
+- implemented on the current working line via code evidence
+- stays frontend-only by composing existing admin-user and audit endpoints
+- complements rather than replaces the existing admin staff-management page

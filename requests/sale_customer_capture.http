@@ -1,0 +1,23 @@
+### Create sale-linked customer capture session
+POST http://localhost:3000/api/sales/{{saleId}}/customer-capture-sessions
+X-Staff-Role: STAFF
+X-Staff-Id: sale-customer-capture-request
+Content-Type: application/json
+
+{}
+
+### Get public customer capture session state
+GET http://localhost:3000/api/public/customer-capture/{{token}}
+
+### Submit public customer capture details
+POST http://localhost:3000/api/public/customer-capture/{{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Jamie",
+  "lastName": "Rider",
+  "email": "jamie.rider@example.com",
+  "phone": "07123456789",
+  "emailMarketingConsent": true,
+  "smsMarketingConsent": false
+}

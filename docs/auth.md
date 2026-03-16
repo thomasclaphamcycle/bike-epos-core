@@ -5,8 +5,10 @@ The app uses real authentication by default (`AUTH_MODE=real`) with cookie-based
 ## Real Auth (default)
 
 - `POST /api/auth/login` with `{ email, password }` sets an HTTP-only auth cookie.
+- `POST /api/auth/pin-login` with `{ userId, pin }` sets the same HTTP-only auth cookie for the current PIN-first login UI.
 - `POST /api/auth/logout` clears the cookie.
 - `GET /api/auth/me` returns the authenticated user.
+- `GET /api/auth/active-users` returns the active login-button list for the React login screen, including whether each account currently has a PIN set.
 - Protected routes use `requireRoleAtLeast("STAFF" | "MANAGER" | "ADMIN")`.
 
 Roles are stored in DB (`User.role`) and enforced from the authenticated user, not from headers.
@@ -42,13 +44,32 @@ Safety rules:
 
 ## Initial Admin Setup
 
-Option 1 (recommended): script
+Option 1: standalone admin script
 
 ```bash
 ADMIN_NAME="Admin User" \
 ADMIN_EMAIL="admin@example.com" \
 ADMIN_PASSWORD="ChangeMe123!" \
 npm run auth:seed-admin
+```
+
+Standard local roster restore:
+
+```bash
+npm run auth:seed-local-staff
+```
+
+This upserts the intended local dev roster and makes `Thomas` the admin user:
+
+- `Thomas` / `thomas@corepos.local` / PIN `8642`
+- `Dom` / `dom@corepos.local` / PIN `2468`
+- `Eric` / `eric@corepos.local` / PIN `1357`
+- `Mike` / `mike@corepos.local` / PIN `4321`
+
+Full local dev reset + reseed:
+
+```bash
+npm run db:reset-and-seed:dev
 ```
 
 Option 2: bootstrap endpoint (only when DB has no users)
@@ -60,23 +81,40 @@ POST /api/auth/bootstrap
 
 ## Local Login Flow
 
-1. Start app (`npm run dev`).
-2. Open `/login`.
-3. Login with staff credentials.
-4. Navigate to `/pos`, `/workshop`, `/admin`, `/till` based on role.
+1. Start the backend (`npm run dev`).
+2. Start the React frontend for the trial path (`npm --prefix frontend run dev`).
+3. Open `http://localhost:5173/login`.
+4. Select an active user button and enter a 4-digit PIN when the account has a PIN set.
+5. If the account is password-only or its PIN has been reset, use the password fallback form on the same `/login` screen.
+6. On successful login, navigate through `/home` to the authorized area based on role.
+
+If the React frontend is not running, the backend-only login surface remains available on `http://localhost:3000/login`, but the current trial/evaluator path is the React SPA on `http://localhost:5173`.
+
+## Local Login Accounts
+
+After `npm run db:seed:dev`, the demo seed preserves existing active staff users instead of creating demo auth accounts.
+
+The login UI is intentionally PIN-first, but password login remains preserved for compatibility and for password-reset/operator flows. For the intended local setup, use `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` so Thomas is restored as the admin user.
+
+If the local dev database has drifted or only contains partial users, `npm run auth:seed-local-staff` will upsert the intended PIN-enabled local roster and remove the old generic local admin seed at `admin@example.com`.
+
+If the local dev database is messy or untrustworthy, `npm run db:reset-and-seed:dev` is the clean recovery path. It resets only the dev DB from `DATABASE_URL`, reapplies migrations, reseeds the base demo data, and restores the intended local staff roster with Thomas as the admin user.
+
+This does not prepare the test database. Continue using `npm run test:db:up` and `.env.test`/`TEST_DATABASE_URL` for test and verification flows.
+
+Inactive or disabled users are not shown in the active-user login list and cannot authenticate through either the PIN or password flow.
 
 ## Default Routes and Navigation
 
-- `/` redirects to `/pos` when authenticated, otherwise `/login`.
+- When the React SPA is active, `/` loads the app shell and immediately routes authenticated users through `/home` to their role landing page (`/dashboard`, `/management`, or `/management/staff`).
+- In backend-only/non-SPA mode, `/` continues to redirect authenticated users to `/pos`; the legacy server-rendered `/login` page also keeps `/pos` as its default fallback target.
 - Protected HTML pages redirect to `/login?next=...` if unauthenticated.
 - If authenticated but role is insufficient, HTML pages redirect to `/not-authorized`.
-- App shell nav visibility:
-  - `STAFF+`: POS, Workshop, Inventory
-  - `MANAGER+`: Till / Cash Up
-  - `ADMIN`: Admin Users, Admin Audit
+- Current UX branch shell visibility is intentionally reduced while navigation is being refined.
+- The reduced sidebar still exposes the core day-to-day links for the signed-in role, while protected routes continue to enforce direct access to management and admin pages that are not surfaced as top-level sidebar links.
 
 ## Smoke Tests and Auth
 
 Smoke scripts run with `NODE_ENV=test`, so header fallback remains available for existing milestone scripts.
 
-New auth/admin/till smoke tests also validate real login flows via `/api/auth/login`.
+New auth/admin/till smoke tests validate backend auth behavior, while the current React login UI uses `GET /api/auth/active-users`, `POST /api/auth/pin-login`, and the preserved password fallback path as needed.

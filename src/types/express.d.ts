@@ -3,10 +3,12 @@ import type { AuthenticatedUser } from "./auth";
 declare global {
   namespace Express {
     interface Request {
-      user?: AuthenticatedUser;
       requestId?: string;
+      user?: AuthenticatedUser;
       location?: {
         id: string;
+        locationId?: string;
+        stockLocationId?: string | null;
         name: string;
         code: string | null;
         isActive: boolean;

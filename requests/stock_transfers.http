@@ -1,0 +1,37 @@
+### List stock transfers
+GET http://localhost:3000/api/stock-transfers
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+### Create stock transfer draft
+POST http://localhost:3000/api/stock-transfers
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+{
+  "fromLocationId": "{{fromLocationId}}",
+  "toLocationId": "{{toLocationId}}",
+  "notes": "Move helmets into workshop",
+  "lines": [
+    {
+      "variantId": "{{variantId}}",
+      "quantity": 2
+    }
+  ]
+}
+
+### Send stock transfer
+POST http://localhost:3000/api/stock-transfers/{{stockTransferId}}/send
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+### Receive stock transfer
+POST http://localhost:3000/api/stock-transfers/{{stockTransferId}}/receive
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+### Cancel stock transfer
+POST http://localhost:3000/api/stock-transfers/{{stockTransferId}}/cancel
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager

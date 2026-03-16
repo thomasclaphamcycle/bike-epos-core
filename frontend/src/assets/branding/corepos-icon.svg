@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="coreGradient" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#FF7A18"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="100" cy="100" r="24" fill="url(#coreGradient)"/>
+  <circle cx="100" cy="30" r="8" fill="#1F8ED8"/>
+  <circle cx="170" cy="100" r="8" fill="#1F8ED8"/>
+  <circle cx="100" cy="170" r="8" fill="#1F8ED8"/>
+  <circle cx="30" cy="100" r="8" fill="#1F8ED8"/>
+
+  <line x1="100" y1="76" x2="100" y2="38" stroke="#1F8ED8" stroke-width="3"/>
+  <line x1="124" y1="100" x2="162" y2="100" stroke="#1F8ED8" stroke-width="3"/>
+  <line x1="100" y1="124" x2="100" y2="162" stroke="#1F8ED8" stroke-width="3"/>
+  <line x1="76" y1="100" x2="38" y2="100" stroke="#1F8ED8" stroke-width="3"/>
+</svg>

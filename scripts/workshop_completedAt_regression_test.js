@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
@@ -206,11 +207,13 @@ const run = async () => {
       },
     });
     state.customerIds.add(customer.id);
+    const locationId = await ensureMainLocationId(prisma);
 
     const job = await prisma.workshopJob.create({
       data: {
         locationId,
         customerId: customer.id,
+        locationId,
         status: "BOOKING_MADE",
         source: "IN_STORE",
         notes: `M19.1 job ${ref}`,

@@ -6,6 +6,6 @@ export const inventoryAdjustmentRouter = Router();
 
 inventoryAdjustmentRouter.post(
   "/adjustments",
-  requireRoleAtLeast("STAFF"),
+  requireRoleAtLeast("MANAGER"),
   createInventoryAdjustmentHandler,
 );

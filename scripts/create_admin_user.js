@@ -13,12 +13,16 @@ if (!DATABASE_URL) {
 const ADMIN_NAME = (process.env.ADMIN_NAME || "Admin User").trim();
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const ADMIN_PIN = (process.env.ADMIN_PIN || "1234").trim();
 
 if (!ADMIN_EMAIL || !ADMIN_EMAIL.includes("@")) {
   throw new Error("ADMIN_EMAIL must be set to a valid email.");
 }
 if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 8) {
   throw new Error("ADMIN_PASSWORD must be at least 8 characters.");
+}
+if (!/^\d{4}$/.test(ADMIN_PIN)) {
+  throw new Error("ADMIN_PIN must be exactly 4 digits.");
 }
 
 const prisma = new PrismaClient({
@@ -42,6 +46,7 @@ const getUniqueUsername = async (tx, base) => {
 const run = async () => {
   try {
     const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    const pinHash = await bcrypt.hash(ADMIN_PIN, 12);
 
     const user = await prisma.$transaction(async (tx) => {
       const existing = await tx.user.findUnique({ where: { email: ADMIN_EMAIL } });
@@ -53,6 +58,7 @@ const run = async () => {
             role: "ADMIN",
             isActive: true,
             passwordHash,
+            pinHash,
           },
         });
       }
@@ -66,11 +72,12 @@ const run = async () => {
           role: "ADMIN",
           isActive: true,
           passwordHash,
+          pinHash,
         },
       });
     });
 
-    console.log(`Admin user ready: ${user.email} (${user.id})`);
+    console.log(`Admin user ready: ${user.email} (${user.id}) with PIN ${ADMIN_PIN}`);
   } finally {
     await prisma.$disconnect();
   }

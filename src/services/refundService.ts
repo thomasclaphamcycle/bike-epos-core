@@ -1,8 +1,8 @@
 import { Prisma, RefundRecordStatus, RefundTenderType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { recordCashRefundMovementForSaleRefundTx } from "./tillService";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { recordCashRefundMovementForSaleRefundTx } from "./tillService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -849,7 +849,7 @@ export const completeRefund = async (refundId: string, input: CompleteRefundInpu
         await tx.inventoryMovement.create({
           data: {
             variantId: line.saleLine.variantId,
-            locationId: refund.sale.locationId,
+            locationId: defaultStockLocation.id,
             type: "RETURN",
             quantity: line.quantity,
             referenceType: "SALE_REFUND_LINE",
@@ -872,18 +872,33 @@ export const completeRefund = async (refundId: string, input: CompleteRefundInpu
       createdByStaffId: normalizedCompletedByStaffId ?? refund.createdByStaffId ?? undefined,
     });
 
+    const refundAuditMetadata = {
+      saleId: refund.saleId,
+      lineCount: refund.lines.length,
+      totalPence: totals.totalPence,
+      tenderedPence,
+      cashTenderedPence,
+      returnToStock,
+    };
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "REFUND_COMPLETED",
+        entityType: "REFUND",
+        entityId: refund.id,
+        metadata: refundAuditMetadata,
+      },
+      input.auditActor,
+    );
+
     await createAuditEventTx(
       tx,
       {
         action: "REFUND_ISSUED",
         entityType: "REFUND",
         entityId: refund.id,
-        metadata: {
-          saleId: refund.saleId,
-          totalPence: totals.totalPence,
-          tenderedPence,
-          returnToStock,
-        },
+        metadata: refundAuditMetadata,
       },
       input.auditActor,
     );
@@ -982,8 +997,6 @@ export const listCompletedRefunds = async (input: ListRefundsInput = {}) => {
       subtotalPence: refund.subtotalPence,
       taxPence: refund.taxPence,
       totalPence: refund.totalPence,
-      returnToStock: refund.returnToStock,
-      returnedToStockAt: refund.returnedToStockAt,
       completedAt: refund.completedAt,
       createdAt: refund.createdAt,
       receiptNumber: refund.receipt?.receiptNumber ?? null,

@@ -2,12 +2,11 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -35,28 +34,69 @@ const prisma = new PrismaClient({
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const uniqueRef = () => `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+const MAX_STARTUP_LOG_CHARS = 4000;
+const APP_REQUEST_RETRIES = 8;
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
 
-const serverIsHealthy = async () => {
   try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i += 1) {
-    if (await serverIsHealthy()) {
-      return;
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
     }
-    await sleep(500);
+  } catch {
+    // Keep the primary URL only if parsing fails unexpectedly.
   }
-  throw new Error("Server did not become healthy on /health");
+
+  return urls;
+})();
+let activeAppBaseUrl = appBaseUrlCandidates[0];
+const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
+const serverController = createSmokeServerController({
+  label: "m24-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupLogCharLimit: MAX_STARTUP_LOG_CHARS,
+  startupReadyPattern: serverStartedPattern,
+  envOverrides: {
+    PORT: new URL(BASE_URL).port || "3100",
+  },
+});
+
+const fetchFromApp = async (path, options = {}) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
+    try {
+      activeAppBaseUrl = serverController.getBaseUrl();
+      return await fetch(`${activeAppBaseUrl}${path}`, options);
+    } catch (error) {
+      lastError = error;
+
+      const healthyBaseUrl = await serverController.probeHealthyBaseUrl();
+      if (healthyBaseUrl) {
+        activeAppBaseUrl = healthyBaseUrl;
+      }
+    }
+
+    if (attempt < APP_REQUEST_RETRIES - 1) {
+      await sleep(250);
+    }
+  }
+
+  if (lastError instanceof Error) {
+    lastError.message = `${lastError.message} while requesting ${activeAppBaseUrl}${path}`;
+    throw lastError;
+  }
+
+  throw new Error(`Failed to fetch ${activeAppBaseUrl}${path}`);
 };
 
 const fetchJson = async (path, options = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchFromApp(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -142,31 +182,9 @@ const run = async () => {
     locationIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
+    activeAppBaseUrl = serverController.getBaseUrl();
 
     const managerHeaders = {
       "X-Staff-Role": "MANAGER",
@@ -177,14 +195,6 @@ const run = async () => {
       "X-Staff-Id": "m24-smoke-staff",
     };
 
-    const location = await prisma.stockLocation.create({
-      data: {
-        name: `M24 Location ${uniqueRef()}`,
-        isDefault: false,
-      },
-    });
-    state.locationIds.add(location.id);
-
     const productRes = await fetchJson("/api/products", {
       method: "POST",
       headers: managerHeaders,
@@ -194,14 +204,16 @@ const run = async () => {
     });
     assert.equal(productRes.status, 201, JSON.stringify(productRes.json));
     state.productIds.add(productRes.json.id);
+    const productName = productRes.json.name;
 
     const barcode = `24${Date.now().toString().slice(-11)}`;
+    const sku = `M24-SKU-${uniqueRef()}`;
     const variantRes = await fetchJson("/api/variants", {
       method: "POST",
       headers: managerHeaders,
       body: JSON.stringify({
         productId: productRes.json.id,
-        sku: `M24-SKU-${uniqueRef()}`,
+        sku,
         barcode,
         option: "M24 option",
         retailPricePence: 1299,
@@ -212,9 +224,23 @@ const run = async () => {
     const variantId = variantRes.json.id;
     state.variantIds.add(variantId);
 
-    const purchaseRes = await fetchJson("/api/inventory/movements", {
+    const blockedPurchaseRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
       headers: staffHeaders,
+      body: JSON.stringify({
+        variantId,
+        type: "PURCHASE",
+        quantity: 1,
+        unitCost: 100,
+        referenceType: "M24_TEST",
+        referenceId: `purchase_blocked_${uniqueRef()}`,
+      }),
+    });
+    assert.equal(blockedPurchaseRes.status, 403, JSON.stringify(blockedPurchaseRes.json));
+
+    const purchaseRes = await fetchJson("/api/inventory/movements", {
+      method: "POST",
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId,
         type: "PURCHASE",
@@ -226,9 +252,17 @@ const run = async () => {
     });
     assert.equal(purchaseRes.status, 201, JSON.stringify(purchaseRes.json));
 
+    const locationsRes = await fetchJson("/api/locations", {
+      headers: staffHeaders,
+    });
+    assert.equal(locationsRes.status, 200, JSON.stringify(locationsRes.json));
+    const reportLocationId = locationsRes.json.locations?.[0]?.id;
+    assert.ok(reportLocationId, "Expected at least one stock location after inventory seed");
+    assert.equal(purchaseRes.json.locationId, reportLocationId);
+
     const saleRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId,
         type: "SALE",
@@ -238,6 +272,7 @@ const run = async () => {
       }),
     });
     assert.equal(saleRes.status, 201, JSON.stringify(saleRes.json));
+    assert.equal(saleRes.json.locationId, reportLocationId);
 
     const blockedAdjustmentRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
@@ -264,6 +299,7 @@ const run = async () => {
       }),
     });
     assert.equal(adjustmentRes.status, 201, JSON.stringify(adjustmentRes.json));
+    assert.equal(adjustmentRes.json.locationId, reportLocationId);
 
     const onHandRes = await fetchJson(
       `/api/inventory/on-hand?variantId=${encodeURIComponent(variantId)}`,
@@ -274,6 +310,16 @@ const run = async () => {
     assert.equal(onHandRes.status, 200, JSON.stringify(onHandRes.json));
     assert.equal(onHandRes.json.variantId, variantId);
     assert.equal(onHandRes.json.onHand, 9);
+
+    const onHandAtLocationRes = await fetchJson(
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantId)}&locationId=${encodeURIComponent(reportLocationId)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandAtLocationRes.status, 200, JSON.stringify(onHandAtLocationRes.json));
+    assert.equal(onHandAtLocationRes.json.locationId, reportLocationId);
+    assert.equal(onHandAtLocationRes.json.onHand, 9);
 
     const blockedMovementsRes = await fetchJson(
       `/api/inventory/movements?variantId=${encodeURIComponent(variantId)}`,
@@ -298,9 +344,32 @@ const run = async () => {
     assert.equal(quantityByType.get("PURCHASE"), 10);
     assert.equal(quantityByType.get("SALE"), -2);
     assert.equal(quantityByType.get("ADJUSTMENT"), 1);
+    assert.equal(movementsRes.json.movements.every((entry) => entry.locationId === reportLocationId), true);
+
+    const locationMovementsRes = await fetchJson(
+      `/api/inventory/movements?variantId=${encodeURIComponent(variantId)}&locationId=${encodeURIComponent(reportLocationId)}`,
+      {
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(locationMovementsRes.status, 200, JSON.stringify(locationMovementsRes.json));
+    assert.equal(locationMovementsRes.json.locationId, reportLocationId);
+    assert.equal(locationMovementsRes.json.movements.length, 3);
+
+    const onHandSearchRes = await fetchJson(
+      `/api/inventory/on-hand/search?q=${encodeURIComponent(sku)}&locationId=${encodeURIComponent(reportLocationId)}&take=25&skip=0`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandSearchRes.status, 200, JSON.stringify(onHandSearchRes.json));
+    const onHandSearchRow = onHandSearchRes.json.rows.find((row) => row.variantId === variantId);
+    assert.ok(onHandSearchRow, "Expected inventory on-hand search row for test variant");
+    assert.equal(onHandSearchRes.json.locationId, reportLocationId);
+    assert.equal(onHandSearchRow.onHand, 9);
 
     const onHandReportRes = await fetchJson(
-      `/api/reports/inventory/on-hand?locationId=${encodeURIComponent(location.id)}`,
+      `/api/reports/inventory/on-hand?locationId=${encodeURIComponent(reportLocationId)}`,
       {
         headers: managerHeaders,
       },
@@ -311,7 +380,7 @@ const run = async () => {
     assert.equal(onHandRow.onHand, 9);
 
     const valueReportRes = await fetchJson(
-      `/api/reports/inventory/value?locationId=${encodeURIComponent(location.id)}`,
+      `/api/reports/inventory/value?locationId=${encodeURIComponent(reportLocationId)}`,
       {
         headers: managerHeaders,
       },
@@ -323,18 +392,24 @@ const run = async () => {
     assert.equal(valueRow.avgUnitCostPence, 100);
     assert.equal(valueRow.valuePence, 900);
 
+    const valueSnapshotRes = await fetchJson(
+      "/api/reports/inventory/value-snapshot",
+      {
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(valueSnapshotRes.status, 200, JSON.stringify(valueSnapshotRes.json));
+    assert.ok(valueSnapshotRes.json.summary.totalValuePence >= 900);
+    const snapshotRow = valueSnapshotRes.json.breakdown.find((row) => row.variantId === variantId);
+    assert.ok(snapshotRow, "Expected inventory value snapshot row for test variant");
+    assert.equal(snapshotRow.productName, productName);
+    assert.equal(snapshotRow.sku, sku);
+    assert.equal(snapshotRow.valuePence, 900);
+
     console.log("PASS m24 inventory movement ledger smoke tests");
   } finally {
     await cleanup(state);
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(300);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
-
+    await serverController.stop();
     await prisma.$disconnect();
   }
 };
@@ -343,4 +418,3 @@ run().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
-

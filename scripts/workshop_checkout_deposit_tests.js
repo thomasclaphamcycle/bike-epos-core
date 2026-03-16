@@ -2,13 +2,17 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+const portFromBaseUrl = () => {
+  const url = new URL(BASE_URL);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -40,6 +44,38 @@ const STAFF_HEADERS = {
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const APP_REQUEST_RETRIES = 8;
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
+
+  try {
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Keep the primary URL only if parsing fails unexpectedly.
+  }
+
+  return urls;
+})();
+let activeAppBaseUrl = appBaseUrlCandidates[0];
+const serverController = createSmokeServerController({
+  label: "m11-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  startup: {
+    command: "npx",
+    args: ["ts-node", "--transpile-only", "src/server.ts"],
+  },
+  captureStartupLog: true,
+  startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
+  envOverrides: {
+    PORT: portFromBaseUrl(),
+  },
+});
 
 const todayUtc = () => {
   const now = new Date();
@@ -54,8 +90,37 @@ const addDays = (date, days) => {
   return out;
 };
 
+const fetchFromApp = async (path, options = {}) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
+    try {
+      activeAppBaseUrl = serverController.getBaseUrl();
+      return await fetch(`${activeAppBaseUrl}${path}`, options);
+    } catch (error) {
+      lastError = error;
+
+      const healthyBaseUrl = await serverController.probeHealthyBaseUrl();
+      if (healthyBaseUrl) {
+        activeAppBaseUrl = healthyBaseUrl;
+      }
+    }
+
+    if (attempt < APP_REQUEST_RETRIES - 1) {
+      await sleep(250);
+    }
+  }
+
+  if (lastError instanceof Error) {
+    lastError.message = `${lastError.message} while requesting ${activeAppBaseUrl}${path}`;
+    throw lastError;
+  }
+
+  throw new Error(`Failed to fetch ${activeAppBaseUrl}${path}`);
+};
+
 const fetchJson = async (path, options = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchFromApp(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -74,55 +139,8 @@ const fetchJson = async (path, options = {}) => {
   return { status: response.status, json };
 };
 
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
-};
-
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
-const ensureMainLocationId = async () => {
-  const existing = await prisma.location.findFirst({
-    where: {
-      code: {
-        equals: "MAIN",
-        mode: "insensitive",
-      },
-    },
-    select: {
-      id: true,
-    },
-  });
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await prisma.location.create({
-    data: {
-      name: "Main",
-      code: "MAIN",
-      isActive: true,
-    },
-    select: {
-      id: true,
-    },
-  });
-  return created.id;
-};
 
 const createOnlineBooking = async (scheduledDate) => {
   const ref = uniqueRef();
@@ -225,8 +243,6 @@ const cleanupTestData = async (workshopJobIds, customerIds, saleIds) => {
 };
 
 const run = async () => {
-  let startedServer = false;
-  let serverProcess = null;
   const createdWorkshopJobIds = new Set();
   const createdCustomerIds = new Set();
   const createdSaleIds = new Set();
@@ -248,28 +264,8 @@ const run = async () => {
   };
 
   try {
-    const alreadyHealthy = await serverIsHealthy();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
+    activeAppBaseUrl = serverController.getBaseUrl();
 
     await prisma.bookingSettings.upsert({
       where: { id: 1 },
@@ -367,7 +363,6 @@ const run = async () => {
 
     await runTest("checkout succeeds when deposit is not required", async () => {
       const ref = uniqueRef();
-      const locationId = await ensureMainLocationId();
       const customer = await prisma.customer.create({
         data: {
           firstName: "InStore",
@@ -377,6 +372,7 @@ const run = async () => {
         },
       });
       createdCustomerIds.add(customer.id);
+      const locationId = await ensureMainLocationId(prisma);
 
       const job = await prisma.workshopJob.create({
         data: {
@@ -394,7 +390,7 @@ const run = async () => {
 
       const response = await checkoutWorkshopJob(job.id, {
         saleTotalPence: 1999,
-        paymentMethod: "CASH",
+        paymentMethod: "CARD",
         amountPence: 1999,
       });
 
@@ -437,13 +433,15 @@ const run = async () => {
   } finally {
     await cleanupTestData(createdWorkshopJobIds, createdCustomerIds, createdSaleIds);
     await prisma.$disconnect();
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-    }
+    await serverController.stop();
   }
 };
 
-run().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+run()
+  .then(() => {
+    process.exit(process.exitCode ?? 0);
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

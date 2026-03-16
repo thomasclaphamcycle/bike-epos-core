@@ -125,6 +125,9 @@ export const CustomerProfilePage = () => {
               <button type="button" onClick={attachToActiveSale} disabled={!activeSaleId}>
                 Attach To Active POS Sale
               </button>
+              <Link to={`/customers/${customer.id}/timeline`} className="button-link">
+                View Timeline
+              </Link>
               <span className="muted-text">
                 {activeSaleId ? `Active sale: ${activeSaleId.slice(0, 8)}` : "No active POS sale in this browser."}
               </span>
@@ -170,6 +173,9 @@ export const CustomerProfilePage = () => {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="actions-inline" style={{ marginTop: "10px" }}>
+          <Link to={`/customers/${id}/timeline`}>Open full timeline</Link>
         </div>
       </section>
 

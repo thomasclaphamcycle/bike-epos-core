@@ -1,0 +1,11 @@
+### M121 Supplier Performance
+
+GET http://localhost:3000/api/reports/suppliers/performance
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### M121 Supplier Cost History
+
+GET http://localhost:3000/api/reports/suppliers/cost-history?take=10
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

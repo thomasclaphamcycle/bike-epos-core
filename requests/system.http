@@ -1,0 +1,4 @@
+@baseUrl = http://localhost:3000
+
+### Get runtime app version
+GET {{baseUrl}}/api/system/version

@@ -1,0 +1,545 @@
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { apiGet, apiPost } from "../api/client";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useToasts } from "../components/ToastProvider";
+import { useAuth } from "../auth/AuthContext";
+
+type Supplier = {
+  id: string;
+  name: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
+type PurchaseOrder = {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  supplier: Supplier;
+  status: "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+  orderedAt: string | null;
+  expectedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  totals: {
+    quantityOrdered: number;
+    quantityReceived: number;
+    quantityRemaining: number;
+  };
+};
+
+type SupplierListResponse = {
+  suppliers: Supplier[];
+};
+
+type PurchaseOrderListResponse = {
+  purchaseOrders: PurchaseOrder[];
+};
+
+const statusOptions = ["", "DRAFT", "SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"] as const;
+
+const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
+
+const toStatusBadgeClass = (status: PurchaseOrder["status"]) => {
+  switch (status) {
+    case "RECEIVED":
+      return "status-badge status-complete";
+    case "PARTIALLY_RECEIVED":
+      return "status-badge status-warning";
+    case "CANCELLED":
+      return "status-badge status-cancelled";
+    case "SENT":
+      return "status-badge status-info";
+    case "DRAFT":
+    default:
+      return "status-badge";
+  }
+};
+
+const formatPurchaseOrderStatus = (status: PurchaseOrder["status"]) => {
+  switch (status) {
+    case "PARTIALLY_RECEIVED":
+      return "Partially Received";
+    case "SENT":
+      return "Ordered";
+    default:
+      return status.charAt(0) + status.slice(1).toLowerCase();
+  }
+};
+
+const getPurchaseOrderNextStep = (purchaseOrder: PurchaseOrder) => {
+  switch (purchaseOrder.status) {
+    case "DRAFT":
+      return "Finish the lines and mark the PO ordered before any goods can be received.";
+    case "SENT":
+      return purchaseOrder.totals.quantityRemaining > 0
+        ? "Wait for delivery or open the PO when stock lands."
+        : "Nothing remains outstanding. Review whether the PO should already be closed.";
+    case "PARTIALLY_RECEIVED":
+      return "Open the PO detail to book in the remaining delivery and confirm final quantities.";
+    case "RECEIVED":
+      return "Receiving is complete. Use the PO detail for a final quantity and cost check.";
+    case "CANCELLED":
+      return "Cancelled orders should stay closed and must not be received.";
+    default:
+      return "Open the PO to review the current state.";
+  }
+};
+
+const formatShortDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
+
+const isOpenPurchaseOrder = (purchaseOrder: PurchaseOrder) =>
+  (purchaseOrder.status === "SENT" || purchaseOrder.status === "PARTIALLY_RECEIVED")
+  && purchaseOrder.totals.quantityRemaining > 0;
+
+const isOverduePurchaseOrder = (purchaseOrder: PurchaseOrder) =>
+  isOpenPurchaseOrder(purchaseOrder)
+  && purchaseOrder.expectedAt !== null
+  && new Date(purchaseOrder.expectedAt).getTime() < Date.now();
+
+export const PurchasingPage = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { success, error } = useToasts();
+  const canManage = isManagerPlus(user?.role);
+
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [status, setStatus] = useState<(typeof statusOptions)[number]>("");
+  const [supplierId, setSupplierId] = useState("");
+  const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const [createSupplierId, setCreateSupplierId] = useState("");
+  const [orderedAt, setOrderedAt] = useState("");
+  const [expectedAt, setExpectedAt] = useState("");
+  const [notes, setNotes] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const debouncedSearch = useDebouncedValue(search, 250);
+
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("take", "100");
+    params.set("skip", "0");
+    if (status) {
+      params.set("status", status);
+    }
+    if (supplierId) {
+      params.set("supplierId", supplierId);
+    }
+    if (debouncedSearch.trim()) {
+      params.set("q", debouncedSearch.trim());
+    }
+    if (fromDate) {
+      params.set("from", fromDate);
+    }
+    if (toDate) {
+      params.set("to", toDate);
+    }
+    return params.toString();
+  }, [debouncedSearch, fromDate, status, supplierId, toDate]);
+
+  const loadSuppliers = async () => {
+    try {
+      const payload = await apiGet<SupplierListResponse>("/api/suppliers");
+      setSuppliers(payload.suppliers || []);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Failed to load suppliers";
+      error(message);
+    }
+  };
+
+  const loadPurchaseOrders = async () => {
+    setLoading(true);
+    try {
+      const payload = await apiGet<PurchaseOrderListResponse>(`/api/purchase-orders?${query}`);
+      setPurchaseOrders(payload.purchaseOrders || []);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Failed to load purchase orders";
+      error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSuppliers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void loadPurchaseOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const createPurchaseOrder = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!canManage) {
+      error("Creating purchase orders requires MANAGER+.");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const purchaseOrder = await apiPost<PurchaseOrder>("/api/purchase-orders", {
+        supplierId: createSupplierId,
+        orderedAt: orderedAt || undefined,
+        expectedAt: expectedAt || undefined,
+        notes: notes || undefined,
+      });
+
+      setOrderedAt("");
+      setExpectedAt("");
+      setNotes("");
+      success("Purchase order created");
+      await loadPurchaseOrders();
+      navigate(`/purchasing/${purchaseOrder.id}`);
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : "Failed to create purchase order";
+      error(message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const orderedUnits = useMemo(
+    () => purchaseOrders.reduce((sum, po) => sum + po.totals.quantityOrdered, 0),
+    [purchaseOrders],
+  );
+  const remainingUnits = useMemo(
+    () => purchaseOrders.reduce((sum, po) => sum + po.totals.quantityRemaining, 0),
+    [purchaseOrders],
+  );
+  const draftCount = useMemo(
+    () => purchaseOrders.filter((po) => po.status === "DRAFT").length,
+    [purchaseOrders],
+  );
+  const sentCount = useMemo(
+    () => purchaseOrders.filter((po) => po.status === "SENT" && po.totals.quantityRemaining > 0).length,
+    [purchaseOrders],
+  );
+  const overduePurchaseOrders = useMemo(
+    () => purchaseOrders
+      .filter((purchaseOrder) => isOverduePurchaseOrder(purchaseOrder))
+      .sort((left, right) => new Date(left.expectedAt || left.createdAt).getTime() - new Date(right.expectedAt || right.createdAt).getTime()),
+    [purchaseOrders],
+  );
+  const partiallyReceivedPurchaseOrders = useMemo(
+    () => purchaseOrders
+      .filter((purchaseOrder) => purchaseOrder.status === "PARTIALLY_RECEIVED" && purchaseOrder.totals.quantityRemaining > 0)
+      .sort((left, right) => new Date(left.expectedAt || left.createdAt).getTime() - new Date(right.expectedAt || right.createdAt).getTime()),
+    [purchaseOrders],
+  );
+  const openAwaitingDeliveryPurchaseOrders = useMemo(
+    () => purchaseOrders
+      .filter((purchaseOrder) => purchaseOrder.status === "SENT" && purchaseOrder.totals.quantityRemaining > 0)
+      .filter((purchaseOrder) => !isOverduePurchaseOrder(purchaseOrder))
+      .sort((left, right) => new Date(left.expectedAt || left.createdAt).getTime() - new Date(right.expectedAt || right.createdAt).getTime()),
+    [purchaseOrders],
+  );
+
+  const renderVisibilityTable = (rows: PurchaseOrder[], emptyLabel: string) => (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>PO Number</th>
+            <th>Supplier</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Expected</th>
+            <th>Remaining</th>
+            <th>Next Step</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={8}>{emptyLabel}</td>
+            </tr>
+          ) : (
+            rows.map((purchaseOrder) => (
+              <tr key={purchaseOrder.id}>
+                <td>
+                  <div className="table-primary">{purchaseOrder.poNumber}</div>
+                  <div className="table-secondary mono-text">{purchaseOrder.id.slice(0, 8)}</div>
+                </td>
+                <td>{purchaseOrder.supplier.name}</td>
+                <td>
+                  <span className={toStatusBadgeClass(purchaseOrder.status)}>
+                    {formatPurchaseOrderStatus(purchaseOrder.status)}
+                  </span>
+                </td>
+                <td>{formatShortDate(purchaseOrder.createdAt)}</td>
+                <td>{formatShortDate(purchaseOrder.expectedAt)}</td>
+                <td className="numeric-cell">{purchaseOrder.totals.quantityRemaining}</td>
+                <td>
+                  <div className="table-primary">{getPurchaseOrderNextStep(purchaseOrder)}</div>
+                </td>
+                <td><Link to={`/purchasing/${purchaseOrder.id}`}>Open PO</Link></td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div className="page-shell">
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h1>Purchasing</h1>
+            <p className="muted-text">
+              Purchase order list, supplier filters, and receiving entry points. For a first trial, create a supplier, create a draft PO, send it, then receive against it here. Draft means still editable, Ordered means waiting for delivery, and Partially Received means stock has started landing but more is still expected.
+            </p>
+          </div>
+          <div className="actions-inline">
+            <Link to="/suppliers" className="button-link">Suppliers</Link>
+            <Link to="/purchasing/receiving" className="button-link">Receiving Workspace</Link>
+            <button type="button" onClick={() => void loadPurchaseOrders()} disabled={loading}>
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+        </div>
+
+        <div className="filter-row">
+          <label className="grow">
+            Search
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="PO number, supplier, SKU, product"
+            />
+          </label>
+          <label>
+            Status
+            <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
+              {statusOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option || "All"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Supplier
+            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+              <option value="">All suppliers</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            From
+            <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+          </label>
+          <label>
+            To
+            <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+          </label>
+        </div>
+
+        <div className="metric-grid">
+          <div className="metric-card">
+            <span className="metric-label">Visible Purchase Orders</span>
+            <strong className="metric-value">{purchaseOrders.length}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Ordered Units</span>
+            <strong className="metric-value">{orderedUnits}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Remaining Units</span>
+            <strong className="metric-value">{remainingUnits}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Draft Orders</span>
+            <strong className="metric-value">{draftCount}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Sent Awaiting Delivery</span>
+            <strong className="metric-value">{sentCount}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Partially Received</span>
+            <strong className="metric-value">{partiallyReceivedPurchaseOrders.length}</strong>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Overdue Deliveries</span>
+            <strong className="metric-value">{overduePurchaseOrders.length}</strong>
+          </div>
+        </div>
+
+        {canManage ? (
+          <div className="page-shell">
+            <div className="card-header-row">
+                <div>
+                  <h2>Purchasing Visibility</h2>
+                  <p className="muted-text">
+                  Simple manager-facing purchase order triage using the current purchase-order list and detail workflow. Use these sections to spot what needs chasing before opening the full PO.
+                </p>
+              </div>
+              <div className="actions-inline">
+                <Link to="/purchasing/receiving" className="button-link">Receiving Workspace</Link>
+              </div>
+            </div>
+
+            <section className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Overdue Purchase Orders</h3>
+                  <p className="muted-text">Open purchase orders with an expected date in the past.</p>
+                </div>
+              </div>
+              {renderVisibilityTable(overduePurchaseOrders, "No overdue purchase orders are currently visible. Check the awaiting-delivery queue below for the live inbound list.")}
+            </section>
+
+            <section className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Partially Received Purchase Orders</h3>
+                  <p className="muted-text">Purchase orders where receiving has started but stock is still outstanding.</p>
+                </div>
+              </div>
+              {renderVisibilityTable(partiallyReceivedPurchaseOrders, "No partially received purchase orders are currently visible. Use the receiving workspace when a delivery lands and only part of it arrives.")}
+            </section>
+
+            <section className="card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Open Purchase Orders Awaiting Delivery</h3>
+                  <p className="muted-text">Sent purchase orders still waiting for delivery and not yet overdue.</p>
+                </div>
+              </div>
+              {renderVisibilityTable(openAwaitingDeliveryPurchaseOrders, "No open purchase orders are currently awaiting delivery. Create and send a draft PO to test the receiving flow.")}
+            </section>
+          </div>
+        ) : null}
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>PO</th>
+                <th>Supplier</th>
+                <th>Status</th>
+                <th>Ordered</th>
+                <th>Received</th>
+                <th>Remaining</th>
+                <th>Expected</th>
+                <th>Created</th>
+                <th>Next Step</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchaseOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={9}>
+                    {loading
+                      ? "Loading purchase orders..."
+                      : canManage
+                        ? "No purchase orders found yet. Create a supplier first if needed, then create a draft purchase order below."
+                        : "No purchase orders found yet. Ask a manager to create one before testing receiving."}
+                  </td>
+                </tr>
+              ) : (
+                purchaseOrders.map((purchaseOrder) => (
+                  <tr
+                    key={purchaseOrder.id}
+                    className="clickable-row"
+                    onClick={() => navigate(`/purchasing/${purchaseOrder.id}`)}
+                  >
+                    <td>
+                      <div className="table-primary">{purchaseOrder.poNumber}</div>
+                      <div className="table-secondary mono-text">{purchaseOrder.id.slice(0, 8)}</div>
+                    </td>
+                    <td>
+                      <div className="table-primary">{purchaseOrder.supplier?.name || "-"}</div>
+                      <div className="table-secondary">
+                        {purchaseOrder.supplier?.contactName || purchaseOrder.supplier?.email || purchaseOrder.supplier?.phone || "-"}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={toStatusBadgeClass(purchaseOrder.status)}>{formatPurchaseOrderStatus(purchaseOrder.status)}</span>
+                    </td>
+                    <td className="numeric-cell">{purchaseOrder.totals.quantityOrdered}</td>
+                    <td className="numeric-cell">{purchaseOrder.totals.quantityReceived}</td>
+                    <td className="numeric-cell">{purchaseOrder.totals.quantityRemaining}</td>
+                    <td>{formatShortDate(purchaseOrder.expectedAt)}</td>
+                    <td>{formatShortDate(purchaseOrder.createdAt)}</td>
+                    <td>
+                      <div className="table-primary">{getPurchaseOrderNextStep(purchaseOrder)}</div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Create Purchase Order</h2>
+            <p className="muted-text">Creating an order does not affect stock. Stock increases only when goods are received.</p>
+          </div>
+        </div>
+
+        {!canManage ? (
+          <div className="restricted-panel">You can view purchase orders, but creating them requires MANAGER+.</div>
+        ) : (
+          <form className="purchase-form-grid" onSubmit={createPurchaseOrder}>
+            {suppliers.length === 0 ? (
+              <div className="restricted-panel">
+                Create a supplier in <Link to="/suppliers">Suppliers</Link> before starting a purchase order trial flow.
+              </div>
+            ) : null}
+            <label>
+              Supplier
+              <select value={createSupplierId} onChange={(event) => setCreateSupplierId(event.target.value)} required>
+                <option value="">Select supplier</option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Ordered Date
+              <input type="date" value={orderedAt} onChange={(event) => setOrderedAt(event.target.value)} />
+            </label>
+            <label>
+              Expected Date
+              <input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} />
+            </label>
+            <label className="purchase-form-wide">
+              Notes
+              <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="delivery notes, supplier ref" />
+            </label>
+            <div className="actions-inline">
+              <button type="submit" className="primary" disabled={creating || !createSupplierId}>
+                {creating ? "Creating..." : "Create Purchase Order"}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    </div>
+  );
+};

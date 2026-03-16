@@ -1,0 +1,6 @@
+@baseUrl = http://localhost:3000
+
+### Get dashboard weather (STAFF+)
+GET {{baseUrl}}/api/dashboard/weather
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff

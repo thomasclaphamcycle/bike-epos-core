@@ -1,4 +1,4 @@
-import { Prisma, UserRole } from "@prisma/client";
+import { Prisma, UserOperationalRole, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { hashPassword } from "./passwordService";
@@ -56,7 +56,9 @@ export type PublicUser = {
   email: string | null;
   name: string | null;
   role: UserRole;
+  operationalRole: UserOperationalRole | null;
   isActive: boolean;
+  hasPin: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -67,7 +69,9 @@ export const toPublicUser = (user: {
   email: string | null;
   name: string | null;
   role: UserRole;
+  operationalRole: UserOperationalRole | null;
   isActive: boolean;
+  pinHash: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): PublicUser => ({
@@ -76,7 +80,9 @@ export const toPublicUser = (user: {
   email: user.email,
   name: user.name,
   role: user.role,
+  operationalRole: user.operationalRole,
   isActive: user.isActive,
+  hasPin: Boolean(user.pinHash),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });

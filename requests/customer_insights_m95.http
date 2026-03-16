@@ -1,0 +1,5 @@
+### M95 Customer Insights
+GET http://localhost:3000/api/reports/customers/insights?from=2026-01-01&to=2026-03-09&take=10
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+

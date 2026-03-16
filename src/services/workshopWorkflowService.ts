@@ -1,4 +1,6 @@
 import { Prisma, WorkshopJobNoteVisibility, WorkshopJobStatus } from "@prisma/client";
+import { emit } from "../core/events";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -19,6 +21,10 @@ type AddWorkshopJobNoteInput = {
 };
 
 type ChangeWorkshopJobStatusInput = {
+  status: string;
+};
+
+type SetWorkshopApprovalStatusInput = {
   status: string;
 };
 
@@ -81,6 +87,23 @@ const parseTargetStageOrThrow = (inputStatus: string): WorkflowStage => {
   }
 };
 
+const parseApprovalStatusOrThrow = (inputStatus: string): WorkshopJobStatus => {
+  const normalized = inputStatus.trim().toUpperCase();
+
+  if (normalized === "WAITING_FOR_APPROVAL") {
+    return "WAITING_FOR_APPROVAL";
+  }
+  if (normalized === "APPROVED") {
+    return "APPROVED";
+  }
+
+  throw new HttpError(
+    400,
+    "status must be WAITING_FOR_APPROVAL or APPROVED",
+    "INVALID_APPROVAL_STATUS",
+  );
+};
+
 const assertCanAssignOrUnassign = (jobAssignedStaffId: string | null, input: AssignWorkshopJobInput) => {
   if (input.actorRole !== "STAFF") {
     return;
@@ -124,7 +147,7 @@ export const assignWorkshopJob = async (
     throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
     });
@@ -361,9 +384,16 @@ export const changeWorkshopJobStatus = async (
   const targetStage = parseTargetStageOrThrow(rawStatus);
   const targetStatus = canonicalStatusByStage[targetStage];
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
+      include: {
+        sale: {
+          select: {
+            id: true,
+          },
+        },
+      },
     });
 
     if (!job) {
@@ -378,8 +408,12 @@ export const changeWorkshopJobStatus = async (
           status: job.status,
           cancelledAt: job.cancelledAt,
           updatedAt: job.updatedAt,
+          completedAt: job.completedAt,
         },
+        fromStatus: job.status,
+        toStatus: job.status,
         idempotent: true,
+        emittedStage: targetStage,
       };
     }
 
@@ -394,6 +428,14 @@ export const changeWorkshopJobStatus = async (
         409,
         "Invalid workshop status transition",
         "INVALID_STATUS_TRANSITION",
+      );
+    }
+
+    if (fromStage === "READY" && targetStage === "COMPLETED" && !job.sale) {
+      throw new HttpError(
+        409,
+        "Workshop job must be checked out to a sale before collection",
+        "WORKSHOP_COLLECTION_REQUIRES_SALE",
       );
     }
 
@@ -426,6 +468,121 @@ export const changeWorkshopJobStatus = async (
           fromStage,
           toStage: targetStage,
           requestedStatus: rawStatus,
+        },
+      },
+      auditActor,
+    );
+
+    return {
+      job: {
+        id: updated.id,
+        status: updated.status,
+        cancelledAt: updated.cancelledAt,
+        updatedAt: updated.updatedAt,
+        completedAt: updated.completedAt,
+      },
+      fromStatus: job.status,
+      toStatus: updated.status,
+      idempotent: false,
+      emittedStage: targetStage,
+    };
+  });
+
+  logOperationalEvent("workshop.job.status_changed", {
+    entityId: result.job.id,
+    resultStatus: result.idempotent ? "noop" : "succeeded",
+    workshopJobId: result.job.id,
+    fromStatus: result.fromStatus,
+    toStatus: result.toStatus,
+    stage: result.emittedStage,
+    idempotent: result.idempotent,
+    completedAt: result.job.completedAt?.toISOString(),
+  });
+
+  if (!result.idempotent && result.emittedStage === "COMPLETED") {
+    emit("workshop.job.completed", {
+      id: result.job.id,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      status: result.job.status,
+      ...(result.job.completedAt ? { completedAt: result.job.completedAt.toISOString() } : {}),
+    });
+  }
+
+  return {
+    job: {
+      id: result.job.id,
+      status: result.job.status,
+      cancelledAt: result.job.cancelledAt,
+      updatedAt: result.job.updatedAt,
+      completedAt: result.job.completedAt,
+    },
+    idempotent: result.idempotent,
+  };
+};
+
+export const setWorkshopJobApprovalStatus = async (
+  workshopJobId: string,
+  input: SetWorkshopApprovalStatusInput,
+  auditActor?: AuditActor,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  const targetStatus = parseApprovalStatusOrThrow(input.status);
+
+  return prisma.$transaction(async (tx) => {
+    const job = await tx.workshopJob.findUnique({
+      where: { id: workshopJobId },
+    });
+
+    if (!job) {
+      throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+    }
+
+    if (job.status === targetStatus) {
+      return {
+        job: {
+          id: job.id,
+          status: job.status,
+          cancelledAt: job.cancelledAt,
+          updatedAt: job.updatedAt,
+        },
+        idempotent: true,
+      };
+    }
+
+    if (
+      job.status === "WAITING_FOR_PARTS" ||
+      job.status === "BIKE_READY" ||
+      job.status === "COMPLETED" ||
+      job.status === "CANCELLED"
+    ) {
+      throw new HttpError(
+        409,
+        "Approval state can only be set before the job is ready, completed, cancelled, or waiting for parts",
+        "INVALID_APPROVAL_STATE_TRANSITION",
+      );
+    }
+
+    const updated = await tx.workshopJob.update({
+      where: { id: workshopJobId },
+      data: {
+        status: targetStatus,
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "JOB_APPROVAL_STATUS_CHANGED",
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopJobId,
+        metadata: {
+          fromStatus: job.status,
+          toStatus: updated.status,
         },
       },
       auditActor,

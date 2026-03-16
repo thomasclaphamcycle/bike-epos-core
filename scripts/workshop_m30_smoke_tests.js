@@ -2,13 +2,17 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
+const portFromBaseUrl = () => {
+  const url = new URL(BASE_URL);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -31,11 +35,71 @@ const prisma = new PrismaClient({
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const MAX_STARTUP_LOG_CHARS = 4000;
+const APP_REQUEST_RETRIES = 8;
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
+
+  try {
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Keep the primary URL only if parsing fails unexpectedly.
+  }
+
+  return urls;
+})();
+let activeAppBaseUrl = appBaseUrlCandidates[0];
+const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
+const serverController = createSmokeServerController({
+  label: "m30-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupLogCharLimit: MAX_STARTUP_LOG_CHARS,
+  startupReadyPattern: serverStartedPattern,
+  envOverrides: {
+    PORT: portFromBaseUrl(),
+  },
+});
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
 
+const fetchFromApp = async (path, options = {}) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
+    try {
+      activeAppBaseUrl = serverController.getBaseUrl();
+      return await fetch(`${activeAppBaseUrl}${path}`, options);
+    } catch (error) {
+      lastError = error;
+
+      const healthyBaseUrl = await serverController.probeHealthyBaseUrl();
+      if (healthyBaseUrl) {
+        activeAppBaseUrl = healthyBaseUrl;
+      }
+    }
+
+    if (attempt < APP_REQUEST_RETRIES - 1) {
+      await sleep(250);
+    }
+  }
+
+  if (lastError instanceof Error) {
+    lastError.message = `${lastError.message} while requesting ${activeAppBaseUrl}${path}`;
+    throw lastError;
+  }
+
+  throw new Error(`Failed to fetch ${activeAppBaseUrl}${path}`);
+};
+
 const fetchJson = async (path, options = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchFromApp(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -54,31 +118,30 @@ const fetchJson = async (path, options = {}) => {
   return { status: response.status, json };
 };
 
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
-};
-
 const cleanup = async (state) => {
   const basketIds = Array.from(state.basketIds);
+  const saleIds = Array.from(state.saleIds);
   const workshopJobIds = Array.from(state.workshopJobIds);
   const variantIds = Array.from(state.variantIds);
   const productIds = Array.from(state.productIds);
   const userIds = Array.from(state.userIds);
+
+  if (saleIds.length > 0) {
+    await prisma.payment.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
+    await prisma.sale.deleteMany({
+      where: {
+        id: {
+          in: saleIds,
+        },
+      },
+    });
+  }
 
   if (basketIds.length > 0) {
     await prisma.basketItem.deleteMany({
@@ -169,37 +232,16 @@ const cleanup = async (state) => {
 const run = async () => {
   const state = {
     basketIds: new Set(),
+    saleIds: new Set(),
     workshopJobIds: new Set(),
     variantIds: new Set(),
     productIds: new Set(),
     userIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
+    activeAppBaseUrl = serverController.getBaseUrl();
 
     const staffUser = await prisma.user.create({
       data: {
@@ -252,7 +294,7 @@ const run = async () => {
 
     const seedRes = await fetchJson("/api/inventory/movements", {
       method: "POST",
-      headers: staffHeaders,
+      headers: managerHeaders,
       body: JSON.stringify({
         variantId: variantRes.json.id,
         type: "PURCHASE",
@@ -328,11 +370,55 @@ const run = async () => {
     assert.equal(movements[0].type, "WORKSHOP_USE");
     assert.equal(movements[0].quantity, -2);
 
+    const stockAfterFinalizeRes = await fetchJson(
+      `/api/stock/variants/${encodeURIComponent(variantRes.json.id)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(stockAfterFinalizeRes.status, 200, JSON.stringify(stockAfterFinalizeRes.json));
+    assert.equal(stockAfterFinalizeRes.json.onHand, 6);
+    assert.equal(stockAfterFinalizeRes.json.locations.length, 1);
+    assert.equal(stockAfterFinalizeRes.json.locations[0].onHand, 6);
+
     const getJobRes = await fetchJson(`/api/workshop/jobs/${workshopJobId}`, {
       headers: staffHeaders,
     });
     assert.equal(getJobRes.status, 200, JSON.stringify(getJobRes.json));
     assert.equal(getJobRes.json.job.finalizedBasketId, finalizeRes.json.basket.id);
+
+    const checkoutRes = await fetchJson(`/api/baskets/${finalizeRes.json.basket.id}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        paymentMethod: "CARD",
+        amountPence: finalizeRes.json.basket.totals.totalPence,
+        providerRef: `m30-checkout-${uniqueRef()}`,
+      }),
+    });
+    assert.equal(checkoutRes.status, 201, JSON.stringify(checkoutRes.json));
+    state.saleIds.add(checkoutRes.json.sale.id);
+
+    const linkedSale = await prisma.sale.findUnique({
+      where: { id: checkoutRes.json.sale.id },
+      select: {
+        id: true,
+        basketId: true,
+        workshopJobId: true,
+      },
+    });
+    assert.equal(linkedSale?.basketId, finalizeRes.json.basket.id);
+    assert.equal(linkedSale?.workshopJobId, workshopJobId);
+
+    const jobAfterCheckout = await prisma.workshopJob.findUnique({
+      where: { id: workshopJobId },
+      select: {
+        status: true,
+        completedAt: true,
+      },
+    });
+    assert.equal(jobAfterCheckout?.status, "COMPLETED");
+    assert.ok(jobAfterCheckout?.completedAt, "Expected workshop completedAt after POS checkout");
 
     console.log("M30 smoke tests passed.");
   } finally {
@@ -344,13 +430,7 @@ const run = async () => {
 
     await prisma.$disconnect();
 
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(600);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
+    await serverController.stop();
   }
 };
 
@@ -358,4 +438,3 @@ run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-

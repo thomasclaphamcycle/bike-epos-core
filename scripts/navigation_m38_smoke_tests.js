@@ -2,13 +2,9 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
-const bcrypt = require("bcryptjs");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -27,30 +23,30 @@ const safeDbUrl = DATABASE_URL.replace(/(postgres(?:ql)?:\/\/[^:/@]+:)[^@]+@/i, 
 console.log(`[m38-smoke] BASE_URL=${BASE_URL}`);
 console.log(`[m38-smoke] DATABASE_URL=${safeDbUrl}`);
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: DATABASE_URL }),
-});
+const APP_REQUEST_RETRIES = 8;
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const serverIsHealthy = async () => {
   try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i++) {
-    if (await serverIsHealthy()) {
-      return;
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
     }
-    await sleep(500);
+  } catch {
+    // Ignore malformed URL handling here; the primary URL will surface the failure.
   }
-  throw new Error("Server did not become healthy on /health");
-};
+
+  return urls;
+})();
+const serverController = createSmokeServerController({
+  label: "m38-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
+});
 
 const parseJson = async (response) => {
   const text = await response.text();
@@ -64,8 +60,56 @@ const parseJson = async (response) => {
   }
 };
 
+const fetchFromApp = async (path, options = {}) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < APP_REQUEST_RETRIES; attempt += 1) {
+    try {
+      return await fetch(`${serverController.getBaseUrl()}${path}`, options);
+    } catch (error) {
+      lastError = error;
+      await serverController.probeHealthyBaseUrl();
+    }
+    if (attempt < APP_REQUEST_RETRIES - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to fetch ${path}`);
+};
+
+const buildAdminBypassHeaders = () => {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Staff-Role": "ADMIN",
+    "X-Staff-Id": "m38-admin-bypass",
+  };
+
+  if (process.env.INTERNAL_AUTH_SHARED_SECRET) {
+    headers["X-Internal-Auth"] = process.env.INTERNAL_AUTH_SHARED_SECRET;
+  }
+
+  return headers;
+};
+
+const fetchJson = async (path, options = {}) => {
+  const response = await fetchFromApp(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers ?? {}),
+    },
+  });
+
+  return {
+    status: response.status,
+    json: await parseJson(response),
+    headers: response.headers,
+  };
+};
+
 const login = async (email, password) => {
-  const response = await fetch(`${BASE_URL}/api/auth/login`, {
+  const response = await fetchFromApp("/api/auth/login", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -91,56 +135,40 @@ const run = async () => {
   const managerEmail = `m38.manager.${token}@example.com`;
   const staffEmail = `m38.staff.${token}@example.com`;
   const password = `M38Pass!${token}`;
-
-  let startedServer = false;
-  let serverProcess = null;
+  const created = {
+    userIds: [],
+  };
 
   try {
-    const alreadyHealthy = await serverIsHealthy();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
+    await serverController.startIfNeeded();
 
-    if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      startedServer = true;
-      await waitForServer();
-    }
-
-    const managerHash = await bcrypt.hash(password, 10);
-    const staffHash = await bcrypt.hash(password, 10);
-
-    await prisma.user.createMany({
-      data: [
-        {
-          username: `m38-manager-${token}`,
-          name: "M38 Manager",
-          email: managerEmail,
-          passwordHash: managerHash,
-          role: "MANAGER",
-          isActive: true,
-        },
-        {
-          username: `m38-staff-${token}`,
-          name: "M38 Staff",
-          email: staffEmail,
-          passwordHash: staffHash,
-          role: "STAFF",
-          isActive: true,
-        },
-      ],
+    const managerCreate = await fetchJson("/api/admin/users", {
+      method: "POST",
+      headers: buildAdminBypassHeaders(),
+      body: JSON.stringify({
+        name: "M38 Manager",
+        email: managerEmail,
+        role: "MANAGER",
+        tempPassword: password,
+      }),
     });
+    assert.equal(managerCreate.status, 201, JSON.stringify(managerCreate.json));
+    created.userIds.push(managerCreate.json.user.id);
 
-    const unauthPos = await fetch(`${BASE_URL}/pos`, {
+    const staffCreate = await fetchJson("/api/admin/users", {
+      method: "POST",
+      headers: buildAdminBypassHeaders(),
+      body: JSON.stringify({
+        name: "M38 Staff",
+        email: staffEmail,
+        role: "STAFF",
+        tempPassword: password,
+      }),
+    });
+    assert.equal(staffCreate.status, 201, JSON.stringify(staffCreate.json));
+    created.userIds.push(staffCreate.json.user.id);
+
+    const unauthPos = await fetchFromApp("/pos", {
       method: "GET",
       redirect: "manual",
       headers: { Accept: "text/html" },
@@ -148,7 +176,7 @@ const run = async () => {
     assert.equal(unauthPos.status, 302);
     assert.ok((unauthPos.headers.get("location") || "").startsWith("/login?next="));
 
-    const unauthRoot = await fetch(`${BASE_URL}/`, {
+    const unauthRoot = await fetchFromApp("/", {
       method: "GET",
       redirect: "manual",
       headers: { Accept: "text/html" },
@@ -158,7 +186,7 @@ const run = async () => {
 
     const staffLogin = await login(staffEmail, password);
 
-    const staffRoot = await fetch(`${BASE_URL}/`, {
+    const staffRoot = await fetchFromApp("/", {
       method: "GET",
       redirect: "manual",
       headers: {
@@ -169,7 +197,7 @@ const run = async () => {
     assert.equal(staffRoot.status, 302);
     assert.equal(staffRoot.headers.get("location"), "/pos");
 
-    const staffPos = await fetch(`${BASE_URL}/pos`, {
+    const staffPos = await fetchFromApp("/pos", {
       method: "GET",
       headers: {
         Accept: "text/html",
@@ -184,7 +212,7 @@ const run = async () => {
     assert.ok(!staffPosHtml.includes('data-testid="app-nav-till"'));
     assert.ok(!staffPosHtml.includes('data-testid="app-nav-admin-users"'));
 
-    const staffAdmin = await fetch(`${BASE_URL}/admin`, {
+    const staffAdmin = await fetchFromApp("/admin", {
       method: "GET",
       redirect: "manual",
       headers: {
@@ -195,8 +223,8 @@ const run = async () => {
     assert.equal(staffAdmin.status, 302);
     assert.ok((staffAdmin.headers.get("location") || "").startsWith("/not-authorized"));
 
-    const notAuthorized = await fetch(
-      `${BASE_URL}${staffAdmin.headers.get("location") || "/not-authorized"}`,
+    const notAuthorized = await fetchFromApp(
+      staffAdmin.headers.get("location") || "/not-authorized",
       {
         method: "GET",
         headers: {
@@ -210,7 +238,7 @@ const run = async () => {
     assert.ok(notAuthorizedHtml.includes("Not Authorized"));
 
     const managerLogin = await login(managerEmail, password);
-    const managerPos = await fetch(`${BASE_URL}/pos`, {
+    const managerPos = await fetchFromApp("/pos", {
       method: "GET",
       headers: {
         Accept: "text/html",
@@ -224,23 +252,19 @@ const run = async () => {
 
     console.log("M38 navigation/auth routing smoke tests passed.");
   } finally {
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          in: [managerEmail, staffEmail],
-        },
-      },
-    });
-
-    await prisma.$disconnect();
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(400);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
+    for (const userId of created.userIds) {
+      try {
+        await fetchJson(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: "PATCH",
+          headers: buildAdminBypassHeaders(),
+          body: JSON.stringify({ isActive: false }),
+        });
+      } catch {
+        // Ignore cleanup failures; unique test identities prevent collisions on later runs.
       }
     }
+
+    await serverController.stop();
   }
 };
 

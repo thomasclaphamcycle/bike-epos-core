@@ -2,13 +2,12 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -30,8 +29,11 @@ console.log(`[m41-smoke] DATABASE_URL=${safeDbUrl}`);
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 });
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const serverController = createSmokeServerController({
+  label: "m41-smoke",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+});
 
 const parseJson = async (response) => {
   const text = await response.text();
@@ -43,25 +45,6 @@ const parseJson = async (response) => {
   } catch {
     return { raw: text };
   }
-};
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i++) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
 };
 
 const apiJson = async ({ path, method = "GET", body, cookie }) => {
@@ -117,29 +100,8 @@ const run = async () => {
     receiptNumbers: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   try {
-    const alreadyHealthy = await serverIsHealthy();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const manager = await prisma.user.create({
       data: {
@@ -296,6 +258,14 @@ const run = async () => {
     assert.equal(completedRefund.status, 201, JSON.stringify(completedRefund.payload));
     assert.equal(completedRefund.payload.refund.status, "COMPLETED");
 
+    const audit = await apiJson({
+      path: `/api/audit?entityType=REFUND&entityId=${encodeURIComponent(refundId)}&action=REFUND_COMPLETED&limit=20`,
+      cookie,
+    });
+    assert.equal(audit.status, 200, JSON.stringify(audit.payload));
+    assert.ok(Array.isArray(audit.payload.events), JSON.stringify(audit.payload));
+    assert.ok(audit.payload.events.length >= 1, JSON.stringify(audit.payload));
+
     const issuedReceipt = await apiJson({
       path: "/api/receipts/issue",
       method: "POST",
@@ -355,6 +325,9 @@ const run = async () => {
 
     const refundIds = Array.from(created.refundIds);
     if (refundIds.length > 0) {
+      await prisma.auditEvent.deleteMany({
+        where: { entityType: "REFUND", entityId: { in: refundIds } },
+      });
       await prisma.refund.deleteMany({
         where: { id: { in: refundIds } },
       });
@@ -391,14 +364,7 @@ const run = async () => {
     }
 
     await prisma.$disconnect();
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(400);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
+    await serverController.stop();
   }
 };
 

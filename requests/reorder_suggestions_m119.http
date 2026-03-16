@@ -1,0 +1,5 @@
+### M119 Reorder Suggestions
+
+GET http://localhost:3000/api/reports/inventory/reorder-suggestions?take=50&q=brake
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

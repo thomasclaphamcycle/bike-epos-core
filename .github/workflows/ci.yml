@@ -6,8 +6,11 @@ on:
       - "**"
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  test:
+  verify-corepos:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -27,13 +30,12 @@ jobs:
     env:
       NODE_ENV: test
       AUTH_MODE: real
-      PORT: 3000
-      TEST_BASE_URL: http://localhost:3000
+      PORT: 3100
+      TEST_BASE_URL: http://localhost:3100
       TEST_DATABASE_URL: postgresql://bike_epos_test:bike_epos_test_pw@localhost:5432/bike_epos_test
       DATABASE_URL: postgresql://bike_epos_test:bike_epos_test_pw@localhost:5432/bike_epos_test
       JWT_SECRET: ci-jwt-secret
       COOKIE_SECRET: ci-cookie-secret
-      ALLOW_EXISTING_SERVER: "1"
 
     steps:
       - name: Checkout
@@ -44,12 +46,26 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json', 'frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       - name: Apply migrations
         run: npx prisma migrate deploy
@@ -57,42 +73,5 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Start API server
-        run: |
-          npx ts-node --transpile-only src/server.ts > /tmp/server.log 2>&1 &
-          echo $! > /tmp/server.pid
-
-      - name: Wait for health endpoint
-        run: |
-          for i in $(seq 1 60); do
-            if curl -fsS "$TEST_BASE_URL/health" > /dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Server did not become healthy in time"
-          cat /tmp/server.log || true
-          exit 1
-
-      - name: Run baseline tests
-        run: npm test
-
-      - name: Run smoke suite
-        run: npm run test:smoke
-
-      - name: Run security auth-guard regression
-        run: npm run test:security
-
-      - name: Stop API server
-        if: always()
-        run: |
-          if [ -f /tmp/server.pid ]; then
-            kill "$(cat /tmp/server.pid)" || true
-          fi
-
-      - name: Run Playwright E2E
-        run: npm run e2e
-
-      - name: Upload server log on failure
-        if: failure()
-        run: cat /tmp/server.log || true
+      - name: Run release verification
+        run: npm run verify

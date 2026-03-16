@@ -1,6 +1,9 @@
 @baseUrl = http://localhost:3000
 @managerRole = MANAGER
 @staffRole = STAFF
+@supplierId = REPLACE_SUPPLIER_ID
+@variantId = REPLACE_VARIANT_ID
+@supplierProductLinkId = REPLACE_SUPPLIER_PRODUCT_LINK_ID
 
 ### Create supplier (MANAGER+)
 POST {{baseUrl}}/api/suppliers
@@ -10,6 +13,7 @@ X-Staff-Id: manager-1
 
 {
   "name": "Madison",
+  "contactName": "Trade Desk",
   "email": "trade@madison.co.uk",
   "phone": "02071234567",
   "notes": "Main UK distributor"
@@ -18,6 +22,49 @@ X-Staff-Id: manager-1
 ### Search suppliers (STAFF+)
 GET {{baseUrl}}/api/suppliers?query=mad
 X-Staff-Role: {{staffRole}}
+
+### Update supplier (MANAGER+)
+PATCH {{baseUrl}}/api/suppliers/{{supplierId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "contactName": "Procurement Team",
+  "notes": "Prefers weekly orders"
+}
+
+### Create supplier product link (MANAGER+)
+POST {{baseUrl}}/api/supplier-product-links
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "supplierId": "{{supplierId}}",
+  "variantId": "{{variantId}}",
+  "supplierProductCode": "MAD-TUBE-700X25",
+  "supplierCostPence": 320,
+  "preferredSupplier": true,
+  "isActive": true
+}
+
+### List supplier product links (STAFF+)
+GET {{baseUrl}}/api/supplier-product-links?supplierId={{supplierId}}&active=1&take=50&skip=0
+X-Staff-Role: {{staffRole}}
+
+### Update supplier product link (MANAGER+)
+PATCH {{baseUrl}}/api/supplier-product-links/{{supplierProductLinkId}}
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{
+  "supplierProductCode": "MAD-TUBE-700X25-V2",
+  "supplierCostPence": 340,
+  "preferredSupplier": true,
+  "isActive": true
+}
 
 ### Create purchase order (MANAGER+)
 POST {{baseUrl}}/api/purchase-orders

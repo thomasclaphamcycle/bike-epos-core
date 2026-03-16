@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { toBackendUrl } from "../utils/backendUrl";
+import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 const ACTIVE_SALE_KEY = "corepos.activeSaleId";
-const BARCODE_PREFIXES = ["EAN:", "BC:", "BAR:", "UPC:"];
 
 type ProductSearchRow = {
   id: string;
@@ -37,6 +37,18 @@ type BasketResponse = {
   };
 };
 
+type CustomerSearchRow = {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type SaleResponse = {
   sale: {
     id: string;
@@ -44,6 +56,7 @@ type SaleResponse = {
     taxPence: number;
     totalPence: number;
     completedAt: string | null;
+    customer: CustomerSearchRow | null;
   };
   saleItems: Array<{
     id: string;
@@ -73,57 +86,80 @@ type CompleteSaleResult = {
   receiptUrl?: string;
 };
 
+type TenderMethod = "CASH" | "CARD";
+
+type CompletedSaleState = {
+  saleId: string;
+  receiptUrl: string;
+  changeDuePence: number;
+  tenderMethod: TenderMethod;
+  customerName: string | null;
+  cashTenderedPence: number | null;
+  totalPaidPence: number;
+};
+
+type SaleCustomerCaptureSessionResponse = {
+  session: {
+    id: string;
+    saleId: string;
+    token: string;
+    status: "ACTIVE";
+    expiresAt: string;
+    createdAt: string;
+    publicPath: string;
+  };
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
-const isBarcodeLikeQuery = (value: string) => {
-  const trimmed = value.trim();
-  if (/^\d{8,14}$/.test(trimmed)) {
-    return true;
-  }
-  const upper = trimmed.toUpperCase();
-  return BARCODE_PREFIXES.some((prefix) => upper.startsWith(prefix));
+const getPublicAppOrigin = () => {
+  const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN?.trim();
+  return configuredOrigin ? configuredOrigin.replace(/\/$/, "") : window.location.origin;
 };
 
-const normalizeBarcodeInput = (value: string) => {
-  const trimmed = value.trim();
-  const upper = trimmed.toUpperCase();
-  for (const prefix of BARCODE_PREFIXES) {
-    if (upper.startsWith(prefix)) {
-      return trimmed.slice(prefix.length).trim();
-    }
+const parseCurrencyInputToPence = (value: string): number | null => {
+  const normalized = value.trim().replace(/[^0-9.]/g, "");
+  if (!normalized) {
+    return null;
   }
-  return trimmed;
-};
 
-const isEditableElement = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) {
-    return false;
+  if (!/^\d+(\.\d{0,2})?$/.test(normalized)) {
+    return null;
   }
-  const tag = target.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT" ||
-    target.isContentEditable
-  );
+
+  const [pounds, decimal = ""] = normalized.split(".");
+  return Number(pounds) * 100 + Number((decimal + "00").slice(0, 2));
 };
 
 export const PosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [searchRows, setSearchRows] = useState<ProductSearchRow[]>([]);
-  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+  const [customerSearchText, setCustomerSearchText] = useState("");
+  const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
+  const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
-  const [lastScanned, setLastScanned] = useState<string | null>(null);
-  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
+  const [cashTenderedAmount, setCashTenderedAmount] = useState("");
+  const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
+  const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSessionResponse["session"] | null>(null);
+  const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -131,10 +167,15 @@ export const PosPage = () => {
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
 
-  const focusSearch = () => {
+  const focusProductSearch = () => {
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
-      searchInputRef.current?.select();
+    });
+  };
+
+  const focusCustomerSearch = () => {
+    window.requestAnimationFrame(() => {
+      customerSearchInputRef.current?.focus();
     });
   };
 
@@ -165,9 +206,16 @@ export const PosPage = () => {
     setBasket(payload);
   };
 
+  const loadProductMatches = async (params: URLSearchParams) => {
+    const payload = await apiGet<{ rows: ProductSearchRow[] }>(`/api/products/search?${params.toString()}`);
+    return payload.rows || [];
+  };
+
   const loadSale = async (id: string) => {
     const payload = await apiGet<SaleResponse>(`/api/sales/${encodeURIComponent(id)}`);
     setSale(payload);
+    setSelectedCustomer(payload.sale.customer ?? null);
+    setCaptureSession(null);
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
   };
 
@@ -176,10 +224,15 @@ export const PosPage = () => {
     setBasket(created);
     setSale(null);
     setReceiptUrl(null);
-    setSelectedLineId(null);
+    setCashTenderedAmount("");
+    setSelectedCustomer(null);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setShowCreateCustomer(false);
+    setCaptureSession(null);
     syncQuery({ basketId: created.id, saleId: null });
     success("New sale created");
-    focusSearch();
+    focusProductSearch();
   };
 
   useEffect(() => {
@@ -206,7 +259,6 @@ export const PosPage = () => {
       } finally {
         if (!cancelled) {
           setLoading(false);
-          focusSearch();
         }
       }
     };
@@ -222,7 +274,6 @@ export const PosPage = () => {
   useEffect(() => {
     if (!debouncedSearch.trim()) {
       setSearchRows([]);
-      setSelectedSearchIndex(0);
       return;
     }
 
@@ -234,9 +285,7 @@ export const PosPage = () => {
           `/api/products/search?q=${encodeURIComponent(debouncedSearch.trim())}`,
         );
         if (!cancelled) {
-          const rows = payload.rows || [];
-          setSearchRows(rows);
-          setSelectedSearchIndex(rows.length > 0 ? 0 : -1);
+          setSearchRows(payload.rows || []);
         }
       } catch (searchError) {
         if (!cancelled) {
@@ -254,17 +303,180 @@ export const PosPage = () => {
   }, [debouncedSearch, error]);
 
   useEffect(() => {
-    const items = basket?.items ?? [];
-    if (items.length === 0) {
-      setSelectedLineId(null);
+    if (!loading && basket && !sale) {
+      focusProductSearch();
+    }
+  }, [loading, basket, sale]);
+
+  useEffect(() => {
+    if (!sale || selectedTenderMethod !== "CASH") {
       return;
     }
-    if (!selectedLineId || !items.some((item) => item.id === selectedLineId)) {
-      setSelectedLineId(items[0].id);
-    }
-  }, [basket, selectedLineId]);
 
-  const addItemByVariant = async (variantId: string, scannedCode?: string) => {
+    window.requestAnimationFrame(() => {
+      cashTenderedInputRef.current?.focus();
+      cashTenderedInputRef.current?.select();
+    });
+  }, [sale, selectedTenderMethod]);
+
+  useEffect(() => {
+    if (!debouncedCustomerSearch.trim()) {
+      setCustomerResults([]);
+      setCustomerLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const searchCustomers = async () => {
+      setCustomerLoading(true);
+      try {
+        const payload = await apiGet<{ customers: CustomerSearchRow[] }>(
+          `/api/customers/search?q=${encodeURIComponent(debouncedCustomerSearch.trim())}&take=12`,
+        );
+        if (!cancelled) {
+          setCustomerResults(payload.customers || []);
+        }
+      } catch (searchError) {
+        if (!cancelled) {
+          const message = searchError instanceof Error ? searchError.message : "Customer search failed";
+          error(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setCustomerLoading(false);
+        }
+      }
+    };
+
+    void searchCustomers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedCustomerSearch, error]);
+
+  const attachCustomerToSale = async (targetSaleId: string, customerId: string | null) => {
+    const payload = await apiPatch<SaleResponse>(`/api/sales/${encodeURIComponent(targetSaleId)}/customer`, {
+      customerId,
+    });
+    setSale(payload);
+    setSelectedCustomer(payload.sale.customer ?? null);
+    localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
+    return payload;
+  };
+
+  const selectCustomer = async (customer: CustomerSearchRow) => {
+    setSelectedCustomer(customer);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setShowCreateCustomer(false);
+
+    if (sale?.sale.id) {
+      try {
+        await attachCustomerToSale(sale.sale.id, customer.id);
+        success("Customer attached to sale");
+      } catch (attachError) {
+        const message = attachError instanceof Error ? attachError.message : "Failed to attach customer";
+        error(message);
+      }
+      return;
+    }
+
+    success("Customer selected. It will attach after checkout.");
+  };
+
+  const clearSelectedCustomer = async () => {
+    if (sale?.sale.id) {
+      try {
+        await attachCustomerToSale(sale.sale.id, null);
+        success("Customer removed from sale");
+      } catch (detachError) {
+        const message = detachError instanceof Error ? detachError.message : "Failed to remove customer";
+        error(message);
+        return;
+      }
+    } else {
+      setSelectedCustomer(null);
+    }
+
+    setSelectedCustomer(null);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setShowCreateCustomer(false);
+  };
+
+  const createCustomerAndSelect = async () => {
+    if (!newCustomerName.trim()) {
+      error("Customer name is required.");
+      return;
+    }
+
+    setCreatingCustomer(true);
+    try {
+      const created = await apiPost<CustomerSearchRow>("/api/customers", {
+        name: newCustomerName.trim(),
+        email: newCustomerEmail.trim() || undefined,
+        phone: newCustomerPhone.trim() || undefined,
+      });
+
+      setNewCustomerName("");
+      setNewCustomerEmail("");
+      setNewCustomerPhone("");
+      await selectCustomer(created);
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : "Failed to create customer";
+      error(message);
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
+
+  const resolveProductSearchRow = async (rawInput: string) => {
+    const trimmed = rawInput.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const exactLoadedMatch = searchRows.find((row) =>
+      isExactLookupMatch(row.barcode, trimmed) || isExactLookupMatch(row.sku, trimmed),
+    );
+    if (exactLoadedMatch) {
+      return exactLoadedMatch;
+    }
+
+    if (looksLikeScannerInput(trimmed)) {
+      const barcodeParams = new URLSearchParams();
+      barcodeParams.set("barcode", trimmed);
+      barcodeParams.set("take", "5");
+      const barcodeRows = await loadProductMatches(barcodeParams);
+      const exactBarcodeMatch = barcodeRows.find((row) => isExactLookupMatch(row.barcode, trimmed));
+      if (exactBarcodeMatch) {
+        return exactBarcodeMatch;
+      }
+
+      const skuParams = new URLSearchParams();
+      skuParams.set("sku", trimmed);
+      skuParams.set("take", "5");
+      const skuRows = await loadProductMatches(skuParams);
+      const exactSkuMatch = skuRows.find((row) => isExactLookupMatch(row.sku, trimmed));
+      if (exactSkuMatch) {
+        return exactSkuMatch;
+      }
+    }
+
+    if (searchRows.length > 0) {
+      return searchRows[0];
+    }
+
+    const queryParams = new URLSearchParams();
+    queryParams.set("q", trimmed);
+    queryParams.set("take", "5");
+    const queriedRows = await loadProductMatches(queryParams);
+    return queriedRows[0] ?? null;
+  };
+
+  const addItem = async (variantId: string) => {
     if (!basketId) {
       error("No active basket.");
       return;
@@ -278,86 +490,63 @@ export const PosPage = () => {
       setBasket(payload);
       setSearchText("");
       setSearchRows([]);
-      setSelectedSearchIndex(0);
-      if (scannedCode) {
-        setLastScanned(scannedCode);
-      }
       success("Item added");
-      focusSearch();
+      window.requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
       error(message);
-      focusSearch();
     }
   };
 
-  const findBarcodeMatch = async (rawCode: string): Promise<ProductSearchRow | null> => {
-    const code = normalizeBarcodeInput(rawCode);
-    if (!code) {
-      return null;
+  const addMultipleItems = async (variantId: string, quantity: number) => {
+    if (!basketId) {
+      error("No active basket.");
+      return;
     }
 
     try {
-      const payload = await apiGet<{ row?: ProductSearchRow }>(
-        `/api/products/barcode/${encodeURIComponent(code)}`,
-      );
-      if (payload.row) {
-        return payload.row;
-      }
-    } catch (lookupError) {
-      if (!(lookupError instanceof ApiError) || lookupError.status !== 404) {
-        throw lookupError;
-      }
+      const payload = await apiPost<BasketResponse>(`/api/baskets/${encodeURIComponent(basketId)}/items`, {
+        variantId,
+        quantity,
+      });
+      setBasket(payload);
+      setSearchText("");
+      setSearchRows([]);
+      success(`${quantity} item${quantity === 1 ? "" : "s"} added`);
+      focusProductSearch();
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : "Failed to add item";
+      error(message);
     }
-
-    const fallback = await apiGet<{ rows: ProductSearchRow[] }>(
-      `/api/products/search?q=${encodeURIComponent(code)}`,
-    );
-
-    const exact = (fallback.rows || []).find((row) => {
-      const barcode = row.barcode?.trim().toUpperCase();
-      const sku = row.sku.trim().toUpperCase();
-      const wanted = code.trim().toUpperCase();
-      return barcode === wanted || sku === wanted;
-    });
-
-    return exact || null;
   };
 
-  const handleSearchEnter = async () => {
-    const query = searchText.trim();
-    if (!query) {
-      if (searchRows.length > 0 && selectedSearchIndex >= 0) {
-        await addItemByVariant(searchRows[selectedSearchIndex]?.id || searchRows[0].id);
-      }
+  const submitProductSearch = async (quantity: number) => {
+    if (!basketId) {
+      error("No active basket.");
+      return;
+    }
+    if (saleId) {
+      error("Finish or reset the current sale before adding more items.");
       return;
     }
 
-    if (isBarcodeLikeQuery(query)) {
-      try {
-        const match = await findBarcodeMatch(query);
-        if (!match) {
-          error("No exact barcode match found");
-          setLastScanned(normalizeBarcodeInput(query));
-          focusSearch();
-          return;
-        }
-        await addItemByVariant(match.id, normalizeBarcodeInput(query));
-      } catch (scanError) {
-        const message = scanError instanceof Error ? scanError.message : "Barcode scan failed";
-        error(message);
-        focusSearch();
+    try {
+      const row = await resolveProductSearchRow(searchText);
+      if (!row) {
+        error("No product matched that barcode, SKU, or search.");
+        return;
       }
-      return;
-    }
 
-    const target =
-      selectedSearchIndex >= 0 && selectedSearchIndex < searchRows.length
-        ? searchRows[selectedSearchIndex]
-        : searchRows[0];
-
-    if (target) {
-      await addItemByVariant(target.id);
+      if (quantity === 1) {
+        await addItem(row.id);
+      } else {
+        await addMultipleItems(row.id, quantity);
+      }
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Failed to add searched item";
+      error(message);
     }
   };
 
@@ -372,11 +561,9 @@ export const PosPage = () => {
         { quantity },
       );
       setBasket(payload);
-      focusSearch();
     } catch (updateError) {
       const message = updateError instanceof Error ? updateError.message : "Failed to update quantity";
       error(message);
-      focusSearch();
     }
   };
 
@@ -385,28 +572,44 @@ export const PosPage = () => {
       return;
     }
 
-    const line = basket?.items.find((item) => item.id === itemId);
-    if (line && line.quantity > 1) {
-      const confirmed = window.confirm(
-        `Remove ${line.quantity} units of ${line.productName}${line.variantName ? ` (${line.variantName})` : ""}?`,
-      );
-      if (!confirmed) {
-        focusSearch();
-        return;
-      }
-    }
-
     try {
       const payload = await apiDelete<BasketResponse>(
         `/api/baskets/${encodeURIComponent(basketId)}/items/${encodeURIComponent(itemId)}`,
       );
       setBasket(payload);
-      success("Line removed");
-      focusSearch();
     } catch (removeError) {
       const message = removeError instanceof Error ? removeError.message : "Failed to remove line";
       error(message);
-      focusSearch();
+    }
+  };
+
+  const adjustLineQty = async (itemId: string, currentQuantity: number, delta: number) => {
+    const nextQuantity = currentQuantity + delta;
+    if (nextQuantity < 1) {
+      await removeLine(itemId);
+      return;
+    }
+
+    await updateLineQty(itemId, nextQuantity);
+  };
+
+  const clearBasket = async () => {
+    if (!basketId || !basket || basket.items.length === 0) {
+      return;
+    }
+
+    try {
+      let latestBasket = basket;
+      for (const item of basket.items) {
+        latestBasket = await apiDelete<BasketResponse>(
+          `/api/baskets/${encodeURIComponent(basketId)}/items/${encodeURIComponent(item.id)}`,
+        );
+      }
+      setBasket(latestBasket);
+      success("Basket cleared");
+    } catch (clearError) {
+      const message = clearError instanceof Error ? clearError.message : "Failed to clear basket";
+      error(message);
     }
   };
 
@@ -417,19 +620,67 @@ export const PosPage = () => {
     }
 
     try {
+      setCompletedSale(null);
+      setCaptureSession(null);
       const payload = await apiPost<{ sale: { id: string } }>(
         `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
         {},
       );
       const nextSaleId = payload.sale.id;
       syncQuery({ basketId, saleId: nextSaleId });
-      await loadSale(nextSaleId);
-      success("Sale created.");
-      focusSearch();
+      if (selectedCustomer?.id) {
+        await attachCustomerToSale(nextSaleId, selectedCustomer.id);
+        success("Sale created and customer attached.");
+      } else {
+        await loadSale(nextSaleId);
+        success("Sale created.");
+      }
     } catch (checkoutError) {
       const message = checkoutError instanceof Error ? checkoutError.message : "Checkout failed";
       error(message);
-      focusSearch();
+    }
+  };
+
+  const captureUrl = useMemo(() => {
+    if (!captureSession) {
+      return null;
+    }
+
+    return `${getPublicAppOrigin()}${captureSession.publicPath}`;
+  }, [captureSession]);
+
+  const createCustomerCaptureSession = async () => {
+    if (!sale?.sale.id) {
+      error("Create a sale before generating a customer capture link.");
+      return;
+    }
+
+    setCreatingCaptureSession(true);
+    try {
+      const payload = await apiPost<SaleCustomerCaptureSessionResponse>(
+        `/api/sales/${encodeURIComponent(sale.sale.id)}/customer-capture-sessions`,
+        {},
+      );
+      setCaptureSession(payload.session);
+      success("Customer capture link ready.");
+    } catch (captureError) {
+      const message = captureError instanceof Error ? captureError.message : "Failed to create capture link";
+      error(message);
+    } finally {
+      setCreatingCaptureSession(false);
+    }
+  };
+
+  const copyCaptureUrl = async () => {
+    if (!captureUrl) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(captureUrl);
+      success("Capture link copied.");
+    } catch {
+      error("Could not copy the capture link.");
     }
   };
 
@@ -442,10 +693,23 @@ export const PosPage = () => {
     setCompleting(true);
     try {
       const remaining = sale.tenderSummary.remainingPence;
+      const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
       if (remaining > 0) {
+        if (selectedTenderMethod === "CASH") {
+          if (cashTenderedPence === null) {
+            error("Enter the amount tendered.");
+            return;
+          }
+
+          if (cashTenderedPence < remaining) {
+            error("Cash tendered must cover the total due.");
+            return;
+          }
+        }
+
         await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
-          method: "CASH",
-          amountPence: remaining,
+          method: selectedTenderMethod,
+          amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : remaining,
         });
       }
 
@@ -453,98 +717,27 @@ export const PosPage = () => {
         `/api/sales/${encodeURIComponent(sale.sale.id)}/complete`,
         {},
       );
+      setCompletedSale({
+        saleId: sale.sale.id,
+        receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
+        changeDuePence: result.changeDuePence,
+        tenderMethod: selectedTenderMethod,
+        customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
+        cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
+        totalPaidPence: sale.tenderSummary.totalPence,
+      });
       setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
-      await loadSale(sale.sale.id);
+      await createBasket();
+      setSelectedTenderMethod("CARD");
+      setCashTenderedAmount("");
       success("Sale completed.");
-      setShowCompleteConfirm(false);
-      focusSearch();
     } catch (completeError) {
       const message = completeError instanceof Error ? completeError.message : "Completion failed";
       error(message);
-      focusSearch();
     } finally {
       setCompleting(false);
     }
   };
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const targetIsEditable = isEditableElement(event.target);
-
-      if (event.key === "/" && !targetIsEditable) {
-        event.preventDefault();
-        focusSearch();
-        return;
-      }
-
-      if (event.ctrlKey && event.key === "Enter") {
-        if (sale && !completing) {
-          event.preventDefault();
-          setShowCompleteConfirm(true);
-        }
-        return;
-      }
-
-      if (!basket || Boolean(saleId)) {
-        return;
-      }
-
-      const lines = basket.items;
-      if (lines.length === 0) {
-        return;
-      }
-
-      if (targetIsEditable) {
-        return;
-      }
-
-      const currentIndex = Math.max(
-        0,
-        lines.findIndex((line) => line.id === selectedLineId),
-      );
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        const nextIndex = Math.min(lines.length - 1, currentIndex + 1);
-        setSelectedLineId(lines[nextIndex].id);
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        const nextIndex = Math.max(0, currentIndex - 1);
-        setSelectedLineId(lines[nextIndex].id);
-        return;
-      }
-
-      const selectedLine = lines[currentIndex];
-      if (!selectedLine) {
-        return;
-      }
-
-      if (event.key === "+") {
-        event.preventDefault();
-        void updateLineQty(selectedLine.id, selectedLine.quantity + 1);
-        return;
-      }
-
-      if (event.key === "-") {
-        event.preventDefault();
-        if (selectedLine.quantity > 1) {
-          void updateLineQty(selectedLine.id, selectedLine.quantity - 1);
-        }
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        void removeLine(selectedLine.id);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [basket, sale, saleId, selectedLineId, completing]);
 
   const activeTotal = useMemo(() => {
     if (sale) {
@@ -553,73 +746,397 @@ export const PosPage = () => {
     return basket?.totals.totalPence ?? 0;
   }, [sale, basket]);
 
-  const selectedLine = useMemo(
-    () => basket?.items.find((item) => item.id === selectedLineId) ?? null,
-    [basket, selectedLineId],
-  );
+  const basketLineCount = basket?.items.length ?? 0;
+  const remainingDuePence = sale?.tenderSummary.remainingPence ?? 0;
+  const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
+  const cashChangeDuePence =
+    selectedTenderMethod === "CASH" && cashTenderedPence !== null
+      ? Math.max(cashTenderedPence - remainingDuePence, 0)
+      : 0;
+  const cashValidationMessage =
+    selectedTenderMethod !== "CASH" || remainingDuePence === 0
+      ? null
+      : cashTenderedAmount.trim() === ""
+        ? "Enter the cash received."
+        : cashTenderedPence === null
+          ? "Enter a valid amount in pounds."
+          : cashTenderedPence < remainingDuePence
+            ? `Cash tendered is short by ${formatMoney(remainingDuePence - cashTenderedPence)}.`
+            : null;
+  const quickCashAmounts = [500, 1000, 2000, 5000];
+  const beginNextSaleFromSuccess = async () => {
+    setCompletedSale(null);
+
+    if (basket?.items.length === 0 && !sale) {
+      focusProductSearch();
+      return;
+    }
+
+    setSelectedTenderMethod("CARD");
+    setCashTenderedAmount("");
+    await createBasket();
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isEditableTarget = target instanceof HTMLElement
+        && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (isEditableTarget) {
+          return;
+        }
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === "F2") {
+        event.preventDefault();
+        focusCustomerSearch();
+        return;
+      }
+
+      if (isEditableTarget) {
+        return;
+      }
+
+      if (event.key === "F4") {
+        event.preventDefault();
+        setCompletedSale(null);
+        setSelectedTenderMethod("CARD");
+        setCashTenderedAmount("");
+        void createBasket();
+        return;
+      }
+
+      if (event.key === "F8" && basket && basket.items.length > 0 && !sale) {
+        event.preventDefault();
+        void checkoutBasket();
+        return;
+      }
+
+      if (event.key === "F9" && sale && !completing && !cashValidationMessage) {
+        event.preventDefault();
+        void completeSale();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [basket, cashValidationMessage, completing, sale]);
 
   return (
     <div className="page-shell">
       <section className="card">
         <div className="card-header-row">
-          <h1>POS</h1>
+          <div>
+            <h1>POS</h1>
+            <p className="muted-text">
+              Start a sale, attach a customer when needed, then take payment and open the receipt.
+            </p>
+            <p className="muted-text pos-shortcuts">
+              Shortcuts: <kbd>/</kbd> product search, <kbd>F2</kbd> customer search, <kbd>F4</kbd> new sale,{" "}
+              <kbd>F8</kbd> checkout basket, <kbd>F9</kbd> complete sale.
+            </p>
+          </div>
           <div className="actions-inline">
             <button
               type="button"
               className="primary"
+              data-testid="pos-checkout-basket"
               onClick={checkoutBasket}
               disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-              title="Ctrl+Enter to complete once sale exists"
             >
               Checkout Basket
             </button>
-            <button type="button" onClick={() => void createBasket()}>
+            <button
+              type="button"
+              onClick={() => {
+                setCompletedSale(null);
+                setSelectedTenderMethod("CARD");
+                setCashTenderedAmount("");
+                void createBasket();
+              }}
+            >
               New Sale
             </button>
           </div>
         </div>
 
         <p className="muted-text">
-          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Total: {formatMoney(activeTotal)}
+          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Lines: {basketLineCount} | Total: {formatMoney(activeTotal)}
         </p>
-
-        <p className="muted-text">
-          Shortcuts: <code>/</code> search, <code>Enter</code> add top result, <code>↑/↓</code> select line,
-          <code> + / - </code>qty, <code>Delete</code> remove, <code>Ctrl+Enter</code> complete.
-        </p>
-
-        {selectedLine ? (
-          <p className="muted-text">
-            Selected line: {selectedLine.productName}
-            {selectedLine.variantName ? ` (${selectedLine.variantName})` : ""} x{selectedLine.quantity}
-          </p>
-        ) : null}
 
         {loading ? <p>Loading...</p> : null}
+
+        {completedSale ? (
+          <div className="success-panel success-panel-sale">
+            <div className="success-panel-heading">
+              <strong>Sale complete.</strong>
+              <span className="status-badge status-complete">Ready for next sale</span>
+            </div>
+            <div className="success-summary-grid">
+              <div>
+                <div className="muted-text">Sale reference</div>
+                <div className="table-primary mono-text">{completedSale.saleId}</div>
+              </div>
+              <div>
+                <div className="muted-text">Tender</div>
+                <div className="table-primary">{completedSale.tenderMethod}</div>
+              </div>
+              <div>
+                <div className="muted-text">Total paid</div>
+                <div className="table-primary">{formatMoney(completedSale.totalPaidPence)}</div>
+              </div>
+              <div>
+                <div className="muted-text">Customer</div>
+                <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
+              </div>
+            </div>
+            {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
+              <div className="success-summary-grid">
+                <div>
+                  <div className="muted-text">Cash received</div>
+                  <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
+                </div>
+                <div>
+                  <div className="muted-text">Change due</div>
+                  <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
+                </div>
+              </div>
+            ) : null}
+            <div className="success-links success-links-sale">
+              <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
+                New sale
+              </button>
+              <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
+                Open receipt
+              </a>
+              <a
+                href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open direct receipt page
+              </a>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Customer</h2>
+            <p className="muted-text">
+              Search and attach a customer to the current sale. If a sale has not been started
+              yet, the selected customer will attach after checkout.
+            </p>
+          </div>
+          {selectedCustomer ? (
+            <button
+              type="button"
+              data-testid="pos-customer-clear"
+              onClick={() => void clearSelectedCustomer()}
+            >
+              {sale?.sale.customer ? "Remove Customer" : "Clear Selection"}
+            </button>
+          ) : null}
+        </div>
+
+        {selectedCustomer ? (
+          <div className="selected-customer-panel" data-testid="pos-selected-customer">
+            <div>
+              <div className="table-primary">{selectedCustomer.name}</div>
+              <div className="muted-text">
+                {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
+              </div>
+            </div>
+            <div className="customer-status-chip">
+              {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
+            </div>
+          </div>
+        ) : (
+          <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
+        )}
+
+        <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
+          <div className="card-header-row">
+            <div>
+              <div className="table-primary">Customer self-capture</div>
+              <p className="muted-text">
+                Generate a temporary public link for the current sale so the customer can enter their own contact details.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary"
+              data-testid="pos-customer-capture-generate"
+              onClick={() => void createCustomerCaptureSession()}
+              disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession}
+            >
+              {creatingCaptureSession ? "Generating..." : "Generate Link"}
+            </button>
+          </div>
+
+          {captureSession && captureUrl ? (
+            <div className="capture-link-panel">
+              <label>
+                Public capture URL
+                <input
+                  data-testid="pos-customer-capture-url"
+                  value={captureUrl}
+                  readOnly
+                />
+              </label>
+              <div className="actions-inline">
+                <button type="button" onClick={() => void copyCaptureUrl()}>
+                  Copy Link
+                </button>
+                <a href={captureUrl} target="_blank" rel="noreferrer">
+                  Open Link
+                </a>
+              </div>
+              <p className="muted-text">
+                Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+              </p>
+            </div>
+          ) : (
+            <p className="muted-text">
+              Available after basket checkout creates a sale.
+            </p>
+          )}
+        </div>
+
+        <div className="customer-search-panel">
+          <label className="grow">
+            Search customers
+            <input
+              ref={customerSearchInputRef}
+              data-testid="pos-customer-search"
+              value={customerSearchText}
+              onChange={(event) => setCustomerSearchText(event.target.value)}
+              placeholder="name, phone, email"
+            />
+          </label>
+          <button type="button" onClick={() => setShowCreateCustomer((value) => !value)}>
+            {showCreateCustomer ? "Hide Quick Create" : "Quick Create Customer"}
+          </button>
+        </div>
+
+        {customerLoading ? <p className="muted-text">Searching customers...</p> : null}
+
+        {customerSearchText.trim() ? (
+          <div className="table-wrap" style={{ marginTop: "10px" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {customerResults.length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
+                  </tr>
+                ) : (
+                  customerResults.map((customer) => (
+                    <tr key={customer.id}>
+                      <td>{customer.name}</td>
+                      <td>{customer.email || "-"}</td>
+                      <td>{customer.phone || "-"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          data-testid={`pos-customer-select-${customer.id}`}
+                          onClick={() => void selectCustomer(customer)}
+                        >
+                          {sale ? "Attach" : "Select"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {showCreateCustomer ? (
+          <div className="quick-create-panel">
+            <div className="quick-create-grid">
+              <label>
+                Name
+                <input
+                  value={newCustomerName}
+                  onChange={(event) => setNewCustomerName(event.target.value)}
+                  placeholder="Customer name"
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  value={newCustomerEmail}
+                  onChange={(event) => setNewCustomerEmail(event.target.value)}
+                  placeholder="name@example.com"
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={newCustomerPhone}
+                  onChange={(event) => setNewCustomerPhone(event.target.value)}
+                  placeholder="Phone number"
+                />
+              </label>
+            </div>
+            <div className="actions-inline">
+              <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
+                {creatingCustomer ? "Creating..." : "Create and Select"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="card">
         <h2>Product Search</h2>
+        <p className="muted-text">
+          Scan a barcode or search by SKU or product name. Press Enter to add the exact barcode or SKU match right away, or Shift+Enter to add five.
+        </p>
         <label className="grow">
           Search / Barcode
-            <input
-              ref={searchInputRef}
-              autoFocus
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void handleSearchEnter();
+          <input
+            ref={searchInputRef}
+            data-testid="pos-product-search"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") {
+                return;
               }
+
+              event.preventDefault();
+              if (event.shiftKey) {
+                void submitProductSearch(5);
+                return;
+              }
+              void submitProductSearch(1);
             }}
             placeholder="sku, barcode, name"
           />
         </label>
-
-        <div className="scan-indicator">
-          Last scanned: {lastScanned ? <strong>{lastScanned}</strong> : "-"}
-        </div>
+        <p className="muted-text">
+          Scanner note: if the scan lands before the debounced search refreshes, Enter still checks for an exact barcode or SKU match before falling back to the visible first row.
+        </p>
 
         <div className="table-wrap" style={{ marginTop: "10px" }}>
           <table>
@@ -635,22 +1152,64 @@ export const PosPage = () => {
             <tbody>
               {searchRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>No results.</td>
+                  <td colSpan={5}>
+                    {searchText.trim() ? "No products matched that search." : "Search or scan to start adding items."}
+                  </td>
                 </tr>
               ) : (
-                searchRows.map((row, index) => (
-                  <tr key={row.id} className={index === selectedSearchIndex ? "selected-row" : ""}>
+                searchRows.map((row) => {
+                  const canAdd = Boolean(basketId) && !saleId;
+
+                  return (
+                  <tr
+                    key={row.id}
+                    className={canAdd ? "clickable-row" : undefined}
+                    onClick={canAdd ? () => void addItem(row.id) : undefined}
+                    onKeyDown={
+                      canAdd
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              void addItem(row.id);
+                            }
+                          }
+                        : undefined
+                    }
+                    role={canAdd ? "button" : undefined}
+                    tabIndex={canAdd ? 0 : undefined}
+                    aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
+                  >
                     <td>{row.name}</td>
                     <td>{row.sku}</td>
                     <td>{formatMoney(row.pricePence)}</td>
                     <td>{row.onHandQty}</td>
                     <td>
-                      <button type="button" onClick={() => void addItemByVariant(row.id)} disabled={!basketId || Boolean(saleId)}>
-                        Add
-                      </button>
+                      <div className="actions-inline">
+                        <button
+                          type="button"
+                          data-testid={`pos-product-add-${row.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void addItem(row.id);
+                          }}
+                          disabled={!canAdd}
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void addMultipleItems(row.id, 5);
+                          }}
+                          disabled={!canAdd}
+                        >
+                          Add 5
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>
@@ -658,7 +1217,18 @@ export const PosPage = () => {
       </section>
 
       <section className="card">
-        <h2>Basket Lines</h2>
+        <div className="card-header-row">
+          <h2>Basket Lines</h2>
+          <div className="actions-inline">
+            <button
+              type="button"
+              onClick={() => void clearBasket()}
+              disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+            >
+              Clear basket
+            </button>
+          </div>
+        </div>
 
         {basket && basket.items.length > 0 ? (
           <div className="table-wrap">
@@ -666,6 +1236,7 @@ export const PosPage = () => {
               <thead>
                 <tr>
                   <th>Item</th>
+                  <th>SKU</th>
                   <th>Qty</th>
                   <th>Unit</th>
                   <th>Total</th>
@@ -674,41 +1245,45 @@ export const PosPage = () => {
               </thead>
               <tbody>
                 {basket.items.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={selectedLineId === item.id ? "selected-row" : ""}
-                    onClick={() => setSelectedLineId(item.id)}
-                  >
+                  <tr key={item.id}>
                     <td>{item.productName}{item.variantName ? ` (${item.variantName})` : ""}</td>
                     <td>
-                      <div className="actions-inline">
+                      {item.sku}
+                    </td>
+                    <td>
+                      <div className="actions-inline pos-qty-controls">
                         <button
                           type="button"
-                          onClick={() => {
-                            void updateLineQty(item.id, Math.max(1, item.quantity - 1));
-                          }}
-                          disabled={Boolean(saleId) || item.quantity <= 1}
+                          onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
+                          disabled={Boolean(saleId)}
+                          aria-label={`Decrease quantity for ${item.productName}`}
                         >
                           -
                         </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(event) => {
-                            const next = Number(event.target.value) || 1;
-                            void updateLineQty(item.id, next);
-                          }}
-                          disabled={Boolean(saleId)}
-                        />
+                        <strong>{item.quantity}</strong>
                         <button
                           type="button"
-                          onClick={() => {
-                            void updateLineQty(item.id, item.quantity + 1);
-                          }}
+                          onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
+                          disabled={Boolean(saleId) || item.quantity < 6}
+                          aria-label={`Decrease quantity by five for ${item.productName}`}
+                        >
+                          -5
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
                           disabled={Boolean(saleId)}
+                          aria-label={`Increase quantity for ${item.productName}`}
                         >
                           +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
+                          disabled={Boolean(saleId)}
+                          aria-label={`Increase quantity by five for ${item.productName}`}
+                        >
+                          +5
                         </button>
                       </div>
                     </td>
@@ -725,65 +1300,97 @@ export const PosPage = () => {
             </table>
           </div>
         ) : (
-          <p className="muted-text">No basket lines yet.</p>
+          <p className="muted-text">No basket lines yet. Search or scan a product to start the sale.</p>
         )}
       </section>
 
       {sale ? (
         <section className="card">
-          <h2>Sale</h2>
+          <h2>Checkout</h2>
+          <p className="muted-text">Take payment here to complete the sale and reset the counter for the next customer.</p>
+          <p className="muted-text">
+            Total: {formatMoney(sale.tenderSummary.totalPence)} | Lines: {sale.saleItems.length} | Customer: {sale.sale.customer?.name || selectedCustomer?.name || "Walk-in"}
+          </p>
           <p className="muted-text">
             Tendered: {formatMoney(sale.tenderSummary.tenderedPence)} | Remaining: {formatMoney(sale.tenderSummary.remainingPence)} | Change: {formatMoney(sale.tenderSummary.changeDuePence)}
           </p>
+
+          <div className="actions-inline" role="group" aria-label="Tender type">
+            <button
+              type="button"
+              className={selectedTenderMethod === "CARD" ? "primary" : ""}
+              onClick={() => setSelectedTenderMethod("CARD")}
+              disabled={completing}
+            >
+              Card
+            </button>
+            <button
+              type="button"
+              className={selectedTenderMethod === "CASH" ? "primary" : ""}
+              onClick={() => setSelectedTenderMethod("CASH")}
+              disabled={completing}
+            >
+              Cash
+            </button>
+          </div>
+
+          {selectedTenderMethod === "CASH" ? (
+            <div className="quick-create-panel" style={{ marginTop: "12px" }}>
+              <div className="quick-create-grid">
+                <label style={{ maxWidth: "180px" }}>
+                  Amount tendered
+                  <input
+                    ref={cashTenderedInputRef}
+                    data-testid="pos-cash-tendered"
+                    inputMode="decimal"
+                    value={cashTenderedAmount}
+                    onChange={(event) => setCashTenderedAmount(event.target.value)}
+                    placeholder="0.00"
+                    disabled={completing}
+                  />
+                </label>
+              </div>
+
+              <div className="actions-inline" role="group" aria-label="Quick cash amounts">
+                <button
+                  type="button"
+                  onClick={() => setCashTenderedAmount((remainingDuePence / 100).toFixed(2))}
+                  disabled={remainingDuePence === 0 || completing}
+                >
+                  Exact
+                </button>
+                {quickCashAmounts.map((amountPence) => (
+                  <button
+                    key={amountPence}
+                    type="button"
+                    onClick={() => setCashTenderedAmount((amountPence / 100).toFixed(2))}
+                    disabled={completing}
+                  >
+                    {formatMoney(amountPence)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="muted-text">
+                Due: {formatMoney(remainingDuePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
+              </div>
+
+              {cashValidationMessage ? <p className="muted-text">{cashValidationMessage}</p> : null}
+            </div>
+          ) : null}
 
           <div className="actions-inline">
             <button
               type="button"
               className="primary"
-              onClick={() => setShowCompleteConfirm(true)}
-              disabled={completing}
+              data-testid="pos-complete-sale"
+              onClick={completeSale}
+              disabled={completing || Boolean(cashValidationMessage)}
             >
               {completing ? "Completing..." : "Complete Sale"}
             </button>
           </div>
-
-          {receiptUrl ? (
-            <div className="success-panel">
-              <strong>Sale complete.</strong>
-              <div className="success-links">
-                <a href={toBackendUrl(receiptUrl)} target="_blank" rel="noreferrer">
-                  Open receipt
-                </a>
-                <a
-                  href={toBackendUrl(`/sales/${encodeURIComponent(sale.sale.id)}/receipt`)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open direct receipt page
-                </a>
-              </div>
-            </div>
-          ) : null}
         </section>
-      ) : null}
-
-      {showCompleteConfirm ? (
-        <div className="modal-backdrop" role="presentation" onClick={() => setShowCompleteConfirm(false)}>
-          <div className="modal-card" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <h3>Complete Sale</h3>
-            <p>
-              Complete sale {sale?.sale.id ? sale.sale.id.slice(0, 8) : ""} for {formatMoney(sale?.sale.totalPence ?? 0)}?
-            </p>
-            <div className="actions-inline">
-              <button type="button" onClick={() => setShowCompleteConfirm(false)} disabled={completing}>
-                Cancel
-              </button>
-              <button type="button" className="primary" onClick={() => void completeSale()} disabled={completing}>
-                {completing ? "Completing..." : "Confirm"}
-              </button>
-            </div>
-          </div>
-        </div>
       ) : null}
     </div>
   );

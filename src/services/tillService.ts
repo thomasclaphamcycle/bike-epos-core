@@ -1,4 +1,4 @@
-import { CashMovementType, CashSessionStatus, Prisma } from "@prisma/client";
+import { CashMovementReason, CashMovementType, CashSessionStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { toCsv } from "../utils/csv";
 import { HttpError, isUuid } from "../utils/http";
@@ -13,6 +13,9 @@ type AddPaidMovementInput = {
   type?: string;
   amountPence?: number;
   ref?: string;
+  note?: string;
+  reason?: CashMovementReason;
+  receiptImageUrl?: string;
   createdByStaffId?: string;
 };
 
@@ -27,7 +30,7 @@ type ListCashSessionsInput = {
   to?: string;
 };
 
-const DATE_ONLY_REGEX = /^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 export const DEFAULT_CASH_LOCATION_ID = "default";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -106,6 +109,8 @@ const createMovementTx = async (
     ref: string;
     locationId?: string;
     note?: string;
+    reason?: CashMovementReason;
+    receiptImageUrl?: string;
     relatedSaleId?: string;
     relatedRefundId?: string;
     createdByStaffId?: string;
@@ -118,10 +123,12 @@ const createMovementTx = async (
       type: input.type,
       amountPence: input.amountPence,
       ref: input.ref,
-      note: input.note ?? null,
-      relatedSaleId: input.relatedSaleId ?? null,
-      relatedRefundId: input.relatedRefundId ?? null,
-      createdByStaffId: input.createdByStaffId ?? null,
+      ...(input.reason !== undefined ? { reason: input.reason } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.receiptImageUrl !== undefined ? { receiptImageUrl: input.receiptImageUrl } : {}),
+      ...(input.relatedSaleId !== undefined ? { relatedSaleId: input.relatedSaleId } : {}),
+      ...(input.relatedRefundId !== undefined ? { relatedRefundId: input.relatedRefundId } : {}),
+      ...(input.createdByStaffId !== undefined ? { createdByStaffId: input.createdByStaffId } : {}),
     },
   });
 
@@ -276,6 +283,7 @@ export const addPaidMovement = async (sessionId: string, input: AddPaidMovementI
     throw new HttpError(400, "amountPence must be greater than zero", "INVALID_TILL_MOVEMENT");
   }
   const ref = normalizeOptionalText(input.ref) ?? `${type}:${Date.now()}`;
+  const note = normalizeOptionalText(input.note);
 
   return prisma.$transaction(async (tx) => {
     const session = await getSessionByIdTx(tx, sessionId);
@@ -288,6 +296,9 @@ export const addPaidMovement = async (sessionId: string, input: AddPaidMovementI
       type,
       amountPence,
       ref,
+      ...(note ? { note } : {}),
+      ...(input.reason ? { reason: input.reason } : {}),
+      ...(input.receiptImageUrl ? { receiptImageUrl: input.receiptImageUrl } : {}),
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),
     });
 
@@ -299,9 +310,11 @@ export const addPaidMovement = async (sessionId: string, input: AddPaidMovementI
         sessionId: movement.sessionId,
         locationId: movement.locationId,
         type: movement.type,
+        reason: movement.reason,
         amountPence: movement.amountPence,
         ref: movement.ref,
         note: movement.note,
+        receiptImageUrl: movement.receiptImageUrl,
         relatedSaleId: movement.relatedSaleId,
         relatedRefundId: movement.relatedRefundId,
         createdAt: movement.createdAt,
@@ -491,7 +504,11 @@ export const recordCashSaleMovementForPaymentTx = async (
 
   const openSession = await getOpenSessionTx(tx);
   if (!openSession) {
-    return;
+    throw new HttpError(
+      409,
+      "No open register session. Open the till before taking a cash sale.",
+      "REGISTER_SESSION_REQUIRED",
+    );
   }
 
   try {

@@ -54,6 +54,14 @@ X-Staff-Id: manager-1
   "countedQty": 12
 }
 
+### Request stocktake review (MANAGER+)
+POST {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/review
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
+
+{}
+
 ### Finalize stocktake session (MANAGER+)
 POST {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/finalize
 Content-Type: application/json
@@ -61,6 +69,11 @@ X-Staff-Role: {{managerRole}}
 X-Staff-Id: manager-1
 
 {}
+
+### Remove stocktake line (MANAGER+)
+DELETE {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/lines/{{lineId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: manager-1
 
 ### Cancel stocktake session (MANAGER+)
 POST {{baseUrl}}/api/stocktake/sessions/{{sessionId}}/cancel

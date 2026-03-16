@@ -1,0 +1,5 @@
+### M124 Customer Reminders
+
+GET http://localhost:3000/api/reports/customers/reminders?dueSoonDays=30&overdueDays=60&lookbackDays=365&take=50
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

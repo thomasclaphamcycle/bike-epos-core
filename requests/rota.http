@@ -1,0 +1,133 @@
+### Rota overview
+GET http://localhost:3000/api/rota
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Rota overview (all active staff, filtered)
+GET http://localhost:3000/api/rota?staffScope=all&role=STAFF&search=Casey
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Create six-week rota period
+POST http://localhost:3000/api/rota/periods
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "startsOn": "2026-03-09",
+  "label": "Spring rota block"
+}
+
+### Bank holiday sync status
+GET http://localhost:3000/api/rota/bank-holidays/status
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Download rota template
+GET http://localhost:3000/api/rota/template?startsOn=2026-03-09
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Export rota period
+GET http://localhost:3000/api/rota/periods/{{rotaPeriodId}}/export
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Sync UK bank holidays
+POST http://localhost:3000/api/rota/bank-holidays/sync
+X-Staff-Role: ADMIN
+X-Staff-Id: rota-admin
+
+### Save rota assignment
+POST http://localhost:3000/api/rota/assignments
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "rotaPeriodId": "{{rotaPeriodId}}",
+  "staffId": "rota-alex-id",
+  "date": "2026-03-10",
+  "shiftType": "FULL_DAY"
+}
+
+### Clear rota assignment
+DELETE http://localhost:3000/api/rota/assignments/{{assignmentId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Holiday requests list (mine)
+GET http://localhost:3000/api/rota/holiday-requests?scope=mine
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
+### Holiday requests list (mine, approved only)
+GET http://localhost:3000/api/rota/holiday-requests?scope=mine&status=APPROVED
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
+### Holiday requests list (all)
+GET http://localhost:3000/api/rota/holiday-requests?scope=all
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+### Submit holiday request
+POST http://localhost:3000/api/rota/holiday-requests
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
+{
+  "startDate": "2026-03-09",
+  "endDate": "2026-03-15",
+  "requestNotes": "Family trip"
+}
+
+### Approve holiday request
+POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/approve
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "decisionNotes": "Approved and covered on the workshop bench."
+}
+
+### Reject holiday request
+POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/reject
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: rota-admin
+
+{
+  "decisionNotes": "Too many people away that weekend."
+}
+
+### Cancel holiday request
+POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/cancel
+X-Staff-Role: STAFF
+X-Staff-Id: rota-alex-id
+
+### Rota import preview
+POST http://localhost:3000/api/rota/import/preview
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "fileName": "rota-export.csv",
+  "spreadsheetText": "Week commencing,09/03/2026,,,,,\nName,Mon 09/03,Tue 10/03,Wed 11/03,Thu 12/03,Fri 13/03,Sat 14/03\nClosed day,,,,,Closed: Special bank holiday,\nAlex Turner,Full,AM,Holiday,Off,Off,PM\nJordan Patel,Off,Full,Off,PM,Off,Off"
+}
+
+### Rota import confirm
+POST http://localhost:3000/api/rota/import/confirm
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "fileName": "rota-export.csv",
+  "previewKey": "replace-with-preview-key",
+  "spreadsheetText": "Week commencing,09/03/2026,,,,,\nName,Mon 09/03,Tue 10/03,Wed 11/03,Thu 12/03,Fri 13/03,Sat 14/03\nClosed day,,,,,Closed: Special bank holiday,\nAlex Turner,Full,AM,Holiday,Off,Off,PM\nJordan Patel,Off,Full,Off,PM,Off,Off"
+}

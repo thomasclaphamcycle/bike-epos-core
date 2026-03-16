@@ -2,6 +2,92 @@
 
 Node/TypeScript + Express + Prisma + Postgres backend for bike EPOS workflows.
 
+## Prerequisites
+
+- local PostgreSQL running on `localhost:5432`
+- Node.js with `npm`
+- two terminals when evaluating the React SPA locally
+
+## Trial Quickstart
+
+1. Install backend dependencies:
+
+```bash
+npm ci
+```
+
+2. Install frontend dependencies:
+
+```bash
+npm --prefix frontend ci
+```
+
+3. Create local env files:
+
+```bash
+cp .env.example .env
+cp .env.test.example .env.test
+```
+
+4. Prepare the local development database:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+npm run db:seed:dev
+```
+
+5. Run the backend:
+
+```bash
+npm run dev
+```
+
+6. In a second terminal, run the React frontend:
+
+```bash
+npm --prefix frontend run dev
+```
+
+7. Open `http://localhost:5173/login`.
+
+The React evaluator path is frontend on `http://localhost:5173` talking to the backend on `http://localhost:3000`.
+Production-style serving still comes from the backend after `npm run build`.
+
+## Production Deployment Checklist
+
+For a real shop deployment, use the concise production runbook in [docs/production_setup.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/production_setup.md).
+
+It covers:
+
+- production environment variables
+- database initialization and Prisma migrations
+- backup and restore
+- log handling
+- safe upgrade steps
+- recovery procedures
+- minimal hardware guidance
+
+For the branch/release gate used before tagging, use [docs/release_checklist.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/release_checklist.md).
+
+## Roadmap Progress
+
+CorePOS roadmap progress is now computed from real repo evidence rather than maintained as hardcoded percentages.
+
+- `npm run roadmap` prints the current per-phase completion table
+- `npm run roadmap:json` prints the explainable JSON breakdown
+- `npm run roadmap1` writes `docs/roadmap-progress.png`
+
+See [docs/roadmap_progress.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/roadmap_progress.md) for the scoring model, evidence rules, and maintenance guidance.
+
+## Real Shop Pilot Guide
+
+For a concise trial-evaluation walkthrough covering seeded logins, operator flows, sample shop scenarios, and known pilot limitations, use [docs/pilot_preparation.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_preparation.md).
+
+For a tighter step-by-step onboarding guide aimed at a real bike shop trial setup, use [docs/pilot_shop_guide.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_shop_guide.md).
+
+For first-live-week support, backup, restore, and daily pilot runbook guidance, use [docs/pilot_support_pack.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/pilot_support_pack.md).
+
 ## Local Setup
 
 1. Install dependencies:
@@ -13,34 +99,145 @@ npm ci
 2. Create local env files:
 
 ```bash
+cp .env.example .env
 cp .env.test.example .env.test
-# keep your existing .env for dev DATABASE_URL
 ```
 
-3. Start dedicated test DB + migrations:
+Set `DATABASE_URL` in `.env` to a real local Postgres role and database. On macOS that is often your local username:
+
+```bash
+DATABASE_URL=postgresql://$(whoami)@localhost:5432/bike_epos
+```
+
+If the role or database does not exist yet:
+
+```bash
+createuser -s "$(whoami)"
+createdb bike_epos
+```
+
+If `prisma migrate dev` reports drift against an old local dev database, reset only the local development DB and recreate it:
+
+```bash
+npm run db:reset:dev
+```
+
+3. Prepare the local development database:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+npm run db:seed:dev
+```
+
+For a clean repeatable local reset plus reseed, use:
+
+```bash
+npm run db:reset-and-seed:dev
+```
+
+That workflow will:
+
+- reset only the local dev database from `DATABASE_URL`
+- regenerate Prisma client
+- apply all existing migrations
+- seed the base operational demo data
+- restore the intended local staff roster: `Dom`, `Eric`, `Mike`, `Thomas`
+- make `Thomas` the intended local admin login for the reset dev environment
+
+It does not prepare the test database. Keep using `npm run test:db:up` for test/e2e setup.
+
+4. Start the backend:
+
+```bash
+npm run dev
+```
+
+5. Install and run the React frontend when evaluating the SPA locally:
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run dev
+```
+
+6. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 
 ```bash
 npm run test:db:up
 ```
+
+7. If you are using Codex locally, this repo already ships a project-scoped `.codex/config.toml` with:
+
+- `sandbox_mode = "workspace-write"`
+- `approval_policy = "never"`
+- `[sandbox_workspace_write].network_access = true`
+- `[sandbox_workspace_write].allowed_hosts = ["localhost", "127.0.0.1"]`
+- `[env].allow = ["DATABASE_URL"]`
+
+That keeps local automation project-scoped while still allowing trusted access to local services such as PostgreSQL on `localhost:5432`.
+
+### Trusted Local Codex Mode
+
+This repository is set up for trusted local Codex runs through `.codex/config.toml`.
+
+- `workspace-write` keeps file access scoped to the project instead of enabling full machine access
+- local loopback and PostgreSQL access on `localhost:5432` are expected for seeds, smoke tests, and verification
+- approval prompts should now be minimal during normal local development
+
+On a fully trusted machine, advanced users can still choose `sandbox_mode = "danger-full-access"` for fully autonomous runs, but that is intentionally not the project default.
 
 ## Auth (M35)
 
 Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 
 - Login API: `POST /api/auth/login`
+- PIN Login API: `POST /api/auth/pin-login`
 - Logout API: `POST /api/auth/logout`
 - Current user: `GET /api/auth/me`
-- Login UI: `/login`
+- Active login users: `GET /api/auth/active-users`
+- Login UI: `/login` (current React UI is PIN-first with active-user buttons, and now includes a password fallback form for password-only or reset-PIN accounts)
+
+### Login after `npm run db:seed:dev`
+
+`scripts/seed_demo_data.ts` no longer creates demo auth users.
+
+The login screen remains PIN-first and lists whatever active staff accounts already exist in the local database. For a fresh local setup, use `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` to restore the intended local roster with Thomas as the admin user.
+
+For the intended local dev roster, run `npm run auth:seed-local-staff` to upsert the standard PIN-enabled staff set and make `Thomas` the admin user.
+
+`npm run db:seed:dev` now keeps the demo environment intentionally small:
+
+- no demo auth users
+- 7 products with opening stock in `Main Stock`
+- 4 customers
+- 3 workshop jobs
+- 1 supplier and 1 open purchase order for receiving
 
 ### Create initial admin
 
-Recommended:
+Optional standalone admin seed:
 
 ```bash
 ADMIN_NAME="Admin User" \
 ADMIN_EMAIL="admin@example.com" \
 ADMIN_PASSWORD="ChangeMe123!" \
 npm run auth:seed-admin
+```
+
+Optional local staff restore:
+
+```bash
+npm run auth:seed-local-staff
+```
+
+The standard local dev admin after `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` is:
+
+- `Thomas` / `thomas@corepos.local` / PIN `8642`
+
+Full local reset + reseed:
+
+```bash
+npm run db:reset-and-seed:dev
 ```
 
 Alternative (only when DB has no users): `POST /api/auth/bootstrap`.
@@ -51,15 +248,32 @@ See [docs/auth.md](docs/auth.md) for full mode/flag details.
 
 Authenticated pages now use a shared app shell with role-aware navigation.
 
-- `/` redirects to `/pos` when authenticated, otherwise `/login`.
+- When the React SPA is active, `/` loads the app shell and routes authenticated users through `/home` to their role landing page (`/dashboard`, `/management`, or `/management/staff`).
+- In backend-only/non-SPA mode, `/` still redirects authenticated users to `/pos`; unauthenticated access still goes to `/login`.
+- The React `/login` screen now routes successful fallback password logins through `/home`; the backend-only legacy login page still falls back to `/pos`.
 - Unauthenticated access to protected pages redirects to `/login?next=...`.
 - Role-based page access redirects to `/not-authorized` for HTML requests.
 
-Navigation visibility:
+Current UX-branch shell visibility:
 
-- `STAFF+`: POS, Workshop, Inventory
-- `MANAGER+`: Till / Cash Up
-- `ADMIN`: Admin Users, Admin Audit
+- sidebar currently shows a reduced navigation set for redesign work
+- route access is still enforced by `ProtectedRoute` role checks
+- management/admin pages remain directly routable for authorized users
+
+## Trial Flow Guide
+
+Recommended evaluator pass:
+
+1. Log in with an existing staff account and confirm `/home` routes to `/dashboard`.
+2. Open `/pos`, attach a seeded customer, add one or two seeded products, and complete a simple sale.
+3. Open `/workshop` and `/workshop/collection` to review the three seeded jobs across booking, waiting-for-parts, and ready-for-collection states.
+4. Log in with an existing manager account, then review `/inventory`, `/purchasing`, and `/management` using the seeded supplier and open purchase order.
+5. Log in with an existing admin account and review `/management/staff` for staff lifecycle and password/PIN controls.
+
+Intentional trial limitations to note:
+
+- some management surfaces are visibility/reporting groundwork rather than full operational modules
+- backend-only legacy HTML routes still exist, but the current evaluator path is the React SPA
 
 ## POS Tenders (M39)
 
@@ -187,6 +401,27 @@ E2E covers:
 - admin permissions
 - till open/paid-in/count/close flow
 
+### Full local verification pass
+
+Run these sequentially from a clean environment:
+
+```bash
+npm test
+npm run build
+npm run e2e
+npm run test:m38
+npm run test:m24
+npm run test:m27
+npm run test:m30
+npm run db:seed:dev
+```
+
+Notes:
+
+- keep shared test ports such as `3100` clear before starting
+- standalone smoke commands start their own local test-mode server on `http://localhost:3100`
+- run `npm run test:db:up` first if the dedicated test database is not already running
+
 ## Dev Workflow
 
 Start dev server:
@@ -195,17 +430,23 @@ Start dev server:
 npm run dev
 ```
 
+Start the frontend dev server in a second terminal:
+
+```bash
+npm --prefix frontend run dev
+```
+
 Useful UI routes:
 
 - `/login`
+- `/home`
+- `/dashboard`
+- `/management`
 - `/pos`
 - `/workshop`
 - `/inventory`
-- `/inventory/adjust`
-- `/admin`
-- `/admin/audit`
-- `/till`
-- `/reports`
+- `/suppliers`
+- `/purchasing`
 
 ## CI
 
@@ -225,6 +466,12 @@ CI runs with:
 - `NODE_ENV=test`
 - `AUTH_MODE=real`
 - `TEST_DATABASE_URL` + `DATABASE_URL` pointed at CI Postgres
+
+## CI Verification Note
+
+This repository uses local verification and GitHub Actions to confirm branch health.
+This note exists to trigger a fresh CI run for the current verified branch state.
+The wording is intentionally non-functional and safe to replace in a later cleanup.
 
 ## Cleanup Test DB
 

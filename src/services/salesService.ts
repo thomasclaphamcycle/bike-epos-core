@@ -1,8 +1,9 @@
 import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { ensureDefaultLocationTx } from "./locationService";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { ensureDefaultLocationTx } from "./locationService";
 import {
   recordCashRefundMovementForPaymentTx,
   recordCashSaleMovementForSaleTx,
@@ -37,15 +38,32 @@ type CompleteSaleInput = {
   staffActorId?: string;
 };
 
-type SaleTenderInput = {
-  method?: SaleTenderMethod;
-  amountPence?: number;
-};
-
 type CreateExchangeSaleInput = {
   staffActorId?: string;
   locationId?: string;
   auditActor?: AuditActor;
+};
+
+const emitSaleCompletedEvent = (payload: {
+  saleId: string;
+  completedAt: Date;
+  totalPence?: number;
+  changeDuePence?: number;
+}) => {
+  emit("sale.completed", {
+    id: payload.saleId,
+    type: "sale.completed",
+    timestamp: new Date().toISOString(),
+    saleId: payload.saleId,
+    completedAt: payload.completedAt.toISOString(),
+    ...(payload.totalPence !== undefined ? { totalPence: payload.totalPence } : {}),
+    ...(payload.changeDuePence !== undefined ? { changeDuePence: payload.changeDuePence } : {}),
+  });
+};
+
+type SaleTenderInput = {
+  method?: SaleTenderMethod;
+  amountPence?: number;
 };
 
 const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
@@ -129,6 +147,87 @@ const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) =
       isDefault: true,
     },
   });
+};
+
+const getWorkshopJobForBasketTx = async (
+  tx: Prisma.TransactionClient,
+  basketId: string,
+) => {
+  const matches = await tx.workshopJob.findMany({
+    where: { finalizedBasketId: basketId },
+    select: {
+      id: true,
+      customerId: true,
+      locationId: true,
+      status: true,
+      completedAt: true,
+      cancelledAt: true,
+    },
+    take: 2,
+  });
+
+  if (matches.length > 1) {
+    throw new HttpError(
+      409,
+      "Basket is linked to multiple workshop jobs",
+      "WORKSHOP_BASKET_CONFLICT",
+    );
+  }
+
+  return matches[0] ?? null;
+};
+
+const completeWorkshopJobForBasketCheckoutTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    workshopJob: {
+      id: string;
+      locationId: string;
+      status: string;
+      completedAt: Date | null;
+    };
+    saleId: string;
+    createdByStaffId: string | undefined;
+  },
+) => {
+  if (
+    input.workshopJob.status === "COMPLETED" ||
+    input.workshopJob.status === "CANCELLED"
+  ) {
+    return {
+      completedAt: input.workshopJob.completedAt,
+      emittedWorkshopCompletion: false,
+    };
+  }
+
+  const completedAt = input.workshopJob.completedAt ?? new Date();
+  await tx.workshopJob.update({
+    where: { id: input.workshopJob.id },
+    data: {
+      status: "COMPLETED",
+      completedAt,
+    },
+  });
+
+  await createAuditEventTx(
+    tx,
+    {
+      action: "WORKSHOP_CHECKOUT_COMPLETED",
+      entityType: "WORKSHOP_JOB",
+      entityId: input.workshopJob.id,
+      metadata: {
+        saleId: input.saleId,
+        completionSource: "BASKET_CHECKOUT",
+        completedAt: completedAt.toISOString(),
+      },
+    },
+    input.createdByStaffId ? { actorId: input.createdByStaffId } : undefined,
+  );
+
+  return {
+    completedAt,
+    emittedWorkshopCompletion: true,
+  };
 };
 
 const toSaleResponse = async (saleId: string) => {
@@ -591,8 +690,10 @@ export const completeSaleIfEligibleTx = async (
 
   return {
     saleId: updatedSale.id,
-    completedAt: updatedSale.completedAt,
+    completedAt,
     changeDuePence: updatedSale.changeDuePence,
+    totalPence: sale.totalPence,
+    didComplete: true,
   };
 };
 
@@ -604,8 +705,20 @@ export const completeSaleIfEligible = async (
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
   }
 
-  return prisma.$transaction((tx) => completeSaleIfEligibleTx(tx, saleId, input));
+  const result = await prisma.$transaction((tx) => completeSaleIfEligibleTx(tx, saleId, input));
+
+  if ("didComplete" in result && result.didComplete) {
+    emitSaleCompletedEvent(result);
+  }
+
+  return {
+    saleId: result.saleId,
+    completedAt: result.completedAt,
+    changeDuePence: result.changeDuePence,
+  };
 };
+
+export { emitSaleCompletedEvent };
 
 const parseSaleTenderMethodOrThrow = (value: SaleTenderMethod | undefined): SaleTenderMethod => {
   if (
@@ -752,7 +865,37 @@ export const checkoutBasketToSale = async (
   const txResult = await prisma.$transaction(async (tx) => {
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
     if (existingSale) {
-      return { saleId: existingSale.id, created: false };
+      const workshopJob = await getWorkshopJobForBasketTx(tx, basketId);
+      let emittedWorkshopCompletion = false;
+      let workshopCompletedAt: Date | null = null;
+
+      if (workshopJob) {
+        if (!existingSale.workshopJobId) {
+          await tx.sale.update({
+            where: { id: existingSale.id },
+            data: {
+              workshopJobId: workshopJob.id,
+              ...(existingSale.customerId ? {} : { customerId: workshopJob.customerId }),
+            },
+          });
+        }
+
+        const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
+          workshopJob,
+          saleId: existingSale.id,
+          createdByStaffId: normalizedCreatedByStaffId,
+        });
+        workshopCompletedAt = completionResult.completedAt;
+        emittedWorkshopCompletion = completionResult.emittedWorkshopCompletion;
+      }
+
+      return {
+        saleId: existingSale.id,
+        created: false,
+        emittedWorkshopCompletion,
+        workshopJobId: workshopJob?.id ?? null,
+        workshopCompletedAt,
+      };
     }
 
     const basket = await tx.basket.findUnique({
@@ -774,6 +917,34 @@ export const checkoutBasketToSale = async (
       throw new HttpError(400, "Cannot checkout an empty basket", "EMPTY_BASKET");
     }
 
+    const workshopJob = await getWorkshopJobForBasketTx(tx, basket.id);
+    if (workshopJob) {
+      const existingWorkshopSale = await tx.sale.findUnique({
+        where: { workshopJobId: workshopJob.id },
+      });
+
+      if (existingWorkshopSale) {
+        await tx.basket.update({
+          where: { id: basket.id },
+          data: { status: BasketStatus.CHECKED_OUT },
+        });
+
+        const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
+          workshopJob,
+          saleId: existingWorkshopSale.id,
+          createdByStaffId: normalizedCreatedByStaffId,
+        });
+
+        return {
+          saleId: existingWorkshopSale.id,
+          created: false,
+          emittedWorkshopCompletion: completionResult.emittedWorkshopCompletion,
+          workshopJobId: workshopJob.id,
+          workshopCompletedAt: completionResult.completedAt,
+        };
+      }
+    }
+
     const subtotalPence = basket.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
       0,
@@ -783,9 +954,11 @@ export const checkoutBasketToSale = async (
 
     const payment = validateCheckoutPayment(paymentInput, totalPence);
 
-    const saleLocation = requestedLocationId
-      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await ensureDefaultLocationTx(tx);
+    const saleLocation = workshopJob
+      ? await tx.location.findUnique({ where: { id: workshopJob.locationId } })
+      : requestedLocationId
+        ? await tx.location.findUnique({ where: { id: requestedLocationId } })
+        : await ensureDefaultLocationTx(tx);
     if (!saleLocation) {
       throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
     }
@@ -794,6 +967,12 @@ export const checkoutBasketToSale = async (
       data: {
         basketId: basket.id,
         locationId: saleLocation.id,
+        ...(workshopJob
+          ? {
+              workshopJobId: workshopJob.id,
+              customerId: workshopJob.customerId,
+            }
+          : {}),
         subtotalPence,
         taxPence,
         totalPence,
@@ -828,7 +1007,7 @@ export const checkoutBasketToSale = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
-          locationId: saleLocation.id,
+          locationId: defaultLocation.id,
           type: "SALE",
           quantity: -item.quantity,
           referenceType: "SALE_ITEM",
@@ -863,10 +1042,40 @@ export const checkoutBasketToSale = async (
       data: { status: BasketStatus.CHECKED_OUT },
     });
 
-    return { saleId: sale.id, created: true };
+    let workshopCompletedAt: Date | null = null;
+    let emittedWorkshopCompletion = false;
+
+    if (workshopJob) {
+      const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
+        workshopJob,
+        saleId: sale.id,
+        createdByStaffId: normalizedCreatedByStaffId,
+      });
+      workshopCompletedAt = completionResult.completedAt;
+      emittedWorkshopCompletion = completionResult.emittedWorkshopCompletion;
+    }
+
+    return {
+      saleId: sale.id,
+      created: true,
+      emittedWorkshopCompletion,
+      workshopJobId: workshopJob?.id ?? null,
+      workshopCompletedAt,
+    };
   });
 
   const response = await toSaleResponse(txResult.saleId);
+  if (txResult.emittedWorkshopCompletion && txResult.workshopJobId && txResult.workshopCompletedAt) {
+    emit("workshop.job.completed", {
+      id: txResult.workshopJobId,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: txResult.workshopJobId,
+      status: "COMPLETED",
+      completedAt: txResult.workshopCompletedAt.toISOString(),
+    });
+  }
+
   return {
     ...response,
     idempotent: !txResult.created,
@@ -941,7 +1150,9 @@ export const createExchangeSale = async (
 
     const saleLocation = requestedLocationId
       ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await tx.location.findUnique({ where: { id: sourceSale.locationId } });
+      : sourceSale.locationId
+        ? await tx.location.findUnique({ where: { id: sourceSale.locationId } })
+        : await ensureDefaultLocationTx(tx);
     if (!saleLocation) {
       throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
     }
@@ -1008,7 +1219,7 @@ export const createExchangeSale = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
-          locationId: saleLocation.id,
+          locationId: defaultLocation.id,
           type: "SALE",
           quantity: -item.quantity,
           referenceType: "SALE_ITEM",
@@ -1191,7 +1402,7 @@ export const createSaleReturn = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
-          locationId: sale.locationId,
+          locationId: defaultLocation.id,
           type: "RETURN",
           quantity: item.quantity,
           referenceType: "SALE_RETURN_ITEM",
@@ -1350,6 +1561,7 @@ export const listSales = async ({
       id: sale.id,
       basketId: sale.basketId,
       exchangeFromSaleId: sale.exchangeFromSaleId,
+      locationId: sale.locationId,
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,

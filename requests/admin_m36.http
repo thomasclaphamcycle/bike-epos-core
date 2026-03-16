@@ -3,6 +3,9 @@
 ### List users (ADMIN)
 GET {{baseUrl}}/api/admin/users
 
+### Staff directory (MANAGER+)
+GET {{baseUrl}}/api/staff-directory
+
 ### Create user (ADMIN)
 POST {{baseUrl}}/api/admin/users
 Content-Type: application/json
@@ -30,6 +33,14 @@ Content-Type: application/json
 
 {
   "tempPassword": "AnotherTempPass123!"
+}
+
+### Update operational role tag (MANAGER+)
+PATCH {{baseUrl}}/api/staff-directory/{{userId}}/operational-role
+Content-Type: application/json
+
+{
+  "operationalRole": "WORKSHOP"
 }
 
 ### Audit feed (MANAGER+)

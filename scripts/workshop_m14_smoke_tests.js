@@ -5,10 +5,16 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
+const portFromBaseUrl = () => {
+  const url = new URL(BASE_URL);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -48,34 +54,6 @@ const addDays = (date, days) => {
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
-const ensureMainLocationId = async () => {
-  const existing = await prisma.location.findFirst({
-    where: {
-      code: {
-        equals: "MAIN",
-        mode: "insensitive",
-      },
-    },
-    select: {
-      id: true,
-    },
-  });
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await prisma.location.create({
-    data: {
-      name: "Main",
-      code: "MAIN",
-      isActive: true,
-    },
-    select: {
-      id: true,
-    },
-  });
-  return created.id;
-};
 
 const RUN_REF = uniqueRef();
 const STAFF_USER_ID = `m14-staff-${RUN_REF}`;
@@ -131,7 +109,7 @@ const waitForServer = async () => {
 
 const createCustomerAndJob = async (state, overrides = {}) => {
   const ref = uniqueRef();
-  const locationId = await ensureMainLocationId();
+  const locationId = await ensureMainLocationId(prisma);
   const customer = await prisma.customer.create({
     data: {
       firstName: "M14",
@@ -144,10 +122,10 @@ const createCustomerAndJob = async (state, overrides = {}) => {
 
   const job = await prisma.workshopJob.create({
     data: {
-      locationId,
       customerId: customer.id,
       status: "BOOKING_MADE",
       source: "IN_STORE",
+      locationId,
       scheduledDate: addDays(todayUtc(), 20),
       depositStatus: "NOT_REQUIRED",
       depositRequiredPence: 0,
@@ -231,6 +209,7 @@ const run = async () => {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
+          PORT: portFromBaseUrl(),
         },
       });
       serverProcess.stdout.on("data", () => {});
@@ -397,8 +376,8 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "COMPLETED" }),
       });
-      assert.equal(toCompleted.status, 201, JSON.stringify(toCompleted.json));
-      assert.equal(toCompleted.json.job.status, "COMPLETED");
+      assert.equal(toCompleted.status, 409, JSON.stringify(toCompleted.json));
+      assert.equal(toCompleted.json.error.code, "WORKSHOP_COLLECTION_REQUIRES_SALE");
 
       const toCancelled = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -413,7 +392,7 @@ const run = async () => {
         { headers: MANAGER_HEADERS },
       );
       assert.equal(audit.status, 200, JSON.stringify(audit.json));
-      assert.ok(audit.json.events.length >= 4, JSON.stringify(audit.json));
+      assert.ok(audit.json.events.length >= 3, JSON.stringify(audit.json));
     }, results);
 
     await runTest("dashboard includes assignment + note stats and new filters", async () => {

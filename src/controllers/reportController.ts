@@ -1,17 +1,44 @@
 import { Request, Response } from "express";
 import {
+  getActionCentreReport,
+  getCustomerServiceRemindersReport,
   getDailyCloseReport,
+  getFinancialMonthlyMarginSummary,
+  getFinancialMonthlySalesSummary,
+  getInventoryInvestigationsReport,
   getInventoryOnHandReport,
+  getInventoryVelocityReport,
   getInventoryValueReport,
+  getInventoryValueSnapshotReport,
+  getFinancialMonthlyMarginReport,
+  getFinancialMonthlySalesSummaryReport,
+  getFinancialSalesByCategoryReport,
   getPaymentsReport,
-  runDailyCloseReport,
+  getCustomerInsightsReport,
+  getInventoryLocationSummaryReport,
+  getOperationsExceptions,
+  getPricingExceptionsReport,
+  getReminderCandidatesReport,
+  getInventoryReorderSuggestionsReport,
+  getInventoryVelocity,
+  getProductSalesReport,
+  importHistoricalFinancialSummaries,
   getSalesDailyReport,
+  getSupplierPerformanceReport,
+  getSupplierCostHistoryReport,
+  getWorkshopCapacityReport,
+  getWorkshopWarrantyReport,
   getWorkshopDailyReport,
+  runDailyCloseReport,
 } from "../services/reportService";
 import { resolveRequestLocation } from "../services/locationService";
-import { getRequestAuditActor } from "../middleware/staffRole";
-import { HttpError } from "../utils/http";
+import {
+  dismissReminderCandidateWithActor,
+  markReminderCandidateReviewed,
+} from "../services/reminderCandidateService";
 import { toCsv } from "../utils/csv";
+import { HttpError } from "../utils/http";
+import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
 
 const getDateRangeQuery = (req: Request) => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
@@ -22,6 +49,44 @@ const getDateRangeQuery = (req: Request) => {
 const getLocationIdQuery = (req: Request) =>
   (typeof req.query.locationId === "string" ? req.query.locationId : undefined);
 
+const getAsOfQuery = (req: Request) =>
+  (typeof req.query.asOf === "string" ? req.query.asOf : undefined);
+
+const getTakeQuery = (req: Request) => {
+  if (req.query.take === undefined) {
+    return undefined;
+  }
+
+  const value = Number(req.query.take);
+  return Number.isNaN(value) ? undefined : value;
+};
+
+const getIntQuery = (req: Request, key: string) => {
+  if (req.query[key] === undefined) {
+    return undefined;
+  }
+
+  const raw = req.query[key];
+  const value = typeof raw === "string" ? Number(raw) : Number.NaN;
+  return Number.isNaN(value) ? undefined : value;
+};
+
+const getBooleanQuery = (req: Request, key: string) => {
+  if (req.query[key] === undefined) {
+    return undefined;
+  }
+
+  const raw = req.query[key];
+  if (raw === "1" || raw === "true") {
+    return true;
+  }
+  if (raw === "0" || raw === "false") {
+    return false;
+  }
+
+  throw new HttpError(400, `${key} must be 1, 0, true, or false`, "INVALID_REPORT_FILTER");
+};
+
 const sendCsv = (res: Response, filename: string, csv: string) => {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -31,14 +96,37 @@ const sendCsv = (res: Response, filename: string, csv: string) => {
 export const getSalesDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const location = await resolveRequestLocation(req);
-  const report = await getSalesDailyReport(from, to, location.id);
+  const report = await getSalesDailyReport(from, to, location.locationId ?? location.id);
   res.json(report);
 };
 
 export const getWorkshopDailyReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const location = await resolveRequestLocation(req);
-  const report = await getWorkshopDailyReport(from, to, location.id);
+  const report = await getWorkshopDailyReport(from, to, location.locationId ?? location.id);
+  res.json(report);
+};
+
+export const getWorkshopCapacityReportHandler = async (_req: Request, res: Response) => {
+  const report = await getWorkshopCapacityReport();
+  res.json(report);
+};
+
+export const getFinancialMonthlyMarginReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getFinancialMonthlyMarginReport(from, to);
+  res.json(report);
+};
+
+export const getFinancialMonthlySalesReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getFinancialMonthlySalesSummaryReport(from, to);
+  res.json(report);
+};
+
+export const getFinancialSalesByCategoryReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getFinancialSalesByCategoryReport(from, to);
   res.json(report);
 };
 
@@ -52,10 +140,15 @@ export const getInventoryValueReportHandler = async (req: Request, res: Response
   res.json(report);
 };
 
+export const getInventoryValueSnapshotReportHandler = async (_req: Request, res: Response) => {
+  const report = await getInventoryValueSnapshotReport();
+  res.json(report);
+};
+
 export const getSalesDailyReportCsvHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const location = await resolveRequestLocation(req);
-  const rows = await getSalesDailyReport(from, to, location.id);
+  const rows = await getSalesDailyReport(from, to, location.locationId ?? location.id);
 
   const csv = toCsv(rows, [
     { header: "date", value: (row) => row.date },
@@ -71,7 +164,7 @@ export const getSalesDailyReportCsvHandler = async (req: Request, res: Response)
 export const getWorkshopDailyReportCsvHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const location = await resolveRequestLocation(req);
-  const rows = await getWorkshopDailyReport(from, to, location.id);
+  const rows = await getWorkshopDailyReport(from, to, location.locationId ?? location.id);
 
   const csv = toCsv(rows, [
     { header: "date", value: (row) => row.date },
@@ -140,6 +233,36 @@ export const getPaymentsReportCsvHandler = async (req: Request, res: Response) =
   sendCsv(res, "payments.csv", csv);
 };
 
+export const importHistoricalFinancialSummariesHandler = async (req: Request, res: Response) => {
+  const csv =
+    typeof req.body === "string"
+      ? req.body
+      : req.body && typeof req.body === "object" && typeof (req.body as { csv?: unknown }).csv === "string"
+        ? (req.body as { csv: string }).csv
+        : null;
+
+  if (!csv) {
+    throw new HttpError(
+      400,
+      "Historical summary import expects raw text/csv or a JSON body with a csv field",
+      "INVALID_HISTORICAL_SUMMARY_CSV",
+    );
+  }
+
+  const result = await importHistoricalFinancialSummaries(csv);
+  res.status(201).json(result);
+};
+
+export const getFinancialMonthlySalesSummaryHandler = async (req: Request, res: Response) => {
+  const report = await getFinancialMonthlySalesSummary(getAsOfQuery(req));
+  res.json(report);
+};
+
+export const getFinancialMonthlyMarginSummaryHandler = async (req: Request, res: Response) => {
+  const report = await getFinancialMonthlyMarginSummary(getAsOfQuery(req));
+  res.json(report);
+};
+
 export const runDailyCloseHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as { date?: unknown; locationCode?: unknown };
 
@@ -157,6 +280,7 @@ export const runDailyCloseHandler = async (req: Request, res: Response) => {
   } = {
     auditActor: getRequestAuditActor(req),
   };
+
   if (body.date !== undefined) {
     input.date = body.date;
   }
@@ -165,7 +289,6 @@ export const runDailyCloseHandler = async (req: Request, res: Response) => {
   }
 
   const report = await runDailyCloseReport(input);
-
   res.status(201).json(report);
 };
 
@@ -173,6 +296,7 @@ export const getDailyCloseHandler = async (req: Request, res: Response) => {
   const date = typeof req.query.date === "string" ? req.query.date : undefined;
   const locationCode =
     typeof req.query.locationCode === "string" ? req.query.locationCode : undefined;
+
   const input: { date?: string; locationCode?: string } = {};
   if (date !== undefined) {
     input.date = date;
@@ -180,6 +304,129 @@ export const getDailyCloseHandler = async (req: Request, res: Response) => {
   if (locationCode !== undefined) {
     input.locationCode = locationCode;
   }
+
   const report = await getDailyCloseReport(input);
+  res.json(report);
+};
+
+export const getProductSalesReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getProductSalesReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getInventoryVelocityReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getInventoryVelocityReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getInventoryVelocityHandler = async (_req: Request, res: Response) => {
+  const report = await getInventoryVelocity();
+  res.json(report);
+};
+
+export const getInventoryReorderSuggestionsReportHandler = async (req: Request, res: Response) => {
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const report = await getInventoryReorderSuggestionsReport(getTakeQuery(req), q);
+  res.json(report);
+};
+
+export const getInventoryInvestigationsReportHandler = async (_req: Request, res: Response) => {
+  const report = await getInventoryInvestigationsReport();
+  res.json(report);
+};
+
+export const getPricingExceptionsReportHandler = async (_req: Request, res: Response) => {
+  const report = await getPricingExceptionsReport();
+  res.json(report);
+};
+
+export const getOperationsExceptionsHandler = async (_req: Request, res: Response) => {
+  const report = await getOperationsExceptions();
+  res.json(report);
+};
+
+export const getActionCentreReportHandler = async (_req: Request, res: Response) => {
+  const report = await getActionCentreReport();
+  res.json(report);
+};
+
+export const getInventoryLocationSummaryReportHandler = async (req: Request, res: Response) => {
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const active = typeof req.query.active === "string" ? req.query.active : undefined;
+  const locationId = getLocationIdQuery(req);
+  const take = getTakeQuery(req);
+  const report = await getInventoryLocationSummaryReport({
+    ...(q === undefined ? {} : { q }),
+    ...(active === undefined ? {} : { active }),
+    ...(locationId === undefined ? {} : { locationId }),
+    ...(take === undefined ? {} : { take }),
+  });
+  res.json(report);
+};
+
+export const getSupplierPerformanceReportHandler = async (req: Request, res: Response) => {
+  const report = await getSupplierPerformanceReport();
+  res.json(report);
+};
+
+export const getSupplierCostHistoryReportHandler = async (req: Request, res: Response) => {
+  const report = await getSupplierCostHistoryReport(getTakeQuery(req));
+  res.json(report);
+};
+
+export const getCustomerInsightsReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getCustomerInsightsReport(from, to, getTakeQuery(req));
+  res.json(report);
+};
+
+export const getCustomerServiceRemindersReportHandler = async (req: Request, res: Response) => {
+  const report = await getCustomerServiceRemindersReport(
+    getIntQuery(req, "dueSoonDays"),
+    getIntQuery(req, "overdueDays"),
+    getIntQuery(req, "lookbackDays"),
+    getTakeQuery(req),
+  );
+  res.json(report);
+};
+
+export const getReminderCandidatesReportHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const report = await getReminderCandidatesReport(
+    status,
+    getTakeQuery(req),
+    getBooleanQuery(req, "includeDismissed"),
+  );
+  res.json(report);
+};
+
+export const markReminderCandidateReviewedHandler = async (req: Request, res: Response) => {
+  const reminderCandidateId = typeof req.params.reminderCandidateId === "string"
+    ? req.params.reminderCandidateId
+    : "";
+  const result = await markReminderCandidateReviewed(
+    reminderCandidateId,
+    getRequestStaffActorId(req),
+  );
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const dismissReminderCandidateHandler = async (req: Request, res: Response) => {
+  const reminderCandidateId = typeof req.params.reminderCandidateId === "string"
+    ? req.params.reminderCandidateId
+    : "";
+  const result = await dismissReminderCandidateWithActor(
+    reminderCandidateId,
+    getRequestStaffActorId(req),
+  );
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const getWorkshopWarrantyReportHandler = async (req: Request, res: Response) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const report = await getWorkshopWarrantyReport(status, search, getTakeQuery(req));
   res.json(report);
 };

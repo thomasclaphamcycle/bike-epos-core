@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   createCustomer,
   getCustomerById,
+  getCustomerTimeline,
   listCustomerSales,
   listCustomerWorkshopJobs,
   searchCustomers,
@@ -120,14 +121,12 @@ export const listCustomerSalesHandler = async (req: Request, res: Response) => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   const take = parseOptionalFilterTake(req.query.take);
-
   const result = await listCustomerSales({
     customerId: req.params.id,
     from,
     to,
     take,
   });
-
   res.json(result);
 };
 
@@ -135,13 +134,16 @@ export const listCustomerWorkshopJobsHandler = async (req: Request, res: Respons
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   const take = parseOptionalFilterTake(req.query.take);
-
   const result = await listCustomerWorkshopJobs({
     customerId: req.params.id,
     from,
     to,
     take,
   });
+  res.json(result);
+};
 
+export const getCustomerTimelineHandler = async (req: Request, res: Response) => {
+  const result = await getCustomerTimeline(req.params.id);
   res.json(result);
 };

@@ -1,0 +1,5 @@
+### M125 Operations Exceptions
+
+GET http://localhost:3000/api/reports/operations/exceptions
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager

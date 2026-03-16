@@ -1,112 +1,114 @@
-# Operations Runbook
+# Operations Guide
 
-## Scope
-Operational reference for database backup/restore, migration deploys, release flow, and production checks.
+## Backup And Restore
 
-## Backup and Restore (Local / Non-Production)
+For operator-managed database backup and restore in local or non-production environments:
 
-### Backup
-1. Export connection string:
-   - `export DATABASE_URL=postgresql://...`
-2. Run:
-   - `npm run db:backup`
-3. Script output:
-   - Creates `./backups/backup_YYYYMMDD_HHMMSS.sql`
-   - Prints full output path
+- `npm run db:backup`
+- `npm run db:restore`
 
-### Restore
-1. Export target connection string:
-   - `export DATABASE_URL=postgresql://...`
-2. Set backup file path:
-   - `export BACKUP_FILE=./backups/backup_YYYYMMDD_HHMMSS.sql`
-   - or pass path argument: `npm run db:restore -- ./backups/file.sql`
-3. Run:
-   - `npm run db:restore`
+These scripts wrap the repo backup helpers under `scripts/db_backup.sh` and `scripts/db_restore.sh`.
 
-### Production-safety guard
-- `scripts/db_backup.sh` and `scripts/db_restore.sh` refuse execution when `DATABASE_URL` appears production-like.
-- Heuristics check for substrings such as:
-  - `prod`
-  - `production`
-  - `rds.amazonaws.com`
-  - `supabase`
-  - `render.com`
-  - `railway.app`
-  - `neon.tech`
-- Override only when intentional:
-  - `CONFIRM_PROD=true npm run db:backup`
-  - `CONFIRM_PROD=true npm run db:restore`
+Safety notes:
 
-## Migration Runbook
+- they refuse production-like `DATABASE_URL` targets unless you explicitly set `CONFIRM_PROD=true`
+- set `BACKUP_FILE=...` or pass a path argument to `npm run db:restore -- ./backups/file.sql`
+- keep using the Export Hub for CSV/data handoff; use the DB backup scripts for full-instance recovery points
 
-### Deploy migrations
-1. Confirm env:
-   - `DATABASE_URL` points to target DB
-   - app secrets are present (`JWT_SECRET`, `COOKIE_SECRET`)
-2. Run:
-   - `npx prisma generate`
-   - `npx prisma migrate deploy`
-3. Verify:
-   - `npx prisma migrate status`
-   - `npm test`
-   - `npm run test:smoke`
-   - `npm run e2e`
+## Management Pages
 
-### Rollback guidance
-- Prefer **roll-forward fixes** with a new migration.
-- If rollback is unavoidable:
-  1. Take backup first (`npm run db:backup`).
-  2. Restore known-good backup into target.
-  3. Deploy last known-good application revision.
-- Avoid manual schema edits unless incident response requires it.
+- `/management`
+  - dashboard and quick links
+- `/management/actions`
+  - grouped triage queue
+- `/management/exceptions`
+  - flat operational exception list
+- `/management/investigations`
+  - stock anomaly review queue
+- `/management/product-data`
+  - catalogue cleanup plus product CSV import preview and confirm
+- `/management/catalogue`
+  - supplier intake review plus manual supplier-product link management
+- `/management/reminders`
+  - internal service reminder candidates queue
+- `/management/reordering`
+  - purchasing prompts
+- `/management/pricing`
+  - margin and retail-price review
+- `/management/capacity`
+  - workshop backlog and ageing
 
-## Tag and Release Strategy
-- Use annotated tags for release points:
-  - `git tag -a vX.Y.Z -m "release vX.Y.Z"`
-  - `git push origin vX.Y.Z`
-- Keep release commits small, with migrations and scripts included.
-- Record release notes with:
-  - schema/migration changes
-  - operational changes
-  - test evidence (`test`, `smoke`, `e2e`)
+## Severity Language
 
-## Before Deploy Checklist
-- Clean git state and correct branch.
-- `DATABASE_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `NODE_ENV`, `PORT` set.
-- Prisma migrations reviewed and committed.
-- All validations pass:
-  - `npm test`
-  - `npm run test:smoke`
-  - `npm run e2e`
-- Backup taken for target DB.
+Manager-facing reporting pages should prefer the shared severity vocabulary:
 
-## After Deploy Checklist
-- `/health` returns 200.
-- Login works for admin/staff roles.
-- Core transaction path verified:
-  - create/complete sale
-  - receipt view
-  - workshop job update
-- Audit logs and reports endpoints respond.
-- Monitor logs for spikes in 4xx/5xx.
+- `CRITICAL`
+- `WARNING`
+- `INFO`
 
-## Troubleshooting
+Business-specific statuses such as reorder urgency or reminder status can still exist, but they should map cleanly to the shared severity language in the UI.
 
-### Database connection failures
-- Verify `DATABASE_URL` format and credentials.
-- Ensure database is reachable from runtime host.
-- Check TLS requirements for hosted Postgres providers.
+## Practical Triage Order
 
-### Missing environment variables
-- Startup or auth failures usually indicate missing `JWT_SECRET` or `COOKIE_SECRET`.
-- Re-check deployment secret injection and runtime env visibility.
+1. Start in Action Centre for grouped operational review.
+2. Use Operations Exceptions for the flat cross-functional queue.
+3. Use Stock Investigations for item-level stock and pricing follow-up.
+4. Move into the specific workflow surface:
+   - inventory item
+   - purchasing
+   - workshop
+   - customer profile
 
-### Port conflicts
-- If app fails to bind:
-  - Confirm `PORT` value.
-  - Stop conflicting process on the same port.
+## Reminder Groundwork
 
-### Migration issues
-- Run `npx prisma migrate status`.
-- Ensure DB user has DDL permissions.
-- If a migration partially applied, restore from backup or roll forward with a corrective migration.
+Automated reminder groundwork is now present behind the event bus and is intentionally internal only.
+
+- `workshop.job.completed` can create a persisted `ReminderCandidate` when the job has a real `completedAt` timestamp and a linked customer
+- candidates store narrow groundwork fields only: customer, workshop job, source event, due date, status, and timestamps
+- candidates can now also be marked reviewed or dismissed by managers for operational queue control
+- the current default reminder due date is 90 days after workshop completion
+- manager visibility is available through `GET /api/reports/reminder-candidates` and `/management/reminders`
+- managers can now review or dismiss reminder candidates from the internal report/page without triggering delivery
+- candidates are not delivered automatically and do not change customer-facing flows
+
+Intentionally deferred:
+
+- SMS, email, push, or webhook delivery
+- background schedulers and automated send orchestration
+- public reminder APIs or customer-facing reminder management UI based on these candidates
+- sale-driven reminder candidate creation until a concrete reminder policy exists for retail-only events
+
+## Product CSV Import
+
+The first product import flow is internal and manager-facing only.
+
+- use `/management/product-data` to choose a CSV file, preview validation, and confirm the import
+- preview calls `POST /api/products/import/preview`
+- confirm calls `POST /api/products/import/confirm` and revalidates the same CSV before writing
+- the import creates new products plus default variants only
+- stock quantity, when supplied, is written as opening stock through inventory movements
+- invalid rows are not imported; warnings remain visible during preview so managers can decide whether to continue
+
+Intentionally deferred:
+
+- supplier feed automation
+- external catalogue sync
+- image URL import
+- updates/merge logic for existing product rows beyond duplicate detection
+
+## Supplier Product Linking
+
+Supplier-product linking groundwork is now available for internal purchasing use.
+
+- use `/management/catalogue` to review existing supplier intake rows and manage supplier-product links
+- links store a supplier-specific product code, supplier-specific cost, preferred supplier flag, and active state for a variant
+- linked supplier cost is now used as the fallback when a manager adds a draft purchase-order line without entering unit cost manually
+- `GET /api/supplier-product-links` provides staff-visible internal listing, while managers can create and update links through the same internal API family
+
+Intentionally deferred:
+
+- automated supplier feeds
+- external supplier APIs
+- full supplier catalogue sync
+- advanced matching/deduplication
+- automated PO creation from supplier links

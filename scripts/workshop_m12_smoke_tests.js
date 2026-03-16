@@ -2,12 +2,12 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -32,8 +32,11 @@ console.log(`[m12-smoke] DATABASE_URL=${safeDbUrl}`);
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 });
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const serverController = createSmokeServerController({
+  label: "m12-smoke",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+});
 
 const todayUtc = () => {
   const now = new Date();
@@ -78,55 +81,8 @@ const STAFF_HEADERS = {
   "X-Staff-Id": "m12-smoke-staff",
 };
 
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i++) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
-};
-
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
-const ensureMainLocationId = async () => {
-  const existing = await prisma.location.findFirst({
-    where: {
-      code: {
-        equals: "MAIN",
-        mode: "insensitive",
-      },
-    },
-    select: {
-      id: true,
-    },
-  });
-  if (existing) {
-    return existing.id;
-  }
-
-  const created = await prisma.location.create({
-    data: {
-      name: "Main",
-      code: "MAIN",
-      isActive: true,
-    },
-    select: {
-      id: true,
-    },
-  });
-  return created.id;
-};
 
 const createOnlineBooking = async (scheduledDate) => {
   const ref = uniqueRef();
@@ -293,9 +249,6 @@ const run = async () => {
     refundIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   const runTest = async (name, fn, results) => {
     try {
       await fn();
@@ -309,27 +262,7 @@ const run = async () => {
   };
 
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     await prisma.bookingSettings.upsert({
       where: { id: 1 },
@@ -510,12 +443,12 @@ const run = async () => {
         },
       });
       state.customerIds.add(customer.id);
-      const locationId = await ensureMainLocationId();
+      const locationId = await ensureMainLocationId(prisma);
 
       const job = await prisma.workshopJob.create({
         data: {
-          locationId,
           customerId: customer.id,
+          locationId,
           status: "BOOKING_MADE",
           source: "IN_STORE",
           scheduledDate: addDays(todayUtc(), 36),
@@ -604,9 +537,7 @@ const run = async () => {
   } finally {
     await cleanup(state);
     await prisma.$disconnect();
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-    }
+    await serverController.stop();
   }
 };
 

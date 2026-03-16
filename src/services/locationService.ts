@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { Request } from "express";
 import { assertRoleAtLeast } from "../middleware/staffRole";
 import { prisma } from "../lib/prisma";
-import { HttpError } from "../utils/http";
+import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 
 const LOCATION_CODE_HEADER = "x-location-code";
@@ -22,6 +22,15 @@ type StockLocation = {
   name: string;
   isDefault: boolean;
   createdAt: Date;
+};
+
+type BusinessLocation = {
+  id: string;
+  name: string;
+  code: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 const normalizeText = (value: string | undefined | null): string | undefined => {
@@ -51,15 +60,13 @@ const normalizeLocationCodeOrThrow = (
   return normalized;
 };
 
-const toRequestLocation = (location: {
-  id: string;
-  name: string;
-  code: string | null;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}) => ({
+const toRequestLocation = (
+  location: BusinessLocation,
+  stockLocationId: string | null,
+) => ({
   id: location.id,
+  locationId: location.id,
+  stockLocationId,
   name: location.name,
   code: location.code,
   isActive: location.isActive,
@@ -94,6 +101,41 @@ const findLocationByNameTx = async (tx: LocationTx, name: string) =>
       createdAt: "asc",
     },
   });
+
+const findStockLocationByNameTx = async (tx: LocationTx, name: string) =>
+  tx.stockLocation.findFirst({
+    where: {
+      name: {
+        equals: name,
+        mode: "insensitive",
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+const ensureStockLocationForBusinessLocationTx = async (
+  tx: LocationTx,
+  location: BusinessLocation,
+) => {
+  const defaultLocation = await ensureDefaultLocationTx(tx);
+  if (location.id === defaultLocation.id) {
+    return ensureDefaultStockLocationTx(tx);
+  }
+
+  const existing = await findStockLocationByNameTx(tx, location.name);
+  if (existing) {
+    return existing;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: location.name,
+      isDefault: false,
+    },
+  });
+};
 
 export const ensureDefaultStockLocationTx = async (tx: LocationTx): Promise<StockLocation> => {
   const existingDefault = await tx.stockLocation.findFirst({
@@ -145,6 +187,9 @@ export const ensureDefaultLocationTx = async (tx: LocationTx) => {
 export const ensureDefaultLocation = async () =>
   prisma.$transaction((tx) => ensureDefaultLocationTx(tx));
 
+export const getOrCreateDefaultLocationTx = ensureDefaultLocationTx;
+export const getOrCreateDefaultLocation = ensureDefaultLocation;
+
 export const resolveLocationByCodeOrThrowTx = async (
   tx: LocationTx,
   code: string,
@@ -185,8 +230,43 @@ export const resolveRequestLocation = async (req: Request) => {
       : resolveLocationByCodeOrThrowTx(tx, code),
   );
 
-  req.location = toRequestLocation(location);
+  const stockLocation = await prisma.$transaction((tx) =>
+    ensureStockLocationForBusinessLocationTx(tx, location),
+  );
+
+  req.location = toRequestLocation(location, stockLocation?.id ?? null);
   return req.location;
+};
+
+export const resolveInventoryStockLocationIdTx = async (
+  tx: LocationTx,
+  requestedLocationId?: string | null,
+) => {
+  const normalizedLocationId = normalizeText(requestedLocationId);
+  if (!normalizedLocationId) {
+    const defaultStockLocation = await ensureDefaultStockLocationTx(tx);
+    return defaultStockLocation.id;
+  }
+
+  if (isUuid(normalizedLocationId)) {
+    const stockLocation = await tx.stockLocation.findUnique({
+      where: { id: normalizedLocationId },
+      select: { id: true },
+    });
+    if (stockLocation) {
+      return stockLocation.id;
+    }
+  }
+
+  const location = await tx.location.findUnique({
+    where: { id: normalizedLocationId },
+  });
+  if (!location) {
+    throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+  }
+
+  const mappedStockLocation = await ensureStockLocationForBusinessLocationTx(tx, location);
+  return mappedStockLocation.id;
 };
 
 export const listLocations = async () => {

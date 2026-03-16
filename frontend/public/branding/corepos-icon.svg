@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <defs>
+    <radialGradient id="coreposGlow3" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#FFD166"/>
+      <stop offset="60%" stop-color="#FF7A18"/>
+      <stop offset="100%" stop-color="#F05A00"/>
+    </radialGradient>
+  </defs>
+  <circle cx="60" cy="60" r="28" fill="url(#coreposGlow3)"/>
+  <circle cx="20" cy="40" r="8" fill="#1F8CEB"/>
+  <circle cx="30" cy="90" r="8" fill="#1F8CEB"/>
+  <circle cx="98" cy="80" r="8" fill="#1F8CEB"/>
+  <circle cx="100" cy="28" r="8" fill="#FF7A18"/>
+  <circle cx="40" cy="18" r="8" fill="#FF7A18"/>
+  <line x1="60" y1="60" x2="20" y2="40" stroke="#1F8CEB" stroke-width="4"/>
+  <line x1="60" y1="60" x2="30" y2="90" stroke="#1F8CEB" stroke-width="4"/>
+  <line x1="60" y1="60" x2="98" y2="80" stroke="#1F8CEB" stroke-width="4"/>
+  <line x1="60" y1="60" x2="100" y2="28" stroke="#FF7A18" stroke-width="4"/>
+  <line x1="60" y1="60" x2="40" y2="18" stroke="#FF7A18" stroke-width="4"/>
+</svg>

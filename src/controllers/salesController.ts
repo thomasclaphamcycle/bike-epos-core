@@ -26,7 +26,7 @@ export const listSalesHandler = async (req: Request, res: Response) => {
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
   const location = await resolveRequestLocation(req);
-  const result = await listSales({ from, to, locationId: location.id });
+  const result = await listSales({ from, to, locationId: location.locationId ?? location.id });
   res.json(result);
 };
 
@@ -131,7 +131,7 @@ export const createExchangeSaleHandler = async (req: Request, res: Response) => 
   const location = await resolveRequestLocation(req);
   const result = await createExchangeSale(req.params.saleId, {
     staffActorId: getRequestStaffActorId(req),
-    locationId: location.id,
+    locationId: location.locationId ?? location.id,
     auditActor: getRequestAuditActor(req),
   });
   res.status(result.idempotent ? 200 : 201).json(result);

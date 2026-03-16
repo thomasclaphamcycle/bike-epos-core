@@ -1,0 +1,66 @@
+@baseUrl = http://localhost:3000
+@managerId = manager-cash-demo
+@movementId = REPLACE_ME
+@uploadToken = REPLACE_ME
+
+### Open register
+POST {{baseUrl}}/api/management/cash/register/open
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+Content-Type: application/json
+
+{
+  "openingFloatPence": 10000
+}
+
+### Current register
+GET {{baseUrl}}/api/management/cash/register/current
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+
+### Register history
+GET {{baseUrl}}/api/management/cash/register/history?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+
+### Record petty expense cash out
+POST {{baseUrl}}/api/management/cash/movements
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+Content-Type: application/json
+
+{
+  "type": "CASH_OUT",
+  "amountPence": 1250,
+  "reason": "PETTY_EXPENSE",
+  "notes": "Cleaning supplies"
+}
+
+### List movements
+GET {{baseUrl}}/api/management/cash/movements?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+
+### Create receipt upload token for petty expense movement
+POST {{baseUrl}}/api/management/cash/movements/{{movementId}}/receipt-token
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+
+### Upload receipt image using one-time token
+POST {{baseUrl}}/api/public/receipt-upload/{{uploadToken}}
+Content-Type: application/json
+
+{
+  "imageDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Yw4n0kAAAAASUVORK5CYII="
+}
+
+### Blind close register
+POST {{baseUrl}}/api/management/cash/register/close
+X-Staff-Role: MANAGER
+X-Staff-Id: {{managerId}}
+Content-Type: application/json
+
+{
+  "countedAmountPence": 8750,
+  "notes": "Blind close completed"
+}

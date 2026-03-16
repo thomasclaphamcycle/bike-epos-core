@@ -1,8 +1,10 @@
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
+import { emit } from "../core/events";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { ensureDefaultLocationTx } from "./locationService";
+import { assertNonNegativeProjectedStockTx } from "./inventoryLedgerService";
 import { ensureVariantExistsById } from "./productService";
 
 type CreateStockAdjustmentInput = {
@@ -13,6 +15,29 @@ type CreateStockAdjustmentInput = {
   referenceType?: string;
   referenceId?: string;
   createdByStaffId?: string;
+  allowNegativeStock?: boolean;
+};
+
+export type StockAdjustmentResult = {
+  entry: {
+    id: string;
+    variantId: string;
+    locationId: string;
+    locationName: string;
+    type: "ADJUSTMENT";
+    quantityDelta: number;
+    referenceType: string;
+    referenceId: string;
+    note: string | null;
+    createdByStaffId: string | null;
+    createdAt: Date;
+  };
+  stock: {
+    variantId: string;
+    locationId: string;
+    onHandAtLocation: number;
+    totalOnHand: number;
+  };
 };
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -193,71 +218,136 @@ export const createStockAdjustment = async (input: CreateStockAdjustmentInput) =
   const referenceId = normalizeOptionalText(input.referenceId) ?? randomUUID();
   const createdByStaffId = normalizeOptionalText(input.createdByStaffId);
 
-  return prisma.$transaction(async (tx) => {
-    await ensureVariantExistsById(tx, variantId);
+  const result = await prisma.$transaction((tx) =>
+    createStockAdjustmentTx(tx, {
+      variantId,
+      locationId: input.locationId,
+      quantityDelta: input.quantityDelta,
+      note,
+      referenceType,
+      referenceId,
+      createdByStaffId,
+      allowNegativeStock: input.allowNegativeStock,
+    }),
+  );
 
-    if (createdByStaffId) {
-      const staff = await tx.user.findUnique({ where: { id: createdByStaffId } });
-      if (!staff) {
-        throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
-      }
+  emitStockAdjusted(result);
+
+  return result;
+};
+
+export const createStockAdjustmentTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    variantId: string;
+    locationId?: string;
+    quantityDelta: number;
+    note?: string;
+    referenceType: string;
+    referenceId: string;
+    createdByStaffId?: string;
+    allowNegativeStock?: boolean;
+  },
+): Promise<StockAdjustmentResult> => {
+  const note = normalizeOptionalText(input.note) ?? null;
+  const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
+
+  await ensureVariantExistsById(tx, input.variantId);
+
+  if (createdByStaffId) {
+    const staff = await tx.user.findUnique({ where: { id: createdByStaffId } });
+    if (!staff) {
+      throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
     }
+  }
 
-    const location = await resolveLocationTx(tx, input.locationId);
-    const inventoryLocation = await ensureDefaultLocationTx(tx);
+  const location = await resolveLocationTx(tx, input.locationId);
 
-    const entry = await tx.stockLedgerEntry.create({
-      data: {
-        variantId,
-        locationId: location.id,
-        type: "ADJUSTMENT",
-        quantityDelta: input.quantityDelta,
-        referenceType,
-        referenceId,
-        note,
-        createdByStaffId,
-      },
-      include: {
-        location: true,
-      },
-    });
+  await assertNonNegativeProjectedStockTx(tx, {
+    variantId: input.variantId,
+    locationId: location.id,
+    quantityDelta: input.quantityDelta,
+    allowNegativeStock: input.allowNegativeStock,
+    message: "Stock adjustment would reduce stock below zero",
+  });
 
-    await tx.inventoryMovement.create({
-      data: {
-        variantId,
-        locationId: inventoryLocation.id,
-        type: "ADJUSTMENT",
-        quantity: input.quantityDelta,
-        referenceType,
-        referenceId,
-        note: note ?? null,
-        createdByStaffId: createdByStaffId ?? null,
-      },
-    });
+  const entry = await tx.stockLedgerEntry.create({
+    data: {
+      variantId: input.variantId,
+      locationId: location.id,
+      type: "ADJUSTMENT",
+      quantityDelta: input.quantityDelta,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note,
+      createdByStaffId,
+    },
+    include: {
+      location: true,
+    },
+  });
 
-    const onHandAtLocation = await getLocationOnHandTx(tx, variantId, location.id);
-    const totalOnHand = await getTotalOnHandTx(tx, variantId);
+  await tx.inventoryMovement.create({
+    data: {
+      variantId: input.variantId,
+      locationId: location.id,
+      type: "ADJUSTMENT",
+      quantity: input.quantityDelta,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note,
+      createdByStaffId,
+    },
+  });
 
-    return {
-      entry: {
-        id: entry.id,
-        variantId: entry.variantId,
-        locationId: entry.locationId,
-        locationName: entry.location.name,
-        type: entry.type,
-        quantityDelta: entry.quantityDelta,
-        referenceType: entry.referenceType,
-        referenceId: entry.referenceId,
-        note: entry.note,
-        createdByStaffId: entry.createdByStaffId,
-        createdAt: entry.createdAt,
-      },
-      stock: {
-        variantId,
-        locationId: location.id,
-        onHandAtLocation,
-        totalOnHand,
-      },
-    };
+  const onHandAtLocation = await getLocationOnHandTx(tx, input.variantId, location.id);
+  const totalOnHand = await getTotalOnHandTx(tx, input.variantId);
+
+  return {
+    entry: {
+      id: entry.id,
+      variantId: entry.variantId,
+      locationId: entry.locationId,
+      locationName: entry.location.name,
+      type: entry.type,
+      quantityDelta: entry.quantityDelta,
+      referenceType: entry.referenceType,
+      referenceId: entry.referenceId,
+      note: entry.note,
+      createdByStaffId: entry.createdByStaffId,
+      createdAt: entry.createdAt,
+    },
+    stock: {
+      variantId: input.variantId,
+      locationId: location.id,
+      onHandAtLocation,
+      totalOnHand,
+    },
+  };
+};
+
+export const emitStockAdjusted = (result: StockAdjustmentResult) => {
+  emit("stock.adjusted", {
+    id: result.entry.id,
+    type: "stock.adjusted",
+    timestamp: result.entry.createdAt.toISOString(),
+    variantId: result.entry.variantId,
+    locationId: result.entry.locationId,
+    quantityDelta: result.entry.quantityDelta,
+    totalOnHand: result.stock.totalOnHand,
+    referenceType: result.entry.referenceType,
+    referenceId: result.entry.referenceId,
+  });
+
+  logOperationalEvent("inventory.stock_adjusted", {
+    entityId: result.entry.id,
+    resultStatus: "succeeded",
+    variantId: result.entry.variantId,
+    locationId: result.entry.locationId,
+    quantityDelta: result.entry.quantityDelta,
+    totalOnHand: result.stock.totalOnHand,
+    referenceType: result.entry.referenceType,
+    referenceId: result.entry.referenceId,
+    createdByStaffId: result.entry.createdByStaffId,
   });
 };

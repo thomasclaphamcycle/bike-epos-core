@@ -1,7 +1,14 @@
 import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
-import { verifyPassword } from "./passwordService";
+import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  hashPin,
+  normalizePinOrThrow,
+  verifyPassword,
+  verifyPin,
+} from "./passwordService";
 import {
   createUserAccountTx,
   findUserByEmail,
@@ -18,6 +25,19 @@ const normalizePasswordOrThrow = (password: string | undefined, code: string) =>
   return password;
 };
 
+export type ActiveLoginUser = {
+  id: string;
+  displayName: string;
+  role: UserRole;
+  hasPin: boolean;
+};
+
+const ACTIVE_LOGIN_ROLE_PRIORITY: Record<UserRole, number> = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
+};
+
 export const authenticateWithEmailPassword = async (
   email: string | undefined,
   password: string | undefined,
@@ -27,14 +47,33 @@ export const authenticateWithEmailPassword = async (
 
   const user = await findUserByEmail(normalizedEmail);
   if (!user || !user.isActive) {
+    logOperationalEvent("auth.password_login", {
+      entityId: user?.id ?? null,
+      resultStatus: "rejected",
+      email: normalizedEmail,
+      reason: !user ? "user_not_found" : "user_inactive",
+    });
     throw new HttpError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
 
   const valid = await verifyPassword(normalizedPassword, user.passwordHash);
   if (!valid) {
+    logOperationalEvent("auth.password_login", {
+      entityId: user.id,
+      resultStatus: "rejected",
+      email: normalizedEmail,
+      userId: user.id,
+      reason: "invalid_password",
+    });
     throw new HttpError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
 
+  logOperationalEvent("auth.password_login", {
+    entityId: user.id,
+    resultStatus: "succeeded",
+    userId: user.id,
+    role: user.role,
+  });
   return toPublicUser(user);
 };
 
@@ -46,6 +85,173 @@ export const getPublicUserById = async (userId: string): Promise<PublicUser | nu
     return null;
   }
   return toPublicUser(user);
+};
+
+export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
+  const users = await prisma.user.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+      role: true,
+      pinHash: true,
+    },
+  });
+
+  return users
+    .map((user) => ({
+      id: user.id,
+      displayName: user.name?.trim() || user.username,
+      role: user.role,
+      hasPin: Boolean(user.pinHash),
+    }))
+    .sort((left, right) => {
+      const roleOrder = ACTIVE_LOGIN_ROLE_PRIORITY[left.role] - ACTIVE_LOGIN_ROLE_PRIORITY[right.role];
+      if (roleOrder !== 0) {
+        return roleOrder;
+      }
+      return left.displayName.localeCompare(right.displayName, undefined, { sensitivity: "base" });
+    });
+};
+
+export const authenticateWithPin = async (
+  userId: string | undefined,
+  pin: string | undefined,
+) => {
+  const normalizedUserId = typeof userId === "string" ? userId.trim() : "";
+  if (!normalizedUserId) {
+    throw new HttpError(400, "userId is required", "INVALID_PIN_LOGIN");
+  }
+  const normalizedPin = normalizePinOrThrow(pin, "INVALID_PIN_LOGIN");
+
+  const user = await prisma.user.findUnique({
+    where: { id: normalizedUserId },
+  });
+  if (!user || !user.isActive || !user.pinHash) {
+    logOperationalEvent("auth.pin_login", {
+      entityId: user?.id ?? normalizedUserId,
+      resultStatus: "rejected",
+      userId: normalizedUserId,
+      reason: !user ? "user_not_found" : !user.isActive ? "user_inactive" : "pin_not_set",
+    });
+    throw new HttpError(401, "Invalid login", "INVALID_CREDENTIALS");
+  }
+
+  const valid = await verifyPin(normalizedPin, user.pinHash);
+  if (!valid) {
+    logOperationalEvent("auth.pin_login", {
+      entityId: normalizedUserId,
+      resultStatus: "rejected",
+      userId: normalizedUserId,
+      reason: "invalid_pin",
+    });
+    throw new HttpError(401, "Invalid login", "INVALID_CREDENTIALS");
+  }
+
+  logOperationalEvent("auth.pin_login", {
+    entityId: user.id,
+    resultStatus: "succeeded",
+    userId: user.id,
+    role: user.role,
+  });
+  return toPublicUser(user);
+};
+
+export const getPinStatus = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, pinHash: true, isActive: true },
+  });
+  if (!user || !user.isActive) {
+    throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+  }
+  return { hasPin: Boolean(user.pinHash) };
+};
+
+export const setCurrentUserPin = async (
+  userId: string,
+  pin: string | undefined,
+  auditActor?: AuditActor,
+) => {
+  const normalizedPin = normalizePinOrThrow(pin, "INVALID_PIN");
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true, pinHash: true, isActive: true },
+    });
+    if (!existing || !existing.isActive) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+    if (existing.pinHash) {
+      throw new HttpError(409, "PIN already exists", "PIN_ALREADY_SET");
+    }
+
+    const pinHash = await hashPin(normalizedPin);
+    await tx.user.update({
+      where: { id: userId },
+      data: { pinHash },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "AUTH_PIN_SET",
+        entityType: "USER",
+        entityId: userId,
+      },
+      auditActor,
+    );
+
+    return { hasPin: true };
+  });
+};
+
+export const changeCurrentUserPin = async (
+  userId: string,
+  currentPin: string | undefined,
+  nextPin: string | undefined,
+  auditActor?: AuditActor,
+) => {
+  const normalizedCurrentPin = normalizePinOrThrow(currentPin, "INVALID_PIN");
+  const normalizedNextPin = normalizePinOrThrow(nextPin, "INVALID_PIN");
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true, pinHash: true, isActive: true },
+    });
+    if (!existing || !existing.isActive) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+    if (!existing.pinHash) {
+      throw new HttpError(409, "No PIN set yet", "PIN_NOT_SET");
+    }
+
+    const valid = await verifyPin(normalizedCurrentPin, existing.pinHash);
+    if (!valid) {
+      throw new HttpError(401, "Current PIN is incorrect", "INVALID_CREDENTIALS");
+    }
+
+    const pinHash = await hashPin(normalizedNextPin);
+    await tx.user.update({
+      where: { id: userId },
+      data: { pinHash },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "AUTH_PIN_CHANGED",
+        entityType: "USER",
+        entityId: userId,
+      },
+      auditActor,
+    );
+
+    return { hasPin: true };
+  });
 };
 
 export const bootstrapInitialAdmin = async (input: {

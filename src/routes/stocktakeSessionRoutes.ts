@@ -1,10 +1,14 @@
 import { Router } from "express";
 import {
+  bulkUpsertStocktakeLinesHandler,
   cancelStocktakeHandler,
   createStocktakeHandler,
+  deleteStocktakeLineHandler,
   finalizeStocktakeHandler,
   getStocktakeHandler,
   listStocktakesHandler,
+  requestStocktakeReviewHandler,
+  scanStocktakeLineHandler,
   upsertStocktakeLineHandler,
 } from "../controllers/stocktakeController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
@@ -18,6 +22,26 @@ stocktakeSessionRouter.post(
   "/sessions/:id/lines",
   requireRoleAtLeast("MANAGER"),
   upsertStocktakeLineHandler,
+);
+stocktakeSessionRouter.post(
+  "/sessions/:id/scan",
+  requireRoleAtLeast("MANAGER"),
+  scanStocktakeLineHandler,
+);
+stocktakeSessionRouter.post(
+  "/sessions/:id/bulk-lines",
+  requireRoleAtLeast("MANAGER"),
+  bulkUpsertStocktakeLinesHandler,
+);
+stocktakeSessionRouter.delete(
+  "/sessions/:id/lines/:lineId",
+  requireRoleAtLeast("MANAGER"),
+  deleteStocktakeLineHandler,
+);
+stocktakeSessionRouter.post(
+  "/sessions/:id/review",
+  requireRoleAtLeast("MANAGER"),
+  requestStocktakeReviewHandler,
 );
 stocktakeSessionRouter.post(
   "/sessions/:id/finalize",

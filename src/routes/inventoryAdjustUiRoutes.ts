@@ -4,4 +4,4 @@ import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const inventoryAdjustUiRouter = Router();
 
-inventoryAdjustUiRouter.get("/inventory/adjust", requireRoleAtLeast("STAFF"), getInventoryAdjustPageHandler);
+inventoryAdjustUiRouter.get("/inventory/adjust", requireRoleAtLeast("MANAGER"), getInventoryAdjustPageHandler);

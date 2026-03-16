@@ -1,17 +1,26 @@
 import { BarcodeType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
-import { ensureDefaultLocationTx } from "./locationService";
+import { resolveInventoryStockLocationIdTx } from "./locationService";
 
 type CreateProductInput = {
   name?: string;
+  category?: string;
   brand?: string;
   description?: string;
   isActive?: boolean;
+  defaultVariant?: {
+    sku?: string;
+    barcode?: string;
+    retailPrice?: string | number;
+    retailPricePence?: number;
+    isActive?: boolean;
+  };
 };
 
 type UpdateProductInput = {
   name?: string;
+  category?: string;
   brand?: string;
   description?: string;
   isActive?: boolean;
@@ -28,6 +37,18 @@ type CreateVariantInput = {
   costPricePence?: number;
   taxCode?: string;
   isActive?: boolean;
+};
+
+type CreateImportedProductRowInput = {
+  name: string;
+  category?: string | null;
+  sku: string;
+  barcode?: string | null;
+  retailPrice: string | number;
+  costPricePence?: number | null;
+  openingStockQty?: number;
+  createdByStaffId?: string;
+  importReferenceId?: string;
 };
 
 type UpdateVariantInput = {
@@ -74,6 +95,24 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
+  const existingDefault = await tx.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: "Default",
+      isDefault: true,
+    },
+  });
 };
 
 const normalizeOptionalNullableText = (value: string | undefined | null): string | null | undefined => {
@@ -196,6 +235,7 @@ const parseRetailPricePatch = (
 const toProductResponse = (product: {
   id: string;
   name: string;
+  category: string | null;
   brand: string | null;
   description: string | null;
   isActive: boolean;
@@ -208,6 +248,7 @@ const toProductResponse = (product: {
   return {
     id: product.id,
     name: product.name,
+    category: product.category,
     brand: product.brand,
     description: product.description,
     isActive: product.isActive,
@@ -231,11 +272,12 @@ const toVariantResponse = (variant: {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  product?: {
-    id: string;
-    name: string;
-    brand: string | null;
-  };
+    product?: {
+      id: string;
+      name: string;
+      category: string | null;
+      brand: string | null;
+    };
 }) => {
   return {
     id: variant.id,
@@ -253,6 +295,7 @@ const toVariantResponse = (variant: {
       ? {
           id: variant.product.id,
           name: variant.product.name,
+          category: variant.product.category,
           brand: variant.product.brand,
         }
       : undefined,
@@ -405,6 +448,7 @@ export const listProducts = async (filters: ListProductsInput = {}) => {
         ? {
             OR: [
               { name: { contains: normalizedQuery, mode: "insensitive" } },
+              { category: { contains: normalizedQuery, mode: "insensitive" } },
               { brand: { contains: normalizedQuery, mode: "insensitive" } },
               { description: { contains: normalizedQuery, mode: "insensitive" } },
             ],
@@ -439,16 +483,174 @@ export const createProduct = async (input: CreateProductInput) => {
     throw new HttpError(400, "isActive must be a boolean", "INVALID_PRODUCT");
   }
 
-  const product = await prisma.product.create({
-    data: {
-      name,
-      brand: normalizeOptionalText(input.brand),
-      description: normalizeOptionalText(input.description),
-      isActive: input.isActive ?? true,
-    },
-  });
+  const category = normalizeOptionalText(input.category);
+  const hasDefaultVariant =
+    input.defaultVariant !== undefined
+    && Object.values(input.defaultVariant).some((value) => value !== undefined);
 
-  return toProductResponse(product);
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
+        name,
+        category,
+        brand: normalizeOptionalText(input.brand),
+        description: normalizeOptionalText(input.description),
+        isActive: input.isActive ?? true,
+      },
+    });
+
+    if (hasDefaultVariant) {
+      const sku = normalizeOptionalText(input.defaultVariant?.sku);
+      const barcode = normalizeOptionalText(input.defaultVariant?.barcode);
+
+      if (!sku) {
+        throw new HttpError(400, "defaultVariant.sku is required", "INVALID_PRODUCT");
+      }
+      if (sku.length < 2) {
+        throw new HttpError(400, "defaultVariant.sku must be at least 2 characters", "INVALID_PRODUCT");
+      }
+
+      const parsedRetailPrice = parseRetailPriceInput(
+        input.defaultVariant?.retailPrice,
+        input.defaultVariant?.retailPricePence,
+        "INVALID_PRODUCT",
+      );
+
+      await ensureSkuAvailable(tx, sku);
+
+      if (barcode) {
+        await ensureBarcodeAvailable(tx, barcode);
+      }
+
+      const variant = await tx.variant.create({
+        data: {
+          productId: product.id,
+          sku,
+          barcode,
+          retailPrice: parsedRetailPrice.retailPrice,
+          retailPricePence: parsedRetailPrice.retailPricePence,
+          isActive: input.defaultVariant?.isActive ?? input.isActive ?? true,
+        },
+      });
+
+      if (barcode) {
+        await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
+      }
+    }
+
+    return toProductResponse(product);
+  });
+};
+
+export const createImportedProductRow = async (input: CreateImportedProductRowInput) => {
+  const name = normalizeOptionalText(input.name);
+  const category = normalizeOptionalNullableText(input.category);
+  const sku = normalizeOptionalText(input.sku);
+  const barcode = normalizeOptionalNullableText(input.barcode);
+  const createdByStaffId = normalizeOptionalNullableText(input.createdByStaffId);
+  const importReferenceId = normalizeOptionalText(input.importReferenceId) ?? sku ?? "PRODUCT_IMPORT";
+  const openingStockQty = input.openingStockQty ?? 0;
+
+  if (!name) {
+    throw new HttpError(400, "name is required", "INVALID_PRODUCT_IMPORT");
+  }
+  if (!sku) {
+    throw new HttpError(400, "sku is required", "INVALID_PRODUCT_IMPORT");
+  }
+  if (sku.length < 2) {
+    throw new HttpError(400, "sku must be at least 2 characters", "INVALID_PRODUCT_IMPORT");
+  }
+  if (!Number.isInteger(openingStockQty) || openingStockQty < 0) {
+    throw new HttpError(
+      400,
+      "openingStockQty must be an integer greater than or equal to 0",
+      "INVALID_PRODUCT_IMPORT",
+    );
+  }
+  if (
+    input.costPricePence !== undefined &&
+    input.costPricePence !== null &&
+    (!Number.isInteger(input.costPricePence) || input.costPricePence < 0)
+  ) {
+    throw new HttpError(
+      400,
+      "costPricePence must be null or a non-negative integer",
+      "INVALID_PRODUCT_IMPORT",
+    );
+  }
+
+  const parsedRetailPrice = parseRetailPriceInput(
+    input.retailPrice,
+    undefined,
+    "INVALID_PRODUCT_IMPORT",
+  );
+
+  return prisma.$transaction(async (tx) => {
+    await ensureSkuAvailable(tx, sku);
+
+    if (barcode) {
+      await ensureBarcodeAvailable(tx, barcode);
+    }
+
+    const product = await tx.product.create({
+      data: {
+        name,
+        category,
+        isActive: true,
+      },
+    });
+
+    const variant = await tx.variant.create({
+      data: {
+        productId: product.id,
+        sku,
+        barcode,
+        retailPrice: parsedRetailPrice.retailPrice,
+        retailPricePence: parsedRetailPrice.retailPricePence,
+        costPricePence: input.costPricePence ?? null,
+        isActive: true,
+      },
+    });
+
+    if (barcode) {
+      await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
+    }
+
+    if (openingStockQty > 0) {
+      const defaultStockLocation = await getOrCreateDefaultStockLocationTx(tx);
+
+      await tx.stockLedgerEntry.create({
+        data: {
+          variantId: variant.id,
+          locationId: defaultStockLocation.id,
+          type: "ADJUSTMENT",
+          quantityDelta: openingStockQty,
+          referenceType: "PRODUCT_IMPORT",
+          referenceId: importReferenceId,
+          note: "Product CSV import opening stock",
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: variant.id,
+          locationId: defaultStockLocation.id,
+          type: "ADJUSTMENT",
+          quantity: openingStockQty,
+          referenceType: "PRODUCT_IMPORT",
+          referenceId: importReferenceId,
+          note: "Product CSV import opening stock",
+          createdByStaffId,
+        },
+      });
+    }
+
+    return {
+      product: toProductResponse(product),
+      variant: toVariantResponse(variant),
+      stockImported: openingStockQty,
+    };
+  });
 };
 
 export const getProductById = async (productId: string) => {
@@ -479,6 +681,7 @@ export const updateProductById = async (productId: string, input: UpdateProductI
 
   const hasAnyField =
     Object.prototype.hasOwnProperty.call(input, "name") ||
+    Object.prototype.hasOwnProperty.call(input, "category") ||
     Object.prototype.hasOwnProperty.call(input, "brand") ||
     Object.prototype.hasOwnProperty.call(input, "description") ||
     Object.prototype.hasOwnProperty.call(input, "isActive");
@@ -495,6 +698,10 @@ export const updateProductById = async (productId: string, input: UpdateProductI
       throw new HttpError(400, "name cannot be empty", "INVALID_PRODUCT_UPDATE");
     }
     data.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "category")) {
+    data.category = normalizeOptionalNullableText(input.category);
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "brand")) {
@@ -551,6 +758,11 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
               { option: { contains: normalizedQuery, mode: "insensitive" } },
               {
                 product: {
+                  category: { contains: normalizedQuery, mode: "insensitive" },
+                },
+              },
+              {
+                product: {
                   name: { contains: normalizedQuery, mode: "insensitive" },
                 },
               },
@@ -571,6 +783,7 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
         select: {
           id: true,
           name: true,
+          category: true,
           brand: true,
         },
       },
@@ -664,6 +877,14 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
               },
               {
                 product: {
+                  category: {
+                    contains: normalizedQ,
+                    mode: "insensitive",
+                  },
+                },
+              },
+              {
+                product: {
                   name: {
                     contains: normalizedQ,
                     mode: "insensitive",
@@ -696,6 +917,7 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
       product: {
         select: {
           name: true,
+          category: true,
         },
       },
       barcodes: {
@@ -716,17 +938,12 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
   const groupedOnHand =
     variantIds.length > 0
       ? await prisma.$transaction(async (tx) => {
-          const location = requestedLocationId
-            ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-            : await ensureDefaultLocationTx(tx);
-          if (!location) {
-            throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
-          }
+          const stockLocationId = await resolveInventoryStockLocationIdTx(tx, requestedLocationId);
 
           return tx.inventoryMovement.groupBy({
             by: ["variantId"],
             where: {
-              locationId: location.id,
+              locationId: stockLocationId,
               variantId: {
                 in: variantIds,
               },
@@ -808,17 +1025,12 @@ export const getProductByBarcode = async (barcode: string, locationId?: string) 
       throw new HttpError(404, "Barcode not found", "BARCODE_NOT_FOUND");
     }
 
-    const location = requestedLocationId
-      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await ensureDefaultLocationTx(tx);
-    if (!location) {
-      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
-    }
+    const stockLocationId = await resolveInventoryStockLocationIdTx(tx, requestedLocationId);
 
     const aggregate = await tx.inventoryMovement.aggregate({
       where: {
         variantId: variant.id,
-        locationId: location.id,
+        locationId: stockLocationId,
       },
       _sum: {
         quantity: true,
@@ -926,6 +1138,7 @@ export const getVariantById = async (variantId: string) => {
         select: {
           id: true,
           name: true,
+          category: true,
           brand: true,
         },
       },

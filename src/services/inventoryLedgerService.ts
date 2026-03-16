@@ -1,7 +1,7 @@
 import { InventoryMovementType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { HttpError } from "../utils/http";
-import { ensureDefaultLocationTx } from "./locationService";
+import { HttpError, isUuid } from "../utils/http";
+import { createAuditEventTx } from "./auditService";
 import { ensureVariantExistsById } from "./productService";
 
 type RecordMovementInput = {
@@ -14,6 +14,7 @@ type RecordMovementInput = {
   referenceId?: string;
   note?: string;
   createdByStaffId?: string;
+  allowNegativeStock?: boolean;
 };
 
 type ListMovementFilters = {
@@ -46,6 +47,7 @@ type RecordAdjustmentInput = {
   reason?: InventoryAdjustmentReason;
   note?: string;
   createdByStaffId?: string;
+  allowNegativeStock?: boolean;
 };
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -57,6 +59,132 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
+  const existingDefault = await tx.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: "Default",
+      isDefault: true,
+    },
+  });
+};
+
+const ensureStockLocationExistsTx = async (
+  tx: Prisma.TransactionClient,
+  locationId: string,
+) => {
+  if (!isUuid(locationId)) {
+    throw new HttpError(400, "locationId must be a valid UUID", "INVALID_LOCATION_ID");
+  }
+
+  const location = await tx.stockLocation.findUnique({
+    where: { id: locationId },
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  });
+
+  if (!location) {
+    throw new HttpError(404, "Stock location not found", "LOCATION_NOT_FOUND");
+  }
+
+  return location;
+};
+
+const ensureStockLocationExists = async (locationId: string) => {
+  if (!isUuid(locationId)) {
+    throw new HttpError(400, "locationId must be a valid UUID", "INVALID_LOCATION_ID");
+  }
+
+  const location = await prisma.stockLocation.findUnique({
+    where: { id: locationId },
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+    },
+  });
+
+  if (!location) {
+    throw new HttpError(404, "Stock location not found", "LOCATION_NOT_FOUND");
+  }
+
+  return location;
+};
+
+const resolveStockLocationTx = async (
+  tx: Prisma.TransactionClient,
+  locationId?: string,
+) => {
+  const normalizedLocationId = normalizeOptionalText(locationId);
+  if (!normalizedLocationId) {
+    return getOrCreateDefaultStockLocationTx(tx);
+  }
+
+  return ensureStockLocationExistsTx(tx, normalizedLocationId);
+};
+
+const toStockLedgerEntryType = (type: InventoryMovementType) => {
+  switch (type) {
+    case "PURCHASE":
+      return "PURCHASE" as const;
+    case "SALE":
+      return "SALE" as const;
+    case "ADJUSTMENT":
+      return "ADJUSTMENT" as const;
+    case "WORKSHOP_USE":
+      return "WORKSHOP" as const;
+    case "RETURN":
+      return "RETURN" as const;
+    case "TRANSFER":
+      return "TRANSFER" as const;
+    default: {
+      const exhaustiveCheck: never = type;
+      return exhaustiveCheck;
+    }
+  }
+};
+
+const toStockLedgerUnitCostPence = (
+  value: Prisma.Decimal | null | undefined,
+) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (value.decimalPlaces() > 0) {
+    return null;
+  }
+
+  return value.toNumber();
+};
+
+const resolveLedgerCreatedByStaffIdTx = async (
+  tx: Prisma.TransactionClient,
+  createdByStaffId: string | null,
+) => {
+  if (!createdByStaffId) {
+    return null;
+  }
+
+  const staff = await tx.user.findUnique({
+    where: { id: createdByStaffId },
+    select: { id: true },
+  });
+
+  return staff?.id ?? null;
 };
 
 const parseTake = (take: number | undefined): number | undefined => {
@@ -121,7 +249,7 @@ const parseToDate = (value: string): Date => {
 const toMovementResponse = (movement: {
   id: string;
   variantId: string;
-  locationId: string;
+  locationId: string | null;
   type: InventoryMovementType;
   quantity: number;
   unitCost: Prisma.Decimal | null;
@@ -130,10 +258,17 @@ const toMovementResponse = (movement: {
   note: string | null;
   createdByStaffId: string | null;
   createdAt: Date;
+  location?: {
+    id: string;
+    name: string;
+    isDefault: boolean;
+  } | null;
 }) => ({
   id: movement.id,
   variantId: movement.variantId,
   locationId: movement.locationId,
+  locationName: movement.location?.name ?? null,
+  locationIsDefault: movement.location?.isDefault ?? null,
   type: movement.type,
   quantity: movement.quantity,
   unitCost: movement.unitCost === null ? null : movement.unitCost.toString(),
@@ -152,12 +287,149 @@ const VALID_ADJUSTMENT_REASONS = new Set<InventoryAdjustmentReason>([
   "OTHER",
 ]);
 
+const getOnHandAtLocationTx = async (
+  tx: Prisma.TransactionClient,
+  variantId: string,
+  locationId: string,
+) => {
+  const aggregate = await tx.stockLedgerEntry.aggregate({
+    where: {
+      variantId,
+      locationId,
+    },
+    _sum: {
+      quantityDelta: true,
+    },
+  });
+
+  return aggregate._sum.quantityDelta ?? 0;
+};
+
+const getTotalOnHandTx = async (
+  tx: Prisma.TransactionClient,
+  variantId: string,
+) => {
+  const aggregate = await tx.stockLedgerEntry.aggregate({
+    where: {
+      variantId,
+    },
+    _sum: {
+      quantityDelta: true,
+    },
+  });
+
+  return aggregate._sum.quantityDelta ?? 0;
+};
+
+export const assertNonNegativeProjectedStockTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    variantId: string;
+    locationId: string;
+    quantityDelta: number;
+    allowNegativeStock?: boolean;
+    message?: string;
+    code?: string;
+  },
+) => {
+  if (input.allowNegativeStock || input.quantityDelta >= 0) {
+    return;
+  }
+
+  const onHandAtLocation = await getOnHandAtLocationTx(
+    tx,
+    input.variantId,
+    input.locationId,
+  );
+  const projectedOnHand = onHandAtLocation + input.quantityDelta;
+
+  if (projectedOnHand < 0) {
+    throw new HttpError(
+      409,
+      input.message ?? "Inventory movement would reduce stock below zero",
+      input.code ?? "NEGATIVE_STOCK_NOT_ALLOWED",
+    );
+  }
+};
+
+const recordMovementTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    variantId: string;
+    locationId?: string;
+    type: InventoryMovementType;
+    quantity: number;
+    unitCost?: string | number | null;
+    referenceType?: string;
+    referenceId?: string;
+    note?: string;
+    createdByStaffId?: string;
+    allowNegativeStock?: boolean;
+  },
+) => {
+  await ensureVariantExistsById(tx, input.variantId);
+
+  const referenceType = normalizeOptionalText(input.referenceType) ?? null;
+  const referenceId = normalizeOptionalText(input.referenceId) ?? null;
+  const note = normalizeOptionalText(input.note) ?? null;
+  const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
+  const unitCost = parseUnitCost(input.unitCost);
+  const location = await resolveStockLocationTx(tx, input.locationId);
+
+  await assertNonNegativeProjectedStockTx(tx, {
+    variantId: input.variantId,
+    locationId: location.id,
+    quantityDelta: input.quantity,
+    allowNegativeStock: input.allowNegativeStock,
+  });
+
+  const movement = await tx.inventoryMovement.create({
+    data: {
+      variantId: input.variantId,
+      locationId: location.id,
+      type: input.type,
+      quantity: input.quantity,
+      unitCost: unitCost === undefined ? null : unitCost,
+      referenceType,
+      referenceId,
+      note,
+      createdByStaffId,
+    },
+    include: {
+      location: {
+        select: {
+          id: true,
+          name: true,
+          isDefault: true,
+        },
+      },
+    },
+  });
+
+  const ledgerCreatedByStaffId = await resolveLedgerCreatedByStaffIdTx(tx, createdByStaffId);
+
+  await tx.stockLedgerEntry.create({
+    data: {
+      variantId: input.variantId,
+      locationId: location.id,
+      type: toStockLedgerEntryType(input.type),
+      quantityDelta: input.quantity,
+      unitCostPence: toStockLedgerUnitCostPence(unitCost),
+      referenceType: referenceType ?? "INVENTORY_MOVEMENT",
+      referenceId: referenceId ?? movement.id,
+      note,
+      createdByStaffId: ledgerCreatedByStaffId,
+    },
+  });
+
+  return movement;
+};
+
 export const recordMovement = async (input: RecordMovementInput) => {
   const variantId = normalizeOptionalText(input.variantId);
   if (!variantId) {
     throw new HttpError(400, "variantId is required", "INVALID_INVENTORY_MOVEMENT");
   }
-  const requestedLocationId = normalizeOptionalText(input.locationId);
 
   if (!input.type) {
     throw new HttpError(400, "type is required", "INVALID_INVENTORY_MOVEMENT");
@@ -171,43 +443,26 @@ export const recordMovement = async (input: RecordMovementInput) => {
     );
   }
 
-  const unitCost = parseUnitCost(input.unitCost);
-
-  const movement = await prisma.$transaction(async (tx) => {
-    await ensureVariantExistsById(tx, variantId);
-    const location = requestedLocationId
-      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await ensureDefaultLocationTx(tx);
-    if (!location) {
-      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
-    }
-
-    const referenceType = normalizeOptionalText(input.referenceType) ?? null;
-    const referenceId = normalizeOptionalText(input.referenceId) ?? null;
-    const note = normalizeOptionalText(input.note) ?? null;
-    const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
-
-    return tx.inventoryMovement.create({
-      data: {
-        variantId,
-        locationId: location.id,
-        type: input.type,
-        quantity: input.quantity,
-        unitCost: unitCost === undefined ? null : unitCost,
-        referenceType,
-        referenceId,
-        note,
-        createdByStaffId,
-      },
-    });
-  });
+  const movement = await prisma.$transaction((tx) =>
+    recordMovementTx(tx, {
+      variantId,
+      locationId: input.locationId,
+      type: input.type,
+      quantity: input.quantity,
+      unitCost: input.unitCost,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note: input.note,
+      createdByStaffId: input.createdByStaffId,
+      allowNegativeStock: input.allowNegativeStock,
+    }),
+  );
 
   return toMovementResponse(movement);
 };
 
 export const recordAdjustment = async (input: RecordAdjustmentInput) => {
   const variantId = normalizeOptionalText(input.variantId);
-  const locationId = normalizeOptionalText(input.locationId);
   if (!variantId) {
     throw new HttpError(400, "variantId is required", "INVALID_INVENTORY_ADJUSTMENT");
   }
@@ -226,25 +481,52 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
     );
   }
 
-  const movement = await recordMovement({
-    variantId,
-    ...(locationId ? { locationId } : {}),
-    type: "ADJUSTMENT",
-    quantity: input.quantityDelta,
-    referenceType: "ADJUSTMENT",
-    referenceId: input.reason,
-    note: normalizeOptionalText(input.note) ?? undefined,
-    createdByStaffId: normalizeOptionalText(input.createdByStaffId),
-  });
+  const createdByStaffId = normalizeOptionalText(input.createdByStaffId);
 
-  const onHand = await getOnHand(variantId, locationId);
+  const result = await prisma.$transaction(async (tx) => {
+    const movement = await recordMovementTx(tx, {
+      variantId,
+      locationId: normalizeOptionalText(input.locationId),
+      type: "ADJUSTMENT",
+      quantity: input.quantityDelta,
+      referenceType: "ADJUSTMENT",
+      referenceId: input.reason,
+      note: normalizeOptionalText(input.note) ?? undefined,
+      createdByStaffId,
+      allowNegativeStock: input.allowNegativeStock,
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "INVENTORY_ADJUSTMENT_RECORDED",
+        entityType: "INVENTORY_MOVEMENT",
+        entityId: movement.id,
+        metadata: {
+          variantId,
+          locationId: movement.locationId,
+          quantityDelta: movement.quantity,
+          reason: input.reason,
+          referenceType: movement.referenceType,
+          referenceId: movement.referenceId,
+          note: movement.note,
+        },
+      },
+      createdByStaffId ? { actorId: createdByStaffId } : undefined,
+    );
+
+    return {
+      movement: toMovementResponse(movement),
+      onHand: await getTotalOnHandTx(tx, variantId),
+    };
+  });
 
   return {
     movement: {
-      ...movement,
+      ...result.movement,
       reason: input.reason,
     },
-    onHand: onHand.onHand,
+    onHand: result.onHand,
   };
 };
 
@@ -253,45 +535,40 @@ export const getOnHand = async (variantId?: string, locationId?: string) => {
   if (!normalizedVariantId) {
     throw new HttpError(400, "variantId is required", "INVALID_VARIANT_ID");
   }
-  const requestedLocationId = normalizeOptionalText(locationId);
 
-  const onHandResult = await prisma.$transaction(async (tx) => {
-    await ensureVariantExistsById(tx, normalizedVariantId);
-    const location = requestedLocationId
-      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await ensureDefaultLocationTx(tx);
-    if (!location) {
-      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
-    }
+  await ensureVariantExistsById(prisma, normalizedVariantId);
+  const normalizedLocationId = normalizeOptionalText(locationId);
+  if (normalizedLocationId) {
+    await ensureStockLocationExists(normalizedLocationId);
+  }
 
-    const aggregate = await tx.inventoryMovement.aggregate({
-      where: {
-        variantId: normalizedVariantId,
-        locationId: location.id,
-      },
-      _sum: {
-        quantity: true,
-      },
-    });
-
-    return {
-      location,
-      aggregate,
-    };
+  const aggregate = await prisma.stockLedgerEntry.aggregate({
+    where: {
+      variantId: normalizedVariantId,
+      ...(normalizedLocationId ? { locationId: normalizedLocationId } : {}),
+    },
+    _sum: {
+      quantityDelta: true,
+    },
   });
 
   return {
     variantId: normalizedVariantId,
-    locationId: onHandResult.location.id,
-    onHand: onHandResult.aggregate._sum.quantity ?? 0,
+    locationId: normalizedLocationId ?? null,
+    onHand: aggregate._sum.quantityDelta ?? 0,
   };
 };
 
 export const listMovements = async (filters: ListMovementFilters) => {
   const variantId = normalizeOptionalText(filters.variantId);
-  const requestedLocationId = normalizeOptionalText(filters.locationId);
   if (!variantId) {
     throw new HttpError(400, "variantId is required", "INVALID_VARIANT_ID");
+  }
+
+  await ensureVariantExistsById(prisma, variantId);
+  const normalizedLocationId = normalizeOptionalText(filters.locationId);
+  if (normalizedLocationId) {
+    await ensureStockLocationExists(normalizedLocationId);
   }
 
   const from = filters.from ? parseFromDate(filters.from) : undefined;
@@ -305,133 +582,121 @@ export const listMovements = async (filters: ListMovementFilters) => {
     );
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    await ensureVariantExistsById(tx, variantId);
-    const location = requestedLocationId
-      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await ensureDefaultLocationTx(tx);
-    if (!location) {
-      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
-    }
-
-    const movements = await tx.inventoryMovement.findMany({
-      where: {
-        variantId,
-        locationId: location.id,
-        ...(filters.type ? { type: filters.type } : {}),
-        ...(from || to
-          ? {
-              createdAt: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
-          : {}),
+  const movements = await prisma.inventoryMovement.findMany({
+    where: {
+      variantId,
+      ...(normalizedLocationId ? { locationId: normalizedLocationId } : {}),
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: {
+      location: {
+        select: {
+          id: true,
+          name: true,
+          isDefault: true,
+        },
       },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    });
-
-    return {
-      locationId: location.id,
-      movements,
-    };
+    },
   });
 
   return {
     variantId,
-    locationId: result.locationId,
-    movements: result.movements.map((movement) => toMovementResponse(movement)),
+    locationId: normalizedLocationId ?? null,
+    movements: movements.map((movement) => toMovementResponse(movement)),
   };
 };
 
 export const listOnHand = async (filters: ListOnHandFilters = {}) => {
-  const requestedLocationId = normalizeOptionalText(filters.locationId);
   const normalizedQuery = normalizeOptionalText(filters.q);
+  const normalizedLocationId = normalizeOptionalText(filters.locationId);
   const take = parseTake(filters.take);
   const skip = parseSkip(filters.skip);
+  if (normalizedLocationId) {
+    await ensureStockLocationExists(normalizedLocationId);
+  }
 
-  return prisma.$transaction(async (tx) => {
-    const location = requestedLocationId
-      ? await tx.location.findUnique({ where: { id: requestedLocationId } })
-      : await ensureDefaultLocationTx(tx);
-    if (!location) {
-      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
-    }
-
-    const variants = await tx.variant.findMany({
-      where: {
-        ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
-        ...(normalizedQuery
-          ? {
-              OR: [
-                { sku: { contains: normalizedQuery, mode: "insensitive" } },
-                { barcode: { contains: normalizedQuery, mode: "insensitive" } },
-                { name: { contains: normalizedQuery, mode: "insensitive" } },
-                { option: { contains: normalizedQuery, mode: "insensitive" } },
-                {
-                  product: {
-                    name: { contains: normalizedQuery, mode: "insensitive" },
-                  },
+  const variants = await prisma.variant.findMany({
+    where: {
+      ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+      ...(normalizedQuery
+        ? {
+            OR: [
+              { sku: { contains: normalizedQuery, mode: "insensitive" } },
+              { barcode: { contains: normalizedQuery, mode: "insensitive" } },
+              { name: { contains: normalizedQuery, mode: "insensitive" } },
+              { option: { contains: normalizedQuery, mode: "insensitive" } },
+              {
+                product: {
+                  name: { contains: normalizedQuery, mode: "insensitive" },
                 },
-                {
-                  product: {
-                    brand: { contains: normalizedQuery, mode: "insensitive" },
-                  },
+              },
+              {
+                product: {
+                  brand: { contains: normalizedQuery, mode: "insensitive" },
                 },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ createdAt: "desc" }],
-      ...(take !== undefined ? { take } : {}),
-      ...(skip !== undefined ? { skip } : {}),
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            brand: true,
-          },
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: "desc" }],
+    ...(take !== undefined ? { take } : {}),
+    ...(skip !== undefined ? { skip } : {}),
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
+          brand: true,
         },
       },
-    });
-
-    const variantIds = variants.map((variant) => variant.id);
-    const grouped =
-      variantIds.length > 0
-        ? await tx.inventoryMovement.groupBy({
-            by: ["variantId"],
-            where: {
-              locationId: location.id,
-              variantId: {
-                in: variantIds,
-              },
-            },
-            _sum: {
-              quantity: true,
-            },
-          })
-        : [];
-
-    const onHandByVariant = new Map(
-      grouped.map((row) => [row.variantId, row._sum.quantity ?? 0]),
-    );
-
-    return {
-      locationId: location.id,
-      rows: variants.map((variant) => ({
-        variantId: variant.id,
-        sku: variant.sku,
-        barcode: variant.barcode,
-        variantName: variant.name ?? variant.option,
-        option: variant.option,
-        productId: variant.product.id,
-        productName: variant.product.name,
-        brand: variant.product.brand,
-        retailPricePence: variant.retailPricePence,
-        isActive: variant.isActive,
-        onHand: onHandByVariant.get(variant.id) ?? 0,
-      })),
-    };
+    },
   });
+
+  const variantIds = variants.map((variant) => variant.id);
+  const grouped =
+    variantIds.length > 0
+      ? await prisma.stockLedgerEntry.groupBy({
+          by: ["variantId"],
+          where: {
+            variantId: {
+              in: variantIds,
+            },
+            ...(normalizedLocationId ? { locationId: normalizedLocationId } : {}),
+          },
+          _sum: {
+            quantityDelta: true,
+          },
+        })
+      : [];
+
+  const onHandByVariant = new Map(
+    grouped.map((row) => [row.variantId, row._sum.quantityDelta ?? 0]),
+  );
+
+  return {
+    locationId: normalizedLocationId ?? null,
+    rows: variants.map((variant) => ({
+      variantId: variant.id,
+      sku: variant.sku,
+      barcode: variant.barcode,
+      variantName: variant.name ?? variant.option,
+      option: variant.option,
+      productId: variant.product.id,
+      productName: variant.product.name,
+      brand: variant.product.brand,
+      retailPricePence: variant.retailPricePence,
+      isActive: variant.isActive,
+      onHand: onHandByVariant.get(variant.id) ?? 0,
+    })),
+  };
 };

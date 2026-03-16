@@ -62,6 +62,8 @@ const apiJsonWithHeaderBypass = async (
 
 let sequence = 0;
 const uniqueToken = (prefix = "e2e") => `${prefix}-${Date.now()}-${++sequence}`;
+const frontendBaseUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
+const backendBaseUrl = process.env.TEST_BASE_URL || "http://localhost:3100";
 
 const ensureUserViaAdminBypass = async (
   request,
@@ -71,6 +73,8 @@ const ensureUserViaAdminBypass = async (
   const role = options.role || "MANAGER";
   const email = `${token}@example.com`;
   const password = options.password || `Playwright!${token}`;
+  const pin = options.pin || "1234";
+  const withPin = options.withPin !== false;
   const name = options.name || `${role} ${token}`;
 
   const payload = await apiJsonWithHeaderBypass(request, "POST", "/api/admin/users", "ADMIN", {
@@ -82,19 +86,53 @@ const ensureUserViaAdminBypass = async (
     },
   });
 
+  if (withPin) {
+    await apiJsonWithHeaderBypass(request, "POST", "/api/auth/pin", role, {
+      headers: {
+        "X-Staff-Id": payload.user.id,
+      },
+      data: {
+        pin,
+      },
+    });
+  }
+
   return {
     user: payload.user,
     email,
     password,
+    ...(withPin ? { pin } : {}),
   };
 };
 
-const loginViaUi = async (page, credentials, nextPath = "/pos") => {
-  await page.goto(`/login?next=${encodeURIComponent(nextPath)}`);
-  await page.fill('[data-testid="login-email"]', credentials.email);
-  await page.fill('[data-testid="login-password"]', credentials.password);
-  await page.click('[data-testid="login-submit"]');
-  await page.waitForURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+const loginViaUi = async (page, credentials, nextPath = "/pos", options = {}) => {
+  const resolvedNextPath = nextPath === undefined ? "/pos" : nextPath;
+  const expectedPath = options.expectedPath ?? resolvedNextPath;
+  const surface = options.surface || "legacy";
+  if (surface === "frontend") {
+    const loginUrl = resolvedNextPath
+      ? `${frontendBaseUrl}/login?next=${encodeURIComponent(resolvedNextPath)}`
+      : `${frontendBaseUrl}/login`;
+    await page.goto(loginUrl);
+    await page.click(`[data-testid="login-user-${credentials.user.id}"]`);
+    await page.fill('[data-testid="login-pin"]', credentials.pin);
+    if (expectedPath) {
+      await page.waitForURL(new RegExp(`${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), {
+        timeout: 6000,
+      });
+    }
+    return;
+  }
+  const loginUrl = resolvedNextPath
+    ? `${backendBaseUrl}/login?next=${encodeURIComponent(resolvedNextPath)}`
+    : `${backendBaseUrl}/login`;
+  await page.goto(loginUrl);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password").fill(credentials.password);
+  await page.getByRole("button", { name: "Login" }).click();
+  if (expectedPath) {
+    await page.waitForURL(new RegExp(`${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  }
 };
 
 const seedCatalogVariant = async (request, options = {}) => {
@@ -108,6 +146,7 @@ const seedCatalogVariant = async (request, options = {}) => {
   });
 
   const sku = `E2E-${token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`;
+  const barcode = options.barcode || `BC-${token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`;
   const variant = await apiJsonWithHeaderBypass(
     request,
     "POST",
@@ -116,6 +155,7 @@ const seedCatalogVariant = async (request, options = {}) => {
     {
       data: {
         sku,
+        barcode,
         name: `E2E Variant ${token}`,
         retailPricePence: options.retailPricePence ?? 1499,
       },
@@ -124,7 +164,7 @@ const seedCatalogVariant = async (request, options = {}) => {
 
   const initialOnHand = options.initialOnHand ?? 4;
   if (initialOnHand !== 0) {
-    await apiJsonWithHeaderBypass(request, "POST", "/api/inventory/adjustments", "STAFF", {
+    await apiJsonWithHeaderBypass(request, "POST", "/api/inventory/adjustments", "MANAGER", {
       data: {
         variantId: variant.id,
         quantityDelta: initialOnHand,
@@ -139,6 +179,7 @@ const seedCatalogVariant = async (request, options = {}) => {
     product,
     variant,
     sku,
+    barcode,
     initialOnHand,
   };
 };

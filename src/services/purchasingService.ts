@@ -1,13 +1,24 @@
 import { Prisma, PurchaseOrderStatus } from "@prisma/client";
+import { emit } from "../core/events";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { ensureDefaultLocationTx } from "./locationService";
+import { createAuditEventTx } from "./auditService";
 
 type CreateSupplierInput = {
   name?: string;
+  contactName?: string;
   email?: string;
   phone?: string;
   notes?: string;
+};
+
+type UpdateSupplierInput = {
+  name?: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
 };
 
 type CreatePurchaseOrderInput = {
@@ -102,7 +113,6 @@ const parseOptionalSkip = (value: number | undefined): number | undefined => {
 };
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
 const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date | undefined => {
   const normalized = normalizeOptionalText(value);
   if (!normalized) {
@@ -124,6 +134,7 @@ const parseDateFilter = (value: string | undefined, field: "from" | "to"): Date 
 const toSupplierResponse = (supplier: {
   id: string;
   name: string;
+  contactName: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
@@ -132,6 +143,7 @@ const toSupplierResponse = (supplier: {
 }) => ({
   id: supplier.id,
   name: supplier.name,
+  contactName: supplier.contactName,
   email: supplier.email,
   phone: supplier.phone,
   notes: supplier.notes,
@@ -151,6 +163,7 @@ const toPurchaseOrderItemResponse = (item: {
   variant: {
     id: string;
     sku: string;
+    barcode: string | null;
     name: string | null;
     product: {
       id: string;
@@ -162,6 +175,7 @@ const toPurchaseOrderItemResponse = (item: {
   purchaseOrderId: item.purchaseOrderId,
   variantId: item.variantId,
   sku: item.variant.sku,
+  barcode: item.variant.barcode,
   variantName: item.variant.name,
   productId: item.variant.product.id,
   productName: item.variant.product.name,
@@ -262,6 +276,7 @@ const getNextStatusOrThrow = (
 
 const toPurchaseOrderResponse = (po: {
   id: string;
+  poNumber: string;
   supplierId: string;
   status: PurchaseOrderStatus;
   orderedAt: Date | null;
@@ -312,6 +327,7 @@ const toPurchaseOrderResponse = (po: {
 
   return {
     id: po.id,
+    poNumber: po.poNumber,
     supplierId: po.supplierId,
     supplier: po.supplier,
     status: po.status,
@@ -323,6 +339,54 @@ const toPurchaseOrderResponse = (po: {
     items,
     totals,
   };
+};
+
+const getLegacyPurchaseOrderNumberPrefixForYear = (year: number) => `COREPOS-PO-${year}-`;
+
+const getCompactPurchaseOrderNumberPrefixForYear = (year: number) =>
+  `PO${year.toString().slice(-2)}`;
+
+const buildPurchaseOrderNumber = (year: number, sequenceNumber: number) =>
+  `${getCompactPurchaseOrderNumberPrefixForYear(year)}${String(sequenceNumber).padStart(6, "0")}`;
+
+const getNextPurchaseOrderNumber = async (
+  tx: Prisma.TransactionClient,
+  createdAt: Date,
+) => {
+  const year = createdAt.getUTCFullYear();
+  const legacyPrefix = getLegacyPurchaseOrderNumberPrefixForYear(year);
+  const compactPrefix = getCompactPurchaseOrderNumberPrefixForYear(year);
+
+  const purchaseOrders = await tx.purchaseOrder.findMany({
+    where: {
+      OR: [
+        {
+          poNumber: {
+            startsWith: legacyPrefix,
+          },
+        },
+        {
+          poNumber: {
+            startsWith: compactPrefix,
+          },
+        },
+      ],
+    },
+    select: {
+      poNumber: true,
+    },
+  });
+
+  const nextSequence =
+    purchaseOrders.reduce((maxSequence, purchaseOrder) => {
+      const sequence = Number.parseInt(purchaseOrder.poNumber.slice(-6), 10);
+      if (Number.isNaN(sequence)) {
+        return maxSequence;
+      }
+      return Math.max(maxSequence, sequence);
+    }, 0) + 1;
+
+  return buildPurchaseOrderNumber(year, nextSequence);
 };
 
 const ensureSupplierExists = async (
@@ -347,6 +411,7 @@ const getPurchaseOrderOrThrow = async (
         select: {
           id: true,
           name: true,
+          contactName: true,
           email: true,
           phone: true,
         },
@@ -396,9 +461,49 @@ export const createSupplier = async (input: CreateSupplierInput) => {
   const supplier = await prisma.supplier.create({
     data: {
       name,
+      contactName: normalizeOptionalText(input.contactName),
       email: normalizeOptionalText(input.email),
       phone: normalizeOptionalText(input.phone),
       notes: normalizeOptionalText(input.notes),
+    },
+  });
+
+  return toSupplierResponse(supplier);
+};
+
+export const updateSupplier = async (supplierId: string, input: UpdateSupplierInput) => {
+  if (!isUuid(supplierId)) {
+    throw new HttpError(400, "Invalid supplier id", "INVALID_SUPPLIER_ID");
+  }
+
+  const hasName = Object.prototype.hasOwnProperty.call(input, "name");
+  const hasContactName = Object.prototype.hasOwnProperty.call(input, "contactName");
+  const hasEmail = Object.prototype.hasOwnProperty.call(input, "email");
+  const hasPhone = Object.prototype.hasOwnProperty.call(input, "phone");
+  const hasNotes = Object.prototype.hasOwnProperty.call(input, "notes");
+
+  if (!hasName && !hasContactName && !hasEmail && !hasPhone && !hasNotes) {
+    throw new HttpError(400, "No fields supplied for update", "INVALID_SUPPLIER_UPDATE");
+  }
+
+  const current = await prisma.supplier.findUnique({ where: { id: supplierId } });
+  if (!current) {
+    throw new HttpError(404, "Supplier not found", "SUPPLIER_NOT_FOUND");
+  }
+
+  const nextName = hasName ? normalizeOptionalText(input.name ?? undefined) : current.name;
+  if (!nextName) {
+    throw new HttpError(400, "name is required", "INVALID_SUPPLIER_UPDATE");
+  }
+
+  const supplier = await prisma.supplier.update({
+    where: { id: supplierId },
+    data: {
+      name: nextName,
+      ...(hasContactName ? { contactName: normalizeOptionalText(input.contactName ?? undefined) ?? null } : {}),
+      ...(hasEmail ? { email: normalizeOptionalText(input.email ?? undefined) ?? null } : {}),
+      ...(hasPhone ? { phone: normalizeOptionalText(input.phone ?? undefined) ?? null } : {}),
+      ...(hasNotes ? { notes: normalizeOptionalText(input.notes ?? undefined) ?? null } : {}),
     },
   });
 
@@ -413,6 +518,7 @@ export const searchSuppliers = async (query?: string) => {
       ? {
           OR: [
             { name: { contains: normalizedQuery, mode: "insensitive" } },
+            { contactName: { contains: normalizedQuery, mode: "insensitive" } },
             { email: { contains: normalizedQuery, mode: "insensitive" } },
             { phone: { contains: normalizedQuery, mode: "insensitive" } },
           ],
@@ -435,43 +541,67 @@ export const createPurchaseOrder = async (input: CreatePurchaseOrderInput) => {
   const orderedAt = toDateOrUndefined(input.orderedAt, "orderedAt");
   const expectedAt = toDateOrUndefined(input.expectedAt, "expectedAt");
 
-  const po = await prisma.$transaction(async (tx) => {
-    await ensureSupplierExists(tx, supplierId);
+  let po;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      po = await prisma.$transaction(async (tx) => {
+        await ensureSupplierExists(tx, supplierId);
+        const createdAt = new Date();
+        const poNumber = await getNextPurchaseOrderNumber(tx, createdAt);
 
-    return tx.purchaseOrder.create({
-      data: {
-        supplierId,
-        orderedAt,
-        expectedAt,
-        notes: normalizeOptionalText(input.notes),
-      },
-      include: {
-        supplier: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
+        return tx.purchaseOrder.create({
+          data: {
+            poNumber,
+            supplierId,
+            orderedAt,
+            expectedAt,
+            notes: normalizeOptionalText(input.notes),
+            createdAt,
           },
-        },
-        items: {
-          orderBy: { createdAt: "asc" },
           include: {
-            variant: {
+            supplier: {
+              select: {
+                id: true,
+                name: true,
+                contactName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            items: {
+              orderBy: { createdAt: "asc" },
               include: {
-                product: {
-                  select: {
-                    id: true,
-                    name: true,
+                variant: {
+                  include: {
+                    product: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
                   },
                 },
               },
             },
           },
-        },
-      },
-    });
-  });
+        });
+      });
+      break;
+    } catch (createError) {
+      if (
+        createError instanceof Prisma.PrismaClientKnownRequestError &&
+        createError.code === "P2002" &&
+        attempt < 2
+      ) {
+        continue;
+      }
+      throw createError;
+    }
+  }
+
+  if (!po) {
+    throw new HttpError(500, "Failed to create purchase order", "PURCHASE_ORDER_CREATE_FAILED");
+  }
 
   return toPurchaseOrderResponse(po);
 };
@@ -508,15 +638,34 @@ export const listPurchaseOrders = async (filters: ListPurchaseOrderFilters = {})
         ? {
             OR: [
               ...(isUuid(normalizedQuery) ? [{ id: normalizedQuery }] : []),
+              { poNumber: { contains: normalizedQuery, mode: "insensitive" } },
               { notes: { contains: normalizedQuery, mode: "insensitive" } },
               { supplier: { name: { contains: normalizedQuery, mode: "insensitive" } } },
               { supplier: { email: { contains: normalizedQuery, mode: "insensitive" } } },
               {
                 items: {
                   some: {
-                    variant: {
-                      sku: { contains: normalizedQuery, mode: "insensitive" },
-                    },
+                    OR: [
+                      {
+                        variant: {
+                          sku: { contains: normalizedQuery, mode: "insensitive" },
+                        },
+                      },
+                      {
+                        variant: {
+                          barcode: { contains: normalizedQuery, mode: "insensitive" },
+                        },
+                      },
+                      {
+                        variant: {
+                          barcodes: {
+                            some: {
+                              code: { contains: normalizedQuery, mode: "insensitive" },
+                            },
+                          },
+                        },
+                      },
+                    ],
                   },
                 },
               },
@@ -543,6 +692,7 @@ export const listPurchaseOrders = async (filters: ListPurchaseOrderFilters = {})
         select: {
           id: true,
           name: true,
+          contactName: true,
           email: true,
           phone: true,
         },
@@ -667,11 +817,28 @@ export const upsertPurchaseOrderItems = async (
       },
     });
 
+    const supplierLinks = await tx.supplierProductLink.findMany({
+      where: {
+        supplierId: po.supplierId,
+        variantId: {
+          in: variantIds,
+        },
+        isActive: true,
+      },
+      select: {
+        variantId: true,
+        supplierCostPence: true,
+      },
+    });
+
     if (variants.length !== variantIds.length) {
       throw new HttpError(404, "One or more variants were not found", "VARIANT_NOT_FOUND");
     }
 
     const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+    const supplierLinkByVariantId = new Map(
+      supplierLinks.map((link) => [link.variantId, link]),
+    );
     const existingItemByVariantId = new Map(
       po.items.map((item) => [item.variantId, item]),
     );
@@ -686,7 +853,11 @@ export const upsertPurchaseOrderItems = async (
       const requestedUnitCostPence =
         line.unitCostPence === undefined ? undefined : line.unitCostPence;
       const effectiveUnitCostPence =
-        requestedUnitCostPence ?? existingItem?.unitCostPence ?? variant.costPricePence ?? null;
+        requestedUnitCostPence
+        ?? existingItem?.unitCostPence
+        ?? supplierLinkByVariantId.get(line.variantId)?.supplierCostPence
+        ?? variant.costPricePence
+        ?? null;
 
       if (existingItem) {
         if (line.quantityOrdered < existingItem.quantityReceived) {
@@ -994,6 +1165,13 @@ export const receivePurchaseOrder = async (
       throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
     }
 
+    if (po.status === "DRAFT") {
+      throw new HttpError(
+        409,
+        "Draft purchase orders must be sent before receiving",
+        "PURCHASE_ORDER_NOT_SENT",
+      );
+    }
     if (po.status === "CANCELLED") {
       throw new HttpError(409, "Cancelled purchase orders cannot be received", "PURCHASE_ORDER_CANCELLED");
     }
@@ -1002,7 +1180,6 @@ export const receivePurchaseOrder = async (
     }
 
     await ensureStockLocationExists(tx, locationId);
-    const inventoryLocation = await ensureDefaultLocationTx(tx);
 
     if (normalizedCreatedByStaffId) {
       const staff = await tx.user.findUnique({ where: { id: normalizedCreatedByStaffId } });
@@ -1012,6 +1189,22 @@ export const receivePurchaseOrder = async (
     }
 
     const itemById = new Map(po.items.map((item) => [item.id, item]));
+    const supplierLinks = await tx.supplierProductLink.findMany({
+      where: {
+        supplierId: po.supplierId,
+        variantId: {
+          in: Array.from(new Set(po.items.map((item) => item.variantId))),
+        },
+        isActive: true,
+      },
+      select: {
+        variantId: true,
+        supplierCostPence: true,
+      },
+    });
+    const supplierLinkByVariantId = new Map(
+      supplierLinks.map((link) => [link.variantId, link]),
+    );
 
     for (const line of parsedLines) {
       const item = itemById.get(line.purchaseOrderItemId);
@@ -1032,7 +1225,12 @@ export const receivePurchaseOrder = async (
         );
       }
 
-      const unitCost = line.unitCostPence ?? item.unitCostPence ?? item.variant.costPricePence ?? null;
+      const unitCost =
+        line.unitCostPence
+        ?? item.unitCostPence
+        ?? supplierLinkByVariantId.get(item.variantId)?.supplierCostPence
+        ?? item.variant.costPricePence
+        ?? null;
 
       await tx.purchaseOrderItem.update({
         where: {
@@ -1063,7 +1261,7 @@ export const receivePurchaseOrder = async (
       await tx.inventoryMovement.create({
         data: {
           variantId: item.variantId,
-          locationId: inventoryLocation.id,
+          locationId,
           type: "PURCHASE",
           quantity: line.quantity,
           unitCost: unitCost,
@@ -1096,8 +1294,59 @@ export const receivePurchaseOrder = async (
       });
     }
 
-    return getPurchaseOrderOrThrow(tx, purchaseOrderId);
+    const quantityReceived = parsedLines.reduce((sum, line) => sum + line.quantity, 0);
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "PURCHASE_ORDER_RECEIVED",
+        entityType: "PURCHASE_ORDER",
+        entityId: purchaseOrderId,
+        metadata: {
+          locationId,
+          lineCount: parsedLines.length,
+          quantityReceived,
+          previousStatus: po.status,
+          nextStatus,
+        },
+      },
+      normalizedCreatedByStaffId ? { actorId: normalizedCreatedByStaffId } : undefined,
+    );
+
+    return {
+      purchaseOrder: await getPurchaseOrderOrThrow(tx, purchaseOrderId),
+      event: {
+        purchaseOrderId,
+        locationId,
+        lineCount: parsedLines.length,
+        quantityReceived,
+      },
+    };
   });
 
-  return toPurchaseOrderResponse(updated);
+  const response = toPurchaseOrderResponse(updated.purchaseOrder);
+  emit("purchaseOrder.received", {
+    id: response.id,
+    type: "purchaseOrder.received",
+    timestamp: new Date().toISOString(),
+    purchaseOrderId: response.id,
+    poNumber: response.poNumber,
+    locationId: updated.event.locationId,
+    lineCount: updated.event.lineCount,
+    quantityReceived: updated.event.quantityReceived,
+    status: response.status,
+  });
+
+  logOperationalEvent("purchasing.purchase_order.received", {
+    entityId: response.id,
+    resultStatus: "succeeded",
+    purchaseOrderId: response.id,
+    poNumber: response.poNumber,
+    locationId: updated.event.locationId,
+    lineCount: updated.event.lineCount,
+    quantityReceived: updated.event.quantityReceived,
+    status: response.status,
+  });
+
+  return response;
 };

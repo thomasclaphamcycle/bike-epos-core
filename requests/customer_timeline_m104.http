@@ -1,0 +1,8 @@
+### M104 Customer Timeline
+# @baseUrl http://localhost:3000
+# @customerId replace-me
+
+GET {{baseUrl}}/api/customers/{{customerId}}/timeline
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+Accept: application/json

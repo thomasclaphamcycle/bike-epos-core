@@ -2,7 +2,7 @@ import { PaymentIntentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { CashProvider } from "../payments/providers/cashProvider";
-import { completeSaleIfEligibleTx } from "./salesService";
+import { completeSaleIfEligibleTx, emitSaleCompletedEvent } from "./salesService";
 import { recordCashSaleMovementForPaymentTx } from "./tillService";
 
 type PaymentIntentProvider = "CASH" | "CARD";
@@ -223,7 +223,7 @@ export const createPaymentIntent = async (
   const provider = parseProviderOrThrow(input.provider);
   const cashProvider = new CashProvider();
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const sale = await ensureSaleExistsTx(tx, saleId);
     const capturedTotal = await getCapturedIntentTotalForSaleTx(tx, saleId);
     const outstandingPence = Math.max(0, sale.totalPence - capturedTotal);
@@ -269,7 +269,13 @@ export const createPaymentIntent = async (
         ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
-      await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
+      const saleCompletion = await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
+      return {
+        saleCompletion,
+        intent: toIntentResponse(intent),
+        salePayment: await getSalePaymentSummaryTx(tx, saleId),
+        idempotent: false,
+      };
     }
 
     const salePayment = await getSalePaymentSummaryTx(tx, saleId);
@@ -280,6 +286,16 @@ export const createPaymentIntent = async (
       idempotent: false,
     };
   });
+
+  if ("saleCompletion" in result && "didComplete" in result.saleCompletion && result.saleCompletion.didComplete) {
+    emitSaleCompletedEvent(result.saleCompletion);
+  }
+
+  return {
+    intent: result.intent,
+    salePayment: result.salePayment,
+    idempotent: result.idempotent,
+  };
 };
 
 export const capturePaymentIntentById = async (
@@ -292,7 +308,7 @@ export const capturePaymentIntentById = async (
 
   const cashProvider = new CashProvider();
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const intent = await tx.paymentIntent.findUnique({
       where: { id: intentId },
     });
@@ -317,10 +333,11 @@ export const capturePaymentIntentById = async (
         ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
-      await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
+      const saleCompletion = await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
 
       const salePayment = await getSalePaymentSummaryTx(tx, intent.saleId);
       return {
+        saleCompletion,
         intent: toIntentResponse(intent),
         salePayment,
         idempotent: true,
@@ -360,7 +377,13 @@ export const capturePaymentIntentById = async (
         ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
-      await completeSaleIfEligibleTx(tx, updated.saleId, toCompleteSaleInput(staffActorId));
+      const saleCompletion = await completeSaleIfEligibleTx(tx, updated.saleId, toCompleteSaleInput(staffActorId));
+      return {
+        saleCompletion,
+        intent: toIntentResponse(updated),
+        salePayment: await getSalePaymentSummaryTx(tx, updated.saleId),
+        idempotent: false,
+      };
     }
 
     const salePayment = await getSalePaymentSummaryTx(tx, updated.saleId);
@@ -370,6 +393,16 @@ export const capturePaymentIntentById = async (
       idempotent: false,
     };
   });
+
+  if ("saleCompletion" in result && "didComplete" in result.saleCompletion && result.saleCompletion.didComplete) {
+    emitSaleCompletedEvent(result.saleCompletion);
+  }
+
+  return {
+    intent: result.intent,
+    salePayment: result.salePayment,
+    idempotent: result.idempotent,
+  };
 };
 
 export const cancelPaymentIntentById = async (intentId: string) => {

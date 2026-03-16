@@ -15,12 +15,14 @@ type AuthUser = {
   name: string | null;
   role: "STAFF" | "MANAGER" | "ADMIN";
   isActive: boolean;
+  hasPin: boolean;
 };
 
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
+  loginWithPin: (userId: string, pin: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -73,9 +75,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })();
   }, [refresh]);
 
+  useEffect(() => {
+    const syncAuthState = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      void refresh().catch(() => {
+        // Let the next explicit auth action surface non-auth errors.
+      });
+    };
+
+    window.addEventListener("focus", syncAuthState);
+    document.addEventListener("visibilitychange", syncAuthState);
+
+    return () => {
+      window.removeEventListener("focus", syncAuthState);
+      document.removeEventListener("visibilitychange", syncAuthState);
+    };
+  }, [refresh]);
+
   const login = useCallback(async (identifier: string, password: string) => {
     const email = normalizeIdentifierToEmail(identifier);
     await apiPost<{ user: AuthUser }>("/api/auth/login", { email, password });
+    await refresh();
+  }, [refresh]);
+
+  const loginWithPin = useCallback(async (userId: string, pin: string) => {
+    await apiPost<{ user: AuthUser }>("/api/auth/pin-login", { userId, pin });
     await refresh();
   }, [refresh]);
 
@@ -89,10 +115,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       user,
       loading,
       login,
+      loginWithPin,
       logout,
       refresh,
     }),
-    [user, loading, login, logout, refresh],
+    [user, loading, login, loginWithPin, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

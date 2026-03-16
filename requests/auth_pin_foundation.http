@@ -1,0 +1,55 @@
+### Active users for PIN login selection (`hasPin` shows whether PIN login is available)
+GET http://localhost:3000/api/auth/active-users
+
+### Password login (existing path remains active and pairs with the `/login` password fallback UI)
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "replace-with-existing-user-email",
+  "password": "replace-with-existing-user-password"
+}
+
+### PIN status for current user
+GET http://localhost:3000/api/auth/pin-status
+
+### Set PIN for current user
+POST http://localhost:3000/api/auth/pin
+Content-Type: application/json
+
+{
+  "pin": "1234"
+}
+
+### Change PIN for current user
+PATCH http://localhost:3000/api/auth/pin
+Content-Type: application/json
+
+{
+  "currentPin": "1234",
+  "nextPin": "5678"
+}
+
+### PIN login
+POST http://localhost:3000/api/auth/pin-login
+Content-Type: application/json
+
+{
+  "userId": "replace-with-user-id",
+  "pin": "5678"
+}
+
+### Manager/admin reset another user's PIN
+POST http://localhost:3000/api/admin/users/replace-with-user-id/reset-pin
+
+### Manager/admin set another user's PIN directly
+POST http://localhost:3000/api/admin/users/replace-with-user-id/set-pin
+Content-Type: application/json
+
+{
+<<<<<<< HEAD
+  "pin": "2468"
+=======
+  "pin": "9999"
+>>>>>>> feat/staff-set-pin
+}

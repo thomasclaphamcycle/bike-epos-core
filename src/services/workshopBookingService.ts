@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
-import { ensureDefaultLocationTx } from "./locationService";
+import { getOrCreateDefaultLocationTx } from "./locationService";
 import { assertDateIsBookable } from "./workshopAvailabilityService";
 import { getBookingSettings } from "./workshopSettingsService";
 
@@ -195,7 +195,7 @@ export const createOnlineWorkshopBooking = async (
       phone,
       notes,
     });
-    const location = await ensureDefaultLocationTx(tx);
+    const location = await getOrCreateDefaultLocationTx(tx);
 
     const manageTokenExpiresAt = resolveManageTokenExpiryDate();
     let workshopJob:
@@ -207,12 +207,12 @@ export const createOnlineWorkshopBooking = async (
         workshopJob = await tx.workshopJob.create({
           data: {
             customerId: customer.id,
-            locationId: location.id,
             status: "BOOKING_MADE",
             scheduledDate: availability.date,
             source: "ONLINE",
             depositRequiredPence: settings.defaultDepositPence,
             depositStatus: "REQUIRED",
+            locationId: location.id,
             manageToken: generateManageToken(),
             manageTokenExpiresAt,
             notes,

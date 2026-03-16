@@ -111,6 +111,21 @@ const toCustomerResponse = (customer: {
   };
 };
 
+const assertCustomerExists = async (customerId: string) => {
+  if (!isUuid(customerId)) {
+    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
+  }
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+  });
+  if (!customer) {
+    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+  }
+
+  return customer;
+};
+
 export const createCustomer = async (input: CreateCustomerInput) => {
   const explicitName = normalizeOptionalText(input.name);
   const suppliedFirstName = normalizeOptionalText(input.firstName);
@@ -165,15 +180,7 @@ export const createCustomer = async (input: CreateCustomerInput) => {
 };
 
 export const getCustomerById = async (customerId: string) => {
-  if (!isUuid(customerId)) {
-    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
-  }
-
-  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-  if (!customer) {
-    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
-  }
-
+  const customer = await assertCustomerExists(customerId);
   return toCustomerResponse(customer);
 };
 
@@ -207,18 +214,7 @@ export const listCustomerSales = async (input: {
   to?: string;
   take?: number;
 }) => {
-  if (!isUuid(input.customerId)) {
-    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
-  }
-
-  const customer = await prisma.customer.findUnique({
-    where: { id: input.customerId },
-    select: { id: true },
-  });
-  if (!customer) {
-    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
-  }
-
+  await assertCustomerExists(input.customerId);
   const fromDate = parseOptionalIsoDate(input.from, "from");
   const toDate = parseOptionalIsoDate(input.to, "to");
   const take = parseOptionalTake(input.take) ?? 50;
@@ -232,21 +228,15 @@ export const listCustomerSales = async (input: {
         ...(toDate ? { lte: toDate } : {}),
       },
     },
-    orderBy: [{ completedAt: "desc" }],
-    take,
-    select: {
-      id: true,
-      subtotalPence: true,
-      taxPence: true,
-      totalPence: true,
-      completedAt: true,
-      createdAt: true,
+    include: {
       receipt: {
         select: {
           receiptNumber: true,
         },
       },
     },
+    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+    take,
   });
 
   return {
@@ -256,9 +246,9 @@ export const listCustomerSales = async (input: {
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
-      completedAt: sale.completedAt,
       createdAt: sale.createdAt,
-      receiptNumber: sale.receipt?.receiptNumber ?? null,
+      completedAt: sale.completedAt,
+      receiptNumber: sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null,
       receiptUrl: sale.receipt?.receiptNumber ? `/r/${sale.receipt.receiptNumber}` : null,
     })),
   };
@@ -270,18 +260,7 @@ export const listCustomerWorkshopJobs = async (input: {
   to?: string;
   take?: number;
 }) => {
-  if (!isUuid(input.customerId)) {
-    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
-  }
-
-  const customer = await prisma.customer.findUnique({
-    where: { id: input.customerId },
-    select: { id: true },
-  });
-  if (!customer) {
-    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
-  }
-
+  await assertCustomerExists(input.customerId);
   const fromDate = parseOptionalIsoDate(input.from, "from");
   const toDate = parseOptionalIsoDate(input.to, "to");
   const take = parseOptionalTake(input.take) ?? 50;
@@ -294,7 +273,7 @@ export const listCustomerWorkshopJobs = async (input: {
         ...(toDate ? { lte: toDate } : {}),
       },
     },
-    orderBy: [{ createdAt: "desc" }],
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     take,
     select: {
       id: true,
@@ -303,24 +282,207 @@ export const listCustomerWorkshopJobs = async (input: {
       bikeDescription: true,
       notes: true,
       scheduledDate: true,
-      completedAt: true,
       createdAt: true,
       updatedAt: true,
+      completedAt: true,
     },
   });
 
   return {
     customerId: input.customerId,
-    workshopJobs: jobs.map((job) => ({
-      id: job.id,
-      status: job.status,
-      customerName: job.customerName,
-      bikeDescription: job.bikeDescription,
-      notes: job.notes,
-      scheduledDate: job.scheduledDate,
-      completedAt: job.completedAt,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
+    workshopJobs: jobs,
+  };
+};
+
+type CustomerTimelineEntry = {
+  id: string;
+  type:
+    | "CUSTOMER_CREATED"
+    | "SALE_COMPLETED"
+    | "WORKSHOP_CREATED"
+    | "WORKSHOP_COMPLETED"
+    | "WORKSHOP_NOTE"
+    | "CREDIT_ENTRY";
+  occurredAt: Date;
+  title: string;
+  summary: string;
+  entityType: "CUSTOMER" | "SALE" | "WORKSHOP_JOB" | "CREDIT_ACCOUNT";
+  entityId: string;
+  amountPence?: number;
+  meta?: Record<string, unknown>;
+};
+
+export const getCustomerTimeline = async (customerId: string) => {
+  const customer = await assertCustomerExists(customerId);
+
+  const [sales, workshopJobs, creditAccounts] = await Promise.all([
+    prisma.sale.findMany({
+      where: { customerId },
+      include: {
+        receipt: {
+          select: {
+            receiptNumber: true,
+          },
+        },
+      },
+      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+    }),
+    prisma.workshopJob.findMany({
+      where: { customerId },
+      select: {
+        id: true,
+        status: true,
+        bikeDescription: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
+        completedAt: true,
+        jobNotes: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            note: true,
+            visibility: true,
+            createdAt: true,
+            authorStaff: {
+              select: {
+                id: true,
+                username: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+    }),
+    prisma.creditAccount.findMany({
+      where: { customerId },
+      select: {
+        id: true,
+        entries: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            amountPence: true,
+            sourceType: true,
+            sourceRef: true,
+            notes: true,
+            createdAt: true,
+          },
+        },
+      },
+      take: 10,
+    }),
+  ]);
+
+  const timeline: CustomerTimelineEntry[] = [
+    {
+      id: `customer-created-${customer.id}`,
+      type: "CUSTOMER_CREATED",
+      occurredAt: customer.createdAt,
+      title: "Customer record created",
+      summary: "Customer added to CorePOS",
+      entityType: "CUSTOMER",
+      entityId: customer.id,
+    },
+  ];
+
+  for (const sale of sales) {
+    const occurredAt = sale.completedAt ?? sale.createdAt;
+    timeline.push({
+      id: `sale-${sale.id}`,
+      type: "SALE_COMPLETED",
+      occurredAt,
+      title: "Sale completed",
+      summary: `Sale total £${(sale.totalPence / 100).toFixed(2)}`,
+      entityType: "SALE",
+      entityId: sale.id,
+      amountPence: sale.totalPence,
+      meta: {
+        receiptNumber: sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null,
+      },
+    });
+  }
+
+  for (const job of workshopJobs) {
+    timeline.push({
+      id: `workshop-created-${job.id}`,
+      type: "WORKSHOP_CREATED",
+      occurredAt: job.createdAt,
+      title: "Workshop job created",
+      summary: job.bikeDescription ? `Job opened for ${job.bikeDescription}` : "Workshop job opened",
+      entityType: "WORKSHOP_JOB",
+      entityId: job.id,
+      meta: {
+        status: job.status,
+      },
+    });
+
+    if (job.completedAt) {
+      timeline.push({
+        id: `workshop-completed-${job.id}`,
+        type: "WORKSHOP_COMPLETED",
+        occurredAt: job.completedAt,
+        title: "Workshop job completed",
+        summary: job.bikeDescription ? `${job.bikeDescription} completed` : "Workshop job completed",
+        entityType: "WORKSHOP_JOB",
+        entityId: job.id,
+        meta: {
+          status: job.status,
+        },
+      });
+    }
+
+    for (const note of job.jobNotes) {
+      timeline.push({
+        id: `workshop-note-${note.id}`,
+        type: "WORKSHOP_NOTE",
+        occurredAt: note.createdAt,
+        title: note.visibility === "CUSTOMER" ? "Customer-visible workshop note" : "Workshop note",
+        summary: note.note,
+        entityType: "WORKSHOP_JOB",
+        entityId: job.id,
+        meta: {
+          noteId: note.id,
+          visibility: note.visibility,
+          authorName: note.authorStaff?.name ?? note.authorStaff?.username ?? null,
+        },
+      });
+    }
+  }
+
+  for (const account of creditAccounts) {
+    for (const entry of account.entries) {
+      timeline.push({
+        id: `credit-entry-${entry.id}`,
+        type: "CREDIT_ENTRY",
+        occurredAt: entry.createdAt,
+        title: "Credit account entry",
+        summary: entry.notes ?? `${entry.sourceType} ${entry.amountPence >= 0 ? "credit" : "debit"}`,
+        entityType: "CREDIT_ACCOUNT",
+        entityId: account.id,
+        amountPence: entry.amountPence,
+        meta: {
+          sourceType: entry.sourceType,
+          sourceRef: entry.sourceRef,
+        },
+      });
+    }
+  }
+
+  timeline.sort((left, right) => (
+    right.occurredAt.getTime() - left.occurredAt.getTime()
+    || left.id.localeCompare(right.id)
+  ));
+
+  return {
+    customer: toCustomerResponse(customer),
+    timeline: timeline.map((entry) => ({
+      ...entry,
+      occurredAt: entry.occurredAt,
     })),
   };
 };

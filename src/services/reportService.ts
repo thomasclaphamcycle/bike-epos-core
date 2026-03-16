@@ -1,402 +1,439 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { HttpError, isUuid } from "../utils/http";
-import { getPaymentsReportRows } from "./paymentIntentService";
-import { DEFAULT_CASH_LOCATION_ID } from "./tillService";
-import { ensureDefaultLocationTx, resolveLocationByCodeOrThrowTx } from "./locationService";
+import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { ensureDefaultLocationTx, resolveLocationByCodeOrThrowTx } from "./locationService";
+import { listDateKeys, parseDateOnlyOrThrow, toInteger } from "./reports/shared";
+import { DEFAULT_CASH_LOCATION_ID } from "./tillService";
+
+export * from "./reports";
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-type DateRange = {
-  from: string;
-  to: string;
-};
-
-type DailyMoneyRow = {
+type HistoricalFinancialSummaryImportRow = {
   date: string;
-  amountPence: number;
+  grossRevenuePence: number;
+  netRevenuePence: number;
+  costOfGoodsPence: number;
+  transactionCount: number;
 };
 
-const parseDateOnlyOrThrow = (value: string, field: "from" | "to") => {
-  if (!DATE_ONLY_REGEX.test(value)) {
-    throw new HttpError(400, `${field} must be YYYY-MM-DD`, "INVALID_DATE");
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) {
-    throw new HttpError(400, `${field} is invalid`, "INVALID_DATE");
-  }
-
-  return date;
-};
-
-const getDateRangeOrThrow = (from?: string, to?: string): DateRange => {
-  if (!from || !to) {
-    throw new HttpError(400, "from and to are required", "INVALID_DATE_RANGE");
-  }
-
-  const fromDate = parseDateOnlyOrThrow(from, "from");
-  const toDate = parseDateOnlyOrThrow(to, "to");
-
-  if (fromDate > toDate) {
-    throw new HttpError(400, "from must be before or equal to to", "INVALID_DATE_RANGE");
-  }
-
-  return { from, to };
-};
-
-const toNumber = (value: unknown): number => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    "toNumber" in value &&
-    typeof (value as { toNumber: unknown }).toNumber === "function"
-  ) {
-    const parsed = (value as { toNumber: () => number }).toNumber();
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  if (value === null || value === undefined) {
-    return 0;
-  }
-  return 0;
-};
-
-const toInteger = (value: unknown): number => Math.trunc(toNumber(value));
-
-const addDaysUtc = (date: Date, days: number) => {
-  const out = new Date(date);
-  out.setUTCDate(out.getUTCDate() + days);
-  return out;
-};
-
-const listDateKeys = (from: string, to: string): string[] => {
-  const start = new Date(`${from}T00:00:00.000Z`);
-  const end = new Date(`${to}T00:00:00.000Z`);
-
-  const keys: string[] = [];
-  let current = start;
-  while (current <= end) {
-    keys.push(current.toISOString().slice(0, 10));
-    current = addDaysUtc(current, 1);
-  }
-
-  return keys;
-};
-
-const buildDailyAmountMap = (rows: DailyMoneyRow[]) => {
-  const map = new Map<string, number>();
-  for (const row of rows) {
-    map.set(row.date, row.amountPence);
-  }
-  return map;
-};
-
-const assertLocationIdOrThrow = async (locationId?: string) => {
-  if (!locationId || !isUuid(locationId)) {
-    throw new HttpError(400, "locationId must be a valid UUID", "INVALID_LOCATION_ID");
-  }
-
-  const location = await prisma.stockLocation.findUnique({
-    where: { id: locationId },
-    select: { id: true },
+const getDateKeyInLondon = (value = new Date()) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   });
-
-  if (!location) {
-    throw new HttpError(404, "Stock location not found", "LOCATION_NOT_FOUND");
-  }
-
-  return locationId;
+  return formatter.format(value);
 };
 
-const assertBusinessLocationIdOrThrow = async (locationId?: string) => {
-  if (!locationId) {
-    return undefined;
-  }
+const getMonthStartKey = (dateKey: string) => `${dateKey.slice(0, 8)}01`;
 
-  const normalized = locationId.trim();
+const shiftDateKeyByYears = (dateKey: string, yearDelta: number) => {
+  const [yearText, monthText, dayText] = dateKey.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  const shifted = new Date(Date.UTC(year + yearDelta, month - 1, 1));
+  shifted.setUTCMonth(month - 1, day);
+  return shifted.toISOString().slice(0, 10);
+};
+
+const sumPenceFromDecimalInput = (raw: string, field: string, lineNumber: number) => {
+  const normalized = raw.trim();
   if (!normalized) {
-    throw new HttpError(400, "locationId must be provided", "INVALID_LOCATION_ID");
+    throw new HttpError(400, `Line ${lineNumber}: ${field} is required`, "INVALID_HISTORICAL_SUMMARY_CSV");
   }
 
-  const location = await prisma.location.findUnique({
-    where: { id: normalized },
-    select: { id: true },
-  });
-  if (!location) {
-    throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new HttpError(
+      400,
+      `Line ${lineNumber}: ${field} must be a number with up to 2 decimal places`,
+      "INVALID_HISTORICAL_SUMMARY_CSV",
+    );
   }
-  return normalized;
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new HttpError(400, `Line ${lineNumber}: ${field} must be zero or greater`, "INVALID_HISTORICAL_SUMMARY_CSV");
+  }
+
+  return Math.round(parsed * 100);
 };
 
-export const getSalesDailyReport = async (from?: string, to?: string, locationId?: string) => {
-  const range = getDateRangeOrThrow(from, to);
-  const resolvedLocationId = await assertBusinessLocationIdOrThrow(locationId);
-  const days = listDateKeys(range.from, range.to);
-  const salesLocationFilter = resolvedLocationId
-    ? Prisma.sql`AND s."locationId" = ${resolvedLocationId}`
-    : Prisma.empty;
+const parseNonNegativeInteger = (raw: string, field: string, lineNumber: number) => {
+  const normalized = raw.trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new HttpError(400, `Line ${lineNumber}: ${field} must be a whole number`, "INVALID_HISTORICAL_SUMMARY_CSV");
+  }
 
-  const salesRows = await prisma.$queryRaw<
-    Array<{ date: string; saleCount: number; grossPence: number }>
-  >`
-    SELECT
-      to_char((s."createdAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD') AS "date",
-      COUNT(*)::int AS "saleCount",
-      COALESCE(SUM(s."totalPence"), 0)::bigint AS "grossPence"
-    FROM "Sale" s
-    WHERE (s."createdAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
-      ${salesLocationFilter}
-    GROUP BY "date"
-    ORDER BY "date" ASC
-  `;
-
-  // Refunds rule for M19 v1:
-  // refundsPence is "refunds posted that day", based on negative Payment rows by payment created-at day.
-  const refundRows = await prisma.$queryRaw<Array<{ date: string; refundsPence: number }>>`
-    SELECT
-      to_char((p."createdAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD') AS "date",
-      COALESCE(SUM(ABS(p."amountPence")), 0)::bigint AS "refundsPence"
-    FROM "Payment" p
-    WHERE
-      p."amountPence" < 0
-      AND (p."createdAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
-    GROUP BY "date"
-    ORDER BY "date" ASC
-  `;
-
-  const salesMap = new Map(
-    salesRows.map((row) => [
-      row.date,
-      {
-        saleCount: toInteger(row.saleCount),
-        grossPence: toInteger(row.grossPence),
-      },
-    ]),
-  );
-  const refundMap = buildDailyAmountMap(
-    refundRows.map((row) => ({
-      date: row.date,
-      amountPence: toInteger(row.refundsPence),
-    })),
-  );
-
-  return days.map((date) => {
-    const sales = salesMap.get(date);
-    const saleCount = sales?.saleCount ?? 0;
-    const grossPence = sales?.grossPence ?? 0;
-    const refundsPence = refundMap.get(date) ?? 0;
-
-    return {
-      date,
-      saleCount,
-      grossPence,
-      refundsPence,
-      // Net can be negative on a day where posted refunds exceed gross sales.
-      netPence: grossPence - refundsPence,
-    };
-  });
+  return Number(normalized);
 };
 
-export const getWorkshopDailyReport = async (from?: string, to?: string, locationId?: string) => {
-  const range = getDateRangeOrThrow(from, to);
-  const resolvedLocationId = await assertBusinessLocationIdOrThrow(locationId);
-  const days = listDateKeys(range.from, range.to);
-  const workshopLocationFilter = resolvedLocationId
-    ? Prisma.sql`AND w."locationId" = ${resolvedLocationId}`
-    : Prisma.empty;
+const parseHistoricalFinancialSummaryCsv = (csv: string) => {
+  const normalized = csv.replace(/^\uFEFF/, "").trim();
+  if (!normalized) {
+    throw new HttpError(400, "CSV body is required", "INVALID_HISTORICAL_SUMMARY_CSV");
+  }
 
-  const rows = await prisma.$queryRaw<Array<{ date: string; jobCount: number; revenuePence: number }>>`
-    SELECT
-      to_char((w."completedAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD') AS "date",
-      COUNT(*)::int AS "jobCount",
-      COALESCE(SUM(s."totalPence"), 0)::bigint AS "revenuePence"
-    FROM "WorkshopJob" w
-    LEFT JOIN "Sale" s ON s."workshopJobId" = w.id
-    WHERE
-      w.status = 'COMPLETED'
-      AND w."completedAt" IS NOT NULL
-      AND (w."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
-      ${workshopLocationFilter}
-    GROUP BY "date"
-    ORDER BY "date" ASC
-  `;
+  const lines = normalized.split(/\r?\n/);
+  if (lines.length < 2) {
+    throw new HttpError(400, "CSV must include a header row and at least one data row", "INVALID_HISTORICAL_SUMMARY_CSV");
+  }
 
-  const byDate = new Map(
-    rows.map((row) => [
-      row.date,
-      {
-        jobCount: toInteger(row.jobCount),
-        revenuePence: toInteger(row.revenuePence),
-      },
-    ]),
-  );
+  const headerLine = lines[0] ?? "";
+  const headers = headerLine.split(",").map((value) => value.trim().toLowerCase());
+  const expectedHeaders = [
+    "date",
+    "gross_revenue",
+    "net_revenue",
+    "cost_of_goods",
+    "transaction_count",
+  ];
 
-  return days.map((date) => {
-    const row = byDate.get(date);
-    return {
-      date,
-      jobCount: row?.jobCount ?? 0,
-      revenuePence: row?.revenuePence ?? 0,
-    };
-  });
-};
+  if (headers.length !== expectedHeaders.length || headers.some((value, index) => value !== expectedHeaders[index])) {
+    throw new HttpError(
+      400,
+      `CSV header must be exactly: ${expectedHeaders.join(",")}`,
+      "INVALID_HISTORICAL_SUMMARY_CSV",
+    );
+  }
 
-export const getInventoryOnHandReport = async (locationId?: string) => {
-  // Keep locationId validation for API compatibility while using a single-location inventory ledger.
-  await assertLocationIdOrThrow(locationId);
+  const parsedRows: Array<HistoricalFinancialSummaryImportRow & { lineNumber: number }> = [];
+  const skipped: Array<{ lineNumber: number; message: string }> = [];
+  const seenDates = new Set<string>();
 
-  const grouped = await prisma.inventoryMovement.groupBy({
-    by: ["variantId"],
-    _sum: {
-      quantity: true,
-    },
-  });
+  for (let index = 1; index < lines.length; index += 1) {
+    const lineNumber = index + 1;
+    const rawLine = lines[index];
+    if (!rawLine || !rawLine.trim()) {
+      continue;
+    }
+    const cells = rawLine.split(",").map((value) => value.trim());
+    if (cells.length !== expectedHeaders.length) {
+      skipped.push({
+        lineNumber,
+        message: "Expected 5 columns matching the CSV header",
+      });
+      continue;
+    }
 
-  const variantIds = grouped.map((row) => row.variantId);
-  const variants =
-    variantIds.length > 0
-      ? await prisma.variant.findMany({
-          where: {
-            id: {
-              in: variantIds,
-            },
-          },
-          select: {
-            id: true,
-            barcode: true,
-            option: true,
-            name: true,
-            product: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        })
-      : [];
-
-  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
-
-  return grouped
-    .map((row) => {
-      const variant = variantById.get(row.variantId);
-      return {
-        variantId: row.variantId,
-        barcode: variant?.barcode ?? null,
-        option: variant?.option ?? variant?.name ?? null,
-        productName: variant?.product.name ?? "Unknown",
-        onHand: toInteger(row._sum.quantity),
-      };
-    })
-    .sort((a, b) => {
-      const productCompare = a.productName.localeCompare(b.productName);
-      if (productCompare !== 0) {
-        return productCompare;
+    try {
+      const [date = "", grossRevenue = "", netRevenue = "", costOfGoods = "", transactionCount = ""] = cells;
+      parseDateOnlyOrThrow(date, "from");
+      if (seenDates.has(date)) {
+        skipped.push({
+          lineNumber,
+          message: `Duplicate date ${date} in CSV import`,
+        });
+        continue;
       }
-      return a.variantId.localeCompare(b.variantId);
-    });
-};
+      seenDates.add(date);
 
-export const getInventoryValueReport = async (locationId?: string) => {
-  // Keep locationId validation for API compatibility while using a single-location inventory ledger.
-  const resolvedLocationId = await assertLocationIdOrThrow(locationId);
-
-  const onHandRows = await prisma.inventoryMovement.groupBy({
-    by: ["variantId"],
-    _sum: {
-      quantity: true,
-    },
-  });
-
-  const variantIds = onHandRows.map((row) => row.variantId);
-  const purchaseCostRows =
-    variantIds.length > 0
-      ? await prisma.inventoryMovement.findMany({
-          where: {
-            variantId: {
-              in: variantIds,
-            },
-            type: "PURCHASE",
-            quantity: {
-              gt: 0,
-            },
-            unitCost: {
-              not: null,
-            },
-          },
-          select: {
-            variantId: true,
-            quantity: true,
-            unitCost: true,
-          },
-        })
-      : [];
-
-  const weightedCostByVariant = new Map<string, { totalQty: number; totalCost: number }>();
-  for (const row of purchaseCostRows) {
-    const current = weightedCostByVariant.get(row.variantId) ?? { totalQty: 0, totalCost: 0 };
-    const quantity = toInteger(row.quantity);
-    const unitCost = toNumber(row.unitCost);
-
-    current.totalQty += quantity;
-    current.totalCost += quantity * unitCost;
-    weightedCostByVariant.set(row.variantId, current);
+      parsedRows.push({
+        lineNumber,
+        date,
+        grossRevenuePence: sumPenceFromDecimalInput(grossRevenue, "gross_revenue", lineNumber),
+        netRevenuePence: sumPenceFromDecimalInput(netRevenue, "net_revenue", lineNumber),
+        costOfGoodsPence: sumPenceFromDecimalInput(costOfGoods, "cost_of_goods", lineNumber),
+        transactionCount: parseNonNegativeInteger(transactionCount, "transaction_count", lineNumber),
+      });
+    } catch (error) {
+      skipped.push({
+        lineNumber,
+        message: error instanceof Error ? error.message : "Invalid CSV row",
+      });
+    }
   }
-
-  const breakdown = onHandRows
-    .map((row) => {
-      const onHand = toInteger(row._sum.quantity);
-      const weighted = weightedCostByVariant.get(row.variantId);
-
-      const avgUnitCostPence =
-        weighted && weighted.totalQty > 0
-          ? Math.round(weighted.totalCost / weighted.totalQty)
-          : null;
-      const valuePence = avgUnitCostPence === null ? 0 : onHand * avgUnitCostPence;
-
-      return {
-        variantId: row.variantId,
-        onHand,
-        avgUnitCostPence,
-        valuePence,
-      };
-    })
-    .sort((a, b) => a.variantId.localeCompare(b.variantId));
-
-  const totalOnHand = breakdown.reduce((sum, row) => sum + row.onHand, 0);
-  const totalValuePence = breakdown.reduce((sum, row) => sum + row.valuePence, 0);
-  const countMissingCost = breakdown.filter((row) => row.avgUnitCostPence === null).length;
 
   return {
-    locationId: resolvedLocationId,
-    totalOnHand,
-    totalValuePence,
-    method: "PURCHASE_COST_AVG_V1",
-    countMissingCost,
-    breakdown,
+    parsedRows,
+    skipped,
   };
 };
 
-export const getPaymentsReport = async (filters: {
-  status?: string;
-  provider?: string;
-  from?: string;
-  to?: string;
-} = {}) => {
-  return getPaymentsReportRows(filters);
+export const importHistoricalFinancialSummaries = async (csv: string) => {
+  const { parsedRows, skipped } = parseHistoricalFinancialSummaryCsv(csv);
+
+  if (parsedRows.length === 0) {
+    return {
+      importedCount: 0,
+      skippedCount: skipped.length,
+      skipped,
+    };
+  }
+
+  const existing = await prisma.historicalFinancialSummary.findMany({
+    where: {
+      date: {
+        in: parsedRows.map((row) => new Date(`${row.date}T00:00:00.000Z`)),
+      },
+    },
+    select: {
+      date: true,
+    },
+  });
+  const existingKeys = new Set(existing.map((row) => row.date.toISOString().slice(0, 10)));
+
+  const rowsToCreate = parsedRows.filter((row) => {
+    if (existingKeys.has(row.date)) {
+      skipped.push({
+        lineNumber: row.lineNumber,
+        message: `Summary for ${row.date} already exists`,
+      });
+      return false;
+    }
+    return true;
+  });
+
+  if (rowsToCreate.length > 0) {
+    const importedAt = new Date();
+    await prisma.historicalFinancialSummary.createMany({
+      data: rowsToCreate.map((row) => ({
+        date: new Date(`${row.date}T00:00:00.000Z`),
+        grossRevenuePence: row.grossRevenuePence,
+        netRevenuePence: row.netRevenuePence,
+        costOfGoodsPence: row.costOfGoodsPence,
+        transactionCount: row.transactionCount,
+        createdAt: importedAt,
+        updatedAt: importedAt,
+      })),
+    });
+  }
+
+  return {
+    importedCount: rowsToCreate.length,
+    skippedCount: skipped.length,
+    skipped,
+  };
 };
 
+const getLiveFinancialMonthToDate = async (from: string, to: string) => {
+  const [grossRows, refundRows, salesCostRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ grossPence: number; saleCount: number }>>`
+      SELECT
+        COALESCE(SUM(s."totalPence"), 0)::bigint AS "grossPence",
+        COUNT(*)::int AS "saleCount"
+      FROM "Sale" s
+      WHERE s."completedAt" IS NOT NULL
+        AND (s."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${from}::date AND ${to}::date
+    `,
+    prisma.$queryRaw<Array<{ refundsPence: number }>>`
+      SELECT
+        COALESCE(SUM(r."totalPence"), 0)::bigint AS "refundsPence"
+      FROM "Refund" r
+      WHERE r.status = 'COMPLETED'
+        AND r."completedAt" IS NOT NULL
+        AND (r."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${from}::date AND ${to}::date
+    `,
+    prisma.$queryRaw<Array<{ costOfGoodsPence: number }>>`
+      SELECT
+        COALESCE(SUM(si.quantity * COALESCE(v."costPricePence", 0)), 0)::bigint AS "costOfGoodsPence"
+      FROM "SaleItem" si
+      INNER JOIN "Sale" s ON s.id = si."saleId"
+      INNER JOIN "Variant" v ON v.id = si."variantId"
+      WHERE s."completedAt" IS NOT NULL
+        AND (s."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${from}::date AND ${to}::date
+    `,
+  ]);
+
+  const grossRevenuePence = toInteger(grossRows[0]?.grossPence);
+  const refundsPence = toInteger(refundRows[0]?.refundsPence);
+  const costOfGoodsPence = toInteger(salesCostRows[0]?.costOfGoodsPence);
+  const revenuePence = grossRevenuePence - refundsPence;
+  const grossMarginPence = revenuePence - costOfGoodsPence;
+  const transactionCount = toInteger(grossRows[0]?.saleCount);
+
+  return {
+    grossRevenuePence,
+    refundsPence,
+    revenuePence,
+    costOfGoodsPence,
+    grossMarginPence,
+    transactionCount,
+  };
+};
+
+const getHistoricalSummaryAggregate = async (from: string, to: string) => {
+  const requiredDateKeys = listDateKeys(from, to);
+  const rows = await prisma.historicalFinancialSummary.findMany({
+    where: {
+      date: {
+        gte: new Date(`${from}T00:00:00.000Z`),
+        lte: new Date(`${to}T00:00:00.000Z`),
+      },
+    },
+    orderBy: {
+      date: "asc",
+    },
+  });
+
+  const rowsByDate = new Map(rows.map((row) => [row.date.toISOString().slice(0, 10), row]));
+  const missingDates = requiredDateKeys.filter((dateKey) => !rowsByDate.has(dateKey));
+
+  return {
+    from,
+    to,
+    requiredDayCount: requiredDateKeys.length,
+    availableDayCount: rows.length,
+    missingDates,
+    totals: rows.reduce(
+      (accumulator, row) => {
+        accumulator.grossRevenuePence += row.grossRevenuePence;
+        accumulator.revenuePence += row.netRevenuePence;
+        accumulator.costOfGoodsPence += row.costOfGoodsPence;
+        accumulator.transactionCount += row.transactionCount;
+        return accumulator;
+      },
+      {
+        grossRevenuePence: 0,
+        revenuePence: 0,
+        costOfGoodsPence: 0,
+        transactionCount: 0,
+      },
+    ),
+  };
+};
+
+const buildComparisonMetric = (
+  currentPence: number,
+  historicalPence: number,
+  coverage: { availableDayCount: number; requiredDayCount: number; missingDates: string[] },
+) => {
+  if (coverage.availableDayCount === 0) {
+    return {
+      status: "no_data" as const,
+      currentPence,
+      historicalPence: null,
+      deltaPence: null,
+      percentageChange: null,
+      label: "No comparison data in CorePOS yet",
+    };
+  }
+
+  if (coverage.availableDayCount < coverage.requiredDayCount) {
+    return {
+      status: "partial_data" as const,
+      currentPence,
+      historicalPence,
+      deltaPence: currentPence - historicalPence,
+      percentageChange: null,
+      label: "Historical comparison data is incomplete in CorePOS",
+    };
+  }
+
+  if (historicalPence === 0) {
+    return {
+      status: "zero_baseline" as const,
+      currentPence,
+      historicalPence,
+      deltaPence: currentPence,
+      percentageChange: null,
+      label: "No valid last-year baseline in CorePOS",
+    };
+  }
+
+  const percentageChange = ((currentPence - historicalPence) / historicalPence) * 100;
+  return {
+    status: "available" as const,
+    currentPence,
+    historicalPence,
+    deltaPence: currentPence - historicalPence,
+    percentageChange,
+    label:
+      Math.abs(percentageChange) < 0.05
+        ? "No change vs same time last year"
+        : `${percentageChange > 0 ? "Up" : "Down"} ${Math.abs(percentageChange).toFixed(1)}% vs same time last year`,
+  };
+};
+
+const resolveFinancialAsOfDateOrThrow = (value?: string) => {
+  if (value === undefined) {
+    return getDateKeyInLondon();
+  }
+
+  const trimmed = value.trim();
+  parseDateOnlyOrThrow(trimmed, "to");
+  return trimmed;
+};
+
+export const getFinancialMonthlySalesSummary = async (asOf?: string) => {
+  const asOfDate = resolveFinancialAsOfDateOrThrow(asOf);
+  const from = getMonthStartKey(asOfDate);
+  const lastYearFrom = shiftDateKeyByYears(from, -1);
+  const lastYearTo = shiftDateKeyByYears(asOfDate, -1);
+
+  const [liveTotals, historical] = await Promise.all([
+    getLiveFinancialMonthToDate(from, asOfDate),
+    getHistoricalSummaryAggregate(lastYearFrom, lastYearTo),
+  ]);
+
+  return {
+    period: {
+      from,
+      to: asOfDate,
+      lastYearFrom,
+      lastYearTo,
+    },
+    summary: {
+      grossRevenuePence: liveTotals.grossRevenuePence,
+      refundsPence: liveTotals.refundsPence,
+      revenuePence: liveTotals.revenuePence,
+      transactionCount: liveTotals.transactionCount,
+    },
+    comparison: {
+      coverage: {
+        requiredDayCount: historical.requiredDayCount,
+        availableDayCount: historical.availableDayCount,
+        missingDates: historical.missingDates,
+      },
+      revenue: buildComparisonMetric(liveTotals.revenuePence, historical.totals.revenuePence, historical),
+    },
+  };
+};
+
+export const getFinancialMonthlyMarginSummary = async (asOf?: string) => {
+  const asOfDate = resolveFinancialAsOfDateOrThrow(asOf);
+  const from = getMonthStartKey(asOfDate);
+  const lastYearFrom = shiftDateKeyByYears(from, -1);
+  const lastYearTo = shiftDateKeyByYears(asOfDate, -1);
+
+  const [liveTotals, historical] = await Promise.all([
+    getLiveFinancialMonthToDate(from, asOfDate),
+    getHistoricalSummaryAggregate(lastYearFrom, lastYearTo),
+  ]);
+
+  const historicalGrossMarginPence = historical.totals.revenuePence - historical.totals.costOfGoodsPence;
+  const marginPercent =
+    liveTotals.revenuePence === 0
+      ? null
+      : Number(((liveTotals.grossMarginPence / liveTotals.revenuePence) * 100).toFixed(1));
+
+  return {
+    period: {
+      from,
+      to: asOfDate,
+      lastYearFrom,
+      lastYearTo,
+    },
+    summary: {
+      revenuePence: liveTotals.revenuePence,
+      costOfGoodsPence: liveTotals.costOfGoodsPence,
+      grossMarginPence: liveTotals.grossMarginPence,
+      marginPercent,
+    },
+    comparison: {
+      coverage: {
+        requiredDayCount: historical.requiredDayCount,
+        availableDayCount: historical.availableDayCount,
+        missingDates: historical.missingDates,
+      },
+      grossMargin: buildComparisonMetric(liveTotals.grossMarginPence, historicalGrossMarginPence, historical),
+    },
+  };
+};
 type DailyCloseInput = {
   date?: string;
   locationCode?: string;
@@ -419,10 +456,12 @@ const resolveDailyCloseDateOrThrow = (value?: string) => {
   if (!DATE_ONLY_REGEX.test(trimmed)) {
     throw new HttpError(400, "date must be YYYY-MM-DD", "INVALID_DATE");
   }
+
   const parsed = new Date(`${trimmed}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) {
     throw new HttpError(400, "date is invalid", "INVALID_DATE");
   }
+
   return trimmed;
 };
 
@@ -437,10 +476,12 @@ const resolveDailyCloseLocationCode = (value?: string) => {
   if (value === undefined) {
     return undefined;
   }
+
   const trimmed = value.trim();
   if (!trimmed) {
     throw new HttpError(400, "locationCode must be non-empty", "INVALID_LOCATION_CODE");
   }
+
   return trimmed.toUpperCase();
 };
 
@@ -646,12 +687,11 @@ const buildDailyCloseReportTx = async (
   };
 };
 
-export const getDailyCloseReport = async (input: DailyCloseInput = {}) => {
-  return prisma.$transaction((tx) => buildDailyCloseReportTx(tx, input));
-};
+export const getDailyCloseReport = async (input: DailyCloseInput = {}) =>
+  prisma.$transaction((tx) => buildDailyCloseReportTx(tx, input));
 
-export const runDailyCloseReport = async (input: DailyCloseInput = {}) => {
-  return prisma.$transaction(async (tx) => {
+export const runDailyCloseReport = async (input: DailyCloseInput = {}) =>
+  prisma.$transaction(async (tx) => {
     const summary = await buildDailyCloseReportTx(tx, input);
 
     await createAuditEventTx(
@@ -673,4 +713,3 @@ export const runDailyCloseReport = async (input: DailyCloseInput = {}) => {
 
     return summary;
   });
-};

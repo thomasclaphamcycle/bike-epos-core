@@ -1,0 +1,26 @@
+### M111 Warranty Tracking
+# @baseUrl http://localhost:3000
+# @jobId REPLACE_WORKSHOP_JOB_ID
+
+### Add open warranty tracking note to a workshop job
+POST {{baseUrl}}/api/workshop/jobs/{{jobId}}/notes
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+Content-Type: application/json
+
+{
+  "visibility": "INTERNAL",
+  "note": "[WARRANTY:OPEN] Fork inspection required after return"
+}
+
+### List all tracked warranty items
+GET {{baseUrl}}/api/reports/workshop/warranty?take=25
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+Accept: application/json
+
+### Filter by resolved warranty items
+GET {{baseUrl}}/api/reports/workshop/warranty?status=RESOLVED&take=25
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+Accept: application/json

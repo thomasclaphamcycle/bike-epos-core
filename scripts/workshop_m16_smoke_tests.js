@@ -5,9 +5,9 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 
-const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
+const INITIAL_BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -26,7 +26,6 @@ const safeDbUrl = DATABASE_URL.replace(
   /(postgres(?:ql)?:\/\/[^:/@]+:)[^@]+@/i,
   "$1***@",
 );
-console.log(`[m16-smoke] BASE_URL=${BASE_URL}`);
 console.log(`[m16-smoke] DATABASE_URL=${safeDbUrl}`);
 
 const prisma = new PrismaClient({
@@ -46,37 +45,29 @@ const STAFF_HEADERS = {
   "X-Staff-Id": STAFF_USER_ID,
 };
 
-const ensureMainLocationId = async () => {
-  const existing = await prisma.location.findFirst({
-    where: {
-      code: {
-        equals: "MAIN",
-        mode: "insensitive",
-      },
-    },
-    select: {
-      id: true,
-    },
-  });
-  if (existing) {
-    return existing.id;
-  }
+let activeBaseUrl = INITIAL_BASE_URL;
 
-  const created = await prisma.location.create({
-    data: {
-      name: "Main",
-      code: "MAIN",
-      isActive: true,
-    },
-    select: {
-      id: true,
-    },
-  });
-  return created.id;
+const setActiveBaseUrl = (nextBaseUrl) => {
+  activeBaseUrl = nextBaseUrl;
+  console.log(`[m16-smoke] BASE_URL=${activeBaseUrl}`);
+};
+
+const currentHealthUrl = () => `${activeBaseUrl}/health`;
+
+const portFromBaseUrl = () => {
+  const url = new URL(activeBaseUrl);
+  return url.port || (url.protocol === "https:" ? "443" : "80");
+};
+
+const buildAlternateBaseUrl = () => {
+  const url = new URL(activeBaseUrl);
+  const currentPort = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+  url.port = String(currentPort === 3000 ? 3100 : currentPort + 1);
+  return url.toString().replace(/\/$/, "");
 };
 
 const fetchJson = async (path, options = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetch(`${activeBaseUrl}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -97,7 +88,7 @@ const fetchJson = async (path, options = {}) => {
 
 const serverIsHealthy = async () => {
   try {
-    const response = await fetch(HEALTH_URL);
+    const response = await fetch(currentHealthUrl());
     return response.ok;
   } catch {
     return false;
@@ -116,7 +107,7 @@ const waitForServer = async () => {
 
 const createCustomerAndJob = async (state) => {
   const ref = uniqueRef();
-  const locationId = await ensureMainLocationId();
+  const locationId = await ensureMainLocationId(prisma);
   const customer = await prisma.customer.create({
     data: {
       firstName: "M16",
@@ -129,8 +120,8 @@ const createCustomerAndJob = async (state) => {
 
   const job = await prisma.workshopJob.create({
     data: {
-      locationId,
       customerId: customer.id,
+      locationId,
       status: "BOOKING_MADE",
       source: "IN_STORE",
       depositStatus: "NOT_REQUIRED",
@@ -215,11 +206,26 @@ const run = async () => {
   };
 
   try {
+    setActiveBaseUrl(INITIAL_BASE_URL);
     const existing = await serverIsHealthy();
     if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
       throw new Error(
         "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
       );
+    }
+
+    if (existing && process.env.ALLOW_EXISTING_SERVER === "1") {
+      const authProbe = await fetchJson("/api/workshop/jobs?take=1", {
+        headers: STAFF_HEADERS,
+      });
+
+      if (authProbe.status === 401 || authProbe.status === 403) {
+        const alternateBaseUrl = buildAlternateBaseUrl();
+        console.log(
+          `[m16-smoke] Existing server on ${INITIAL_BASE_URL} does not accept test header auth. Starting isolated test server on ${alternateBaseUrl}.`,
+        );
+        setActiveBaseUrl(alternateBaseUrl);
+      }
     }
 
     if (!existing) {
@@ -229,6 +235,23 @@ const run = async () => {
           ...process.env,
           NODE_ENV: "test",
           DATABASE_URL,
+          PORT: portFromBaseUrl(),
+        },
+      });
+      serverProcess.stdout.on("data", () => {});
+      serverProcess.stderr.on("data", () => {});
+      startedServer = true;
+      await waitForServer();
+    }
+
+    if (existing && !(await serverIsHealthy())) {
+      serverProcess = spawn("npm", ["run", "dev"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          DATABASE_URL,
+          PORT: portFromBaseUrl(),
         },
       });
       serverProcess.stdout.on("data", () => {});
@@ -366,6 +389,19 @@ const run = async () => {
         const variantId = createVariantResponse.json.id;
         state.variantIds.add(variantId);
 
+        const stockAdjust = await fetchJson("/api/stock/adjustments", {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({
+            variantId,
+            quantityDelta: 1,
+            note: "m16 checkout opening",
+          }),
+        });
+        assert.equal(stockAdjust.status, 201);
+        const locationId = stockAdjust.json.stock?.locationId ?? stockAdjust.json.entry?.locationId;
+        assert.ok(locationId);
+
         const addPart = await fetchJson(`/api/workshop-jobs/${job.id}/parts`, {
           method: "POST",
           headers: STAFF_HEADERS,
@@ -373,6 +409,7 @@ const run = async () => {
             variantId,
             quantity: 1,
             status: "USED",
+            locationId,
           }),
         });
         assert.equal(addPart.status, 201);

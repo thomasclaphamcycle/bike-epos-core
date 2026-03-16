@@ -61,7 +61,7 @@ export const checkoutBasketHandler = async (req: Request, res: Response) => {
     req.params.id,
     payment,
     getRequestStaffActorId(req),
-    location.id,
+    location.locationId ?? location.id,
   );
   res.status(result.idempotent ? 200 : 201).json({
     sale: result.sale,

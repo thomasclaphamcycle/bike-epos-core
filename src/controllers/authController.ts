@@ -1,16 +1,27 @@
 import { Request, Response } from "express";
+import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import {
+  authenticateWithPin,
   authenticateWithEmailPassword,
   bootstrapInitialAdmin,
+  changeCurrentUserPin,
   getPublicUserById,
+  getPinStatus,
+  listActiveLoginUsers,
+  setCurrentUserPin,
 } from "../services/authService";
 import {
   AUTH_COOKIE_NAME,
   getAuthCookieMaxAgeMs,
   issueAuthToken,
 } from "../services/authTokenService";
-import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
+import {
+  clearPinLoginFailures,
+  getPinLoginClientKey,
+  recordPinLoginFailure,
+} from "../middleware/pinLoginRateLimit";
 
 const authCookieOptions = () => ({
   httpOnly: true,
@@ -49,7 +60,50 @@ export const loginHandler = async (req: Request, res: Response) => {
   });
 };
 
+export const pinLoginHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { userId?: unknown; pin?: unknown };
+
+  if (body.userId !== undefined && typeof body.userId !== "string") {
+    throw new HttpError(400, "userId must be a string", "INVALID_PIN_LOGIN");
+  }
+  if (body.pin !== undefined && typeof body.pin !== "string") {
+    throw new HttpError(400, "pin must be a string", "INVALID_PIN_LOGIN");
+  }
+
+  const clientKey = getPinLoginClientKey(req);
+
+  try {
+    const user = await authenticateWithPin(body.userId, body.pin);
+    clearPinLoginFailures(clientKey);
+
+    const token = issueAuthToken({
+      userId: user.id,
+      role: user.role,
+    });
+
+    res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
+    res.status(200).json({ user });
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 401) {
+      recordPinLoginFailure(clientKey);
+      throw new HttpError(401, "Invalid login", "INVALID_CREDENTIALS");
+    }
+    throw error;
+  }
+};
+
+export const activeUsersHandler = async (_req: Request, res: Response) => {
+  const users = await listActiveLoginUsers();
+  res.json({ users });
+};
+
 export const logoutHandler = async (_req: Request, res: Response) => {
+  const actorId = getRequestStaffActorId(_req);
+  logOperationalEvent("auth.logout", {
+    entityId: actorId ?? null,
+    resultStatus: "succeeded",
+    userId: actorId ?? null,
+  });
   res.clearCookie(AUTH_COOKIE_NAME, clearAuthCookieOptions());
   res.status(204).send();
 };
@@ -66,6 +120,54 @@ export const meHandler = async (req: Request, res: Response) => {
   }
 
   res.json({ user });
+};
+
+export const pinStatusHandler = async (req: Request, res: Response) => {
+  const actorId = getRequestStaffActorId(req);
+  if (!actorId) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const result = await getPinStatus(actorId);
+  res.json(result);
+};
+
+export const setPinHandler = async (req: Request, res: Response) => {
+  const actorId = getRequestStaffActorId(req);
+  if (!actorId) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const body = (req.body ?? {}) as { pin?: unknown };
+  if (body.pin !== undefined && typeof body.pin !== "string") {
+    throw new HttpError(400, "pin must be a string", "INVALID_PIN");
+  }
+
+  const result = await setCurrentUserPin(actorId, body.pin, getRequestAuditActor(req));
+  res.status(201).json(result);
+};
+
+export const changePinHandler = async (req: Request, res: Response) => {
+  const actorId = getRequestStaffActorId(req);
+  if (!actorId) {
+    throw new HttpError(401, "Authentication required", "UNAUTHORIZED");
+  }
+
+  const body = (req.body ?? {}) as { currentPin?: unknown; nextPin?: unknown };
+  if (body.currentPin !== undefined && typeof body.currentPin !== "string") {
+    throw new HttpError(400, "currentPin must be a string", "INVALID_PIN");
+  }
+  if (body.nextPin !== undefined && typeof body.nextPin !== "string") {
+    throw new HttpError(400, "nextPin must be a string", "INVALID_PIN");
+  }
+
+  const result = await changeCurrentUserPin(
+    actorId,
+    body.currentPin,
+    body.nextPin,
+    getRequestAuditActor(req),
+  );
+  res.json(result);
 };
 
 export const bootstrapHandler = async (req: Request, res: Response) => {
