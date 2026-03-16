@@ -256,7 +256,7 @@ const getShiftBadgeLabel = (shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM
     case "HOLIDAY":
       return "Holiday";
     default:
-      return "All day";
+      return "FULL";
   }
 };
 
@@ -720,26 +720,6 @@ export const DashboardPage = () => {
     workshopWaitingCount,
   ]);
 
-  const staffTodayWindow = useMemo(() => {
-    if (!staffToday?.summary || staffToday.summary.isClosed) {
-      return null;
-    }
-    if (!staffToday.summary.opensAt || !staffToday.summary.closesAt) {
-      return null;
-    }
-    return `${staffToday.summary.opensAt} - ${staffToday.summary.closesAt}`;
-  }, [staffToday]);
-
-  const staffTomorrowWindow = useMemo(() => {
-    if (!staffTomorrow?.summary || staffTomorrow.summary.isClosed) {
-      return null;
-    }
-    if (!staffTomorrow.summary.opensAt || !staffTomorrow.summary.closesAt) {
-      return null;
-    }
-    return `${staffTomorrow.summary.opensAt} - ${staffTomorrow.summary.closesAt}`;
-  }, [staffTomorrow]);
-
   const todayDate = useMemo(() => clock, [clock]);
   const tomorrowDate = useMemo(() => {
     const value = new Date(clock);
@@ -780,69 +760,123 @@ export const DashboardPage = () => {
         </div>
       </SurfaceCard>
 
-      <SurfaceCard className="dashboard-weather-strip" aria-label="Trading weather">
-        {!weather ? (
-          <EmptyState title="Loading weather" description="Fetching the latest trading-hour forecast." />
-        ) : weather.status === "ready" && weather.today ? (
-          <div className="dashboard-weather-strip-content">
-            <div className="dashboard-weather-strip-head">
-              <div>
-                <strong className="dashboard-weather-strip-title">
-                  {weatherSummaryLine}
-                </strong>
-                <div className="dashboard-weather-strip-meta">
-                  <span>{weather.today.summary}</span>
-                  <span>
-                    {weather.today.highC}° / {weather.today.lowC}°
-                  </span>
-                  <span>Rain {weather.today.precipitationMm} mm</span>
-                  {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
-                </div>
-              </div>
-            </div>
-
-            {tradingWeatherTimeline.length ? (
-              <div className="dashboard-weather-timeline" aria-label="Trading hour weather change points">
-                <div className="dashboard-weather-timeline-points" role="list">
-                  {tradingWeatherTimeline.map((point) => (
-                    <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
-                      <strong className="dashboard-weather-timeline-hour">{point.label}</strong>
-                      <span className="dashboard-weather-timeline-icon" aria-hidden="true">{weatherGlyph[point.kind]}</span>
-                      <span className="dashboard-weather-timeline-temp">{point.temperatureC}°</span>
-                      {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
-                        <span className="dashboard-weather-timeline-rain">{point.precipitationProbabilityPercent}% rain</span>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-                {weather.tomorrow ? (
-                  <div className="dashboard-weather-tomorrow-inline">
-                    <span className="metric-label dashboard-metric-label">Tomorrow</span>
-                    <strong>{weather.tomorrow.summary}</strong>
-                    <span>{weather.tomorrow.highC}° / {weather.tomorrow.lowC}°</span>
-                    <span>Rain {weather.tomorrow.precipitationMm} mm</span>
+      <div className="dashboard-context-row">
+        <SurfaceCard className="dashboard-weather-strip" aria-label="Trading weather">
+          {!weather ? (
+            <EmptyState title="Loading weather" description="Fetching the latest trading-hour forecast." />
+          ) : weather.status === "ready" && weather.today ? (
+            <div className="dashboard-weather-strip-content">
+              <div className="dashboard-weather-strip-head">
+                <div>
+                  <strong className="dashboard-weather-strip-title">
+                    {weatherSummaryLine}
+                  </strong>
+                  <div className="dashboard-weather-strip-meta">
+                    <span>{weather.today.summary}</span>
+                    <span>
+                      {weather.today.highC}° / {weather.today.lowC}°
+                    </span>
+                    <span>Rain {weather.today.precipitationMm} mm</span>
+                    {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
                   </div>
-                ) : null}
+                </div>
               </div>
-            ) : (
-              <div className="dashboard-weather-strip-empty">
-                Trading-hour change points are unavailable right now.
+
+              {tradingWeatherTimeline.length ? (
+                <div className="dashboard-weather-timeline" aria-label="Trading hour weather change points">
+                  <div className="dashboard-weather-timeline-points" role="list">
+                    {tradingWeatherTimeline.map((point) => (
+                      <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
+                        <strong className="dashboard-weather-timeline-hour">{point.label}</strong>
+                        <span className="dashboard-weather-timeline-icon" aria-hidden="true">{weatherGlyph[point.kind]}</span>
+                        <span className="dashboard-weather-timeline-temp">{point.temperatureC}°</span>
+                        {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
+                          <span className="dashboard-weather-timeline-rain">{point.precipitationProbabilityPercent}% rain</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  {weather.tomorrow ? (
+                    <div className="dashboard-weather-tomorrow-inline">
+                      <span className="metric-label dashboard-metric-label">Tomorrow</span>
+                      <strong>{weather.tomorrow.summary}</strong>
+                      <span>{weather.tomorrow.highC}° / {weather.tomorrow.lowC}°</span>
+                      <span>Rain {weather.tomorrow.precipitationMm} mm</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="dashboard-weather-strip-empty">
+                  Trading-hour change points are unavailable right now.
+                </div>
+              )}
+            </div>
+          ) : weather.status === "missing_location" ? (
+            <EmptyState
+              title="Weather unavailable"
+              description={user?.role === "ADMIN" ? (
+                <>
+                  Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
+                </>
+              ) : "Ask an admin to set the store postcode in Settings."}
+            />
+          ) : (
+            <EmptyState title="Weather temporarily unavailable" description={weather.message || "Forecast data could not be loaded right now."} />
+          )}
+        </SurfaceCard>
+
+        <SurfaceCard className="dashboard-staff-strip" aria-label="Staff today">
+          <SectionHeader
+            title="Staff Today"
+            actions={(
+              <div className="actions-inline">
+                {rotaLink ? <Link to={rotaLink}>View Rota</Link> : null}
               </div>
             )}
-          </div>
-        ) : weather.status === "missing_location" ? (
-          <EmptyState
-            title="Weather unavailable"
-            description={user?.role === "ADMIN" ? (
-              <>
-                Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
-              </>
-            ) : "Ask an admin to set the store postcode in Settings."}
           />
-        ) : (
-          <EmptyState title="Weather temporarily unavailable" description={weather.message || "Forecast data could not be loaded right now."} />
-        )}
-      </SurfaceCard>
+
+          {!staffToday || !staffTomorrow ? (
+            <EmptyState title="Loading rota summary" description="Fetching today and tomorrow’s staffing coverage." />
+          ) : (
+            <div className="dashboard-staff-roster-grid">
+              {[
+                { label: "Today", dateLabel: formatDashboardDayLabel(todayDate), staffDay: staffToday },
+                { label: "Tomorrow", dateLabel: formatDashboardDayLabel(tomorrowDate), staffDay: staffTomorrow },
+              ].map(({ label, dateLabel, staffDay }) => (
+                <section key={label} className="dashboard-staff-roster-column">
+                  <div className="dashboard-staff-roster-header">
+                    <span className="metric-label dashboard-metric-label">{label}</span>
+                    <strong>{dateLabel}</strong>
+                  </div>
+
+                  {staffDay.summary.isClosed ? (
+                    <div className="dashboard-staff-roster-closed">
+                      {staffDay.summary.closedReason ?? "Store closed"}
+                    </div>
+                  ) : staffDay.staff.length || (staffDay.holidayStaff ?? []).length ? (
+                    <div className="dashboard-staff-roster-list">
+                      {staffDay.staff.map((entry) => (
+                        <div key={`${label}-${entry.staffId}-${entry.shiftType}`} className="dashboard-staff-roster-row">
+                          <span className="dashboard-staff-roster-name">{entry.name}</span>
+                          <span className="status-badge status-info">{getShiftBadgeLabel(entry.shiftType)}</span>
+                        </div>
+                      ))}
+                      {(staffDay.holidayStaff ?? []).map((entry) => (
+                        <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-roster-row dashboard-staff-roster-row-muted">
+                          <span className="dashboard-staff-roster-name">{entry.name}</span>
+                          <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="dashboard-staff-roster-empty">No staff scheduled</div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+        </SurfaceCard>
+      </div>
       </div>
 
       <section className="dashboard-v1-group" aria-label="Financial snapshot">
@@ -997,77 +1031,6 @@ export const DashboardPage = () => {
               title="Manager view"
               description="Rental operations are configured for manager access only on this deployment. The widget remains in place so the dashboard structure is consistent when rental access is enabled."
             />
-          )}
-        </SurfaceCard>
-        </div>
-      </section>
-
-      <section className="dashboard-v1-group" aria-label="People">
-        <div className="dashboard-v1-lower-row">
-        <SurfaceCard className="dashboard-v1-widget dashboard-v1-widget--people">
-          <SectionHeader
-            title="Staff Today"
-            description="Today and tomorrow at a glance."
-            actions={(
-              <div className="actions-inline">
-                {rotaLink ? (
-                  <Link to={rotaLink}>View Rota</Link>
-                ) : null}
-              </div>
-            )}
-          />
-
-          {!staffToday || !staffTomorrow ? (
-            <EmptyState title="Loading rota summary" description="Fetching today and tomorrow’s staffing coverage." />
-          ) : (
-            <div className="dashboard-staff-summary">
-              {[
-                { label: "Today", dateLabel: formatDashboardDayLabel(todayDate), staffDay: staffToday, windowLabel: staffTodayWindow },
-                { label: "Tomorrow", dateLabel: formatDashboardDayLabel(tomorrowDate), staffDay: staffTomorrow, windowLabel: staffTomorrowWindow },
-              ].map(({ label, dateLabel, staffDay, windowLabel }) => (
-                <section key={label} className="dashboard-staff-day-card">
-                  <div className="dashboard-staff-day-header">
-                    <div>
-                      <span className="metric-label dashboard-metric-label">{label}</span>
-                      <strong>{dateLabel}</strong>
-                    </div>
-                    {!staffDay.summary.isClosed && windowLabel ? (
-                      <span className="dashboard-staff-day-hours">{windowLabel}</span>
-                    ) : null}
-                  </div>
-
-                  {staffDay.summary.isClosed ? (
-                    <EmptyState title="Store closed" description={staffDay.summary.closedReason ?? "No trading hours for this day."} />
-                  ) : staffDay.staff.length ? (
-                    <div className="dashboard-staff-chip-list">
-                      {staffDay.staff.map((entry) => (
-                        <div key={`${label}-${entry.staffId}-${entry.shiftType}`} className="dashboard-staff-chip">
-                          <span>{entry.name}</span>
-                          <span className="status-badge status-info">{getShiftBadgeLabel(entry.shiftType)}</span>
-                        </div>
-                      ))}
-                      {(staffDay.holidayStaff ?? []).map((entry) => (
-                        <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-chip dashboard-staff-chip-muted">
-                          <span>{entry.name}</span>
-                          <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (staffDay.holidayStaff ?? []).length ? (
-                    <div className="dashboard-staff-chip-list">
-                      {(staffDay.holidayStaff ?? []).map((entry) => (
-                        <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-chip dashboard-staff-chip-muted">
-                          <span>{entry.name}</span>
-                          <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState title="No staff scheduled" description="No live rota assignments exist for this day yet." />
-                  )}
-                </section>
-              ))}
-            </div>
           )}
         </SurfaceCard>
         </div>

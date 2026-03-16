@@ -928,6 +928,13 @@ th {
   gap: var(--cp-space-3);
 }
 
+.dashboard-context-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.95fr);
+  gap: 12px;
+  align-items: start;
+}
+
 .dashboard-v1-header {
   display: grid;
   gap: 14px;
@@ -955,6 +962,12 @@ th {
 }
 
 .dashboard-weather-strip {
+  display: grid;
+  gap: 10px;
+  padding: var(--cp-space-3);
+}
+
+.dashboard-staff-strip {
   display: grid;
   gap: 10px;
   padding: var(--cp-space-3);
@@ -1147,12 +1160,6 @@ th {
   align-items: start;
 }
 
-.dashboard-v1-lower-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-}
-
 .dashboard-v1-widget {
   display: grid;
   gap: 12px;
@@ -1165,10 +1172,6 @@ th {
 
 .dashboard-v1-widget .ui-section-header {
   align-items: start;
-}
-
-.dashboard-v1-widget--people {
-  max-width: 980px;
 }
 
 .dashboard-action-list {
@@ -1258,70 +1261,67 @@ th {
   min-height: 106px;
 }
 
-.dashboard-staff-summary {
+.dashboard-staff-roster-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.dashboard-staff-day-card {
+.dashboard-staff-roster-column {
   display: grid;
   gap: 8px;
-  padding: 12px;
-  border: 1px solid #d9e3ec;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 1px 2px rgba(8, 15, 31, 0.03);
+  min-width: 0;
 }
 
-.dashboard-staff-day-card .ui-empty-state {
-  padding: var(--cp-space-3);
-}
-
-.dashboard-staff-day-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 12px;
-}
-
-.dashboard-staff-day-header strong {
-  display: block;
-  margin-top: 4px;
-  color: #14293f;
-}
-
-.dashboard-staff-day-hours {
-  color: #5f7185;
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-
-.dashboard-staff-chip-list {
+.dashboard-staff-roster-header {
   display: grid;
-  gap: 6px;
+  gap: 2px;
 }
 
-.dashboard-staff-chip {
-  display: flex;
-  justify-content: space-between;
+.dashboard-staff-roster-header strong {
+  color: #14293f;
+  font-size: 0.94rem;
+}
+
+.dashboard-staff-roster-list {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-staff-roster-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #f5f8fb;
-  border: 1px solid #e0e8f0;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(217, 227, 236, 0.82);
   color: #14293f;
 }
 
-.dashboard-staff-chip-muted {
-  background: #faf7f0;
-  border-color: #eadfcb;
+.dashboard-staff-roster-row:last-child {
+  border-bottom: 0;
 }
 
-.dashboard-staff-chip .status-badge {
+.dashboard-staff-roster-row-muted {
+  color: #7a6752;
+}
+
+.dashboard-staff-roster-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-staff-roster-row .status-badge {
   flex-shrink: 0;
+}
+
+.dashboard-staff-roster-closed,
+.dashboard-staff-roster-empty {
+  color: #5f7185;
+  font-size: 0.84rem;
+  padding: 6px 0;
 }
 
 .dashboard-weather-card {
@@ -1411,11 +1411,8 @@ th {
 }
 
 @media (max-width: 1100px) {
+  .dashboard-context-row,
   .dashboard-v1-main-row {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboard-v1-lower-row {
     grid-template-columns: 1fr;
   }
 
@@ -1449,9 +1446,8 @@ th {
     justify-items: start;
   }
 
-  .dashboard-staff-day-header {
-    flex-direction: column;
-    align-items: start;
+  .dashboard-staff-roster-grid {
+    grid-template-columns: 1fr;
   }
 }
 
