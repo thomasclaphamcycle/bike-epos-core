@@ -1140,10 +1140,11 @@ th {
 
 .dashboard-weather-tomorrow-inline {
   flex: 0 0 auto;
-  min-width: 156px;
-  max-width: 182px;
+  min-width: 118px;
+  max-width: 132px;
   display: grid;
-  gap: 3px;
+  justify-items: center;
+  gap: 6px;
   padding-left: 10px;
   color: #5f7185;
   font-size: 0.79rem;
@@ -1163,9 +1164,9 @@ th {
   transform: translateY(-50%);
 }
 
-.dashboard-weather-tomorrow-inline strong {
-  color: #14293f;
-  font-size: 0.88rem;
+.dashboard-weather-tomorrow-symbol {
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .dashboard-weather-strip-empty {

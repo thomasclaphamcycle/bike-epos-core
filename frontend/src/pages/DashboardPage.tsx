@@ -264,6 +264,24 @@ const weatherGlyph: Record<DashboardWeatherTimelinePoint["kind"], string> = {
   showers: "☔",
 };
 
+const tomorrowWeatherKindFromSummary = (summary: string | undefined): DashboardWeatherTimelinePoint["kind"] => {
+  const value = summary?.toLowerCase() ?? "";
+
+  if (value.includes("shower")) {
+    return "showers";
+  }
+  if (value.includes("rain") || value.includes("drizzle") || value.includes("thunder")) {
+    return "rain";
+  }
+  if (value.includes("cloud") || value.includes("overcast") || value.includes("fog")) {
+    return "cloud";
+  }
+  if (value.includes("clear")) {
+    return "sun";
+  }
+  return "part-sun";
+};
+
 const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }: MetricCardProps) => {
   const content = (
     <>
@@ -755,11 +773,18 @@ export const DashboardPage = () => {
                     ))}
                   </div>
                   {weather.tomorrow ? (
-                    <div className="dashboard-weather-tomorrow-inline">
+                    <div
+                      className="dashboard-weather-tomorrow-inline"
+                      aria-label={`Tomorrow: ${weather.tomorrow.summary}, ${weather.tomorrow.highC} degrees high, ${weather.tomorrow.lowC} degrees low, ${weather.tomorrow.precipitationMm} millimetres of rain`}
+                      title={`${weather.tomorrow.summary} · ${weather.tomorrow.highC}° / ${weather.tomorrow.lowC}° · Rain ${weather.tomorrow.precipitationMm} mm`}
+                    >
                       <span className="metric-label dashboard-metric-label">Tomorrow</span>
-                      <strong>{weather.tomorrow.summary}</strong>
-                      <span>{weather.tomorrow.highC}° / {weather.tomorrow.lowC}°</span>
-                      <span>Rain {weather.tomorrow.precipitationMm} mm</span>
+                      <span
+                        className={`dashboard-weather-tomorrow-symbol dashboard-weather-timeline-icon--${tomorrowWeatherKindFromSummary(weather.tomorrow.summary)}`}
+                        aria-hidden="true"
+                      >
+                        {weatherGlyph[tomorrowWeatherKindFromSummary(weather.tomorrow.summary)]}
+                      </span>
                     </div>
                   ) : null}
                 </div>
