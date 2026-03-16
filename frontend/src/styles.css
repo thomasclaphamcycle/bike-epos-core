@@ -892,8 +892,8 @@ th {
 
 .dashboard-v1 {
   display: grid;
-  gap: var(--cp-space-6);
-  padding: var(--cp-space-4);
+  gap: var(--cp-space-5);
+  padding: var(--cp-space-3);
   border-radius: var(--cp-radius-lg);
   background:
     radial-gradient(circle at top right, rgba(243, 149, 39, 0.08), transparent 28%),
@@ -902,52 +902,52 @@ th {
 
 .dashboard-hero-stack {
   display: grid;
-  gap: var(--cp-space-4);
+  gap: var(--cp-space-3);
 }
 
 .dashboard-v1-header {
   display: grid;
-  gap: 18px;
-  padding: var(--cp-space-5);
+  gap: 14px;
+  padding: var(--cp-space-4);
 }
 
 .dashboard-weather-strip {
   display: grid;
-  gap: 12px;
-  padding: var(--cp-space-4);
+  gap: 10px;
+  padding: var(--cp-space-3);
 }
 
 .dashboard-weather-strip-content {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .dashboard-weather-strip-head {
   display: flex;
   justify-content: space-between;
   align-items: start;
-  gap: 16px;
+  gap: 12px;
 }
 
 .dashboard-weather-strip-title {
   display: block;
-  margin-top: 4px;
-  font-size: 1.05rem;
+  margin-top: 2px;
+  font-size: 0.98rem;
   color: #14293f;
 }
 
 .dashboard-weather-strip-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-top: 8px;
-  font-size: 0.88rem;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 0.82rem;
   color: #5f7185;
 }
 
 .dashboard-weather-tomorrow-chip {
-  min-width: 150px;
-  padding: 10px 12px;
+  min-width: 138px;
+  padding: 8px 10px;
   border: 1px solid #d9e3ec;
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
@@ -964,26 +964,26 @@ th {
 }
 
 .dashboard-weather-tomorrow-chip strong {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .dashboard-weather-timeline {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+  gap: 8px;
 }
 
 .dashboard-weather-timeline-point {
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px;
   border: 1px solid #d9e3ec;
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
 }
 
 .dashboard-weather-timeline-icon {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   line-height: 1;
 }
 
@@ -998,7 +998,7 @@ th {
 
 .dashboard-weather-timeline-copy span {
   color: #5f7185;
-  font-size: 0.84rem;
+  font-size: 0.78rem;
 }
 
 .dashboard-weather-timeline-meta {
@@ -1006,16 +1006,16 @@ th {
   justify-content: space-between;
   gap: 8px;
   color: #5f7185;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
 }
 
 .dashboard-weather-tomorrow-panel {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 10px;
-  padding-top: 2px;
+  gap: 6px 8px;
+  padding-top: 0;
   color: #5f7185;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
 }
 
 .dashboard-weather-tomorrow-panel strong {
@@ -1029,7 +1029,7 @@ th {
 
 .dashboard-v1-group {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dashboard-v1-group-header {
@@ -1038,7 +1038,7 @@ th {
 
 .dashboard-v1-header-actions {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   justify-items: end;
 }
 
@@ -1065,9 +1065,10 @@ th {
 }
 
 .dashboard-metric-card {
-  min-height: 148px;
+  min-height: 128px;
   align-content: start;
-  gap: var(--cp-space-2);
+  gap: 5px;
+  padding: 12px;
 }
 
 .dashboard-metric-label {
@@ -1095,7 +1096,7 @@ th {
 }
 
 .dashboard-metric-value {
-  font-size: clamp(1.7rem, 2vw, 2.25rem);
+  font-size: clamp(1.45rem, 1.7vw, 1.95rem);
   line-height: 1;
   letter-spacing: -0.03em;
   color: #10243a;
@@ -1104,20 +1105,20 @@ th {
 .dashboard-v1-main-row {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
   align-items: start;
 }
 
 .dashboard-v1-lower-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
 }
 
 .dashboard-v1-widget {
   display: grid;
-  gap: 16px;
-  padding: var(--cp-space-4);
+  gap: 12px;
+  padding: var(--cp-space-3);
 }
 
 .dashboard-v1-action-centre {
@@ -1134,15 +1135,15 @@ th {
 
 .dashboard-action-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dashboard-action-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
-  gap: 12px;
-  padding: 13px 14px;
+  gap: 10px;
+  padding: 11px 12px;
   border: 1px solid #d9e3ec;
   border-radius: 12px;
   background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
@@ -1158,13 +1159,13 @@ th {
 }
 
 .dashboard-action-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 800;
   line-height: 1;
   margin-top: 1px;
@@ -1196,14 +1197,14 @@ th {
 }
 
 .dashboard-action-copy strong {
-  font-size: 0.96rem;
+  font-size: 0.92rem;
   color: #14293f;
 }
 
 .dashboard-v1-stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .dashboard-v1-stat-card {
@@ -1213,21 +1214,21 @@ th {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     0 1px 2px rgba(8, 15, 31, 0.03);
-  padding: 14px;
+  padding: 12px;
   display: grid;
-  gap: 6px;
-  min-height: 124px;
+  gap: 5px;
+  min-height: 106px;
 }
 
 .dashboard-staff-summary {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dashboard-staff-day-card {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid #d9e3ec;
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
@@ -1237,7 +1238,7 @@ th {
 }
 
 .dashboard-staff-day-card .ui-empty-state {
-  padding: var(--cp-space-4);
+  padding: var(--cp-space-3);
 }
 
 .dashboard-staff-day-header {
@@ -1261,7 +1262,7 @@ th {
 
 .dashboard-staff-chip-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dashboard-staff-chip {
@@ -1269,7 +1270,7 @@ th {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 10px;
   background: #f5f8fb;
   border: 1px solid #e0e8f0;
@@ -1721,14 +1722,14 @@ th {
 .dashboard-link-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .dashboard-link-card {
   justify-content: center;
-  min-height: 48px;
+  min-height: 42px;
   font-weight: 600;
-  padding: 11px 14px;
+  padding: 9px 12px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid #d5dee8;
@@ -1737,8 +1738,8 @@ th {
 
 .dashboard-metric-detail {
   color: #647488;
-  font-size: 0.82rem;
-  line-height: 1.4;
+  font-size: 0.78rem;
+  line-height: 1.3;
 }
 
 .view-toggle {
