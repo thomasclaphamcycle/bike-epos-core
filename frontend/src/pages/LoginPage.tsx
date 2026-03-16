@@ -5,7 +5,7 @@ import { apiGet, ApiError } from "../api/client";
 import { normalizeLoginRedirectTarget } from "../utils/authRedirect";
 import { toRoleHomeRoute } from "../utils/homeRoute";
 import CorePosLogo from "../components/branding/CorePosLogo";
-import { appVersionLabel } from "../utils/buildInfo";
+import { useRuntimeVersionLabel } from "../hooks/useRuntimeVersionLabel";
 
 type ActiveLoginUser = {
   id: string;
@@ -18,6 +18,7 @@ export const LoginPage = () => {
   const { user, loginWithPin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const appVersionLabel = useRuntimeVersionLabel();
   const redirectTarget = useMemo(() => {
     const fromState = normalizeLoginRedirectTarget((location.state as { from?: string } | null)?.from);
     if (fromState) {

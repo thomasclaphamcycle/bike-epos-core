@@ -254,6 +254,11 @@ const run = async () => {
     assert.equal(managerStoreInfoRes.status, 403, JSON.stringify(managerStoreInfoRes.json));
     assert.equal(managerStoreInfoRes.json.error.code, "INSUFFICIENT_ROLE");
 
+    const versionRes = await fetchJson("/api/system/version");
+    assert.equal(versionRes.status, 200, JSON.stringify(versionRes.json));
+    assert.match(versionRes.json.app.version, /^\d+\.\d+\.\d+$/);
+    assert.equal(versionRes.json.app.label, `v${versionRes.json.app.version}`);
+
     console.log("[settings-smoke] persisted settings API passed");
   } finally {
     await prisma.$disconnect();

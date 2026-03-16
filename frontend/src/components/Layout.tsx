@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import { GlobalCommandBar } from "./GlobalCommandBar";
 import CorePosLogo from "./branding/CorePosLogo";
-import { appVersionLabel } from "../utils/buildInfo";
+import { useRuntimeVersionLabel } from "../hooks/useRuntimeVersionLabel";
 import {
   canAccessNavigationRole,
   matchesNavigationPath,
@@ -23,6 +23,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { error, success } = useToasts();
   const navigate = useNavigate();
   const location = useLocation();
+  const appVersionLabel = useRuntimeVersionLabel();
 
   const onLogout = async () => {
     try {
