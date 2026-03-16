@@ -51,6 +51,9 @@ const daysAgo = (days) => {
 };
 
 const cleanup = async (state) => {
+  if (state.saleIds.length) {
+    await prisma.sale.deleteMany({ where: { id: { in: state.saleIds } } });
+  }
   if (state.purchaseOrderIds.length) {
     await prisma.purchaseOrder.deleteMany({ where: { id: { in: state.purchaseOrderIds } } });
   }
@@ -85,6 +88,7 @@ const main = async () => {
     variantIds: [],
     inventoryMovementVariantIds: [],
     purchaseOrderIds: [],
+    saleIds: [],
     workshopJobIds: [],
     customerIds: [],
   };
@@ -95,7 +99,7 @@ const main = async () => {
     const before = await fetchJson("/api/reports/operations/actions");
     assert.equal(before.status, 200);
 
-    const [pricingProduct, deadStockProduct] = await Promise.all([
+    const [pricingProduct, deadStockProduct, lowStockProduct] = await Promise.all([
       prisma.product.create({
         data: {
           name: `M126 Pricing ${RUN_REF}`,
@@ -122,20 +126,71 @@ const main = async () => {
         },
         include: { variants: true },
       }),
+      prisma.product.create({
+        data: {
+          name: `M126 Low Stock ${RUN_REF}`,
+          variants: {
+            create: {
+              sku: `M126-LOW-${RUN_REF}`,
+              retailPricePence: 2400,
+              costPricePence: 1200,
+            },
+          },
+        },
+        include: { variants: true },
+      }),
     ]);
-    state.productIds.push(pricingProduct.id, deadStockProduct.id);
-    state.variantIds.push(pricingProduct.variants[0].id, deadStockProduct.variants[0].id);
+    state.productIds.push(pricingProduct.id, deadStockProduct.id, lowStockProduct.id);
+    state.variantIds.push(
+      pricingProduct.variants[0].id,
+      deadStockProduct.variants[0].id,
+      lowStockProduct.variants[0].id,
+    );
 
-    await prisma.inventoryMovement.create({
+    await prisma.inventoryMovement.createMany({
+      data: [
+        {
+          variantId: deadStockProduct.variants[0].id,
+          type: "PURCHASE",
+          quantity: 5,
+          referenceType: "M126",
+          referenceId: `${RUN_REF}-dead-purchase`,
+        },
+        {
+          variantId: lowStockProduct.variants[0].id,
+          type: "PURCHASE",
+          quantity: 9,
+          referenceType: "M126",
+          referenceId: `${RUN_REF}-low-purchase`,
+        },
+        {
+          variantId: lowStockProduct.variants[0].id,
+          type: "SALE",
+          quantity: -8,
+          referenceType: "M126",
+          referenceId: `${RUN_REF}-low-sale`,
+        },
+      ],
+    });
+    state.inventoryMovementVariantIds.push(deadStockProduct.variants[0].id, lowStockProduct.variants[0].id);
+
+    const lowStockSale = await prisma.sale.create({
       data: {
-        variantId: deadStockProduct.variants[0].id,
-        type: "PURCHASE",
-        quantity: 5,
-        referenceType: "M126",
-        referenceId: RUN_REF,
+        subtotalPence: 19_200,
+        taxPence: 0,
+        totalPence: 19_200,
+        completedAt: new Date(),
+        items: {
+          create: {
+            variantId: lowStockProduct.variants[0].id,
+            quantity: 8,
+            unitPricePence: 2400,
+            lineTotalPence: 19_200,
+          },
+        },
       },
     });
-    state.inventoryMovementVariantIds.push(deadStockProduct.variants[0].id);
+    state.saleIds.push(lowStockSale.id);
 
     const supplier = await prisma.supplier.create({
       data: { name: `M126 Supplier ${RUN_REF}` },
@@ -309,6 +364,7 @@ const main = async () => {
     const backlogRow = workshopSection.items.find((row) => row.type === "WORKSHOP_BACKLOG");
     const pricingRow = pricingSection.items.find((row) => row.entityId === pricingProduct.variants[0].id);
     const deadStockRow = inventorySection.items.find((row) => row.entityId === deadStockProduct.variants[0].id);
+    const lowStockRow = inventorySection.items.find((row) => row.type === "LOW_STOCK_ITEMS");
 
     assert.ok(overduePoRow, "expected overdue purchase order action");
     assert.equal(overduePoRow.severity, "WARNING");
@@ -332,6 +388,11 @@ const main = async () => {
     assert.ok(deadStockRow, "expected dead stock action");
     assert.equal(deadStockRow.type, "DEAD_STOCK");
     assert.equal(deadStockRow.severity, "INFO");
+
+    assert.ok(lowStockRow, "expected low stock action");
+    assert.equal(lowStockRow.severity, "WARNING");
+    assert.equal(lowStockRow.link, "/management/reordering");
+    assert.match(lowStockRow.reason, /below reorder level/i);
 
     assert.ok(after.json.summary.total >= before.json.summary.total + 5);
     assert.ok(after.json.summary.sectionsWithItems >= 4);

@@ -1,7 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { OPEN_WORKSHOP_STATUSES, addDaysUtc } from "./shared";
 import { getCustomerServiceRemindersReport } from "./customerReports";
-import { getInventoryVelocity } from "./inventoryReports";
+import { getInventoryReorderSuggestionsReport, getInventoryVelocity } from "./inventoryReports";
 import { getPricingExceptionsReport } from "./pricingReports";
 import { getWorkshopCapacityReport } from "./workshopReports";
 
@@ -42,15 +42,16 @@ const actionCentreSections: Array<{
     key: "inventory",
     title: "Inventory",
     description: "Dead stock and stock anomalies. Use the stock investigation queue for deeper follow-up.",
-    types: ["DEAD_STOCK"],
+    types: ["LOW_STOCK_ITEMS", "DEAD_STOCK"],
   },
 ];
 
 export const getOperationsExceptions = async () => {
   const now = new Date();
   const workshopAgeThresholdDays = 14;
-  const [pricing, velocity, workshopCapacity, reminders, overduePurchaseOrders, oldWorkshopJobs] = await Promise.all([
+  const [pricing, reorderSuggestions, velocity, workshopCapacity, reminders, overduePurchaseOrders, oldWorkshopJobs] = await Promise.all([
     getPricingExceptionsReport(),
+    getInventoryReorderSuggestionsReport(),
     getInventoryVelocity(),
     getWorkshopCapacityReport(),
     getCustomerServiceRemindersReport(30, 60, 365, 100),
@@ -93,6 +94,16 @@ export const getOperationsExceptions = async () => {
       orderBy: [{ createdAt: "asc" }],
     }),
   ]);
+  const lowStockCount = reorderSuggestions.summary.reorderNowCount + reorderSuggestions.summary.reorderSoonCount;
+  const lowStockReasonParts = [
+    lowStockCount === 1 ? "1 product below reorder level." : `${lowStockCount} products below reorder level.`,
+    reorderSuggestions.summary.reorderNowCount > 0
+      ? `${reorderSuggestions.summary.reorderNowCount} need ordering now`
+      : null,
+    reorderSuggestions.summary.reorderSoonCount > 0
+      ? `${reorderSuggestions.summary.reorderSoonCount} should be reviewed soon`
+      : null,
+  ].filter((part): part is string => Boolean(part));
 
   const items = [
     ...pricing.items.map((row) => ({
@@ -118,6 +129,16 @@ export const getOperationsExceptions = async () => {
         severity: "INFO" as OperationsExceptionSeverity,
         link: `/inventory/${row.variantId}`,
       })),
+    ...(lowStockCount > 0
+      ? [{
+          type: "LOW_STOCK_ITEMS",
+          entityId: "inventory-low-stock",
+          title: "Low stock items",
+          description: lowStockReasonParts.join(" | "),
+          severity: "WARNING" as OperationsExceptionSeverity,
+          link: "/management/reordering",
+        }]
+      : []),
     ...overduePurchaseOrders.map((row) => {
       const overdueDays = row.expectedAt
         ? Math.max(0, Math.floor((now.getTime() - row.expectedAt.getTime()) / 86_400_000))
