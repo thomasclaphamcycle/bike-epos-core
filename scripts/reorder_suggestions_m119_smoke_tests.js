@@ -4,6 +4,7 @@ require("dotenv/config");
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
@@ -66,6 +67,7 @@ const main = async () => {
   const state = { productIds: [], variantIds: [], saleIds: [], supplierIds: [], purchaseOrderIds: [] };
   try {
     await serverController.startIfNeeded();
+    const locationId = await ensureMainLocationId(prisma);
 
     const reorderProduct = await prisma.product.create({
       data: {
@@ -119,6 +121,7 @@ const main = async () => {
 
     const sale = await prisma.sale.create({
       data: {
+        locationId,
         subtotalPence: 16200,
         taxPence: 0,
         totalPence: 16200,

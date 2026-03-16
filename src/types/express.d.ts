@@ -5,6 +5,16 @@ declare global {
     interface Request {
       requestId?: string;
       user?: AuthenticatedUser;
+      location?: {
+        id: string;
+        locationId?: string;
+        stockLocationId?: string | null;
+        name: string;
+        code: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      };
     }
   }
 }

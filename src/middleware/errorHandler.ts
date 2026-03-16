@@ -2,18 +2,45 @@ import { NextFunction, Request, Response } from "express";
 import { isCorePosDebugEnabled, logCorePosDebug, logCorePosEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 
+const getApiErrorPayload = (req: Request, code: string, message: string) => ({
+  error: {
+    code,
+    message,
+    requestId: req.requestId ?? "unknown",
+  },
+});
+
 export const errorHandler = (
   err: unknown,
   req: Request,
   res: Response,
   _next: NextFunction,
 ): void => {
+  const isApiRoute = req.path.startsWith("/api");
   const requestId = req.requestId ?? null;
   const basePayload = {
     requestId,
     method: req.method,
     route: req.originalUrl || req.url,
   };
+
+  if (err instanceof SyntaxError && isApiRoute) {
+    logCorePosEvent(
+      "http.error",
+      {
+        ...basePayload,
+        resultStatus: "handled",
+        statusCode: 400,
+        errorCode: "INVALID_JSON_BODY",
+        message: err.message,
+      },
+      "warn",
+    );
+    res
+      .status(400)
+      .json(getApiErrorPayload(req, "INVALID_JSON_BODY", "Request body must be valid JSON"));
+    return;
+  }
 
   if (err instanceof HttpError) {
     if (err.status >= 500 || isCorePosDebugEnabled()) {
@@ -29,12 +56,9 @@ export const errorHandler = (
         err.status >= 500 ? "error" : "warn",
       );
     }
-    res.status(err.status).json({
-      error: {
-        code: err.code,
-        message: err.message,
-      },
-    });
+
+    const payload = getApiErrorPayload(req, err.code, err.message);
+    res.status(err.status).json(isApiRoute ? payload : payload);
     return;
   }
 
@@ -61,9 +85,6 @@ export const errorHandler = (
     });
   }
   res.status(500).json({
-    error: {
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Something went wrong",
-    },
+    ...getApiErrorPayload(req, "INTERNAL_SERVER_ERROR", "Something went wrong"),
   });
 };

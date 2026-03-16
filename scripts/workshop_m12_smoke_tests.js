@@ -343,6 +343,7 @@ const run = async () => {
 
       const balance = await fetchJson(
         `/api/credits/balance?email=${encodeURIComponent(booking.customer.email)}&phone=${encodeURIComponent(booking.customer.phone)}`,
+        { headers: MANAGER_HEADERS },
       );
       assert.equal(balance.status, 200, JSON.stringify(balance.json));
       assert.ok(balance.json.balancePence >= 1000, JSON.stringify(balance.json));
@@ -497,6 +498,7 @@ const run = async () => {
 
       const balance = await fetchJson(
         `/api/credits/balance?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`,
+        { headers: MANAGER_HEADERS },
       );
       assert.equal(balance.status, 200, JSON.stringify(balance.json));
       assert.equal(balance.json.balancePence, 300);
@@ -508,18 +510,21 @@ const run = async () => {
 
       const payments = await fetchJson(
         `/api/reports/workshop/payments?from=${from}&to=${to}`,
+        { headers: MANAGER_HEADERS },
       );
       assert.equal(payments.status, 200, JSON.stringify(payments.json));
       assert.ok(Array.isArray(payments.json.totals), JSON.stringify(payments.json));
 
       const deposits = await fetchJson(
         `/api/reports/workshop/deposits?from=${from}&to=${to}`,
+        { headers: MANAGER_HEADERS },
       );
       assert.equal(deposits.status, 200, JSON.stringify(deposits.json));
       assert.ok(typeof deposits.json.required?.count === "number", JSON.stringify(deposits.json));
 
       const credits = await fetchJson(
         `/api/reports/workshop/credits?from=${from}&to=${to}`,
+        { headers: MANAGER_HEADERS },
       );
       assert.equal(credits.status, 200, JSON.stringify(credits.json));
       assert.ok(typeof credits.json.netPence === "number", JSON.stringify(credits.json));

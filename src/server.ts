@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { execSync } from "node:child_process";
 import express from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -64,7 +65,21 @@ import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
 import { registerInternalEventSubscribers } from "./core/eventSubscribers";
 
+const resolveVersion = () => {
+  const explicitVersion = process.env.APP_VERSION ?? process.env.GIT_SHA ?? process.env.GITHUB_SHA;
+  if (explicitVersion && explicitVersion.trim().length > 0) {
+    return explicitVersion.trim();
+  }
+
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+};
+
 const app = express();
+const appVersion = resolveVersion();
 registerInternalEventSubscribers();
 app.use(requestLoggingMiddleware);
 app.use(express.json({ limit: "12mb" }));
@@ -80,7 +95,8 @@ const serveFrontendSpa =
 const isLegacyPrintableRoute = (requestPath: string) =>
   /^\/r\/[^/]+$/.test(requestPath) ||
   /^\/sales\/[^/]+\/receipt$/.test(requestPath) ||
-  /^\/workshop\/[^/]+\/print$/.test(requestPath);
+  /^\/workshop\/[^/]+\/print$/.test(requestPath) ||
+  /^\/reports\/daily-close\/print$/.test(requestPath);
 
 app.post("/auth/bootstrap", bootstrapHandler);
 
@@ -144,6 +160,16 @@ app.get("/health", async (req, res, next) => {
     next(error);
   }
 });
+
+app.get("/metrics", requireRoleAtLeast("MANAGER"), (req, res) =>
+  res.json({
+    status: "ok",
+    uptime: Number(process.uptime().toFixed(3)),
+    env: process.env.NODE_ENV ?? "development",
+    version: appVersion,
+    time: new Date().toISOString(),
+  }),
+);
 
 app.get("/", (req, res) => {
   if (serveFrontendSpa) {

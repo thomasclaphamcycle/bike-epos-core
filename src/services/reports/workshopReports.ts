@@ -1,4 +1,4 @@
-import { WorkshopJobStatus } from "@prisma/client";
+import { Prisma, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { HttpError } from "../../utils/http";
 import {
@@ -10,9 +10,12 @@ import {
   toPositiveIntWithinRangeOrThrow,
 } from "./shared";
 
-export const getWorkshopDailyReport = async (from?: string, to?: string) => {
+export const getWorkshopDailyReport = async (from?: string, to?: string, locationId?: string) => {
   const range = getDateRangeOrThrow(from, to);
   const days = listDateKeys(range.from, range.to);
+  const workshopLocationFilter = locationId
+    ? Prisma.sql`AND w."locationId" = ${locationId}`
+    : Prisma.empty;
 
   const rows = await prisma.$queryRaw<Array<{ date: string; jobCount: number; revenuePence: number }>>`
     SELECT
@@ -25,6 +28,7 @@ export const getWorkshopDailyReport = async (from?: string, to?: string) => {
       w.status = 'COMPLETED'
       AND w."completedAt" IS NOT NULL
       AND (w."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      ${workshopLocationFilter}
     GROUP BY "date"
     ORDER BY "date" ASC
   `;

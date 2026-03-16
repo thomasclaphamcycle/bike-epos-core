@@ -92,12 +92,24 @@ In production (`NODE_ENV=production`), the backend serves static files from `fro
 
 Legacy printable routes (for example receipt and workshop print views) continue to be served by backend HTML handlers.
 
+This includes:
+
+- `/r/:receiptNumber`
+- `/sales/:saleId/receipt`
+- `/reports/daily-close/print`
+
 ## Backup And Restore
 
 CorePOS now includes a simple repo-supported database backup helper for trusted local or operator-managed environments:
 
 ```bash
 scripts/backup_database.sh
+```
+
+The merge line also retains npm-wrapped operator scripts:
+
+```bash
+npm run db:backup
 ```
 
 This uses the current `DATABASE_URL` and writes a timestamped PostgreSQL custom-format dump to `backups/` by default. You can also pass an explicit output path:
@@ -120,6 +132,12 @@ To restore a backup into the database currently pointed to by `DATABASE_URL`:
 
 ```bash
 COREPOS_CONFIRM_RESTORE=1 scripts/restore_database.sh backups/pre-trial-corepos.dump
+```
+
+Or via the wrapped helper:
+
+```bash
+npm run db:restore -- backups/pre-trial-corepos.dump
 ```
 
 Restore should be treated as a deliberate operator action because it overwrites existing objects in the target database.

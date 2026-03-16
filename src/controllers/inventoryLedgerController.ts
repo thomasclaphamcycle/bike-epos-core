@@ -10,7 +10,10 @@ import {
   listMovements,
   recordMovement,
 } from "../services/inventoryLedgerService";
+import { resolveRequestLocation } from "../services/locationService";
 import { HttpError } from "../utils/http";
+
+const LOCATION_CODE_HEADER = "x-location-code";
 
 const INVENTORY_MOVEMENT_TYPES = new Set<InventoryMovementType>(
   Object.values(InventoryMovementType),
@@ -35,6 +38,21 @@ const parseMovementTypeOrThrow = (
 
   return normalized as InventoryMovementType;
 };
+
+const hasScopedLocationCode = (req: Request) =>
+  typeof req.header(LOCATION_CODE_HEADER) === "string"
+  && req.header(LOCATION_CODE_HEADER)!.trim().length > 0;
+
+const shapeBusinessScopedLocationResponse = <
+  T extends { locationId?: string | null; stockLocationId?: string | null },
+>(
+  payload: T,
+  requestLocation: Awaited<ReturnType<typeof resolveRequestLocation>>,
+) => ({
+  ...payload,
+  stockLocationId: payload.stockLocationId ?? payload.locationId ?? requestLocation.stockLocationId ?? null,
+  locationId: requestLocation.locationId ?? requestLocation.id,
+});
 
 export const createInventoryMovementHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
@@ -84,6 +102,9 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
     assertRoleAtLeast(req, "MANAGER");
   }
 
+  const requestLocation =
+    typeof body.locationId === "string" ? null : await resolveRequestLocation(req);
+
   const movementInput: {
     variantId?: string;
     locationId?: string;
@@ -103,6 +124,8 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
   }
   if (typeof body.locationId === "string") {
     movementInput.locationId = body.locationId;
+  } else if (requestLocation) {
+    movementInput.locationId = requestLocation.stockLocationId ?? requestLocation.id;
   }
   if (typeof body.quantity === "number") {
     movementInput.quantity = body.quantity;
@@ -125,16 +148,26 @@ export const createInventoryMovementHandler = async (req: Request, res: Response
   }
 
   const movement = await recordMovement(movementInput);
+  if (requestLocation && hasScopedLocationCode(req)) {
+    res.status(201).json(shapeBusinessScopedLocationResponse(movement, requestLocation));
+    return;
+  }
 
   res.status(201).json(movement);
 };
 
 export const listInventoryMovementsHandler = async (req: Request, res: Response) => {
   const variantId = typeof req.query.variantId === "string" ? req.query.variantId : undefined;
-  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const explicitLocationId =
+    typeof req.query.locationId === "string" ? req.query.locationId : undefined;
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   const typeRaw = typeof req.query.type === "string" ? req.query.type : undefined;
+  const requestLocation =
+    explicitLocationId === undefined && hasScopedLocationCode(req)
+      ? await resolveRequestLocation(req)
+      : null;
+  const locationId = explicitLocationId ?? (requestLocation?.stockLocationId ?? requestLocation?.id);
 
   const filters: {
     variantId?: string;
@@ -160,14 +193,30 @@ export const listInventoryMovementsHandler = async (req: Request, res: Response)
   }
 
   const response = await listMovements(filters);
+  if (requestLocation && hasScopedLocationCode(req)) {
+    res.json({
+      ...shapeBusinessScopedLocationResponse(response, requestLocation),
+      movements: response.movements.map((movement) =>
+        shapeBusinessScopedLocationResponse(movement, requestLocation)),
+    });
+    return;
+  }
 
   res.json(response);
 };
 
 export const getInventoryOnHandHandler = async (req: Request, res: Response) => {
   const variantId = typeof req.query.variantId === "string" ? req.query.variantId : undefined;
-  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const explicitLocationId =
+    typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const requestLocation =
+    explicitLocationId === undefined ? await resolveRequestLocation(req) : null;
+  const locationId = explicitLocationId ?? (requestLocation?.stockLocationId ?? requestLocation?.id);
   const response = await getOnHand(variantId, locationId);
+  if (requestLocation && hasScopedLocationCode(req)) {
+    res.json(shapeBusinessScopedLocationResponse(response, requestLocation));
+    return;
+  }
   res.json(response);
 };
 
@@ -206,7 +255,15 @@ export const listInventoryOnHandHandler = async (req: Request, res: Response) =>
 
   const take = parseOptionalIntQuery(req.query.take);
   const skip = parseOptionalIntQuery(req.query.skip);
-  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const explicitLocationId =
+    typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  const requestLocation =
+    explicitLocationId === undefined ? await resolveRequestLocation(req) : null;
+  const locationId = explicitLocationId ?? (requestLocation?.stockLocationId ?? requestLocation?.id);
   const result = await listOnHand({ q, locationId, isActive, take, skip });
+  if (requestLocation && hasScopedLocationCode(req)) {
+    res.json(shapeBusinessScopedLocationResponse(result, requestLocation));
+    return;
+  }
   res.json(result);
 };

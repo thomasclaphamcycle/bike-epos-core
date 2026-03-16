@@ -1,0 +1,58 @@
+@baseUrl = http://localhost:3000
+@branchCode = BRANCH1
+@variantId = REPLACE_VARIANT_ID
+
+### List locations (STAFF+)
+GET {{baseUrl}}/api/locations
+X-Staff-Role: STAFF
+X-Staff-Id: m73-requests-staff
+
+### Create location (ADMIN+)
+POST {{baseUrl}}/api/locations
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: m73-requests-admin
+
+{
+  "name": "Branch 1",
+  "code": "{{branchCode}}"
+}
+
+### Record inventory movement scoped to branch
+POST {{baseUrl}}/api/inventory/movements
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: m73-requests-manager
+X-Location-Code: {{branchCode}}
+
+{
+  "variantId": "{{variantId}}",
+  "type": "PURCHASE",
+  "quantity": 3,
+  "note": "M73 branch stock"
+}
+
+### Get on-hand in branch context
+GET {{baseUrl}}/api/inventory/on-hand?variantId={{variantId}}
+X-Staff-Role: STAFF
+X-Staff-Id: m73-requests-staff
+X-Location-Code: {{branchCode}}
+
+### Create workshop job in branch context
+POST {{baseUrl}}/api/workshop/jobs
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: m73-requests-staff
+X-Location-Code: {{branchCode}}
+
+{
+  "customerName": "M73 Request Customer",
+  "bikeDescription": "Road Bike",
+  "notes": "M73 location scope"
+}
+
+### List workshop jobs in branch context
+GET {{baseUrl}}/api/workshop/jobs
+X-Staff-Role: STAFF
+X-Staff-Id: m73-requests-staff
+X-Location-Code: {{branchCode}}

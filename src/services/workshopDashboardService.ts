@@ -1,6 +1,6 @@
 import { Prisma, WorkshopJobSource, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { HttpError } from "../utils/http";
+import { HttpError, isUuid } from "../utils/http";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 import { getWorkshopStaffingToday } from "./rotaService";
 
@@ -58,6 +58,14 @@ const CAPACITY_ACTIVE_WORKLOAD_STATUSES: WorkshopJobStatus[] = [
   "WAITING_FOR_PARTS",
   "ON_HOLD",
   "BIKE_READY",
+];
+const WORKSHOP_STAFFING_FOUNDATION_TABLES = [
+  "public.appconfig",
+  "public.rotaassignment",
+  "public.rotaclosedday",
+  "public.rotaperiod",
+  "public.rotatemplate",
+  "public.rotatemplateassignment",
 ];
 
 const normalizeText = (value: string | undefined): string | undefined => {
@@ -189,6 +197,104 @@ const buildCapacityBaseMetricsText = (metrics: {
   activeWorkloadJobs: number;
 }) =>
   `${metrics.scheduledStaffCount} workshop staff scheduled, ${metrics.dueTodayJobs} job${metrics.dueTodayJobs === 1 ? "" : "s"} due today, ${metrics.overdueJobs} overdue, ${metrics.activeWorkloadJobs} active open job${metrics.activeWorkloadJobs === 1 ? "" : "s"}.`;
+
+const isMissingWorkshopStaffingFoundationError = (error: unknown) => {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2021"
+  ) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  if (!message.includes("does not exist")) {
+    return false;
+  }
+
+  return WORKSHOP_STAFFING_FOUNDATION_TABLES.some((tableName) =>
+    message.includes(tableName),
+  );
+};
+
+const buildFallbackWorkshopStaffingToday = (
+  staffDate?: string,
+): Awaited<ReturnType<typeof getWorkshopStaffingToday>> => {
+  const { dayStart } = getUtcDayBounds(staffDate);
+  const date = staffDate ?? dayStart.toISOString().slice(0, 10);
+
+  return {
+    summary: {
+      date,
+      isClosed: false,
+      closedReason: null,
+      opensAt: null,
+      closesAt: null,
+      scheduledStaffCount: 0,
+      holidayStaffCount: 0,
+      totalScheduledStaffCount: 0,
+      totalHolidayStaffCount: 0,
+      coverageStatus: "none",
+    },
+    context: {
+      usesOperationalRoleTags: false,
+      fallbackToBroadStaffing: true,
+    },
+    scheduledStaff: [],
+    holidayStaff: [],
+  };
+};
+
+const getWorkshopStaffingTodaySafely = async (
+  staffDate?: string,
+): Promise<Awaited<ReturnType<typeof getWorkshopStaffingToday>>> => {
+  try {
+    return await getWorkshopStaffingToday({ date: staffDate }, prisma);
+  } catch (error) {
+    if (!isMissingWorkshopStaffingFoundationError(error)) {
+      throw error;
+    }
+
+    return buildFallbackWorkshopStaffingToday(staffDate);
+  }
+};
+
+const isMissingWorkshopPartsFoundationError = (error: unknown) => {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2021" || error.code === "P2022")
+  ) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.toLowerCase().includes("does not exist");
+};
+
+const getWorkshopJobPartsOverviewSafely = async (workshopJobId: string) => {
+  if (!isUuid(workshopJobId)) {
+    return null;
+  }
+
+  try {
+    return await getWorkshopJobPartsOverview(workshopJobId);
+  } catch (error) {
+    if (
+      (error instanceof HttpError && error.code === "INVALID_WORKSHOP_JOB_ID") ||
+      isMissingWorkshopPartsFoundationError(error)
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+};
 
 const deriveWorkshopCapacityToday = (input: {
   staffingToday: Awaited<ReturnType<typeof getWorkshopStaffingToday>>;
@@ -493,7 +599,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
           },
         },
       }),
-      getWorkshopStaffingToday({ date: input.staffDate }, prisma),
+      getWorkshopStaffingTodaySafely(input.staffDate),
       prisma.workshopJob.count({
         where: capacityWhere,
       }),
@@ -547,10 +653,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
   });
 
   const partsOverviewEntries = await Promise.all(
-    jobs.map(async (job) => [
-      job.id,
-      await getWorkshopJobPartsOverview(job.id),
-    ] as const),
+    jobs.map(async (job) => [job.id, await getWorkshopJobPartsOverviewSafely(job.id)] as const),
   );
 
   const partsOverviewByJobId = new Map(partsOverviewEntries);

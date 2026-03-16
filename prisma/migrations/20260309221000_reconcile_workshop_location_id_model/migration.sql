@@ -10,7 +10,7 @@ WHERE NOT EXISTS (
   WHERE UPPER(COALESCE("code", '')) = 'MAIN'
 );
 
-ALTER TABLE "WorkshopJob" ADD COLUMN "locationId" TEXT;
+ALTER TABLE "WorkshopJob" ADD COLUMN IF NOT EXISTS "locationId" TEXT;
 
 WITH "default_location" AS (
   SELECT "id"
@@ -25,11 +25,20 @@ WHERE "locationId" IS NULL;
 
 ALTER TABLE "WorkshopJob" ALTER COLUMN "locationId" SET NOT NULL;
 
-CREATE INDEX "WorkshopJob_locationId_idx" ON "WorkshopJob"("locationId");
+CREATE INDEX IF NOT EXISTS "WorkshopJob_locationId_idx" ON "WorkshopJob"("locationId");
 
-ALTER TABLE "WorkshopJob"
-  ADD CONSTRAINT "WorkshopJob_locationId_fkey"
-  FOREIGN KEY ("locationId")
-  REFERENCES "Location"("id")
-  ON DELETE RESTRICT
-  ON UPDATE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'WorkshopJob_locationId_fkey'
+  ) THEN
+    ALTER TABLE "WorkshopJob"
+      ADD CONSTRAINT "WorkshopJob_locationId_fkey"
+      FOREIGN KEY ("locationId")
+      REFERENCES "Location"("id")
+      ON DELETE RESTRICT
+      ON UPDATE CASCADE;
+  END IF;
+END $$;

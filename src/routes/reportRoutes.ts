@@ -3,6 +3,7 @@ import {
   dismissReminderCandidateHandler,
   getActionCentreReportHandler,
   getCustomerServiceRemindersReportHandler,
+  getDailyCloseHandler,
   getFinancialMonthlyMarginReportHandler,
   getFinancialMonthlySalesReportHandler,
   getFinancialSalesByCategoryReportHandler,
@@ -31,17 +32,20 @@ import {
   getWorkshopDailyReportCsvHandler,
   getWorkshopWarrantyReportHandler,
   markReminderCandidateReviewedHandler,
+  runDailyCloseHandler,
 } from "../controllers/reportController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const reportRouter = Router();
 
-reportRouter.get("/sales/daily", getSalesDailyReportHandler);
+reportRouter.get("/sales/daily", requireRoleAtLeast("MANAGER"), getSalesDailyReportHandler);
 reportRouter.get("/sales/daily.csv", requireRoleAtLeast("MANAGER"), getSalesDailyReportCsvHandler);
+reportRouter.get("/daily-close", requireRoleAtLeast("MANAGER"), getDailyCloseHandler);
+reportRouter.post("/daily-close", requireRoleAtLeast("MANAGER"), runDailyCloseHandler);
 reportRouter.get("/financial/monthly-margin", requireRoleAtLeast("MANAGER"), getFinancialMonthlyMarginReportHandler);
 reportRouter.get("/financial/monthly-sales", requireRoleAtLeast("MANAGER"), getFinancialMonthlySalesReportHandler);
 reportRouter.get("/financial/sales-by-category", requireRoleAtLeast("MANAGER"), getFinancialSalesByCategoryReportHandler);
-reportRouter.get("/workshop/daily", getWorkshopDailyReportHandler);
+reportRouter.get("/workshop/daily", requireRoleAtLeast("MANAGER"), getWorkshopDailyReportHandler);
 reportRouter.get(
   "/workshop/daily.csv",
   requireRoleAtLeast("MANAGER"),

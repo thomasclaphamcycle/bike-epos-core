@@ -376,8 +376,8 @@ const run = async () => {
 
       const job = await prisma.workshopJob.create({
         data: {
-          customerId: customer.id,
           locationId,
+          customerId: customer.id,
           status: "BOOKING_MADE",
           source: "IN_STORE",
           scheduledDate: addDays(todayUtc(), 31),

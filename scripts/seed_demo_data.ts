@@ -816,6 +816,7 @@ const seedDemoPurchaseOrders = async (
 const seedDemoSales = async (
   variantBySku: Map<string, { id: string; productId: string; retailPricePence: number }>,
 ) => {
+  const location = await ensureMainLocation();
   const users = await prisma.user.findMany({
     where: {
       username: {
@@ -874,6 +875,7 @@ const seedDemoSales = async (
       update: {
         basketId: sale.basketId,
         customerId: sale.customerId,
+        locationId: location.id,
         subtotalPence,
         taxPence: 0,
         totalPence,
@@ -886,6 +888,7 @@ const seedDemoSales = async (
         id: sale.id,
         basketId: sale.basketId,
         customerId: sale.customerId,
+        locationId: location.id,
         subtotalPence,
         taxPence: 0,
         totalPence,

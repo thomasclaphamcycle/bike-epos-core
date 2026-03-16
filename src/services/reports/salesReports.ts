@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { getPaymentsReportRows } from "../paymentIntentService";
 import {
@@ -9,9 +10,12 @@ import {
   toInteger,
 } from "./shared";
 
-export const getSalesDailyReport = async (from?: string, to?: string) => {
+export const getSalesDailyReport = async (from?: string, to?: string, locationId?: string) => {
   const range = getDateRangeOrThrow(from, to);
   const days = listDateKeys(range.from, range.to);
+  const salesLocationFilter = locationId
+    ? Prisma.sql`AND s."locationId" = ${locationId}`
+    : Prisma.empty;
 
   const salesRows = await prisma.$queryRaw<
     Array<{ date: string; saleCount: number; grossPence: number }>
@@ -22,6 +26,7 @@ export const getSalesDailyReport = async (from?: string, to?: string) => {
       COALESCE(SUM(s."totalPence"), 0)::bigint AS "grossPence"
     FROM "Sale" s
     WHERE (s."createdAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      ${salesLocationFilter}
     GROUP BY "date"
     ORDER BY "date" ASC
   `;

@@ -101,6 +101,7 @@ const main = async () => {
       prisma.sale.create({
         data: {
           customerId: repeatCustomer.id,
+          locationId,
           subtotalPence: 12000,
           taxPence: 0,
           totalPence: 12000,
@@ -110,6 +111,7 @@ const main = async () => {
       prisma.sale.create({
         data: {
           customerId: repeatCustomer.id,
+          locationId,
           subtotalPence: 8000,
           taxPence: 0,
           totalPence: 8000,

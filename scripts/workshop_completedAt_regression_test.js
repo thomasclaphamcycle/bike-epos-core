@@ -38,6 +38,34 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
+const ensureMainLocationId = async () => {
+  const existing = await prisma.location.findFirst({
+    where: {
+      code: {
+        equals: "MAIN",
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+  if (existing) {
+    return existing.id;
+  }
+
+  const created = await prisma.location.create({
+    data: {
+      name: "Main",
+      code: "MAIN",
+      isActive: true,
+    },
+    select: {
+      id: true,
+    },
+  });
+  return created.id;
+};
 
 const fetchJson = async (path, options = {}) => {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -169,6 +197,7 @@ const run = async () => {
     }
 
     const ref = uniqueRef();
+    const locationId = await ensureMainLocationId();
     const customer = await prisma.customer.create({
       data: {
         firstName: "M19",
@@ -182,6 +211,7 @@ const run = async () => {
 
     const job = await prisma.workshopJob.create({
       data: {
+        locationId,
         customerId: customer.id,
         locationId,
         status: "BOOKING_MADE",

@@ -82,6 +82,7 @@ const main = async () => {
     const sale = await prisma.sale.create({
       data: {
         customerId: customer.id,
+        locationId,
         subtotalPence: 7500,
         taxPence: 0,
         totalPence: 7500,

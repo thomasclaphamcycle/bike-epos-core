@@ -13,6 +13,7 @@ import {
 import { normalizeDateKeyOrThrow } from "../services/rotaService";
 import { getWorkshopDashboard } from "../services/workshopDashboardService";
 import { getWorkshopAvailability } from "../services/workshopAvailabilityService";
+import { resolveRequestLocation } from "../services/locationService";
 import {
   createOnlineWorkshopBooking,
   getWorkshopBookingByManageToken,
@@ -138,7 +139,11 @@ export const createWorkshopJobHandler = async (req: Request, res: Response) => {
     throw new HttpError(400, "status must be a string", "INVALID_WORKSHOP_JOB");
   }
 
-  const job = await createWorkshopJob(body);
+  const location = await resolveRequestLocation(req);
+  const job = await createWorkshopJob({
+    ...body,
+    locationId: location.id,
+  });
   res.status(201).json(job);
 };
 
@@ -153,9 +158,11 @@ export const listWorkshopJobsHandler = async (req: Request, res: Response) => {
   const take = parseOptionalIntegerQuery(req.query.take, "take");
   const skip = parseOptionalIntegerQuery(req.query.skip, "skip");
 
+  const location = await resolveRequestLocation(req);
   const result = await listWorkshopJobs({
     status,
     q,
+    locationId: location.id,
     take,
     skip,
   });

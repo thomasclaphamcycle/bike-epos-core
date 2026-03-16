@@ -25,7 +25,7 @@ import { requireRoleAtLeast } from "../middleware/staffRole";
 export const workshopRouter = Router();
 
 workshopRouter.get("/availability", getWorkshopAvailabilityHandler);
-workshopRouter.get("/dashboard", getWorkshopDashboardHandler);
+workshopRouter.get("/dashboard", requireRoleAtLeast("STAFF"), getWorkshopDashboardHandler);
 workshopRouter.post("/jobs", requireRoleAtLeast("STAFF"), createWorkshopJobHandler);
 workshopRouter.get("/jobs", requireRoleAtLeast("STAFF"), listWorkshopJobsHandler);
 workshopRouter.get("/jobs/:id", requireRoleAtLeast("STAFF"), getWorkshopJobHandler);

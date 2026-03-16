@@ -1,7 +1,7 @@
 import { Prisma, RefundRecordStatus, RefundTenderType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { createAuditEventTx } from "./auditService";
+import { createAuditEventTx, type AuditActor } from "./auditService";
 import { recordCashRefundMovementForSaleRefundTx } from "./tillService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -46,6 +46,8 @@ type RefundSummary = {
     subtotalPence: number;
     taxPence: number;
     totalPence: number;
+    returnToStock: boolean;
+    returnedToStockAt: Date | null;
     computedSubtotalPence: number;
     computedTaxPence: number;
     computedTotalPence: number;
@@ -122,6 +124,12 @@ type AddRefundTenderInput = {
   meta?: Prisma.JsonValue;
 };
 
+type CompleteRefundInput = {
+  completedByStaffId?: string;
+  returnToStock?: boolean;
+  auditActor?: AuditActor;
+};
+
 const computeRefundTotals = (input: {
   saleSubtotalPence: number;
   saleTaxPence: number;
@@ -177,6 +185,23 @@ const parseRefundTenderTypeOrThrow = (value: RefundTenderType | undefined): Refu
     );
   }
   return value;
+};
+
+const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
+  const existingDefault = await tx.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return tx.stockLocation.create({
+    data: {
+      name: "Default",
+      isDefault: true,
+    },
+  });
 };
 
 const getRefundForMutationTx = async (tx: Prisma.TransactionClient, refundId: string) => {
@@ -271,6 +296,8 @@ const toRefundSummary = (refund: {
   subtotalPence: number;
   taxPence: number;
   totalPence: number;
+  returnToStock: boolean;
+  returnedToStockAt: Date | null;
   createdByStaffId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -338,6 +365,8 @@ const toRefundSummary = (refund: {
       subtotalPence: refund.subtotalPence,
       taxPence: refund.taxPence,
       totalPence: refund.totalPence,
+      returnToStock: refund.returnToStock,
+      returnedToStockAt: refund.returnedToStockAt,
       computedSubtotalPence: computed.subtotalPence,
       computedTaxPence: computed.taxPence,
       computedTotalPence: computed.totalPence,
@@ -696,12 +725,13 @@ const assertRefundLineQuantitiesStillValidTx = async (
   }
 };
 
-export const completeRefund = async (refundId: string, completedByStaffId?: string) => {
+export const completeRefund = async (refundId: string, input: CompleteRefundInput = {}) => {
   if (!isUuid(refundId)) {
     throw new HttpError(400, "Invalid refund id", "INVALID_REFUND_ID");
   }
 
-  const normalizedCompletedByStaffId = normalizeOptionalText(completedByStaffId);
+  const normalizedCompletedByStaffId = normalizeOptionalText(input.completedByStaffId);
+  const returnToStock = input.returnToStock === true;
 
   return prisma.$transaction(async (tx) => {
     const refund = await tx.refund.findUnique({
@@ -710,6 +740,7 @@ export const completeRefund = async (refundId: string, completedByStaffId?: stri
         sale: {
           select: {
             id: true,
+            locationId: true,
             completedAt: true,
             subtotalPence: true,
             taxPence: true,
@@ -722,6 +753,11 @@ export const completeRefund = async (refundId: string, completedByStaffId?: stri
             saleLineId: true,
             quantity: true,
             lineTotalPence: true,
+            saleLine: {
+              select: {
+                variantId: true,
+              },
+            },
           },
         },
         tenders: {
@@ -789,9 +825,41 @@ export const completeRefund = async (refundId: string, completedByStaffId?: stri
         subtotalPence: totals.subtotalPence,
         taxPence: totals.taxPence,
         totalPence: totals.totalPence,
+        returnToStock,
+        returnedToStockAt: returnToStock ? new Date() : null,
         completedAt: new Date(),
       },
     });
+
+    if (returnToStock) {
+      const defaultStockLocation = await getOrCreateDefaultStockLocationTx(tx);
+      for (const line of refund.lines) {
+        await tx.stockLedgerEntry.create({
+          data: {
+            variantId: line.saleLine.variantId,
+            locationId: defaultStockLocation.id,
+            type: "RETURN",
+            quantityDelta: line.quantity,
+            referenceType: "SALE_REFUND_LINE",
+            referenceId: line.id,
+            note: `Refund ${refund.id} return to stock`,
+          },
+        });
+
+        await tx.inventoryMovement.create({
+          data: {
+            variantId: line.saleLine.variantId,
+            locationId: defaultStockLocation.id,
+            type: "RETURN",
+            quantity: line.quantity,
+            referenceType: "SALE_REFUND_LINE",
+            referenceId: line.id,
+            note: `Refund ${refund.id} return to stock`,
+            createdByStaffId: normalizedCompletedByStaffId ?? refund.createdByStaffId ?? null,
+          },
+        });
+      }
+    }
 
     const cashTenderedPence = refund.tenders
       .filter((tender) => tender.tenderType === "CASH")
@@ -804,26 +872,53 @@ export const completeRefund = async (refundId: string, completedByStaffId?: stri
       createdByStaffId: normalizedCompletedByStaffId ?? refund.createdByStaffId ?? undefined,
     });
 
+    const refundAuditMetadata = {
+      saleId: refund.saleId,
+      lineCount: refund.lines.length,
+      totalPence: totals.totalPence,
+      tenderedPence,
+      cashTenderedPence,
+      returnToStock,
+    };
+
     await createAuditEventTx(
       tx,
       {
         action: "REFUND_COMPLETED",
         entityType: "REFUND",
         entityId: refund.id,
-        metadata: {
-          saleId: refund.saleId,
-          lineCount: refund.lines.length,
-          totalPence: totals.totalPence,
-          tenderedPence,
-          cashTenderedPence,
-        },
+        metadata: refundAuditMetadata,
       },
-      normalizedCompletedByStaffId
-        ? { actorId: normalizedCompletedByStaffId }
-        : refund.createdByStaffId
-          ? { actorId: refund.createdByStaffId }
-          : undefined,
+      input.auditActor,
     );
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "REFUND_ISSUED",
+        entityType: "REFUND",
+        entityId: refund.id,
+        metadata: refundAuditMetadata,
+      },
+      input.auditActor,
+    );
+
+    if (returnToStock) {
+      await createAuditEventTx(
+        tx,
+        {
+          action: "RETURN_TO_STOCK",
+          entityType: "REFUND",
+          entityId: refund.id,
+          metadata: {
+            saleId: refund.saleId,
+            lines: refund.lines.length,
+            quantityReturned: refund.lines.reduce((sum, line) => sum + line.quantity, 0),
+          },
+        },
+        input.auditActor,
+      );
+    }
 
     return {
       ...(await getRefundSummaryTx(tx, refund.id)),

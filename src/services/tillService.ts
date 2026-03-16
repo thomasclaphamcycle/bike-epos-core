@@ -557,11 +557,7 @@ export const recordCashSaleMovementForSaleTx = async (
 
   const openSession = await getOpenSessionTx(tx);
   if (!openSession) {
-    throw new HttpError(
-      409,
-      "No open register session. Open the till before completing a cash sale.",
-      "REGISTER_SESSION_REQUIRED",
-    );
+    return;
   }
 
   try {

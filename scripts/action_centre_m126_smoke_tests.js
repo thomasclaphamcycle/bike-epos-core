@@ -176,6 +176,7 @@ const main = async () => {
 
     const lowStockSale = await prisma.sale.create({
       data: {
+        locationId,
         subtotalPence: 19_200,
         taxPence: 0,
         totalPence: 19_200,

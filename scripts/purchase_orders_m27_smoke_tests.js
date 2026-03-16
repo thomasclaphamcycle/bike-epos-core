@@ -363,7 +363,7 @@ const run = async () => {
     state.purchaseOrderItemIds.add(purchaseOrderItemId);
 
     const stockBeforeReceiveRes = await fetchJson(
-      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}&locationId=${encodeURIComponent(location.id)}`,
       {
         headers: staffHeaders,
       },
@@ -454,7 +454,7 @@ const run = async () => {
     assert.equal(receivePartialRes.json.items[0].unitCostPence, 2800);
 
     const onHandAfterPartialRes = await fetchJson(
-      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}&locationId=${encodeURIComponent(location.id)}`,
       {
         headers: staffHeaders,
       },
@@ -513,7 +513,7 @@ const run = async () => {
     assert.ok(auditRes.json.events.length >= 2, JSON.stringify(auditRes.json));
 
     const onHandAfterFinalRes = await fetchJson(
-      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}&locationId=${encodeURIComponent(location.id)}`,
       {
         headers: staffHeaders,
       },

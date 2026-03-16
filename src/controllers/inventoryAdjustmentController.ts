@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { getRequestStaffActorId } from "../middleware/staffRole";
+import { resolveRequestLocation } from "../services/locationService";
 import { recordAdjustment } from "../services/inventoryLedgerService";
 import { HttpError } from "../utils/http";
 
@@ -44,9 +45,15 @@ export const createInventoryAdjustmentHandler = async (req: Request, res: Respon
     throw new HttpError(400, "note must be a string", "INVALID_INVENTORY_ADJUSTMENT");
   }
 
+  const requestLocation =
+    typeof body.locationId === "string" ? null : await resolveRequestLocation(req);
+
   const result = await recordAdjustment({
     variantId: body.variantId,
-    locationId: typeof body.locationId === "string" ? body.locationId : undefined,
+    locationId:
+      typeof body.locationId === "string"
+        ? body.locationId
+        : (requestLocation?.stockLocationId ?? requestLocation?.id),
     quantityDelta: body.quantityDelta,
     reason: body.reason,
     note: body.note,

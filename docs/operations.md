@@ -1,5 +1,20 @@
 # Operations Guide
 
+## Backup And Restore
+
+For operator-managed database backup and restore in local or non-production environments:
+
+- `npm run db:backup`
+- `npm run db:restore`
+
+These scripts wrap the repo backup helpers under `scripts/db_backup.sh` and `scripts/db_restore.sh`.
+
+Safety notes:
+
+- they refuse production-like `DATABASE_URL` targets unless you explicitly set `CONFIRM_PROD=true`
+- set `BACKUP_FILE=...` or pass a path argument to `npm run db:restore -- ./backups/file.sql`
+- keep using the Export Hub for CSV/data handoff; use the DB backup scripts for full-instance recovery points
+
 ## Management Pages
 
 - `/management`

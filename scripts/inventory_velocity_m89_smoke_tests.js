@@ -4,6 +4,7 @@ require("dotenv/config");
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { ensureMainLocationId } = require("./default_location_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -53,6 +54,7 @@ const cleanup = async (state) => {
 const main = async () => {
   const state = { productIds: [], variantIds: [], saleIds: [] };
   try {
+    const locationId = await ensureMainLocationId(prisma);
     const [fast, slow, dead] = await Promise.all([
       prisma.product.create({
         data: {
@@ -105,6 +107,7 @@ const main = async () => {
 
     const sale = await prisma.sale.create({
       data: {
+        locationId,
         subtotalPence: 14000,
         taxPence: 0,
         totalPence: 14000,

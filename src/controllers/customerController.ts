@@ -73,6 +73,26 @@ const parseSearchTake = (value: unknown) => {
   return parsed;
 };
 
+const parseOptionalFilterTake = (value: unknown): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HttpError(400, "take must be an integer", "INVALID_CUSTOMER_FILTER");
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 200) {
+    throw new HttpError(
+      400,
+      "take must be an integer between 1 and 200",
+      "INVALID_CUSTOMER_FILTER",
+    );
+  }
+
+  return parsed;
+};
+
 export const searchCustomersHandler = async (req: Request, res: Response) => {
   const query =
     typeof req.query.q === "string"
@@ -98,12 +118,28 @@ export const listCustomersHandler = async (req: Request, res: Response) => {
 };
 
 export const listCustomerSalesHandler = async (req: Request, res: Response) => {
-  const result = await listCustomerSales(req.params.id);
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
+  const take = parseOptionalFilterTake(req.query.take);
+  const result = await listCustomerSales({
+    customerId: req.params.id,
+    from,
+    to,
+    take,
+  });
   res.json(result);
 };
 
 export const listCustomerWorkshopJobsHandler = async (req: Request, res: Response) => {
-  const result = await listCustomerWorkshopJobs(req.params.id);
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
+  const take = parseOptionalFilterTake(req.query.take);
+  const result = await listCustomerWorkshopJobs({
+    customerId: req.params.id,
+    from,
+    to,
+    take,
+  });
   res.json(result);
 };
 

@@ -12,6 +12,7 @@ type CreateWorkshopJobInput = {
   customerName?: string;
   bikeDescription?: string;
   notes?: string;
+  locationId?: string;
   status?: string;
 };
 
@@ -25,6 +26,7 @@ type UpdateWorkshopJobInput = {
 type ListWorkshopJobsInput = {
   status?: string;
   q?: string;
+  locationId?: string;
   take?: number;
   skip?: number;
 };
@@ -462,6 +464,7 @@ const buildBasketResponseTx = async (tx: Prisma.TransactionClient, basketId: str
 export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
   const customerName = normalizeOptionalText(input.customerName);
   const bikeDescription = normalizeOptionalText(input.bikeDescription);
+  const locationId = normalizeOptionalText(input.locationId);
   const notes = normalizeOptionalText(input.notes);
 
   if (!customerName) {
@@ -476,7 +479,16 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
     : ("BOOKED" as WorkflowStatus);
 
   return prisma.$transaction(async (tx) => {
-    const location = await getOrCreateDefaultLocationTx(tx);
+    const location = locationId
+      ? await tx.location.findUnique({
+          where: { id: locationId },
+          select: { id: true },
+        })
+      : await getOrCreateDefaultLocationTx(tx);
+
+    if (!location) {
+      throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+    }
 
     const job = await tx.workshopJob.create({
       data: {
@@ -507,12 +519,14 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
 
 export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {
   const q = normalizeOptionalText(filters.q);
+  const locationId = normalizeOptionalText(filters.locationId);
   const take = normalizeTake(filters.take);
   const skip = normalizeSkip(filters.skip);
   const requestedStatus = filters.status ? parseWorkflowStatus(filters.status) : undefined;
 
   const jobs = await prisma.workshopJob.findMany({
     where: {
+      ...(locationId ? { locationId } : {}),
       ...(requestedStatus === "CLOSED"
         ? { closedAt: { not: null } }
         : requestedStatus

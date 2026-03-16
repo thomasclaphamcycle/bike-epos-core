@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createProductHandler,
+  getProductByBarcodeHandler,
   getProductHandler,
   listProductsHandler,
   patchProductHandler,
@@ -17,6 +18,7 @@ export const productRouter = Router();
 
 productRouter.get("/", requireRoleAtLeast("STAFF"), listProductsHandler);
 productRouter.get("/search", requireRoleAtLeast("STAFF"), searchProductsHandler);
+productRouter.get("/barcode/:code", requireRoleAtLeast("STAFF"), getProductByBarcodeHandler);
 productRouter.post("/", requireRoleAtLeast("MANAGER"), createProductHandler);
 productRouter.post("/import/preview", requireRoleAtLeast("MANAGER"), previewProductCsvImportHandler);
 productRouter.post("/import/confirm", requireRoleAtLeast("MANAGER"), confirmProductCsvImportHandler);

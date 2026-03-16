@@ -3,6 +3,7 @@ import {
   addSaleTenderHandler,
   attachCustomerToSaleHandler,
   completeSaleHandler,
+  createExchangeSaleHandler,
   createSaleReturnHandler,
   deleteSaleTenderHandler,
   getSaleHandler,
@@ -16,6 +17,7 @@ import { saleCustomerCaptureRouter } from "./saleCustomerCaptureRoutes";
 export const salesRouter = Router();
 
 salesRouter.get("/", requireRoleAtLeast("STAFF"), listSalesHandler);
+salesRouter.post("/:saleId/exchange", requireRoleAtLeast("MANAGER"), createExchangeSaleHandler);
 salesRouter.post("/:saleId/returns", requireRoleAtLeast("MANAGER"), createSaleReturnHandler);
 salesRouter.patch("/:saleId/customer", requireRoleAtLeast("STAFF"), attachCustomerToSaleHandler);
 salesRouter.use("/:saleId/customer-capture-sessions", saleCustomerCaptureRouter);

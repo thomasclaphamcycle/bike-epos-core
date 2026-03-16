@@ -160,6 +160,12 @@ const AuthedApp = () => (
           )}
         />
         <Route
+          path="/refunds"
+          element={(
+            managerOnly(<RefundOversightPage />)
+          )}
+        />
+        <Route
           path="/management/cash"
           element={(
             managerOnly(<CashOversightPage />)
@@ -173,6 +179,12 @@ const AuthedApp = () => (
         />
         <Route
           path="/management/trade-close"
+          element={(
+            managerOnly(<DailyTradeClosePage />)
+          )}
+        />
+        <Route
+          path="/manager/daily-close"
           element={(
             managerOnly(<DailyTradeClosePage />)
           )}

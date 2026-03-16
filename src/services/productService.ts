@@ -1,6 +1,7 @@
 import { BarcodeType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
+import { resolveInventoryStockLocationIdTx } from "./locationService";
 
 type CreateProductInput = {
   name?: string;
@@ -82,6 +83,7 @@ type SearchProductsInput = {
   q?: string;
   barcode?: string;
   sku?: string;
+  locationId?: string;
   take?: number;
   skip?: number;
 };
@@ -932,18 +934,24 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
   });
 
   const variantIds = variants.map((variant) => variant.id);
+  const requestedLocationId = normalizeOptionalText(filters.locationId);
   const groupedOnHand =
     variantIds.length > 0
-      ? await prisma.inventoryMovement.groupBy({
-          by: ["variantId"],
-          where: {
-            variantId: {
-              in: variantIds,
+      ? await prisma.$transaction(async (tx) => {
+          const stockLocationId = await resolveInventoryStockLocationIdTx(tx, requestedLocationId);
+
+          return tx.inventoryMovement.groupBy({
+            by: ["variantId"],
+            where: {
+              locationId: stockLocationId,
+              variantId: {
+                in: variantIds,
+              },
             },
-          },
-          _sum: {
-            quantity: true,
-          },
+            _sum: {
+              quantity: true,
+            },
+          });
         })
       : [];
 
@@ -962,6 +970,85 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
       onHandQty: onHandByVariantId.get(variant.id) ?? 0,
     })),
   };
+};
+
+export const getProductByBarcode = async (barcode: string, locationId?: string) => {
+  const normalizedBarcode = normalizeOptionalText(barcode);
+  if (!normalizedBarcode) {
+    throw new HttpError(400, "barcode is required", "INVALID_BARCODE");
+  }
+
+  const requestedLocationId = normalizeOptionalText(locationId);
+
+  return prisma.$transaction(async (tx) => {
+    const variant = await tx.variant.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          {
+            barcode: {
+              equals: normalizedBarcode,
+              mode: "insensitive",
+            },
+          },
+          {
+            barcodes: {
+              some: {
+                code: {
+                  equals: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        barcodes: {
+          select: {
+            code: true,
+            isPrimary: true,
+          },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    });
+
+    if (!variant) {
+      throw new HttpError(404, "Barcode not found", "BARCODE_NOT_FOUND");
+    }
+
+    const stockLocationId = await resolveInventoryStockLocationIdTx(tx, requestedLocationId);
+
+    const aggregate = await tx.inventoryMovement.aggregate({
+      where: {
+        variantId: variant.id,
+        locationId: stockLocationId,
+      },
+      _sum: {
+        quantity: true,
+      },
+    });
+
+    return {
+      row: {
+        id: variant.id,
+        productId: variant.productId,
+        name: variant.name ?? variant.option ?? variant.product.name,
+        sku: variant.sku,
+        barcode: variant.barcode ?? variant.barcodes[0]?.code ?? null,
+        pricePence: variant.retailPricePence,
+        onHandQty: aggregate._sum.quantity ?? 0,
+      },
+    };
+  });
 };
 
 export const createVariant = async (input: CreateVariantInput) => {
