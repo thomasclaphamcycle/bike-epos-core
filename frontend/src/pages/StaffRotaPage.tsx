@@ -265,6 +265,8 @@ const HOLIDAY_REQUEST_FILTERS: Array<{ value: HolidayRequestFilter; label: strin
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
+const OVERVIEW_WEEK_ORDER = [0, 3, 1, 4, 2, 5];
+
 export const StaffRotaPage = () => {
   const { user } = useAuth();
   const { error, success } = useToasts();
@@ -426,7 +428,30 @@ export const StaffRotaPage = () => {
       .filter((day): day is NonNullable<RotaOverviewResponse["period"]>["days"][number] => day !== null),
     [currentPeriod?.days, visibleDayIndices],
   );
-  const allDays = currentPeriod?.days ?? [];
+  const overviewWeeks = useMemo(() => {
+    if (!currentPeriod) {
+      return [];
+    }
+
+    const orderedWeeks = OVERVIEW_WEEK_ORDER
+      .map((weekIndex) => currentPeriod.weeks.find((week) => week.weekIndex === weekIndex) ?? null)
+      .filter((week): week is NonNullable<RotaOverviewResponse["period"]>["weeks"][number] => week !== null);
+
+    return orderedWeeks.map((week) => {
+      const dayIndices = currentPeriod.days.reduce<number[]>((indices, day, index) => {
+        if (day.weekIndex === week.weekIndex) {
+          indices.push(index);
+        }
+        return indices;
+      }, []);
+
+      return {
+        week,
+        dayIndices,
+        days: dayIndices.map((index) => currentPeriod.days[index]),
+      };
+    });
+  }, [currentPeriod]);
   const openEditorContext = useMemo<OpenEditorContext | null>(() => {
     if (!currentPeriod || !openEditorCellKey) {
       return null;
@@ -1032,101 +1057,98 @@ export const StaffRotaPage = () => {
                 </table>
               </div>
             ) : (
-              <div className="table-wrap rota-grid-wrap rota-overview-wrap">
-                <table className="table-primary rota-review-grid rota-overview-grid">
-                  <thead>
-                    <tr>
-                      <th className="rota-sticky rota-sticky-name" rowSpan={2}>Staff</th>
-                      <th className="rota-sticky rota-sticky-role" rowSpan={2}>Role</th>
-                      {currentPeriod.weeks.map((week) => {
-                        const weekDays = allDays.filter((day) => day.weekIndex === week.weekIndex);
-                        return (
-                          <th key={week.weekIndex} colSpan={weekDays.length} className="rota-overview-week-group">
-                            <div className="rota-week-heading">
-                              <strong>Week {week.weekIndex + 1}</strong>
-                              <span>{week.label}</span>
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                    <tr>
-                      {allDays.map((day) => (
-                        <th
-                          key={day.date}
-                          className={[
-                            "rota-day-heading",
-                            "rota-overview-day-heading",
-                            day.isClosed ? "rota-day-heading-closed rota-overview-day-closed" : "",
-                            day.date === todayDateKey ? "rota-overview-day-today" : "",
-                          ].filter(Boolean).join(" ")}
-                        >
-                          <div className="rota-day-heading-copy">
-                            <strong>{day.weekdayLabel.slice(0, 3)}</strong>
-                            <span>{day.shortDateLabel}</span>
-                            {day.date === todayDateKey ? <span className="status-badge status-info">Today</span> : null}
-                            {day.isClosed ? (
-                              <span className="table-secondary rota-day-closed-reason">{day.closedReason ?? "Closed"}</span>
-                            ) : null}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentPeriod.staffRows.length ? currentPeriod.staffRows.map((row) => {
-                      const isCurrentUserRow = row.staffId === user?.id;
-                      return (
-                        <tr key={row.staffId} className={isCurrentUserRow ? "rota-overview-row-current-user" : ""}>
-                          <th className="rota-sticky rota-sticky-name rota-staff-name" scope="row">
-                            <div className="rota-staff-name-copy">
-                              <span>{row.name}</span>
-                              <span className="table-secondary">
-                                {isCurrentUserRow ? "You" : row.cells.some((cell) => cell.shiftType) ? "Scheduled in period" : "Off all period"}
-                              </span>
-                            </div>
-                          </th>
-                          <td className="rota-sticky rota-sticky-role rota-staff-role">
-                            <span className="status-badge status-info">{row.role}</span>
-                          </td>
-                          {row.cells.map((cell) => (
-                            <td
-                              key={`${row.staffId}-${cell.date}`}
-                              className={[
-                                "rota-cell",
-                                "rota-overview-cell",
-                                cell.isClosed ? "rota-cell-closed rota-overview-cell-closed" : "",
-                                cell.date === todayDateKey ? "rota-overview-day-today" : "",
-                              ].filter(Boolean).join(" ")}
-                              title={cell.isClosed ? (cell.closedReason ?? "Closed") : `${row.name} · ${cell.date} · ${shiftShortLabel(cell.shiftType)}`}
-                            >
-                              {cell.isClosed ? (
-                                <span className="table-secondary rota-overview-closed-label">{cell.closedReason ?? "Closed"}</span>
-                              ) : (
-                                <div className="rota-overview-cell-content">
-                                  <span className={`${shiftClassName(cell.shiftType)} rota-overview-pill`}>
-                                    {shiftShortLabel(cell.shiftType)}
-                                  </span>
-                                  {cell.source === "HOLIDAY_APPROVED" ? (
-                                    <span className="table-secondary rota-overview-source">Holiday</span>
+              <div className="rota-overview-layout">
+                {currentPeriod.staffRows.length ? overviewWeeks.map(({ week, dayIndices, days }) => (
+                  <section key={week.weekIndex} className="card rota-overview-week-card">
+                    <div className="card-header-row rota-overview-week-header">
+                      <div>
+                        <h3>Week {week.weekIndex + 1}</h3>
+                        <p className="muted-text">
+                          Starts {week.startsOn} · {week.label}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="table-wrap rota-overview-table-wrap">
+                      <table className="table-primary rota-overview-week-grid">
+                        <thead>
+                          <tr>
+                            <th className="rota-overview-staff-heading">Staff</th>
+                            {days.map((day) => (
+                              <th
+                                key={day.date}
+                                className={[
+                                  "rota-day-heading",
+                                  "rota-overview-day-heading",
+                                  day.isClosed ? "rota-day-heading-closed rota-overview-day-closed" : "",
+                                  day.date === todayDateKey ? "rota-overview-day-today" : "",
+                                ].filter(Boolean).join(" ")}
+                              >
+                                <div className="rota-day-heading-copy">
+                                  <strong>{day.weekdayLabel.slice(0, 3)}</strong>
+                                  <span>{day.shortDateLabel}</span>
+                                  {day.date === todayDateKey ? <span className="status-badge status-info">Today</span> : null}
+                                  {day.isClosed ? (
+                                    <span className="table-secondary rota-day-closed-reason">{day.closedReason ?? "Closed"}</span>
                                   ) : null}
                                 </div>
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      );
-                    }) : (
-                      <tr>
-                        <td colSpan={allDays.length + 2}>
-                          <div className="restricted-panel info-panel">
-                            No staff match the current rota filters.
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentPeriod.staffRows.map((row) => {
+                            const isCurrentUserRow = row.staffId === user?.id;
+                            return (
+                              <tr key={`${week.weekIndex}-${row.staffId}`} className={isCurrentUserRow ? "rota-overview-row-current-user" : ""}>
+                                <th className="rota-staff-name rota-overview-staff-cell" scope="row">
+                                  <div className="rota-staff-name-copy">
+                                    <span>{row.name}</span>
+                                    <span className="table-secondary">
+                                      {isCurrentUserRow ? "You" : row.role}
+                                    </span>
+                                  </div>
+                                </th>
+                                {dayIndices.map((dayIndex) => {
+                                  const cell = row.cells[dayIndex];
+                                  return (
+                                    <td
+                                      key={`${row.staffId}-${cell.date}`}
+                                      className={[
+                                        "rota-cell",
+                                        "rota-overview-cell",
+                                        cell.isClosed ? "rota-cell-closed rota-overview-cell-closed" : "",
+                                        cell.date === todayDateKey ? "rota-overview-day-today" : "",
+                                      ].filter(Boolean).join(" ")}
+                                      title={cell.isClosed ? (cell.closedReason ?? "Closed") : `${row.name} · ${cell.date} · ${shiftShortLabel(cell.shiftType)}`}
+                                    >
+                                      {cell.isClosed ? (
+                                        <span className="table-secondary rota-overview-closed-label">{cell.closedReason ?? "Closed"}</span>
+                                      ) : (
+                                        <div className="rota-overview-cell-content">
+                                          <span className={`${shiftClassName(cell.shiftType)} rota-overview-pill`}>
+                                            {shiftShortLabel(cell.shiftType)}
+                                          </span>
+                                          {cell.source === "HOLIDAY_APPROVED" ? (
+                                            <span className="table-secondary rota-overview-source">Holiday</span>
+                                          ) : null}
+                                        </div>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )) : (
+                  <div className="restricted-panel info-panel">
+                    No staff match the current rota filters.
+                  </div>
+                )}
               </div>
             )}
           </>

@@ -2317,16 +2317,40 @@ th {
   padding-bottom: 4px;
 }
 
-.rota-overview-grid {
-  min-width: 1880px;
+.rota-overview-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.rota-overview-week-group {
-  border-left: 1px solid #d8e1ec;
+.rota-overview-week-card {
+  padding: 0;
+  overflow: hidden;
 }
 
-.rota-overview-week-group:first-of-type {
-  border-left: 0;
+.rota-overview-week-header {
+  padding: 18px 18px 0;
+}
+
+.rota-overview-week-header h3 {
+  margin: 0 0 4px;
+}
+
+.rota-overview-table-wrap {
+  overflow-x: visible;
+  padding: 0 18px 18px;
+}
+
+.rota-overview-week-grid {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.rota-overview-week-grid thead th {
+  background: #f5f8fc;
 }
 
 .rota-day-heading {
@@ -2334,7 +2358,7 @@ th {
 }
 
 .rota-overview-day-heading {
-  min-width: 76px;
+  min-width: 0;
 }
 
 .rota-day-heading-copy {
@@ -2432,7 +2456,7 @@ th {
 }
 
 .rota-overview-cell {
-  min-width: 76px;
+  min-width: 0;
   padding: 6px 4px;
   text-align: center;
 }
@@ -2459,12 +2483,20 @@ th {
 }
 
 .rota-overview-row-current-user > .rota-sticky,
-.rota-overview-row-current-user > td {
+.rota-overview-row-current-user > td,
+.rota-overview-row-current-user > th {
   background: #f3f9ff;
 }
 
-.rota-overview-row-current-user > .rota-sticky .rota-staff-name-copy span:first-child {
+.rota-overview-row-current-user .rota-staff-name-copy span:first-child {
   color: #0f4c81;
+}
+
+.rota-overview-staff-heading,
+.rota-overview-staff-cell {
+  width: 148px;
+  min-width: 148px;
+  max-width: 148px;
 }
 
 .rota-cell-note {
@@ -2644,8 +2676,8 @@ th {
     flex: 1 1 0;
   }
 
-  .rota-overview-grid {
-    min-width: 1320px;
+  .rota-overview-layout {
+    grid-template-columns: 1fr;
   }
 }
 
