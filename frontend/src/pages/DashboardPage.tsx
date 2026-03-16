@@ -174,17 +174,6 @@ const startOfMonth = (value: Date) => new Date(value.getFullYear(), value.getMon
 const sumNetPence = (rows: SalesDailyRow[]) =>
   rows.reduce((total, row) => total + row.netPence, 0);
 
-const getGreetingContext = (value: Date) => {
-  const hour = value.getHours();
-  if (hour < 12) {
-    return "Good morning";
-  }
-  if (hour < 18) {
-    return "Good afternoon";
-  }
-  return "Good evening";
-};
-
 const getFirstName = (name: string | null | undefined, username: string | undefined) => {
   const trimmed = name?.trim();
   if (trimmed) {
@@ -563,14 +552,13 @@ export const DashboardPage = () => {
 
   const firstName = useMemo(() => getFirstName(user?.name, user?.username), [user?.name, user?.username]);
   const headerDateLabel = useMemo(
-    () => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(clock),
+    () => new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" }).format(clock),
     [clock],
   );
   const headerTimeLabel = useMemo(
     () => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(clock),
     [clock],
   );
-  const headerGreetingContext = useMemo(() => getGreetingContext(clock), [clock]);
 
   const outstandingWorkshopJobs = useMemo(() => {
     if (!workshopSummary) {
@@ -768,15 +756,15 @@ export const DashboardPage = () => {
       <div className="dashboard-hero-stack">
       <SurfaceCard className="dashboard-v1-header ui-surface-card--soft">
         <PageHeader
-          eyebrow="Operational Control Centre"
           title={`Hello ${firstName}`}
-          description={`${headerDateLabel} · ${headerGreetingContext} · ${headerTimeLabel}`}
+          meta={(
+            <div className="dashboard-header-clock" aria-label={`Current time ${headerDateLabel} ${headerTimeLabel}`}>
+              <span className="dashboard-header-clock-label">Current time</span>
+              <strong className="dashboard-header-clock-value">{headerDateLabel} • {headerTimeLabel}</strong>
+            </div>
+          )}
           actions={(
             <div className="dashboard-v1-header-actions">
-              <div>
-                <p className="dashboard-v1-section-kicker">Quick Actions</p>
-                <p className="muted-text">Open the core front-of-house tools without leaving the dashboard.</p>
-              </div>
               <div className="actions-inline">
                 <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
                   {loading ? "Refreshing..." : "Refresh dashboard"}
@@ -799,7 +787,6 @@ export const DashboardPage = () => {
           <div className="dashboard-weather-strip-content">
             <div className="dashboard-weather-strip-head">
               <div>
-                <p className="ui-section-eyebrow">Trading Weather</p>
                 <strong className="dashboard-weather-strip-title">
                   {weatherSummaryLine}
                 </strong>
@@ -858,13 +845,7 @@ export const DashboardPage = () => {
       </SurfaceCard>
       </div>
 
-      <section className="dashboard-v1-group">
-        <SectionHeader
-          eyebrow="Row 1"
-          title="Financial"
-          description={`Month to date versus last year ${monthDeltaLabel}.`}
-          className="dashboard-v1-group-header"
-        />
+      <section className="dashboard-v1-group" aria-label="Financial snapshot">
         <div className="dashboard-summary-grid dashboard-v1-kpis ui-kpi-grid">
           <DashboardMetricCard
             label="Sales Today"
@@ -913,13 +894,7 @@ export const DashboardPage = () => {
         </div>
       </section>
 
-      <section className="dashboard-v1-group">
-        <SectionHeader
-          eyebrow="Row 2"
-          title="Operations"
-          description="Today’s operational flow across alerts, workshop load, and rentals."
-          className="dashboard-v1-group-header"
-        />
+      <section className="dashboard-v1-group" aria-label="Operations overview">
         <div className="dashboard-v1-main-row">
         <SurfaceCard className="dashboard-v1-widget dashboard-v1-action-centre">
           <SectionHeader
@@ -1027,13 +1002,7 @@ export const DashboardPage = () => {
         </div>
       </section>
 
-      <section className="dashboard-v1-group">
-        <SectionHeader
-          eyebrow="Row 3"
-          title="People"
-          description="Staff coverage and local trading context for the day ahead."
-          className="dashboard-v1-group-header"
-        />
+      <section className="dashboard-v1-group" aria-label="People">
         <div className="dashboard-v1-lower-row">
         <SurfaceCard className="dashboard-v1-widget dashboard-v1-widget--people">
           <SectionHeader

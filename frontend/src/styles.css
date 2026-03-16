@@ -934,6 +934,26 @@ th {
   padding: var(--cp-space-4);
 }
 
+.dashboard-header-clock {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-header-clock-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #66768a;
+}
+
+.dashboard-header-clock-value {
+  color: #14293f;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .dashboard-weather-strip {
   display: grid;
   gap: 10px;
@@ -954,7 +974,7 @@ th {
 
 .dashboard-weather-strip-title {
   display: block;
-  margin-top: 2px;
+  margin-top: 0;
   font-size: 0.98rem;
   color: #14293f;
 }
@@ -1063,13 +1083,9 @@ th {
   gap: 10px;
 }
 
-.dashboard-v1-group-header {
-  align-items: end;
-}
-
 .dashboard-v1-header-actions {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   justify-items: end;
 }
 
@@ -1080,15 +1096,6 @@ th {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #9a5b00;
-}
-
-.dashboard-v1-section-kicker {
-  margin: 0 0 4px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #66768a;
 }
 
 .dashboard-v1-kpis {
