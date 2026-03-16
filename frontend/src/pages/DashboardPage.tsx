@@ -910,7 +910,11 @@ export const DashboardPage = () => {
         <SurfaceCard className="dashboard-v1-widget dashboard-v1-action-centre">
           <SectionHeader
             title="Action Centre"
-            actions={canViewManagerWidgets ? <Link to="/management/actions">Open full queue</Link> : null}
+            actions={canViewManagerWidgets ? (
+              <Link className="button-link button-link-compact dashboard-section-action" to="/management/actions">
+                Open full queue
+              </Link>
+            ) : null}
           />
 
           <div className="dashboard-v1-widget-body">
@@ -958,8 +962,12 @@ export const DashboardPage = () => {
             title="Workshop Snapshot"
             actions={(
               <div className="actions-inline">
-                <Link to="/workshop">Job Board</Link>
-                <Link to="/workshop/collection">Collection</Link>
+                <Link className="button-link button-link-compact dashboard-section-action" to="/workshop">
+                  Job Board
+                </Link>
+                <Link className="button-link button-link-compact dashboard-section-action" to="/workshop/collection">
+                  Collection
+                </Link>
               </div>
             )}
           />
@@ -1000,7 +1008,11 @@ export const DashboardPage = () => {
         <SurfaceCard className="dashboard-v1-widget">
           <SectionHeader
             title="Rentals"
-            actions={canViewManagerWidgets ? <Link to="/rental/calendar">Rental Calendar</Link> : null}
+            actions={canViewManagerWidgets ? (
+              <Link className="button-link button-link-compact dashboard-section-action" to="/rental/calendar">
+                Rental Calendar
+              </Link>
+            ) : null}
           />
 
           <div className="dashboard-v1-widget-body">

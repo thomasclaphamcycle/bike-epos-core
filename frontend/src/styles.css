@@ -1267,6 +1267,14 @@ th {
   align-items: start;
 }
 
+.dashboard-v1-widget .ui-section-header__actions {
+  align-items: center;
+}
+
+.dashboard-section-action {
+  white-space: nowrap;
+}
+
 .dashboard-v1-widget-body {
   display: grid;
   gap: 12px;
