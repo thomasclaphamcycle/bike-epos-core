@@ -1033,22 +1033,21 @@ th {
 }
 
 .dashboard-weather-strip {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
   height: 100%;
 }
 
 .dashboard-staff-strip {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
   height: 100%;
 }
 
 .dashboard-weather-strip-content {
   display: grid;
   gap: 8px;
+}
+
+.dashboard-weather-strip .dashboard-v1-widget-body,
+.dashboard-staff-strip .dashboard-v1-widget-body {
+  gap: 10px;
 }
 
 .dashboard-weather-timeline {

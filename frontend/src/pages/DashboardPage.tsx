@@ -740,68 +740,72 @@ export const DashboardPage = () => {
       </SurfaceCard>
 
       <div className="dashboard-context-row">
-        <SurfaceCard className="dashboard-weather-strip" aria-label="Trading weather">
-          {!weather ? (
-            <EmptyState title="Loading weather" description="Fetching the latest trading-hour forecast." />
-          ) : weather.status === "ready" && weather.today ? (
-            <div className="dashboard-weather-strip-content">
-              {tradingWeatherTimeline.length ? (
-                <div className="dashboard-weather-timeline" aria-label="Trading hour weather change points">
-                  <div className="dashboard-weather-timeline-points" role="list">
-                    {tradingWeatherTimeline.map((point) => (
-                      <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
-                        <strong className="dashboard-weather-timeline-hour">{point.label}</strong>
+        <SurfaceCard className="dashboard-v1-widget dashboard-weather-strip" aria-label="Trading weather">
+          <SectionHeader title="Weather" />
+
+          <div className="dashboard-v1-widget-body">
+            {!weather ? (
+              <EmptyState title="Loading weather" description="Fetching the latest trading-hour forecast." />
+            ) : weather.status === "ready" && weather.today ? (
+              <div className="dashboard-weather-strip-content">
+                {tradingWeatherTimeline.length ? (
+                  <div className="dashboard-weather-timeline" aria-label="Trading hour weather change points">
+                    <div className="dashboard-weather-timeline-points" role="list">
+                      {tradingWeatherTimeline.map((point) => (
+                        <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
+                          <strong className="dashboard-weather-timeline-hour">{point.label}</strong>
+                          <span
+                            className={`dashboard-weather-timeline-icon dashboard-weather-timeline-icon--${point.kind}`}
+                            aria-hidden="true"
+                          >
+                            {weatherGlyph[point.kind]}
+                          </span>
+                          <span className="dashboard-weather-timeline-temp">{point.temperatureC}°</span>
+                          {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
+                            <span className="dashboard-weather-timeline-rain">{point.precipitationProbabilityPercent}% rain</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                    {weather.tomorrow ? (
+                      <div
+                        className="dashboard-weather-tomorrow-inline"
+                        aria-label={`Tomorrow: ${weather.tomorrow.summary}, ${weather.tomorrow.highC} degrees high, ${weather.tomorrow.lowC} degrees low, ${weather.tomorrow.precipitationMm} millimetres of rain`}
+                        title={`${weather.tomorrow.summary} · ${weather.tomorrow.highC}° / ${weather.tomorrow.lowC}° · Rain ${weather.tomorrow.precipitationMm} mm`}
+                      >
+                        <span className="metric-label dashboard-metric-label">Tomorrow</span>
                         <span
-                          className={`dashboard-weather-timeline-icon dashboard-weather-timeline-icon--${point.kind}`}
+                          className={`dashboard-weather-tomorrow-symbol dashboard-weather-timeline-icon--${tomorrowWeatherKindFromSummary(weather.tomorrow.summary)}`}
                           aria-hidden="true"
                         >
-                          {weatherGlyph[point.kind]}
+                          {weatherGlyph[tomorrowWeatherKindFromSummary(weather.tomorrow.summary)]}
                         </span>
-                        <span className="dashboard-weather-timeline-temp">{point.temperatureC}°</span>
-                        {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
-                          <span className="dashboard-weather-timeline-rain">{point.precipitationProbabilityPercent}% rain</span>
-                        ) : null}
+                        <span className="dashboard-weather-tomorrow-temp">{Math.round(weather.tomorrow.highC)}°</span>
                       </div>
-                    ))}
+                    ) : null}
                   </div>
-                  {weather.tomorrow ? (
-                    <div
-                      className="dashboard-weather-tomorrow-inline"
-                      aria-label={`Tomorrow: ${weather.tomorrow.summary}, ${weather.tomorrow.highC} degrees high, ${weather.tomorrow.lowC} degrees low, ${weather.tomorrow.precipitationMm} millimetres of rain`}
-                      title={`${weather.tomorrow.summary} · ${weather.tomorrow.highC}° / ${weather.tomorrow.lowC}° · Rain ${weather.tomorrow.precipitationMm} mm`}
-                    >
-                      <span className="metric-label dashboard-metric-label">Tomorrow</span>
-                      <span
-                        className={`dashboard-weather-tomorrow-symbol dashboard-weather-timeline-icon--${tomorrowWeatherKindFromSummary(weather.tomorrow.summary)}`}
-                        aria-hidden="true"
-                      >
-                        {weatherGlyph[tomorrowWeatherKindFromSummary(weather.tomorrow.summary)]}
-                      </span>
-                      <span className="dashboard-weather-tomorrow-temp">{Math.round(weather.tomorrow.highC)}°</span>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="dashboard-weather-strip-empty">
-                  Trading-hour change points are unavailable right now.
-                </div>
-              )}
-            </div>
-          ) : weather.status === "missing_location" ? (
-            <EmptyState
-              title="Weather unavailable"
-              description={user?.role === "ADMIN" ? (
-                <>
-                  Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
-                </>
-              ) : "Ask an admin to set the store postcode in Settings."}
-            />
-          ) : (
-            <EmptyState title="Weather temporarily unavailable" description={weather.message || "Forecast data could not be loaded right now."} />
-          )}
+                ) : (
+                  <div className="dashboard-weather-strip-empty">
+                    Trading-hour change points are unavailable right now.
+                  </div>
+                )}
+              </div>
+            ) : weather.status === "missing_location" ? (
+              <EmptyState
+                title="Weather unavailable"
+                description={user?.role === "ADMIN" ? (
+                  <>
+                    Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
+                  </>
+                ) : "Ask an admin to set the store postcode in Settings."}
+              />
+            ) : (
+              <EmptyState title="Weather temporarily unavailable" description={weather.message || "Forecast data could not be loaded right now."} />
+            )}
+          </div>
         </SurfaceCard>
 
-        <SurfaceCard className="dashboard-staff-strip" aria-label="Staff today">
+        <SurfaceCard className="dashboard-v1-widget dashboard-staff-strip" aria-label="Staff today">
           <SectionHeader
             title="Staff Today"
             actions={(
@@ -811,45 +815,47 @@ export const DashboardPage = () => {
             )}
           />
 
-          {!staffToday || !staffTomorrow ? (
-            <EmptyState title="Loading rota summary" description="Fetching today and tomorrow’s staffing coverage." />
-          ) : (
-            <div className="dashboard-staff-roster-grid">
-              {[
-                { label: "Today", staffDay: staffToday },
-                { label: "Tomorrow", staffDay: staffTomorrow },
-              ].map(({ label, staffDay }) => (
-                <section key={label} className="dashboard-staff-roster-column">
-                  <div className="dashboard-staff-roster-header">
-                    <span className="metric-label dashboard-metric-label">{label}</span>
-                  </div>
+          <div className="dashboard-v1-widget-body">
+            {!staffToday || !staffTomorrow ? (
+              <EmptyState title="Loading rota summary" description="Fetching today and tomorrow’s staffing coverage." />
+            ) : (
+              <div className="dashboard-staff-roster-grid">
+                {[
+                  { label: "Today", staffDay: staffToday },
+                  { label: "Tomorrow", staffDay: staffTomorrow },
+                ].map(({ label, staffDay }) => (
+                  <section key={label} className="dashboard-staff-roster-column">
+                    <div className="dashboard-staff-roster-header">
+                      <span className="metric-label dashboard-metric-label">{label}</span>
+                    </div>
 
-                  {staffDay.summary.isClosed ? (
-                    <div className="dashboard-staff-roster-closed">
-                      {staffDay.summary.closedReason ?? "Store closed"}
-                    </div>
-                  ) : staffDay.staff.length || (staffDay.holidayStaff ?? []).length ? (
-                    <div className="dashboard-staff-roster-list">
-                      {staffDay.staff.map((entry) => (
-                        <div key={`${label}-${entry.staffId}-${entry.shiftType}`} className="dashboard-staff-roster-row">
-                          <span className="dashboard-staff-roster-name">{entry.name}</span>
-                          <span className="status-badge status-info">{getShiftBadgeLabel(entry.shiftType)}</span>
-                        </div>
-                      ))}
-                      {(staffDay.holidayStaff ?? []).map((entry) => (
-                        <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-roster-row dashboard-staff-roster-row-muted">
-                          <span className="dashboard-staff-roster-name">{entry.name}</span>
-                          <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="dashboard-staff-roster-empty">No staff scheduled</div>
-                  )}
-                </section>
-              ))}
-            </div>
-          )}
+                    {staffDay.summary.isClosed ? (
+                      <div className="dashboard-staff-roster-closed">
+                        {staffDay.summary.closedReason ?? "Store closed"}
+                      </div>
+                    ) : staffDay.staff.length || (staffDay.holidayStaff ?? []).length ? (
+                      <div className="dashboard-staff-roster-list">
+                        {staffDay.staff.map((entry) => (
+                          <div key={`${label}-${entry.staffId}-${entry.shiftType}`} className="dashboard-staff-roster-row">
+                            <span className="dashboard-staff-roster-name">{entry.name}</span>
+                            <span className="status-badge status-info">{getShiftBadgeLabel(entry.shiftType)}</span>
+                          </div>
+                        ))}
+                        {(staffDay.holidayStaff ?? []).map((entry) => (
+                          <div key={`${label}-holiday-${entry.staffId}`} className="dashboard-staff-roster-row dashboard-staff-roster-row-muted">
+                            <span className="dashboard-staff-roster-name">{entry.name}</span>
+                            <span className="status-badge">{getShiftBadgeLabel(entry.shiftType)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="dashboard-staff-roster-empty">No staff scheduled</div>
+                    )}
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
         </SurfaceCard>
       </div>
       </div>
