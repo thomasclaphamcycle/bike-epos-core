@@ -253,13 +253,19 @@ export const StaffManagementPage = () => {
   };
 
   const resetPin = async (userId: string) => {
+    const pin = pinInputs[userId]?.trim() ?? "";
+    if (!/^\d{4}$/.test(pin)) {
+      error("PIN must be exactly 4 digits");
+      return;
+    }
+
     try {
       await apiPost(`/api/admin/users/${encodeURIComponent(userId)}/reset-pin`);
       success("PIN reset");
       setPinInputs((current) => ({ ...current, [userId]: "" }));
       await loadUsers();
     } catch (resetError) {
-      error(resetError instanceof Error ? resetError.message : "Failed to reset PIN");
+      error(resetError instanceof Error ? resetError.message : "Failed to set PIN");
     }
   };
 

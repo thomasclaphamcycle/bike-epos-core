@@ -47,5 +47,9 @@ POST http://localhost:3000/api/admin/users/replace-with-user-id/set-pin
 Content-Type: application/json
 
 {
+<<<<<<< HEAD
   "pin": "2468"
+=======
+  "pin": "9999"
+>>>>>>> feat/staff-set-pin
 }

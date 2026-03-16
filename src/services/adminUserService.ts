@@ -317,10 +317,18 @@ export const adminSetUserPin = async (
       throw new HttpError(403, "Cannot set PIN for a higher-privileged user", "INSUFFICIENT_ROLE");
     }
 
+<<<<<<< HEAD
     const updated = await tx.user.update({
       where: { id: existing.id },
       data: {
         pinHash: await hashPin(normalizedPin),
+=======
+    const pinHash = await hashPin(normalizedPin);
+    const updated = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        pinHash,
+>>>>>>> feat/staff-set-pin
       },
     });
 
