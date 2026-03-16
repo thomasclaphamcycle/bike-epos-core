@@ -50,7 +50,7 @@ type WorkshopCheckoutResult = {
 const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
-    (error.code === "P2002" || error.code === "P2034")
+    (error.code === "P2002" || error.code === "P2034" || error.code === "P2028")
   ) {
     return true;
   }
@@ -83,8 +83,6 @@ const withWorkshopCheckoutTransaction = <T>(
 
 const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promise<WorkshopCheckoutResult | null> =>
   withWorkshopCheckoutTransaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
-
     const workshopJob = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
     });
@@ -157,9 +155,15 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promis
 
 const recoverWorkshopCheckoutRace = async (workshopJobId: string) => {
   for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS; attempt += 1) {
-    const recovered = await loadExistingWorkshopCheckoutResult(workshopJobId);
-    if (recovered) {
-      return recovered;
+    try {
+      const recovered = await loadExistingWorkshopCheckoutResult(workshopJobId);
+      if (recovered) {
+        return recovered;
+      }
+    } catch (error) {
+      if (!isRecoverableWorkshopCheckoutRace(error)) {
+        throw error;
+      }
     }
 
     if (attempt < WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS - 1) {
