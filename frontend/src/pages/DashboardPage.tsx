@@ -140,7 +140,6 @@ type DashboardActionLink = {
   label: string;
   to?: string;
   disabledReason?: string;
-  emphasize?: boolean;
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
@@ -319,8 +318,8 @@ const DashboardStatCard = ({ label, value, detail }: DashboardStatCardProps) => 
   </div>
 );
 
-const DashboardActionButton = ({ label, to, disabledReason, emphasize = false }: DashboardActionLink) => {
-  const className = `button-link dashboard-link-card${emphasize ? " dashboard-link-card-primary" : ""}`;
+const DashboardActionButton = ({ label, to, disabledReason }: DashboardActionLink) => {
+  const className = "button-link dashboard-link-card";
 
   if (!to) {
     return (
@@ -639,7 +638,7 @@ export const DashboardPage = () => {
         : undefined;
 
     return [
-      { label: "New Sale", to: "/pos", emphasize: true },
+      { label: "New Sale", to: "/pos" },
       { label: "New Workshop Job", to: "/workshop/check-in" },
       { label: "Customer Search", to: "/customers" },
       {
