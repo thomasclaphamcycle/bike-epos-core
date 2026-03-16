@@ -1070,7 +1070,7 @@ th {
   flex-wrap: wrap;
   justify-content: center;
   align-items: stretch;
-  gap: 0;
+  gap: 12px;
 }
 
 .dashboard-weather-timeline-point {
@@ -1080,25 +1080,9 @@ th {
   gap: 5px;
   min-width: 82px;
   min-height: 114px;
-  padding: 3px 9px;
+  padding: 3px 8px;
   color: #42576d;
-  position: relative;
   text-align: center;
-}
-
-.dashboard-weather-timeline-point::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 50%;
-  width: 1px;
-  height: 16px;
-  background: rgba(191, 209, 228, 0.68);
-  transform: translateY(-50%);
-}
-
-.dashboard-weather-timeline-point:last-child::after {
-  display: none;
 }
 
 .dashboard-weather-timeline-hour {
@@ -1154,22 +1138,10 @@ th {
   justify-items: center;
   align-content: center;
   gap: 7px;
-  padding-left: 10px;
+  padding-left: 18px;
   color: #5f7185;
   font-size: 0.79rem;
-  position: relative;
   align-self: stretch;
-}
-
-.dashboard-weather-tomorrow-inline::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 1px;
-  height: 24px;
-  background: rgba(191, 209, 228, 0.72);
-  transform: translateY(-50%);
 }
 
 .dashboard-weather-tomorrow-symbol {
@@ -1455,7 +1427,7 @@ th {
 
 .dashboard-staff-roster-list {
   display: grid;
-  gap: 2px;
+  gap: 8px;
 }
 
 .dashboard-staff-roster-row {
@@ -1463,14 +1435,9 @@ th {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 28px;
-  padding: 4px 0;
-  border-bottom: 1px solid rgba(217, 227, 236, 0.6);
+  min-height: 30px;
+  padding: 2px 0;
   color: #14293f;
-}
-
-.dashboard-staff-roster-row:last-child {
-  border-bottom: 0;
 }
 
 .dashboard-staff-roster-row-muted {
