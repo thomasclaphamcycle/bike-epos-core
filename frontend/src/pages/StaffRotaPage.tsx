@@ -698,8 +698,8 @@ export const StaffRotaPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
-            <p className="dashboard-v1-kicker">Management / Staff</p>
-            <h1>Staff Rota</h1>
+            <p className="dashboard-v1-kicker">Management / Rota</p>
+            <h1>Rota</h1>
             <p className="muted-text">
               Plan rota coverage inside CorePOS with a simple Monday to Saturday weekly editor. Store Info opening hours and closed-day rules stay as the source of truth for what can be scheduled.
             </p>

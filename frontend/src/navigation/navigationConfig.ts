@@ -314,6 +314,29 @@ export const navigationSections: NavigationSection[] = [
     ],
   },
   {
+    id: "rota",
+    label: "Rota",
+    to: "/management/staff-rota",
+    minimumRole: "MANAGER",
+    matchPrefixes: ["/management/staff-rota"],
+    matchExact: ["/settings/staff-rota"],
+    items: [
+      {
+        kind: "link",
+        label: "Planner",
+        to: "/management/staff-rota",
+        minimumRole: "MANAGER",
+      },
+      {
+        kind: "link",
+        label: "Tools",
+        to: "/management/staff-rota/tools",
+        minimumRole: "MANAGER",
+        matchExact: ["/settings/staff-rota"],
+      },
+    ],
+  },
+  {
     id: "rental",
     label: "Rental",
     to: "/rental/calendar",
@@ -425,12 +448,6 @@ export const navigationSections: NavigationSection[] = [
         to: "/settings/roles-permissions",
         minimumRole: "ADMIN",
         matchExact: ["/management/admin-review"],
-      },
-      {
-        kind: "link",
-        label: "Rota Tools",
-        to: "/settings/staff-rota",
-        minimumRole: "ADMIN",
       },
       {
         kind: "link",

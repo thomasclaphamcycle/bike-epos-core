@@ -284,7 +284,7 @@ export const StaffRotaToolsPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
-            <p className="dashboard-v1-kicker">Management / Staff</p>
+            <p className="dashboard-v1-kicker">Management / Rota</p>
             <h1>Rota Tools</h1>
             <p className="muted-text">
               Keep spreadsheet workflow and closure admin here so the planner stays focused on live scheduling. These tools still use the same canonical rota, closed-day, and Store Info rules as the weekly editor.
