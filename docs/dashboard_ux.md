@@ -13,6 +13,24 @@ Dashboard v1 favors:
 - compact status widgets over charts
 - graceful placeholders where live feeds do not yet exist
 
+## UI Foundation
+
+Dashboard now sits on the shared CorePOS UI foundation layer used by other operational screens.
+
+The current foundation standardizes:
+
+- central colour, spacing, type, radius, shadow, and width tokens in the global frontend stylesheet
+- reusable page primitives for:
+  - page headers
+  - section headers
+  - surface cards
+  - empty states
+- two page-width modes:
+  - standard pages for settings/forms/admin surfaces
+  - workspace pages for broader operational views such as Dashboard and Rota
+
+The foundation is intended to reduce page-by-page styling drift while keeping the app visually consistent with the existing CorePOS direction.
+
 ## Layout Zones
 
 Dashboard v1 uses four zones:

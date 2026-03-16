@@ -6,6 +6,10 @@ import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { HolidayDecisionModal } from "../components/HolidayDecisionModal";
 import { HolidayRequestsPanel, type HolidayRequestItem } from "../components/HolidayRequestsPanel";
+import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { SurfaceCard } from "../components/ui/SurfaceCard";
 
 type RotaShiftType = "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
 type RotaEditorShiftValue = RotaShiftType | "OFF";
@@ -719,27 +723,25 @@ export const StaffRotaPage = () => {
   };
 
   return (
-    <div className="page-shell page-shell-workspace rota-page">
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <p className="dashboard-v1-kicker">Management / Rota</p>
-            <h1>Rota</h1>
-            <p className="muted-text">
-              Plan rota coverage inside CorePOS with a simple Monday to Saturday weekly editor. Store Info opening hours and closed-day rules stay as the source of truth for what can be scheduled.
-            </p>
-          </div>
-          <div className="actions-inline">
-            <button type="button" onClick={() => void loadOverview(selectedPeriodId, true)} disabled={loading || refreshing}>
-              {refreshing ? "Refreshing..." : "Refresh"}
-            </button>
-            <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
-            <Link to="/dashboard">Dashboard</Link>
-            {canEditGrid ? <Link to="/management/staff-rota/tools">Rota Tools</Link> : null}
-            {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
-            {isAdmin ? <Link to="/settings/roles-permissions">Roles & Permissions</Link> : null}
-          </div>
-        </div>
+    <div className="page-shell page-shell-workspace ui-page ui-page--workspace rota-page">
+      <SurfaceCard tone="soft">
+        <PageHeader
+          eyebrow="Management / Rota"
+          title="Rota"
+          description="Plan rota coverage inside CorePOS with a simple Monday to Saturday weekly editor. Store Info opening hours and closed-day rules stay as the source of truth for what can be scheduled."
+          actions={(
+            <div className="actions-inline">
+              <button type="button" onClick={() => void loadOverview(selectedPeriodId, true)} disabled={loading || refreshing}>
+                {refreshing ? "Refreshing..." : "Refresh"}
+              </button>
+              <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
+              <Link to="/dashboard">Dashboard</Link>
+              {canEditGrid ? <Link to="/management/staff-rota/tools">Rota Tools</Link> : null}
+              {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
+              {isAdmin ? <Link to="/settings/roles-permissions">Roles & Permissions</Link> : null}
+            </div>
+          )}
+        />
 
         <div className="dashboard-summary-grid">
           <div className="metric-card">
@@ -767,17 +769,14 @@ export const StaffRotaPage = () => {
             </span>
           </div>
         </div>
-      </section>
+      </SurfaceCard>
 
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Weekly Editor</h2>
-            <p className="muted-text">
-              Switch between the detailed weekly planner and a six-week overview for quick team scanning. Off remains the default state until a live assignment is added.
-            </p>
-          </div>
-          <div className="actions-inline rota-period-controls">
+      <SurfaceCard>
+        <SectionHeader
+          title="Weekly Editor"
+          description="Switch between the detailed weekly planner and a six-week overview for quick team scanning. Off remains the default state until a live assignment is added."
+          actions={(
+            <div className="actions-inline rota-period-controls">
             <div className="rota-view-toggle" role="tablist" aria-label="Rota view mode">
               <button
                 type="button"
@@ -818,8 +817,9 @@ export const StaffRotaPage = () => {
             <button type="button" onClick={() => nextPeriod && goToPeriod(nextPeriod.id)} disabled={!nextPeriod}>
               Next
             </button>
-          </div>
-        </div>
+            </div>
+          )}
+        />
 
         {canEditGrid ? (
           <div className="rota-create-panel">
@@ -847,14 +847,12 @@ export const StaffRotaPage = () => {
         ) : null}
 
         {emptyState ? (
-          <div className="restricted-panel info-panel">
-            <strong>No rota period exists yet.</strong>
-            <div className="muted-text">
-              {canEditGrid
-                ? "Create the first six-week period above, then fill in weekly assignments directly here. Spreadsheet template, export, and update tools are available from Rota Tools."
-                : "Ask a manager or admin to create the first rota period so live staffing can appear on the dashboard and rota pages."}
-            </div>
-          </div>
+          <EmptyState
+            title="No rota period exists yet."
+            description={canEditGrid
+              ? "Create the first six-week period above, then fill in weekly assignments directly here. Spreadsheet template, export, and update tools are available from Rota Tools."
+              : "Ask a manager or admin to create the first rota period so live staffing can appear on the dashboard and rota pages."}
+          />
         ) : currentPeriod ? (
           <>
             <div className="rota-period-summary">
@@ -1047,9 +1045,11 @@ export const StaffRotaPage = () => {
                     )) : (
                       <tr>
                         <td colSpan={visibleDays.length + 2}>
-                          <div className="restricted-panel info-panel">
-                            No staff match the current rota filters.
-                          </div>
+                          <EmptyState
+                            title="No staff match the current rota filters."
+                            description="Adjust staff view, role, or search filters to widen the planner."
+                            className="rota-empty-state"
+                          />
                         </td>
                       </tr>
                     )}
@@ -1145,23 +1145,23 @@ export const StaffRotaPage = () => {
                     </div>
                   </section>
                 )) : (
-                  <div className="restricted-panel info-panel">
-                    No staff match the current rota filters.
-                  </div>
+                  <EmptyState
+                    title="No staff match the current rota filters."
+                    description="Adjust staff view, role, or search filters to widen the six-week overview."
+                    className="rota-empty-state"
+                  />
                 )}
               </div>
             )}
           </>
         ) : null}
-      </section>
+      </SurfaceCard>
 
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Holiday Requests</h2>
-            <p className="muted-text">Keep pending leave decisions close to the planner. Approved requests still write back into the live rota as HOLIDAY assignments.</p>
-          </div>
-        </div>
+      <SurfaceCard>
+        <SectionHeader
+          title="Holiday Requests"
+          description="Keep pending leave decisions close to the planner. Approved requests still write back into the live rota as HOLIDAY assignments."
+        />
 
         <HolidayRequestsPanel
           title="Holiday Requests"
@@ -1190,7 +1190,7 @@ export const StaffRotaPage = () => {
               : `No ${holidayRequestFilter.toLowerCase()} holiday requests in this view yet.`
           }
         />
-      </section>
+      </SurfaceCard>
 
       <HolidayDecisionModal
         open={Boolean(decisionModalState)}

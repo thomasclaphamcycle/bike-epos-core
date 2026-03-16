@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { SurfaceCard } from "../components/ui/SurfaceCard";
 
 const STORE_WEEKDAYS = [
   { key: "MONDAY", label: "Monday" },
@@ -338,20 +342,19 @@ export const SystemSettingsPage = () => {
   };
 
   return (
-    <div className="page-shell">
-      <section className="card store-info-hero">
-        <div className="card-header-row">
-          <div>
-            <h1>Store Info</h1>
-            <p className="muted-text">
-              Central business identity settings for receipts, customer communications, printed documents, and future storefront/profile surfaces.
-            </p>
-          </div>
-          <div className="actions-inline">
-            <Link to="/settings/receipts">Receipts</Link>
-            <Link to="/settings/integrations">Integrations</Link>
-          </div>
-        </div>
+    <div className="page-shell ui-page">
+      <SurfaceCard className="store-info-hero" tone="soft">
+        <PageHeader
+          eyebrow="Settings / Store Info"
+          title="Store Info"
+          description="Central business identity settings for receipts, customer communications, printed documents, and future storefront and profile surfaces."
+          actions={(
+            <div className="actions-inline">
+              <Link to="/settings/receipts">Receipts</Link>
+              <Link to="/settings/integrations">Integrations</Link>
+            </div>
+          )}
+        />
 
         <div className="dashboard-summary-grid">
           <div className="metric-card">
@@ -376,25 +379,27 @@ export const SystemSettingsPage = () => {
         <div className="restricted-panel info-panel">
           Store Info is the app-level source of truth for the shop&apos;s identity, opening hours, and other shared operational settings. Receipt settings stay compatible automatically, and weather plus rota features use the saved store schedule data.
         </div>
-      </section>
+      </SurfaceCard>
 
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Business Details</h2>
-            <p className="muted-text">Define how the shop should identify itself across customer-facing and operational surfaces.</p>
-          </div>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => void saveStoreInfo()}
-            disabled={!store || !isDirty || hasValidationErrors || saving}
-          >
-            {saving ? "Saving..." : "Save Store Info"}
-          </button>
-        </div>
+      <SurfaceCard>
+        <SectionHeader
+          title="Business Details"
+          description="Define how the shop should identify itself across customer-facing and operational surfaces."
+          actions={(
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void saveStoreInfo()}
+              disabled={!store || !isDirty || hasValidationErrors || saving}
+            >
+              {saving ? "Saving..." : "Save Store Info"}
+            </button>
+          )}
+        />
 
-        {loading ? <p className="muted-text">Loading Store Info...</p> : null}
+        {loading ? (
+          <EmptyState title="Loading Store Info" description="Fetching the current store profile, contact details, and opening hours." />
+        ) : null}
 
         {!loading && store ? (
           <div className="store-info-sections">
@@ -638,7 +643,7 @@ export const SystemSettingsPage = () => {
             </section>
           </div>
         ) : null}
-      </section>
+      </SurfaceCard>
 
       <section className="card">
         <div className="card-header-row">

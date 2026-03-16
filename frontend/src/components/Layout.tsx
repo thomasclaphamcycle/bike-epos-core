@@ -14,6 +14,7 @@ import {
 const envLabel = import.meta.env.MODE || "development";
 
 const workspacePagePrefixes = [
+  "/dashboard",
   "/management/staff-rota",
 ];
 

@@ -9,6 +9,10 @@ import {
 } from "../api/financialReports";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/ui/PageHeader";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { SurfaceCard } from "../components/ui/SurfaceCard";
+import { EmptyState } from "../components/ui/EmptyState";
 
 type SalesDailyRow = {
   date: string;
@@ -747,43 +751,41 @@ export const DashboardPage = () => {
   const weatherSummaryLine = useMemo(() => buildWeatherChangeSummary(tradingWeatherTimeline), [tradingWeatherTimeline]);
 
   return (
-    <div className="page-shell dashboard-v1">
-      <section className="card dashboard-v1-header">
-        <div className="dashboard-v1-header-main">
-          <div>
-            <p className="dashboard-v1-kicker">Operational Control Centre</p>
-            <h1>Hello {firstName}</h1>
-            <p className="muted-text">
-              {headerDateLabel} · {headerGreetingContext} · {headerTimeLabel}
-            </p>
-          </div>
-          <div className="dashboard-v1-header-actions">
-            <div>
-              <p className="dashboard-v1-section-kicker">Quick Actions</p>
-              <p className="muted-text">Open the core front-of-house tools without leaving the dashboard.</p>
+    <div className="page-shell page-shell-workspace ui-page ui-page--workspace dashboard-v1">
+      <SurfaceCard className="dashboard-v1-header ui-surface-card--soft">
+        <PageHeader
+          eyebrow="Operational Control Centre"
+          title={`Hello ${firstName}`}
+          description={`${headerDateLabel} · ${headerGreetingContext} · ${headerTimeLabel}`}
+          actions={(
+            <div className="dashboard-v1-header-actions">
+              <div>
+                <p className="dashboard-v1-section-kicker">Quick Actions</p>
+                <p className="muted-text">Open the core front-of-house tools without leaving the dashboard.</p>
+              </div>
+              <div className="actions-inline">
+                <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
+                  {loading ? "Refreshing..." : "Refresh dashboard"}
+                </button>
+              </div>
             </div>
-            <div className="actions-inline">
-              <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
-                {loading ? "Refreshing..." : "Refresh dashboard"}
-              </button>
-            </div>
-          </div>
-        </div>
+          )}
+        />
         <div className="dashboard-link-grid">
           {quickActions.map((action) => (
             <DashboardActionButton key={action.label} {...action} />
           ))}
         </div>
-      </section>
+      </SurfaceCard>
 
-      <section className="card dashboard-weather-strip" aria-label="Trading weather">
+      <SurfaceCard className="dashboard-weather-strip" aria-label="Trading weather">
         {!weather ? (
-          <div className="restricted-panel info-panel">Loading weather…</div>
+          <EmptyState title="Loading weather" description="Fetching the latest trading-hour forecast." />
         ) : weather.status === "ready" && weather.today ? (
           <div className="dashboard-weather-strip-content">
             <div className="dashboard-weather-strip-head">
               <div>
-                <p className="dashboard-v1-section-kicker">Trading Weather</p>
+                <p className="ui-section-eyebrow">Trading Weather</p>
                 <strong className="dashboard-weather-strip-title">
                   {weatherSummaryLine}
                 </strong>
@@ -844,33 +846,27 @@ export const DashboardPage = () => {
             ) : null}
           </div>
         ) : weather.status === "missing_location" ? (
-          <div className="restricted-panel info-panel">
-            {user?.role === "ADMIN" ? (
+          <EmptyState
+            title="Weather unavailable"
+            description={user?.role === "ADMIN" ? (
               <>
-                Weather unavailable. Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
+                Set the store postcode in <Link to="/settings/store-info">Settings</Link>.
               </>
-            ) : (
-              "Weather unavailable. Ask an admin to set the store postcode in Settings."
-            )}
-          </div>
+            ) : "Ask an admin to set the store postcode in Settings."}
+          />
         ) : (
-          <div className="restricted-panel info-panel">
-            {weather.message || "Weather temporarily unavailable."}
-          </div>
+          <EmptyState title="Weather temporarily unavailable" description={weather.message || "Forecast data could not be loaded right now."} />
         )}
-      </section>
+      </SurfaceCard>
 
       <section className="dashboard-v1-group">
-        <div className="dashboard-v1-group-header">
-          <div>
-            <p className="dashboard-v1-section-kicker">Row 1</p>
-            <h2>Financial</h2>
-          </div>
-          <p className="muted-text">
-            Month to date versus last year {monthDeltaLabel}.
-          </p>
-        </div>
-        <div className="dashboard-summary-grid dashboard-v1-kpis">
+        <SectionHeader
+          eyebrow="Row 1"
+          title="Financial"
+          description={`Month to date versus last year ${monthDeltaLabel}.`}
+          className="dashboard-v1-group-header"
+        />
+        <div className="dashboard-summary-grid dashboard-v1-kpis ui-kpi-grid">
           <DashboardMetricCard
             label="Sales Today"
             value={salesToday ? formatMoney(salesToday.netPence) : "—"}
@@ -919,15 +915,14 @@ export const DashboardPage = () => {
       </section>
 
       <section className="dashboard-v1-group">
-        <div className="dashboard-v1-group-header">
-          <div>
-            <p className="dashboard-v1-section-kicker">Row 2</p>
-            <h2>Operations</h2>
-          </div>
-          <p className="muted-text">Today’s operational flow across alerts, workshop load, and rentals.</p>
-        </div>
+        <SectionHeader
+          eyebrow="Row 2"
+          title="Operations"
+          description="Today’s operational flow across alerts, workshop load, and rentals."
+          className="dashboard-v1-group-header"
+        />
         <div className="dashboard-v1-main-row">
-        <section className="card dashboard-v1-widget dashboard-v1-action-centre">
+        <SurfaceCard className="dashboard-v1-widget dashboard-v1-action-centre">
           <div className="card-header-row">
             <div>
               <h2>Action Centre</h2>
@@ -961,18 +956,20 @@ export const DashboardPage = () => {
                 })}
               </div>
             ) : (
-              <div className="restricted-panel info-panel">
-                No operational alerts need action right now. The full management action centre still holds broader grouped oversight queues outside this dashboard.
-              </div>
+              <EmptyState
+                title="No operational alerts"
+                description="The full management action centre still holds broader grouped oversight queues outside this dashboard."
+              />
             )
           ) : (
-            <div className="restricted-panel info-panel">
-              Action Centre is available to managers. Staff can jump directly into POS, workshop, customers, and inventory from the quick actions above.
-            </div>
+            <EmptyState
+              title="Manager view"
+              description="Action Centre is available to managers. Staff can jump directly into POS, workshop, customers, and inventory from the quick actions above."
+            />
           )}
-        </section>
+        </SurfaceCard>
 
-        <section className="card dashboard-v1-widget">
+        <SurfaceCard className="dashboard-v1-widget">
           <div className="card-header-row">
             <div>
               <h2>Workshop Snapshot</h2>
@@ -1008,9 +1005,9 @@ export const DashboardPage = () => {
               <span className="dashboard-metric-detail">Completed jobs ready for customer handover.</span>
             </div>
           </div>
-        </section>
+        </SurfaceCard>
 
-        <section className="card dashboard-v1-widget">
+        <SurfaceCard className="dashboard-v1-widget">
           <div className="card-header-row">
             <div>
               <h2>Rentals</h2>
@@ -1048,24 +1045,24 @@ export const DashboardPage = () => {
               </div>
             </div>
           ) : (
-            <div className="restricted-panel info-panel">
-              Rental operations are configured for manager access only on this deployment. The widget remains in place so the dashboard structure is consistent when rental access is enabled.
-            </div>
+            <EmptyState
+              title="Manager view"
+              description="Rental operations are configured for manager access only on this deployment. The widget remains in place so the dashboard structure is consistent when rental access is enabled."
+            />
           )}
-        </section>
+        </SurfaceCard>
         </div>
       </section>
 
       <section className="dashboard-v1-group">
-        <div className="dashboard-v1-group-header">
-          <div>
-            <p className="dashboard-v1-section-kicker">Row 3</p>
-            <h2>People</h2>
-          </div>
-          <p className="muted-text">Staff coverage and local trading context for the day ahead.</p>
-        </div>
+        <SectionHeader
+          eyebrow="Row 3"
+          title="People"
+          description="Staff coverage and local trading context for the day ahead."
+          className="dashboard-v1-group-header"
+        />
         <div className="dashboard-v1-lower-row">
-        <section className="card dashboard-v1-widget">
+        <SurfaceCard className="dashboard-v1-widget">
           <div className="card-header-row">
             <div>
               <h2>Staff Today</h2>
@@ -1079,7 +1076,7 @@ export const DashboardPage = () => {
           </div>
 
           {!staffToday || !staffTomorrow ? (
-            <div className="restricted-panel info-panel">Loading rota summary...</div>
+            <EmptyState title="Loading rota summary" description="Fetching today and tomorrow’s staffing coverage." />
           ) : (
             <div className="dashboard-staff-summary">
               {[
@@ -1098,7 +1095,7 @@ export const DashboardPage = () => {
                   </div>
 
                   {staffDay.summary.isClosed ? (
-                    <div className="restricted-panel info-panel">Store closed</div>
+                    <EmptyState title="Store closed" description={staffDay.summary.closedReason ?? "No trading hours for this day."} />
                   ) : staffDay.staff.length ? (
                     <div className="dashboard-staff-chip-list">
                       {staffDay.staff.map((entry) => (
@@ -1124,13 +1121,13 @@ export const DashboardPage = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="restricted-panel info-panel">No staff scheduled</div>
+                    <EmptyState title="No staff scheduled" description="No live rota assignments exist for this day yet." />
                   )}
                 </section>
               ))}
             </div>
           )}
-        </section>
+        </SurfaceCard>
         </div>
       </section>
 
