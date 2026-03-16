@@ -7,6 +7,7 @@ import {
   cancelWorkshopJobHandler,
   changeWorkshopJobStatusHandler,
   closeWorkshopJobHandler,
+  convertWorkshopJobToSaleHandler,
   checkoutWorkshopJobHandler,
   createWorkshopJobHandler,
   deleteWorkshopJobLineHandler,
@@ -42,4 +43,5 @@ workshopRouter.post("/jobs/:id/approval", requireRoleAtLeast("STAFF"), setWorksh
 workshopRouter.post("/jobs/:id/notes", requireRoleAtLeast("STAFF"), addWorkshopJobNoteHandler);
 workshopRouter.get("/jobs/:id/notes", requireRoleAtLeast("STAFF"), getWorkshopJobNotesHandler);
 workshopRouter.post("/jobs/:id/checkout", requireRoleAtLeast("STAFF"), checkoutWorkshopJobHandler);
+workshopRouter.post("/jobs/:id/convert-to-sale", requireRoleAtLeast("STAFF"), convertWorkshopJobToSaleHandler);
 workshopRouter.post("/jobs/:id/cancel", requireRoleAtLeast("STAFF"), cancelWorkshopJobHandler);
