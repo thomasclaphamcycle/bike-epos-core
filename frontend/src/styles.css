@@ -1049,7 +1049,8 @@ th {
 
 .dashboard-weather-timeline {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  justify-content: center;
   gap: 8px;
   padding: 8px 9px;
   border: 1px solid #d9e3ec;
@@ -1063,6 +1064,7 @@ th {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: stretch;
   gap: 0;
 }
@@ -1072,7 +1074,8 @@ th {
   justify-items: center;
   align-content: center;
   gap: 5px;
-  min-width: 78px;
+  min-width: 82px;
+  min-height: 114px;
   padding: 3px 9px;
   color: #42576d;
   position: relative;
@@ -1141,14 +1144,15 @@ th {
 .dashboard-weather-tomorrow-inline {
   flex: 0 0 auto;
   min-width: 118px;
-  max-width: 132px;
+  max-width: 136px;
+  min-height: 114px;
   display: grid;
   justify-items: center;
-  gap: 6px;
+  align-content: center;
+  gap: 7px;
   padding-left: 10px;
   color: #5f7185;
   font-size: 0.79rem;
-  align-content: center;
   position: relative;
   align-self: stretch;
 }
@@ -1166,6 +1170,13 @@ th {
 
 .dashboard-weather-tomorrow-symbol {
   font-size: 2rem;
+  line-height: 1;
+}
+
+.dashboard-weather-tomorrow-temp {
+  color: #14293f;
+  font-size: 1.1rem;
+  font-weight: 700;
   line-height: 1;
 }
 

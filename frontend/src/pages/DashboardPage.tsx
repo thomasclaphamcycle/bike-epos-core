@@ -629,6 +629,7 @@ export const DashboardPage = () => {
     return [
       { label: "New Sale", to: "/pos" },
       { label: "New Workshop Job", to: "/workshop/check-in" },
+      { label: "Sales History", to: "/sales-history/transactions" },
       { label: "Customer Search", to: "/customers" },
       {
         label: "View Rota",
@@ -776,6 +777,7 @@ export const DashboardPage = () => {
                       >
                         {weatherGlyph[tomorrowWeatherKindFromSummary(weather.tomorrow.summary)]}
                       </span>
+                      <span className="dashboard-weather-tomorrow-temp">{Math.round(weather.tomorrow.highC)}°</span>
                     </div>
                   ) : null}
                 </div>
@@ -908,7 +910,6 @@ export const DashboardPage = () => {
         <SurfaceCard className="dashboard-v1-widget dashboard-v1-action-centre">
           <SectionHeader
             title="Action Centre"
-            description="Top operational alerts only. Open the linked area to resolve the issue."
             actions={canViewManagerWidgets ? <Link to="/management/actions">Open full queue</Link> : null}
           />
 
@@ -955,7 +956,6 @@ export const DashboardPage = () => {
         <SurfaceCard className="dashboard-v1-widget">
           <SectionHeader
             title="Workshop Snapshot"
-            description="A fast count of jobs waiting, active, ready for pickup, and still open."
             actions={(
               <div className="actions-inline">
                 <Link to="/workshop">Job Board</Link>
@@ -1000,7 +1000,6 @@ export const DashboardPage = () => {
         <SurfaceCard className="dashboard-v1-widget">
           <SectionHeader
             title="Rentals"
-            description="Today and tomorrow’s hire desk handoffs without opening the full rental workspace."
             actions={canViewManagerWidgets ? <Link to="/rental/calendar">Rental Calendar</Link> : null}
           />
 
