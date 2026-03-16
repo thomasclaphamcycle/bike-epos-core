@@ -2235,6 +2235,30 @@ th {
   margin-bottom: 10px;
 }
 
+.rota-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #d8e1ec;
+  border-radius: 999px;
+  background: #f5f8fc;
+}
+
+.rota-view-toggle button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #475569;
+  padding: 8px 12px;
+}
+
+.rota-view-toggle button.is-active {
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+}
+
 .rota-filter-summary {
   margin: 0 0 12px;
 }
@@ -2289,8 +2313,28 @@ th {
   color: #64748b;
 }
 
+.rota-overview-wrap {
+  padding-bottom: 4px;
+}
+
+.rota-overview-grid {
+  min-width: 1880px;
+}
+
+.rota-overview-week-group {
+  border-left: 1px solid #d8e1ec;
+}
+
+.rota-overview-week-group:first-of-type {
+  border-left: 0;
+}
+
 .rota-day-heading {
   min-width: 110px;
+}
+
+.rota-overview-day-heading {
+  min-width: 76px;
 }
 
 .rota-day-heading-copy {
@@ -2308,6 +2352,14 @@ th {
 
 .rota-day-heading-closed {
   background: #fff7e8;
+}
+
+.rota-overview-day-today {
+  background: #e9f3ff !important;
+}
+
+.rota-overview-day-closed {
+  background: #fff6e5 !important;
 }
 
 .rota-day-hours {
@@ -2377,6 +2429,42 @@ th {
 .rota-cell-content {
   display: grid;
   gap: 6px;
+}
+
+.rota-overview-cell {
+  min-width: 76px;
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.rota-overview-cell-content {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.rota-overview-pill {
+  min-width: 52px;
+  padding-inline: 8px;
+}
+
+.rota-overview-source {
+  font-size: 0.72rem;
+}
+
+.rota-overview-closed-label {
+  display: inline-block;
+  line-height: 1.25;
+  font-size: 0.74rem;
+}
+
+.rota-overview-row-current-user > .rota-sticky,
+.rota-overview-row-current-user > td {
+  background: #f3f9ff;
+}
+
+.rota-overview-row-current-user > .rota-sticky .rota-staff-name-copy span:first-child {
+  color: #0f4c81;
 }
 
 .rota-cell-note {
@@ -2543,6 +2631,21 @@ th {
   .rota-page .rota-review-grid td {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+}
+
+@media (max-width: 900px) {
+  .rota-view-toggle {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .rota-view-toggle button {
+    flex: 1 1 0;
+  }
+
+  .rota-overview-grid {
+    min-width: 1320px;
   }
 }
 
