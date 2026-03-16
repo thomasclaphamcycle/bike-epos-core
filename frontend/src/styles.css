@@ -893,21 +893,28 @@ th {
 .dashboard-v1 {
   display: grid;
   gap: var(--cp-space-6);
-  padding: 18px;
+  padding: var(--cp-space-4);
   border-radius: var(--cp-radius-lg);
   background:
     radial-gradient(circle at top right, rgba(243, 149, 39, 0.08), transparent 28%),
     linear-gradient(180deg, #f6f8fb 0%, #eef2f7 100%);
 }
 
+.dashboard-hero-stack {
+  display: grid;
+  gap: var(--cp-space-4);
+}
+
 .dashboard-v1-header {
   display: grid;
   gap: 18px;
+  padding: var(--cp-space-5);
 }
 
 .dashboard-weather-strip {
   display: grid;
   gap: 12px;
+  padding: var(--cp-space-4);
 }
 
 .dashboard-weather-strip-content {
@@ -1026,17 +1033,7 @@ th {
 }
 
 .dashboard-v1-group-header {
-  display: flex;
-  justify-content: space-between;
   align-items: end;
-  gap: 14px;
-}
-
-.dashboard-v1-header-main {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: start;
 }
 
 .dashboard-v1-header-actions {
@@ -1065,6 +1062,12 @@ th {
 
 .dashboard-v1-kpis {
   margin-top: 0;
+}
+
+.dashboard-metric-card {
+  min-height: 148px;
+  align-content: start;
+  gap: var(--cp-space-2);
 }
 
 .dashboard-metric-label {
@@ -1102,21 +1105,31 @@ th {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr));
   gap: 18px;
+  align-items: start;
 }
 
 .dashboard-v1-lower-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
 .dashboard-v1-widget {
   display: grid;
   gap: 16px;
+  padding: var(--cp-space-4);
 }
 
 .dashboard-v1-action-centre {
   align-self: start;
+}
+
+.dashboard-v1-widget .ui-section-header {
+  align-items: start;
+}
+
+.dashboard-v1-widget--people {
+  max-width: 980px;
 }
 
 .dashboard-action-list {
@@ -1203,6 +1216,7 @@ th {
   padding: 14px;
   display: grid;
   gap: 6px;
+  min-height: 124px;
 }
 
 .dashboard-staff-summary {
@@ -1220,6 +1234,10 @@ th {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     0 1px 2px rgba(8, 15, 31, 0.03);
+}
+
+.dashboard-staff-day-card .ui-empty-state {
+  padding: var(--cp-space-4);
 }
 
 .dashboard-staff-day-header {
@@ -1373,10 +1391,6 @@ th {
 }
 
 @media (max-width: 720px) {
-  .dashboard-v1-header-main {
-    flex-direction: column;
-  }
-
   .dashboard-v1-header-actions {
     justify-items: start;
   }

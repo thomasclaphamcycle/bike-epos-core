@@ -306,15 +306,29 @@ const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }
   );
 
   return href ? (
-    <Link className="metric-card dashboard-metric-card-link" to={href}>
+    <Link className="metric-card dashboard-metric-card dashboard-metric-card-link" to={href}>
       {content}
     </Link>
   ) : (
-    <div className="metric-card">
+    <div className="metric-card dashboard-metric-card">
       {content}
     </div>
   );
 };
+
+type DashboardStatCardProps = {
+  label: string;
+  value: string | number;
+  detail: string;
+};
+
+const DashboardStatCard = ({ label, value, detail }: DashboardStatCardProps) => (
+  <div className="dashboard-v1-stat-card">
+    <span className="metric-label dashboard-metric-label">{label}</span>
+    <strong className="metric-value">{value}</strong>
+    <span className="dashboard-metric-detail">{detail}</span>
+  </div>
+);
 
 const DashboardActionButton = ({ label, to, disabledReason, emphasize = false }: DashboardActionLink) => {
   const className = `button-link dashboard-link-card${emphasize ? " dashboard-link-card-primary" : ""}`;
@@ -752,6 +766,7 @@ export const DashboardPage = () => {
 
   return (
     <div className="page-shell page-shell-workspace ui-page ui-page--workspace dashboard-v1">
+      <div className="dashboard-hero-stack">
       <SurfaceCard className="dashboard-v1-header ui-surface-card--soft">
         <PageHeader
           eyebrow="Operational Control Centre"
@@ -858,6 +873,7 @@ export const DashboardPage = () => {
           <EmptyState title="Weather temporarily unavailable" description={weather.message || "Forecast data could not be loaded right now."} />
         )}
       </SurfaceCard>
+      </div>
 
       <section className="dashboard-v1-group">
         <SectionHeader
@@ -923,13 +939,11 @@ export const DashboardPage = () => {
         />
         <div className="dashboard-v1-main-row">
         <SurfaceCard className="dashboard-v1-widget dashboard-v1-action-centre">
-          <div className="card-header-row">
-            <div>
-              <h2>Action Centre</h2>
-              <p className="muted-text">Top operational alerts only. Open the linked area to resolve the issue.</p>
-            </div>
-            {canViewManagerWidgets ? <Link to="/management/actions">Open full queue</Link> : null}
-          </div>
+          <SectionHeader
+            title="Action Centre"
+            description="Top operational alerts only. Open the linked area to resolve the issue."
+            actions={canViewManagerWidgets ? <Link to="/management/actions">Open full queue</Link> : null}
+          />
 
           {canViewManagerWidgets ? (
             dashboardActionItems.length ? (
@@ -970,79 +984,55 @@ export const DashboardPage = () => {
         </SurfaceCard>
 
         <SurfaceCard className="dashboard-v1-widget">
-          <div className="card-header-row">
-            <div>
-              <h2>Workshop Snapshot</h2>
-              <p className="muted-text">A fast count of jobs waiting, active, ready for pickup, and still open.</p>
-            </div>
-            <div className="actions-inline">
-              <Link to="/workshop">Job Board</Link>
-              <Link to="/workshop/collection">Collection</Link>
-            </div>
-          </div>
+          <SectionHeader
+            title="Workshop Snapshot"
+            description="A fast count of jobs waiting, active, ready for pickup, and still open."
+            actions={(
+              <div className="actions-inline">
+                <Link to="/workshop">Job Board</Link>
+                <Link to="/workshop/collection">Collection</Link>
+              </div>
+            )}
+          />
 
           <div className="dashboard-v1-stat-grid">
-            <div className="dashboard-v1-stat-card">
-              <span className="metric-label dashboard-metric-label">Outstanding</span>
-              <strong className="metric-value">{outstandingWorkshopJobs === null ? "—" : `${outstandingWorkshopJobs}`}</strong>
-              <span className="dashboard-metric-detail">
-                Due today {workshopSummary?.dueToday ?? 0} · Overdue {workshopSummary?.overdue ?? 0}
-              </span>
-            </div>
-            <div className="dashboard-v1-stat-card">
-              <span className="metric-label dashboard-metric-label">Waiting</span>
-              <strong className="metric-value">{workshopSummary ? workshopWaitingCount : "—"}</strong>
-              <span className="dashboard-metric-detail">Jobs waiting for approval, parts, or scheduling decisions.</span>
-            </div>
-            <div className="dashboard-v1-stat-card">
-              <span className="metric-label dashboard-metric-label">In Progress</span>
-              <strong className="metric-value">{workshopSummary ? workshopInProgressCount : "—"}</strong>
-              <span className="dashboard-metric-detail">Active bench work already underway.</span>
-            </div>
-            <div className="dashboard-v1-stat-card">
-              <span className="metric-label dashboard-metric-label">Ready for Pickup</span>
-              <strong className="metric-value">{workshopSummary ? workshopReadyCount : "—"}</strong>
-              <span className="dashboard-metric-detail">Completed jobs ready for customer handover.</span>
-            </div>
+            <DashboardStatCard
+              label="Outstanding"
+              value={outstandingWorkshopJobs === null ? "—" : `${outstandingWorkshopJobs}`}
+              detail={`Due today ${workshopSummary?.dueToday ?? 0} · Overdue ${workshopSummary?.overdue ?? 0}`}
+            />
+            <DashboardStatCard
+              label="Waiting"
+              value={workshopSummary ? workshopWaitingCount : "—"}
+              detail="Jobs waiting for approval, parts, or scheduling decisions."
+            />
+            <DashboardStatCard
+              label="In Progress"
+              value={workshopSummary ? workshopInProgressCount : "—"}
+              detail="Active bench work already underway."
+            />
+            <DashboardStatCard
+              label="Ready for Pickup"
+              value={workshopSummary ? workshopReadyCount : "—"}
+              detail="Completed jobs ready for customer handover."
+            />
           </div>
         </SurfaceCard>
 
         <SurfaceCard className="dashboard-v1-widget">
-          <div className="card-header-row">
-            <div>
-              <h2>Rentals</h2>
-              <p className="muted-text">Today and tomorrow’s hire desk handoffs without opening the full rental workspace.</p>
-            </div>
-            {canViewManagerWidgets ? <Link to="/rental/calendar">Rental Calendar</Link> : null}
-          </div>
+          <SectionHeader
+            title="Rentals"
+            description="Today and tomorrow’s hire desk handoffs without opening the full rental workspace."
+            actions={canViewManagerWidgets ? <Link to="/rental/calendar">Rental Calendar</Link> : null}
+          />
 
           {canViewManagerWidgets ? (
             <div className="dashboard-v1-stat-grid">
-              <div className="dashboard-v1-stat-card">
-                <span className="metric-label dashboard-metric-label">Pickups Today</span>
-                <strong className="metric-value">{rentalSnapshot.pickupsToday}</strong>
-                <span className="dashboard-metric-detail">Reserved bikes due out today.</span>
-              </div>
-              <div className="dashboard-v1-stat-card">
-                <span className="metric-label dashboard-metric-label">Pickups Tomorrow</span>
-                <strong className="metric-value">{rentalSnapshot.pickupsTomorrow}</strong>
-                <span className="dashboard-metric-detail">Reserved bikes due out tomorrow.</span>
-              </div>
-              <div className="dashboard-v1-stat-card">
-                <span className="metric-label dashboard-metric-label">Returns Today</span>
-                <strong className="metric-value">{rentalSnapshot.returnsToday}</strong>
-                <span className="dashboard-metric-detail">Checked-out bikes expected back today.</span>
-              </div>
-              <div className="dashboard-v1-stat-card">
-                <span className="metric-label dashboard-metric-label">Returns Tomorrow</span>
-                <strong className="metric-value">{rentalSnapshot.returnsTomorrow}</strong>
-                <span className="dashboard-metric-detail">Checked-out bikes expected back tomorrow.</span>
-              </div>
-              <div className="dashboard-v1-stat-card">
-                <span className="metric-label dashboard-metric-label">Overdue</span>
-                <strong className="metric-value">{rentalSnapshot.overdue}</strong>
-                <span className="dashboard-metric-detail">Checked-out rentals already past due back time.</span>
-              </div>
+              <DashboardStatCard label="Pickups Today" value={rentalSnapshot.pickupsToday} detail="Reserved bikes due out today." />
+              <DashboardStatCard label="Pickups Tomorrow" value={rentalSnapshot.pickupsTomorrow} detail="Reserved bikes due out tomorrow." />
+              <DashboardStatCard label="Returns Today" value={rentalSnapshot.returnsToday} detail="Checked-out bikes expected back today." />
+              <DashboardStatCard label="Returns Tomorrow" value={rentalSnapshot.returnsTomorrow} detail="Checked-out bikes expected back tomorrow." />
+              <DashboardStatCard label="Overdue" value={rentalSnapshot.overdue} detail="Checked-out rentals already past due back time." />
             </div>
           ) : (
             <EmptyState
@@ -1062,18 +1052,18 @@ export const DashboardPage = () => {
           className="dashboard-v1-group-header"
         />
         <div className="dashboard-v1-lower-row">
-        <SurfaceCard className="dashboard-v1-widget">
-          <div className="card-header-row">
-            <div>
-              <h2>Staff Today</h2>
-              <p className="muted-text">Today and tomorrow at a glance.</p>
-            </div>
-            <div className="actions-inline">
-              {rotaLink ? (
-                <Link to={rotaLink}>View Rota</Link>
-              ) : null}
-            </div>
-          </div>
+        <SurfaceCard className="dashboard-v1-widget dashboard-v1-widget--people">
+          <SectionHeader
+            title="Staff Today"
+            description="Today and tomorrow at a glance."
+            actions={(
+              <div className="actions-inline">
+                {rotaLink ? (
+                  <Link to={rotaLink}>View Rota</Link>
+                ) : null}
+              </div>
+            )}
+          />
 
           {!staffToday || !staffTomorrow ? (
             <EmptyState title="Loading rota summary" description="Fetching today and tomorrow’s staffing coverage." />

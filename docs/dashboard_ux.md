@@ -17,6 +17,14 @@ Dashboard v1 favors:
 
 Dashboard now sits on the shared CorePOS UI foundation layer used by other operational screens.
 
+Dashboard is the first page expected to fully demonstrate that foundation in practice, with:
+
+- workspace-width layout
+- shared page and section headers
+- consistent KPI tiles
+- consistent operational surface cards
+- shared empty-state treatment across manager and staff views
+
 The current foundation standardizes:
 
 - central colour, spacing, type, radius, shadow, and width tokens in the global frontend stylesheet
