@@ -34,7 +34,6 @@ export const LoginPage = () => {
   const [pinFocused, setPinFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-<<<<<<< HEAD
   const pinInputRef = useRef<HTMLInputElement | null>(null);
   const pinUsers = useMemo(() => users.filter((candidate) => candidate.hasPin), [users]);
 
@@ -42,14 +41,6 @@ export const LoginPage = () => {
     () => pinUsers.find((candidate) => candidate.id === selectedUserId) ?? null,
     [selectedUserId, pinUsers],
   );
-=======
-  const selectedUser = useMemo(
-    () => users.find((candidate) => candidate.id === selectedUserId) || null,
-    [users, selectedUserId],
-  );
-  const noPinSelected = Boolean(selectedUser && !selectedUser.hasPin);
-  const noPinMessage = "No PIN has been set for this user yet. Please ask a manager to set or reset the PIN.";
->>>>>>> feat/login-pin-status-prompt
 
   useEffect(() => {
     if (user) {
@@ -83,7 +74,6 @@ export const LoginPage = () => {
   }, []);
 
   const canSubmit = useMemo(
-<<<<<<< HEAD
     () =>
       Boolean(selectedUserId) &&
       /^\d{4}$/.test(pin) &&
@@ -94,15 +84,6 @@ export const LoginPage = () => {
 
   const submitPinLogin = useCallback(async () => {
     if (!selectedUserId || !/^\d{4}$/.test(pin)) {
-=======
-    () => Boolean(selectedUserId) && !noPinSelected && /^\d{4}$/.test(pin) && !submitting && !usersLoading,
-    [selectedUserId, noPinSelected, pin, submitting, usersLoading],
-  );
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedUserId || noPinSelected || !/^\d{4}$/.test(pin)) {
->>>>>>> feat/login-pin-status-prompt
       return;
     }
 
@@ -224,12 +205,6 @@ export const LoginPage = () => {
               </div>
             </div>
           </div>
-
-          {noPinSelected ? (
-            <p className="login-inline-status login-pin-help" data-testid="login-no-pin-message">
-              {noPinMessage}
-            </p>
-          ) : null}
 
           {errorMessage ? <p className="error-banner">{errorMessage}</p> : null}
           <p className="login-build-info">{appVersionLabel}</p>
