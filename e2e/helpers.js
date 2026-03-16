@@ -74,7 +74,11 @@ const ensureUserViaAdminBypass = async (
   const email = `${token}@example.com`;
   const password = options.password || `Playwright!${token}`;
   const pin = options.pin || "1234";
+<<<<<<< HEAD
   const withPin = options.withPin !== false;
+=======
+  const setPin = options.setPin !== false;
+>>>>>>> feat/login-pin-status-prompt
   const name = options.name || `${role} ${token}`;
 
   const payload = await apiJsonWithHeaderBypass(request, "POST", "/api/admin/users", "ADMIN", {
@@ -86,7 +90,11 @@ const ensureUserViaAdminBypass = async (
     },
   });
 
+<<<<<<< HEAD
   if (withPin) {
+=======
+  if (setPin) {
+>>>>>>> feat/login-pin-status-prompt
     await apiJsonWithHeaderBypass(request, "POST", "/api/auth/pin", role, {
       headers: {
         "X-Staff-Id": payload.user.id,
@@ -101,7 +109,11 @@ const ensureUserViaAdminBypass = async (
     user: payload.user,
     email,
     password,
+<<<<<<< HEAD
     ...(withPin ? { pin } : {}),
+=======
+    pin: setPin ? pin : null,
+>>>>>>> feat/login-pin-status-prompt
   };
 };
 

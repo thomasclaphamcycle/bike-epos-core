@@ -54,6 +54,27 @@ const ensureOpenRegisterSession = async (request) => {
 
 test.describe.configure({ mode: "serial" });
 
+test("PIN login blocks submit and shows manager prompt when selected user has no PIN", async ({
+  page,
+  request,
+}) => {
+  const reactFrontendUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "pinless-login",
+    setPin: false,
+  });
+
+  await page.goto(`${reactFrontendUrl}/login`);
+  await expect(page.getByTestId(`login-user-${credentials.user.id}`)).toBeVisible();
+  await page.getByTestId(`login-user-${credentials.user.id}`).click();
+  await expect(page.getByTestId("login-no-pin-message")).toContainText(
+    "No PIN has been set for this user yet. Please ask a manager to set or reset the PIN.",
+  );
+  await page.getByTestId("login-pin").fill("1234");
+  await expect(page.getByTestId("login-submit")).toBeDisabled();
+});
+
 test("Auth routing redirects and navigation visibility follows role", async ({ page, request }) => {
   const primaryNav = page.getByRole("navigation", { name: "Primary navigation" });
   const posToggle = page.getByTestId("nav-toggle-pos");
