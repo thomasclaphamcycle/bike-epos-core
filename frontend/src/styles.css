@@ -40,6 +40,16 @@
   --cp-page-warm: rgba(255, 122, 24, 0.09);
 }
 
+@font-face {
+  font-family: "Digital-7";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    url("@fontsource/dseg7-classic-mini/files/dseg7-classic-mini-latin-400-normal.woff2") format("woff2"),
+    url("@fontsource/dseg7-classic-mini/files/dseg7-classic-mini-latin-400-normal.woff") format("woff");
+}
+
 * {
   box-sizing: border-box;
 }
@@ -956,11 +966,11 @@ th {
 
 .dashboard-header-clock-time {
   color: #14293f;
-  font-family: "SFMono-Regular", "SF Mono", "Roboto Mono", "Menlo", "Consolas", monospace;
+  font-family: "Digital-7", ui-monospace, monospace;
   font-size: 1.65rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   line-height: 1;
 }
 
