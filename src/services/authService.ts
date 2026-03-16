@@ -30,15 +30,12 @@ export type ActiveLoginUser = {
   displayName: string;
   role: UserRole;
   hasPin: boolean;
-<<<<<<< HEAD
 };
 
 const ACTIVE_LOGIN_ROLE_PRIORITY: Record<UserRole, number> = {
   STAFF: 1,
   MANAGER: 2,
   ADMIN: 3,
-=======
->>>>>>> feat/login-pin-status-prompt
 };
 
 export const authenticateWithEmailPassword = async (
@@ -102,7 +99,6 @@ export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
     },
   });
 
-<<<<<<< HEAD
   return users
     .map((user) => ({
       id: user.id,
@@ -117,14 +113,6 @@ export const listActiveLoginUsers = async (): Promise<ActiveLoginUser[]> => {
       }
       return left.displayName.localeCompare(right.displayName, undefined, { sensitivity: "base" });
     });
-=======
-  return users.map((user) => ({
-    id: user.id,
-    displayName: user.name?.trim() || user.username,
-    role: user.role,
-    hasPin: Boolean(user.pinHash),
-  }));
->>>>>>> feat/login-pin-status-prompt
 };
 
 export const authenticateWithPin = async (
