@@ -121,8 +121,8 @@ textarea {
   color: #edf5fb;
   padding: 18px 14px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -132,40 +132,18 @@ textarea {
 .sidebar-brand-block {
   display: grid;
   gap: 0;
-  margin-bottom: 18px;
+  margin-bottom: 8px;
 }
 
 .sidebar-brand-logo {
   display: block;
 }
 
-.sidebar-utility {
-  display: grid;
-  gap: 10px;
-}
-
-.sidebar-utility .command-trigger {
-  width: 100%;
-  justify-content: space-between;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #edf5fb;
-  box-shadow: none;
-}
-
-.sidebar-utility .command-trigger:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.sidebar-utility .command-hint {
-  color: rgba(237, 245, 251, 0.66);
-}
-
 .sidebar-nav {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
   overflow: auto;
   padding-right: 2px;
 }
@@ -414,9 +392,9 @@ textarea {
 .sidebar-submenu {
   display: grid;
   gap: 8px;
-  padding-left: 14px;
+  padding-left: 12px;
   border-left: 1px solid rgba(157, 180, 201, 0.22);
-  margin-left: 10px;
+  margin-left: 14px;
 }
 
 .sidebar-subgroup-label {

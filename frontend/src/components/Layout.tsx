@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
-import { GlobalCommandBar } from "./GlobalCommandBar";
 import CorePosLogo from "./branding/CorePosLogo";
 import { useRuntimeVersionLabel } from "../hooks/useRuntimeVersionLabel";
 import {
@@ -100,10 +99,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <Link to="/dashboard" className="brand" aria-label="CorePOS dashboard">
             <CorePosLogo variant="full" size={60} className="sidebar-brand-logo" />
           </Link>
-        </div>
-
-        <div className="sidebar-utility">
-          <GlobalCommandBar />
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
