@@ -159,6 +159,27 @@ textarea {
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(157, 180, 201, 0.34) rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(157, 180, 201, 0.42) 0%, rgba(110, 137, 163, 0.52) 100%);
+  border-radius: 999px;
+  border: 1px solid rgba(4, 19, 52, 0.28);
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(176, 197, 216, 0.52) 0%, rgba(124, 149, 173, 0.62) 100%);
 }
 
 .sidebar-footer {
