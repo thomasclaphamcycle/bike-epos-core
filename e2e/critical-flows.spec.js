@@ -45,6 +45,7 @@ test.describe.configure({ mode: "serial" });
 test("Auth routing redirects and navigation visibility follows role", async ({ page, request }) => {
   const primaryNav = page.getByRole("navigation", { name: "Primary navigation" });
   const posToggle = page.getByTestId("nav-toggle-pos");
+  const reportsToggle = page.getByTestId("nav-toggle-reports");
 
   await page.context().clearCookies();
   await page.goto("/workshop");
@@ -60,8 +61,11 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await expect(primaryNav.getByRole("link", { name: "Sale", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
   await posToggle.click();
+  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toHaveCount(0);
+  await posToggle.click();
   await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Receipts", exact: true })).toBeVisible();
+  await primaryNav.getByRole("link", { name: "Receipts", exact: true }).click();
+  await expect(page).toHaveURL(/\/sales-history\/receipt-view/);
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toHaveCount(0);
   await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toHaveCount(0);
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
@@ -87,6 +91,10 @@ test("Auth routing redirects and navigation visibility follows role", async ({ p
   await posToggle.click();
   await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Reports", exact: true })).toBeVisible();
+  await expect(primaryNav.getByRole("link", { name: "Financial Reports", exact: true })).toHaveCount(0);
+  await reportsToggle.click();
+  await expect(primaryNav.getByRole("link", { name: "Cash Management", exact: true })).toHaveCount(0);
+  await expect(primaryNav.getByRole("link", { name: "Financial Reports", exact: true })).toBeVisible();
   await expect(primaryNav.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
   await page.goto("/management/cash");
   await expect(page).toHaveURL(/\/management\/cash/);

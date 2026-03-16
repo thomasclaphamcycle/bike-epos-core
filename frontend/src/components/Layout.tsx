@@ -66,18 +66,26 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const isSectionDirectlyActive = (section: typeof visibleSections[number]) =>
     matchesNavigationPath(currentPath, section) && !getActiveChild(section);
 
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [openSectionId, setOpenSectionId] = useState<string | null>(null);
 
   useEffect(() => {
-    setOpenSections((current) => {
-      const next: Record<string, boolean> = {};
-      for (const section of visibleSections) {
-        if (!section.items?.length) {
-          continue;
-        }
-        next[section.id] = isSectionActive(section) || Boolean(current[section.id]);
+    const activeExpandableSectionId = visibleSections.find(
+      (section) => section.items?.length && isSectionActive(section),
+    )?.id ?? null;
+
+    setOpenSectionId((current) => {
+      if (activeExpandableSectionId) {
+        return activeExpandableSectionId;
       }
-      return next;
+
+      if (
+        current
+        && visibleSections.some((section) => section.id === current && section.items?.length)
+      ) {
+        return current;
+      }
+
+      return null;
     });
   }, [currentPath, visibleSections]);
 
@@ -99,7 +107,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 const hasChildren = Boolean(section.items?.length);
                 const isActive = isSectionActive(section);
                 const isDirectlyActive = isSectionDirectlyActive(section);
-                const isOpen = hasChildren ? (isActive || Boolean(openSections[section.id])) : false;
+                const isOpen = hasChildren ? openSectionId === section.id : false;
                 const submenuId = `sidebar-submenu-${section.id}`;
 
                 return (
@@ -128,10 +136,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           aria-controls={submenuId}
                           data-testid={`nav-toggle-${section.id}`}
                           onClick={() => {
-                            setOpenSections((current) => ({
-                              ...current,
-                              [section.id]: !current[section.id],
-                            }));
+                            setOpenSectionId((current) => (current === section.id ? null : section.id));
                           }}
                         >
                           <span
