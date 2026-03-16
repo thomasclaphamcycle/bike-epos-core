@@ -391,7 +391,6 @@ export const DashboardPage = () => {
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
   const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
   const [staffTomorrow, setStaffTomorrow] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
-  const [weatherTomorrowExpanded, setWeatherTomorrowExpanded] = useState(false);
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -813,52 +812,36 @@ export const DashboardPage = () => {
                   {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
                 </div>
               </div>
-              {weather.tomorrow ? (
-                <button
-                  type="button"
-                  className={`dashboard-weather-tomorrow-chip${weatherTomorrowExpanded ? " dashboard-weather-tomorrow-chip-active" : ""}`}
-                  onClick={() => setWeatherTomorrowExpanded((value) => !value)}
-                  aria-expanded={weatherTomorrowExpanded}
-                >
-                  <span className="metric-label dashboard-metric-label">Tomorrow</span>
-                  <strong>{weather.tomorrow.summary}</strong>
-                  <span>{weather.tomorrow.highC}° / {weather.tomorrow.lowC}°</span>
-                </button>
-              ) : null}
             </div>
 
             {tradingWeatherTimeline.length ? (
-              <div className="dashboard-weather-timeline" role="list" aria-label="Trading hour weather change points">
-                {tradingWeatherTimeline.map((point) => (
-                  <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
-                    <span className="dashboard-weather-timeline-icon" aria-hidden="true">{weatherGlyph[point.kind]}</span>
-                    <div className="dashboard-weather-timeline-copy">
-                      <strong>{point.label}</strong>
-                      <span>{point.summary}</span>
-                    </div>
-                    <div className="dashboard-weather-timeline-meta">
-                      <span>{point.temperatureC}°</span>
+              <div className="dashboard-weather-timeline" aria-label="Trading hour weather change points">
+                <div className="dashboard-weather-timeline-points" role="list">
+                  {tradingWeatherTimeline.map((point) => (
+                    <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
+                      <strong className="dashboard-weather-timeline-hour">{point.label}</strong>
+                      <span className="dashboard-weather-timeline-icon" aria-hidden="true">{weatherGlyph[point.kind]}</span>
+                      <span className="dashboard-weather-timeline-temp">{point.temperatureC}°</span>
                       {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
-                        <span>{point.precipitationProbabilityPercent}% rain</span>
+                        <span className="dashboard-weather-timeline-rain">{point.precipitationProbabilityPercent}% rain</span>
                       ) : null}
                     </div>
+                  ))}
+                </div>
+                {weather.tomorrow ? (
+                  <div className="dashboard-weather-tomorrow-inline">
+                    <span className="metric-label dashboard-metric-label">Tomorrow</span>
+                    <strong>{weather.tomorrow.summary}</strong>
+                    <span>{weather.tomorrow.highC}° / {weather.tomorrow.lowC}°</span>
+                    <span>Rain {weather.tomorrow.precipitationMm} mm</span>
                   </div>
-                ))}
+                ) : null}
               </div>
             ) : (
               <div className="dashboard-weather-strip-empty">
                 Trading-hour change points are unavailable right now.
               </div>
             )}
-
-            {weatherTomorrowExpanded && weather.tomorrow ? (
-              <div className="dashboard-weather-tomorrow-panel">
-                <strong>Tomorrow</strong>
-                <span>
-                  {weather.tomorrow.summary} · {weather.tomorrow.highC}° / {weather.tomorrow.lowC}° · Rain {weather.tomorrow.precipitationMm} mm
-                </span>
-              </div>
-            ) : null}
           </div>
         ) : weather.status === "missing_location" ? (
           <EmptyState
