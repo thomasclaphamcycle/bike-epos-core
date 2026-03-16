@@ -2319,8 +2319,8 @@ th {
 
 .rota-overview-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: 18px;
 }
 
 .rota-overview-week-card {
@@ -2329,7 +2329,7 @@ th {
 }
 
 .rota-overview-week-header {
-  padding: 18px 18px 0;
+  padding: 16px 16px 0;
 }
 
 .rota-overview-week-header h3 {
@@ -2338,7 +2338,7 @@ th {
 
 .rota-overview-table-wrap {
   overflow-x: visible;
-  padding: 0 18px 18px;
+  padding: 0 16px 16px;
 }
 
 .rota-overview-week-grid {
@@ -2347,6 +2347,7 @@ th {
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
+  font-size: 0.92rem;
 }
 
 .rota-overview-week-grid thead th {
@@ -2359,19 +2360,20 @@ th {
 
 .rota-overview-day-heading {
   min-width: 0;
+  padding: 8px 4px;
 }
 
 .rota-day-heading-copy {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .rota-day-heading-copy strong {
-  font-size: 0.86rem;
+  font-size: 0.82rem;
 }
 
 .rota-day-heading-copy span {
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .rota-day-heading-closed {
@@ -2457,7 +2459,7 @@ th {
 
 .rota-overview-cell {
   min-width: 0;
-  padding: 6px 4px;
+  padding: 5px 3px;
   text-align: center;
 }
 
@@ -2468,8 +2470,8 @@ th {
 }
 
 .rota-overview-pill {
-  min-width: 52px;
-  padding-inline: 8px;
+  min-width: 48px;
+  padding-inline: 6px;
 }
 
 .rota-overview-source {
@@ -2494,9 +2496,9 @@ th {
 
 .rota-overview-staff-heading,
 .rota-overview-staff-cell {
-  width: 148px;
-  min-width: 148px;
-  max-width: 148px;
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
 }
 
 .rota-cell-note {
@@ -2666,6 +2668,13 @@ th {
   }
 }
 
+@media (min-width: 1500px) {
+  .rota-overview-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
 @media (max-width: 900px) {
   .rota-view-toggle {
     width: 100%;
@@ -2676,8 +2685,12 @@ th {
     flex: 1 1 0;
   }
 
-  .rota-overview-layout {
-    grid-template-columns: 1fr;
+  .rota-overview-week-header {
+    padding: 14px 14px 0;
+  }
+
+  .rota-overview-table-wrap {
+    padding: 0 14px 14px;
   }
 }
 
