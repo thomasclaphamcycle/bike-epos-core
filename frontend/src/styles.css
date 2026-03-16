@@ -1005,14 +1005,14 @@ th {
   display: grid;
   justify-items: center;
   gap: 0;
-  min-width: 92px;
+  min-width: 108px;
   align-self: center;
 }
 
 .dashboard-header-clock-time {
   color: #14293f;
   font-family: "Digital-7", ui-monospace, monospace;
-  font-size: 1.65rem;
+  font-size: 1.82rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
