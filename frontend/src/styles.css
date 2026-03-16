@@ -328,13 +328,17 @@ textarea {
 
 .sidebar-group-toggle {
   color: rgba(237, 245, 251, 0.9);
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 0;
+  width: 40px;
+  min-width: 40px;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: 0;
+  box-shadow: none;
+  appearance: none;
   cursor: pointer;
   transition:
     background-color 120ms ease,
@@ -344,6 +348,12 @@ textarea {
 .sidebar-link--group,
 .sidebar-group-toggle {
   border-radius: 0;
+}
+
+.sidebar-group-toggle:focus,
+.sidebar-group-toggle:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .sidebar-link--group:hover,
@@ -367,6 +377,14 @@ textarea {
 
 .sidebar-section-item--open > .sidebar-section-row--group.sidebar-section-row--group-active .sidebar-group-toggle {
   color: #041334;
+}
+
+.sidebar-section-row--group:focus-within {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.sidebar-section-row--group-active:focus-within {
+  box-shadow: inset 0 0 0 1px rgba(4, 19, 52, 0.2);
 }
 
 .sidebar-toggle-chevron--open {
