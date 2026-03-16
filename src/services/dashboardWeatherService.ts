@@ -232,6 +232,33 @@ const shouldKeepTradingPoint = (current: TradingWeatherPoint, previous: TradingW
   return Math.abs(current.temperatureC - previous.temperatureC) >= 4;
 };
 
+const MAX_TRADING_TIMELINE_POINTS = 8;
+
+const fillTradingTimelinePoints = (
+  tradingPoints: TradingWeatherPoint[],
+  selectedIndexes: Set<number>,
+  maxPoints: number,
+) => {
+  if (selectedIndexes.size >= maxPoints || tradingPoints.length <= selectedIndexes.size) {
+    return;
+  }
+
+  const candidateIndexes = tradingPoints
+    .map((_, index) => index)
+    .filter((index) => !selectedIndexes.has(index));
+
+  if (!candidateIndexes.length) {
+    return;
+  }
+
+  const remainingSlots = maxPoints - selectedIndexes.size;
+  for (let slot = 0; slot < remainingSlots && slot < candidateIndexes.length; slot += 1) {
+    const position = Math.round(((slot + 1) * (candidateIndexes.length + 1)) / (remainingSlots + 1)) - 1;
+    const clampedPosition = Math.min(candidateIndexes.length - 1, Math.max(0, position));
+    selectedIndexes.add(candidateIndexes[clampedPosition]);
+  }
+};
+
 const buildTradingDayTimeline = (
   times: string[] | undefined,
   weatherCodes: number[] | undefined,
@@ -258,14 +285,40 @@ const buildTradingDayTimeline = (
     return [];
   }
 
-  const condensed = tradingPoints.filter((point, index) => {
+  const selectedIndexes = new Set<number>();
+  selectedIndexes.add(0);
+  selectedIndexes.add(tradingPoints.length - 1);
+
+  tradingPoints.forEach((point, index) => {
     if (index === 0 || index === tradingPoints.length - 1) {
-      return true;
+      return;
     }
-    return shouldKeepTradingPoint(point, tradingPoints[index - 1]);
+    if (shouldKeepTradingPoint(point, tradingPoints[index - 1])) {
+      selectedIndexes.add(index);
+    }
   });
 
-  return condensed.slice(0, 6);
+  if (selectedIndexes.size > MAX_TRADING_TIMELINE_POINTS) {
+    const sortedIndexes = Array.from(selectedIndexes).sort((left, right) => left - right);
+    const preservedIndexes = new Set<number>([0, tradingPoints.length - 1]);
+    const middleIndexes = sortedIndexes.filter((index) => !preservedIndexes.has(index));
+    const middleSlots = MAX_TRADING_TIMELINE_POINTS - preservedIndexes.size;
+
+    for (let slot = 0; slot < middleSlots && slot < middleIndexes.length; slot += 1) {
+      const position = Math.round((slot * (middleIndexes.length - 1)) / Math.max(1, middleSlots - 1));
+      preservedIndexes.add(middleIndexes[position]);
+    }
+
+    return Array.from(preservedIndexes)
+      .sort((left, right) => left - right)
+      .map((index) => tradingPoints[index]);
+  }
+
+  fillTradingTimelinePoints(tradingPoints, selectedIndexes, MAX_TRADING_TIMELINE_POINTS);
+
+  return Array.from(selectedIndexes)
+    .sort((left, right) => left - right)
+    .map((index) => tradingPoints[index]);
 };
 
 const normalizePostcode = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
