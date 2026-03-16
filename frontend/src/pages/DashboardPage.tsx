@@ -685,7 +685,9 @@ export const DashboardPage = () => {
       });
     }
 
-    items.push(...actionItems.filter((item) => item.type === "OVERDUE_PURCHASE_ORDER"));
+    items.push(
+      ...actionItems.filter((item) => item.type === "OVERDUE_PURCHASE_ORDER" || item.type === "TEST_REORDER_ATTENTION"),
+    );
 
     return items
       .sort((left, right) => {

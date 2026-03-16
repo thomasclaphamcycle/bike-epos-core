@@ -46,8 +46,6 @@ const actionCentreSections: Array<{
   },
 ];
 
-const TEMPORARY_DASHBOARD_LOW_STOCK_UX_TEST_COUNT = 3;
-
 export const getOperationsExceptions = async () => {
   const now = new Date();
   const workshopAgeThresholdDays = 14;
@@ -96,14 +94,7 @@ export const getOperationsExceptions = async () => {
       orderBy: [{ createdAt: "asc" }],
     }),
   ]);
-  const realLowStockCount = reorderSuggestions.summary.reorderNowCount + reorderSuggestions.summary.reorderSoonCount;
-  // Temporary UX testing helper: force a visible dashboard low-stock alert when
-  // the live reorder engine returns zero items, so the Action Centre can be
-  // visually reviewed without altering reorder suggestion calculations.
-  const lowStockCount =
-    realLowStockCount === 0
-      ? TEMPORARY_DASHBOARD_LOW_STOCK_UX_TEST_COUNT
-      : realLowStockCount;
+  const lowStockCount = reorderSuggestions.summary.reorderNowCount + reorderSuggestions.summary.reorderSoonCount;
   const lowStockReasonParts = [
     lowStockCount === 1 ? "1 product below reorder level." : `${lowStockCount} products below reorder level.`,
     reorderSuggestions.summary.reorderNowCount > 0
@@ -111,9 +102,6 @@ export const getOperationsExceptions = async () => {
       : null,
     reorderSuggestions.summary.reorderSoonCount > 0
       ? `${reorderSuggestions.summary.reorderSoonCount} should be reviewed soon`
-      : null,
-    realLowStockCount === 0
-      ? "Temporary UX test override."
       : null,
   ].filter((part): part is string => Boolean(part));
 
@@ -227,6 +215,20 @@ export const getActionCentreReport = async () => {
         severity: item.severity,
         link: item.link,
       }));
+
+    if (section.key === "inventory" && !items.some((item) => item.type === "TEST_REORDER_ATTENTION")) {
+      // Temporary UX testing override: inject a literal inventory/reorder alert
+      // into the final Action Centre payload so both the dashboard and the full
+      // Action Centre page can be visually reviewed even when live data is quiet.
+      items.unshift({
+        type: "TEST_REORDER_ATTENTION",
+        entityId: "test-reorder-attention",
+        title: "Reorder attention",
+        reason: "3 items need attention",
+        severity: "WARNING",
+        link: "/management/reordering",
+      });
+    }
 
     return {
       key: section.key,
