@@ -293,7 +293,7 @@ export const StaffRotaPage = () => {
   const floatingMenuRef = useRef<HTMLDivElement | null>(null);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
-  const staffScope = searchParams.get("staffScope") === "all" ? "all" : "assigned";
+  const staffScope = searchParams.get("staffScope") === "assigned" ? "assigned" : "all";
   const roleFilter = searchParams.get("role") ?? "ALL";
   const searchFilter = searchParams.get("search") ?? "";
   const isAdmin = user?.role === "ADMIN";
@@ -301,7 +301,7 @@ export const StaffRotaPage = () => {
 
   const updateQueryParam = (key: string, value: string) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (!value.trim() || value === "ALL" || value === "assigned") {
+    if (!value.trim() || value === "ALL" || value === "all") {
       nextParams.delete(key);
     } else {
       nextParams.set(key, value);
@@ -904,8 +904,8 @@ export const StaffRotaPage = () => {
                   value={staffScope}
                   onChange={(event) => updateQueryParam("staffScope", event.target.value)}
                 >
-                  <option value="assigned">With assignments</option>
                   <option value="all">All active staff</option>
+                  <option value="assigned">Assigned staff only</option>
                 </select>
               </label>
               <label className="grow">
@@ -933,7 +933,7 @@ export const StaffRotaPage = () => {
 
             <p className="muted-text rota-filter-summary">
               {staffScope === "all"
-                ? "Showing active staff plus existing assignments for this period."
+                ? "Showing the full active team for this rota period."
                 : "Showing staff who already have assignments somewhere in this six-week period."}
               {unassignedVisibleStaffCount
                 ? ` ${unassignedVisibleStaffCount} visible ${unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.`
