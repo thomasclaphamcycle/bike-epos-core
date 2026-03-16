@@ -400,6 +400,11 @@ textarea {
   padding: 22px 20px 20px;
 }
 
+.app-main--workspace {
+  width: min(1600px, 100%);
+  padding-inline: 16px;
+}
+
 .app-footer {
   padding: 8px 18px 14px;
   color: #4b5563;
@@ -409,6 +414,10 @@ textarea {
 .page-shell {
   display: grid;
   gap: 14px;
+}
+
+.page-shell-workspace {
+  gap: 16px;
 }
 
 .card {
@@ -3805,6 +3814,11 @@ th {
   }
 
   .app-main {
+    padding: 10px;
+  }
+
+  .app-main--workspace {
+    width: 100%;
     padding: 10px;
   }
 

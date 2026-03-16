@@ -719,7 +719,7 @@ export const StaffRotaPage = () => {
   };
 
   return (
-    <div className="page-shell rota-page">
+    <div className="page-shell page-shell-workspace rota-page">
       <section className="card">
         <div className="card-header-row">
           <div>

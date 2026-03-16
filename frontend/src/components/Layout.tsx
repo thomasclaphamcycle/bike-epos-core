@@ -13,6 +13,10 @@ import {
 
 const envLabel = import.meta.env.MODE || "development";
 
+const workspacePagePrefixes = [
+  "/management/staff-rota",
+];
+
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
   const { error, success } = useToasts();
@@ -31,6 +35,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
+  const isWorkspacePage = workspacePagePrefixes.some((prefix) => currentPath.startsWith(prefix));
   const visibleSections = useMemo(() => (
     navigationSections
       .filter((section) => canAccessNavigationRole(user?.role, section.minimumRole))
@@ -203,7 +208,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
 
-        <main className="app-main">{children}</main>
+        <main className={isWorkspacePage ? "app-main app-main--workspace" : "app-main"}>{children}</main>
 
         <footer className="app-footer">
           <span>Environment: {envLabel}</span>
