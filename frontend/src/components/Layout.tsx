@@ -144,7 +144,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           <span
                             aria-hidden="true"
                             className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}
-                          />
+                          >
+                            <svg viewBox="0 0 12 12" focusable="false" aria-hidden="true">
+                              <path d="M4 2.5L8 6L4 9.5" />
+                            </svg>
+                          </span>
                         </button>
                       </div>
                     ) : (

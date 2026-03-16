@@ -302,12 +302,28 @@ textarea {
 }
 
 .sidebar-toggle-chevron {
-  position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   line-height: 0;
+  transition: transform 120ms ease;
+}
+
+.sidebar-toggle-chevron svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.sidebar-toggle-chevron path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .sidebar-group-toggle {
@@ -323,17 +339,6 @@ textarea {
   transition:
     background-color 120ms ease,
     color 120ms ease;
-}
-
-.sidebar-toggle-chevron::before {
-  content: "";
-  position: absolute;
-  inset: 1px 2px 1px 1px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg);
-  transform-origin: center;
-  transition: transform 120ms ease, border-color 120ms ease;
 }
 
 .sidebar-link--group,
@@ -365,10 +370,7 @@ textarea {
 }
 
 .sidebar-toggle-chevron--open {
-}
-
-.sidebar-toggle-chevron--open::before {
-  transform: rotate(45deg);
+  transform: rotate(90deg);
 }
 
 .sidebar-submenu {
