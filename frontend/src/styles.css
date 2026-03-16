@@ -1071,9 +1071,9 @@ th {
   display: grid;
   justify-items: center;
   align-content: center;
-  gap: 4px;
-  min-width: 72px;
-  padding: 2px 8px;
+  gap: 5px;
+  min-width: 78px;
+  padding: 3px 9px;
   color: #42576d;
   position: relative;
   text-align: center;
@@ -1096,14 +1096,14 @@ th {
 
 .dashboard-weather-timeline-hour {
   color: #14293f;
-  font-size: 0.86rem;
+  font-size: 0.92rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .dashboard-weather-timeline-icon {
-  font-size: 1.82rem;
+  font-size: 2.08rem;
   line-height: 1;
 }
 
@@ -1126,14 +1126,14 @@ th {
 
 .dashboard-weather-timeline-temp {
   color: #14293f;
-  font-size: 1.12rem;
+  font-size: 1.22rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .dashboard-weather-timeline-rain {
   color: #5a7087;
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   font-weight: 600;
   white-space: nowrap;
 }
