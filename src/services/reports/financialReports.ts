@@ -14,6 +14,16 @@ type FinancialDateRange = {
   label: string;
 };
 
+type FinancialChangeDirection = "up" | "down" | "flat" | "new";
+
+type FinancialYearOverYearComparison = {
+  previousPeriod: FinancialDateRange;
+  currentValuePence: number;
+  previousValuePence: number;
+  percentChange: number | null;
+  direction: FinancialChangeDirection;
+};
+
 type FinancialCategoryAccumulator = {
   categoryName: string;
   grossSalesPence: number;
@@ -125,6 +135,55 @@ const getFinancialDateRange = (from?: string, to?: string): FinancialDateRange =
     preset: "current_month_to_date",
     timezone: REPORT_TIMEZONE,
     label: formatMonthLabel(today),
+  };
+};
+
+const shiftDateKeyByYears = (dateKey: string, yearDelta: number) => {
+  const [yearPart = "0", monthPart = "1", dayPart = "1"] = dateKey.split("-");
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+  const day = Number(dayPart);
+  const targetYear = year + yearDelta;
+  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+  const shifted = new Date(Date.UTC(targetYear, month - 1, Math.min(day, lastDayOfTargetMonth)));
+  return formatDateKeyInTimezone(shifted, REPORT_TIMEZONE);
+};
+
+const getPreviousYearRange = (range: FinancialDateRange): FinancialDateRange => ({
+  from: shiftDateKeyByYears(range.from, -1),
+  to: shiftDateKeyByYears(range.to, -1),
+  preset: "custom",
+  timezone: range.timezone,
+  label: formatMonthLabel(shiftDateKeyByYears(range.to, -1)),
+});
+
+const buildYearOverYearComparison = (
+  currentRange: FinancialDateRange,
+  currentValuePence: number,
+  previousValuePence: number,
+): FinancialYearOverYearComparison => {
+  let direction: FinancialChangeDirection = "flat";
+  let percentChange: number | null = null;
+
+  if (previousValuePence <= 0) {
+    direction = currentValuePence > 0 ? "new" : "flat";
+  } else {
+    const rawPercentChange = ((currentValuePence - previousValuePence) / previousValuePence) * 100;
+    percentChange = Number(rawPercentChange.toFixed(1));
+
+    if (percentChange > 0) {
+      direction = "up";
+    } else if (percentChange < 0) {
+      direction = "down";
+    }
+  }
+
+  return {
+    previousPeriod: getPreviousYearRange(currentRange),
+    currentValuePence,
+    previousValuePence,
+    percentChange,
+    direction,
   };
 };
 
@@ -523,16 +582,31 @@ const buildFinancialSnapshot = async (from?: string, to?: string) => {
 
 export const getFinancialMonthlyMarginReport = async (from?: string, to?: string) => {
   const snapshot = await buildFinancialSnapshot(from, to);
+  const previousSnapshot = await buildFinancialSnapshot(
+    shiftDateKeyByYears(snapshot.filters.from, -1),
+    shiftDateKeyByYears(snapshot.filters.to, -1),
+  );
 
   return {
     filters: snapshot.filters,
     summary: snapshot.summary,
     costBasis: snapshot.costBasis,
+    comparison: {
+      grossMargin: buildYearOverYearComparison(
+        snapshot.filters,
+        snapshot.summary.grossMarginPence,
+        previousSnapshot.summary.grossMarginPence,
+      ),
+    },
   };
 };
 
 export const getFinancialMonthlySalesSummaryReport = async (from?: string, to?: string) => {
   const snapshot = await buildFinancialSnapshot(from, to);
+  const previousSnapshot = await buildFinancialSnapshot(
+    shiftDateKeyByYears(snapshot.filters.from, -1),
+    shiftDateKeyByYears(snapshot.filters.to, -1),
+  );
 
   return {
     filters: snapshot.filters,
@@ -543,6 +617,13 @@ export const getFinancialMonthlySalesSummaryReport = async (from?: string, to?: 
       transactions: snapshot.summary.transactions,
       refundCount: snapshot.summary.refundCount,
       averageSaleValuePence: snapshot.summary.averageSaleValuePence,
+    },
+    comparison: {
+      revenue: buildYearOverYearComparison(
+        snapshot.filters,
+        snapshot.summary.revenuePence,
+        previousSnapshot.summary.revenuePence,
+      ),
     },
   };
 };

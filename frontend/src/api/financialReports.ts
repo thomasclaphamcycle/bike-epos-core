@@ -18,6 +18,14 @@ export type FinancialCostBasis = {
   notes: string[];
 };
 
+export type FinancialYearOverYearComparison = {
+  previousPeriod: FinancialFilters;
+  currentValuePence: number;
+  previousValuePence: number;
+  percentChange: number | null;
+  direction: "up" | "down" | "flat" | "new";
+};
+
 export type FinancialMonthlyMarginReport = {
   filters: FinancialFilters;
   summary: {
@@ -32,6 +40,9 @@ export type FinancialMonthlyMarginReport = {
     averageSaleValuePence: number;
   };
   costBasis: FinancialCostBasis;
+  comparison: {
+    grossMargin: FinancialYearOverYearComparison;
+  };
 };
 
 export type FinancialMonthlySalesSummaryReport = {
@@ -43,6 +54,9 @@ export type FinancialMonthlySalesSummaryReport = {
     transactions: number;
     refundCount: number;
     averageSaleValuePence: number;
+  };
+  comparison: {
+    revenue: FinancialYearOverYearComparison;
   };
 };
 

@@ -85,15 +85,15 @@ Rules:
 
 Dashboard v1 KPI cards:
 
-- Monthly Margin
-- vs Last Year
 - Sales Today
 - Transactions Today
-- Outstanding Workshop Jobs
+- Revenue
+- Monthly Margin
 
 Rules:
 
 - use live data where a defensible source already exists
+- Revenue and Monthly Margin should show a same-point-last-year comparison when the financial reports layer can support it safely
 - if a KPI does not yet have a suitable backend feed, show a clear placeholder state rather than inventing a number
 - keep cards compact and readable from a standing distance
 

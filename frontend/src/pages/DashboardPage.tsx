@@ -6,6 +6,7 @@ import {
   getFinancialMonthlySalesSummaryReport,
   type FinancialMonthlyMarginReport,
   type FinancialMonthlySalesSummaryReport,
+  type FinancialYearOverYearComparison,
 } from "../api/financialReports";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
@@ -132,6 +133,7 @@ type MetricCardProps = {
   label: string;
   value: string;
   detail: string;
+  comparison?: string;
   href?: string;
   placeholder?: boolean;
 };
@@ -151,27 +153,12 @@ const formatDashboardCurrency = (valueGbp: number) =>
   }).format(valueGbp);
 const formatDashboardCurrencyFromPence = (valuePence: number) => formatDashboardCurrency(valuePence / 100);
 
-const formatPercentDelta = (current: number, previous: number) => {
-  if (previous <= 0) {
-    return current > 0 ? "New" : "—";
-  }
-
-  const delta = ((current - previous) / previous) * 100;
-  const prefix = delta > 0 ? "+" : "";
-  return `${prefix}${delta.toFixed(0)}%`;
-};
-
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
   const month = `${value.getMonth() + 1}`.padStart(2, "0");
   const day = `${value.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-
-const startOfMonth = (value: Date) => new Date(value.getFullYear(), value.getMonth(), 1);
-
-const sumNetPence = (rows: SalesDailyRow[]) =>
-  rows.reduce((total, row) => total + row.netPence, 0);
 
 const getFirstName = (name: string | null | undefined, username: string | undefined) => {
   const trimmed = name?.trim();
@@ -282,12 +269,29 @@ const tomorrowWeatherKindFromSummary = (summary: string | undefined): DashboardW
   return "part-sun";
 };
 
-const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }: MetricCardProps) => {
+const formatComparisonLabel = (comparison: FinancialYearOverYearComparison | undefined) => {
+  if (!comparison) {
+    return "";
+  }
+
+  if (comparison.direction === "new") {
+    return "New vs same time last year";
+  }
+
+  if (comparison.direction === "flat" || comparison.percentChange === null || comparison.percentChange === 0) {
+    return "No change vs same time last year";
+  }
+
+  return `${comparison.direction === "up" ? "↑" : "↓"} ${Math.abs(comparison.percentChange).toFixed(1)}% vs same time last year`;
+};
+
+const DashboardMetricCard = ({ label, value, detail, comparison, href, placeholder = false }: MetricCardProps) => {
   const content = (
     <>
       <span className="metric-label dashboard-metric-label">{label}</span>
       <strong className={`metric-value dashboard-metric-value${placeholder ? " dashboard-metric-value-muted" : ""}`}>{value}</strong>
       <span className="dashboard-metric-detail">{detail}</span>
+      {comparison ? <span className="dashboard-metric-comparison">{comparison}</span> : null}
     </>
   );
 
@@ -367,8 +371,6 @@ export const DashboardPage = () => {
   const [clock, setClock] = useState(() => new Date());
   const [loading, setLoading] = useState(false);
   const [salesToday, setSalesToday] = useState<SalesDailyRow | null>(null);
-  const [monthToDateNetPence, setMonthToDateNetPence] = useState<number | null>(null);
-  const [lastYearMonthToDateNetPence, setLastYearMonthToDateNetPence] = useState<number | null>(null);
   const [monthlyMarginReport, setMonthlyMarginReport] = useState<FinancialMonthlyMarginReport | null>(null);
   const [monthlySalesReport, setMonthlySalesReport] = useState<FinancialMonthlySalesSummaryReport | null>(null);
   const [workshopSummary, setWorkshopSummary] = useState<WorkshopDashboardResponse["summary"] | null>(null);
@@ -393,17 +395,9 @@ export const DashboardPage = () => {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
     const tomorrowKey = formatDateKey(tomorrow);
-    const monthStartKey = formatDateKey(startOfMonth(today));
-    const lastYearToday = new Date(today);
-    lastYearToday.setFullYear(today.getFullYear() - 1);
-    const lastYearMonthStart = startOfMonth(lastYearToday);
 
     const requests = await Promise.allSettled([
       apiGet<SalesDailyRow[]>(`/api/reports/sales/daily?from=${todayKey}&to=${todayKey}`),
-      apiGet<SalesDailyRow[]>(`/api/reports/sales/daily?from=${monthStartKey}&to=${todayKey}`),
-      apiGet<SalesDailyRow[]>(
-        `/api/reports/sales/daily?from=${formatDateKey(lastYearMonthStart)}&to=${formatDateKey(lastYearToday)}`,
-      ),
       apiGet<WorkshopDashboardResponse>("/api/workshop/dashboard?limit=12"),
       canViewManagerWidgets ? getFinancialMonthlyMarginReport() : Promise.resolve(null),
       canViewManagerWidgets ? getFinancialMonthlySalesSummaryReport() : Promise.resolve(null),
@@ -416,8 +410,6 @@ export const DashboardPage = () => {
 
     const [
       salesTodayResult,
-      monthResult,
-      lastYearResult,
       workshopResult,
       monthlyMarginResult,
       monthlySalesResult,
@@ -441,20 +433,6 @@ export const DashboardPage = () => {
     } else {
       setSalesToday(null);
       error(salesTodayResult.reason instanceof Error ? salesTodayResult.reason.message : "Failed to load today’s sales");
-    }
-
-    if (monthResult.status === "fulfilled") {
-      setMonthToDateNetPence(sumNetPence(monthResult.value));
-    } else {
-      setMonthToDateNetPence(null);
-      error(monthResult.reason instanceof Error ? monthResult.reason.message : "Failed to load month-to-date sales");
-    }
-
-    if (lastYearResult.status === "fulfilled") {
-      setLastYearMonthToDateNetPence(sumNetPence(lastYearResult.value));
-    } else {
-      setLastYearMonthToDateNetPence(null);
-      error(lastYearResult.reason instanceof Error ? lastYearResult.reason.message : "Failed to load last year comparison");
     }
 
     if (workshopResult.status === "fulfilled") {
@@ -580,13 +558,6 @@ export const DashboardPage = () => {
     () => countStatuses(workshopSummary?.byStatus, WORKSHOP_READY_STATUSES),
     [workshopSummary],
   );
-
-  const monthDeltaLabel = useMemo(() => {
-    if (monthToDateNetPence === null || lastYearMonthToDateNetPence === null) {
-      return "—";
-    }
-    return formatPercentDelta(monthToDateNetPence, lastYearMonthToDateNetPence);
-  }, [lastYearMonthToDateNetPence, monthToDateNetPence]);
 
   const rentalSnapshot = useMemo(() => {
     const now = new Date();
@@ -878,7 +849,7 @@ export const DashboardPage = () => {
             placeholder={!salesToday}
           />
           <DashboardMetricCard
-            label="Monthly Sales"
+            label="Revenue"
             value={monthlySalesReport
               ? formatDashboardCurrencyFromPence(monthlySalesReport.summary.revenuePence)
               : canViewManagerWidgets
@@ -889,6 +860,7 @@ export const DashboardPage = () => {
               : canViewManagerWidgets
                 ? "Current-month sales summary is unavailable."
                 : "Financial analytics are visible to managers and admins."}
+            comparison={monthlySalesReport ? formatComparisonLabel(monthlySalesReport.comparison.revenue) : undefined}
             href={canViewManagerWidgets ? "/reports/financial" : undefined}
             placeholder={!monthlySalesReport}
           />
@@ -904,6 +876,7 @@ export const DashboardPage = () => {
               : canViewManagerWidgets
                 ? "Current-month financial summary is unavailable."
                 : "Financial analytics are visible to managers and admins."}
+            comparison={monthlyMarginReport ? formatComparisonLabel(monthlyMarginReport.comparison.grossMargin) : undefined}
             href={canViewManagerWidgets ? "/reports/financial" : undefined}
             placeholder={!monthlyMarginReport}
           />
