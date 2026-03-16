@@ -251,11 +251,6 @@ export const InventoryStocktakesPage = () => {
     }
   };
 
-  const refreshSessionState = async (sessionId: string) => {
-    await loadSessions(sessionId);
-    await loadSelectedSession(sessionId);
-  };
-
   useEffect(() => {
     void Promise.all([loadLocations(), loadSessions()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,9 +266,12 @@ export const InventoryStocktakesPage = () => {
       setSelectedSession(null);
       return;
     }
+    if (selectedSession?.id === selectedSessionId) {
+      return;
+    }
     void loadSelectedSession(selectedSessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSessionId]);
+  }, [selectedSession, selectedSessionId]);
 
   useEffect(() => {
     if (!selectedSession || selectedSession.status !== "OPEN" || !debouncedVariantSearch.trim()) {
@@ -399,7 +397,7 @@ export const InventoryStocktakesPage = () => {
       setSelectedSessionId(payload.id);
       setSelectedSession(payload);
       success("Stocktake session created.");
-      await refreshSessionState(payload.id);
+      await loadSessions(payload.id);
     } catch (createError) {
       error(createError instanceof Error ? createError.message : "Failed to create stocktake session");
     } finally {
@@ -418,7 +416,7 @@ export const InventoryStocktakesPage = () => {
         `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/review`,
       );
       setSelectedSession(payload);
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.id);
       success("Stocktake moved to review.");
     } catch (requestError) {
       error(requestError instanceof Error ? requestError.message : "Failed to request review");
@@ -438,7 +436,7 @@ export const InventoryStocktakesPage = () => {
         `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/finalize`,
       );
       setSelectedSession(payload);
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.id);
       success("Stocktake finalized and adjustments posted.");
     } catch (finalizeError) {
       error(finalizeError instanceof Error ? finalizeError.message : "Failed to finalize stocktake");
@@ -458,7 +456,7 @@ export const InventoryStocktakesPage = () => {
         `/api/stocktake/sessions/${encodeURIComponent(selectedSession.id)}/cancel`,
       );
       setSelectedSession(payload);
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.id);
       success("Stocktake cancelled.");
     } catch (cancelError) {
       error(cancelError instanceof Error ? cancelError.message : "Failed to cancel stocktake");
@@ -494,7 +492,7 @@ export const InventoryStocktakesPage = () => {
       setSelectedSession(payload);
       setCountedQty("");
       success("Stocktake line saved.");
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.id);
     } catch (saveError) {
       error(saveError instanceof Error ? saveError.message : "Failed to save stocktake line");
     } finally {
@@ -539,7 +537,7 @@ export const InventoryStocktakesPage = () => {
       success(
         `${payload.scannedLine.productName} counted to ${payload.scannedLine.countedQty}.`,
       );
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.stocktake.id);
       window.requestAnimationFrame(() => {
         scanInputRef.current?.focus();
       });
@@ -574,7 +572,7 @@ export const InventoryStocktakesPage = () => {
       setSelectedSession(payload.stocktake);
       setBulkImportText("");
       success(`Applied ${payload.appliedCount} bulk stocktake count${payload.appliedCount === 1 ? "" : "s"}.`);
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.stocktake.id);
       window.requestAnimationFrame(() => {
         scanInputRef.current?.focus();
       });
@@ -607,7 +605,7 @@ export const InventoryStocktakesPage = () => {
       );
       setSelectedSession(payload);
       success(`${line.productName} counted quantity updated to ${nextCount}.`);
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.id);
     } catch (adjustError) {
       error(adjustError instanceof Error ? adjustError.message : "Failed to adjust counted line");
     } finally {
@@ -627,7 +625,7 @@ export const InventoryStocktakesPage = () => {
       );
       setSelectedSession(payload);
       success("Stocktake line removed.");
-      await refreshSessionState(selectedSession.id);
+      await loadSessions(payload.id);
     } catch (deleteError) {
       error(deleteError instanceof Error ? deleteError.message : "Failed to remove stocktake line");
     } finally {
