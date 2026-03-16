@@ -121,12 +121,12 @@ textarea {
   color: #edf5fb;
   padding: 18px 14px;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 18px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 14px;
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .sidebar-brand-block {
@@ -139,14 +139,76 @@ textarea {
   display: block;
 }
 
+.sidebar-utility {
+  display: grid;
+  gap: 10px;
+}
+
+.sidebar-utility .command-trigger {
+  width: 100%;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #edf5fb;
+  box-shadow: none;
+}
+
+.sidebar-utility .command-trigger:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sidebar-utility .command-hint {
+  color: rgba(237, 245, 251, 0.66);
+}
+
 .sidebar-nav {
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.sidebar-footer {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(157, 180, 201, 0.2);
+}
+
+.sidebar-account-block {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-account-name {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #edf5fb;
+}
+
+.sidebar-account-role {
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(237, 245, 251, 0.62);
+}
+
+.sidebar-logout-button {
+  width: 100%;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #edf5fb;
+  box-shadow: none;
+}
+
+.sidebar-logout-button:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-build-info {
-  margin-top: 8px;
   font-size: 0.76rem;
   color: rgba(237, 245, 251, 0.68);
   letter-spacing: 0.02em;
@@ -208,49 +270,7 @@ textarea {
 .app-shell {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-}
-
-.app-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 20px;
-  background: rgba(255, 255, 255, 0.74);
-  color: #111827;
-  align-items: center;
-  border-bottom: 1px solid #d6e0eb;
-  backdrop-filter: blur(14px);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.header-context {
-  display: grid;
-  gap: 3px;
-}
-
-.header-eyebrow {
-  color: #6b7280;
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.header-area {
-  font-size: 1.05rem;
-  color: var(--cp-navy);
-}
-
-.header-quick-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  grid-template-rows: 1fr auto;
 }
 
 .brand {
@@ -433,21 +453,6 @@ textarea {
   color: #fff4e8;
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.user-chip {
-  font-size: 0.9rem;
-  background: #eef3f8;
-  padding: 5px 8px;
-  border-radius: 8px;
-}
-
 .command-trigger {
   background: #fff;
   border-color: #cfd8e3;
@@ -465,7 +470,7 @@ textarea {
 .app-main {
   width: min(var(--cp-width-standard), 100%);
   margin: 0 auto;
-  padding: 22px 20px 20px;
+  padding: 18px 20px 20px;
 }
 
 .app-main--workspace {
@@ -4053,12 +4058,11 @@ th {
     height: auto;
     border-right: 0;
     border-bottom: 1px solid #d6e0eb;
+    overflow: visible;
   }
 
-  .header-left,
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
+  .sidebar-nav {
+    overflow: visible;
   }
 
   .app-main {

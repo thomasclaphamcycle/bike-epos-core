@@ -91,7 +91,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     });
   }, [currentPath, visibleSections]);
 
-  const activeArea = visibleSections.find((section) => isSectionActive(section))?.label ?? "Dashboard";
+  const userDisplayName = user?.name || user?.username || "Signed in";
 
   return (
     <div className="layout-root">
@@ -100,6 +100,10 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <Link to="/dashboard" className="brand" aria-label="CorePOS dashboard">
             <CorePosLogo variant="full" size={60} className="sidebar-brand-logo" />
           </Link>
+        </div>
+
+        <div className="sidebar-utility">
+          <GlobalCommandBar />
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary navigation">
@@ -196,27 +200,17 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </section>
         </nav>
 
-        <div className="sidebar-build-info">{appVersionLabel}</div>
+        <div className="sidebar-footer">
+          <div className="sidebar-account-block">
+            <div className="sidebar-account-name">{userDisplayName}</div>
+            <div className="sidebar-account-role">{user?.role}</div>
+          </div>
+          <button type="button" className="sidebar-logout-button" onClick={onLogout}>Logout</button>
+          <div className="sidebar-build-info">{appVersionLabel}</div>
+        </div>
       </aside>
 
       <div className="app-shell">
-        <header className="app-header">
-          <div className="header-left">
-            <div className="header-context">
-              <span className="header-eyebrow">Current Area</span>
-              <strong className="header-area">{activeArea}</strong>
-            </div>
-            <div className="header-quick-actions">
-              <Link to="/workshop/check-in" className="button-link">New Check-In</Link>
-            </div>
-          </div>
-          <div className="header-right">
-            <GlobalCommandBar />
-            <span className="user-chip">{user?.username} ({user?.role})</span>
-            <button type="button" className="logout-button" onClick={onLogout}>Logout</button>
-          </div>
-        </header>
-
         <main className={isWorkspacePage ? "app-main app-main--workspace" : "app-main"}>{children}</main>
 
         <footer className="app-footer">
