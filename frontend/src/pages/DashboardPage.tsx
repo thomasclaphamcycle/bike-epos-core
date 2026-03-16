@@ -243,9 +243,6 @@ const actionIconLabel = (item: ActionItem) => {
   return { glyph: "i", label: "Operational information", tone: "info" };
 };
 
-const formatDashboardDayLabel = (value: Date) =>
-  new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" }).format(value);
-
 const getShiftBadgeLabel = (shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY") => {
   switch (shiftType) {
     case "HALF_DAY_AM":
@@ -265,23 +262,6 @@ const weatherGlyph: Record<DashboardWeatherTimelinePoint["kind"], string> = {
   cloud: "☁",
   rain: "☂",
   showers: "☔",
-};
-
-const buildWeatherChangeSummary = (timeline: DashboardWeatherTimelinePoint[]) => {
-  if (!timeline.length) {
-    return "No trading-hour weather changes available.";
-  }
-
-  const wetPoint = timeline.find((point) => point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35);
-  if (wetPoint) {
-    return `Rain risk from ${wetPoint.label}.`;
-  }
-
-  if (timeline.length > 1) {
-    return `${timeline[0].summary} turning ${timeline[timeline.length - 1].summary.toLowerCase()} by ${timeline[timeline.length - 1].label}.`;
-  }
-
-  return `${timeline[0].summary} through trading hours.`;
 };
 
 const DashboardMetricCard = ({ label, value, detail, href, placeholder = false }: MetricCardProps) => {
@@ -719,16 +699,8 @@ export const DashboardPage = () => {
     workshopWaitingCount,
   ]);
 
-  const todayDate = useMemo(() => clock, [clock]);
-  const tomorrowDate = useMemo(() => {
-    const value = new Date(clock);
-    value.setDate(value.getDate() + 1);
-    return value;
-  }, [clock]);
-
   const rotaLink = quickActions.find((action) => action.label === "View Rota")?.to;
   const tradingWeatherTimeline = weather?.tradingDayTimeline ?? [];
-  const weatherSummaryLine = useMemo(() => buildWeatherChangeSummary(tradingWeatherTimeline), [tradingWeatherTimeline]);
 
   return (
     <div className="page-shell page-shell-workspace ui-page ui-page--workspace dashboard-v1">
@@ -738,7 +710,6 @@ export const DashboardPage = () => {
           title={`Hello ${firstName}`}
           meta={(
             <div className="dashboard-header-clock" aria-label={`Current time ${headerDateLabel} ${headerTimeLabel}`}>
-              <span className="dashboard-header-clock-label">Current time</span>
               <strong className="dashboard-header-clock-value">{headerDateLabel} • {headerTimeLabel}</strong>
             </div>
           )}
@@ -765,22 +736,6 @@ export const DashboardPage = () => {
             <EmptyState title="Loading weather" description="Fetching the latest trading-hour forecast." />
           ) : weather.status === "ready" && weather.today ? (
             <div className="dashboard-weather-strip-content">
-              <div className="dashboard-weather-strip-head">
-                <div>
-                  <strong className="dashboard-weather-strip-title">
-                    {weatherSummaryLine}
-                  </strong>
-                  <div className="dashboard-weather-strip-meta">
-                    <span>{weather.today.summary}</span>
-                    <span>
-                      {weather.today.highC}° / {weather.today.lowC}°
-                    </span>
-                    <span>Rain {weather.today.precipitationMm} mm</span>
-                    {weather.locationLabel ? <span>{weather.locationLabel}</span> : null}
-                  </div>
-                </div>
-              </div>
-
               {tradingWeatherTimeline.length ? (
                 <div className="dashboard-weather-timeline" aria-label="Trading hour weather change points">
                   <div className="dashboard-weather-timeline-points" role="list">
@@ -839,13 +794,12 @@ export const DashboardPage = () => {
           ) : (
             <div className="dashboard-staff-roster-grid">
               {[
-                { label: "Today", dateLabel: formatDashboardDayLabel(todayDate), staffDay: staffToday },
-                { label: "Tomorrow", dateLabel: formatDashboardDayLabel(tomorrowDate), staffDay: staffTomorrow },
-              ].map(({ label, dateLabel, staffDay }) => (
+                { label: "Today", staffDay: staffToday },
+                { label: "Tomorrow", staffDay: staffTomorrow },
+              ].map(({ label, staffDay }) => (
                 <section key={label} className="dashboard-staff-roster-column">
                   <div className="dashboard-staff-roster-header">
                     <span className="metric-label dashboard-metric-label">{label}</span>
-                    <strong>{dateLabel}</strong>
                   </div>
 
                   {staffDay.summary.isClosed ? (

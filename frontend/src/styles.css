@@ -950,14 +950,6 @@ th {
   gap: 2px;
 }
 
-.dashboard-header-clock-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #66768a;
-}
-
 .dashboard-header-clock-value {
   color: #14293f;
   font-size: 1rem;
@@ -980,29 +972,6 @@ th {
 .dashboard-weather-strip-content {
   display: grid;
   gap: 10px;
-}
-
-.dashboard-weather-strip-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 12px;
-}
-
-.dashboard-weather-strip-title {
-  display: block;
-  margin-top: 0;
-  font-size: 0.98rem;
-  color: #14293f;
-}
-
-.dashboard-weather-strip-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  margin-top: 6px;
-  font-size: 0.82rem;
-  color: #5f7185;
 }
 
 .dashboard-weather-timeline {
@@ -1282,11 +1251,6 @@ th {
   gap: 2px;
 }
 
-.dashboard-staff-roster-header strong {
-  color: #14293f;
-  font-size: 0.94rem;
-}
-
 .dashboard-staff-roster-list {
   display: grid;
   gap: 2px;
@@ -1408,10 +1372,6 @@ th {
   .dashboard-v1-group-header {
     flex-direction: column;
     align-items: start;
-  }
-
-  .dashboard-weather-strip-head {
-    flex-direction: column;
   }
 
   .dashboard-weather-timeline {
