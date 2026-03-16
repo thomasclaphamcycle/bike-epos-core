@@ -120,8 +120,8 @@ textarea {
   background: #041334;
   color: #edf5fb;
   padding: 18px 14px;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   position: sticky;
   top: 0;
@@ -140,6 +140,7 @@ textarea {
 }
 
 .sidebar-nav {
+  flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   display: flex;
@@ -151,6 +152,7 @@ textarea {
 }
 
 .sidebar-footer {
+  flex-shrink: 0;
   display: grid;
   gap: 10px;
   padding-top: 12px;
