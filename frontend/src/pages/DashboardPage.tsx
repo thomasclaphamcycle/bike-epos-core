@@ -320,6 +320,21 @@ const DashboardStatCard = ({ label, value, detail }: DashboardStatCardProps) => 
   </div>
 );
 
+type DashboardWidgetSummaryProps = {
+  items: Array<{ label: string; value: string | number }>;
+};
+
+const DashboardWidgetSummary = ({ items }: DashboardWidgetSummaryProps) => (
+  <div className="dashboard-v1-widget-summary" role="list">
+    {items.map((item) => (
+      <div key={item.label} className="dashboard-v1-widget-summary-item" role="listitem">
+        <span className="metric-label dashboard-metric-label">{item.label}</span>
+        <strong>{item.value}</strong>
+      </div>
+    ))}
+  </div>
+);
+
 const DashboardActionButton = ({ label, to, disabledReason }: DashboardActionLink) => {
   const className = "button-link dashboard-link-card";
 
@@ -600,6 +615,11 @@ export const DashboardPage = () => {
 
     return summary;
   }, [hireBookings]);
+
+  const activeHireCount = useMemo(
+    () => hireBookings.filter((booking) => booking.status === "CHECKED_OUT").length,
+    [hireBookings],
+  );
 
   const quickActions = useMemo<DashboardActionLink[]>(() => {
     const rotaLink = user?.role === "ADMIN" || user?.role === "MANAGER"
@@ -892,42 +912,44 @@ export const DashboardPage = () => {
             actions={canViewManagerWidgets ? <Link to="/management/actions">Open full queue</Link> : null}
           />
 
-          {canViewManagerWidgets ? (
-            dashboardActionItems.length ? (
-              <div className="dashboard-action-list">
-                {dashboardActionItems.map((item) => {
-                  const icon = actionIconLabel(item);
+          <div className="dashboard-v1-widget-body">
+            {canViewManagerWidgets ? (
+              dashboardActionItems.length ? (
+                <div className="dashboard-action-list">
+                  {dashboardActionItems.map((item) => {
+                    const icon = actionIconLabel(item);
 
-                  return (
-                    <Link key={`${item.type}-${item.entityId}`} className="dashboard-action-item" to={item.link}>
-                      <span
-                        className={`dashboard-action-icon dashboard-action-icon--${icon.tone}`}
-                        aria-hidden="true"
-                        title={icon.label}
-                      >
-                        {icon.glyph}
-                      </span>
-                      <div className="dashboard-action-copy">
-                        <strong>{item.title}</strong>
-                        <span className="muted-text">{item.reason}</span>
-                      </div>
-                      <span className={actionSeverityBadgeClass[item.severity]}>{item.severity}</span>
-                    </Link>
-                  );
-                })}
-              </div>
+                    return (
+                      <Link key={`${item.type}-${item.entityId}`} className="dashboard-action-item" to={item.link}>
+                        <span
+                          className={`dashboard-action-icon dashboard-action-icon--${icon.tone}`}
+                          aria-hidden="true"
+                          title={icon.label}
+                        >
+                          {icon.glyph}
+                        </span>
+                        <div className="dashboard-action-copy">
+                          <strong>{item.title}</strong>
+                          <span className="muted-text">{item.reason}</span>
+                        </div>
+                        <span className={actionSeverityBadgeClass[item.severity]}>{item.severity}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No operational alerts"
+                  description="The full management action centre still holds broader grouped oversight queues outside this dashboard."
+                />
+              )
             ) : (
               <EmptyState
-                title="No operational alerts"
-                description="The full management action centre still holds broader grouped oversight queues outside this dashboard."
+                title="Manager view"
+                description="Action Centre is available to managers. Staff can jump directly into POS, workshop, customers, and inventory from the quick actions above."
               />
-            )
-          ) : (
-            <EmptyState
-              title="Manager view"
-              description="Action Centre is available to managers. Staff can jump directly into POS, workshop, customers, and inventory from the quick actions above."
-            />
-          )}
+            )}
+          </div>
         </SurfaceCard>
 
         <SurfaceCard className="dashboard-v1-widget">
@@ -942,27 +964,36 @@ export const DashboardPage = () => {
             )}
           />
 
-          <div className="dashboard-v1-stat-grid">
-            <DashboardStatCard
-              label="Outstanding"
-              value={outstandingWorkshopJobs === null ? "—" : `${outstandingWorkshopJobs}`}
-              detail={`Due today ${workshopSummary?.dueToday ?? 0} · Overdue ${workshopSummary?.overdue ?? 0}`}
+          <div className="dashboard-v1-widget-body">
+            <DashboardWidgetSummary
+              items={[
+                { label: "Due today", value: workshopSummary?.dueToday ?? "—" },
+                { label: "Overdue", value: workshopSummary?.overdue ?? "—" },
+              ]}
             />
-            <DashboardStatCard
-              label="Waiting"
-              value={workshopSummary ? workshopWaitingCount : "—"}
-              detail="Jobs waiting for approval, parts, or scheduling decisions."
-            />
-            <DashboardStatCard
-              label="In Progress"
-              value={workshopSummary ? workshopInProgressCount : "—"}
-              detail="Active bench work already underway."
-            />
-            <DashboardStatCard
-              label="Ready for Pickup"
-              value={workshopSummary ? workshopReadyCount : "—"}
-              detail="Completed jobs ready for customer handover."
-            />
+
+            <div className="dashboard-v1-stat-grid dashboard-v1-stat-grid--balanced">
+              <DashboardStatCard
+                label="Outstanding"
+                value={outstandingWorkshopJobs === null ? "—" : `${outstandingWorkshopJobs}`}
+                detail="Open jobs still moving through the queue."
+              />
+              <DashboardStatCard
+                label="Waiting"
+                value={workshopSummary ? workshopWaitingCount : "—"}
+                detail="Approval, parts, or scheduling follow-up."
+              />
+              <DashboardStatCard
+                label="In Progress"
+                value={workshopSummary ? workshopInProgressCount : "—"}
+                detail="Active bench work underway now."
+              />
+              <DashboardStatCard
+                label="Ready for Pickup"
+                value={workshopSummary ? workshopReadyCount : "—"}
+                detail="Completed jobs ready for handover."
+              />
+            </div>
           </div>
         </SurfaceCard>
 
@@ -973,20 +1004,30 @@ export const DashboardPage = () => {
             actions={canViewManagerWidgets ? <Link to="/rental/calendar">Rental Calendar</Link> : null}
           />
 
-          {canViewManagerWidgets ? (
-            <div className="dashboard-v1-stat-grid">
-              <DashboardStatCard label="Pickups Today" value={rentalSnapshot.pickupsToday} detail="Reserved bikes due out today." />
-              <DashboardStatCard label="Pickups Tomorrow" value={rentalSnapshot.pickupsTomorrow} detail="Reserved bikes due out tomorrow." />
-              <DashboardStatCard label="Returns Today" value={rentalSnapshot.returnsToday} detail="Checked-out bikes expected back today." />
-              <DashboardStatCard label="Returns Tomorrow" value={rentalSnapshot.returnsTomorrow} detail="Checked-out bikes expected back tomorrow." />
-              <DashboardStatCard label="Overdue" value={rentalSnapshot.overdue} detail="Checked-out rentals already past due back time." />
-            </div>
-          ) : (
-            <EmptyState
-              title="Manager view"
-              description="Rental operations are configured for manager access only on this deployment. The widget remains in place so the dashboard structure is consistent when rental access is enabled."
-            />
-          )}
+          <div className="dashboard-v1-widget-body">
+            {canViewManagerWidgets ? (
+              <>
+                <DashboardWidgetSummary
+                  items={[
+                    { label: "Active hires", value: activeHireCount },
+                    { label: "Overdue", value: rentalSnapshot.overdue },
+                  ]}
+                />
+
+                <div className="dashboard-v1-stat-grid dashboard-v1-stat-grid--balanced">
+                  <DashboardStatCard label="Pickups Today" value={rentalSnapshot.pickupsToday} detail="Reserved bikes due out today." />
+                  <DashboardStatCard label="Pickups Tomorrow" value={rentalSnapshot.pickupsTomorrow} detail="Reserved bikes due out tomorrow." />
+                  <DashboardStatCard label="Returns Today" value={rentalSnapshot.returnsToday} detail="Checked-out bikes expected back today." />
+                  <DashboardStatCard label="Returns Tomorrow" value={rentalSnapshot.returnsTomorrow} detail="Checked-out bikes expected back tomorrow." />
+                </div>
+              </>
+            ) : (
+              <EmptyState
+                title="Manager view"
+                description="Rental operations are configured for manager access only on this deployment. The widget remains in place so the dashboard structure is consistent when rental access is enabled."
+              />
+            )}
+          </div>
         </SurfaceCard>
         </div>
       </section>
