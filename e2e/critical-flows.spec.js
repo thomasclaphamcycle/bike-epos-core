@@ -18,6 +18,18 @@ const parseOnHand = (labelText) => {
   return Number.parseInt(match[1], 10);
 };
 
+const expectStocktakeLineCount = async (page, variantId, expectedCount) => {
+  await expect.poll(async () => {
+    const cell = page.getByTestId(`stocktake-line-count-${variantId}`);
+    if (await cell.count() === 0) {
+      return null;
+    }
+    return (await cell.first().textContent())?.trim() ?? null;
+  }, {
+    message: `Expected stocktake line ${variantId} count to become ${expectedCount}`,
+  }).toBe(String(expectedCount));
+};
+
 const ensureOpenRegisterSession = async (request) => {
   const current = await apiJsonWithHeaderBypass(
     request,
@@ -525,18 +537,18 @@ test("Stocktake scan mode and bulk import build counted lines quickly", async ({
 
   await page.getByTestId("stocktake-scan-code").fill(firstVariant.barcode);
   await page.getByTestId("stocktake-scan-code").press("Enter");
-  await expect(page.getByTestId(`stocktake-line-count-${firstVariant.variant.id}`)).toHaveText("1");
+  await expectStocktakeLineCount(page, firstVariant.variant.id, 1);
 
   await page.getByTestId("stocktake-scan-code").fill(firstVariant.barcode);
   await page.getByTestId("stocktake-scan-code").press("Enter");
-  await expect(page.getByTestId(`stocktake-line-count-${firstVariant.variant.id}`)).toHaveText("2");
+  await expectStocktakeLineCount(page, firstVariant.variant.id, 2);
 
   await page.getByTestId("stocktake-bulk-import").fill(
     `${firstVariant.barcode},4\n${secondVariant.barcode},6`,
   );
   await page.getByTestId("stocktake-bulk-apply").click();
-  await expect(page.getByTestId(`stocktake-line-count-${firstVariant.variant.id}`)).toHaveText("4");
-  await expect(page.getByTestId(`stocktake-line-count-${secondVariant.variant.id}`)).toHaveText("6");
+  await expectStocktakeLineCount(page, firstVariant.variant.id, 4);
+  await expectStocktakeLineCount(page, secondVariant.variant.id, 6);
 });
 
 test("Purchase order receiving shortcuts populate remaining quantities without auto-submitting", async ({
