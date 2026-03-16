@@ -854,7 +854,7 @@ export const DashboardPage = () => {
       </div>
       </div>
 
-      <section className="dashboard-v1-group" aria-label="Financial snapshot">
+      <section className="dashboard-v1-group dashboard-v1-group--band dashboard-v1-group--financial" aria-label="Financial snapshot">
         <div className="dashboard-summary-grid dashboard-v1-kpis ui-kpi-grid">
           <DashboardMetricCard
             label="Sales Today"
@@ -905,7 +905,7 @@ export const DashboardPage = () => {
         </div>
       </section>
 
-      <section className="dashboard-v1-group" aria-label="Operations overview">
+      <section className="dashboard-v1-group dashboard-v1-group--band dashboard-v1-group--operations" aria-label="Operations overview">
         <div className="dashboard-v1-main-row">
         <SurfaceCard className="dashboard-v1-widget dashboard-v1-action-centre">
           <SectionHeader
