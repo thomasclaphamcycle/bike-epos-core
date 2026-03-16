@@ -8,7 +8,7 @@ const NAME = "Thomas";
 const PIN = "9999";
 const DEV_PASSWORD = "thomas-admin-dev";
 
-async function main() {
+export async function createThomasAdmin() {
   const pinHash = await hashPin(PIN);
   const passwordHash = await hashPassword(DEV_PASSWORD);
 
@@ -29,13 +29,18 @@ async function main() {
       passwordHash,
     },
   });
+}
 
+async function main() {
+  await createThomasAdmin();
   console.log("Admin user 'Thomas' ready with PIN 9999");
 }
 
-main()
+if (require.main === module) {
+  void main()
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());
+}

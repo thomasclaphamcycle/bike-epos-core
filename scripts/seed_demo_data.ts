@@ -7,6 +7,7 @@ import {
   WorkshopJobStatus,
 } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { createThomasAdmin } from "./dev/create_thomas_admin";
 
 const DATABASE_URL = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
 if (!DATABASE_URL) {
@@ -1029,14 +1030,15 @@ const run = async () => {
   await seedDemoSuppliers();
   await seedDemoPurchaseOrders(variantBySku);
   await seedDemoSales(variantBySku);
+  await createThomasAdmin();
 
   console.log("Demo seed ready:");
-  console.log("- no demo auth users are created");
+  console.log("- admin login user Thomas (username: thomas, PIN: 9999) is ready");
   console.log(`- ${DEMO_PRODUCTS.length} products with opening stock in ${DEMO_STOCK_LOCATION.name}`);
   console.log(`- ${DEMO_CUSTOMERS.length} customers`);
   console.log(`- ${DEMO_WORKSHOP_JOBS.length} workshop jobs`);
   console.log(`- ${DEMO_SUPPLIERS.length} supplier and ${DEMO_PURCHASE_ORDERS.length} open purchase order`);
-  console.log("Existing local staff accounts are preserved.");
+  console.log("Existing local staff accounts are preserved and Thomas is upserted idempotently.");
 };
 
 run()
