@@ -143,9 +143,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           <span
                             aria-hidden="true"
                             className={isOpen ? "sidebar-toggle-chevron sidebar-toggle-chevron--open" : "sidebar-toggle-chevron"}
-                          >
-                            ▸
-                          </span>
+                          />
                         </button>
                       </div>
                     ) : (

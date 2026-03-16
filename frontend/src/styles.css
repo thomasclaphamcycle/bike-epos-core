@@ -302,9 +302,12 @@ textarea {
 }
 
 .sidebar-toggle-chevron {
+  position: relative;
   display: inline-block;
   flex: 0 0 auto;
-  transition: transform 120ms ease;
+  width: 10px;
+  height: 10px;
+  line-height: 0;
 }
 
 .sidebar-group-toggle {
@@ -320,6 +323,17 @@ textarea {
   transition:
     background-color 120ms ease,
     color 120ms ease;
+}
+
+.sidebar-toggle-chevron::before {
+  content: "";
+  position: absolute;
+  inset: 1px 2px 1px 1px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  transition: transform 120ms ease, border-color 120ms ease;
 }
 
 .sidebar-link--group,
@@ -351,7 +365,10 @@ textarea {
 }
 
 .sidebar-toggle-chevron--open {
-  transform: rotate(90deg);
+}
+
+.sidebar-toggle-chevron--open::before {
+  transform: rotate(45deg);
 }
 
 .sidebar-submenu {
