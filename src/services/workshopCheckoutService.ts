@@ -17,6 +17,8 @@ export type WorkshopCheckoutInput = {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS = 10;
 const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 4;
+const WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS = 15_000;
+const WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS = 15_000;
 
 type WorkshopCheckoutResult = {
   sale: {
@@ -62,13 +64,25 @@ const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
     message.includes("write conflict") ||
     message.includes("deadlock") ||
     message.includes("could not serialize") ||
+    message.includes("transaction already closed") ||
+    message.includes("a query cannot be executed on an expired transaction") ||
+    message.includes("transaction is no longer valid") ||
+    message.includes("transaction api error") ||
     (message.includes("duplicate key value") && message.includes("workshopjobid")) ||
     (message.includes("unique constraint") && message.includes("workshopjobid"))
   );
 };
 
+const withWorkshopCheckoutTransaction = <T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+) =>
+  prisma.$transaction(fn, {
+    maxWait: WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS,
+    timeout: WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS,
+  });
+
 const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promise<WorkshopCheckoutResult | null> =>
-  prisma.$transaction(async (tx) => {
+  withWorkshopCheckoutTransaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
 
     const workshopJob = await tx.workshopJob.findUnique({
@@ -189,7 +203,7 @@ export const checkoutWorkshopJobToSale = async (
 
   for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_TRANSACTION_RETRIES; attempt += 1) {
     try {
-      result = await prisma.$transaction(async (tx) => {
+      result = await withWorkshopCheckoutTransaction(async (tx) => {
       let workshopJob = await tx.workshopJob.findUnique({
         where: { id: workshopJobId },
         include: { customer: true },
