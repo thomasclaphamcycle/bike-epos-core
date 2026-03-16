@@ -974,15 +974,39 @@ th {
 
 .dashboard-v1-header {
   display: grid;
-  gap: 14px;
-  padding: var(--cp-space-4);
+  gap: 10px;
+  padding: 14px;
+}
+
+.dashboard-v1-header-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.dashboard-v1-header-greeting {
+  min-width: 0;
+}
+
+.dashboard-v1-header-greeting .ui-page-header {
+  display: block;
+}
+
+.dashboard-v1-header-greeting .ui-page-header__copy {
+  gap: 0;
+}
+
+.dashboard-v1-header-greeting .ui-page-title {
+  line-height: 1.04;
 }
 
 .dashboard-header-clock {
   display: grid;
-  justify-items: end;
+  justify-items: center;
   gap: 0;
   min-width: 92px;
+  align-self: center;
 }
 
 .dashboard-header-clock-time {
@@ -1001,6 +1025,7 @@ th {
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.2;
+  text-align: center;
 }
 
 .dashboard-weather-strip {
@@ -1156,6 +1181,7 @@ th {
   display: grid;
   gap: 6px;
   justify-items: end;
+  align-self: center;
 }
 
 .dashboard-v1-kicker {
@@ -1486,8 +1512,18 @@ th {
 }
 
 @media (max-width: 720px) {
+  .dashboard-v1-header-top {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dashboard-header-clock,
   .dashboard-v1-header-actions {
     justify-items: start;
+  }
+
+  .dashboard-header-clock-date {
+    text-align: left;
   }
 
   .dashboard-staff-roster-grid {

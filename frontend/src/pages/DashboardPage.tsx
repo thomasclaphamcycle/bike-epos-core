@@ -706,24 +706,22 @@ export const DashboardPage = () => {
     <div className="page-shell page-shell-workspace ui-page ui-page--workspace dashboard-v1">
       <div className="dashboard-hero-stack">
       <SurfaceCard className="dashboard-v1-header ui-surface-card--soft">
-        <PageHeader
-          title={`Hello ${firstName}`}
-          meta={(
-            <div className="dashboard-header-clock" aria-label={`Current time ${headerDateLabel} ${headerTimeLabel}`}>
-              <strong className="dashboard-header-clock-time">{headerTimeLabel}</strong>
-              <span className="dashboard-header-clock-date">{headerDateLabel}</span>
+        <div className="dashboard-v1-header-top">
+          <div className="dashboard-v1-header-greeting">
+            <PageHeader title={`Hello ${firstName}`} />
+          </div>
+          <div className="dashboard-header-clock" aria-label={`Current time ${headerDateLabel} ${headerTimeLabel}`}>
+            <strong className="dashboard-header-clock-time">{headerTimeLabel}</strong>
+            <span className="dashboard-header-clock-date">{headerDateLabel}</span>
+          </div>
+          <div className="dashboard-v1-header-actions">
+            <div className="actions-inline">
+              <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
+                {loading ? "Refreshing..." : "Refresh dashboard"}
+              </button>
             </div>
-          )}
-          actions={(
-            <div className="dashboard-v1-header-actions">
-              <div className="actions-inline">
-                <button type="button" onClick={() => void loadDashboard()} disabled={loading}>
-                  {loading ? "Refreshing..." : "Refresh dashboard"}
-                </button>
-              </div>
-            </div>
-          )}
-        />
+          </div>
+        </div>
         <div className="dashboard-link-grid">
           {quickActions.map((action) => (
             <DashboardActionButton key={action.label} {...action} />
