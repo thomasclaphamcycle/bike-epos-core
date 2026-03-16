@@ -15,6 +15,8 @@ X-Staff-Id: demo-manager
 ### calculated from negative Payment rows by payment created date (Europe/London).
 ### netPence can be negative on high-refund/low-gross days.
 GET {{baseUrl}}/api/reports/sales/daily?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Sales daily CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/sales/daily.csv?from=2026-03-01&to=2026-03-31
@@ -41,10 +43,32 @@ GET {{baseUrl}}/api/reports/financial/sales-by-category
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Historical financial summary CSV import (MANAGER+)
+POST {{baseUrl}}/api/reports/financial/historical-summary/import
+Content-Type: text/csv
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+date,gross_revenue,net_revenue,cost_of_goods,transaction_count
+2025-03-01,1340,1200,720,42
+2025-03-02,1580,1450,810,48
+
+### Month-to-date revenue summary with year-on-year comparison (MANAGER+)
+GET {{baseUrl}}/api/reports/financial/monthly-sales-summary?asOf=2026-03-16
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Month-to-date margin summary with year-on-year comparison (MANAGER+)
+GET {{baseUrl}}/api/reports/financial/monthly-margin-summary?asOf=2026-03-16
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
 ### Workshop daily report
 ### Uses WorkshopJob.completedAt as completion date.
 ### Date bucketing is Europe/London.
 GET {{baseUrl}}/api/reports/workshop/daily?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Workshop daily CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/workshop/daily.csv?from=2026-03-01&to=2026-03-31
@@ -53,6 +77,8 @@ X-Staff-Id: demo-manager
 
 ### Inventory on-hand by location
 GET {{baseUrl}}/api/reports/inventory/on-hand?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Inventory on-hand CSV (MANAGER+)
 GET {{baseUrl}}/api/reports/inventory/on-hand.csv?locationId={{locationId}}
@@ -61,6 +87,8 @@ X-Staff-Id: demo-manager
 
 ### Inventory value by location (purchase average cost v1)
 GET {{baseUrl}}/api/reports/inventory/value?locationId={{locationId}}
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
 
 ### Inventory valuation snapshot (MANAGER+)
 GET {{baseUrl}}/api/reports/inventory/value-snapshot

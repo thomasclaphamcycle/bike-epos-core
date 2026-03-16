@@ -917,6 +917,19 @@ model SaleReturnItem {
   @@index([saleItemId])
 }
 
+model HistoricalFinancialSummary {
+  id                 String   @id @default(uuid()) @db.Uuid
+  date               DateTime @unique @db.Date
+  grossRevenuePence  Int
+  netRevenuePence    Int
+  costOfGoodsPence   Int
+  transactionCount   Int
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([date])
+}
+
 model Customer {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @default("")

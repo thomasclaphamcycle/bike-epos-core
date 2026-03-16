@@ -3,6 +3,8 @@ import {
   getActionCentreReport,
   getCustomerServiceRemindersReport,
   getDailyCloseReport,
+  getFinancialMonthlyMarginSummary,
+  getFinancialMonthlySalesSummary,
   getInventoryInvestigationsReport,
   getInventoryOnHandReport,
   getInventoryVelocityReport,
@@ -20,6 +22,7 @@ import {
   getInventoryReorderSuggestionsReport,
   getInventoryVelocity,
   getProductSalesReport,
+  importHistoricalFinancialSummaries,
   getSalesDailyReport,
   getSupplierPerformanceReport,
   getSupplierCostHistoryReport,
@@ -45,6 +48,9 @@ const getDateRangeQuery = (req: Request) => {
 
 const getLocationIdQuery = (req: Request) =>
   (typeof req.query.locationId === "string" ? req.query.locationId : undefined);
+
+const getAsOfQuery = (req: Request) =>
+  (typeof req.query.asOf === "string" ? req.query.asOf : undefined);
 
 const getTakeQuery = (req: Request) => {
   if (req.query.take === undefined) {
@@ -225,6 +231,36 @@ export const getPaymentsReportCsvHandler = async (req: Request, res: Response) =
   ]);
 
   sendCsv(res, "payments.csv", csv);
+};
+
+export const importHistoricalFinancialSummariesHandler = async (req: Request, res: Response) => {
+  const csv =
+    typeof req.body === "string"
+      ? req.body
+      : req.body && typeof req.body === "object" && typeof (req.body as { csv?: unknown }).csv === "string"
+        ? (req.body as { csv: string }).csv
+        : null;
+
+  if (!csv) {
+    throw new HttpError(
+      400,
+      "Historical summary import expects raw text/csv or a JSON body with a csv field",
+      "INVALID_HISTORICAL_SUMMARY_CSV",
+    );
+  }
+
+  const result = await importHistoricalFinancialSummaries(csv);
+  res.status(201).json(result);
+};
+
+export const getFinancialMonthlySalesSummaryHandler = async (req: Request, res: Response) => {
+  const report = await getFinancialMonthlySalesSummary(getAsOfQuery(req));
+  res.json(report);
+};
+
+export const getFinancialMonthlyMarginSummaryHandler = async (req: Request, res: Response) => {
+  const report = await getFinancialMonthlyMarginSummary(getAsOfQuery(req));
+  res.json(report);
 };
 
 export const runDailyCloseHandler = async (req: Request, res: Response) => {

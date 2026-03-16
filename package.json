@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "prisma:generate": "npx prisma generate",
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:frontend",
     "start:prod": "NODE_ENV=production node src/server.ts",
@@ -22,6 +23,7 @@
     "test:db:migrate": "node scripts/ensure_test_db_schema.js",
     "test": "npm run test:db:migrate && npm run typecheck:reports && npm run test:smoke",
     "test:smoke": "node scripts/run_smoke_suite.js",
+    "db:sync:test": "node scripts/run_with_test_env.js npx prisma db push --force-reset --accept-data-loss",
     "test:db:up": "bash scripts/test_db_up.sh",
     "test:db:down": "bash scripts/test_db_down.sh",
     "auth:seed-admin": "node scripts/create_admin_user.js",
@@ -66,6 +68,7 @@
     "test:m76": "node scripts/run_smoke_test.js scripts/pos_barcode_m76_smoke_tests.js",
     "test:m77": "node scripts/run_smoke_test.js scripts/refunds_exchanges_m77_smoke_tests.js",
     "test:m78": "node scripts/run_smoke_test.js scripts/daily_close_m78_smoke_tests.js",
+    "test:financial-comparisons": "node scripts/run_smoke_test.js scripts/financial_comparisons_smoke_tests.js",
     "test:security": "node scripts/run_with_test_env.js node scripts/security_auth_guard_tests.js",
     "test:cash-foundation": "node scripts/run_smoke_test.js scripts/cash_management_foundation_smoke_tests.js",
     "test:m88": "node scripts/run_smoke_test.js scripts/product_sales_m88_smoke_tests.js",

@@ -1,11 +1,13 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import {
   dismissReminderCandidateHandler,
   getActionCentreReportHandler,
   getCustomerServiceRemindersReportHandler,
   getDailyCloseHandler,
   getFinancialMonthlyMarginReportHandler,
+  getFinancialMonthlyMarginSummaryHandler,
   getFinancialMonthlySalesReportHandler,
+  getFinancialMonthlySalesSummaryHandler,
   getFinancialSalesByCategoryReportHandler,
   getInventoryInvestigationsReportHandler,
   getInventoryOnHandReportHandler,
@@ -23,6 +25,7 @@ import {
   getCustomerInsightsReportHandler,
   getInventoryLocationSummaryReportHandler,
   getProductSalesReportHandler,
+  importHistoricalFinancialSummariesHandler,
   getSalesDailyReportHandler,
   getSalesDailyReportCsvHandler,
   getSupplierCostHistoryReportHandler,
@@ -40,6 +43,22 @@ export const reportRouter = Router();
 
 reportRouter.get("/sales/daily", requireRoleAtLeast("MANAGER"), getSalesDailyReportHandler);
 reportRouter.get("/sales/daily.csv", requireRoleAtLeast("MANAGER"), getSalesDailyReportCsvHandler);
+reportRouter.get(
+  "/financial/monthly-sales-summary",
+  requireRoleAtLeast("MANAGER"),
+  getFinancialMonthlySalesSummaryHandler,
+);
+reportRouter.get(
+  "/financial/monthly-margin-summary",
+  requireRoleAtLeast("MANAGER"),
+  getFinancialMonthlyMarginSummaryHandler,
+);
+reportRouter.post(
+  "/financial/historical-summary/import",
+  requireRoleAtLeast("MANAGER"),
+  express.text({ type: ["text/csv", "text/plain", "application/csv"] }),
+  importHistoricalFinancialSummariesHandler,
+);
 reportRouter.get("/daily-close", requireRoleAtLeast("MANAGER"), getDailyCloseHandler);
 reportRouter.post("/daily-close", requireRoleAtLeast("MANAGER"), runDailyCloseHandler);
 reportRouter.get("/financial/monthly-margin", requireRoleAtLeast("MANAGER"), getFinancialMonthlyMarginReportHandler);
