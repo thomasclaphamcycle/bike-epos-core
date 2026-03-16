@@ -141,10 +141,12 @@ textarea {
 
 .sidebar-nav {
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 2px;
 }
 
@@ -214,6 +216,7 @@ textarea {
 .sidebar-section-item {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .sidebar-section-row {
@@ -392,9 +395,10 @@ textarea {
 .sidebar-submenu {
   display: grid;
   gap: 8px;
-  padding-left: 12px;
+  min-width: 0;
+  padding-left: 26px;
   border-left: 1px solid rgba(157, 180, 201, 0.22);
-  margin-left: 14px;
+  margin-left: 0;
 }
 
 .sidebar-subgroup-label {
