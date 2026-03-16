@@ -710,7 +710,8 @@ export const DashboardPage = () => {
           title={`Hello ${firstName}`}
           meta={(
             <div className="dashboard-header-clock" aria-label={`Current time ${headerDateLabel} ${headerTimeLabel}`}>
-              <strong className="dashboard-header-clock-value">{headerDateLabel} • {headerTimeLabel}</strong>
+              <strong className="dashboard-header-clock-time">{headerTimeLabel}</strong>
+              <span className="dashboard-header-clock-date">{headerDateLabel}</span>
             </div>
           )}
           actions={(

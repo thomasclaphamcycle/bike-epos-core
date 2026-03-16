@@ -949,14 +949,27 @@ th {
 
 .dashboard-header-clock {
   display: grid;
-  gap: 2px;
+  justify-items: end;
+  gap: 0;
+  min-width: 92px;
 }
 
-.dashboard-header-clock-value {
+.dashboard-header-clock-time {
   color: #14293f;
-  font-size: 1rem;
+  font-family: "SFMono-Regular", "SF Mono", "Roboto Mono", "Menlo", "Consolas", monospace;
+  font-size: 1.65rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.dashboard-header-clock-date {
+  color: #607184;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .dashboard-weather-strip {
