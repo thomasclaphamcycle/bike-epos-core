@@ -742,7 +742,12 @@ export const DashboardPage = () => {
                     {tradingWeatherTimeline.map((point) => (
                       <div key={point.time} className="dashboard-weather-timeline-point" role="listitem">
                         <strong className="dashboard-weather-timeline-hour">{point.label}</strong>
-                        <span className="dashboard-weather-timeline-icon" aria-hidden="true">{weatherGlyph[point.kind]}</span>
+                        <span
+                          className={`dashboard-weather-timeline-icon dashboard-weather-timeline-icon--${point.kind}`}
+                          aria-hidden="true"
+                        >
+                          {weatherGlyph[point.kind]}
+                        </span>
                         <span className="dashboard-weather-timeline-temp">{point.temperatureC}°</span>
                         {(point.precipitationMm > 0.1 || point.precipitationProbabilityPercent >= 35) ? (
                           <span className="dashboard-weather-timeline-rain">{point.precipitationProbabilityPercent}% rain</span>
@@ -784,7 +789,7 @@ export const DashboardPage = () => {
             title="Staff Today"
             actions={(
               <div className="actions-inline">
-                {rotaLink ? <Link to={rotaLink}>View Rota</Link> : null}
+                {rotaLink ? <Link className="button-link button-link-compact dashboard-inline-action" to={rotaLink}>View Rota</Link> : null}
               </div>
             )}
           />

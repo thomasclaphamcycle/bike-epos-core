@@ -936,9 +936,9 @@ th {
 
 .dashboard-context-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.95fr);
+  grid-template-columns: minmax(0, 1.58fr) minmax(340px, 1.08fr);
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .dashboard-v1-header {
@@ -963,12 +963,14 @@ th {
   display: grid;
   gap: 10px;
   padding: var(--cp-space-3);
+  height: 100%;
 }
 
 .dashboard-staff-strip {
   display: grid;
   gap: 10px;
   padding: var(--cp-space-3);
+  height: 100%;
 }
 
 .dashboard-weather-strip-content {
@@ -979,8 +981,8 @@ th {
 .dashboard-weather-timeline {
   display: flex;
   align-items: stretch;
-  gap: 14px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid #d9e3ec;
   border-radius: 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, #f7fbfe 100%);
@@ -992,17 +994,20 @@ th {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 0;
 }
 
 .dashboard-weather-timeline-point {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 4px;
+  min-width: 66px;
+  padding: 4px 12px;
   color: #42576d;
   position: relative;
+  text-align: center;
 }
 
 .dashboard-weather-timeline-point::after {
@@ -1022,34 +1027,54 @@ th {
 
 .dashboard-weather-timeline-hour {
   color: #14293f;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
+  font-weight: 700;
   letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .dashboard-weather-timeline-icon {
-  font-size: 1rem;
+  font-size: 1.3rem;
   line-height: 1;
+}
+
+.dashboard-weather-timeline-icon--sun {
+  color: #d68407;
+}
+
+.dashboard-weather-timeline-icon--part-sun {
+  color: #cc8b18;
+}
+
+.dashboard-weather-timeline-icon--cloud {
+  color: #5f7185;
+}
+
+.dashboard-weather-timeline-icon--rain,
+.dashboard-weather-timeline-icon--showers {
+  color: #2d6ea3;
 }
 
 .dashboard-weather-timeline-temp {
   color: #14293f;
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 700;
+  line-height: 1;
 }
 
 .dashboard-weather-timeline-rain {
-  color: #5f7185;
-  font-size: 0.76rem;
+  color: #5a7087;
+  font-size: 0.72rem;
   white-space: nowrap;
 }
 
 .dashboard-weather-tomorrow-inline {
   flex: 0 0 auto;
-  min-width: 172px;
+  min-width: 188px;
   max-width: 220px;
   display: grid;
-  gap: 2px;
-  padding-left: 14px;
+  gap: 4px;
+  padding-left: 16px;
   border-left: 1px solid rgba(191, 209, 228, 0.8);
   color: #5f7185;
   font-size: 0.79rem;
@@ -1239,12 +1264,13 @@ th {
 .dashboard-staff-roster-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 18px;
+  align-items: start;
 }
 
 .dashboard-staff-roster-column {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -1255,7 +1281,7 @@ th {
 
 .dashboard-staff-roster-list {
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .dashboard-staff-roster-row {
@@ -1263,7 +1289,8 @@ th {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 6px 0;
+  min-height: 30px;
+  padding: 5px 0;
   border-bottom: 1px solid rgba(217, 227, 236, 0.82);
   color: #14293f;
 }
@@ -1285,6 +1312,10 @@ th {
 
 .dashboard-staff-roster-row .status-badge {
   flex-shrink: 0;
+}
+
+.dashboard-inline-action {
+  text-decoration: none;
 }
 
 .dashboard-staff-roster-closed,
@@ -1386,7 +1417,7 @@ th {
     min-width: 0;
     max-width: none;
     padding-left: 0;
-    padding-top: 8px;
+    padding-top: 10px;
     border-left: 0;
     border-top: 1px solid rgba(191, 209, 228, 0.8);
   }
