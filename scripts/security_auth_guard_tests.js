@@ -2,11 +2,10 @@
 require("dotenv").config({ path: ".env.test" });
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (process.env.NODE_ENV !== "test") {
@@ -22,13 +21,36 @@ if (DATABASE_URL && process.env.ALLOW_NON_TEST_DB !== "1") {
   }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const roleActorIds = {
   STAFF: randomUUID(),
   MANAGER: randomUUID(),
   ADMIN: randomUUID(),
 };
+
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
+
+  try {
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Ignore malformed URL handling here; the primary URL will surface the failure.
+  }
+
+  return urls;
+})();
+
+const serverController = createSmokeServerController({
+  label: "security-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
+});
 
 const headersWithRole = (role) => ({
   "X-Staff-Role": role,
@@ -39,7 +61,7 @@ const isAuthRejected = (status) => status === 401 || status === 403;
 const REPORT_RANGE_QUERY = "?from=2026-01-01&to=2026-12-31";
 
 const request = async ({ path, method = "GET", headers = {}, body }) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetch(`${serverController.getBaseUrl()}${path}`, {
     method,
     headers: {
       Accept: "application/json",
@@ -58,25 +80,6 @@ const request = async ({ path, method = "GET", headers = {}, body }) => {
   }
 
   return { status: response.status, text, json, headers: response.headers };
-};
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 80; i += 1) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
 };
 
 const expectStatus = (name, result, expectedStatuses) => {
@@ -145,29 +148,8 @@ const createFixtures = async () => {
 };
 
 const run = async () => {
-  let startedServer = false;
-  let serverProcess = null;
-
   try {
-    const alreadyHealthy = await serverIsHealthy();
-    if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!alreadyHealthy) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          ...(DATABASE_URL ? { DATABASE_URL } : {}),
-        },
-      });
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const fixtures = await createFixtures();
 
@@ -355,13 +337,7 @@ const run = async () => {
 
     console.log("Security auth-guard regression tests passed.");
   } finally {
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(400);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
+    await serverController.stop();
   }
 };
 
