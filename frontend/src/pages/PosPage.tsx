@@ -998,6 +998,15 @@ export const PosPage = () => {
         saleContext.bikeLabel,
       ].filter(Boolean).join(" | ")
     : "Retail sale";
+  const searchResultSummary = searchText.trim()
+    ? `${searchRows.length} result${searchRows.length === 1 ? "" : "s"}`
+    : "Ready for scan";
+  const activeCustomerName =
+    sale?.sale.customer?.name
+    || selectedCustomer?.name
+    || (saleContext.type === "WORKSHOP" ? saleContext.customerName : null)
+    || "Walk-in";
+  const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
 
@@ -1065,29 +1074,17 @@ export const PosPage = () => {
   }, [basket, cashValidationMessage, completing, sale]);
 
   return (
-    <div className="page-shell">
-      <section className="card">
-        <div className="card-header-row">
-          <div>
+    <div className="page-shell pos-page-shell">
+      <section className="card pos-workstation">
+        <div className="pos-topbar">
+          <div className="pos-topbar-copy">
+            <span className="pos-kicker">Counter POS</span>
             <h1>POS</h1>
             <p className="muted-text">
               Start a sale, attach a customer when needed, then take payment and open the receipt.
             </p>
-            <p className="muted-text pos-shortcuts">
-              Shortcuts: <kbd>/</kbd> product search, <kbd>F2</kbd> customer search, <kbd>F4</kbd> new sale,{" "}
-              <kbd>F8</kbd> checkout basket, <kbd>F9</kbd> complete sale.
-            </p>
           </div>
-          <div className="actions-inline">
-            <button
-              type="button"
-              className="primary"
-              data-testid="pos-checkout-basket"
-              onClick={checkoutBasket}
-              disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-            >
-              Checkout Basket
-            </button>
+          <div className="actions-inline pos-topbar-actions">
             <button
               type="button"
               onClick={() => {
@@ -1103,10 +1100,16 @@ export const PosPage = () => {
         </div>
 
         <div className="pos-context-header" data-testid="pos-context-header">
-          <div>
+          <div className="pos-context-copy">
+            <div className="pos-context-pill-row">
+              <span className="pos-context-pill">
+                {saleContext.type === "WORKSHOP" ? "Workshop handoff" : "Retail counter"}
+              </span>
+              <span className="pos-context-pill pos-context-pill-soft">Unified POS</span>
+            </div>
             <div className="muted-text pos-context-label">Sale Context</div>
             <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
-            <div className="muted-text">{contextHeaderMeta}</div>
+            <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
           </div>
           <div className="pos-context-totals">
             {saleContext.type === "WORKSHOP" ? (
@@ -1125,19 +1128,35 @@ export const PosPage = () => {
                 </div>
               </>
             ) : (
-              <div>
-                <span className="muted-text">Total</span>
-                <strong>{formatMoney(activeTotal)}</strong>
-              </div>
+              <>
+                <div>
+                  <span className="muted-text">Total</span>
+                  <strong>{formatMoney(activeTotal)}</strong>
+                </div>
+                <div>
+                  <span className="muted-text">Lines</span>
+                  <strong>{basketLineCount}</strong>
+                </div>
+                <div>
+                  <span className="muted-text">Payable</span>
+                  <strong>{formatMoney(payablePence)}</strong>
+                </div>
+              </>
             )}
           </div>
         </div>
 
-        <p className="muted-text">
-          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Lines: {basketLineCount} | Payable: {formatMoney(payablePence)}
-        </p>
+        <div className="pos-meta-strip" aria-label="POS sale metadata">
+          <span>Basket {basketId || "-"}</span>
+          <span>Sale {sale?.sale.id || saleId || "-"}</span>
+          <span>Lines {basketLineCount}</span>
+          <span>Payable {formatMoney(payablePence)}</span>
+          <span className="pos-meta-shortcuts">
+            <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
+          </span>
+        </div>
 
-        {loading ? <p>Loading...</p> : null}
+        {loading ? <p className="muted-text">Loading...</p> : null}
 
         {completedSale ? (
           <div className="success-panel success-panel-sale">
@@ -1192,558 +1211,643 @@ export const PosPage = () => {
             </div>
           </div>
         ) : null}
-      </section>
 
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Customer</h2>
-            <p className="muted-text">
-              Search and attach a customer to the current sale. If a sale has not been started
-              yet, the selected customer will attach after checkout.
-            </p>
-          </div>
-          {selectedCustomer ? (
-            <button
-              type="button"
-              data-testid="pos-customer-clear"
-              onClick={() => void clearSelectedCustomer()}
-            >
-              {sale?.sale.customer ? "Remove Customer" : "Clear Selection"}
-            </button>
-          ) : null}
-        </div>
-
-        {selectedCustomer ? (
-          <div className="selected-customer-panel" data-testid="pos-selected-customer">
-            <div>
-              <div className="table-primary">{selectedCustomer.name}</div>
-              <div className="muted-text">
-                {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
-              </div>
-            </div>
-            <div className="customer-status-chip">
-              {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
-            </div>
-          </div>
-        ) : (
-          <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
-        )}
-
-        <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
-          <div className="card-header-row">
-            <div>
-              <div className="table-primary">Add Customer</div>
-              <p className="muted-text">
-                Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="primary"
-              data-testid="pos-customer-capture-generate"
-              onClick={() => void createCustomerCaptureSession()}
-              disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession}
-            >
-              {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
-            </button>
-          </div>
-
-          {captureSession && captureUrl ? (
-            captureSession.status === "ACTIVE" ? (
-              <div className="cash-qr-card">
-                <div className="card-header-row">
-                  <div>
-                    <span className="status-badge">Waiting for customer</span>
-                    <p className="muted-text">
-                      Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
-                    </p>
-                  </div>
-                </div>
-                <div className="cash-qr-layout">
-                  <div className="cash-qr-box">
-                    {captureQrBusy ? (
-                      <span>Generating QR...</span>
-                    ) : captureQrImage ? (
-                      <img
-                        src={captureQrImage}
-                        alt="Customer capture QR code"
-                        data-testid="pos-customer-capture-qr"
-                      />
-                    ) : (
-                      <span>QR unavailable</span>
-                    )}
-                  </div>
-                  <div className="cash-qr-copy">
-                    <div>
-                      <div className="table-primary">Need the link instead?</div>
-                      <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
-                    </div>
-                    <label>
-                      Public capture URL
-                      <input
-                        data-testid="pos-customer-capture-url"
-                        value={captureUrl}
-                        readOnly
-                      />
-                    </label>
-                    <div className="actions-inline">
-                      <button type="button" onClick={() => void copyCaptureUrl()}>
-                        Copy Link
-                      </button>
-                      <a href={captureUrl} target="_blank" rel="noreferrer">
-                        Open Link
-                      </a>
-                    </div>
-                    <p className="muted-text">
-                      Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : captureSession.status === "COMPLETED" ? (
-                <div className="success-panel success-panel-sale">
-                  <div className="success-panel-heading">
-                    <strong>Customer capture complete.</strong>
-                    <span className="status-badge status-complete">Attached to sale</span>
-                  </div>
+        <div className="pos-layout">
+          <div className="pos-main-column">
+            <section className="pos-panel pos-search-panel">
+              <div className="pos-panel-heading">
+                <div>
+                  <div className="pos-section-kicker">Scan First</div>
+                  <h2>Product Entry</h2>
                   <p className="muted-text">
-                  {sale?.sale.customer?.name
-                    ? `${sale.sale.customer.name} is now attached to this sale.`
-                    : "The customer details have been attached to the active sale."}
+                    Scan a barcode or search by SKU or product name. Press Enter to add the exact barcode or SKU match right away, or Shift+Enter to add five.
                   </p>
                 </div>
-            ) : (
-              <div className="quick-create-panel">
-                <span className="status-badge">Expired</span>
-                <strong>Capture link expired</strong>
-                <p className="muted-text">
-                  The last customer capture link expired before it was used. Start Add Customer again when the customer is ready to scan or tap.
-                </p>
+                <div className="pos-search-status" aria-live="polite">
+                  <span className="muted-text">{looksLikeScannerInput(searchText) ? "Scanner input" : "Live search"}</span>
+                  <strong>{searchResultSummary}</strong>
+                </div>
               </div>
-            )
-          ) : (
-            sale?.sale.id && !sale.sale.completedAt ? (
-              <div className="quick-create-panel">
-                <span className="status-badge">Ready</span>
-                <strong>Ready to add a customer</strong>
-                <p className="muted-text">
-                  Start Add Customer to show a QR code now. The same landing flow is ready for future counter NFC entry without changing how sale-linked capture works.
-                </p>
-              </div>
-            ) : (
-              <p className="muted-text">
-                Available after basket checkout creates a sale.
-              </p>
-            )
-          )}
-        </div>
 
-        <div className="customer-search-panel">
-          <label className="grow">
-            Search customers
-            <input
-              ref={customerSearchInputRef}
-              data-testid="pos-customer-search"
-              value={customerSearchText}
-              onChange={(event) => setCustomerSearchText(event.target.value)}
-              placeholder="name, phone, email"
-            />
-          </label>
-          <button type="button" onClick={() => setShowCreateCustomer((value) => !value)}>
-            {showCreateCustomer ? "Hide Quick Create" : "Quick Create Customer"}
-          </button>
-        </div>
-
-        {customerLoading ? <p className="muted-text">Searching customers...</p> : null}
-
-        {customerSearchText.trim() ? (
-          <div className="table-wrap" style={{ marginTop: "10px" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Phone</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {customerResults.length === 0 ? (
-                  <tr>
-                    <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
-                  </tr>
-                ) : (
-                  customerResults.map((customer) => (
-                    <tr key={customer.id}>
-                      <td>{customer.name}</td>
-                      <td>{customer.email || "-"}</td>
-                      <td>{customer.phone || "-"}</td>
-                      <td>
-                        <button
-                          type="button"
-                          data-testid={`pos-customer-select-${customer.id}`}
-                          onClick={() => void selectCustomer(customer)}
-                        >
-                          {sale ? "Attach" : "Select"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-
-        {showCreateCustomer ? (
-          <div className="quick-create-panel">
-            <div className="quick-create-grid">
-              <label>
-                Name
+              <label className="pos-search-field">
+                <span>Search / Barcode</span>
                 <input
-                  value={newCustomerName}
-                  onChange={(event) => setNewCustomerName(event.target.value)}
-                  placeholder="Customer name"
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  value={newCustomerEmail}
-                  onChange={(event) => setNewCustomerEmail(event.target.value)}
-                  placeholder="name@example.com"
-                />
-              </label>
-              <label>
-                Phone
-                <input
-                  value={newCustomerPhone}
-                  onChange={(event) => setNewCustomerPhone(event.target.value)}
-                  placeholder="Phone number"
-                />
-              </label>
-            </div>
-            <div className="actions-inline">
-              <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
-                {creatingCustomer ? "Creating..." : "Create and Select"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="card">
-        <h2>Product Search</h2>
-        <p className="muted-text">
-          Scan a barcode or search by SKU or product name. Press Enter to add the exact barcode or SKU match right away, or Shift+Enter to add five.
-        </p>
-        <label className="grow">
-          Search / Barcode
-          <input
-            ref={searchInputRef}
-            data-testid="pos-product-search"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") {
-                return;
-              }
-
-              event.preventDefault();
-              if (event.shiftKey) {
-                void submitProductSearch(5);
-                return;
-              }
-              void submitProductSearch(1);
-            }}
-            placeholder="sku, barcode, name"
-          />
-        </label>
-        <p className="muted-text">
-          Scanner note: if the scan lands before the debounced search refreshes, Enter still checks for an exact barcode or SKU match before falling back to the visible first row.
-        </p>
-
-        <div className="table-wrap" style={{ marginTop: "10px" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>SKU</th>
-                <th>Price</th>
-                <th>On Hand</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {searchRows.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    {searchText.trim() ? "No products matched that search." : "Search or scan to start adding items."}
-                  </td>
-                </tr>
-              ) : (
-                searchRows.map((row) => {
-                  const canAdd = Boolean(basketId) && !saleId;
-
-                  return (
-                  <tr
-                    key={row.id}
-                    className={canAdd ? "clickable-row" : undefined}
-                    onClick={canAdd ? () => void addItem(row.id) : undefined}
-                    onKeyDown={
-                      canAdd
-                        ? (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              void addItem(row.id);
-                            }
-                          }
-                        : undefined
+                  ref={searchInputRef}
+                  data-testid="pos-product-search"
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") {
+                      return;
                     }
-                    role={canAdd ? "button" : undefined}
-                    tabIndex={canAdd ? 0 : undefined}
-                    aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
-                  >
-                    <td>{row.name}</td>
-                    <td>{row.sku}</td>
-                    <td>{formatMoney(row.pricePence)}</td>
-                    <td>{row.onHandQty}</td>
-                    <td>
-                      <div className="actions-inline">
-                        <button
-                          type="button"
-                          data-testid={`pos-product-add-${row.id}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void addItem(row.id);
-                          }}
-                          disabled={!canAdd}
-                        >
-                          Add
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void addMultipleItems(row.id, 5);
-                          }}
-                          disabled={!canAdd}
-                        >
-                          Add 5
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )})
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      <section className="card">
-        <div className="card-header-row">
-          <h2>Basket Lines</h2>
-          <div className="actions-inline">
-            <button
-              type="button"
-              onClick={() => void clearBasket()}
-              disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-            >
-              Clear basket
-            </button>
-          </div>
-        </div>
+                    event.preventDefault();
+                    if (event.shiftKey) {
+                      void submitProductSearch(5);
+                      return;
+                    }
+                    void submitProductSearch(1);
+                  }}
+                  placeholder="sku, barcode, name"
+                />
+              </label>
 
-        {basket && basket.items.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>SKU</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                  <th>Total</th>
-                  <th />
-                </tr>
-              </thead>
-              {basketGroups.map((group) => (
-                <tbody key={group.key}>
-                  <tr className="pos-group-row">
-                    <th colSpan={6}>{group.label}</th>
-                  </tr>
-                  {group.items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.productName}{item.variantName ? ` (${item.variantName})` : ""}</td>
-                      <td>
-                        {item.sku}
-                      </td>
-                      <td>
-                        <div className="actions-inline pos-qty-controls">
-                          <button
-                            type="button"
-                            onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
-                            disabled={Boolean(saleId)}
-                            aria-label={`Decrease quantity for ${item.productName}`}
-                          >
-                            -
-                          </button>
-                          <strong>{item.quantity}</strong>
-                          <button
-                            type="button"
-                            onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
-                            disabled={Boolean(saleId) || item.quantity < 6}
-                            aria-label={`Decrease quantity by five for ${item.productName}`}
-                          >
-                            -5
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
-                            disabled={Boolean(saleId)}
-                            aria-label={`Increase quantity for ${item.productName}`}
-                          >
-                            +
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
-                            disabled={Boolean(saleId)}
-                            aria-label={`Increase quantity by five for ${item.productName}`}
-                          >
-                            +5
-                          </button>
-                        </div>
-                      </td>
-                      <td>{formatMoney(item.unitPricePence)}</td>
-                      <td>{formatMoney(item.lineTotalPence)}</td>
-                      <td>
-                        <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
-                          Remove
-                        </button>
-                      </td>
+              <div className="pos-search-hints">
+                <div className="pos-search-hint">
+                  <strong>Enter</strong>
+                  <span>Add the exact barcode or first visible result fast.</span>
+                </div>
+                <div className="pos-search-hint">
+                  <strong>Shift + Enter</strong>
+                  <span>Quick-add five when replenishing a basket or job handoff.</span>
+                </div>
+                <div className="pos-search-hint">
+                  <strong>Scanner-safe</strong>
+                  <span>Exact barcode and SKU matching still wins even before the debounce settles.</span>
+                </div>
+              </div>
+
+              <div className="table-wrap pos-results-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>SKU</th>
+                      <th>Price</th>
+                      <th>On Hand</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              ))}
-            </table>
-          </div>
-        ) : (
-          <p className="muted-text">No basket lines yet. Search or scan a product to start the sale.</p>
-        )}
-      </section>
+                  </thead>
+                  <tbody>
+                    {searchRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>
+                          {searchText.trim() ? "No products matched that search." : "Search or scan to start adding items."}
+                        </td>
+                      </tr>
+                    ) : (
+                      searchRows.map((row) => {
+                        const canAdd = Boolean(basketId) && !saleId;
 
-      {sale ? (
-        <section className="card">
-          <h2>Checkout</h2>
-          <p className="muted-text">Take payment here to complete the sale and reset the counter for the next customer.</p>
-          {saleContext.type === "WORKSHOP" ? (
-            <div className="pos-checkout-summary" data-testid="pos-checkout-summary">
-              <div>
-                <span className="muted-text">Job Total</span>
-                <strong>{formatMoney(sale.tenderSummary.totalPence)}</strong>
+                        return (
+                          <tr
+                            key={row.id}
+                            className={canAdd ? "clickable-row" : undefined}
+                            onClick={canAdd ? () => void addItem(row.id) : undefined}
+                            onKeyDown={
+                              canAdd
+                                ? (event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                      event.preventDefault();
+                                      void addItem(row.id);
+                                    }
+                                  }
+                                : undefined
+                            }
+                            role={canAdd ? "button" : undefined}
+                            tabIndex={canAdd ? 0 : undefined}
+                            aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
+                          >
+                            <td>{row.name}</td>
+                            <td>{row.sku}</td>
+                            <td>{formatMoney(row.pricePence)}</td>
+                            <td>{row.onHandQty}</td>
+                            <td>
+                              <div className="actions-inline">
+                                <button
+                                  type="button"
+                                  data-testid={`pos-product-add-${row.id}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void addItem(row.id);
+                                  }}
+                                  disabled={!canAdd}
+                                >
+                                  Add
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void addMultipleItems(row.id, 5);
+                                  }}
+                                  disabled={!canAdd}
+                                >
+                                  Add 5
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <div>
-                <span className="muted-text">Deposit Paid</span>
-                <strong>{formatMoney(depositPaidPence)}</strong>
-              </div>
-              <div>
-                <span className="muted-text">Remaining</span>
-                <strong>{formatMoney(payablePence)}</strong>
-              </div>
-              <div>
-                <span className="muted-text">Customer</span>
-                <strong>{sale.sale.customer?.name || selectedCustomer?.name || saleContext.customerName}</strong>
-              </div>
-            </div>
-          ) : (
-            <p className="muted-text">
-              Total: {formatMoney(sale.tenderSummary.totalPence)} | Lines: {sale.saleItems.length} | Customer: {sale.sale.customer?.name || selectedCustomer?.name || "Walk-in"}
-            </p>
-          )}
-          <p className="muted-text">
-            Tendered: {formatMoney(sale.tenderSummary.tenderedPence)} | Remaining: {formatMoney(sale.tenderSummary.remainingPence)} | Change: {formatMoney(sale.tenderSummary.changeDuePence)}
-          </p>
+            </section>
 
-          <div className="actions-inline" role="group" aria-label="Tender type">
-            <button
-              type="button"
-              className={selectedTenderMethod === "CARD" ? "primary" : ""}
-              onClick={() => setSelectedTenderMethod("CARD")}
-              disabled={completing}
-            >
-              Card
-            </button>
-            <button
-              type="button"
-              className={selectedTenderMethod === "CASH" ? "primary" : ""}
-              onClick={() => setSelectedTenderMethod("CASH")}
-              disabled={completing}
-            >
-              Cash
-            </button>
-          </div>
+            <section className="pos-panel pos-customer-panel">
+              <div className="pos-panel-heading">
+                <div>
+                  <div className="pos-section-kicker">Customer</div>
+                  <h2>Attach Customer</h2>
+                  <p className="muted-text">
+                    Search and attach a customer to the current sale. If a sale has not been started yet, the selected customer will attach after checkout.
+                  </p>
+                </div>
+                {selectedCustomer ? (
+                  <button
+                    type="button"
+                    data-testid="pos-customer-clear"
+                    onClick={() => void clearSelectedCustomer()}
+                  >
+                    {sale?.sale.customer ? "Remove Customer" : "Clear Selection"}
+                  </button>
+                ) : null}
+              </div>
 
-          {selectedTenderMethod === "CASH" ? (
-            <div className="quick-create-panel" style={{ marginTop: "12px" }}>
-              <div className="quick-create-grid">
-                <label style={{ maxWidth: "180px" }}>
-                  Amount tendered
+              {selectedCustomer ? (
+                <div className="selected-customer-panel" data-testid="pos-selected-customer">
+                  <div>
+                    <div className="table-primary">{selectedCustomer.name}</div>
+                    <div className="muted-text">
+                      {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
+                    </div>
+                  </div>
+                  <div className="customer-status-chip">
+                    {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
+                  </div>
+                </div>
+              ) : (
+                <div className="pos-empty-inline">
+                  <strong>No customer selected yet. Search below or leave this sale as walk-in.</strong>
+                  <p className="muted-text">Search below or leave this sale as a walk-in.</p>
+                </div>
+              )}
+
+              <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
+                <div className="card-header-row">
+                  <div>
+                    <div className="table-primary">Add Customer</div>
+                    <p className="muted-text">
+                      Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-customer-capture-generate"
+                    onClick={() => void createCustomerCaptureSession()}
+                    disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession}
+                  >
+                    {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
+                  </button>
+                </div>
+
+                {captureSession && captureUrl ? (
+                  captureSession.status === "ACTIVE" ? (
+                    <div className="cash-qr-card">
+                      <div className="card-header-row">
+                        <div>
+                          <span className="status-badge">Waiting for customer</span>
+                          <p className="muted-text">
+                            Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="cash-qr-layout">
+                        <div className="cash-qr-box">
+                          {captureQrBusy ? (
+                            <span>Generating QR...</span>
+                          ) : captureQrImage ? (
+                            <img
+                              src={captureQrImage}
+                              alt="Customer capture QR code"
+                              data-testid="pos-customer-capture-qr"
+                            />
+                          ) : (
+                            <span>QR unavailable</span>
+                          )}
+                        </div>
+                        <div className="cash-qr-copy">
+                          <div>
+                            <div className="table-primary">Need the link instead?</div>
+                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
+                          </div>
+                          <label>
+                            Public capture URL
+                            <input
+                              data-testid="pos-customer-capture-url"
+                              value={captureUrl}
+                              readOnly
+                            />
+                          </label>
+                          <div className="actions-inline">
+                            <button type="button" onClick={() => void copyCaptureUrl()}>
+                              Copy Link
+                            </button>
+                            <a href={captureUrl} target="_blank" rel="noreferrer">
+                              Open Link
+                            </a>
+                          </div>
+                          <p className="muted-text">
+                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : captureSession.status === "COMPLETED" ? (
+                    <div className="success-panel success-panel-sale">
+                      <div className="success-panel-heading">
+                        <strong>Customer capture complete.</strong>
+                        <span className="status-badge status-complete">Attached to sale</span>
+                      </div>
+                      <p className="muted-text">
+                        {sale?.sale.customer?.name
+                          ? `${sale.sale.customer.name} is now attached to this sale.`
+                          : "The customer details have been attached to the active sale."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="quick-create-panel">
+                      <span className="status-badge">Expired</span>
+                      <strong>Capture link expired</strong>
+                      <p className="muted-text">
+                        The last customer capture link expired before it was used. Start Add Customer again when the customer is ready to scan or tap.
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  sale?.sale.id && !sale.sale.completedAt ? (
+                    <div className="quick-create-panel">
+                      <span className="status-badge">Ready</span>
+                      <strong>Ready to add a customer</strong>
+                      <p className="muted-text">
+                        Start Add Customer to show a QR code now. The same landing flow is ready for future counter NFC entry without changing how sale-linked capture works.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="muted-text">
+                      Available after basket checkout creates a sale.
+                    </p>
+                  )
+                )}
+              </div>
+
+              <div className="customer-search-panel">
+                <label className="grow">
+                  Search customers
                   <input
-                    ref={cashTenderedInputRef}
-                    data-testid="pos-cash-tendered"
-                    inputMode="decimal"
-                    value={cashTenderedAmount}
-                    onChange={(event) => setCashTenderedAmount(event.target.value)}
-                    placeholder="0.00"
-                    disabled={completing}
+                    ref={customerSearchInputRef}
+                    data-testid="pos-customer-search"
+                    value={customerSearchText}
+                    onChange={(event) => setCustomerSearchText(event.target.value)}
+                    placeholder="name, phone, email"
                   />
                 </label>
-              </div>
-
-              <div className="actions-inline" role="group" aria-label="Quick cash amounts">
-                <button
-                  type="button"
-                  onClick={() => setCashTenderedAmount((payablePence / 100).toFixed(2))}
-                  disabled={payablePence === 0 || completing}
-                >
-                  Exact
+                <button type="button" onClick={() => setShowCreateCustomer((value) => !value)}>
+                  {showCreateCustomer ? "Hide Quick Create" : "Quick Create Customer"}
                 </button>
-                {quickCashAmounts.map((amountPence) => (
-                  <button
-                    key={amountPence}
-                    type="button"
-                    onClick={() => setCashTenderedAmount((amountPence / 100).toFixed(2))}
-                    disabled={completing}
-                  >
-                    {formatMoney(amountPence)}
-                  </button>
-                ))}
               </div>
 
-              <div className="muted-text">
-                Due: {formatMoney(payablePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
-              </div>
+              {customerLoading ? <p className="muted-text">Searching customers...</p> : null}
 
-              {cashValidationMessage ? <p className="muted-text">{cashValidationMessage}</p> : null}
-            </div>
-          ) : null}
+              {customerSearchText.trim() ? (
+                <div className="table-wrap pos-results-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerResults.length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
+                        </tr>
+                      ) : (
+                        customerResults.map((customer) => (
+                          <tr key={customer.id}>
+                            <td>{customer.name}</td>
+                            <td>{customer.email || "-"}</td>
+                            <td>{customer.phone || "-"}</td>
+                            <td>
+                              <button
+                                type="button"
+                                data-testid={`pos-customer-select-${customer.id}`}
+                                onClick={() => void selectCustomer(customer)}
+                              >
+                                {sale ? "Attach" : "Select"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
 
-          <div className="actions-inline">
-            <button
-              type="button"
-              className="primary"
-              data-testid="pos-complete-sale"
-              onClick={completeSale}
-              disabled={completing || Boolean(cashValidationMessage)}
-            >
-              {completing ? "Completing..." : "Complete Sale"}
-            </button>
+              {showCreateCustomer ? (
+                <div className="quick-create-panel">
+                  <div className="quick-create-grid">
+                    <label>
+                      Name
+                      <input
+                        value={newCustomerName}
+                        onChange={(event) => setNewCustomerName(event.target.value)}
+                        placeholder="Customer name"
+                      />
+                    </label>
+                    <label>
+                      Email
+                      <input
+                        value={newCustomerEmail}
+                        onChange={(event) => setNewCustomerEmail(event.target.value)}
+                        placeholder="name@example.com"
+                      />
+                    </label>
+                    <label>
+                      Phone
+                      <input
+                        value={newCustomerPhone}
+                        onChange={(event) => setNewCustomerPhone(event.target.value)}
+                        placeholder="Phone number"
+                      />
+                    </label>
+                  </div>
+                  <div className="actions-inline">
+                    <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
+                      {creatingCustomer ? "Creating..." : "Create and Select"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           </div>
-        </section>
-      ) : null}
+
+          <div className="pos-side-column">
+            <section className="pos-panel pos-basket-panel">
+              <div className="pos-panel-heading">
+                <div>
+                  <div className="pos-section-kicker">Basket</div>
+                  <h2>Basket Lines</h2>
+                  <p className="muted-text">
+                    Keep the basket easy to scan under pressure with grouped lines and fast quantity controls.
+                  </p>
+                </div>
+                <div className="actions-inline">
+                  <button
+                    type="button"
+                    onClick={() => void clearBasket()}
+                    disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+                  >
+                    Clear basket
+                  </button>
+                </div>
+              </div>
+
+              {basket && basket.items.length > 0 ? (
+                <div className="pos-basket-groups">
+                  {basketGroups.map((group) => (
+                    <section key={group.key} className={`pos-basket-group pos-basket-group-${group.key.toLowerCase()}`}>
+                      <div className="pos-basket-group-header pos-group-row">
+                        <div>
+                          <strong>{group.label}</strong>
+                          <span>{group.items.length} line{group.items.length === 1 ? "" : "s"}</span>
+                        </div>
+                      </div>
+                      <div className="pos-basket-list">
+                        {group.items.map((item) => (
+                          <article key={item.id} className="pos-line-item">
+                            <div className="pos-line-main">
+                              <div className="table-primary pos-line-title">
+                                {item.productName}
+                                {item.variantName ? ` (${item.variantName})` : ""}
+                              </div>
+                              <div className="muted-text pos-line-meta">SKU {item.sku}</div>
+                            </div>
+                            <div className="pos-line-pricing">
+                              <strong>{formatMoney(item.lineTotalPence)}</strong>
+                              <span>{formatMoney(item.unitPricePence)} each</span>
+                            </div>
+                            <div className="pos-line-actions">
+                              <div className="actions-inline pos-qty-controls">
+                                <button
+                                  type="button"
+                                  onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
+                                  disabled={Boolean(saleId)}
+                                  aria-label={`Decrease quantity for ${item.productName}`}
+                                >
+                                  -
+                                </button>
+                                <strong>{item.quantity}</strong>
+                                <button
+                                  type="button"
+                                  onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
+                                  disabled={Boolean(saleId) || item.quantity < 6}
+                                  aria-label={`Decrease quantity by five for ${item.productName}`}
+                                >
+                                  -5
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
+                                  disabled={Boolean(saleId)}
+                                  aria-label={`Increase quantity for ${item.productName}`}
+                                >
+                                  +
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
+                                  disabled={Boolean(saleId)}
+                                  aria-label={`Increase quantity by five for ${item.productName}`}
+                                >
+                                  +5
+                                </button>
+                              </div>
+                              <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
+                                Remove
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="pos-empty-state">
+                  <strong>No basket lines yet</strong>
+                  <p className="muted-text">Search or scan a product on the left to start the sale.</p>
+                </div>
+              )}
+            </section>
+
+            <section className="pos-panel pos-payment-panel">
+              <div className="pos-panel-heading">
+                <div>
+                  <div className="pos-section-kicker">Totals & Payment</div>
+                  <h2>{sale ? "Take Payment" : "Ready to Checkout"}</h2>
+                  <p className="muted-text">
+                    {sale
+                      ? "Take payment here to complete the sale and reset the counter for the next customer."
+                      : "When the basket is ready, move it into checkout and keep the counter flowing."}
+                  </p>
+                </div>
+                <span className="pos-payment-state">{sale ? "Sale live" : "Basket open"}</span>
+              </div>
+
+              {saleContext.type === "WORKSHOP" ? (
+                <div className="pos-checkout-summary pos-payment-summary" data-testid="pos-checkout-summary">
+                  <div>
+                    <span className="muted-text">Job Total</span>
+                    <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Deposit Paid</span>
+                    <strong>{formatMoney(depositPaidPence)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Remaining</span>
+                    <strong>{formatMoney(payablePence)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Customer</span>
+                    <strong>{activeCustomerName}</strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="pos-payment-summary pos-payment-summary-retail">
+                  <div>
+                    <span className="muted-text">Total</span>
+                    <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Payable</span>
+                    <strong>{formatMoney(payablePence)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Lines</span>
+                    <strong>{sale ? sale.saleItems.length : basketLineCount}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Customer</span>
+                    <strong>{activeCustomerName}</strong>
+                  </div>
+                </div>
+              )}
+
+              {sale ? (
+                <>
+                  <p className="muted-text pos-payment-running-total">
+                    Tendered: {formatMoney(sale.tenderSummary.tenderedPence)} | Remaining: {formatMoney(sale.tenderSummary.remainingPence)} | Change: {formatMoney(sale.tenderSummary.changeDuePence)}
+                  </p>
+
+                  <div className="actions-inline pos-tender-switch" role="group" aria-label="Tender type">
+                    <button
+                      type="button"
+                      className={selectedTenderMethod === "CARD" ? "primary" : ""}
+                      onClick={() => setSelectedTenderMethod("CARD")}
+                      disabled={completing}
+                    >
+                      Card
+                    </button>
+                    <button
+                      type="button"
+                      className={selectedTenderMethod === "CASH" ? "primary" : ""}
+                      onClick={() => setSelectedTenderMethod("CASH")}
+                      disabled={completing}
+                    >
+                      Cash
+                    </button>
+                  </div>
+
+                  {selectedTenderMethod === "CASH" ? (
+                    <div className="quick-create-panel pos-cash-panel">
+                      <div className="quick-create-grid pos-cash-grid">
+                        <label>
+                          Amount tendered
+                          <input
+                            ref={cashTenderedInputRef}
+                            data-testid="pos-cash-tendered"
+                            inputMode="decimal"
+                            value={cashTenderedAmount}
+                            onChange={(event) => setCashTenderedAmount(event.target.value)}
+                            placeholder="0.00"
+                            disabled={completing}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="actions-inline pos-cash-shortcuts" role="group" aria-label="Quick cash amounts">
+                        <button
+                          type="button"
+                          onClick={() => setCashTenderedAmount((payablePence / 100).toFixed(2))}
+                          disabled={payablePence === 0 || completing}
+                        >
+                          Exact
+                        </button>
+                        {quickCashAmounts.map((amountPence) => (
+                          <button
+                            key={amountPence}
+                            type="button"
+                            onClick={() => setCashTenderedAmount((amountPence / 100).toFixed(2))}
+                            disabled={completing}
+                          >
+                            {formatMoney(amountPence)}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="muted-text pos-cash-summary">
+                        Due: {formatMoney(payablePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
+                      </div>
+
+                      {cashValidationMessage ? <p className="muted-text pos-cash-warning">{cashValidationMessage}</p> : null}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="pos-ready-note">
+                  <strong>Checkout uses the current payable amount.</strong>
+                  <p className="muted-text">
+                    Payment options appear here after the basket becomes a sale.
+                  </p>
+                </div>
+              )}
+
+              <div className="actions-inline pos-payment-actions">
+                {sale ? (
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-complete-sale"
+                    onClick={completeSale}
+                    disabled={completing || Boolean(cashValidationMessage)}
+                  >
+                    {completing ? "Completing..." : "Complete Sale"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-checkout-basket"
+                    onClick={checkoutBasket}
+                    disabled={!canCheckoutBasket}
+                  >
+                    Checkout Basket
+                  </button>
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };
