@@ -1,38 +1,17 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "DATABASE_URL is required."
-  exit 1
-fi
+# Config
+DB_NAME="bike_epos"
+BACKUP_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/CorePOS-Backups"
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+FILENAME="$BACKUP_DIR/corepos_backup_$TIMESTAMP.sql"
 
-looks_like_production() {
-  local value
-  value="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
-  [[ "$value" == *"prod"* ]] || \
-  [[ "$value" == *"production"* ]] || \
-  [[ "$value" == *"rds.amazonaws.com"* ]] || \
-  [[ "$value" == *"supabase"* ]] || \
-  [[ "$value" == *"render.com"* ]] || \
-  [[ "$value" == *"railway.app"* ]] || \
-  [[ "$value" == *"neon.tech"* ]]
-}
+# Ensure folder exists
+mkdir -p "$BACKUP_DIR"
 
-if looks_like_production "$DATABASE_URL" && [[ "${CONFIRM_PROD:-false}" != "true" ]]; then
-  echo "Refusing backup: DATABASE_URL appears to target production."
-  echo "Set CONFIRM_PROD=true to override intentionally."
-  exit 1
-fi
+echo "Backing up database: $DB_NAME"
 
-if ! command -v pg_dump >/dev/null 2>&1; then
-  echo "pg_dump is required but not found in PATH."
-  exit 1
-fi
+pg_dump "$DB_NAME" > "$FILENAME"
 
-mkdir -p backups
-timestamp="$(date +%Y%m%d_%H%M%S)"
-output_file="backups/backup_${timestamp}.sql"
-
-echo "Creating backup..."
-pg_dump --clean --if-exists --no-owner --no-privileges "$DATABASE_URL" > "$output_file"
-echo "Backup created: $output_file"
+echo "Backup saved to:"
+echo "$FILENAME"
