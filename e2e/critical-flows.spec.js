@@ -329,6 +329,7 @@ test("POS customer capture link flow attaches captured customer to the active sa
   await page.getByTestId("pos-customer-capture-generate").click();
   const captureUrlInput = page.getByTestId("pos-customer-capture-url");
   await expect(captureUrlInput).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-qr")).toBeVisible();
   const captureUrl = await captureUrlInput.inputValue();
   expect(captureUrl).toContain("/customer-capture/");
 
@@ -344,8 +345,8 @@ test("POS customer capture link flow attaches captured customer to the active sa
   const saleId = new URL(page.url()).searchParams.get("saleId");
   expect(saleId).toBeTruthy();
 
-  await page.reload();
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Taylor Rider");
+  await expect(page.getByText("Customer capture complete.")).toBeVisible();
 
   const refreshedSale = await apiJsonWithHeaderBypass(
     request,
