@@ -270,6 +270,26 @@ const run = async () => {
     });
     assert.equal(stockSeedRes.status, 201, JSON.stringify(stockSeedRes.json));
 
+    const preloadedBasketRes = await fetchJson("/api/baskets", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        items: [
+          {
+            variantId: variantRes.json.id,
+            quantity: 2,
+            unitPricePence: 777,
+          },
+        ],
+      }),
+    });
+    assert.equal(preloadedBasketRes.status, 201, JSON.stringify(preloadedBasketRes.json));
+    assert.equal(preloadedBasketRes.json.items.length, 1);
+    assert.equal(preloadedBasketRes.json.items[0].quantity, 2);
+    assert.equal(preloadedBasketRes.json.items[0].unitPricePence, 777);
+    assert.equal(preloadedBasketRes.json.items[0].type, "PART");
+    state.basketIds.add(preloadedBasketRes.json.id);
+
     const createBasketRes = await fetchJson("/api/baskets", {
       method: "POST",
       headers: staffHeaders,

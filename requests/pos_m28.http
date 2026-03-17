@@ -17,6 +17,22 @@ X-Staff-Id: staff-1
 
 {}
 
+### Create preloaded basket (STAFF+)
+POST {{baseUrl}}/api/baskets
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "items": [
+    {
+      "variantId": "{{variantId}}",
+      "quantity": 2,
+      "unitPricePence": 699
+    }
+  ]
+}
+
 ### Get basket (STAFF+)
 GET {{baseUrl}}/api/baskets/{{basketId}}
 X-Staff-Role: {{staffRole}}

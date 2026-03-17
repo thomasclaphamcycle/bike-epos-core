@@ -2,6 +2,7 @@ import { Basket, BasketItem, BasketStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findBarcodeOrThrow } from "./productLookupService";
 import { HttpError, isUuid } from "../utils/http";
+import { toPosLineItemType } from "./posLineItemType";
 
 type BasketWithItems = Basket & {
   items: Array<
@@ -23,6 +24,14 @@ type AddBasketItemInput = {
   barcode?: string;
   variantId?: string;
   quantity: number;
+};
+
+type CreateBasketInput = {
+  items?: Array<{
+    variantId: string;
+    quantity: number;
+    unitPricePence?: number;
+  }>;
 };
 
 const getBasketWithItems = async (basketId: string): Promise<BasketWithItems | null> => {
@@ -71,6 +80,7 @@ const toBasketResponse = (basket: BasketWithItems) => {
     items: basket.items.map((item) => ({
       id: item.id,
       variantId: item.variantId,
+      type: toPosLineItemType(item.variant.sku),
       sku: item.variant.sku,
       productName: item.variant.product.name,
       variantName: item.variant.name,
@@ -88,12 +98,86 @@ const toBasketResponse = (basket: BasketWithItems) => {
   };
 };
 
-export const createBasket = async () => {
-  const basket = await prisma.basket.create({
-    data: { status: BasketStatus.OPEN },
+export const createBasket = async (input: CreateBasketInput = {}) => {
+  const requestedItems = Array.isArray(input.items) ? input.items : [];
+
+  for (const item of requestedItems) {
+    if (typeof item.variantId !== "string" || item.variantId.trim().length === 0) {
+      throw new HttpError(400, "variantId is required", "MISSING_VARIANT_ID");
+    }
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+      throw new HttpError(400, "quantity must be a positive integer", "INVALID_QUANTITY");
+    }
+    if (
+      item.unitPricePence !== undefined
+      && (!Number.isInteger(item.unitPricePence) || item.unitPricePence < 0)
+    ) {
+      throw new HttpError(400, "unitPricePence must be a non-negative integer", "INVALID_UNIT_PRICE");
+    }
+  }
+
+  const basketId = await prisma.$transaction(async (tx) => {
+    const basket = await tx.basket.create({
+      data: { status: BasketStatus.OPEN },
+      select: { id: true },
+    });
+
+    if (requestedItems.length > 0) {
+      const variants = await tx.variant.findMany({
+        where: {
+          id: {
+            in: requestedItems.map((item) => item.variantId),
+          },
+        },
+        select: {
+          id: true,
+          retailPricePence: true,
+        },
+      });
+
+      const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+      if (variantById.size !== new Set(requestedItems.map((item) => item.variantId)).size) {
+        throw new HttpError(404, "One or more basket preload variants were not found", "VARIANT_NOT_FOUND");
+      }
+
+      const mergedItems = new Map<string, { variantId: string; quantity: number; unitPrice: number }>();
+      for (const item of requestedItems) {
+        const variant = variantById.get(item.variantId);
+        if (!variant) {
+          throw new HttpError(404, "Variant not found", "VARIANT_NOT_FOUND");
+        }
+
+        const unitPrice = item.unitPricePence ?? variant.retailPricePence;
+        const existing = mergedItems.get(item.variantId);
+        if (existing && existing.unitPrice !== unitPrice) {
+          throw new HttpError(
+            409,
+            "Preloaded basket lines with the same variant must use the same unit price",
+            "BASKET_PRELOAD_PRICE_CONFLICT",
+          );
+        }
+
+        mergedItems.set(item.variantId, {
+          variantId: item.variantId,
+          quantity: (existing?.quantity ?? 0) + item.quantity,
+          unitPrice,
+        });
+      }
+
+      await tx.basketItem.createMany({
+        data: Array.from(mergedItems.values()).map((item) => ({
+          basketId: basket.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      });
+    }
+
+    return basket.id;
   });
 
-  const withItems = await getBasketWithItems(basket.id);
+  const withItems = await getBasketWithItems(basketId);
   if (!withItems) {
     throw new HttpError(500, "Could not load basket after create", "BASKET_LOAD_FAILED");
   }

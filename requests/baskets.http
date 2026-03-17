@@ -10,6 +10,22 @@ X-Staff-Id: staff-1
 
 {}
 
+### Create basket with preloaded items (STAFF+)
+POST {{baseUrl}}/api/baskets
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "items": [
+    {
+      "variantId": "REPLACE_WITH_VARIANT_ID",
+      "quantity": 2,
+      "unitPricePence": 699
+    }
+  ]
+}
+
 ### Get basket by id (STAFF+)
 GET {{baseUrl}}/api/baskets/{{basketId}}
 X-Staff-Role: {{staffRole}}

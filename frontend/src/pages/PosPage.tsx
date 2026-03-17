@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import {
+  DEFAULT_SALE_CONTEXT,
+  getPosOpenState,
+  resolvePosLineItemType,
+  type PosLineItem,
+  type SaleContext,
+} from "../features/pos/posContext";
 import { toBackendUrl } from "../utils/backendUrl";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
@@ -24,12 +31,15 @@ type BasketResponse = {
   items: Array<{
     id: string;
     variantId: string;
+    type?: "PART" | "LABOUR";
     sku: string;
     productName: string;
     variantName: string | null;
     quantity: number;
     unitPricePence: number;
     lineTotalPence: number;
+    createdAt?: string;
+    updatedAt?: string;
   }>;
   totals: {
     subtotalPence: number;
@@ -78,6 +88,12 @@ type SaleResponse = {
     method: string;
     amountPence: number;
   }>;
+};
+
+type PreloadedBasketItemInput = {
+  variantId: string;
+  quantity: number;
+  unitPricePence: number;
 };
 
 type CompleteSaleResult = {
@@ -149,6 +165,7 @@ const parseCurrencyInputToPence = (value: string): number | null => {
 };
 
 export const PosPage = () => {
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -162,6 +179,7 @@ export const PosPage = () => {
   const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
+  const [contextCustomerId, setContextCustomerId] = useState<string | null>(null);
   const [customerLoading, setCustomerLoading] = useState(false);
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
@@ -171,6 +189,7 @@ export const PosPage = () => {
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
+  const [saleContext, setSaleContext] = useState<SaleContext>(DEFAULT_SALE_CONTEXT);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
@@ -185,6 +204,7 @@ export const PosPage = () => {
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
+  const posOpenState = getPosOpenState(location.state);
 
   const focusProductSearch = () => {
     window.requestAnimationFrame(() => {
@@ -220,6 +240,17 @@ export const PosPage = () => {
     setSearchParams(updated, { replace: true });
   };
 
+  const loadContextCustomer = async (customerId: string | null) => {
+    setContextCustomerId(customerId);
+    if (!customerId) {
+      return null;
+    }
+
+    const customer = await apiGet<CustomerSearchRow>(`/api/customers/${encodeURIComponent(customerId)}`);
+    setSelectedCustomer(customer);
+    return customer;
+  };
+
   const loadBasket = async (id: string) => {
     const payload = await apiGet<BasketResponse>(`/api/baskets/${encodeURIComponent(id)}`);
     setBasket(payload);
@@ -240,21 +271,46 @@ export const PosPage = () => {
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
   };
 
-  const createBasket = async () => {
-    const created = await apiPost<BasketResponse>("/api/baskets", {});
+  const createBasket = async (options?: {
+    saleContext?: SaleContext;
+    customerId?: string | null;
+    preloadedItems?: PreloadedBasketItemInput[];
+    announce?: boolean;
+    successMessage?: string;
+  }) => {
+    const created = await apiPost<BasketResponse>("/api/baskets", options?.preloadedItems?.length
+      ? { items: options.preloadedItems }
+      : {});
     setBasket(created);
     setSale(null);
     setReceiptUrl(null);
     setCashTenderedAmount("");
-    setSelectedCustomer(null);
     setCustomerSearchText("");
     setCustomerResults([]);
     setShowCreateCustomer(false);
     setCaptureSession(null);
+    setSaleContext(options?.saleContext ?? DEFAULT_SALE_CONTEXT);
+    setContextCustomerId(options?.customerId ?? null);
+    if (options?.customerId) {
+      await loadContextCustomer(options.customerId);
+    } else {
+      setSelectedCustomer(null);
+    }
     syncQuery({ basketId: created.id, saleId: null });
-    success("New sale created");
+    if (options?.announce !== false) {
+      success(options?.successMessage ?? "New sale created");
+    }
     focusProductSearch();
   };
+
+  const toPreloadedBasketItems = (items: PosLineItem[]): PreloadedBasketItemInput[] =>
+    items
+      .filter((item): item is PosLineItem & { variantId: string } => Boolean(item.variantId))
+      .map((item) => ({
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPricePence: item.unitPricePence,
+      }));
 
   useEffect(() => {
     let cancelled = false;
@@ -262,17 +318,32 @@ export const PosPage = () => {
     const init = async () => {
       setLoading(true);
       try {
+        const nextContext = posOpenState?.saleContext ?? DEFAULT_SALE_CONTEXT;
+        const nextCustomerId = posOpenState?.customerId ?? null;
+        if (!cancelled) {
+          setSaleContext(nextContext);
+          setContextCustomerId(nextCustomerId);
+        }
+
         if (saleId) {
           await loadSale(saleId);
+          if (nextCustomerId) {
+            await loadContextCustomer(nextCustomerId);
+          }
         }
 
         if (basketId) {
           await loadBasket(basketId);
+          if (nextCustomerId && !saleId) {
+            await loadContextCustomer(nextCustomerId);
+          }
         } else if (!saleId) {
-          const created = await apiPost<BasketResponse>("/api/baskets", {});
-          if (cancelled) return;
-          setBasket(created);
-          syncQuery({ basketId: created.id, saleId: null });
+          await createBasket({
+            saleContext: nextContext,
+            customerId: nextCustomerId,
+            preloadedItems: posOpenState?.items?.length ? toPreloadedBasketItems(posOpenState.items) : undefined,
+            announce: false,
+          });
         }
       } catch (initError) {
         const message = initError instanceof Error ? initError.message : "Failed to initialize POS";
@@ -389,6 +460,7 @@ export const PosPage = () => {
 
   const selectCustomer = async (customer: CustomerSearchRow) => {
     setSelectedCustomer(customer);
+    setContextCustomerId(customer.id);
     setCustomerSearchText("");
     setCustomerResults([]);
     setShowCreateCustomer(false);
@@ -422,6 +494,7 @@ export const PosPage = () => {
     }
 
     setSelectedCustomer(null);
+    setContextCustomerId(null);
     setCustomerSearchText("");
     setCustomerResults([]);
     setShowCreateCustomer(false);
@@ -652,6 +725,9 @@ export const PosPage = () => {
       if (selectedCustomer?.id) {
         await attachCustomerToSale(nextSaleId, selectedCustomer.id);
         success("Sale created and customer attached.");
+      } else if (contextCustomerId) {
+        await attachCustomerToSale(nextSaleId, contextCustomerId);
+        success("Sale created and customer attached.");
       } else {
         await loadSale(nextSaleId);
         success("Sale created.");
@@ -830,16 +906,15 @@ export const PosPage = () => {
 
     setCompleting(true);
     try {
-      const remaining = sale.tenderSummary.remainingPence;
       const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
-      if (remaining > 0) {
+      if (payablePence > 0) {
         if (selectedTenderMethod === "CASH") {
           if (cashTenderedPence === null) {
             error("Enter the amount tendered.");
             return;
           }
 
-          if (cashTenderedPence < remaining) {
+          if (cashTenderedPence < payablePence) {
             error("Cash tendered must cover the total due.");
             return;
           }
@@ -847,7 +922,7 @@ export const PosPage = () => {
 
         await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
           method: selectedTenderMethod,
-          amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : remaining,
+          amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : payablePence,
         });
       }
 
@@ -886,22 +961,43 @@ export const PosPage = () => {
 
   const basketLineCount = basket?.items.length ?? 0;
   const remainingDuePence = sale?.tenderSummary.remainingPence ?? 0;
+  const depositPaidPence = saleContext.type === "WORKSHOP" ? saleContext.depositPaidPence ?? 0 : 0;
+  const contextRemainingPence = Math.max(activeTotal - depositPaidPence, 0);
+  const payablePence = sale ? remainingDuePence : contextRemainingPence;
   const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
   const cashChangeDuePence =
     selectedTenderMethod === "CASH" && cashTenderedPence !== null
-      ? Math.max(cashTenderedPence - remainingDuePence, 0)
+      ? Math.max(cashTenderedPence - payablePence, 0)
       : 0;
   const cashValidationMessage =
-    selectedTenderMethod !== "CASH" || remainingDuePence === 0
+    selectedTenderMethod !== "CASH" || payablePence === 0
       ? null
       : cashTenderedAmount.trim() === ""
         ? "Enter the cash received."
         : cashTenderedPence === null
           ? "Enter a valid amount in pounds."
-          : cashTenderedPence < remainingDuePence
-            ? `Cash tendered is short by ${formatMoney(remainingDuePence - cashTenderedPence)}.`
+          : cashTenderedPence < payablePence
+            ? `Cash tendered is short by ${formatMoney(payablePence - cashTenderedPence)}.`
             : null;
   const quickCashAmounts = [500, 1000, 2000, 5000];
+  const basketGroups = useMemo(() => {
+    const labour = (basket?.items ?? []).filter((item) => resolvePosLineItemType(item) === "LABOUR");
+    const parts = (basket?.items ?? []).filter((item) => resolvePosLineItemType(item) === "PART");
+
+    return [
+      { key: "LABOUR", label: "Labour", items: labour },
+      { key: "PART", label: "Parts", items: parts },
+    ].filter((group) => group.items.length > 0);
+  }, [basket?.items]);
+  const contextHeaderTitle = saleContext.type === "WORKSHOP"
+    ? `Workshop Job #${saleContext.jobId}`
+    : "New Sale";
+  const contextHeaderMeta = saleContext.type === "WORKSHOP"
+    ? [
+        saleContext.customerName,
+        saleContext.bikeLabel,
+      ].filter(Boolean).join(" | ")
+    : "Retail sale";
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
 
@@ -1006,8 +1102,39 @@ export const PosPage = () => {
           </div>
         </div>
 
+        <div className="pos-context-header" data-testid="pos-context-header">
+          <div>
+            <div className="muted-text pos-context-label">Sale Context</div>
+            <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
+            <div className="muted-text">{contextHeaderMeta}</div>
+          </div>
+          <div className="pos-context-totals">
+            {saleContext.type === "WORKSHOP" ? (
+              <>
+                <div>
+                  <span className="muted-text">Job Total</span>
+                  <strong>{formatMoney(activeTotal)}</strong>
+                </div>
+                <div>
+                  <span className="muted-text">Deposit Paid</span>
+                  <strong>{formatMoney(depositPaidPence)}</strong>
+                </div>
+                <div>
+                  <span className="muted-text">Remaining</span>
+                  <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
+                </div>
+              </>
+            ) : (
+              <div>
+                <span className="muted-text">Total</span>
+                <strong>{formatMoney(activeTotal)}</strong>
+              </div>
+            )}
+          </div>
+        </div>
+
         <p className="muted-text">
-          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Lines: {basketLineCount} | Total: {formatMoney(activeTotal)}
+          Basket: {basketId || "-"} | Sale: {sale?.sale.id || saleId || "-"} | Lines: {basketLineCount} | Payable: {formatMoney(payablePence)}
         </p>
 
         {loading ? <p>Loading...</p> : null}
@@ -1442,60 +1569,65 @@ export const PosPage = () => {
                   <th />
                 </tr>
               </thead>
-              <tbody>
-                {basket.items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.productName}{item.variantName ? ` (${item.variantName})` : ""}</td>
-                    <td>
-                      {item.sku}
-                    </td>
-                    <td>
-                      <div className="actions-inline pos-qty-controls">
-                        <button
-                          type="button"
-                          onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
-                          disabled={Boolean(saleId)}
-                          aria-label={`Decrease quantity for ${item.productName}`}
-                        >
-                          -
-                        </button>
-                        <strong>{item.quantity}</strong>
-                        <button
-                          type="button"
-                          onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
-                          disabled={Boolean(saleId) || item.quantity < 6}
-                          aria-label={`Decrease quantity by five for ${item.productName}`}
-                        >
-                          -5
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
-                          disabled={Boolean(saleId)}
-                          aria-label={`Increase quantity for ${item.productName}`}
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
-                          disabled={Boolean(saleId)}
-                          aria-label={`Increase quantity by five for ${item.productName}`}
-                        >
-                          +5
-                        </button>
-                      </div>
-                    </td>
-                    <td>{formatMoney(item.unitPricePence)}</td>
-                    <td>{formatMoney(item.lineTotalPence)}</td>
-                    <td>
-                      <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
-                        Remove
-                      </button>
-                    </td>
+              {basketGroups.map((group) => (
+                <tbody key={group.key}>
+                  <tr className="pos-group-row">
+                    <th colSpan={6}>{group.label}</th>
                   </tr>
-                ))}
-              </tbody>
+                  {group.items.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.productName}{item.variantName ? ` (${item.variantName})` : ""}</td>
+                      <td>
+                        {item.sku}
+                      </td>
+                      <td>
+                        <div className="actions-inline pos-qty-controls">
+                          <button
+                            type="button"
+                            onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
+                            disabled={Boolean(saleId)}
+                            aria-label={`Decrease quantity for ${item.productName}`}
+                          >
+                            -
+                          </button>
+                          <strong>{item.quantity}</strong>
+                          <button
+                            type="button"
+                            onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
+                            disabled={Boolean(saleId) || item.quantity < 6}
+                            aria-label={`Decrease quantity by five for ${item.productName}`}
+                          >
+                            -5
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
+                            disabled={Boolean(saleId)}
+                            aria-label={`Increase quantity for ${item.productName}`}
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
+                            disabled={Boolean(saleId)}
+                            aria-label={`Increase quantity by five for ${item.productName}`}
+                          >
+                            +5
+                          </button>
+                        </div>
+                      </td>
+                      <td>{formatMoney(item.unitPricePence)}</td>
+                      <td>{formatMoney(item.lineTotalPence)}</td>
+                      <td>
+                        <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         ) : (
@@ -1507,9 +1639,30 @@ export const PosPage = () => {
         <section className="card">
           <h2>Checkout</h2>
           <p className="muted-text">Take payment here to complete the sale and reset the counter for the next customer.</p>
-          <p className="muted-text">
-            Total: {formatMoney(sale.tenderSummary.totalPence)} | Lines: {sale.saleItems.length} | Customer: {sale.sale.customer?.name || selectedCustomer?.name || "Walk-in"}
-          </p>
+          {saleContext.type === "WORKSHOP" ? (
+            <div className="pos-checkout-summary" data-testid="pos-checkout-summary">
+              <div>
+                <span className="muted-text">Job Total</span>
+                <strong>{formatMoney(sale.tenderSummary.totalPence)}</strong>
+              </div>
+              <div>
+                <span className="muted-text">Deposit Paid</span>
+                <strong>{formatMoney(depositPaidPence)}</strong>
+              </div>
+              <div>
+                <span className="muted-text">Remaining</span>
+                <strong>{formatMoney(payablePence)}</strong>
+              </div>
+              <div>
+                <span className="muted-text">Customer</span>
+                <strong>{sale.sale.customer?.name || selectedCustomer?.name || saleContext.customerName}</strong>
+              </div>
+            </div>
+          ) : (
+            <p className="muted-text">
+              Total: {formatMoney(sale.tenderSummary.totalPence)} | Lines: {sale.saleItems.length} | Customer: {sale.sale.customer?.name || selectedCustomer?.name || "Walk-in"}
+            </p>
+          )}
           <p className="muted-text">
             Tendered: {formatMoney(sale.tenderSummary.tenderedPence)} | Remaining: {formatMoney(sale.tenderSummary.remainingPence)} | Change: {formatMoney(sale.tenderSummary.changeDuePence)}
           </p>
@@ -1553,8 +1706,8 @@ export const PosPage = () => {
               <div className="actions-inline" role="group" aria-label="Quick cash amounts">
                 <button
                   type="button"
-                  onClick={() => setCashTenderedAmount((remainingDuePence / 100).toFixed(2))}
-                  disabled={remainingDuePence === 0 || completing}
+                  onClick={() => setCashTenderedAmount((payablePence / 100).toFixed(2))}
+                  disabled={payablePence === 0 || completing}
                 >
                   Exact
                 </button>
@@ -1571,7 +1724,7 @@ export const PosPage = () => {
               </div>
 
               <div className="muted-text">
-                Due: {formatMoney(remainingDuePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
+                Due: {formatMoney(payablePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
               </div>
 
               {cashValidationMessage ? <p className="muted-text">{cashValidationMessage}</p> : null}

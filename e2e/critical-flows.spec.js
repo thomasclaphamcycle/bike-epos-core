@@ -302,6 +302,72 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   expect(completedSale.sale.customer?.name).toBe(secondCustomer.name);
 });
 
+test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-pos-context",
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "workshop-pos-context",
+    retailPricePence: 2199,
+  });
+  const token = uniqueToken("workshop-pos-context");
+  const job = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Workshop ${token}`,
+      bikeDescription: `Bike ${token}`,
+      notes: `POS context ${token}`,
+    },
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "PART",
+        productId: seeded.product.id,
+        variantId: seeded.variant.id,
+        qty: 1,
+        unitPricePence: 2199,
+      },
+    },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "LABOUR",
+        description: "Workshop labour",
+        qty: 1,
+        unitPricePence: 3000,
+      },
+    },
+  );
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, `/workshop/${job.id}`, { surface: "frontend" });
+
+  await page.getByRole("button", { name: "Send to POS" }).click();
+  await expect(page).toHaveURL(/\/pos\?basketId=/);
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop Job #${job.id}`);
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop ${token}`);
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Bike ${token}`);
+  await expect(page.locator(".pos-group-row")).toContainText(["Labour", "Parts"]);
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await expect(page.getByTestId("pos-checkout-summary")).toContainText("Job Total");
+  await expect(page.getByTestId("pos-checkout-summary")).toContainText("Remaining");
+});
+
 test("POS customer capture link flow attaches captured customer to the active sale", async ({
   page,
   request,

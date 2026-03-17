@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
+import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
@@ -47,8 +48,6 @@ type UpdateWorkshopJobLineInput = {
   productId?: string | null;
   variantId?: string | null;
 };
-
-const LABOUR_VARIANT_SKU = "WORKSHOP-LABOUR-SERVICE";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -266,7 +265,7 @@ const ensureVariantForPartTx = async (
 
 const getOrCreateLabourVariantTx = async (tx: Prisma.TransactionClient) => {
   const existing = await tx.variant.findUnique({
-    where: { sku: LABOUR_VARIANT_SKU },
+    where: { sku: WORKSHOP_LABOUR_VARIANT_SKU },
     select: {
       id: true,
       sku: true,
@@ -305,7 +304,7 @@ const getOrCreateLabourVariantTx = async (tx: Prisma.TransactionClient) => {
     return await tx.variant.create({
       data: {
         productId: labourProduct.id,
-        sku: LABOUR_VARIANT_SKU,
+        sku: WORKSHOP_LABOUR_VARIANT_SKU,
         name: "Workshop Labour",
         option: "Service",
         retailPrice: new Prisma.Decimal(0),
@@ -321,7 +320,7 @@ const getOrCreateLabourVariantTx = async (tx: Prisma.TransactionClient) => {
     const prismaError = error as { code?: string };
     if (prismaError.code === "P2002") {
       const variant = await tx.variant.findUnique({
-        where: { sku: LABOUR_VARIANT_SKU },
+        where: { sku: WORKSHOP_LABOUR_VARIANT_SKU },
         select: {
           id: true,
           sku: true,
@@ -381,6 +380,8 @@ const toJobResponse = (job: {
   bikeDescription: string | null;
   status: WorkshopJobStatus;
   notes: string | null;
+  depositRequiredPence: number;
+  depositStatus: string;
   finalizedBasketId: string | null;
   closedAt: Date | null;
   createdAt: Date;
@@ -399,6 +400,8 @@ const toJobResponse = (job: {
   status: toWorkflowStatus(job),
   rawStatus: job.status,
   notes: job.notes,
+  depositRequiredPence: job.depositRequiredPence,
+  depositStatus: job.depositStatus,
   finalizedBasketId: job.finalizedBasketId,
   sale: job.sale
     ? {
@@ -446,6 +449,7 @@ const buildBasketResponseTx = async (tx: Prisma.TransactionClient, basketId: str
     items: basket.items.map((item) => ({
       id: item.id,
       variantId: item.variantId,
+      type: toPosLineItemType(item.variant.sku),
       sku: item.variant.sku,
       productName: item.variant.product.name,
       variantName: item.variant.name,
