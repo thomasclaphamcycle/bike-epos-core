@@ -3715,8 +3715,8 @@ th {
 
 .pos-workstation {
   display: grid;
-  gap: 18px;
-  padding: 20px;
+  gap: 20px;
+  padding: 18px 20px 24px;
   background:
     radial-gradient(circle at top left, rgba(46, 124, 246, 0.08), transparent 28%),
     radial-gradient(circle at bottom right, rgba(255, 122, 24, 0.08), transparent 24%),
@@ -3732,7 +3732,7 @@ th {
 
 .pos-topbar-copy {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .pos-topbar-copy h1,
@@ -3762,50 +3762,48 @@ th {
 
 .pos-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.15fr);
+  gap: 20px;
   align-items: start;
 }
 
 .pos-main-column,
 .pos-side-column {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .pos-panel {
   padding: 18px;
-  border-radius: 22px;
-  border: 1px solid #d7e4ef;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-    0 18px 36px rgba(15, 34, 52, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  border: 1px solid rgba(215, 228, 239, 0.75);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 22px rgba(15, 34, 52, 0.04);
 }
 
 .pos-panel-heading {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   align-items: flex-start;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .pos-panel-heading > div:first-child {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .pos-context-header {
-  padding: 18px 20px;
+  padding: 16px 18px;
   border-radius: 20px;
-  border: 1px solid #d2e0ec;
+  border: 1px solid #d6e3ee;
   background:
-    radial-gradient(circle at top left, rgba(46, 124, 246, 0.14), transparent 34%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(242, 247, 252, 0.98));
+    radial-gradient(circle at top left, rgba(46, 124, 246, 0.11), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(244, 248, 252, 0.98));
   display: flex;
   justify-content: space-between;
-  gap: 20px;
+  gap: 18px;
   align-items: flex-start;
 }
 
@@ -3854,7 +3852,7 @@ th {
 .pos-context-totals {
   display: grid;
   grid-template-columns: repeat(3, minmax(122px, 1fr));
-  gap: 12px;
+  gap: 10px;
   min-width: min(420px, 100%);
 }
 
@@ -3867,17 +3865,17 @@ th {
 
 .pos-context-totals > div,
 .pos-payment-summary > div {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(209, 221, 232, 0.92);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(214, 226, 236, 0.88);
 }
 
 .pos-context-totals strong,
 .pos-checkout-summary strong,
 .pos-payment-summary strong {
   color: #173247;
-  font-size: 1.12rem;
+  font-size: 1.08rem;
 }
 
 .pos-meta-strip {
@@ -3891,11 +3889,11 @@ th {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   border-radius: 999px;
   background: rgba(236, 243, 249, 0.95);
   color: #4b6074;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
@@ -3905,33 +3903,26 @@ th {
 }
 
 .pos-search-panel {
-  background:
-    radial-gradient(circle at top left, rgba(46, 124, 246, 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.98));
+  border-color: rgba(215, 228, 239, 0.45);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: none;
 }
 
 .pos-search-status {
   display: grid;
   gap: 4px;
   min-width: 142px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(243, 248, 252, 0.96);
-  border: 1px solid #d7e4ef;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(243, 248, 252, 0.92);
+  border: 1px solid rgba(215, 228, 239, 0.75);
   text-align: right;
 }
 
 .pos-search-field {
   display: grid;
   gap: 10px;
-  margin-bottom: 14px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid #cedcea;
-  background:
-    radial-gradient(circle at top right, rgba(255, 122, 24, 0.08), transparent 24%),
-    linear-gradient(180deg, #fbfdff, #f4f8fb);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  margin-bottom: 10px;
 }
 
 .pos-search-field span {
@@ -3943,51 +3934,30 @@ th {
 }
 
 .pos-search-field input {
-  min-height: 64px;
-  padding: 0 18px;
+  min-height: 72px;
+  padding: 0 20px;
   border-radius: 16px;
-  border: 1px solid #b9cbdd;
+  border: 1px solid #aec3d7;
   background: #ffffff;
-  font-size: 1.08rem;
+  font-size: 1.18rem;
   font-weight: 600;
   color: #173247;
   box-shadow:
-    0 12px 22px rgba(15, 34, 52, 0.06),
+    0 10px 20px rgba(15, 34, 52, 0.05),
     inset 0 1px 2px rgba(15, 34, 52, 0.03);
 }
 
 .pos-search-field input:focus {
   border-color: #5e8fe9;
   box-shadow:
-    0 0 0 3px rgba(91, 141, 239, 0.16),
-    0 14px 26px rgba(15, 34, 52, 0.08);
-}
-
-.pos-search-hints {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.pos-search-hint {
-  display: grid;
-  gap: 6px;
-  min-height: 100%;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(244, 248, 252, 0.96);
-  border: 1px solid #dae5ee;
-}
-
-.pos-search-hint strong {
-  color: #173247;
+    0 0 0 4px rgba(91, 141, 239, 0.14),
+    0 12px 24px rgba(15, 34, 52, 0.07);
 }
 
 .pos-results-wrap {
   margin-top: 0;
-  border-radius: 18px;
-  border: 1px solid #dbe5ee;
+  border-radius: 16px;
+  border: 1px solid rgba(219, 229, 238, 0.85);
   background: rgba(250, 252, 254, 0.96);
   overflow: hidden;
 }
@@ -4046,26 +4016,30 @@ th {
 
 .pos-basket-panel {
   background:
-    radial-gradient(circle at top right, rgba(255, 122, 24, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.98));
+    radial-gradient(circle at top right, rgba(255, 122, 24, 0.05), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 251, 254, 0.99));
+  box-shadow:
+    0 16px 34px rgba(15, 34, 52, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .pos-basket-groups {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .pos-basket-group {
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid #dbe6ef;
-  background: #fbfdff;
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  border: 0;
+  background: transparent;
 }
 
 .pos-basket-group-header {
-  padding: 12px 16px;
-  background: #eef5fb;
-  border-bottom: 1px solid #d6e3ee;
+  padding: 0 0 8px;
+  background: transparent;
+  border-bottom: 1px solid #dfe8f0;
 }
 
 .pos-basket-group-header > div {
@@ -4077,34 +4051,35 @@ th {
 
 .pos-basket-group-header strong {
   color: #173247;
-  font-size: 0.98rem;
+  font-size: 0.96rem;
 }
 
 .pos-basket-group-header span {
   color: #4b6074;
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .pos-basket-group-labour .pos-basket-group-header {
-  background: linear-gradient(180deg, rgba(255, 122, 24, 0.14), rgba(255, 239, 227, 0.94));
+  border-bottom-color: rgba(255, 122, 24, 0.28);
 }
 
 .pos-basket-group-part .pos-basket-group-header {
-  background: linear-gradient(180deg, rgba(46, 124, 246, 0.12), rgba(237, 245, 252, 0.94));
+  border-bottom-color: rgba(46, 124, 246, 0.25);
 }
 
 .pos-basket-list {
   display: grid;
+  gap: 2px;
 }
 
 .pos-line-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px 16px;
-  padding: 16px;
+  gap: 18px 16px;
+  padding: 18px 0;
   border-top: 1px solid #ebf1f6;
 }
 
@@ -4119,11 +4094,13 @@ th {
 }
 
 .pos-line-title {
-  font-size: 1rem;
+  font-size: 1.08rem;
+  font-weight: 800;
 }
 
 .pos-line-meta {
-  font-size: 0.84rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
 }
 
 .pos-line-pricing {
@@ -4134,13 +4111,13 @@ th {
 }
 
 .pos-line-pricing strong {
-  font-size: 1.02rem;
+  font-size: 1.08rem;
   color: #173247;
 }
 
 .pos-line-pricing span {
   color: #5d7285;
-  font-size: 0.84rem;
+  font-size: 0.78rem;
 }
 
 .pos-line-actions {
@@ -4158,8 +4135,12 @@ th {
 
 .pos-payment-panel {
   background:
-    radial-gradient(circle at top left, rgba(255, 122, 24, 0.1), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 249, 252, 0.99));
+    radial-gradient(circle at top left, rgba(255, 122, 24, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(246, 249, 252, 0.99));
+  border-color: rgba(242, 177, 132, 0.55);
+  box-shadow:
+    0 22px 40px rgba(255, 122, 24, 0.08),
+    0 12px 24px rgba(15, 34, 52, 0.06);
 }
 
 .pos-payment-state {
@@ -4177,22 +4158,36 @@ th {
 .pos-payment-summary {
   margin-top: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  padding: 14px;
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(110px, 1fr));
+  gap: 10px;
+  padding: 12px;
   border-radius: 18px;
-  border: 1px solid #d8e2ec;
-  background: #f9fbfd;
+  border: 1px solid rgba(216, 226, 236, 0.88);
+  background: rgba(249, 251, 253, 0.96);
 }
 
 .pos-payment-summary-retail {
   background:
-    radial-gradient(circle at top right, rgba(46, 124, 246, 0.08), transparent 30%),
-    linear-gradient(180deg, #f9fbfd, #f4f8fb);
+    radial-gradient(circle at top right, rgba(46, 124, 246, 0.06), transparent 30%),
+    linear-gradient(180deg, #fbfcfe, #f5f8fb);
+}
+
+.pos-payment-total-block {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 244, 236, 0.98));
+  border-color: rgba(242, 177, 132, 0.72);
+}
+
+.pos-payment-total-block strong {
+  font-size: clamp(2.15rem, 4vw, 2.9rem);
+  line-height: 1;
 }
 
 .pos-payment-running-total {
   margin: 14px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.88rem;
 }
 
 .pos-tender-switch {
@@ -4224,9 +4219,11 @@ th {
 }
 
 .pos-payment-actions .primary {
+  width: 100%;
   min-height: 56px;
   padding-inline: 24px;
-  font-size: 1rem;
+  font-size: 1.08rem;
+  font-weight: 800;
   box-shadow: 0 16px 28px rgba(255, 122, 24, 0.18);
 }
 
@@ -4560,7 +4557,8 @@ th {
   }
 
   .pos-layout,
-  .pos-search-hints,
+  .pos-payment-summary,
+  .pos-checkout-summary,
   .pos-cash-grid {
     grid-template-columns: 1fr;
   }
@@ -4574,6 +4572,10 @@ th {
   .pos-line-pricing {
     text-align: left;
     justify-items: start;
+  }
+
+  .pos-payment-total-block strong {
+    font-size: 2.25rem;
   }
 
   .pos-payment-actions .primary,
@@ -4607,6 +4609,11 @@ th {
 @media (max-width: 1440px) {
   .pos-layout {
     grid-template-columns: 1fr;
+  }
+
+  .pos-payment-summary,
+  .pos-checkout-summary {
+    grid-template-columns: minmax(0, 1fr) repeat(3, minmax(120px, 1fr));
   }
 }
 

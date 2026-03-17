@@ -1080,9 +1080,6 @@ export const PosPage = () => {
           <div className="pos-topbar-copy">
             <span className="pos-kicker">Counter POS</span>
             <h1>POS</h1>
-            <p className="muted-text">
-              Start a sale, attach a customer when needed, then take payment and open the receipt.
-            </p>
           </div>
           <div className="actions-inline pos-topbar-actions">
             <button
@@ -1217,11 +1214,8 @@ export const PosPage = () => {
             <section className="pos-panel pos-search-panel">
               <div className="pos-panel-heading">
                 <div>
-                  <div className="pos-section-kicker">Scan First</div>
-                  <h2>Product Entry</h2>
-                  <p className="muted-text">
-                    Scan a barcode or search by SKU or product name. Press Enter to add the exact barcode or SKU match right away, or Shift+Enter to add five.
-                  </p>
+                  <div className="pos-section-kicker">Input</div>
+                  <h2>Search / Scan</h2>
                 </div>
                 <div className="pos-search-status" aria-live="polite">
                   <span className="muted-text">{looksLikeScannerInput(searchText) ? "Scanner input" : "Live search"}</span>
@@ -1230,7 +1224,7 @@ export const PosPage = () => {
               </div>
 
               <label className="pos-search-field">
-                <span>Search / Barcode</span>
+                <span>Search / Scan</span>
                 <input
                   ref={searchInputRef}
                   data-testid="pos-product-search"
@@ -1252,21 +1246,6 @@ export const PosPage = () => {
                 />
               </label>
 
-              <div className="pos-search-hints">
-                <div className="pos-search-hint">
-                  <strong>Enter</strong>
-                  <span>Add the exact barcode or first visible result fast.</span>
-                </div>
-                <div className="pos-search-hint">
-                  <strong>Shift + Enter</strong>
-                  <span>Quick-add five when replenishing a basket or job handoff.</span>
-                </div>
-                <div className="pos-search-hint">
-                  <strong>Scanner-safe</strong>
-                  <span>Exact barcode and SKU matching still wins even before the debounce settles.</span>
-                </div>
-              </div>
-
               <div className="table-wrap pos-results-wrap">
                 <table>
                   <thead>
@@ -1282,7 +1261,7 @@ export const PosPage = () => {
                     {searchRows.length === 0 ? (
                       <tr>
                         <td colSpan={5}>
-                          {searchText.trim() ? "No products matched that search." : "Search or scan to start adding items."}
+                          {searchText.trim() ? "No products matched that search." : "Scan or search to start"}
                         </td>
                       </tr>
                     ) : (
@@ -1594,10 +1573,7 @@ export const PosPage = () => {
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Basket</div>
-                  <h2>Basket Lines</h2>
-                  <p className="muted-text">
-                    Keep the basket easy to scan under pressure with grouped lines and fast quantity controls.
-                  </p>
+                  <h2>Current Sale</h2>
                 </div>
                 <div className="actions-inline">
                   <button
@@ -1682,8 +1658,7 @@ export const PosPage = () => {
                 </div>
               ) : (
                 <div className="pos-empty-state">
-                  <strong>No basket lines yet</strong>
-                  <p className="muted-text">Search or scan a product on the left to start the sale.</p>
+                  <strong>Scan or search to start</strong>
                 </div>
               )}
             </section>
@@ -1692,19 +1667,14 @@ export const PosPage = () => {
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Totals & Payment</div>
-                  <h2>{sale ? "Take Payment" : "Ready to Checkout"}</h2>
-                  <p className="muted-text">
-                    {sale
-                      ? "Take payment here to complete the sale and reset the counter for the next customer."
-                      : "When the basket is ready, move it into checkout and keep the counter flowing."}
-                  </p>
+                  <h2>{sale ? "Take Payment" : "Checkout"}</h2>
                 </div>
                 <span className="pos-payment-state">{sale ? "Sale live" : "Basket open"}</span>
               </div>
 
               {saleContext.type === "WORKSHOP" ? (
                 <div className="pos-checkout-summary pos-payment-summary" data-testid="pos-checkout-summary">
-                  <div>
+                  <div className="pos-payment-total-block">
                     <span className="muted-text">Job Total</span>
                     <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
                   </div>
@@ -1723,13 +1693,13 @@ export const PosPage = () => {
                 </div>
               ) : (
                 <div className="pos-payment-summary pos-payment-summary-retail">
+                  <div className="pos-payment-total-block">
+                    <span className="muted-text">Payable</span>
+                    <strong>{formatMoney(payablePence)}</strong>
+                  </div>
                   <div>
                     <span className="muted-text">Total</span>
                     <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-text">Payable</span>
-                    <strong>{formatMoney(payablePence)}</strong>
                   </div>
                   <div>
                     <span className="muted-text">Lines</span>
@@ -1744,9 +1714,11 @@ export const PosPage = () => {
 
               {sale ? (
                 <>
-                  <p className="muted-text pos-payment-running-total">
-                    Tendered: {formatMoney(sale.tenderSummary.tenderedPence)} | Remaining: {formatMoney(sale.tenderSummary.remainingPence)} | Change: {formatMoney(sale.tenderSummary.changeDuePence)}
-                  </p>
+                  <div className="muted-text pos-payment-running-total">
+                    <span>Tendered {formatMoney(sale.tenderSummary.tenderedPence)}</span>
+                    <span>Remaining {formatMoney(sale.tenderSummary.remainingPence)}</span>
+                    <span>Change {formatMoney(sale.tenderSummary.changeDuePence)}</span>
+                  </div>
 
                   <div className="actions-inline pos-tender-switch" role="group" aria-label="Tender type">
                     <button
@@ -1814,10 +1786,7 @@ export const PosPage = () => {
                 </>
               ) : (
                 <div className="pos-ready-note">
-                  <strong>Checkout uses the current payable amount.</strong>
-                  <p className="muted-text">
-                    Payment options appear here after the basket becomes a sale.
-                  </p>
+                  <strong>Checkout to continue</strong>
                 </div>
               )}
 
