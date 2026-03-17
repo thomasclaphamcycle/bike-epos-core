@@ -9,7 +9,6 @@
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:frontend",
     "start:prod": "NODE_ENV=production node src/server.ts",
-    "prisma:generate": "npx prisma generate",
     "db:reset:dev": "node scripts/reset_local_dev_db.js",
     "db:reset-and-seed:dev": "node scripts/reset_and_seed_local_dev.js",
     "db:dev:migrate": "node scripts/ensure_local_dev_db_schema.js",
