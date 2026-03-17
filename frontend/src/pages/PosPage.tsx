@@ -1327,12 +1327,14 @@ export const PosPage = () => {
               </div>
             </section>
 
+          </div>
+
+          <div className="pos-side-column">
             <section className="pos-panel pos-customer-panel">
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Customer</div>
                   <h2>Attach Customer</h2>
-                  <p className="muted-text">Optional for walk-ins.</p>
                 </div>
                 {selectedCustomer ? (
                   <button
@@ -1382,7 +1384,7 @@ export const PosPage = () => {
               {customerLoading ? <p className="muted-text">Searching customers...</p> : null}
 
               {customerSearchText.trim() ? (
-                <div className="table-wrap pos-results-wrap">
+                <div className="table-wrap pos-results-wrap pos-customer-results">
                   <table>
                     <thead>
                       <tr>
@@ -1565,9 +1567,7 @@ export const PosPage = () => {
                 <div className="pos-customer-capture-inline muted-text">Add Customer becomes available after checkout.</div>
               )}
             </section>
-          </div>
 
-          <div className="pos-side-column">
             <section className="pos-panel pos-basket-panel">
               <div className="pos-panel-heading">
                 <div>

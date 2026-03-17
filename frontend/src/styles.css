@@ -3795,7 +3795,7 @@ th {
 
 .pos-side-column {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
   min-width: 0;
   align-self: start;
@@ -4038,8 +4038,9 @@ th {
 }
 
 .pos-customer-panel {
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 0 0 12px;
+  background: transparent;
+  border-bottom: 1px solid rgba(223, 232, 240, 0.92);
 }
 
 .customer-status-chip {
@@ -4056,19 +4057,19 @@ th {
 }
 
 .customer-search-panel {
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: end;
 }
 
 .pos-customer-capture-inline {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 0.84rem;
 }
 
 .pos-customer-capture-compact {
-  margin-top: 10px;
+  margin-top: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
@@ -4087,6 +4088,51 @@ th {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.pos-side-column .pos-panel-heading {
+  margin-bottom: 8px;
+}
+
+.pos-side-column .pos-panel-heading h2 {
+  font-size: 1.08rem;
+}
+
+.pos-side-column .pos-panel-heading .muted-text {
+  font-size: 0.8rem;
+}
+
+.pos-side-column .selected-customer-panel {
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.pos-side-column .pos-empty-inline {
+  padding: 10px 12px;
+}
+
+.pos-side-column .pos-empty-inline strong {
+  font-size: 0.9rem;
+}
+
+.pos-customer-results {
+  margin-top: 8px;
+  max-height: min(32vh, 240px);
+}
+
+.pos-side-column .quick-create-panel {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.pos-side-column .quick-create-grid {
+  gap: 10px;
+}
+
+.pos-side-column .cash-qr-card {
+  padding: 12px 14px;
 }
 
 .pos-basket-panel {
