@@ -131,6 +131,9 @@ const getPublicAppOrigin = () => {
   return configuredOrigin ? configuredOrigin.replace(/\/$/, "") : window.location.origin;
 };
 
+const buildCustomerCaptureEntryUrl = (token: string) =>
+  `${getPublicAppOrigin()}/customer-capture?token=${encodeURIComponent(token)}`;
+
 const parseCurrencyInputToPence = (value: string): number | null => {
   const normalized = value.trim().replace(/[^0-9.]/g, "");
   if (!normalized) {
@@ -664,7 +667,7 @@ export const PosPage = () => {
       return null;
     }
 
-    return `${getPublicAppOrigin()}${captureSession.publicPath}`;
+    return buildCustomerCaptureEntryUrl(captureSession.token);
   }, [captureSession]);
 
   useEffect(() => {
@@ -1103,9 +1106,9 @@ export const PosPage = () => {
         <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
           <div className="card-header-row">
             <div>
-              <div className="table-primary">Customer self-capture</div>
+              <div className="table-primary">Add Customer</div>
               <p className="muted-text">
-                Generate a temporary QR-first link for the current sale so the customer can add their details at the till on their own phone.
+                Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
               </p>
             </div>
             <button
@@ -1115,7 +1118,7 @@ export const PosPage = () => {
               onClick={() => void createCustomerCaptureSession()}
               disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession}
             >
-              {creatingCaptureSession ? "Generating..." : "Generate Link"}
+              {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
             </button>
           </div>
 
@@ -1126,7 +1129,7 @@ export const PosPage = () => {
                   <div>
                     <span className="status-badge">Waiting for customer</span>
                     <p className="muted-text">
-                      Scan the QR code first. This sale refreshes automatically as soon as the customer saves their details.
+                      Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
                     </p>
                   </div>
                 </div>
@@ -1172,29 +1175,40 @@ export const PosPage = () => {
                 </div>
               </div>
             ) : captureSession.status === "COMPLETED" ? (
-              <div className="success-panel success-panel-sale">
-                <div className="success-panel-heading">
-                  <strong>Customer capture complete.</strong>
-                  <span className="status-badge status-complete">Attached to sale</span>
-                </div>
-                <p className="muted-text">
+                <div className="success-panel success-panel-sale">
+                  <div className="success-panel-heading">
+                    <strong>Customer capture complete.</strong>
+                    <span className="status-badge status-complete">Attached to sale</span>
+                  </div>
+                  <p className="muted-text">
                   {sale?.sale.customer?.name
                     ? `${sale.sale.customer.name} is now attached to this sale.`
                     : "The customer details have been attached to the active sale."}
-                </p>
-              </div>
+                  </p>
+                </div>
             ) : (
               <div className="quick-create-panel">
+                <span className="status-badge">Expired</span>
                 <strong>Capture link expired</strong>
                 <p className="muted-text">
-                  The last customer capture link expired before it was used. Generate a fresh QR when the customer is ready.
+                  The last customer capture link expired before it was used. Start Add Customer again when the customer is ready to scan or tap.
                 </p>
               </div>
             )
           ) : (
-            <p className="muted-text">
-              Available after basket checkout creates a sale.
-            </p>
+            sale?.sale.id && !sale.sale.completedAt ? (
+              <div className="quick-create-panel">
+                <span className="status-badge">Ready</span>
+                <strong>Ready to add a customer</strong>
+                <p className="muted-text">
+                  Start Add Customer to show a QR code now. The same landing flow is ready for future counter NFC entry without changing how sale-linked capture works.
+                </p>
+              </div>
+            ) : (
+              <p className="muted-text">
+                Available after basket checkout creates a sale.
+              </p>
+            )
           )}
         </div>
 

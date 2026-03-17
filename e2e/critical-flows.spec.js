@@ -331,7 +331,7 @@ test("POS customer capture link flow attaches captured customer to the active sa
   await expect(captureUrlInput).toBeVisible();
   await expect(page.getByTestId("pos-customer-capture-qr")).toBeVisible();
   const captureUrl = await captureUrlInput.inputValue();
-  expect(captureUrl).toContain("/customer-capture/");
+  expect(captureUrl).toContain("/customer-capture?token=");
 
   const capturePage = await context.newPage();
   await capturePage.goto(captureUrl);
@@ -347,6 +347,10 @@ test("POS customer capture link flow attaches captured customer to the active sa
 
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Taylor Rider");
   await expect(page.getByText("Customer capture complete.")).toBeVisible();
+
+  await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
+  await expect(capturePage.getByText("No active customer capture yet")).toBeVisible();
+  await expect(capturePage.getByText("scan the QR code or tap the counter NFC prompt again", { exact: false })).toBeVisible();
 
   const refreshedSale = await apiJsonWithHeaderBypass(
     request,

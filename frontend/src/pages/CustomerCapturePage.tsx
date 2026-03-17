@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 
 type PublicCaptureSessionState = {
@@ -40,7 +40,9 @@ const defaultForm = {
 };
 
 export const CustomerCapturePage = () => {
-  const { token } = useParams();
+  const { token: routeToken } = useParams();
+  const [searchParams] = useSearchParams();
+  const token = routeToken?.trim() || searchParams.get("token")?.trim() || null;
   const [session, setSession] = useState<PublicCaptureSessionState["session"] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,8 @@ export const CustomerCapturePage = () => {
 
     const load = async () => {
       if (!token) {
-        setLoadError("This customer capture link is invalid.");
+        setSession(null);
+        setLoadError(null);
         setLoading(false);
         return;
       }
@@ -133,6 +136,16 @@ export const CustomerCapturePage = () => {
             <strong>Link unavailable</strong>
             <p className="muted-text">{loadError}</p>
             <Link to="/login">Back to CorePOS</Link>
+          </div>
+        ) : null}
+
+        {!loading && !loadError && !token ? (
+          <div className="quick-create-panel">
+            <span className="status-badge">Ready for QR or NFC</span>
+            <strong>No active customer capture yet</strong>
+            <p className="muted-text">
+              Ask staff to tap Add Customer on the till, then scan the QR code or tap the counter NFC prompt again.
+            </p>
           </div>
         ) : null}
 

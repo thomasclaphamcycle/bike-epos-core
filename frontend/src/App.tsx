@@ -718,6 +718,7 @@ export const App = () => {
   return (
     <Routes>
       <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
+      <Route path="/customer-capture" element={<CustomerCapturePage />} />
       <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
       <Route path="/site" element={<CustomerSitePage variant="home" />} />
       <Route path="/site/services" element={<CustomerSitePage variant="services" />} />
