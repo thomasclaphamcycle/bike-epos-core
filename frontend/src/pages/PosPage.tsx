@@ -1366,16 +1366,60 @@ export const PosPage = () => {
               )}
 
               <div className="customer-search-panel">
-                <label className="grow">
-                  Search customers
-                  <input
-                    ref={customerSearchInputRef}
-                    data-testid="pos-customer-search"
-                    value={customerSearchText}
-                    onChange={(event) => setCustomerSearchText(event.target.value)}
-                    placeholder="name, phone, email"
-                  />
-                </label>
+                <div className="customer-search-stack grow">
+                  <label className="grow">
+                    Search customers
+                    <input
+                      ref={customerSearchInputRef}
+                      data-testid="pos-customer-search"
+                      value={customerSearchText}
+                      onChange={(event) => setCustomerSearchText(event.target.value)}
+                      placeholder="name, phone, email"
+                    />
+                  </label>
+
+                  {customerLoading ? <p className="muted-text pos-customer-search-status">Searching customers...</p> : null}
+
+                  {customerSearchText.trim() ? (
+                    <div className="table-wrap pos-results-wrap pos-customer-results">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customerResults.length === 0 ? (
+                            <tr>
+                              <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
+                            </tr>
+                          ) : (
+                            customerResults.map((customer) => (
+                              <tr key={customer.id}>
+                                <td>{customer.name}</td>
+                                <td>{customer.email || "-"}</td>
+                                <td>{customer.phone || "-"}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    data-testid={`pos-customer-select-${customer.id}`}
+                                    onClick={() => void selectCustomer(customer)}
+                                  >
+                                    {sale ? "Attach" : "Select"}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+
                 <button
                   type="button"
                   aria-expanded={showCreateCustomer}
@@ -1384,47 +1428,6 @@ export const PosPage = () => {
                   {showCreateCustomer ? "Hide quick create" : "Quick create"}
                 </button>
               </div>
-
-              {customerLoading ? <p className="muted-text">Searching customers...</p> : null}
-
-              {customerSearchText.trim() ? (
-                <div className="table-wrap pos-results-wrap pos-customer-results">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {customerResults.length === 0 ? (
-                        <tr>
-                          <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
-                        </tr>
-                      ) : (
-                        customerResults.map((customer) => (
-                          <tr key={customer.id}>
-                            <td>{customer.name}</td>
-                            <td>{customer.email || "-"}</td>
-                            <td>{customer.phone || "-"}</td>
-                            <td>
-                              <button
-                                type="button"
-                                data-testid={`pos-customer-select-${customer.id}`}
-                                onClick={() => void selectCustomer(customer)}
-                              >
-                                {sale ? "Attach" : "Select"}
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
 
               {showCreateCustomer ? (
                 <div className="quick-create-panel">
