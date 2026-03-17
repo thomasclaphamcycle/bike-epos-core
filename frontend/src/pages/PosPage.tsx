@@ -1376,8 +1376,12 @@ export const PosPage = () => {
                     placeholder="name, phone, email"
                   />
                 </label>
-                <button type="button" onClick={() => setShowCreateCustomer((value) => !value)}>
-                  {showCreateCustomer ? "Hide Quick Create" : "Quick Create Customer"}
+                <button
+                  type="button"
+                  aria-expanded={showCreateCustomer}
+                  onClick={() => setShowCreateCustomer((value) => !value)}
+                >
+                  {showCreateCustomer ? "Hide quick create" : "Quick create"}
                 </button>
               </div>
 
