@@ -1075,82 +1075,84 @@ export const PosPage = () => {
 
   return (
     <div className="page-shell pos-page-shell">
-      <section className="card pos-workstation">
-        <div className="pos-topbar">
-          <div className="pos-topbar-copy">
-            <span className="pos-kicker">Counter POS</span>
-            <h1>POS</h1>
-          </div>
-          <div className="actions-inline pos-topbar-actions">
-            <button
-              type="button"
-              onClick={() => {
-                setCompletedSale(null);
-                setSelectedTenderMethod("CARD");
-                setCashTenderedAmount("");
-                void createBasket();
-              }}
-            >
-              New Sale
-            </button>
-          </div>
-        </div>
-
-        <div className="pos-context-header" data-testid="pos-context-header">
-          <div className="pos-context-copy">
-            <div className="pos-context-pill-row">
-              <span className="pos-context-pill">
-                {saleContext.type === "WORKSHOP" ? "Workshop handoff" : "Retail counter"}
-              </span>
-              <span className="pos-context-pill pos-context-pill-soft">Unified POS</span>
+      <section className="pos-workstation">
+        <div className="pos-utility-strip">
+          <div className="pos-topbar">
+            <div className="pos-topbar-copy">
+              <span className="pos-kicker">Counter POS</span>
+              <h1>POS</h1>
             </div>
-            <div className="muted-text pos-context-label">Sale Context</div>
-            <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
-            <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
+            <div className="actions-inline pos-topbar-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletedSale(null);
+                  setSelectedTenderMethod("CARD");
+                  setCashTenderedAmount("");
+                  void createBasket();
+                }}
+              >
+                New Sale
+              </button>
+            </div>
           </div>
-          <div className="pos-context-totals">
-            {saleContext.type === "WORKSHOP" ? (
-              <>
-                <div>
-                  <span className="muted-text">Job Total</span>
-                  <strong>{formatMoney(activeTotal)}</strong>
-                </div>
-                <div>
-                  <span className="muted-text">Deposit Paid</span>
-                  <strong>{formatMoney(depositPaidPence)}</strong>
-                </div>
-                <div>
-                  <span className="muted-text">Remaining</span>
-                  <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <span className="muted-text">Total</span>
-                  <strong>{formatMoney(activeTotal)}</strong>
-                </div>
-                <div>
-                  <span className="muted-text">Lines</span>
-                  <strong>{basketLineCount}</strong>
-                </div>
-                <div>
-                  <span className="muted-text">Payable</span>
-                  <strong>{formatMoney(payablePence)}</strong>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
 
-        <div className="pos-meta-strip" aria-label="POS sale metadata">
-          <span>Basket {basketId || "-"}</span>
-          <span>Sale {sale?.sale.id || saleId || "-"}</span>
-          <span>Lines {basketLineCount}</span>
-          <span>Payable {formatMoney(payablePence)}</span>
-          <span className="pos-meta-shortcuts">
-            <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
-          </span>
+          <div className="pos-context-header" data-testid="pos-context-header">
+            <div className="pos-context-copy">
+              <div className="pos-context-pill-row">
+                <span className="pos-context-pill">
+                  {saleContext.type === "WORKSHOP" ? "Workshop handoff" : "Retail counter"}
+                </span>
+                <span className="pos-context-pill pos-context-pill-soft">Unified POS</span>
+              </div>
+              <div className="muted-text pos-context-label">Sale Context</div>
+              <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
+              <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
+            </div>
+            <div className="pos-context-totals">
+              {saleContext.type === "WORKSHOP" ? (
+                <>
+                  <div>
+                    <span className="muted-text">Job Total</span>
+                    <strong>{formatMoney(activeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Deposit Paid</span>
+                    <strong>{formatMoney(depositPaidPence)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Remaining</span>
+                    <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="muted-text">Total</span>
+                    <strong>{formatMoney(activeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Lines</span>
+                    <strong>{basketLineCount}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-text">Payable</span>
+                    <strong>{formatMoney(payablePence)}</strong>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="pos-meta-strip" aria-label="POS sale metadata">
+            <span>Basket {basketId || "-"}</span>
+            <span>Sale {sale?.sale.id || saleId || "-"}</span>
+            <span>Lines {basketLineCount}</span>
+            <span>Payable {formatMoney(payablePence)}</span>
+            <span className="pos-meta-shortcuts">
+              <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
+            </span>
+          </div>
         </div>
 
         {loading ? <p className="muted-text">Loading...</p> : null}
@@ -1330,9 +1332,7 @@ export const PosPage = () => {
                 <div>
                   <div className="pos-section-kicker">Customer</div>
                   <h2>Attach Customer</h2>
-                  <p className="muted-text">
-                    Search and attach a customer to the current sale. If a sale has not been started yet, the selected customer will attach after checkout.
-                  </p>
+                  <p className="muted-text">Optional for walk-ins.</p>
                 </div>
                 {selectedCustomer ? (
                   <button
@@ -1360,118 +1360,8 @@ export const PosPage = () => {
               ) : (
                 <div className="pos-empty-inline">
                   <strong>No customer selected yet. Search below or leave this sale as walk-in.</strong>
-                  <p className="muted-text">Search below or leave this sale as a walk-in.</p>
                 </div>
               )}
-
-              <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
-                <div className="card-header-row">
-                  <div>
-                    <div className="table-primary">Add Customer</div>
-                    <p className="muted-text">
-                      Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="primary"
-                    data-testid="pos-customer-capture-generate"
-                    onClick={() => void createCustomerCaptureSession()}
-                    disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession}
-                  >
-                    {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
-                  </button>
-                </div>
-
-                {captureSession && captureUrl ? (
-                  captureSession.status === "ACTIVE" ? (
-                    <div className="cash-qr-card">
-                      <div className="card-header-row">
-                        <div>
-                          <span className="status-badge">Waiting for customer</span>
-                          <p className="muted-text">
-                            Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="cash-qr-layout">
-                        <div className="cash-qr-box">
-                          {captureQrBusy ? (
-                            <span>Generating QR...</span>
-                          ) : captureQrImage ? (
-                            <img
-                              src={captureQrImage}
-                              alt="Customer capture QR code"
-                              data-testid="pos-customer-capture-qr"
-                            />
-                          ) : (
-                            <span>QR unavailable</span>
-                          )}
-                        </div>
-                        <div className="cash-qr-copy">
-                          <div>
-                            <div className="table-primary">Need the link instead?</div>
-                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
-                          </div>
-                          <label>
-                            Public capture URL
-                            <input
-                              data-testid="pos-customer-capture-url"
-                              value={captureUrl}
-                              readOnly
-                            />
-                          </label>
-                          <div className="actions-inline">
-                            <button type="button" onClick={() => void copyCaptureUrl()}>
-                              Copy Link
-                            </button>
-                            <a href={captureUrl} target="_blank" rel="noreferrer">
-                              Open Link
-                            </a>
-                          </div>
-                          <p className="muted-text">
-                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : captureSession.status === "COMPLETED" ? (
-                    <div className="success-panel success-panel-sale">
-                      <div className="success-panel-heading">
-                        <strong>Customer capture complete.</strong>
-                        <span className="status-badge status-complete">Attached to sale</span>
-                      </div>
-                      <p className="muted-text">
-                        {sale?.sale.customer?.name
-                          ? `${sale.sale.customer.name} is now attached to this sale.`
-                          : "The customer details have been attached to the active sale."}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="quick-create-panel">
-                      <span className="status-badge">Expired</span>
-                      <strong>Capture link expired</strong>
-                      <p className="muted-text">
-                        The last customer capture link expired before it was used. Start Add Customer again when the customer is ready to scan or tap.
-                      </p>
-                    </div>
-                  )
-                ) : (
-                  sale?.sale.id && !sale.sale.completedAt ? (
-                    <div className="quick-create-panel">
-                      <span className="status-badge">Ready</span>
-                      <strong>Ready to add a customer</strong>
-                      <p className="muted-text">
-                        Start Add Customer to show a QR code now. The same landing flow is ready for future counter NFC entry without changing how sale-linked capture works.
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="muted-text">
-                      Available after basket checkout creates a sale.
-                    </p>
-                  )
-                )}
-              </div>
 
               <div className="customer-search-panel">
                 <label className="grow">
@@ -1565,6 +1455,115 @@ export const PosPage = () => {
                   </div>
                 </div>
               ) : null}
+
+              {captureSession && captureUrl ? (
+                <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
+                  {captureSession.status === "ACTIVE" ? (
+                    <div className="cash-qr-card">
+                      <div className="card-header-row">
+                        <div>
+                          <span className="status-badge">Waiting for customer</span>
+                          <p className="muted-text">
+                            Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="pos-customer-capture-generate"
+                          onClick={() => void createCustomerCaptureSession()}
+                          disabled={creatingCaptureSession}
+                        >
+                          {creatingCaptureSession ? "Preparing..." : "Refresh Link"}
+                        </button>
+                      </div>
+                      <div className="cash-qr-layout">
+                        <div className="cash-qr-box">
+                          {captureQrBusy ? (
+                            <span>Generating QR...</span>
+                          ) : captureQrImage ? (
+                            <img
+                              src={captureQrImage}
+                              alt="Customer capture QR code"
+                              data-testid="pos-customer-capture-qr"
+                            />
+                          ) : (
+                            <span>QR unavailable</span>
+                          )}
+                        </div>
+                        <div className="cash-qr-copy">
+                          <div>
+                            <div className="table-primary">Need the link instead?</div>
+                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
+                          </div>
+                          <label>
+                            Public capture URL
+                            <input
+                              data-testid="pos-customer-capture-url"
+                              value={captureUrl}
+                              readOnly
+                            />
+                          </label>
+                          <div className="actions-inline">
+                            <button type="button" onClick={() => void copyCaptureUrl()}>
+                              Copy Link
+                            </button>
+                            <a href={captureUrl} target="_blank" rel="noreferrer">
+                              Open Link
+                            </a>
+                          </div>
+                          <p className="muted-text">
+                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : captureSession.status === "COMPLETED" ? (
+                    <div className="success-panel success-panel-sale">
+                      <div className="success-panel-heading">
+                        <strong>Customer capture complete.</strong>
+                        <span className="status-badge status-complete">Attached to sale</span>
+                      </div>
+                      <p className="muted-text">
+                        {sale?.sale.customer?.name
+                          ? `${sale.sale.customer.name} is now attached to this sale.`
+                          : "The customer details have been attached to the active sale."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="pos-customer-capture-note">
+                      <span className="status-badge">Expired</span>
+                      <strong>Capture link expired</strong>
+                      <button
+                        type="button"
+                        data-testid="pos-customer-capture-generate"
+                        onClick={() => void createCustomerCaptureSession()}
+                        disabled={creatingCaptureSession}
+                      >
+                        {creatingCaptureSession ? "Preparing..." : "Start Again"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : sale?.sale.id && !sale.sale.completedAt ? (
+                <div className="quick-create-panel pos-customer-capture-compact" data-testid="pos-customer-capture-panel">
+                  <div>
+                    <div className="table-primary">Add Customer</div>
+                    <p className="muted-text">QR/NFC capture for the active sale.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-customer-capture-generate"
+                    onClick={() => void createCustomerCaptureSession()}
+                    disabled={creatingCaptureSession}
+                  >
+                    {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
+                  </button>
+                </div>
+              ) : (
+                <div className="pos-customer-capture-inline muted-text">Add Customer becomes available after checkout.</div>
+              )}
             </section>
           </div>
 
