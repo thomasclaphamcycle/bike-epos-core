@@ -314,6 +314,34 @@ Implementation status:
 - staff management now includes lightweight operational role tagging so workshop views can prefer workshop-capable rota staff without changing auth roles or introducing a second scheduling model
 - workshop operations now also surface a simple capacity signal that combines rota-backed workshop cover with due, overdue, and active workshop workload for better daily triage
 
+Planned item:
+
+### POS Basket Persistence (PARTIAL / MEDIUM)
+
+Intent:
+Implement POS basket persistence in stages so the active basket survives normal use now without prematurely locking CorePOS into the wrong long-term session model.
+
+Phase 1 — Session Basket Persistence (Implemented):
+- persist active basket ID in localStorage
+- restore basket on POS load
+- preserve basket across navigation
+- clear basket on checkout / new sale
+- recover safely from invalid or missing basket IDs
+- backend remains the source of truth
+
+Phase 2 — User / Till-Scoped Basket (Future):
+- associate active basket with user and/or till session
+- support recovery across login/logout and multiple tabs/devices
+- define one-active-basket rules and conflict handling
+- align the final model with till sessions and workshop handoff flows
+
+Progress thresholds:
+- partial = session persistence working
+- complete = user/till-scoped persistence working
+
+Architectural note:
+- basket persistence is being implemented intentionally in stages so CorePOS can ship near-term session recovery without prematurely locking into the wrong long-term user/till session model
+
 ---
 
 ## Phase 10 — Rental Services (FUTURE)
