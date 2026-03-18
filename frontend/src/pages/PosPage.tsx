@@ -23,6 +23,7 @@ const QUICK_ADD_TILE_DEFINITIONS = [
   { key: "floor-pump", label: "Floor Pump", query: "Floor Pump" },
   { key: "city-bike", label: "City Bike", query: "City Bike" },
 ] as const;
+const ACTIVE_BASKET_KEY = "corepos_active_basket_id";
 
 type ProductSearchRow = {
   id: string;
@@ -179,6 +180,15 @@ const parseCurrencyInputToPence = (value: string): number | null => {
   return Number(pounds) * 100 + Number((decimal + "00").slice(0, 2));
 };
 
+const getApiErrorStatus = (value: unknown) => {
+  if (!value || typeof value !== "object" || !("status" in value)) {
+    return null;
+  }
+
+  const status = (value as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
+};
+
 export const PosPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -286,6 +296,16 @@ export const PosPage = () => {
     return increasedItem?.id ?? null;
   };
 
+  const readStoredBasketId = () => localStorage.getItem(ACTIVE_BASKET_KEY)?.trim() || null;
+
+  const persistActiveBasketId = (id: string) => {
+    localStorage.setItem(ACTIVE_BASKET_KEY, id);
+  };
+
+  const clearStoredBasketId = () => {
+    localStorage.removeItem(ACTIVE_BASKET_KEY);
+  };
+
   const syncQuery = (next: { basketId?: string | null; saleId?: string | null }) => {
     const updated = new URLSearchParams(searchParams);
 
@@ -322,6 +342,8 @@ export const PosPage = () => {
   const loadBasket = async (id: string) => {
     const payload = await apiGet<BasketResponse>(`/api/baskets/${encodeURIComponent(id)}`);
     setBasket(payload);
+    persistActiveBasketId(payload.id);
+    return payload;
   };
 
   const loadProductMatches = async (params: URLSearchParams) => {
@@ -350,6 +372,7 @@ export const PosPage = () => {
       ? { items: options.preloadedItems }
       : {});
     setBasket(created);
+    persistActiveBasketId(created.id);
     setSale(null);
     setReceiptUrl(null);
     setCashTenderedAmount("");
@@ -400,10 +423,40 @@ export const PosPage = () => {
           }
         }
 
-        if (basketId) {
-          await loadBasket(basketId);
-          if (nextCustomerId && !saleId) {
-            await loadContextCustomer(nextCustomerId);
+        const storedBasketId = !saleId ? readStoredBasketId() : null;
+        const candidateBasketId = basketId ?? storedBasketId;
+
+        if (candidateBasketId) {
+          try {
+            const restoredBasket = await loadBasket(candidateBasketId);
+            if (!saleId) {
+              syncQuery({ basketId: restoredBasket.id, saleId: null });
+            }
+            if (nextCustomerId && !saleId) {
+              await loadContextCustomer(nextCustomerId);
+            }
+          } catch (loadBasketError) {
+            const isStoredBasketRestore = Boolean(storedBasketId) && candidateBasketId === storedBasketId;
+            const canRecoverFromMissingBasket = getApiErrorStatus(loadBasketError) === 404;
+            const canRecoverBasket = isStoredBasketRestore || canRecoverFromMissingBasket;
+
+            if (!canRecoverBasket) {
+              throw loadBasketError;
+            }
+
+            clearStoredBasketId();
+
+            if (saleId) {
+              setBasket(null);
+              syncQuery({ basketId: null, saleId });
+            } else {
+              await createBasket({
+                saleContext: nextContext,
+                customerId: nextCustomerId,
+                preloadedItems: posOpenState?.items?.length ? toPreloadedBasketItems(posOpenState.items) : undefined,
+                announce: false,
+              });
+            }
           }
         } else if (!saleId) {
           await createBasket({
@@ -898,6 +951,7 @@ export const PosPage = () => {
         {},
       );
       const nextSaleId = payload.sale.id;
+      clearStoredBasketId();
       syncQuery({ basketId, saleId: nextSaleId });
       if (selectedCustomer?.id) {
         await attachCustomerToSale(nextSaleId, selectedCustomer.id);
