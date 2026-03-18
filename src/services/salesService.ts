@@ -131,6 +131,46 @@ const toSaleTenderMethodFromProvider = (provider: string): SaleTenderMethod => {
   return "CARD";
 };
 
+const syncWorkshopDepositTendersTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+  workshopJobId: string,
+  staffActorId?: string,
+) => {
+  const existingTenderCount = await tx.saleTender.count({
+    where: { saleId },
+  });
+  if (existingTenderCount > 0) {
+    return;
+  }
+
+  const depositPayments = await tx.payment.findMany({
+    where: {
+      workshopJobId,
+      purpose: "DEPOSIT",
+      amountPence: { gt: 0 },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      method: true,
+      amountPence: true,
+    },
+  });
+
+  if (depositPayments.length === 0) {
+    return;
+  }
+
+  await tx.saleTender.createMany({
+    data: depositPayments.map((payment) => ({
+      saleId,
+      method: toSaleTenderMethodFromPaymentMethod(payment.method),
+      amountPence: payment.amountPence,
+      createdByStaffId: staffActorId ?? null,
+    })),
+  });
+};
+
 const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
   const existingDefault = await tx.stockLocation.findFirst({
     where: { isDefault: true },
@@ -880,6 +920,13 @@ export const checkoutBasketToSale = async (
           });
         }
 
+        await syncWorkshopDepositTendersTx(
+          tx,
+          existingSale.id,
+          workshopJob.id,
+          normalizedCreatedByStaffId,
+        );
+
         const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
           workshopJob,
           saleId: existingSale.id,
@@ -929,6 +976,13 @@ export const checkoutBasketToSale = async (
           data: { status: BasketStatus.CHECKED_OUT },
         });
 
+        await syncWorkshopDepositTendersTx(
+          tx,
+          existingWorkshopSale.id,
+          workshopJob.id,
+          normalizedCreatedByStaffId,
+        );
+
         const completionResult = await completeWorkshopJobForBasketCheckoutTx(tx, {
           workshopJob,
           saleId: existingWorkshopSale.id,
@@ -951,8 +1005,22 @@ export const checkoutBasketToSale = async (
     );
     const taxPence = 0;
     const totalPence = subtotalPence + taxPence;
-
-    const payment = validateCheckoutPayment(paymentInput, totalPence);
+    const workshopDepositPence = workshopJob
+      ? (await tx.payment.findMany({
+          where: {
+            workshopJobId: workshopJob.id,
+            purpose: "DEPOSIT",
+            amountPence: { gt: 0 },
+          },
+          select: {
+            amountPence: true,
+          },
+        })).reduce((sum, payment) => sum + payment.amountPence, 0)
+      : 0;
+    const payment = validateCheckoutPayment(
+      paymentInput,
+      Math.max(0, totalPence - workshopDepositPence),
+    );
 
     const saleLocation = workshopJob
       ? await tx.location.findUnique({ where: { id: workshopJob.locationId } })
@@ -979,6 +1047,15 @@ export const checkoutBasketToSale = async (
         ...(normalizedCreatedByStaffId ? { createdByStaffId: normalizedCreatedByStaffId } : {}),
       },
     });
+
+    if (workshopJob) {
+      await syncWorkshopDepositTendersTx(
+        tx,
+        sale.id,
+        workshopJob.id,
+        normalizedCreatedByStaffId,
+      );
+    }
 
     const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
 

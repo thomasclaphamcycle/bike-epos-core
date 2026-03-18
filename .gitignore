@@ -93,3 +93,5 @@ playwright-report/
 test-results/
 uploads/
 .DS_Store
+frontend/.env.local
+tmp-pos-check/

@@ -127,6 +127,13 @@ const cleanup = async (state) => {
   const userIds = Array.from(state.userIds);
 
   if (saleIds.length > 0) {
+    await prisma.saleTender.deleteMany({
+      where: {
+        saleId: {
+          in: saleIds,
+        },
+      },
+    });
     await prisma.payment.deleteMany({
       where: {
         saleId: {
@@ -161,6 +168,13 @@ const cleanup = async (state) => {
   }
 
   if (workshopJobIds.length > 0) {
+    await prisma.payment.deleteMany({
+      where: {
+        workshopJobId: {
+          in: workshopJobIds,
+        },
+      },
+    });
     await prisma.workshopJobLine.deleteMany({
       where: {
         jobId: {
@@ -358,6 +372,14 @@ const run = async () => {
       Array.isArray(finalizeRes.json.basket.items) && finalizeRes.json.basket.items.length >= 2,
       "Expected basket items from part and labour lines",
     );
+    assert.ok(
+      finalizeRes.json.basket.items.some((item) => item.type === "PART"),
+      "Expected PART basket line after finalize",
+    );
+    assert.ok(
+      finalizeRes.json.basket.items.some((item) => item.type === "LABOUR"),
+      "Expected LABOUR basket line after finalize",
+    );
 
     const movements = await prisma.inventoryMovement.findMany({
       where: {
@@ -419,6 +441,75 @@ const run = async () => {
     });
     assert.equal(jobAfterCheckout?.status, "COMPLETED");
     assert.ok(jobAfterCheckout?.completedAt, "Expected workshop completedAt after POS checkout");
+
+    const createDepositJobRes = await fetchJson("/api/workshop/jobs", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        customerName: "M30 Deposit Customer",
+        bikeDescription: "M30 Deposit Bike",
+        notes: "Deposit carried into POS",
+      }),
+    });
+    assert.equal(createDepositJobRes.status, 201, JSON.stringify(createDepositJobRes.json));
+    const depositJobId = createDepositJobRes.json.id;
+    state.workshopJobIds.add(depositJobId);
+
+    await prisma.workshopJob.update({
+      where: { id: depositJobId },
+      data: {
+        depositRequiredPence: 1000,
+        depositStatus: "PAID",
+      },
+    });
+    await prisma.payment.create({
+      data: {
+        workshopJobId: depositJobId,
+        method: "CARD",
+        purpose: "DEPOSIT",
+        amountPence: 1000,
+        providerRef: `m30-deposit-${uniqueRef()}`,
+      },
+    });
+
+    const addDepositLabourLineRes = await fetchJson(`/api/workshop/jobs/${depositJobId}/lines`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        type: "LABOUR",
+        description: "Deposit labour",
+        qty: 1,
+        unitPricePence: 3000,
+      }),
+    });
+    assert.equal(addDepositLabourLineRes.status, 201, JSON.stringify(addDepositLabourLineRes.json));
+
+    const finalizeDepositJobRes = await fetchJson(`/api/workshop/jobs/${depositJobId}/finalize`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(finalizeDepositJobRes.status, 201, JSON.stringify(finalizeDepositJobRes.json));
+    state.basketIds.add(finalizeDepositJobRes.json.basket.id);
+
+    const depositCheckoutRes = await fetchJson(`/api/baskets/${finalizeDepositJobRes.json.basket.id}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(depositCheckoutRes.status, 201, JSON.stringify(depositCheckoutRes.json));
+    state.saleIds.add(depositCheckoutRes.json.sale.id);
+
+    const depositSaleRes = await fetchJson(`/api/sales/${depositCheckoutRes.json.sale.id}`, {
+      headers: staffHeaders,
+    });
+    assert.equal(depositSaleRes.status, 200, JSON.stringify(depositSaleRes.json));
+    assert.equal(depositSaleRes.json.tenderSummary.totalPence, 3000);
+    assert.equal(depositSaleRes.json.tenderSummary.tenderedPence, 1000);
+    assert.equal(depositSaleRes.json.tenderSummary.remainingPence, 2000);
+    assert.equal(depositSaleRes.json.tenders.length, 1);
+    assert.equal(depositSaleRes.json.tenders[0].method, "CARD");
+    assert.equal(depositSaleRes.json.tenders[0].amountPence, 1000);
 
     console.log("M30 smoke tests passed.");
   } finally {

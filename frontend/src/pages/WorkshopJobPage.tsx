@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
 
@@ -97,6 +98,8 @@ type WorkshopJobResponse = {
     customerName: string | null;
     bikeDescription: string | null;
     notes: string | null;
+    depositRequiredPence: number;
+    depositStatus: string;
     finalizedBasketId: string | null;
     sale: {
       id: string;
@@ -331,6 +334,7 @@ const getStageActions = (status: string): Array<{ label: string; value: string }
 export const WorkshopJobPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const openPosWithContext = useOpenPosWithContext();
   const { user } = useAuth();
   const { success, error } = useToasts();
 
@@ -605,17 +609,44 @@ export const WorkshopJobPage = () => {
   };
 
   const openPosHandoff = async () => {
-    if (!id) {
+    if (!id || !payload) {
       return;
     }
 
+    const saleContext: SaleContext = {
+      type: "WORKSHOP",
+      jobId: payload.job.id,
+      customerName: payload.job.customerName ?? "Workshop customer",
+      bikeLabel: payload.job.bikeDescription ?? undefined,
+      depositPaidPence:
+        payload.job.depositStatus === "PAID"
+          ? payload.job.depositRequiredPence
+          : 0,
+    };
+    const lineItems: PosLineItem[] = payload.lines.map((line) => ({
+      variantId: line.variantId,
+      type: line.type,
+      sku: line.variantSku,
+      productName: line.productName ?? line.description,
+      variantName: line.variantName,
+      quantity: line.qty,
+      unitPricePence: line.unitPricePence,
+      lineTotalPence: line.lineTotalPence,
+    }));
+
     if (payload?.job.sale) {
-      navigate(`/pos?saleId=${encodeURIComponent(payload.job.sale.id)}`);
+      openPosWithContext(saleContext, lineItems, {
+        saleId: payload.job.sale.id,
+        customerId: payload.job.customerId,
+      });
       return;
     }
 
     if (payload?.job.finalizedBasketId) {
-      navigate(`/pos?basketId=${encodeURIComponent(payload.job.finalizedBasketId)}`);
+      openPosWithContext(saleContext, lineItems, {
+        basketId: payload.job.finalizedBasketId,
+        customerId: payload.job.customerId,
+      });
       return;
     }
 
@@ -625,7 +656,10 @@ export const WorkshopJobPage = () => {
         {},
       );
       success("Workshop handed off to POS.");
-      navigate(`/pos?basketId=${encodeURIComponent(response.basket.id)}`);
+      openPosWithContext(saleContext, lineItems, {
+        basketId: response.basket.id,
+        customerId: payload.job.customerId,
+      });
     } catch (convertError) {
       const message = convertError instanceof Error ? convertError.message : "Unable to open POS handoff";
       error(message);
@@ -781,11 +815,11 @@ export const WorkshopJobPage = () => {
         <div className="card-header-row">
           <h1>Workshop Job {id.slice(0, 8)}</h1>
           <div className="actions-inline">
-            {payload?.job.status !== "CLOSED" && payload?.job.status !== "CANCELLED" ? (
+            {payload && payload.job.status !== "CLOSED" && payload.job.status !== "CANCELLED" ? (
               <button type="button" className="primary" onClick={openPosHandoff}>
-                {payload?.job.sale
+                {payload.job.sale
                   ? "Open sale"
-                  : payload?.job.finalizedBasketId
+                  : payload.job.finalizedBasketId
                     ? "Open POS handoff"
                     : "Send to POS"}
               </button>

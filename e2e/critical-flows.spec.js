@@ -279,7 +279,8 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   expect(saleIdAfterCheckout).toBeTruthy();
 
   await page.getByTestId("pos-customer-clear").click();
-  await expect(page.getByText("No customer selected yet. Search below or leave this sale as walk-in.")).toBeVisible();
+  await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
+  await expect(customerSearchInput).toBeVisible();
 
   await customerSearchInput.click();
   await customerSearchInput.fill(secondCustomer.email);
@@ -300,6 +301,165 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   );
   expect(completedSale.sale.customer?.id).toBe(secondCustomer.id);
   expect(completedSale.sale.customer?.name).toBe(secondCustomer.name);
+});
+
+test("React POS product search supports keyboard navigation and quick add quantity 2", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-product-keyboard",
+  });
+  const sharedPrefix = uniqueToken("react-pos-product-keyboard");
+  const firstProduct = await seedCatalogVariant(request, {
+    prefix: `${sharedPrefix}-one`,
+    retailPricePence: 1499,
+  });
+  const secondProduct = await seedCatalogVariant(request, {
+    prefix: `${sharedPrefix}-two`,
+    retailPricePence: 2399,
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  const productSearchInput = page.getByTestId("pos-product-search");
+  await productSearchInput.fill(sharedPrefix);
+
+  const resultRows = page.locator(".pos-results-wrap tbody tr");
+  await expect(resultRows).toHaveCount(2);
+  await expect(resultRows.nth(0)).toHaveClass(/pos-search-result-active/);
+
+  const firstRowSku = (await resultRows.nth(0).locator("td").nth(1).textContent())?.trim();
+  const secondRowSku = (await resultRows.nth(1).locator("td").nth(1).textContent())?.trim();
+  expect(firstRowSku).toBeTruthy();
+  expect(secondRowSku).toBeTruthy();
+
+  await productSearchInput.press("ArrowDown");
+  await expect(resultRows.nth(1)).toHaveClass(/pos-search-result-active/);
+  await productSearchInput.press("Enter");
+  await expect(productSearchInput).toHaveValue("");
+
+  const basketId = new URL(page.url()).searchParams.get("basketId");
+  expect(basketId).toBeTruthy();
+  const keyboardSelectedSku = secondRowSku;
+
+  await expect.poll(async () => {
+    const basketAfterKeyboardAdd = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basketAfterKeyboardAdd.items.find((item) => item.sku === keyboardSelectedSku)?.quantity ?? 0;
+  }).toBe(1);
+
+  await productSearchInput.fill(firstProduct.sku);
+  await expect(page.getByTestId(`pos-product-add-${firstProduct.variant.id}`)).toBeVisible();
+  const addTwoButton = page.locator(`tr:has([data-testid="pos-product-add-${firstProduct.variant.id}"])`).getByRole("button", {
+    name: "Add 2",
+  });
+  await expect(addTwoButton).toBeVisible();
+  await addTwoButton.click();
+  const expectedFirstProductQuantity = keyboardSelectedSku === firstProduct.sku ? 3 : 2;
+
+  await expect.poll(async () => {
+    const basketAfterQuickAdd = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basketAfterQuickAdd.items.find((item) => item.sku === firstProduct.sku)?.quantity ?? 0;
+  }).toBe(expectedFirstProductQuantity);
+
+  await productSearchInput.fill(secondProduct.sku);
+  await productSearchInput.press("Shift+Enter");
+  await expect(productSearchInput).toHaveValue("");
+  const expectedSecondProductQuantity = keyboardSelectedSku === secondProduct.sku ? 3 : 2;
+
+  await expect.poll(async () => {
+    const basketAfterShiftEnter = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return {
+      firstProductQuantity: basketAfterShiftEnter.items.find((item) => item.sku === firstProduct.sku)?.quantity ?? 0,
+      secondProductQuantity: basketAfterShiftEnter.items.find((item) => item.sku === secondProduct.sku)?.quantity ?? 0,
+    };
+  }).toEqual({
+    firstProductQuantity: expectedFirstProductQuantity,
+    secondProductQuantity: expectedSecondProductQuantity,
+  });
+});
+
+test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-pos-context",
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "workshop-pos-context",
+    retailPricePence: 2199,
+  });
+  const token = uniqueToken("workshop-pos-context");
+  const job = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Workshop ${token}`,
+      bikeDescription: `Bike ${token}`,
+      notes: `POS context ${token}`,
+    },
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "PART",
+        productId: seeded.product.id,
+        variantId: seeded.variant.id,
+        qty: 1,
+        unitPricePence: 2199,
+      },
+    },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "LABOUR",
+        description: "Workshop labour",
+        qty: 1,
+        unitPricePence: 3000,
+      },
+    },
+  );
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, `/workshop/${job.id}`, { surface: "frontend" });
+
+  await page.getByRole("button", { name: "Send to POS" }).click();
+  await expect(page).toHaveURL(/\/pos\?basketId=/);
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop Job #${job.id}`);
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop ${token}`);
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Bike ${token}`);
+  await expect(page.locator(".pos-group-row")).toContainText(["Labour", "Parts"]);
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await expect(page.getByTestId("pos-checkout-summary")).toContainText("Job Total");
+  await expect(page.getByTestId("pos-checkout-summary")).toContainText("Remaining");
 });
 
 test("POS customer capture link flow attaches captured customer to the active sale", async ({
@@ -329,8 +489,9 @@ test("POS customer capture link flow attaches captured customer to the active sa
   await page.getByTestId("pos-customer-capture-generate").click();
   const captureUrlInput = page.getByTestId("pos-customer-capture-url");
   await expect(captureUrlInput).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-qr")).toBeVisible();
   const captureUrl = await captureUrlInput.inputValue();
-  expect(captureUrl).toContain("/customer-capture/");
+  expect(captureUrl).toContain("/customer-capture?token=");
 
   const capturePage = await context.newPage();
   await capturePage.goto(captureUrl);
@@ -344,8 +505,12 @@ test("POS customer capture link flow attaches captured customer to the active sa
   const saleId = new URL(page.url()).searchParams.get("saleId");
   expect(saleId).toBeTruthy();
 
-  await page.reload();
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Taylor Rider");
+  await expect(page.getByText("Customer capture complete.")).toBeVisible();
+
+  await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
+  await expect(capturePage.getByText("No active customer capture yet")).toBeVisible();
+  await expect(capturePage.getByText("scan the QR code or tap the counter NFC prompt again", { exact: false })).toBeVisible();
 
   const refreshedSale = await apiJsonWithHeaderBypass(
     request,

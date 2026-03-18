@@ -15,6 +15,7 @@ const envLabel = import.meta.env.MODE || "development";
 const workspacePagePrefixes = [
   "/dashboard",
   "/management/staff-rota",
+  "/pos",
 ];
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -206,7 +207,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <div className="app-shell">
-        <main className={isWorkspacePage ? "app-main app-main--workspace" : "app-main"}>{children}</main>
+        <main className={currentPath.startsWith("/pos")
+          ? "app-main app-main--workspace app-main--pos"
+          : isWorkspacePage
+            ? "app-main app-main--workspace"
+            : "app-main"}
+        >
+          {children}
+        </main>
 
         <footer className="app-footer">
           <span>Environment: {envLabel}</span>

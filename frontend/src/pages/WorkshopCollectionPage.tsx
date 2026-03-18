@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { useOpenPosWithContext, type SaleContext } from "../features/pos/posContext";
 
 type CollectionJob = {
   id: string;
@@ -9,6 +10,7 @@ type CollectionJob = {
   finalizedBasketId: string | null;
   scheduledDate: string | null;
   bikeDescription: string | null;
+  depositRequiredPence: number;
   depositStatus: string;
   customer: {
     id: string;
@@ -34,7 +36,7 @@ const customerName = (job: CollectionJob) =>
   job.customer ? [job.customer.firstName, job.customer.lastName].filter(Boolean).join(" ") || "-" : "-";
 
 export const WorkshopCollectionPage = () => {
-  const navigate = useNavigate();
+  const openPosWithContext = useOpenPosWithContext();
   const { success, error } = useToasts();
   const [jobs, setJobs] = useState<CollectionJob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,14 +68,28 @@ export const WorkshopCollectionPage = () => {
     depositPaidCount: jobs.filter((job) => job.depositStatus === "PAID" || job.depositStatus === "NOT_REQUIRED").length,
   }), [jobs]);
 
+  const toSaleContext = (job: CollectionJob): SaleContext => ({
+    type: "WORKSHOP",
+    jobId: job.id,
+    customerName: customerName(job),
+    bikeLabel: job.bikeDescription ?? undefined,
+    depositPaidPence: job.depositStatus === "PAID" ? job.depositRequiredPence : 0,
+  });
+
   const openCollectionHandoff = async (job: CollectionJob) => {
     if (job.sale) {
-      navigate(`/pos?saleId=${encodeURIComponent(job.sale.id)}`);
+      openPosWithContext(toSaleContext(job), [], {
+        saleId: job.sale.id,
+        customerId: job.customer?.id ?? null,
+      });
       return;
     }
 
     if (job.finalizedBasketId) {
-      navigate(`/pos?basketId=${encodeURIComponent(job.finalizedBasketId)}`);
+      openPosWithContext(toSaleContext(job), [], {
+        basketId: job.finalizedBasketId,
+        customerId: job.customer?.id ?? null,
+      });
       return;
     }
 
@@ -84,7 +100,10 @@ export const WorkshopCollectionPage = () => {
         {},
       );
       success("Workshop handed off to POS");
-      navigate(`/pos?basketId=${encodeURIComponent(result.basket.id)}`);
+      openPosWithContext(toSaleContext(job), [], {
+        basketId: result.basket.id,
+        customerId: job.customer?.id ?? null,
+      });
     } catch (handoffError) {
       error(handoffError instanceof Error ? handoffError.message : "Failed to open POS handoff");
     } finally {
