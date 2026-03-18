@@ -20,6 +20,10 @@ const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 4;
 const WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS = 15_000;
 const WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS = 15_000;
 const WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS = 15_000;
+const WORKSHOP_CHECKOUT_FINAL_RECOVERY_MAX_WAIT_MS =
+  WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS +
+  WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS +
+  WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS;
 
 type WorkshopCheckoutResult = {
   sale: {
@@ -205,8 +209,11 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promis
   };
 };
 
-const recoverWorkshopCheckoutRace = async (workshopJobId: string) => {
-  const deadline = Date.now() + WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS;
+const recoverWorkshopCheckoutRace = async (
+  workshopJobId: string,
+  maxWaitMs = WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS,
+) => {
+  const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() <= deadline) {
     try {
@@ -331,52 +338,52 @@ export const checkoutWorkshopJobToSale = async (
           };
         }
 
-      if (workshopJob.status === "CANCELLED") {
-        throw new HttpError(
-          409,
-          "Cancelled workshop jobs cannot be checked out",
-          "WORKSHOP_JOB_NOT_CHECKOUTABLE",
-        );
-      }
+        if (workshopJob.status === "CANCELLED") {
+          throw new HttpError(
+            409,
+            "Cancelled workshop jobs cannot be checked out",
+            "WORKSHOP_JOB_NOT_CHECKOUTABLE",
+          );
+        }
 
-      if (
-        workshopJob.source === "ONLINE" &&
-        workshopJob.depositStatus === "REQUIRED" &&
-        !input.allowUnpaidDepositOverride
-      ) {
-        throw new HttpError(
-          409,
-          "Deposit must be paid before checkout",
-          "DEPOSIT_REQUIRED",
-        );
-      }
+        if (
+          workshopJob.source === "ONLINE" &&
+          workshopJob.depositStatus === "REQUIRED" &&
+          !input.allowUnpaidDepositOverride
+        ) {
+          throw new HttpError(
+            409,
+            "Deposit must be paid before checkout",
+            "DEPOSIT_REQUIRED",
+          );
+        }
 
-      const serviceTotalPence = input.saleTotalPence;
-      const saleTotalPence = serviceTotalPence + partsTotalPence;
+        const serviceTotalPence = input.saleTotalPence;
+        const saleTotalPence = serviceTotalPence + partsTotalPence;
 
-      const depositPayments = await tx.payment.findMany({
-        where: {
-          workshopJobId,
-          purpose: "DEPOSIT",
-          amountPence: {
-            gt: 0,
+        const depositPayments = await tx.payment.findMany({
+          where: {
+            workshopJobId,
+            purpose: "DEPOSIT",
+            amountPence: {
+              gt: 0,
+            },
           },
-        },
-        orderBy: { createdAt: "asc" },
-      });
+          orderBy: { createdAt: "asc" },
+        });
 
-      const depositPaidPence = depositPayments.reduce((sum, p) => sum + p.amountPence, 0);
-      const creditPence = Math.max(0, depositPaidPence - saleTotalPence);
-      // Outstanding is clamped to 0 so invoices never show negative due amounts.
-      const outstandingPence = Math.max(0, saleTotalPence - depositPaidPence);
+        const depositPaidPence = depositPayments.reduce((sum, p) => sum + p.amountPence, 0);
+        const creditPence = Math.max(0, depositPaidPence - saleTotalPence);
+        // Outstanding is clamped to 0 so invoices never show negative due amounts.
+        const outstandingPence = Math.max(0, saleTotalPence - depositPaidPence);
 
-      if (hasPaymentAmount && input.amountPence !== outstandingPence) {
-        throw new HttpError(
-          400,
-          "Payment amount must equal outstanding amount",
-          "PAYMENT_MISMATCH",
-        );
-      }
+        if (hasPaymentAmount && input.amountPence !== outstandingPence) {
+          throw new HttpError(
+            400,
+            "Payment amount must equal outstanding amount",
+            "PAYMENT_MISMATCH",
+          );
+        }
 
         const sale = await tx.sale.create({
           data: {
@@ -390,95 +397,95 @@ export const checkoutWorkshopJobToSale = async (
           },
         });
 
-      if (!sale) {
-        throw new HttpError(500, "Could not create sale", "SALE_CREATE_FAILED");
-      }
-
-      if (depositPayments.length > 0) {
-        await tx.payment.updateMany({
-          where: {
-            id: {
-              in: depositPayments.map((p) => p.id),
-            },
-          },
-          data: {
-            saleId: sale.id,
-          },
-        });
-      }
-
-      let payment: {
-        id: string;
-        method: PaymentMethod;
-        amountPence: number;
-        providerRef: string | null;
-        createdAt: Date;
-      } | null = null;
-
-      if (hasPaymentAmount && outstandingPence > 0) {
-        const createdPayment = await tx.payment.create({
-          data: {
-            saleId: sale.id,
-            workshopJobId,
-            method: input.paymentMethod,
-            purpose: "FINAL",
-            status: "COMPLETED",
-            amountPence: outstandingPence,
-            providerRef: input.providerRef,
-          },
-        });
-
-        await recordCashSaleMovementForPaymentTx(tx, {
-          paymentId: createdPayment.id,
-          paymentMethod: createdPayment.method,
-          amountPence: createdPayment.amountPence,
-          saleId: sale.id,
-          createdByStaffId: auditActor?.actorId,
-        });
-
-        payment = {
-          id: createdPayment.id,
-          method: createdPayment.method,
-          amountPence: createdPayment.amountPence,
-          providerRef: createdPayment.providerRef,
-          createdAt: createdPayment.createdAt,
-        };
-      }
-
-      if (workshopJob.status !== "COMPLETED") {
-        const data: { status: "COMPLETED"; completedAt?: Date } = {
-          status: "COMPLETED",
-        };
-        if (!workshopJob.completedAt) {
-          data.completedAt = new Date();
+        if (!sale) {
+          throw new HttpError(500, "Could not create sale", "SALE_CREATE_FAILED");
         }
 
-        await tx.workshopJob.update({
-          where: { id: workshopJob.id },
-          data,
-        });
-      }
+        if (depositPayments.length > 0) {
+          await tx.payment.updateMany({
+            where: {
+              id: {
+                in: depositPayments.map((p) => p.id),
+              },
+            },
+            data: {
+              saleId: sale.id,
+            },
+          });
+        }
 
-      await createAuditEventTx(
-        tx,
-        {
-          action: "WORKSHOP_CHECKOUT_COMPLETED",
-          entityType: "WORKSHOP_JOB",
-          entityId: workshopJob.id,
-          metadata: {
+        let payment: {
+          id: string;
+          method: PaymentMethod;
+          amountPence: number;
+          providerRef: string | null;
+          createdAt: Date;
+        } | null = null;
+
+        if (hasPaymentAmount && outstandingPence > 0) {
+          const createdPayment = await tx.payment.create({
+            data: {
+              saleId: sale.id,
+              workshopJobId,
+              method: input.paymentMethod,
+              purpose: "FINAL",
+              status: "COMPLETED",
+              amountPence: outstandingPence,
+              providerRef: input.providerRef,
+            },
+          });
+
+          await recordCashSaleMovementForPaymentTx(tx, {
+            paymentId: createdPayment.id,
+            paymentMethod: createdPayment.method,
+            amountPence: createdPayment.amountPence,
             saleId: sale.id,
-            serviceTotalPence,
-            partsTotalPence,
-            saleTotalPence,
-            depositPaidPence,
-            creditPence,
-            outstandingPence,
-            paymentId: payment?.id ?? null,
-            paymentAmountPence: payment?.amountPence ?? null,
+            createdByStaffId: auditActor?.actorId,
+          });
+
+          payment = {
+            id: createdPayment.id,
+            method: createdPayment.method,
+            amountPence: createdPayment.amountPence,
+            providerRef: createdPayment.providerRef,
+            createdAt: createdPayment.createdAt,
+          };
+        }
+
+        if (workshopJob.status !== "COMPLETED") {
+          const data: { status: "COMPLETED"; completedAt?: Date } = {
+            status: "COMPLETED",
+          };
+          if (!workshopJob.completedAt) {
+            data.completedAt = new Date();
+          }
+
+          await tx.workshopJob.update({
+            where: { id: workshopJob.id },
+            data,
+          });
+        }
+
+        await createAuditEventTx(
+          tx,
+          {
+            action: "WORKSHOP_CHECKOUT_COMPLETED",
+            entityType: "WORKSHOP_JOB",
+            entityId: workshopJob.id,
+            metadata: {
+              saleId: sale.id,
+              serviceTotalPence,
+              partsTotalPence,
+              saleTotalPence,
+              depositPaidPence,
+              creditPence,
+              outstandingPence,
+              paymentId: payment?.id ?? null,
+              paymentAmountPence: payment?.amountPence ?? null,
+            },
           },
-        },
-        auditActor,
-      );
+          auditActor,
+        );
 
         return {
           sale: {
@@ -518,6 +525,15 @@ export const checkoutWorkshopJobToSale = async (
 
       lastRecoverableError = error;
       if (attempt === WORKSHOP_CHECKOUT_TRANSACTION_RETRIES - 1) {
+        const extendedRecovered = await recoverWorkshopCheckoutRace(
+          workshopJobId,
+          WORKSHOP_CHECKOUT_FINAL_RECOVERY_MAX_WAIT_MS,
+        );
+        if (extendedRecovered) {
+          result = extendedRecovered;
+          lastRecoverableError = undefined;
+          break;
+        }
         throw error;
       }
 

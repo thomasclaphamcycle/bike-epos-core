@@ -189,6 +189,17 @@ const getApiErrorStatus = (value: unknown) => {
   return typeof status === "number" ? status : null;
 };
 
+const resolveHighlightedProductIndex = (
+  rows: ProductSearchRow[],
+  highlightedIndex: number,
+) => {
+  if (rows.length === 0) {
+    return -1;
+  }
+
+  return highlightedIndex >= 0 && highlightedIndex < rows.length ? highlightedIndex : 0;
+};
+
 export const PosPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -235,6 +246,8 @@ export const PosPage = () => {
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
+
+  const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
@@ -568,14 +581,14 @@ export const PosPage = () => {
   }, [searchRows, searchText]);
 
   useEffect(() => {
-    if (highlightedProductIndex < 0) {
+    if (activeProductIndex < 0) {
       return;
     }
 
-    productResultRefs.current[highlightedProductIndex]?.scrollIntoView({
+    productResultRefs.current[activeProductIndex]?.scrollIntoView({
       block: "nearest",
     });
-  }, [highlightedProductIndex]);
+  }, [activeProductIndex]);
 
   useEffect(() => {
     if (!loading && basket && !sale) {
@@ -836,8 +849,8 @@ export const PosPage = () => {
     }
 
     try {
-      const row = highlightedProductIndex >= 0 && highlightedProductIndex < searchRows.length
-        ? searchRows[highlightedProductIndex]
+      const row = activeProductIndex >= 0 && activeProductIndex < searchRows.length
+        ? searchRows[activeProductIndex]
         : await resolveProductSearchRow(searchText);
       if (!row) {
         error("No product matched that barcode, SKU, or search.");
@@ -1529,10 +1542,11 @@ export const PosPage = () => {
                             }}
                             className={[
                               canAdd ? "clickable-row" : "",
-                              index === highlightedProductIndex ? "pos-search-result-active" : "",
+                              index === activeProductIndex ? "pos-search-result-active" : "",
                             ].filter(Boolean).join(" ")}
                             onClick={canAdd ? () => void addItem(row.id) : undefined}
-                            onMouseEnter={() => setHighlightedProductIndex(index)}
+                            onMouseMove={() => setHighlightedProductIndex(index)}
+                            onFocus={() => setHighlightedProductIndex(index)}
                             onKeyDown={
                               canAdd
                                 ? (event) => {
@@ -1546,7 +1560,7 @@ export const PosPage = () => {
                             role={canAdd ? "button" : undefined}
                             tabIndex={canAdd ? 0 : undefined}
                             aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
-                            aria-selected={index === highlightedProductIndex}
+                            aria-selected={index === activeProductIndex}
                           >
                             <td>{row.name}</td>
                             <td>{row.sku}</td>
