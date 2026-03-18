@@ -15,10 +15,11 @@ export type WorkshopCheckoutInput = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS = 10;
+const WORKSHOP_CHECKOUT_RECOVERY_POLL_MS = 100;
 const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 4;
 const WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS = 15_000;
 const WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS = 15_000;
+const WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS = 15_000;
 
 type WorkshopCheckoutResult = {
   sale: {
@@ -64,6 +65,9 @@ const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
     message.includes("write conflict") ||
     message.includes("deadlock") ||
     message.includes("could not serialize") ||
+    message.includes("lock timeout") ||
+    message.includes("could not obtain lock") ||
+    message.includes("canceling statement due to lock timeout") ||
     message.includes("transaction already closed") ||
     message.includes("a query cannot be executed on an expired transaction") ||
     message.includes("transaction is no longer valid") ||
@@ -154,7 +158,9 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promis
   });
 
 const recoverWorkshopCheckoutRace = async (workshopJobId: string) => {
-  for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS; attempt += 1) {
+  const deadline = Date.now() + WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS;
+
+  while (Date.now() <= deadline) {
     try {
       const recovered = await loadExistingWorkshopCheckoutResult(workshopJobId);
       if (recovered) {
@@ -166,8 +172,8 @@ const recoverWorkshopCheckoutRace = async (workshopJobId: string) => {
       }
     }
 
-    if (attempt < WORKSHOP_CHECKOUT_RECOVERY_ATTEMPTS - 1) {
-      await sleep(50 * (attempt + 1));
+    if (Date.now() < deadline) {
+      await sleep(WORKSHOP_CHECKOUT_RECOVERY_POLL_MS);
     }
   }
 
