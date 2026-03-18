@@ -54,6 +54,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: var(--cp-font-family-base);
@@ -116,9 +122,11 @@ textarea {
 }
 
 .layout-root {
+  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  overflow: hidden;
   background:
     radial-gradient(circle at 12% 8%, var(--cp-page-glow) 0%, transparent 26%),
     radial-gradient(circle at 88% 12%, var(--cp-page-warm) 0%, transparent 20%),
@@ -285,6 +293,8 @@ textarea {
   min-width: 0;
   display: grid;
   grid-template-rows: 1fr auto;
+  height: 100%;
+  min-height: 0;
 }
 
 .brand {
@@ -496,7 +506,13 @@ textarea {
 .app-main--pos {
   width: 100%;
   max-width: none;
-  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  padding: 4px 6px 6px;
+  overflow: hidden;
 }
 
 .app-main--pos + .app-footer {
@@ -3722,35 +3738,48 @@ th {
 .pos-page-shell {
   width: 100%;
   max-width: none;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
   gap: 8px;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pos-workstation {
   display: grid;
-  gap: 10px;
-  padding: 8px 10px 10px;
-  border-radius: 18px;
-  border: 1px solid rgba(211, 223, 234, 0.72);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  align-content: stretch;
+  height: 100%;
+  min-height: 0;
+  padding: 2px 2px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(211, 223, 234, 0.34);
   background:
     radial-gradient(circle at top left, rgba(46, 124, 246, 0.08), transparent 28%),
     radial-gradient(circle at bottom right, rgba(255, 122, 24, 0.08), transparent 24%),
     linear-gradient(180deg, rgba(252, 253, 255, 0.98), rgba(244, 248, 252, 0.98));
-  box-shadow: 0 18px 36px rgba(15, 34, 52, 0.06);
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .pos-utility-strip {
   display: grid;
-  gap: 6px;
-  padding: 6px 8px 8px;
-  border-radius: 14px;
-  border: 1px solid rgba(214, 226, 236, 0.84);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(243, 247, 251, 0.94));
+  gap: 4px;
+  padding: 4px 6px 3px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(214, 226, 236, 0.72);
+  background: transparent;
 }
 
 .pos-topbar {
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 6px;
   align-items: center;
 }
 
@@ -3767,10 +3796,6 @@ th {
 .pos-topbar-copy h1 {
   font-size: 1.35rem;
   line-height: 1;
-}
-
-.pos-topbar-actions {
-  align-items: stretch;
 }
 
 .pos-kicker,
@@ -3792,35 +3817,42 @@ th {
 .pos-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   align-items: stretch;
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pos-main-column {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
+  align-self: stretch;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pos-side-column {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
-  height: calc(100vh - 242px);
-  min-width: 0;
-  align-self: start;
-  position: sticky;
-  top: 8px;
+  height: 100%;
   min-height: 0;
-  padding: 8px 10px 10px;
-  border-radius: 18px;
-  border: 1px solid rgba(236, 189, 153, 0.6);
+  min-width: 0;
+  align-self: stretch;
+  overflow: hidden;
+  padding: 6px 8px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(236, 189, 153, 0.44);
   background:
-    radial-gradient(circle at top left, rgba(255, 122, 24, 0.1), transparent 28%),
+    radial-gradient(circle at top left, rgba(255, 122, 24, 0.08), transparent 28%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.995), rgba(245, 248, 251, 0.98));
-  box-shadow:
-    0 24px 44px rgba(255, 122, 24, 0.08),
-    0 14px 30px rgba(15, 34, 52, 0.08);
+  box-shadow: none;
 }
 
 .pos-panel {
@@ -3932,19 +3964,43 @@ th {
   gap: 4px;
   align-items: center;
   overflow-x: auto;
+  padding-top: 1px;
 }
 
 .pos-meta-strip span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 7px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: rgba(236, 243, 249, 0.95);
   color: #4b6074;
   font-size: 0.64rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.pos-meta-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 226, 236, 0.95);
+  background: rgba(255, 255, 255, 0.94);
+  color: #375067;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pos-meta-action:hover,
+.pos-meta-action:focus-visible {
+  border-color: rgba(171, 193, 211, 0.98);
+  background: rgba(247, 250, 253, 0.98);
 }
 
 .pos-meta-shortcuts {
@@ -3956,7 +4012,8 @@ th {
   display: grid;
   grid-template-rows: auto auto minmax(320px, 1fr);
   gap: 0;
-  height: calc(100vh - 242px);
+  align-self: stretch;
+  height: 100%;
   min-height: 0;
   border-color: rgba(215, 228, 239, 0.45);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(247, 250, 253, 0.76));
@@ -4051,7 +4108,9 @@ th {
 }
 
 .pos-customer-panel {
+  grid-row: 1;
   padding: 0 0 10px;
+  min-height: 0;
   background: transparent;
   border-bottom: 1px solid rgba(223, 232, 240, 0.92);
 }
@@ -4167,6 +4226,79 @@ th {
     0 6px 14px rgba(15, 34, 52, 0.08);
 }
 
+.pos-customer-results-empty {
+  margin: 0;
+  padding: 12px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.pos-customer-result {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid rgba(214, 226, 236, 0.9);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pos-customer-result:last-child {
+  border-bottom: 0;
+}
+
+.pos-customer-result:hover,
+.pos-customer-result:focus-visible {
+  background: rgba(15, 34, 52, 0.06);
+}
+
+.pos-customer-result:focus-visible {
+  outline: 2px solid rgba(46, 124, 246, 0.35);
+  outline-offset: -2px;
+}
+
+.pos-customer-result-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.pos-customer-result-name,
+.pos-customer-result-meta {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pos-customer-result-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.pos-customer-result-meta {
+  font-size: 0.76rem;
+  color: var(--color-text-secondary);
+}
+
+.pos-customer-result-action {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent-strong);
+}
+
 .pos-side-column .quick-create-panel {
   margin-top: 6px;
   padding: 10px 12px;
@@ -4204,19 +4336,40 @@ th {
 }
 
 .pos-basket-panel {
+  grid-row: 2;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  align-self: stretch;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   padding-right: 2px;
 }
 
+.pos-basket-panel > .pos-basket-groups,
+.pos-basket-panel > .pos-empty-state {
+  overflow: auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.pos-basket-panel > .pos-empty-state {
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.pos-basket-panel > .pos-empty-state strong {
+  align-self: start;
+}
+
 .pos-basket-groups {
   display: grid;
   gap: 10px;
+  height: 100%;
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
+  align-content: start;
 }
 
 .pos-basket-group {
@@ -4325,9 +4478,11 @@ th {
 }
 
 .pos-payment-panel {
-  align-self: end;
+  grid-row: 3;
+  align-self: stretch;
+  min-height: 0;
   padding-top: 10px;
-  margin-top: 8px;
+  margin-top: 0;
   border-top: 1px solid rgba(232, 205, 182, 0.86);
 }
 
@@ -4344,10 +4499,10 @@ th {
 
 .pos-checkout-summary,
 .pos-payment-summary {
-  margin-top: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+  gap: 4px;
+  margin-top: 0;
   padding: 0;
   border-radius: 18px;
   border: 0;
@@ -4355,22 +4510,31 @@ th {
 }
 
 .pos-payment-summary-retail {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   background: transparent;
 }
 
+.pos-payment-summary-retail > :not(.pos-payment-total-block) {
+  padding: 6px 8px;
+}
+
+.pos-payment-summary-retail > :not(.pos-payment-total-block) strong {
+  font-size: 0.95rem;
+}
+
 .pos-payment-total-block {
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 244, 236, 0.99));
   border-color: rgba(242, 177, 132, 0.72);
 }
 
 .pos-payment-total-block strong {
-  font-size: clamp(2rem, 3.1vw, 2.6rem);
+  font-size: clamp(1.75rem, 2.6vw, 2.3rem);
   line-height: 1;
 }
 
 .pos-payment-running-total {
-  margin: 8px 0 0;
+  margin: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 12px;
@@ -4378,11 +4542,11 @@ th {
 }
 
 .pos-tender-switch {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .pos-cash-panel {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .pos-cash-grid {
@@ -4402,7 +4566,7 @@ th {
 }
 
 .pos-payment-actions {
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .pos-payment-actions .primary {
@@ -4578,13 +4742,6 @@ th {
   background: rgba(255, 255, 255, 0.72);
 }
 
-.login-pin-help {
-  margin-top: 10px;
-  border-style: solid;
-  background: rgba(46, 124, 246, 0.08);
-  color: #36537a;
-}
-
 .login-card label {
   margin-top: 2px;
   font-weight: 700;
@@ -4729,6 +4886,8 @@ th {
   }
 
   .pos-workstation {
+    min-height: auto;
+    overflow: visible;
     padding: 10px;
   }
 
@@ -4773,6 +4932,13 @@ th {
     position: static;
     height: auto;
     min-height: auto;
+    margin-top: 0;
+  }
+
+  .app-main--pos,
+  .pos-page-shell {
+    min-height: auto;
+    overflow: visible;
   }
 
   .pos-search-status,
@@ -4818,15 +4984,25 @@ th {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   }
 
-  .pos-payment-summary,
   .pos-checkout-summary {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pos-payment-summary-retail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1360px) {
   .pos-layout {
     grid-template-columns: 1fr;
+  }
+
+  .app-main--pos,
+  .pos-page-shell,
+  .pos-workstation {
+    min-height: auto;
+    overflow: visible;
   }
 
   .pos-search-panel {
@@ -4838,6 +5014,7 @@ th {
     position: static;
     height: auto;
     min-height: auto;
+    margin-top: 0;
   }
 }
 

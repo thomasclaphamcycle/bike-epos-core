@@ -1079,76 +1079,47 @@ export const PosPage = () => {
         <div className="pos-utility-strip">
           <div className="pos-topbar">
             <div className="pos-topbar-copy">
-              <span className="pos-kicker">Counter POS</span>
               <h1>POS</h1>
-            </div>
-            <div className="actions-inline pos-topbar-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setCompletedSale(null);
-                  setSelectedTenderMethod("CARD");
-                  setCashTenderedAmount("");
-                  void createBasket();
-                }}
-              >
-                New Sale
-              </button>
             </div>
           </div>
 
           <div className="pos-context-header" data-testid="pos-context-header">
             <div className="pos-context-copy">
-              <div className="pos-context-pill-row">
-                <span className="pos-context-pill">
-                  {saleContext.type === "WORKSHOP" ? "Workshop handoff" : "Retail counter"}
-                </span>
-                <span className="pos-context-pill pos-context-pill-soft">Unified POS</span>
-              </div>
-              <div className="muted-text pos-context-label">Sale Context</div>
               <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
               <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
             </div>
-            <div className="pos-context-totals">
-              {saleContext.type === "WORKSHOP" ? (
-                <>
-                  <div>
-                    <span className="muted-text">Job Total</span>
-                    <strong>{formatMoney(activeTotal)}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-text">Deposit Paid</span>
-                    <strong>{formatMoney(depositPaidPence)}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-text">Remaining</span>
-                    <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <span className="muted-text">Total</span>
-                    <strong>{formatMoney(activeTotal)}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-text">Lines</span>
-                    <strong>{basketLineCount}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-text">Payable</span>
-                    <strong>{formatMoney(payablePence)}</strong>
-                  </div>
-                </>
-              )}
-            </div>
+            {saleContext.type === "WORKSHOP" ? (
+              <div className="pos-context-totals">
+                <div>
+                  <span className="muted-text">Job Total</span>
+                  <strong>{formatMoney(activeTotal)}</strong>
+                </div>
+                <div>
+                  <span className="muted-text">Deposit Paid</span>
+                  <strong>{formatMoney(depositPaidPence)}</strong>
+                </div>
+                <div>
+                  <span className="muted-text">Remaining</span>
+                  <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="pos-meta-strip" aria-label="POS sale metadata">
-            <span>Basket {basketId || "-"}</span>
+            <button
+              type="button"
+              className="pos-meta-action"
+              onClick={() => {
+                setCompletedSale(null);
+                setSelectedTenderMethod("CARD");
+                setCashTenderedAmount("");
+                void createBasket();
+              }}
+            >
+              New Sale
+            </button>
             <span>Sale {sale?.sale.id || saleId || "-"}</span>
-            <span>Lines {basketLineCount}</span>
-            <span>Payable {formatMoney(payablePence)}</span>
             <span className="pos-meta-shortcuts">
               <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
             </span>
@@ -1381,41 +1352,30 @@ export const PosPage = () => {
                   {customerLoading ? <p className="muted-text pos-customer-search-status">Searching customers...</p> : null}
 
                   {customerSearchText.trim() ? (
-                    <div className="table-wrap pos-results-wrap pos-customer-results">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {customerResults.length === 0 ? (
-                            <tr>
-                              <td colSpan={4}>No customers matched that search. Use quick create if you need a new account.</td>
-                            </tr>
-                          ) : (
-                            customerResults.map((customer) => (
-                              <tr key={customer.id}>
-                                <td>{customer.name}</td>
-                                <td>{customer.email || "-"}</td>
-                                <td>{customer.phone || "-"}</td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    data-testid={`pos-customer-select-${customer.id}`}
-                                    onClick={() => void selectCustomer(customer)}
-                                  >
-                                    {sale ? "Attach" : "Select"}
-                                  </button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                    <div className="pos-customer-results" role="listbox" aria-label="Customer search results">
+                      {customerResults.length === 0 ? (
+                        <p className="pos-customer-results-empty">No customers matched that search. Use quick create if you need a new account.</p>
+                      ) : (
+                        customerResults.map((customer) => {
+                          const metadata = [customer.email, customer.phone].filter(Boolean).join(" • ") || "No email or phone";
+
+                          return (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              className="pos-customer-result"
+                              data-testid={`pos-customer-select-${customer.id}`}
+                              onClick={() => void selectCustomer(customer)}
+                            >
+                              <span className="pos-customer-result-copy">
+                                <span className="pos-customer-result-name">{customer.name}</span>
+                                <span className="pos-customer-result-meta">{metadata}</span>
+                              </span>
+                              <span className="pos-customer-result-action">{sale ? "Attach" : "Select"}</span>
+                            </button>
+                          );
+                        })
+                      )}
                     </div>
                   ) : null}
                 </div>
