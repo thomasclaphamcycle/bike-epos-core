@@ -496,6 +496,9 @@ textarea {
   width: min(var(--cp-width-standard), 100%);
   margin: 0 auto;
   padding: 18px 20px 20px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .app-main--workspace {
@@ -4504,10 +4507,11 @@ th {
 }
 
 .pos-line-item-highlighted {
-  background: rgba(255, 141, 43, 0.08);
+  background: linear-gradient(180deg, rgba(255, 141, 43, 0.14) 0%, rgba(255, 141, 43, 0.07) 100%);
   box-shadow:
-    inset 4px 0 0 rgba(255, 141, 43, 0.92),
-    inset 0 0 0 1px rgba(255, 141, 43, 0.18);
+    inset 0 0 0 1px rgba(255, 141, 43, 0.24),
+    0 10px 18px -22px rgba(255, 141, 43, 0.9);
+  border-top-color: transparent;
   border-radius: 10px;
   animation: pos-line-item-added 1.15s ease-out;
 }
@@ -4520,25 +4524,24 @@ th {
 
 @keyframes pos-line-item-added {
   0% {
-    background: rgba(255, 141, 43, 0.24);
+    background: linear-gradient(180deg, rgba(255, 141, 43, 0.24) 0%, rgba(255, 141, 43, 0.13) 100%);
     box-shadow:
-      inset 4px 0 0 rgba(255, 141, 43, 1),
-      inset 0 0 0 1px rgba(255, 141, 43, 0.28),
-      0 0 0 1px rgba(255, 141, 43, 0.08);
+      inset 0 0 0 1px rgba(255, 141, 43, 0.34),
+      0 14px 28px -24px rgba(255, 141, 43, 0.95);
   }
 
   55% {
-    background: rgba(255, 141, 43, 0.12);
+    background: linear-gradient(180deg, rgba(255, 141, 43, 0.16) 0%, rgba(255, 141, 43, 0.09) 100%);
     box-shadow:
-      inset 4px 0 0 rgba(255, 141, 43, 0.96),
-      inset 0 0 0 1px rgba(255, 141, 43, 0.2);
+      inset 0 0 0 1px rgba(255, 141, 43, 0.26),
+      0 12px 22px -24px rgba(255, 141, 43, 0.72);
   }
 
   100% {
-    background: rgba(255, 141, 43, 0.08);
+    background: linear-gradient(180deg, rgba(255, 141, 43, 0.14) 0%, rgba(255, 141, 43, 0.07) 100%);
     box-shadow:
-      inset 4px 0 0 rgba(255, 141, 43, 0.92),
-      inset 0 0 0 1px rgba(255, 141, 43, 0.18);
+      inset 0 0 0 1px rgba(255, 141, 43, 0.24),
+      0 10px 18px -22px rgba(255, 141, 43, 0.9);
   }
 }
 
