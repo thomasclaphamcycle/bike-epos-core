@@ -378,6 +378,7 @@ test("React POS product search supports keyboard navigation and quick add quanti
   await expect(resultRows.nth(1)).toHaveClass(/pos-search-result-active/);
   await productSearchInput.press("Enter");
   await expect(productSearchInput).toHaveValue("");
+  await expect(productSearchInput).toBeFocused();
 
   const basketId = new URL(page.url()).searchParams.get("basketId");
   expect(basketId).toBeTruthy();
@@ -394,12 +395,12 @@ test("React POS product search supports keyboard navigation and quick add quanti
   }).toBe(1);
 
   await productSearchInput.fill(firstProduct.sku);
-  await expect(page.getByTestId(`pos-product-add-${firstProduct.variant.id}`)).toBeVisible();
   const addTwoButton = page.locator(`tr:has([data-testid="pos-product-add-${firstProduct.variant.id}"])`).getByRole("button", {
     name: "Add 2",
   });
   await expect(addTwoButton).toBeVisible();
   await addTwoButton.click();
+  await expect(productSearchInput).toBeFocused();
   const expectedFirstProductQuantity = keyboardSelectedSku === firstProduct.sku ? 3 : 2;
 
   await expect.poll(async () => {
@@ -415,6 +416,7 @@ test("React POS product search supports keyboard navigation and quick add quanti
   await productSearchInput.fill(secondProduct.sku);
   await productSearchInput.press("Shift+Enter");
   await expect(productSearchInput).toHaveValue("");
+  await expect(productSearchInput).toBeFocused();
   const expectedSecondProductQuantity = keyboardSelectedSku === secondProduct.sku ? 3 : 2;
 
   await expect.poll(async () => {
@@ -467,6 +469,7 @@ test("React POS quick add grid renders shortcuts and adds products instantly", a
   await expect(page.getByTestId("pos-quick-add-brake-pads")).toContainText("Brake Pads");
 
   await page.getByTestId("pos-quick-add-inner-tube").click();
+  await expect(page.getByTestId("pos-product-search")).toBeFocused();
 
   const basketId = new URL(page.url()).searchParams.get("basketId");
   expect(basketId).toBeTruthy();

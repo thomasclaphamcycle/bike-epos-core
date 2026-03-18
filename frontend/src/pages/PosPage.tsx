@@ -240,6 +240,21 @@ export const PosPage = () => {
     });
   };
 
+  const restoreScannerSearchFocus = () => {
+    window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement) {
+        if (activeElement === customerSearchInputRef.current || activeElement === cashTenderedInputRef.current) {
+          return;
+        }
+        if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
+          return;
+        }
+      }
+      searchInputRef.current?.focus();
+    });
+  };
+
   const flashBasketRow = (itemId: string | null) => {
     if (lastAddedRowTimeoutRef.current) {
       window.clearTimeout(lastAddedRowTimeoutRef.current);
@@ -712,9 +727,7 @@ export const PosPage = () => {
       setSearchText("");
       setSearchRows([]);
       setHighlightedProductIndex(-1);
-      window.requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
-      });
+      restoreScannerSearchFocus();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
       error(message);
@@ -738,7 +751,7 @@ export const PosPage = () => {
       setSearchText("");
       setSearchRows([]);
       setHighlightedProductIndex(-1);
-      focusProductSearch();
+      restoreScannerSearchFocus();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
       error(message);
