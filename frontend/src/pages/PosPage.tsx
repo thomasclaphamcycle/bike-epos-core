@@ -15,6 +15,14 @@ import { toBackendUrl } from "../utils/backendUrl";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 const ACTIVE_SALE_KEY = "corepos.activeSaleId";
+const QUICK_ADD_TILE_DEFINITIONS = [
+  { key: "inner-tube", label: "Inner Tube", query: "Inner Tube" },
+  { key: "chain-lube", label: "Chain Lube", query: "Chain Lube" },
+  { key: "brake-pads", label: "Brake Pads", query: "Brake Pads" },
+  { key: "helmet", label: "Helmet", query: "Helmet" },
+  { key: "floor-pump", label: "Floor Pump", query: "Floor Pump" },
+  { key: "city-bike", label: "City Bike", query: "City Bike" },
+] as const;
 
 type ProductSearchRow = {
   id: string;
@@ -23,6 +31,13 @@ type ProductSearchRow = {
   barcode: string | null;
   pricePence: number;
   onHandQty: number;
+};
+
+type QuickAddTile = {
+  key: (typeof QUICK_ADD_TILE_DEFINITIONS)[number]["key"];
+  label: string;
+  query: string;
+  product: ProductSearchRow;
 };
 
 type BasketResponse = {
@@ -177,6 +192,7 @@ export const PosPage = () => {
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [searchRows, setSearchRows] = useState<ProductSearchRow[]>([]);
+  const [quickAddTiles, setQuickAddTiles] = useState<QuickAddTile[]>([]);
   const [highlightedProductIndex, setHighlightedProductIndex] = useState(-1);
   const [customerSearchText, setCustomerSearchText] = useState("");
   const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
@@ -397,6 +413,42 @@ export const PosPage = () => {
       cancelled = true;
     };
   }, [debouncedSearch, error]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadQuickAddTiles = async () => {
+      try {
+        const tiles = await Promise.all(
+          QUICK_ADD_TILE_DEFINITIONS.map(async (definition) => {
+            const payload = await apiGet<{ rows: ProductSearchRow[] }>(
+              `/api/products/search?q=${encodeURIComponent(definition.query)}&take=6`,
+            );
+            const rows = payload.rows || [];
+            const normalizedQuery = definition.query.toLowerCase();
+            const product = rows.find((row) => row.name.toLowerCase().includes(normalizedQuery)) ?? rows[0] ?? null;
+            return product ? { ...definition, product } : null;
+          }),
+        );
+
+        if (!cancelled) {
+          setQuickAddTiles(tiles.filter((tile): tile is QuickAddTile => Boolean(tile)));
+        }
+      } catch (quickAddError) {
+        if (!cancelled) {
+          const message = quickAddError instanceof Error ? quickAddError.message : "Quick add products failed to load";
+          error(message);
+          setQuickAddTiles([]);
+        }
+      }
+    };
+
+    void loadQuickAddTiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error]);
 
   useEffect(() => {
     if (!searchText.trim() || searchRows.length === 0) {
@@ -1291,6 +1343,32 @@ export const PosPage = () => {
                   placeholder="sku, barcode, name"
                 />
               </label>
+
+              {quickAddTiles.length > 0 ? (
+                <div className="pos-quick-add" data-testid="pos-quick-add-grid">
+                  <div className="pos-section-kicker">Quick Add</div>
+                  <div className="pos-quick-add-grid">
+                    {quickAddTiles.map((tile) => {
+                      const canQuickAdd = Boolean(basketId) && !saleId;
+
+                      return (
+                        <button
+                          key={tile.key}
+                          type="button"
+                          className="pos-quick-add-tile"
+                          data-testid={`pos-quick-add-${tile.key}`}
+                          onClick={() => void addItem(tile.product.id)}
+                          disabled={!canQuickAdd}
+                          aria-label={`Quick add ${tile.label}`}
+                        >
+                          <span className="pos-quick-add-name">{tile.label}</span>
+                          <span className="pos-quick-add-price">{formatMoney(tile.product.pricePence)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="table-wrap pos-results-wrap">
                 <table>

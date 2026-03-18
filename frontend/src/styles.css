@@ -4015,7 +4015,7 @@ th {
 
 .pos-search-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(320px, 1fr);
+  grid-template-rows: auto auto auto minmax(320px, 1fr);
   gap: 0;
   align-self: stretch;
   height: 100%;
@@ -4070,6 +4070,54 @@ th {
   box-shadow:
     0 0 0 4px rgba(91, 141, 239, 0.14),
     0 12px 24px rgba(15, 34, 52, 0.07);
+}
+
+.pos-quick-add {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.pos-quick-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.pos-quick-add-tile {
+  display: grid;
+  gap: 6px;
+  align-content: space-between;
+  min-height: 76px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(204, 219, 232, 0.95);
+  background: rgba(248, 251, 253, 0.95);
+  color: #173247;
+  text-align: left;
+  box-shadow: none;
+}
+
+.pos-quick-add-tile:hover,
+.pos-quick-add-tile:focus-visible {
+  border-color: rgba(117, 153, 193, 0.95);
+  background: rgba(241, 247, 252, 0.98);
+}
+
+.pos-quick-add-tile:disabled {
+  opacity: 0.58;
+}
+
+.pos-quick-add-name {
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.pos-quick-add-price {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #4b6074;
 }
 
 .pos-results-wrap {

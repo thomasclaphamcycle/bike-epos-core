@@ -52,6 +52,44 @@ const ensureOpenRegisterSession = async (request) => {
   );
 };
 
+const seedNamedQuickAddProduct = async (request, options) => {
+  const token = uniqueToken(`quick-add-${options.slug}`);
+  const safeToken = token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const product = await apiJsonWithHeaderBypass(request, "POST", "/api/products", "MANAGER", {
+    data: {
+      name: options.name,
+      brand: "Quick Add",
+      description: `${options.name} quick add seed`,
+    },
+  });
+
+  const variant = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/products/${encodeURIComponent(product.id)}/variants`,
+    "MANAGER",
+    {
+      data: {
+        sku: `QA-${options.slug}-${safeToken}`,
+        barcode: `QA-BC-${options.slug}-${safeToken}`,
+        name: options.name,
+        retailPricePence: options.retailPricePence,
+      },
+    },
+  );
+
+  await apiJsonWithHeaderBypass(request, "POST", "/api/inventory/adjustments", "MANAGER", {
+    data: {
+      variantId: variant.id,
+      quantityDelta: options.initialOnHand ?? 6,
+      reason: "COUNT_CORRECTION",
+      note: `Quick add seed ${token}`,
+    },
+  });
+
+  return { product, variant };
+};
+
 test.describe.configure({ mode: "serial" });
 
 test("PIN login hides users without a PIN and keeps PIN entry disabled until a PIN user is selected", async ({
@@ -394,6 +432,54 @@ test("React POS product search supports keyboard navigation and quick add quanti
     firstProductQuantity: expectedFirstProductQuantity,
     secondProductQuantity: expectedSecondProductQuantity,
   });
+});
+
+test("React POS quick add grid renders shortcuts and adds products instantly", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-quick-add",
+  });
+  const innerTube = await seedNamedQuickAddProduct(request, {
+    slug: "tube",
+    name: "Inner Tube",
+    retailPricePence: 699,
+  });
+  await seedNamedQuickAddProduct(request, {
+    slug: "lube",
+    name: "Chain Lube",
+    retailPricePence: 899,
+  });
+  await seedNamedQuickAddProduct(request, {
+    slug: "pads",
+    name: "Brake Pads",
+    retailPricePence: 1499,
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await expect(page.getByTestId("pos-quick-add-grid")).toBeVisible();
+  await expect(page.getByTestId("pos-quick-add-inner-tube")).toContainText("Inner Tube");
+  await expect(page.getByTestId("pos-quick-add-chain-lube")).toContainText("Chain Lube");
+  await expect(page.getByTestId("pos-quick-add-brake-pads")).toContainText("Brake Pads");
+
+  await page.getByTestId("pos-quick-add-inner-tube").click();
+
+  const basketId = new URL(page.url()).searchParams.get("basketId");
+  expect(basketId).toBeTruthy();
+
+  await expect.poll(async () => {
+    const basket = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basket.items.find((item) => item.variantId === innerTube.variant.id)?.quantity ?? 0;
+  }).toBe(1);
 });
 
 test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({
