@@ -51,7 +51,7 @@ type WorkshopCheckoutResult = {
 const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
-    (error.code === "P2002" || error.code === "P2034" || error.code === "P2028")
+    (error.code === "P2002" || error.code === "P2034" || error.code === "P2028" || error.code === "P2024")
   ) {
     return true;
   }
@@ -68,6 +68,10 @@ const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
     message.includes("lock timeout") ||
     message.includes("could not obtain lock") ||
     message.includes("canceling statement due to lock timeout") ||
+    message.includes("expired transaction") ||
+    message.includes("timeout for this transaction was") ||
+    message.includes("unable to start a transaction in the given time") ||
+    message.includes("timed out fetching a new connection from the connection pool") ||
     message.includes("transaction already closed") ||
     message.includes("a query cannot be executed on an expired transaction") ||
     message.includes("transaction is no longer valid") ||
