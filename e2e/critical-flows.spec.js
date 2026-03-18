@@ -312,11 +312,11 @@ test("React POS product search supports keyboard navigation and quick add quanti
     prefix: "react-pos-product-keyboard",
   });
   const sharedPrefix = uniqueToken("react-pos-product-keyboard");
-  await seedCatalogVariant(request, {
+  const firstProduct = await seedCatalogVariant(request, {
     prefix: `${sharedPrefix}-one`,
     retailPricePence: 1499,
   });
-  await seedCatalogVariant(request, {
+  const secondProduct = await seedCatalogVariant(request, {
     prefix: `${sharedPrefix}-two`,
     retailPricePence: 2399,
   });
@@ -343,68 +343,57 @@ test("React POS product search supports keyboard navigation and quick add quanti
 
   const basketId = new URL(page.url()).searchParams.get("basketId");
   expect(basketId).toBeTruthy();
+  const keyboardSelectedSku = secondRowSku;
 
-  const basketAfterKeyboardAdd = await apiJsonWithHeaderBypass(
-    request,
-    "GET",
-    `/api/baskets/${encodeURIComponent(basketId)}`,
-    "MANAGER",
-  );
-  expect(basketAfterKeyboardAdd.items).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        sku: secondRowSku,
-        quantity: 1,
-      }),
-    ]),
-  );
+  await expect.poll(async () => {
+    const basketAfterKeyboardAdd = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basketAfterKeyboardAdd.items.find((item) => item.sku === keyboardSelectedSku)?.quantity ?? 0;
+  }).toBe(1);
 
-  await productSearchInput.fill(firstRowSku);
-  const addTwoButton = page.locator(".pos-results-wrap tbody tr").first().getByRole("button", { name: "Add 2" });
+  await productSearchInput.fill(firstProduct.sku);
+  await expect(page.getByTestId(`pos-product-add-${firstProduct.variant.id}`)).toBeVisible();
+  const addTwoButton = page.locator(`tr:has([data-testid="pos-product-add-${firstProduct.variant.id}"])`).getByRole("button", {
+    name: "Add 2",
+  });
   await expect(addTwoButton).toBeVisible();
   await addTwoButton.click();
+  const expectedFirstProductQuantity = keyboardSelectedSku === firstProduct.sku ? 3 : 2;
 
-  const basketAfterQuickAdd = await apiJsonWithHeaderBypass(
-    request,
-    "GET",
-    `/api/baskets/${encodeURIComponent(basketId)}`,
-    "MANAGER",
-  );
-  expect(basketAfterQuickAdd.items).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        sku: firstRowSku,
-        quantity: 2,
-      }),
-      expect.objectContaining({
-        sku: secondRowSku,
-        quantity: 1,
-      }),
-    ]),
-  );
+  await expect.poll(async () => {
+    const basketAfterQuickAdd = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basketAfterQuickAdd.items.find((item) => item.sku === firstProduct.sku)?.quantity ?? 0;
+  }).toBe(expectedFirstProductQuantity);
 
-  await productSearchInput.fill(secondRowSku);
+  await productSearchInput.fill(secondProduct.sku);
   await productSearchInput.press("Shift+Enter");
   await expect(productSearchInput).toHaveValue("");
+  const expectedSecondProductQuantity = keyboardSelectedSku === secondProduct.sku ? 3 : 2;
 
-  const basketAfterShiftEnter = await apiJsonWithHeaderBypass(
-    request,
-    "GET",
-    `/api/baskets/${encodeURIComponent(basketId)}`,
-    "MANAGER",
-  );
-  expect(basketAfterShiftEnter.items).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        sku: secondRowSku,
-        quantity: 3,
-      }),
-      expect.objectContaining({
-        sku: firstRowSku,
-        quantity: 2,
-      }),
-    ]),
-  );
+  await expect.poll(async () => {
+    const basketAfterShiftEnter = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return {
+      firstProductQuantity: basketAfterShiftEnter.items.find((item) => item.sku === firstProduct.sku)?.quantity ?? 0,
+      secondProductQuantity: basketAfterShiftEnter.items.find((item) => item.sku === secondProduct.sku)?.quantity ?? 0,
+    };
+  }).toEqual({
+    firstProductQuantity: expectedFirstProductQuantity,
+    secondProductQuantity: expectedSecondProductQuantity,
+  });
 });
 
 test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({

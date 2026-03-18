@@ -4379,7 +4379,7 @@ th {
 
 .pos-basket-groups {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   height: 100%;
   min-height: 0;
   overflow: auto;
@@ -4389,14 +4389,14 @@ th {
 
 .pos-basket-group {
   display: grid;
-  gap: 8px;
-  padding-top: 2px;
+  gap: 5px;
+  padding-top: 1px;
   border: 0;
   background: transparent;
 }
 
 .pos-basket-group-header {
-  padding: 0 0 6px;
+  padding: 0 0 4px;
   background: transparent;
   border-bottom: 1px solid #dfe8f0;
 }
@@ -4410,12 +4410,12 @@ th {
 
 .pos-basket-group-header strong {
   color: #173247;
-  font-size: 0.96rem;
+  font-size: 0.92rem;
 }
 
 .pos-basket-group-header span {
   color: #4b6074;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -4431,14 +4431,17 @@ th {
 
 .pos-basket-list {
   display: grid;
-  gap: 2px;
+  gap: 0;
 }
 
 .pos-line-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px 14px;
-  padding: 12px 0;
+  grid-template-areas:
+    "main pricing"
+    "actions actions";
+  gap: 6px 10px;
+  padding: 8px 0;
   border-top: 1px solid #ebf1f6;
 }
 
@@ -4447,68 +4450,106 @@ th {
 }
 
 .pos-line-main {
+  grid-area: main;
   display: grid;
-  gap: 4px;
+  gap: 2px;
   align-content: start;
+  min-width: 0;
 }
 
 .pos-line-title {
-  font-size: 1rem;
+  font-size: 0.96rem;
   font-weight: 800;
+  line-height: 1.2;
 }
 
 .pos-line-meta {
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .pos-line-pricing {
+  grid-area: pricing;
   display: grid;
-  gap: 2px;
+  gap: 1px;
   justify-items: end;
   text-align: right;
+  align-content: start;
 }
 
 .pos-line-pricing strong {
-  font-size: 1rem;
+  font-size: 0.96rem;
   color: #173247;
+  line-height: 1.1;
 }
 
 .pos-line-pricing span {
   color: #5d7285;
-  font-size: 0.74rem;
+  font-size: 0.7rem;
+  line-height: 1.15;
 }
 
 .pos-line-actions {
-  grid-column: 1 / -1;
+  grid-area: actions;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
 }
 
 .pos-qty-controls {
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.pos-qty-controls button {
+  min-width: 34px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-weight: 800;
+}
+
+.pos-qty-controls strong {
+  min-width: 18px;
+  text-align: center;
+  font-size: 0.94rem;
+  line-height: 1;
+}
+
+.pos-line-actions > button:last-child {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #5c6f81;
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: none;
 }
 
 .pos-payment-panel {
   grid-row: 3;
   align-self: stretch;
   min-height: 0;
-  padding-top: 10px;
+  padding-top: 8px;
   margin-top: 0;
   border-top: 1px solid rgba(232, 205, 182, 0.86);
+}
+
+.pos-payment-panel .pos-panel-heading {
+  margin-bottom: 5px;
 }
 
 .pos-payment-state {
   display: inline-flex;
   align-items: center;
-  padding: 5px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   background: rgba(255, 122, 24, 0.12);
   color: #934a10;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -4516,7 +4557,7 @@ th {
 .pos-payment-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+  gap: 3px;
   margin-top: 0;
   padding: 0;
   border-radius: 18px;
@@ -4530,21 +4571,21 @@ th {
 }
 
 .pos-payment-summary-retail > :not(.pos-payment-total-block) {
-  padding: 6px 8px;
+  padding: 5px 7px;
 }
 
 .pos-payment-summary-retail > :not(.pos-payment-total-block) strong {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .pos-payment-total-block {
-  padding: 8px 10px 10px;
+  padding: 7px 9px 8px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 244, 236, 0.99));
   border-color: rgba(242, 177, 132, 0.72);
 }
 
 .pos-payment-total-block strong {
-  font-size: clamp(1.75rem, 2.6vw, 2.3rem);
+  font-size: clamp(1.62rem, 2.35vw, 2.1rem);
   line-height: 1;
 }
 
@@ -4552,8 +4593,8 @@ th {
   margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
-  font-size: 0.78rem;
+  gap: 4px 10px;
+  font-size: 0.74rem;
 }
 
 .pos-tender-switch {
@@ -4586,9 +4627,9 @@ th {
 
 .pos-payment-actions .primary {
   width: 100%;
-  min-height: 50px;
-  padding-inline: 24px;
-  font-size: 1rem;
+  min-height: 46px;
+  padding-inline: 20px;
+  font-size: 0.96rem;
   font-weight: 800;
   box-shadow: 0 16px 28px rgba(255, 122, 24, 0.18);
 }
