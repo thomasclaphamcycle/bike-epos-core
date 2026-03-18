@@ -89,77 +89,121 @@ const withWorkshopCheckoutTransaction = <T>(
     timeout: WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS,
   });
 
-const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promise<WorkshopCheckoutResult | null> =>
-  withWorkshopCheckoutTransaction(async (tx) => {
-    const workshopJob = await tx.workshopJob.findUnique({
+const getWorkshopJobUsedPartsTotalPence = async (workshopJobId: string) => {
+  const usedParts = await prisma.workshopJobPart.findMany({
+    where: {
+      workshopJobId,
+      status: "USED",
+    },
+    select: {
+      quantity: true,
+      unitPriceAtTime: true,
+    },
+  });
+
+  return usedParts.reduce(
+    (sum, part) => sum + part.quantity * part.unitPriceAtTime,
+    0,
+  );
+};
+
+const getDepositPaidPenceForWorkshopJob = async (workshopJobId: string) => {
+  const depositPayments = await prisma.payment.findMany({
+    where: {
+      workshopJobId,
+      purpose: "DEPOSIT",
+      amountPence: {
+        gt: 0,
+      },
+    },
+    select: {
+      amountPence: true,
+    },
+  });
+
+  return depositPayments.reduce((sum, payment) => sum + payment.amountPence, 0);
+};
+
+const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promise<WorkshopCheckoutResult | null> => {
+  const [workshopJob, existingSale] = await Promise.all([
+    prisma.workshopJob.findUnique({
       where: { id: workshopJobId },
-    });
-
-    if (!workshopJob) {
-      return null;
-    }
-
-    const existingSale = await tx.sale.findUnique({
+      select: {
+        id: true,
+        status: true,
+        completedAt: true,
+      },
+    }),
+    prisma.sale.findUnique({
       where: { workshopJobId },
-    });
+    }),
+  ]);
 
-    if (!existingSale) {
-      return null;
-    }
+  if (!workshopJob || !existingSale) {
+    return null;
+  }
 
-    const partsTotalPence = await getWorkshopJobUsedPartsTotalPenceTx(tx, workshopJobId);
-    const depositPayments = await tx.payment.findMany({
+  const [partsTotalPence, depositPaidPence] = await Promise.all([
+    getWorkshopJobUsedPartsTotalPence(workshopJobId),
+    getDepositPaidPenceForWorkshopJob(workshopJobId),
+  ]);
+
+  const creditPence = Math.max(0, depositPaidPence - existingSale.totalPence);
+  const outstandingPence = Math.max(0, existingSale.totalPence - depositPaidPence);
+
+  let completedAt = workshopJob.completedAt;
+  let emittedWorkshopCompletion = false;
+
+  if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
+    completedAt = completedAt ?? new Date();
+
+    const updateResult = await prisma.workshopJob.updateMany({
       where: {
-        workshopJobId,
-        purpose: "DEPOSIT",
-        amountPence: {
-          gt: 0,
+        id: workshopJob.id,
+        status: {
+          notIn: ["COMPLETED", "CANCELLED"],
         },
       },
-      select: {
-        amountPence: true,
+      data: {
+        status: "COMPLETED",
+        ...(workshopJob.completedAt ? {} : { completedAt }),
       },
     });
-    const depositPaidPence = depositPayments.reduce((sum, payment) => sum + payment.amountPence, 0);
-    const creditPence = Math.max(0, depositPaidPence - existingSale.totalPence);
-    const outstandingPence = Math.max(0, existingSale.totalPence - depositPaidPence);
 
-    let completedAt = workshopJob.completedAt;
-    let emittedWorkshopCompletion = false;
+    emittedWorkshopCompletion = updateResult.count > 0;
 
-    if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-      completedAt = completedAt ?? new Date();
-      await tx.workshopJob.update({
+    if (!emittedWorkshopCompletion) {
+      const refreshedWorkshopJob = await prisma.workshopJob.findUnique({
         where: { id: workshopJob.id },
-        data: {
-          status: "COMPLETED",
-          ...(workshopJob.completedAt ? {} : { completedAt }),
+        select: {
+          completedAt: true,
         },
       });
-      emittedWorkshopCompletion = true;
+      completedAt = refreshedWorkshopJob?.completedAt ?? completedAt;
     }
+  }
 
-    return {
-      sale: {
-        id: existingSale.id,
-        workshopJobId: existingSale.workshopJobId,
-        customerId: existingSale.customerId,
-        totalPence: existingSale.totalPence,
-        createdAt: existingSale.createdAt,
-      },
-      serviceTotalPence: Math.max(0, existingSale.totalPence - partsTotalPence),
-      partsTotalPence,
-      saleTotalPence: existingSale.totalPence,
-      depositPaidPence,
-      creditPence,
-      outstandingPence,
-      payment: null,
-      idempotent: true,
-      emittedWorkshopCompletion,
-      workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
-      workshopCompletedAt: completedAt ?? new Date(),
-    };
-  });
+  return {
+    sale: {
+      id: existingSale.id,
+      workshopJobId: existingSale.workshopJobId,
+      customerId: existingSale.customerId,
+      totalPence: existingSale.totalPence,
+      createdAt: existingSale.createdAt,
+    },
+    serviceTotalPence: Math.max(0, existingSale.totalPence - partsTotalPence),
+    partsTotalPence,
+    saleTotalPence: existingSale.totalPence,
+    depositPaidPence,
+    creditPence,
+    outstandingPence,
+    payment: null,
+    idempotent: true,
+    emittedWorkshopCompletion,
+    workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
+    workshopCompletedAt: completedAt ?? new Date(),
+  };
+};
 
 const recoverWorkshopCheckoutRace = async (workshopJobId: string) => {
   const deadline = Date.now() + WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS;
@@ -218,74 +262,74 @@ export const checkoutWorkshopJobToSale = async (
   for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_TRANSACTION_RETRIES; attempt += 1) {
     try {
       result = await withWorkshopCheckoutTransaction(async (tx) => {
-      let workshopJob = await tx.workshopJob.findUnique({
-        where: { id: workshopJobId },
-        include: { customer: true },
-      });
+        let workshopJob = await tx.workshopJob.findUnique({
+          where: { id: workshopJobId },
+          include: { customer: true },
+        });
 
-      if (!workshopJob) {
-        throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
-      }
-
-      // Serialize checkout attempts per workshop job to prevent unique-key races
-      // on Sale(workshopJobId) and keep idempotent behavior deterministic.
-      await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
-
-      workshopJob = await tx.workshopJob.findUnique({
-        where: { id: workshopJobId },
-        include: { customer: true },
-      });
-
-      if (!workshopJob) {
-        throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
-      }
-
-      const partsTotalPence = await getWorkshopJobUsedPartsTotalPenceTx(tx, workshopJobId);
-
-      const existingSale = await tx.sale.findUnique({
-        where: { workshopJobId },
-      });
-
-      if (existingSale) {
-        if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-          const data: { status: "COMPLETED"; completedAt?: Date } = {
-            status: "COMPLETED",
-          };
-          if (!workshopJob.completedAt) {
-            data.completedAt = new Date();
-          }
-
-          await tx.workshopJob.update({
-            where: { id: workshopJob.id },
-            data,
-          });
+        if (!workshopJob) {
+          throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
         }
 
-        const depositPaidPence = workshopJob.depositStatus === "PAID" ? workshopJob.depositRequiredPence : 0;
-        const creditPence = Math.max(0, depositPaidPence - existingSale.totalPence);
-        const outstandingPence = Math.max(0, existingSale.totalPence - depositPaidPence);
+        // Serialize checkout attempts per workshop job to prevent unique-key races
+        // on Sale(workshopJobId) and keep idempotent behavior deterministic.
+        await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
 
-        return {
-          sale: {
-            id: existingSale.id,
-            workshopJobId: existingSale.workshopJobId,
-            customerId: existingSale.customerId,
-            totalPence: existingSale.totalPence,
-            createdAt: existingSale.createdAt,
-          },
-          serviceTotalPence: Math.max(0, existingSale.totalPence - partsTotalPence),
-          partsTotalPence,
-          saleTotalPence: existingSale.totalPence,
-          depositPaidPence,
-          creditPence,
-          outstandingPence,
-          payment: null,
-          idempotent: true,
-          emittedWorkshopCompletion: workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED",
-          workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
-          workshopCompletedAt: workshopJob.completedAt ?? new Date(),
-        };
-      }
+        workshopJob = await tx.workshopJob.findUnique({
+          where: { id: workshopJobId },
+          include: { customer: true },
+        });
+
+        if (!workshopJob) {
+          throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+        }
+
+        const partsTotalPence = await getWorkshopJobUsedPartsTotalPenceTx(tx, workshopJobId);
+
+        const existingSale = await tx.sale.findUnique({
+          where: { workshopJobId },
+        });
+
+        if (existingSale) {
+          if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
+            const data: { status: "COMPLETED"; completedAt?: Date } = {
+              status: "COMPLETED",
+            };
+            if (!workshopJob.completedAt) {
+              data.completedAt = new Date();
+            }
+
+            await tx.workshopJob.update({
+              where: { id: workshopJob.id },
+              data,
+            });
+          }
+
+          const depositPaidPence = workshopJob.depositStatus === "PAID" ? workshopJob.depositRequiredPence : 0;
+          const creditPence = Math.max(0, depositPaidPence - existingSale.totalPence);
+          const outstandingPence = Math.max(0, existingSale.totalPence - depositPaidPence);
+
+          return {
+            sale: {
+              id: existingSale.id,
+              workshopJobId: existingSale.workshopJobId,
+              customerId: existingSale.customerId,
+              totalPence: existingSale.totalPence,
+              createdAt: existingSale.createdAt,
+            },
+            serviceTotalPence: Math.max(0, existingSale.totalPence - partsTotalPence),
+            partsTotalPence,
+            saleTotalPence: existingSale.totalPence,
+            depositPaidPence,
+            creditPence,
+            outstandingPence,
+            payment: null,
+            idempotent: true,
+            emittedWorkshopCompletion: workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED",
+            workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
+            workshopCompletedAt: workshopJob.completedAt ?? new Date(),
+          };
+        }
 
       if (workshopJob.status === "CANCELLED") {
         throw new HttpError(
@@ -334,17 +378,17 @@ export const checkoutWorkshopJobToSale = async (
         );
       }
 
-      const sale = await tx.sale.create({
-        data: {
-          workshopJobId,
-          customerId: workshopJob.customerId,
-          locationId: workshopJob.locationId,
-          subtotalPence: saleTotalPence,
-          taxPence: 0,
-          totalPence: saleTotalPence,
-          createdByStaffId: auditActor?.actorId ?? null,
-        },
-      });
+        const sale = await tx.sale.create({
+          data: {
+            workshopJobId,
+            customerId: workshopJob.customerId,
+            locationId: workshopJob.locationId,
+            subtotalPence: saleTotalPence,
+            taxPence: 0,
+            totalPence: saleTotalPence,
+            createdByStaffId: auditActor?.actorId ?? null,
+          },
+        });
 
       if (!sale) {
         throw new HttpError(500, "Could not create sale", "SALE_CREATE_FAILED");
@@ -436,26 +480,26 @@ export const checkoutWorkshopJobToSale = async (
         auditActor,
       );
 
-      return {
-        sale: {
-          id: sale.id,
-          workshopJobId: sale.workshopJobId,
-          customerId: sale.customerId,
-          totalPence: sale.totalPence,
-          createdAt: sale.createdAt,
-        },
-        serviceTotalPence,
-        partsTotalPence,
-        saleTotalPence,
-        depositPaidPence,
-        creditPence,
-        outstandingPence,
-        payment,
-        idempotent: false,
-        emittedWorkshopCompletion: workshopJob.status !== "COMPLETED",
-        workshopJobStatus: "COMPLETED",
-        workshopCompletedAt: workshopJob.completedAt ?? new Date(),
-      };
+        return {
+          sale: {
+            id: sale.id,
+            workshopJobId: sale.workshopJobId,
+            customerId: sale.customerId,
+            totalPence: sale.totalPence,
+            createdAt: sale.createdAt,
+          },
+          serviceTotalPence,
+          partsTotalPence,
+          saleTotalPence,
+          depositPaidPence,
+          creditPence,
+          outstandingPence,
+          payment,
+          idempotent: false,
+          emittedWorkshopCompletion: workshopJob.status !== "COMPLETED",
+          workshopJobStatus: "COMPLETED",
+          workshopCompletedAt: workshopJob.completedAt ?? new Date(),
+        };
       });
       lastRecoverableError = undefined;
       break;
