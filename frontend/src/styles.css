@@ -4194,6 +4194,10 @@ th {
   margin-bottom: 6px;
 }
 
+.pos-basket-panel .pos-panel-heading {
+  margin-bottom: 4px;
+}
+
 .pos-side-column .pos-panel-heading h2 {
   font-size: 1rem;
 }
@@ -4440,8 +4444,8 @@ th {
   grid-template-areas:
     "main pricing"
     "actions actions";
-  gap: 6px 10px;
-  padding: 8px 0;
+  gap: 4px 10px;
+  padding: 7px 0;
   border-top: 1px solid #ebf1f6;
 }
 
@@ -4452,21 +4456,15 @@ th {
 .pos-line-main {
   grid-area: main;
   display: grid;
-  gap: 2px;
+  gap: 1px;
   align-content: start;
   min-width: 0;
 }
 
 .pos-line-title {
-  font-size: 0.96rem;
+  font-size: 0.94rem;
   font-weight: 800;
-  line-height: 1.2;
-}
-
-.pos-line-meta {
-  font-size: 0.7rem;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+  line-height: 1.16;
 }
 
 .pos-line-pricing {
@@ -4479,7 +4477,7 @@ th {
 }
 
 .pos-line-pricing strong {
-  font-size: 0.96rem;
+  font-size: 0.94rem;
   color: #173247;
   line-height: 1.1;
 }
@@ -4494,37 +4492,37 @@ th {
   grid-area: actions;
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
 .pos-qty-controls {
-  gap: 4px;
+  gap: 3px;
   flex-wrap: nowrap;
 }
 
 .pos-qty-controls button {
-  min-width: 34px;
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 9px;
+  min-width: 32px;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
   font-weight: 800;
 }
 
 .pos-qty-controls strong {
-  min-width: 18px;
+  min-width: 16px;
   text-align: center;
-  font-size: 0.94rem;
+  font-size: 0.9rem;
   line-height: 1;
 }
 
 .pos-line-actions > button:last-child {
-  min-height: 30px;
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 3px 8px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
   color: #5c6f81;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
   box-shadow: none;
 }

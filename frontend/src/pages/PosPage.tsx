@@ -1386,7 +1386,6 @@ export const PosPage = () => {
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Customer</div>
-                  <h2>Attach Customer</h2>
                 </div>
                 {selectedCustomer ? (
                   <button
@@ -1415,8 +1414,7 @@ export const PosPage = () => {
 
               <div className="customer-search-panel">
                 <div className="customer-search-stack grow">
-                  <label className="grow">
-                    Search customers
+                  <div className="grow">
                     <input
                       ref={customerSearchInputRef}
                       data-testid="pos-customer-search"
@@ -1450,7 +1448,7 @@ export const PosPage = () => {
                       }}
                       placeholder="name, phone, email"
                     />
-                  </label>
+                  </div>
 
                   {customerLoading ? <p className="muted-text pos-customer-search-status">Searching customers...</p> : null}
 
@@ -1494,6 +1492,13 @@ export const PosPage = () => {
                   onClick={() => setShowCreateCustomer((value) => !value)}
                 >
                   {showCreateCustomer ? "Hide quick create" : "Quick create"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void clearBasket()}
+                  disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+                >
+                  Clear basket
                 </button>
               </div>
 
@@ -1639,7 +1644,7 @@ export const PosPage = () => {
                   </button>
                 </div>
               ) : (
-                <div className="pos-customer-capture-inline muted-text">Add Customer becomes available after checkout.</div>
+                null
               )}
             </section>
 
@@ -1647,16 +1652,6 @@ export const PosPage = () => {
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Basket</div>
-                  <h2>Current Sale</h2>
-                </div>
-                <div className="actions-inline">
-                  <button
-                    type="button"
-                    onClick={() => void clearBasket()}
-                    disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-                  >
-                    Clear basket
-                  </button>
                 </div>
               </div>
 
@@ -1673,12 +1668,11 @@ export const PosPage = () => {
                       <div className="pos-basket-list">
                         {group.items.map((item) => (
                           <article key={item.id} className="pos-line-item">
-                            <div className="pos-line-main">
+                            <div className="pos-line-main" title={`SKU ${item.sku}`} data-sku={item.sku}>
                               <div className="table-primary pos-line-title">
                                 {item.productName}
                                 {item.variantName ? ` (${item.variantName})` : ""}
                               </div>
-                              <div className="muted-text pos-line-meta">SKU {item.sku}</div>
                             </div>
                             <div className="pos-line-pricing">
                               <strong>{formatMoney(item.lineTotalPence)}</strong>
@@ -1697,27 +1691,11 @@ export const PosPage = () => {
                                 <strong>{item.quantity}</strong>
                                 <button
                                   type="button"
-                                  onClick={() => void adjustLineQty(item.id, item.quantity, -5)}
-                                  disabled={Boolean(saleId) || item.quantity < 6}
-                                  aria-label={`Decrease quantity by five for ${item.productName}`}
-                                >
-                                  -5
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
                                   disabled={Boolean(saleId)}
                                   aria-label={`Increase quantity for ${item.productName}`}
                                 >
                                   +
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void adjustLineQty(item.id, item.quantity, 5)}
-                                  disabled={Boolean(saleId)}
-                                  aria-label={`Increase quantity by five for ${item.productName}`}
-                                >
-                                  +5
                                 </button>
                               </div>
                               <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
