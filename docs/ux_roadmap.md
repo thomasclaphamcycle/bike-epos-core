@@ -80,3 +80,31 @@ This document is the canonical UX roadmap and navigation reference for CorePOS.
 - UX-7 Rental
 - UX-8 Customer Experience
 - UX-9 Online Store
+
+## UX-1 POS Planned Follow-On
+
+### POS Basket Persistence (PLANNED / MEDIUM)
+
+Intent:
+Implement POS basket persistence in stages so staff do not lose the active basket during normal use, while leaving room for a later user/till-scoped model.
+
+Phase 1 — Session Basket Persistence (Next):
+- persist active basket ID in localStorage
+- restore basket on POS load
+- preserve basket across navigation
+- clear basket on checkout / new sale
+- recover safely from invalid or missing basket IDs
+- backend remains the source of truth
+
+Phase 2 — User / Till-Scoped Basket (Future):
+- associate active basket with user and/or till session
+- support recovery across login/logout and multiple tabs/devices
+- define one-active-basket rules and conflict handling
+- align the final model with till sessions and workshop handoff flows
+
+Progress thresholds:
+- partial = session persistence working
+- complete = user/till-scoped persistence working
+
+Architectural note:
+- basket persistence is being implemented intentionally in stages so the near-term UX fix does not prematurely lock CorePOS into the wrong long-term session model
