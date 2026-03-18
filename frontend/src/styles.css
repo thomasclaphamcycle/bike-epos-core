@@ -3750,9 +3750,7 @@ th {
 
 .pos-workstation {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 6px;
-  align-content: stretch;
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   padding: 2px 2px 4px;
@@ -3828,13 +3826,20 @@ th {
 
 .pos-main-column {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
   align-self: stretch;
   height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.pos-main-header-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  align-content: start;
 }
 
 .pos-side-column {
@@ -4015,6 +4020,7 @@ th {
   align-self: stretch;
   height: 100%;
   min-height: 0;
+  margin-top: 0;
   border-color: rgba(215, 228, 239, 0.45);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(247, 250, 253, 0.76));
   box-shadow: none;
@@ -4354,12 +4360,16 @@ th {
 }
 
 .pos-basket-panel > .pos-empty-state {
-  grid-template-rows: minmax(0, 1fr);
-  align-content: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100%;
+  text-align: center;
 }
 
 .pos-basket-panel > .pos-empty-state strong {
-  align-self: start;
+  align-self: center;
 }
 
 .pos-basket-groups {

@@ -1076,114 +1076,116 @@ export const PosPage = () => {
   return (
     <div className="page-shell pos-page-shell">
       <section className="pos-workstation">
-        <div className="pos-utility-strip">
-          <div className="pos-topbar">
-            <div className="pos-topbar-copy">
-              <h1>POS</h1>
-            </div>
-          </div>
-
-          <div className="pos-context-header" data-testid="pos-context-header">
-            <div className="pos-context-copy">
-              <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
-              <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
-            </div>
-            {saleContext.type === "WORKSHOP" ? (
-              <div className="pos-context-totals">
-                <div>
-                  <span className="muted-text">Job Total</span>
-                  <strong>{formatMoney(activeTotal)}</strong>
-                </div>
-                <div>
-                  <span className="muted-text">Deposit Paid</span>
-                  <strong>{formatMoney(depositPaidPence)}</strong>
-                </div>
-                <div>
-                  <span className="muted-text">Remaining</span>
-                  <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="pos-meta-strip" aria-label="POS sale metadata">
-            <button
-              type="button"
-              className="pos-meta-action"
-              onClick={() => {
-                setCompletedSale(null);
-                setSelectedTenderMethod("CARD");
-                setCashTenderedAmount("");
-                void createBasket();
-              }}
-            >
-              New Sale
-            </button>
-            <span>Sale {sale?.sale.id || saleId || "-"}</span>
-            <span className="pos-meta-shortcuts">
-              <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
-            </span>
-          </div>
-        </div>
-
-        {loading ? <p className="muted-text">Loading...</p> : null}
-
-        {completedSale ? (
-          <div className="success-panel success-panel-sale">
-            <div className="success-panel-heading">
-              <strong>Sale complete.</strong>
-              <span className="status-badge status-complete">Ready for next sale</span>
-            </div>
-            <div className="success-summary-grid">
-              <div>
-                <div className="muted-text">Sale reference</div>
-                <div className="table-primary mono-text">{completedSale.saleId}</div>
-              </div>
-              <div>
-                <div className="muted-text">Tender</div>
-                <div className="table-primary">{completedSale.tenderMethod}</div>
-              </div>
-              <div>
-                <div className="muted-text">Total paid</div>
-                <div className="table-primary">{formatMoney(completedSale.totalPaidPence)}</div>
-              </div>
-              <div>
-                <div className="muted-text">Customer</div>
-                <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
-              </div>
-            </div>
-            {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
-              <div className="success-summary-grid">
-                <div>
-                  <div className="muted-text">Cash received</div>
-                  <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
-                </div>
-                <div>
-                  <div className="muted-text">Change due</div>
-                  <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
-                </div>
-              </div>
-            ) : null}
-            <div className="success-links success-links-sale">
-              <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
-                New sale
-              </button>
-              <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
-                Open receipt
-              </a>
-              <a
-                href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open direct receipt page
-              </a>
-            </div>
-          </div>
-        ) : null}
-
         <div className="pos-layout">
           <div className="pos-main-column">
+            <div className="pos-main-header-stack">
+              <div className="pos-utility-strip">
+                <div className="pos-topbar">
+                  <div className="pos-topbar-copy">
+                    <h1>POS</h1>
+                  </div>
+                </div>
+
+                <div className="pos-context-header" data-testid="pos-context-header">
+                  <div className="pos-context-copy">
+                    <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
+                    <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
+                  </div>
+                  {saleContext.type === "WORKSHOP" ? (
+                    <div className="pos-context-totals">
+                      <div>
+                        <span className="muted-text">Job Total</span>
+                        <strong>{formatMoney(activeTotal)}</strong>
+                      </div>
+                      <div>
+                        <span className="muted-text">Deposit Paid</span>
+                        <strong>{formatMoney(depositPaidPence)}</strong>
+                      </div>
+                      <div>
+                        <span className="muted-text">Remaining</span>
+                        <strong data-testid="pos-context-remaining">{formatMoney(contextRemainingPence)}</strong>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="pos-meta-strip" aria-label="POS sale metadata">
+                  <button
+                    type="button"
+                    className="pos-meta-action"
+                    onClick={() => {
+                      setCompletedSale(null);
+                      setSelectedTenderMethod("CARD");
+                      setCashTenderedAmount("");
+                      void createBasket();
+                    }}
+                  >
+                    New Sale
+                  </button>
+                  <span>Sale {sale?.sale.id || saleId || "-"}</span>
+                  <span className="pos-meta-shortcuts">
+                    <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
+                  </span>
+                </div>
+              </div>
+
+              {loading ? <p className="muted-text">Loading...</p> : null}
+
+              {completedSale ? (
+                <div className="success-panel success-panel-sale">
+                  <div className="success-panel-heading">
+                    <strong>Sale complete.</strong>
+                    <span className="status-badge status-complete">Ready for next sale</span>
+                  </div>
+                  <div className="success-summary-grid">
+                    <div>
+                      <div className="muted-text">Sale reference</div>
+                      <div className="table-primary mono-text">{completedSale.saleId}</div>
+                    </div>
+                    <div>
+                      <div className="muted-text">Tender</div>
+                      <div className="table-primary">{completedSale.tenderMethod}</div>
+                    </div>
+                    <div>
+                      <div className="muted-text">Total paid</div>
+                      <div className="table-primary">{formatMoney(completedSale.totalPaidPence)}</div>
+                    </div>
+                    <div>
+                      <div className="muted-text">Customer</div>
+                      <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
+                    </div>
+                  </div>
+                  {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
+                    <div className="success-summary-grid">
+                      <div>
+                        <div className="muted-text">Cash received</div>
+                        <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
+                      </div>
+                      <div>
+                        <div className="muted-text">Change due</div>
+                        <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="success-links success-links-sale">
+                    <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
+                      New sale
+                    </button>
+                    <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
+                      Open receipt
+                    </a>
+                    <a
+                      href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open direct receipt page
+                    </a>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <section className="pos-panel pos-search-panel">
               <div className="pos-panel-heading">
                 <div>
