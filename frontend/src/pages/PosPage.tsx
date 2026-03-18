@@ -188,12 +188,14 @@ export const PosPage = () => {
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
+  const lastAddedRowTimeoutRef = useRef<number | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [searchRows, setSearchRows] = useState<ProductSearchRow[]>([]);
   const [quickAddTiles, setQuickAddTiles] = useState<QuickAddTile[]>([]);
   const [highlightedProductIndex, setHighlightedProductIndex] = useState(-1);
+  const [lastAddedBasketItemId, setLastAddedBasketItemId] = useState<string | null>(null);
   const [customerSearchText, setCustomerSearchText] = useState("");
   const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
@@ -236,6 +238,27 @@ export const PosPage = () => {
     window.requestAnimationFrame(() => {
       customerSearchInputRef.current?.focus();
     });
+  };
+
+  const flashBasketRow = (itemId: string | null) => {
+    if (lastAddedRowTimeoutRef.current) {
+      window.clearTimeout(lastAddedRowTimeoutRef.current);
+    }
+    setLastAddedBasketItemId(itemId);
+    if (!itemId) {
+      lastAddedRowTimeoutRef.current = null;
+      return;
+    }
+    lastAddedRowTimeoutRef.current = window.setTimeout(() => {
+      setLastAddedBasketItemId((current) => (current === itemId ? null : current));
+      lastAddedRowTimeoutRef.current = null;
+    }, 900);
+  };
+
+  const findHighlightedBasketItemId = (previous: BasketResponse | null, next: BasketResponse) => {
+    const previousById = new Map(previous?.items.map((item) => [item.id, item.quantity]) ?? []);
+    const increasedItem = next.items.find((item) => item.quantity > (previousById.get(item.id) ?? 0));
+    return increasedItem?.id ?? null;
   };
 
   const syncQuery = (next: { basketId?: string | null; saleId?: string | null }) => {
@@ -679,15 +702,16 @@ export const PosPage = () => {
     }
 
     try {
+      const previousBasket = basket;
       const payload = await apiPost<BasketResponse>(`/api/baskets/${encodeURIComponent(basketId)}/items`, {
         variantId,
         quantity: 1,
       });
       setBasket(payload);
+      flashBasketRow(findHighlightedBasketItemId(previousBasket, payload));
       setSearchText("");
       setSearchRows([]);
       setHighlightedProductIndex(-1);
-      success("Item added");
       window.requestAnimationFrame(() => {
         searchInputRef.current?.focus();
       });
@@ -704,15 +728,16 @@ export const PosPage = () => {
     }
 
     try {
+      const previousBasket = basket;
       const payload = await apiPost<BasketResponse>(`/api/baskets/${encodeURIComponent(basketId)}/items`, {
         variantId,
         quantity,
       });
       setBasket(payload);
+      flashBasketRow(findHighlightedBasketItemId(previousBasket, payload));
       setSearchText("");
       setSearchRows([]);
       setHighlightedProductIndex(-1);
-      success(`${quantity} item${quantity === 1 ? "" : "s"} added`);
       focusProductSearch();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
@@ -766,6 +791,14 @@ export const PosPage = () => {
       error(message);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (lastAddedRowTimeoutRef.current) {
+        window.clearTimeout(lastAddedRowTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const removeLine = async (itemId: string) => {
     if (!basketId) {
@@ -1744,7 +1777,10 @@ export const PosPage = () => {
                       </div>
                       <div className="pos-basket-list">
                         {group.items.map((item) => (
-                          <article key={item.id} className="pos-line-item">
+                          <article
+                            key={item.id}
+                            className={`pos-line-item${lastAddedBasketItemId === item.id ? " pos-line-item-highlighted" : ""}`}
+                          >
                             <div className="pos-line-main" title={`SKU ${item.sku}`} data-sku={item.sku}>
                               <div className="table-primary pos-line-title">
                                 {item.productName}
