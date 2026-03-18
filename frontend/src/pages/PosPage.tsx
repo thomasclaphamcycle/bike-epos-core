@@ -15,6 +15,14 @@ import { toBackendUrl } from "../utils/backendUrl";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 const ACTIVE_SALE_KEY = "corepos.activeSaleId";
+const QUICK_ADD_TILE_DEFINITIONS = [
+  { key: "inner-tube", label: "Inner Tube", query: "Inner Tube" },
+  { key: "chain-lube", label: "Chain Lube", query: "Chain Lube" },
+  { key: "brake-pads", label: "Brake Pads", query: "Brake Pads" },
+  { key: "helmet", label: "Helmet", query: "Helmet" },
+  { key: "floor-pump", label: "Floor Pump", query: "Floor Pump" },
+  { key: "city-bike", label: "City Bike", query: "City Bike" },
+] as const;
 const ACTIVE_BASKET_KEY = "corepos_active_basket_id";
 
 type ProductSearchRow = {
@@ -24,6 +32,13 @@ type ProductSearchRow = {
   barcode: string | null;
   pricePence: number;
   onHandQty: number;
+};
+
+type QuickAddTile = {
+  key: (typeof QUICK_ADD_TILE_DEFINITIONS)[number]["key"];
+  label: string;
+  query: string;
+  product: ProductSearchRow;
 };
 
 type BasketResponse = {
@@ -174,6 +189,17 @@ const getApiErrorStatus = (value: unknown) => {
   return typeof status === "number" ? status : null;
 };
 
+const resolveHighlightedProductIndex = (
+  rows: ProductSearchRow[],
+  highlightedIndex: number,
+) => {
+  if (rows.length === 0) {
+    return -1;
+  }
+
+  return highlightedIndex >= 0 && highlightedIndex < rows.length ? highlightedIndex : 0;
+};
+
 export const PosPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -183,11 +209,16 @@ export const PosPage = () => {
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
+  const lastAddedRowTimeoutRef = useRef<number | null>(null);
+  const searchFocusFrameRef = useRef<number | null>(null);
+  const basketItemRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [searchRows, setSearchRows] = useState<ProductSearchRow[]>([]);
+  const [quickAddTiles, setQuickAddTiles] = useState<QuickAddTile[]>([]);
   const [highlightedProductIndex, setHighlightedProductIndex] = useState(-1);
+  const [lastAddedBasketItemId, setLastAddedBasketItemId] = useState<string | null>(null);
   const [customerSearchText, setCustomerSearchText] = useState("");
   const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
@@ -216,6 +247,8 @@ export const PosPage = () => {
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
 
+  const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
+
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
   const posOpenState = getPosOpenState(location.state);
@@ -230,6 +263,50 @@ export const PosPage = () => {
     window.requestAnimationFrame(() => {
       customerSearchInputRef.current?.focus();
     });
+  };
+
+  const restoreScannerSearchFocus = () => {
+    if (searchFocusFrameRef.current) {
+      window.cancelAnimationFrame(searchFocusFrameRef.current);
+    }
+    searchFocusFrameRef.current = window.requestAnimationFrame(() => {
+      searchFocusFrameRef.current = window.requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement) {
+          if (activeElement === customerSearchInputRef.current || activeElement === cashTenderedInputRef.current) {
+            searchFocusFrameRef.current = null;
+            return;
+          }
+          if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
+            searchFocusFrameRef.current = null;
+            return;
+          }
+        }
+        searchInputRef.current?.focus();
+        searchFocusFrameRef.current = null;
+      });
+    });
+  };
+
+  const flashBasketRow = (itemId: string | null) => {
+    if (lastAddedRowTimeoutRef.current) {
+      window.clearTimeout(lastAddedRowTimeoutRef.current);
+    }
+    setLastAddedBasketItemId(itemId);
+    if (!itemId) {
+      lastAddedRowTimeoutRef.current = null;
+      return;
+    }
+    lastAddedRowTimeoutRef.current = window.setTimeout(() => {
+      setLastAddedBasketItemId((current) => (current === itemId ? null : current));
+      lastAddedRowTimeoutRef.current = null;
+    }, 1400);
+  };
+
+  const findHighlightedBasketItemId = (previous: BasketResponse | null, next: BasketResponse) => {
+    const previousById = new Map(previous?.items.map((item) => [item.id, item.quantity]) ?? []);
+    const increasedItem = next.items.find((item) => item.quantity > (previousById.get(item.id) ?? 0));
+    return increasedItem?.id ?? null;
   };
 
   const readStoredBasketId = () => localStorage.getItem(ACTIVE_BASKET_KEY)?.trim() || null;
@@ -423,6 +500,7 @@ export const PosPage = () => {
   useEffect(() => {
     if (!debouncedSearch.trim()) {
       setSearchRows([]);
+      setHighlightedProductIndex(-1);
       return;
     }
 
@@ -434,12 +512,15 @@ export const PosPage = () => {
           `/api/products/search?q=${encodeURIComponent(debouncedSearch.trim())}`,
         );
         if (!cancelled) {
-          setSearchRows(payload.rows || []);
+          const rows = payload.rows || [];
+          setSearchRows(rows);
+          setHighlightedProductIndex(rows.length > 0 ? 0 : -1);
         }
       } catch (searchError) {
         if (!cancelled) {
           const message = searchError instanceof Error ? searchError.message : "Search failed";
           error(message);
+          setHighlightedProductIndex(-1);
         }
       }
     };
@@ -450,6 +531,42 @@ export const PosPage = () => {
       cancelled = true;
     };
   }, [debouncedSearch, error]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadQuickAddTiles = async () => {
+      try {
+        const tiles = await Promise.all(
+          QUICK_ADD_TILE_DEFINITIONS.map(async (definition) => {
+            const payload = await apiGet<{ rows: ProductSearchRow[] }>(
+              `/api/products/search?q=${encodeURIComponent(definition.query)}&take=6`,
+            );
+            const rows = payload.rows || [];
+            const normalizedQuery = definition.query.toLowerCase();
+            const product = rows.find((row) => row.name.toLowerCase().includes(normalizedQuery)) ?? rows[0] ?? null;
+            return product ? { ...definition, product } : null;
+          }),
+        );
+
+        if (!cancelled) {
+          setQuickAddTiles(tiles.filter((tile): tile is QuickAddTile => Boolean(tile)));
+        }
+      } catch (quickAddError) {
+        if (!cancelled) {
+          const message = quickAddError instanceof Error ? quickAddError.message : "Quick add products failed to load";
+          error(message);
+          setQuickAddTiles([]);
+        }
+      }
+    };
+
+    void loadQuickAddTiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error]);
 
   useEffect(() => {
     if (!searchText.trim() || searchRows.length === 0) {
@@ -464,14 +581,14 @@ export const PosPage = () => {
   }, [searchRows, searchText]);
 
   useEffect(() => {
-    if (highlightedProductIndex < 0) {
+    if (activeProductIndex < 0) {
       return;
     }
 
-    productResultRefs.current[highlightedProductIndex]?.scrollIntoView({
+    productResultRefs.current[activeProductIndex]?.scrollIntoView({
       block: "nearest",
     });
-  }, [highlightedProductIndex]);
+  }, [activeProductIndex]);
 
   useEffect(() => {
     if (!loading && basket && !sale) {
@@ -680,18 +797,17 @@ export const PosPage = () => {
     }
 
     try {
+      const previousBasket = basket;
       const payload = await apiPost<BasketResponse>(`/api/baskets/${encodeURIComponent(basketId)}/items`, {
         variantId,
         quantity: 1,
       });
       setBasket(payload);
+      flashBasketRow(findHighlightedBasketItemId(previousBasket, payload));
       setSearchText("");
       setSearchRows([]);
       setHighlightedProductIndex(-1);
-      success("Item added");
-      window.requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
-      });
+      restoreScannerSearchFocus();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
       error(message);
@@ -705,16 +821,17 @@ export const PosPage = () => {
     }
 
     try {
+      const previousBasket = basket;
       const payload = await apiPost<BasketResponse>(`/api/baskets/${encodeURIComponent(basketId)}/items`, {
         variantId,
         quantity,
       });
       setBasket(payload);
+      flashBasketRow(findHighlightedBasketItemId(previousBasket, payload));
       setSearchText("");
       setSearchRows([]);
       setHighlightedProductIndex(-1);
-      success(`${quantity} item${quantity === 1 ? "" : "s"} added`);
-      focusProductSearch();
+      restoreScannerSearchFocus();
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Failed to add item";
       error(message);
@@ -732,8 +849,8 @@ export const PosPage = () => {
     }
 
     try {
-      const row = highlightedProductIndex >= 0 && highlightedProductIndex < searchRows.length
-        ? searchRows[highlightedProductIndex]
+      const row = activeProductIndex >= 0 && activeProductIndex < searchRows.length
+        ? searchRows[activeProductIndex]
         : await resolveProductSearchRow(searchText);
       if (!row) {
         error("No product matched that barcode, SKU, or search.");
@@ -767,6 +884,29 @@ export const PosPage = () => {
       error(message);
     }
   };
+
+  useEffect(() => {
+    if (!lastAddedBasketItemId) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      basketItemRefs.current[lastAddedBasketItemId]?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+  }, [basket, lastAddedBasketItemId]);
+
+  useEffect(() => {
+    return () => {
+      if (lastAddedRowTimeoutRef.current) {
+        window.clearTimeout(lastAddedRowTimeoutRef.current);
+      }
+      if (searchFocusFrameRef.current) {
+        window.cancelAnimationFrame(searchFocusFrameRef.current);
+      }
+    };
+  }, []);
 
   const removeLine = async (itemId: string) => {
     if (!basketId) {
@@ -1346,6 +1486,32 @@ export const PosPage = () => {
                 />
               </label>
 
+              {quickAddTiles.length > 0 ? (
+                <div className="pos-quick-add" data-testid="pos-quick-add-grid">
+                  <div className="pos-section-kicker">Quick Add</div>
+                  <div className="pos-quick-add-grid">
+                    {quickAddTiles.map((tile) => {
+                      const canQuickAdd = Boolean(basketId) && !saleId;
+
+                      return (
+                        <button
+                          key={tile.key}
+                          type="button"
+                          className="pos-quick-add-tile"
+                          data-testid={`pos-quick-add-${tile.key}`}
+                          onClick={() => void addItem(tile.product.id)}
+                          disabled={!canQuickAdd}
+                          aria-label={`Quick add ${tile.label}`}
+                        >
+                          <span className="pos-quick-add-name">{tile.label}</span>
+                          <span className="pos-quick-add-price">{formatMoney(tile.product.pricePence)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="table-wrap pos-results-wrap">
                 <table>
                   <thead>
@@ -1376,10 +1542,11 @@ export const PosPage = () => {
                             }}
                             className={[
                               canAdd ? "clickable-row" : "",
-                              index === highlightedProductIndex ? "pos-search-result-active" : "",
+                              index === activeProductIndex ? "pos-search-result-active" : "",
                             ].filter(Boolean).join(" ")}
                             onClick={canAdd ? () => void addItem(row.id) : undefined}
-                            onMouseEnter={() => setHighlightedProductIndex(index)}
+                            onMouseMove={() => setHighlightedProductIndex(index)}
+                            onFocus={() => setHighlightedProductIndex(index)}
                             onKeyDown={
                               canAdd
                                 ? (event) => {
@@ -1393,7 +1560,7 @@ export const PosPage = () => {
                             role={canAdd ? "button" : undefined}
                             tabIndex={canAdd ? 0 : undefined}
                             aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
-                            aria-selected={index === highlightedProductIndex}
+                            aria-selected={index === activeProductIndex}
                           >
                             <td>{row.name}</td>
                             <td>{row.sku}</td>
@@ -1720,7 +1887,13 @@ export const PosPage = () => {
                       </div>
                       <div className="pos-basket-list">
                         {group.items.map((item) => (
-                          <article key={item.id} className="pos-line-item">
+                          <article
+                            key={item.id}
+                            ref={(element) => {
+                              basketItemRefs.current[item.id] = element;
+                            }}
+                            className={`pos-line-item${lastAddedBasketItemId === item.id ? " pos-line-item-highlighted" : ""}`}
+                          >
                             <div className="pos-line-main" title={`SKU ${item.sku}`} data-sku={item.sku}>
                               <div className="table-primary pos-line-title">
                                 {item.productName}

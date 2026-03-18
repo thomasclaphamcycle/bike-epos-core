@@ -52,6 +52,44 @@ const ensureOpenRegisterSession = async (request) => {
   );
 };
 
+const seedNamedQuickAddProduct = async (request, options) => {
+  const token = uniqueToken(`quick-add-${options.slug}`);
+  const safeToken = token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const product = await apiJsonWithHeaderBypass(request, "POST", "/api/products", "MANAGER", {
+    data: {
+      name: options.name,
+      brand: "Quick Add",
+      description: `${options.name} quick add seed`,
+    },
+  });
+
+  const variant = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/products/${encodeURIComponent(product.id)}/variants`,
+    "MANAGER",
+    {
+      data: {
+        sku: `QA-${options.slug}-${safeToken}`,
+        barcode: `QA-BC-${options.slug}-${safeToken}`,
+        name: options.name,
+        retailPricePence: options.retailPricePence,
+      },
+    },
+  );
+
+  await apiJsonWithHeaderBypass(request, "POST", "/api/inventory/adjustments", "MANAGER", {
+    data: {
+      variantId: variant.id,
+      quantityDelta: options.initialOnHand ?? 6,
+      reason: "COUNT_CORRECTION",
+      note: `Quick add seed ${token}`,
+    },
+  });
+
+  return { product, variant };
+};
+
 test.describe.configure({ mode: "serial" });
 
 test("PIN login hides users without a PIN and keeps PIN entry disabled until a PIN user is selected", async ({
@@ -320,6 +358,10 @@ test("React POS product search supports keyboard navigation and quick add quanti
     prefix: `${sharedPrefix}-two`,
     retailPricePence: 2399,
   });
+  const clickProduct = await seedCatalogVariant(request, {
+    prefix: `${sharedPrefix}-three`,
+    retailPricePence: 1899,
+  });
 
   await page.context().clearCookies();
   await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
@@ -328,7 +370,7 @@ test("React POS product search supports keyboard navigation and quick add quanti
   await productSearchInput.fill(sharedPrefix);
 
   const resultRows = page.locator(".pos-results-wrap tbody tr");
-  await expect(resultRows).toHaveCount(2);
+  await expect(resultRows).toHaveCount(3);
   await expect(resultRows.nth(0)).toHaveClass(/pos-search-result-active/);
 
   const firstRowSku = (await resultRows.nth(0).locator("td").nth(1).textContent())?.trim();
@@ -340,6 +382,7 @@ test("React POS product search supports keyboard navigation and quick add quanti
   await expect(resultRows.nth(1)).toHaveClass(/pos-search-result-active/);
   await productSearchInput.press("Enter");
   await expect(productSearchInput).toHaveValue("");
+  await expect(productSearchInput).toBeFocused();
 
   const basketId = new URL(page.url()).searchParams.get("basketId");
   expect(basketId).toBeTruthy();
@@ -356,12 +399,12 @@ test("React POS product search supports keyboard navigation and quick add quanti
   }).toBe(1);
 
   await productSearchInput.fill(firstProduct.sku);
-  await expect(page.getByTestId(`pos-product-add-${firstProduct.variant.id}`)).toBeVisible();
   const addTwoButton = page.locator(`tr:has([data-testid="pos-product-add-${firstProduct.variant.id}"])`).getByRole("button", {
     name: "Add 2",
   });
   await expect(addTwoButton).toBeVisible();
   await addTwoButton.click();
+  await expect(productSearchInput).toBeFocused();
   const expectedFirstProductQuantity = keyboardSelectedSku === firstProduct.sku ? 3 : 2;
 
   await expect.poll(async () => {
@@ -377,6 +420,7 @@ test("React POS product search supports keyboard navigation and quick add quanti
   await productSearchInput.fill(secondProduct.sku);
   await productSearchInput.press("Shift+Enter");
   await expect(productSearchInput).toHaveValue("");
+  await expect(productSearchInput).toBeFocused();
   const expectedSecondProductQuantity = keyboardSelectedSku === secondProduct.sku ? 3 : 2;
 
   await expect.poll(async () => {
@@ -394,6 +438,73 @@ test("React POS product search supports keyboard navigation and quick add quanti
     firstProductQuantity: expectedFirstProductQuantity,
     secondProductQuantity: expectedSecondProductQuantity,
   });
+
+  await productSearchInput.fill(clickProduct.sku);
+  const clickRow = page.locator(`tr:has([data-testid="pos-product-add-${clickProduct.variant.id}"])`);
+  await expect(clickRow).toBeVisible();
+  await clickRow.locator("td").first().click();
+  await expect(productSearchInput).toBeFocused();
+
+  await expect.poll(async () => {
+    const basketAfterRowClick = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basketAfterRowClick.items.find((item) => item.sku === clickProduct.sku)?.quantity ?? 0;
+  }).toBe(1);
+});
+
+test("React POS quick add grid renders shortcuts and adds products instantly", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-quick-add",
+  });
+  const innerTube = await seedNamedQuickAddProduct(request, {
+    slug: "tube",
+    name: "Inner Tube",
+    retailPricePence: 699,
+  });
+  await seedNamedQuickAddProduct(request, {
+    slug: "lube",
+    name: "Chain Lube",
+    retailPricePence: 899,
+  });
+  await seedNamedQuickAddProduct(request, {
+    slug: "pads",
+    name: "Brake Pads",
+    retailPricePence: 1499,
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await expect(page.getByTestId("pos-quick-add-grid")).toBeVisible();
+  await expect(page.getByTestId("pos-quick-add-inner-tube")).toContainText("Inner Tube");
+  await expect(page.getByTestId("pos-quick-add-chain-lube")).toContainText("Chain Lube");
+  await expect(page.getByTestId("pos-quick-add-brake-pads")).toContainText("Brake Pads");
+
+  await page.getByTestId("pos-quick-add-inner-tube").click();
+  await expect(page.getByTestId("pos-product-search")).toBeFocused();
+
+  const basketId = new URL(page.url()).searchParams.get("basketId");
+  expect(basketId).toBeTruthy();
+
+  await expect.poll(async () => {
+    const basket = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basket.items.find((item) => item.variantId === innerTube.variant.id)?.quantity ?? 0;
+  }).toBe(1);
+
+  await expect(page.locator(".pos-line-item", { hasText: "Inner Tube" })).toHaveClass(/pos-line-item-highlighted/);
 });
 
 test("React POS restores the active basket across navigation and clears stored basket state on checkout", async ({
