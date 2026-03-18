@@ -170,6 +170,7 @@ export const PosPage = () => {
   const { success, error } = useToasts();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
 
   const [searchText, setSearchText] = useState("");
@@ -178,6 +179,7 @@ export const PosPage = () => {
   const [customerSearchText, setCustomerSearchText] = useState("");
   const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
+  const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
   const [contextCustomerId, setContextCustomerId] = useState<string | null>(null);
   const [customerLoading, setCustomerLoading] = useState(false);
@@ -448,6 +450,28 @@ export const PosPage = () => {
     };
   }, [debouncedCustomerSearch, error]);
 
+  useEffect(() => {
+    if (!customerSearchText.trim() || customerResults.length === 0) {
+      setHighlightedCustomerIndex(-1);
+      customerResultRefs.current = [];
+      return;
+    }
+
+    setHighlightedCustomerIndex((current) => (
+      current >= 0 && current < customerResults.length ? current : 0
+    ));
+  }, [customerResults, customerSearchText]);
+
+  useEffect(() => {
+    if (highlightedCustomerIndex < 0) {
+      return;
+    }
+
+    customerResultRefs.current[highlightedCustomerIndex]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [highlightedCustomerIndex]);
+
   const attachCustomerToSale = async (targetSaleId: string, customerId: string | null) => {
     const payload = await apiPatch<SaleResponse>(`/api/sales/${encodeURIComponent(targetSaleId)}/customer`, {
       customerId,
@@ -463,6 +487,7 @@ export const PosPage = () => {
     setContextCustomerId(customer.id);
     setCustomerSearchText("");
     setCustomerResults([]);
+    setHighlightedCustomerIndex(-1);
     setShowCreateCustomer(false);
 
     if (sale?.sale.id) {
@@ -497,6 +522,7 @@ export const PosPage = () => {
     setContextCustomerId(null);
     setCustomerSearchText("");
     setCustomerResults([]);
+    setHighlightedCustomerIndex(-1);
     setShowCreateCustomer(false);
   };
 
@@ -1000,7 +1026,7 @@ export const PosPage = () => {
     : "Retail sale";
   const searchResultSummary = searchText.trim()
     ? `${searchRows.length} result${searchRows.length === 1 ? "" : "s"}`
-    : "Ready for scan";
+    : "";
   const activeCustomerName =
     sale?.sale.customer?.name
     || selectedCustomer?.name
@@ -1192,10 +1218,11 @@ export const PosPage = () => {
                   <div className="pos-section-kicker">Input</div>
                   <h2>Search / Scan</h2>
                 </div>
-                <div className="pos-search-status" aria-live="polite">
-                  <span className="muted-text">{looksLikeScannerInput(searchText) ? "Scanner input" : "Live search"}</span>
-                  <strong>{searchResultSummary}</strong>
-                </div>
+                {searchText.trim() ? (
+                  <div className="pos-search-status" aria-live="polite">
+                    <strong>{searchResultSummary}</strong>
+                  </div>
+                ) : null}
               </div>
 
               <label className="pos-search-field">
@@ -1332,11 +1359,7 @@ export const PosPage = () => {
                     {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
                   </div>
                 </div>
-              ) : (
-                <div className="pos-empty-inline">
-                  <strong>No customer selected yet. Search below or leave this sale as walk-in.</strong>
-                </div>
-              )}
+              ) : null}
 
               <div className="customer-search-panel">
                 <div className="customer-search-stack grow">
@@ -1347,6 +1370,32 @@ export const PosPage = () => {
                       data-testid="pos-customer-search"
                       value={customerSearchText}
                       onChange={(event) => setCustomerSearchText(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (customerResults.length === 0) {
+                          return;
+                        }
+
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setHighlightedCustomerIndex((current) => (
+                            current < 0 ? 0 : Math.min(current + 1, customerResults.length - 1)
+                          ));
+                          return;
+                        }
+
+                        if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setHighlightedCustomerIndex((current) => (
+                            current < 0 ? 0 : Math.max(current - 1, 0)
+                          ));
+                          return;
+                        }
+
+                        if (event.key === "Enter" && highlightedCustomerIndex >= 0) {
+                          event.preventDefault();
+                          void selectCustomer(customerResults[highlightedCustomerIndex]);
+                        }
+                      }}
                       placeholder="name, phone, email"
                     />
                   </label>
@@ -1358,16 +1407,21 @@ export const PosPage = () => {
                       {customerResults.length === 0 ? (
                         <p className="pos-customer-results-empty">No customers matched that search. Use quick create if you need a new account.</p>
                       ) : (
-                        customerResults.map((customer) => {
+                        customerResults.map((customer, index) => {
                           const metadata = [customer.email, customer.phone].filter(Boolean).join(" • ") || "No email or phone";
 
                           return (
                             <button
                               key={customer.id}
                               type="button"
-                              className="pos-customer-result"
+                              ref={(element) => {
+                                customerResultRefs.current[index] = element;
+                              }}
+                              className={index === highlightedCustomerIndex ? "pos-customer-result pos-customer-result-active" : "pos-customer-result"}
                               data-testid={`pos-customer-select-${customer.id}`}
+                              aria-selected={index === highlightedCustomerIndex}
                               onClick={() => void selectCustomer(customer)}
+                              onMouseEnter={() => setHighlightedCustomerIndex(index)}
                             >
                               <span className="pos-customer-result-copy">
                                 <span className="pos-customer-result-name">{customer.name}</span>

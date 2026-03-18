@@ -279,7 +279,8 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   expect(saleIdAfterCheckout).toBeTruthy();
 
   await page.getByTestId("pos-customer-clear").click();
-  await expect(page.getByText("No customer selected yet. Search below or leave this sale as walk-in.")).toBeVisible();
+  await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
+  await expect(customerSearchInput).toBeVisible();
 
   await customerSearchInput.click();
   await customerSearchInput.fill(secondCustomer.email);

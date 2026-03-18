@@ -4261,6 +4261,7 @@ th {
 }
 
 .pos-customer-result:hover,
+.pos-customer-result-active,
 .pos-customer-result:focus-visible {
   background: rgba(15, 34, 52, 0.06);
 }
