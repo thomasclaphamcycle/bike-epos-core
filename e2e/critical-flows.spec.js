@@ -358,6 +358,10 @@ test("React POS product search supports keyboard navigation and quick add quanti
     prefix: `${sharedPrefix}-two`,
     retailPricePence: 2399,
   });
+  const clickProduct = await seedCatalogVariant(request, {
+    prefix: `${sharedPrefix}-three`,
+    retailPricePence: 1899,
+  });
 
   await page.context().clearCookies();
   await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
@@ -366,7 +370,7 @@ test("React POS product search supports keyboard navigation and quick add quanti
   await productSearchInput.fill(sharedPrefix);
 
   const resultRows = page.locator(".pos-results-wrap tbody tr");
-  await expect(resultRows).toHaveCount(2);
+  await expect(resultRows).toHaveCount(3);
   await expect(resultRows.nth(0)).toHaveClass(/pos-search-result-active/);
 
   const firstRowSku = (await resultRows.nth(0).locator("td").nth(1).textContent())?.trim();
@@ -434,6 +438,22 @@ test("React POS product search supports keyboard navigation and quick add quanti
     firstProductQuantity: expectedFirstProductQuantity,
     secondProductQuantity: expectedSecondProductQuantity,
   });
+
+  await productSearchInput.fill(clickProduct.sku);
+  const clickRow = page.locator(`tr:has([data-testid="pos-product-add-${clickProduct.variant.id}"])`);
+  await expect(clickRow).toBeVisible();
+  await clickRow.locator("td").first().click();
+  await expect(productSearchInput).toBeFocused();
+
+  await expect.poll(async () => {
+    const basketAfterRowClick = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(basketId)}`,
+      "MANAGER",
+    );
+    return basketAfterRowClick.items.find((item) => item.sku === clickProduct.sku)?.quantity ?? 0;
+  }).toBe(1);
 });
 
 test("React POS quick add grid renders shortcuts and adds products instantly", async ({
@@ -483,6 +503,8 @@ test("React POS quick add grid renders shortcuts and adds products instantly", a
     );
     return basket.items.find((item) => item.variantId === innerTube.variant.id)?.quantity ?? 0;
   }).toBe(1);
+
+  await expect(page.locator(".pos-line-item", { hasText: "Inner Tube" })).toHaveClass(/pos-line-item-highlighted/);
 });
 
 test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({

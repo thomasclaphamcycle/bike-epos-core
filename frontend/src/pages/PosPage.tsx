@@ -189,6 +189,8 @@ export const PosPage = () => {
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
+  const searchFocusFrameRef = useRef<number | null>(null);
+  const basketItemRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
@@ -241,17 +243,25 @@ export const PosPage = () => {
   };
 
   const restoreScannerSearchFocus = () => {
-    window.requestAnimationFrame(() => {
-      const activeElement = document.activeElement;
-      if (activeElement instanceof HTMLElement) {
-        if (activeElement === customerSearchInputRef.current || activeElement === cashTenderedInputRef.current) {
-          return;
+    if (searchFocusFrameRef.current) {
+      window.cancelAnimationFrame(searchFocusFrameRef.current);
+    }
+    searchFocusFrameRef.current = window.requestAnimationFrame(() => {
+      searchFocusFrameRef.current = window.requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement) {
+          if (activeElement === customerSearchInputRef.current || activeElement === cashTenderedInputRef.current) {
+            searchFocusFrameRef.current = null;
+            return;
+          }
+          if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
+            searchFocusFrameRef.current = null;
+            return;
+          }
         }
-        if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
-          return;
-        }
-      }
-      searchInputRef.current?.focus();
+        searchInputRef.current?.focus();
+        searchFocusFrameRef.current = null;
+      });
     });
   };
 
@@ -267,7 +277,7 @@ export const PosPage = () => {
     lastAddedRowTimeoutRef.current = window.setTimeout(() => {
       setLastAddedBasketItemId((current) => (current === itemId ? null : current));
       lastAddedRowTimeoutRef.current = null;
-    }, 900);
+    }, 1400);
   };
 
   const findHighlightedBasketItemId = (previous: BasketResponse | null, next: BasketResponse) => {
@@ -806,9 +816,24 @@ export const PosPage = () => {
   };
 
   useEffect(() => {
+    if (!lastAddedBasketItemId) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      basketItemRefs.current[lastAddedBasketItemId]?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    });
+  }, [basket, lastAddedBasketItemId]);
+
+  useEffect(() => {
     return () => {
       if (lastAddedRowTimeoutRef.current) {
         window.clearTimeout(lastAddedRowTimeoutRef.current);
+      }
+      if (searchFocusFrameRef.current) {
+        window.cancelAnimationFrame(searchFocusFrameRef.current);
       }
     };
   }, []);
@@ -1792,6 +1817,9 @@ export const PosPage = () => {
                         {group.items.map((item) => (
                           <article
                             key={item.id}
+                            ref={(element) => {
+                              basketItemRefs.current[item.id] = element;
+                            }}
                             className={`pos-line-item${lastAddedBasketItemId === item.id ? " pos-line-item-highlighted" : ""}`}
                           >
                             <div className="pos-line-main" title={`SKU ${item.sku}`} data-sku={item.sku}>
