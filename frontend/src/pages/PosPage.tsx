@@ -1661,7 +1661,7 @@ export const PosPage = () => {
                     <section key={group.key} className={`pos-basket-group pos-basket-group-${group.key.toLowerCase()}`}>
                       <div className="pos-basket-group-header pos-group-row">
                         <div>
-                          <strong>{group.key === "PART" ? "" : group.label}</strong>
+                          <strong>{saleContext.type === "WORKSHOP" ? group.label : group.key === "PART" ? "" : group.label}</strong>
                         </div>
                       </div>
                       <div className="pos-basket-list">
