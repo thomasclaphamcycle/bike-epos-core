@@ -169,6 +169,7 @@ export const PosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const productResultRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
@@ -176,6 +177,7 @@ export const PosPage = () => {
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
   const [searchRows, setSearchRows] = useState<ProductSearchRow[]>([]);
+  const [highlightedProductIndex, setHighlightedProductIndex] = useState(-1);
   const [customerSearchText, setCustomerSearchText] = useState("");
   const debouncedCustomerSearch = useDebouncedValue(customerSearchText, 250);
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
@@ -397,6 +399,28 @@ export const PosPage = () => {
   }, [debouncedSearch, error]);
 
   useEffect(() => {
+    if (!searchText.trim() || searchRows.length === 0) {
+      setHighlightedProductIndex(-1);
+      productResultRefs.current = [];
+      return;
+    }
+
+    setHighlightedProductIndex((current) => (
+      current >= 0 && current < searchRows.length ? current : 0
+    ));
+  }, [searchRows, searchText]);
+
+  useEffect(() => {
+    if (highlightedProductIndex < 0) {
+      return;
+    }
+
+    productResultRefs.current[highlightedProductIndex]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [highlightedProductIndex]);
+
+  useEffect(() => {
     if (!loading && basket && !sale) {
       focusProductSearch();
     }
@@ -610,6 +634,7 @@ export const PosPage = () => {
       setBasket(payload);
       setSearchText("");
       setSearchRows([]);
+      setHighlightedProductIndex(-1);
       success("Item added");
       window.requestAnimationFrame(() => {
         searchInputRef.current?.focus();
@@ -634,6 +659,7 @@ export const PosPage = () => {
       setBasket(payload);
       setSearchText("");
       setSearchRows([]);
+      setHighlightedProductIndex(-1);
       success(`${quantity} item${quantity === 1 ? "" : "s"} added`);
       focusProductSearch();
     } catch (addError) {
@@ -653,7 +679,9 @@ export const PosPage = () => {
     }
 
     try {
-      const row = await resolveProductSearchRow(searchText);
+      const row = highlightedProductIndex >= 0 && highlightedProductIndex < searchRows.length
+        ? searchRows[highlightedProductIndex]
+        : await resolveProductSearchRow(searchText);
       if (!row) {
         error("No product matched that barcode, SKU, or search.");
         return;
@@ -1233,13 +1261,29 @@ export const PosPage = () => {
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
                   onKeyDown={(event) => {
+                    if (searchRows.length > 0 && event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setHighlightedProductIndex((current) => (
+                        current < 0 ? 0 : Math.min(current + 1, searchRows.length - 1)
+                      ));
+                      return;
+                    }
+
+                    if (searchRows.length > 0 && event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setHighlightedProductIndex((current) => (
+                        current < 0 ? 0 : Math.max(current - 1, 0)
+                      ));
+                      return;
+                    }
+
                     if (event.key !== "Enter") {
                       return;
                     }
 
                     event.preventDefault();
                     if (event.shiftKey) {
-                      void submitProductSearch(5);
+                      void submitProductSearch(2);
                       return;
                     }
                     void submitProductSearch(1);
@@ -1267,14 +1311,21 @@ export const PosPage = () => {
                         </td>
                       </tr>
                     ) : (
-                      searchRows.map((row) => {
+                      searchRows.map((row, index) => {
                         const canAdd = Boolean(basketId) && !saleId;
 
                         return (
                           <tr
                             key={row.id}
-                            className={canAdd ? "clickable-row" : undefined}
+                            ref={(element) => {
+                              productResultRefs.current[index] = element;
+                            }}
+                            className={[
+                              canAdd ? "clickable-row" : "",
+                              index === highlightedProductIndex ? "pos-search-result-active" : "",
+                            ].filter(Boolean).join(" ")}
                             onClick={canAdd ? () => void addItem(row.id) : undefined}
+                            onMouseEnter={() => setHighlightedProductIndex(index)}
                             onKeyDown={
                               canAdd
                                 ? (event) => {
@@ -1288,6 +1339,7 @@ export const PosPage = () => {
                             role={canAdd ? "button" : undefined}
                             tabIndex={canAdd ? 0 : undefined}
                             aria-label={canAdd ? `Add ${row.name} to basket` : undefined}
+                            aria-selected={index === highlightedProductIndex}
                           >
                             <td>{row.name}</td>
                             <td>{row.sku}</td>
@@ -1310,11 +1362,11 @@ export const PosPage = () => {
                                   type="button"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    void addMultipleItems(row.id, 5);
+                                    void addMultipleItems(row.id, 2);
                                   }}
                                   disabled={!canAdd}
                                 >
-                                  Add 5
+                                  Add 2
                                 </button>
                               </div>
                             </td>

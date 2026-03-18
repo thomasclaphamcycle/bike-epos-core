@@ -303,6 +303,110 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   expect(completedSale.sale.customer?.name).toBe(secondCustomer.name);
 });
 
+test("React POS product search supports keyboard navigation and quick add quantity 2", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-product-keyboard",
+  });
+  const sharedPrefix = uniqueToken("react-pos-product-keyboard");
+  await seedCatalogVariant(request, {
+    prefix: `${sharedPrefix}-one`,
+    retailPricePence: 1499,
+  });
+  await seedCatalogVariant(request, {
+    prefix: `${sharedPrefix}-two`,
+    retailPricePence: 2399,
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  const productSearchInput = page.getByTestId("pos-product-search");
+  await productSearchInput.fill(sharedPrefix);
+
+  const resultRows = page.locator(".pos-results-wrap tbody tr");
+  await expect(resultRows).toHaveCount(2);
+  await expect(resultRows.nth(0)).toHaveClass(/pos-search-result-active/);
+
+  const firstRowSku = (await resultRows.nth(0).locator("td").nth(1).textContent())?.trim();
+  const secondRowSku = (await resultRows.nth(1).locator("td").nth(1).textContent())?.trim();
+  expect(firstRowSku).toBeTruthy();
+  expect(secondRowSku).toBeTruthy();
+
+  await productSearchInput.press("ArrowDown");
+  await expect(resultRows.nth(1)).toHaveClass(/pos-search-result-active/);
+  await productSearchInput.press("Enter");
+  await expect(productSearchInput).toHaveValue("");
+
+  const basketId = new URL(page.url()).searchParams.get("basketId");
+  expect(basketId).toBeTruthy();
+
+  const basketAfterKeyboardAdd = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/baskets/${encodeURIComponent(basketId)}`,
+    "MANAGER",
+  );
+  expect(basketAfterKeyboardAdd.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        sku: secondRowSku,
+        quantity: 1,
+      }),
+    ]),
+  );
+
+  await productSearchInput.fill(firstRowSku);
+  const addTwoButton = page.locator(".pos-results-wrap tbody tr").first().getByRole("button", { name: "Add 2" });
+  await expect(addTwoButton).toBeVisible();
+  await addTwoButton.click();
+
+  const basketAfterQuickAdd = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/baskets/${encodeURIComponent(basketId)}`,
+    "MANAGER",
+  );
+  expect(basketAfterQuickAdd.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        sku: firstRowSku,
+        quantity: 2,
+      }),
+      expect.objectContaining({
+        sku: secondRowSku,
+        quantity: 1,
+      }),
+    ]),
+  );
+
+  await productSearchInput.fill(secondRowSku);
+  await productSearchInput.press("Shift+Enter");
+  await expect(productSearchInput).toHaveValue("");
+
+  const basketAfterShiftEnter = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/baskets/${encodeURIComponent(basketId)}`,
+    "MANAGER",
+  );
+  expect(basketAfterShiftEnter.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        sku: secondRowSku,
+        quantity: 3,
+      }),
+      expect.objectContaining({
+        sku: firstRowSku,
+        quantity: 2,
+      }),
+    ]),
+  );
+});
+
 test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({
   page,
   request,

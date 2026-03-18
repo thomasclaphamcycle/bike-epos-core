@@ -4089,6 +4089,10 @@ th {
   text-transform: uppercase;
 }
 
+.pos-search-result-active {
+  background: rgba(15, 34, 52, 0.06);
+}
+
 .selected-customer-panel {
   display: flex;
   justify-content: space-between;
