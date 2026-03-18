@@ -1661,8 +1661,7 @@ export const PosPage = () => {
                     <section key={group.key} className={`pos-basket-group pos-basket-group-${group.key.toLowerCase()}`}>
                       <div className="pos-basket-group-header pos-group-row">
                         <div>
-                          <strong>{group.label}</strong>
-                          <span>{group.items.length} line{group.items.length === 1 ? "" : "s"}</span>
+                          <strong>{group.key === "PART" ? "" : group.label}</strong>
                         </div>
                       </div>
                       <div className="pos-basket-list">
@@ -1719,7 +1718,7 @@ export const PosPage = () => {
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Totals & Payment</div>
-                  <h2>{sale ? "Take Payment" : "Checkout"}</h2>
+                  {sale ? <h2>Take Payment</h2> : null}
                 </div>
                 <span className="pos-payment-state">{sale ? "Sale live" : "Basket open"}</span>
               </div>
