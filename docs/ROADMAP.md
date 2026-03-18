@@ -316,12 +316,12 @@ Implementation status:
 
 Planned item:
 
-### POS Basket Persistence (PLANNED / MEDIUM)
+### POS Basket Persistence (PARTIAL / MEDIUM)
 
 Intent:
 Implement POS basket persistence in stages so the active basket survives normal use now without prematurely locking CorePOS into the wrong long-term session model.
 
-Phase 1 — Session Basket Persistence (Next):
+Phase 1 — Session Basket Persistence (Implemented):
 - persist active basket ID in localStorage
 - restore basket on POS load
 - preserve basket across navigation

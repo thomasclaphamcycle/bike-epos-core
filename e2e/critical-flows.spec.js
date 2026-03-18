@@ -396,6 +396,110 @@ test("React POS product search supports keyboard navigation and quick add quanti
   });
 });
 
+test("React POS restores the active basket across navigation and clears stored basket state on checkout", async ({
+  page,
+  request,
+}) => {
+  const activeBasketStorageKey = "corepos_active_basket_id";
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-basket-persistence",
+  });
+  const seeded = await seedCatalogVariant(request, { prefix: "react-pos-basket-persistence" });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await page.getByTestId("pos-product-search").fill(seeded.sku);
+  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
+
+  const initialBasketId = new URL(page.url()).searchParams.get("basketId");
+  expect(initialBasketId).toBeTruthy();
+
+  await expect.poll(async () => page.evaluate(
+    (storageKey) => window.localStorage.getItem(storageKey),
+    activeBasketStorageKey,
+  )).toBe(initialBasketId);
+
+  await page.goto(`${frontendBaseUrl}/customers`);
+  await expect(page).toHaveURL(/\/customers/);
+
+  await page.goto(`${frontendBaseUrl}/pos`);
+  await expect.poll(() => new URL(page.url()).searchParams.get("basketId")).toBe(initialBasketId);
+  await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
+
+  await expect.poll(async () => {
+    const restoredBasket = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(initialBasketId)}`,
+      "MANAGER",
+    );
+    return restoredBasket.items.find((item) => item.sku === seeded.sku)?.quantity ?? 0;
+  }).toBe(1);
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await expect(page.getByTestId("pos-complete-sale")).toBeVisible();
+
+  await expect.poll(async () => page.evaluate(
+    (storageKey) => window.localStorage.getItem(storageKey),
+    activeBasketStorageKey,
+  )).toBeNull();
+});
+
+test("React POS replaces stale stored basket ids with a fresh basket on load", async ({
+  page,
+  request,
+}) => {
+  const activeBasketStorageKey = "corepos_active_basket_id";
+  const staleBasketId = "00000000-0000-0000-0000-000000000000";
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-stale-basket",
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await page.goto(`${frontendBaseUrl}/customers`);
+  await expect(page).toHaveURL(/\/customers/);
+
+  await page.evaluate(([storageKey, nextBasketId]) => {
+    window.localStorage.setItem(storageKey, nextBasketId);
+  }, [activeBasketStorageKey, staleBasketId]);
+
+  await page.goto(`${frontendBaseUrl}/pos`);
+  await expect.poll(async () => {
+    const storedBasketId = await page.evaluate(
+      (storageKey) => window.localStorage.getItem(storageKey),
+      activeBasketStorageKey,
+    );
+    return Boolean(storedBasketId) && storedBasketId !== staleBasketId;
+  }).toBe(true);
+
+  const finalRecoveredBasketId = await page.evaluate(
+    (storageKey) => window.localStorage.getItem(storageKey),
+    activeBasketStorageKey,
+  );
+  expect(finalRecoveredBasketId).toBeTruthy();
+  expect(finalRecoveredBasketId).not.toBe(staleBasketId);
+
+  const recoveredBasketId = finalRecoveredBasketId;
+
+  await expect(page.getByTestId("pos-checkout-basket")).toBeDisabled();
+  await expect(page.locator(".pos-basket-panel")).toContainText("Scan or search to start");
+  await expect.poll(async () => {
+    const recoveredBasket = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/baskets/${encodeURIComponent(recoveredBasketId)}`,
+      "MANAGER",
+    );
+    return recoveredBasket.items.length;
+  }).toBe(0);
+});
+
 test("Workshop handoff opens the unified POS with context header and grouped basket lines", async ({
   page,
   request,

@@ -83,12 +83,12 @@ This document is the canonical UX roadmap and navigation reference for CorePOS.
 
 ## UX-1 POS Planned Follow-On
 
-### POS Basket Persistence (PLANNED / MEDIUM)
+### POS Basket Persistence (PARTIAL / MEDIUM)
 
 Intent:
 Implement POS basket persistence in stages so staff do not lose the active basket during normal use, while leaving room for a later user/till-scoped model.
 
-Phase 1 — Session Basket Persistence (Next):
+Phase 1 — Session Basket Persistence (Implemented):
 - persist active basket ID in localStorage
 - restore basket on POS load
 - preserve basket across navigation
