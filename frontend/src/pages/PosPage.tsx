@@ -487,6 +487,7 @@ export const PosPage = () => {
   useEffect(() => {
     if (!debouncedSearch.trim()) {
       setSearchRows([]);
+      setHighlightedProductIndex(-1);
       return;
     }
 
@@ -498,12 +499,15 @@ export const PosPage = () => {
           `/api/products/search?q=${encodeURIComponent(debouncedSearch.trim())}`,
         );
         if (!cancelled) {
-          setSearchRows(payload.rows || []);
+          const rows = payload.rows || [];
+          setSearchRows(rows);
+          setHighlightedProductIndex(rows.length > 0 ? 0 : -1);
         }
       } catch (searchError) {
         if (!cancelled) {
           const message = searchError instanceof Error ? searchError.message : "Search failed";
           error(message);
+          setHighlightedProductIndex(-1);
         }
       }
     };
