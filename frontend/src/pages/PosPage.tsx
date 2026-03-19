@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
@@ -210,7 +210,6 @@ export const PosPage = () => {
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
-  const searchFocusFrameRef = useRef<number | null>(null);
   const basketItemRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const [searchText, setSearchText] = useState("");
@@ -246,6 +245,7 @@ export const PosPage = () => {
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [productSearchFocusRequest, setProductSearchFocusRequest] = useState(0);
 
   const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
 
@@ -266,26 +266,7 @@ export const PosPage = () => {
   };
 
   const restoreScannerSearchFocus = () => {
-    if (searchFocusFrameRef.current) {
-      window.cancelAnimationFrame(searchFocusFrameRef.current);
-    }
-    searchFocusFrameRef.current = window.requestAnimationFrame(() => {
-      searchFocusFrameRef.current = window.requestAnimationFrame(() => {
-        const activeElement = document.activeElement;
-        if (activeElement instanceof HTMLElement) {
-          if (activeElement === customerSearchInputRef.current || activeElement === cashTenderedInputRef.current) {
-            searchFocusFrameRef.current = null;
-            return;
-          }
-          if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
-            searchFocusFrameRef.current = null;
-            return;
-          }
-        }
-        searchInputRef.current?.focus();
-        searchFocusFrameRef.current = null;
-      });
-    });
+    setProductSearchFocusRequest((current) => current + 1);
   };
 
   const flashBasketRow = (itemId: string | null) => {
@@ -902,11 +883,26 @@ export const PosPage = () => {
       if (lastAddedRowTimeoutRef.current) {
         window.clearTimeout(lastAddedRowTimeoutRef.current);
       }
-      if (searchFocusFrameRef.current) {
-        window.cancelAnimationFrame(searchFocusFrameRef.current);
-      }
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (productSearchFocusRequest === 0) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      if (activeElement === customerSearchInputRef.current || activeElement === cashTenderedInputRef.current) {
+        return;
+      }
+      if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
+        return;
+      }
+    }
+
+    searchInputRef.current?.focus();
+  }, [productSearchFocusRequest]);
 
   const removeLine = async (itemId: string) => {
     if (!basketId) {
