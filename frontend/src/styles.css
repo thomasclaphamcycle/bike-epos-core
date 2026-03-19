@@ -4034,10 +4034,12 @@ th {
   align-self: stretch;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   margin-top: 0;
   border-color: rgba(215, 228, 239, 0.45);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(247, 250, 253, 0.76));
   box-shadow: none;
+  overflow: hidden;
 }
 
 .pos-search-status {
@@ -4141,6 +4143,20 @@ th {
   background: rgba(250, 252, 254, 0.96);
   overflow: auto;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.pos-results-wrap table {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.pos-results-wrap td,
+.pos-results-wrap th {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pos-results-wrap table th {
