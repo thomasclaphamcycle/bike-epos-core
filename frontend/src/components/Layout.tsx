@@ -207,14 +207,19 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <div className="app-shell">
-        <main className={currentPath.startsWith("/pos")
-          ? "app-main app-main--workspace app-main--pos"
-          : isWorkspacePage
-            ? "app-main app-main--workspace"
-            : "app-main"}
+        <div className={currentPath.startsWith("/pos")
+          ? "app-content-pane app-content-pane--pos"
+          : "app-content-pane"}
         >
-          {children}
-        </main>
+          <main className={currentPath.startsWith("/pos")
+            ? "app-main app-main--workspace app-main--pos"
+            : isWorkspacePage
+              ? "app-main app-main--workspace"
+              : "app-main"}
+          >
+            {children}
+          </main>
+        </div>
 
         <footer className="app-footer">
           <span>Environment: {envLabel}</span>

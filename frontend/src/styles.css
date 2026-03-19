@@ -292,9 +292,22 @@ textarea {
 .app-shell {
   min-width: 0;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
+}
+
+.app-content-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.app-content-pane--pos {
+  display: flex;
+  overflow: hidden;
 }
 
 .brand {
@@ -496,6 +509,7 @@ textarea {
   width: min(var(--cp-width-standard), 100%);
   margin: 0 auto;
   padding: 18px 20px 20px;
+  min-width: 0;
 }
 
 .app-main--workspace {
