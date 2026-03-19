@@ -235,6 +235,35 @@ const recoverWorkshopCheckoutRace = async (
   return null;
 };
 
+const toWorkshopCheckoutResponse = (
+  workshopJobId: string,
+  result: WorkshopCheckoutResult,
+) => {
+  if (result.emittedWorkshopCompletion) {
+    emit("workshop.job.completed", {
+      id: workshopJobId,
+      type: "workshop.job.completed",
+      timestamp: new Date().toISOString(),
+      workshopJobId,
+      status: result.workshopJobStatus,
+      completedAt: result.workshopCompletedAt.toISOString(),
+      saleId: result.sale.id,
+    });
+  }
+
+  return {
+    sale: result.sale,
+    serviceTotalPence: result.serviceTotalPence,
+    partsTotalPence: result.partsTotalPence,
+    saleTotalPence: result.saleTotalPence,
+    depositPaidPence: result.depositPaidPence,
+    creditPence: result.creditPence,
+    outstandingPence: result.outstandingPence,
+    payment: result.payment,
+    idempotent: result.idempotent,
+  };
+};
+
 export const checkoutWorkshopJobToSale = async (
   workshopJobId: string,
   input: WorkshopCheckoutInput,
@@ -263,26 +292,28 @@ export const checkoutWorkshopJobToSale = async (
     throw new HttpError(400, "amountPence must be a non-negative integer", "INVALID_PAYMENT");
   }
 
+  const existingCheckout = await loadExistingWorkshopCheckoutResult(workshopJobId);
+  if (existingCheckout) {
+    return toWorkshopCheckoutResponse(workshopJobId, existingCheckout);
+  }
+
   let result: WorkshopCheckoutResult | undefined;
   let lastRecoverableError: unknown;
 
   for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_TRANSACTION_RETRIES; attempt += 1) {
     try {
       result = await withWorkshopCheckoutTransaction(async (tx) => {
-        let workshopJob = await tx.workshopJob.findUnique({
-          where: { id: workshopJobId },
-          include: { customer: true },
-        });
+        // Serialize checkout attempts per workshop job to prevent unique-key races
+        // on Sale(workshopJobId) and keep idempotent behavior deterministic.
+        const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE
+        `;
 
-        if (!workshopJob) {
+        if (lockedRows.length === 0) {
           throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
         }
 
-        // Serialize checkout attempts per workshop job to prevent unique-key races
-        // on Sale(workshopJobId) and keep idempotent behavior deterministic.
-        await tx.$queryRaw`SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE`;
-
-        workshopJob = await tx.workshopJob.findUnique({
+        const workshopJob = await tx.workshopJob.findUnique({
           where: { id: workshopJobId },
           include: { customer: true },
         });
@@ -545,27 +576,5 @@ export const checkoutWorkshopJobToSale = async (
     throw lastRecoverableError ?? new Error("Workshop checkout transaction did not produce a result");
   }
 
-  if (result.emittedWorkshopCompletion) {
-    emit("workshop.job.completed", {
-      id: workshopJobId,
-      type: "workshop.job.completed",
-      timestamp: new Date().toISOString(),
-      workshopJobId,
-      status: result.workshopJobStatus,
-      completedAt: result.workshopCompletedAt.toISOString(),
-      saleId: result.sale.id,
-    });
-  }
-
-  return {
-    sale: result.sale,
-    serviceTotalPence: result.serviceTotalPence,
-    partsTotalPence: result.partsTotalPence,
-    saleTotalPence: result.saleTotalPence,
-    depositPaidPence: result.depositPaidPence,
-    creditPence: result.creditPence,
-    outstandingPence: result.outstandingPence,
-    payment: result.payment,
-    idempotent: result.idempotent,
-  };
+  return toWorkshopCheckoutResponse(workshopJobId, result);
 };
