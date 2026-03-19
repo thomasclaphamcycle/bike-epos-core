@@ -295,6 +295,7 @@ textarea {
   grid-template-rows: 1fr auto;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .brand {
@@ -496,6 +497,7 @@ textarea {
   width: min(var(--cp-width-standard), 100%);
   margin: 0 auto;
   padding: 18px 20px 20px;
+  height: 100%;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -531,6 +533,7 @@ textarea {
 .page-shell {
   display: grid;
   gap: var(--cp-space-4);
+  min-height: 0;
 }
 
 .page-shell-workspace {
