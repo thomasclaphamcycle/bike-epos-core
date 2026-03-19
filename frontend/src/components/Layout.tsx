@@ -37,6 +37,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
+  const isPosPage = currentPath.startsWith("/pos");
   const isWorkspacePage = workspacePagePrefixes.some((prefix) => currentPath.startsWith(prefix));
   const visibleSections = useMemo(() => (
     navigationSections
@@ -207,14 +208,16 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <div className="app-shell">
-        <main className={currentPath.startsWith("/pos")
-          ? "app-main app-main--workspace app-main--pos"
-          : isWorkspacePage
-            ? "app-main app-main--workspace"
-            : "app-main"}
-        >
-          {children}
-        </main>
+        <div className={isPosPage ? "app-content-pane app-content-pane--pos" : "app-content-pane"}>
+          <main className={isPosPage
+            ? "app-main app-main--workspace app-main--pos"
+            : isWorkspacePage
+              ? "app-main app-main--workspace"
+              : "app-main"}
+          >
+            {children}
+          </main>
+        </div>
 
         <footer className="app-footer">
           <span>Environment: {envLabel}</span>

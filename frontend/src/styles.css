@@ -298,6 +298,17 @@ textarea {
   overflow: hidden;
 }
 
+.app-content-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.app-content-pane--pos {
+  overflow: hidden;
+}
+
 .brand {
   color: #fff;
   text-decoration: none;
@@ -497,10 +508,7 @@ textarea {
   width: min(var(--cp-width-standard), 100%);
   margin: 0 auto;
   padding: 18px 20px 20px;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  min-height: 100%;
 }
 
 .app-main--workspace {
@@ -520,7 +528,7 @@ textarea {
   overflow: hidden;
 }
 
-.app-main--pos + .app-footer {
+.app-content-pane--pos + .app-footer {
   display: none;
 }
 
