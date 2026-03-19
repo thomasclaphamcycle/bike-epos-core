@@ -10,6 +10,84 @@ const {
 
 const frontendBaseUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
 
+const collectPosAddTwoDiagnostics = async (page, variantId) => page.evaluate((buttonTestId) => {
+  const serializeElement = (selector) => {
+    const element = document.querySelector(selector);
+    if (!element) {
+      return null;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+
+    return {
+      selector,
+      tagName: element.tagName,
+      className: element.className,
+      text: element.textContent?.trim().slice(0, 200) ?? "",
+      rect: {
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      },
+      computedStyle: {
+        position: style.position,
+        zIndex: style.zIndex,
+        pointerEvents: style.pointerEvents,
+        display: style.display,
+        overflow: style.overflow,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+      },
+    };
+  };
+
+  const addButtonSelector = `[data-testid="${buttonTestId}"]`;
+  const addButton = document.querySelector(addButtonSelector);
+  let elementAtButtonCenter = null;
+
+  if (addButton) {
+    const rect = addButton.getBoundingClientRect();
+    const centerX = rect.left + (rect.width / 2);
+    const centerY = rect.top + (rect.height / 2);
+    const topElement = document.elementFromPoint(centerX, centerY);
+    const topStyle = topElement ? window.getComputedStyle(topElement) : null;
+
+    elementAtButtonCenter = topElement ? {
+      tagName: topElement.tagName,
+      className: topElement.className,
+      testId: topElement.getAttribute("data-testid"),
+      text: topElement.textContent?.trim().slice(0, 200) ?? "",
+      computedStyle: topStyle ? {
+        position: topStyle.position,
+        zIndex: topStyle.zIndex,
+        pointerEvents: topStyle.pointerEvents,
+      } : null,
+    } : null;
+  }
+
+  return {
+    viewport: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+    },
+    elements: {
+      posLayout: serializeElement(".pos-layout"),
+      posMainColumn: serializeElement(".pos-main-column"),
+      posSideColumn: serializeElement(".pos-side-column"),
+      posSearchPanel: serializeElement(".pos-search-panel"),
+      posResultsWrap: serializeElement(".pos-results-wrap"),
+      posSearchField: serializeElement(".pos-search-field"),
+      addTwoButton: serializeElement(addButtonSelector),
+    },
+    elementAtButtonCenter,
+  };
+}, `pos-product-add-${variantId}`);
+
 const parseOnHand = (labelText) => {
   const match = labelText.match(/On hand:\s*(-?\d+)/i);
   if (!match) {
@@ -403,7 +481,25 @@ test("React POS product search supports keyboard navigation and quick add quanti
     name: "Add 2",
   });
   await expect(addTwoButton).toBeVisible();
-  await addTwoButton.click();
+  const addTwoDiagnosticsBeforeClick = await collectPosAddTwoDiagnostics(page, firstProduct.variant.id);
+  console.log(`[pos-add-two-before-click] ${JSON.stringify(addTwoDiagnosticsBeforeClick)}`);
+  await test.info().attach("pos-add-two-before-click", {
+    body: JSON.stringify(addTwoDiagnosticsBeforeClick, null, 2),
+    contentType: "application/json",
+  });
+
+  try {
+    await addTwoButton.click();
+  } catch (error) {
+    const addTwoDiagnosticsAfterFailure = await collectPosAddTwoDiagnostics(page, firstProduct.variant.id);
+    console.log(`[pos-add-two-click-failure] ${JSON.stringify(addTwoDiagnosticsAfterFailure)}`);
+    await test.info().attach("pos-add-two-click-failure", {
+      body: JSON.stringify(addTwoDiagnosticsAfterFailure, null, 2),
+      contentType: "application/json",
+    });
+    throw error;
+  }
+
   await expect(productSearchInput).toBeFocused();
   const expectedFirstProductQuantity = keyboardSelectedSku === firstProduct.sku ? 3 : 2;
 
