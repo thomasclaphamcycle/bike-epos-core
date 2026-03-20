@@ -70,7 +70,9 @@ export const clockTimeToMinutes = (value: string) => {
     return null;
   }
 
-  const [hours, minutes] = normalized.split(":").map(Number);
+  const [hoursText = "0", minutesText = "0"] = normalized.split(":");
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
   return (hours * 60) + minutes;
 };
 

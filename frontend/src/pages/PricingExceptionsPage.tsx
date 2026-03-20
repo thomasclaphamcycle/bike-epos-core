@@ -2,7 +2,9 @@ import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 import { ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
+import { formatCurrencyFromPence } from "../utils/currency";
 
 type PricingExceptionType = "MISSING_RETAIL_PRICE" | "RETAIL_AT_OR_BELOW_COST" | "LOW_MARGIN";
 
@@ -55,15 +57,18 @@ const pricingExceptionSeverity = (type: PricingExceptionType): ReportSeverity =>
   return "CRITICAL";
 };
 
-const formatMoney = (pence: number | null) => (pence === null ? "-" : `GBP ${(pence / 100).toFixed(2)}`);
-const formatMargin = (pence: number | null, percent: number | null) =>
-  (pence === null || percent === null ? "-" : `GBP ${(pence / 100).toFixed(2)} (${percent.toFixed(1)}%)`);
+const formatMoney = (pence: number | null, currencyCode: string) =>
+  (pence === null ? "-" : formatCurrencyFromPence(pence, currencyCode));
+const formatMargin = (pence: number | null, percent: number | null, currencyCode: string) =>
+  (pence === null || percent === null ? "-" : `${formatCurrencyFromPence(pence, currencyCode)} (${percent.toFixed(1)}%)`);
 
 export const PricingExceptionsPage = () => {
+  const appConfig = useAppConfig();
   const { error } = useToasts();
   const [report, setReport] = useState<PricingExceptionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [exceptionFilter, setExceptionFilter] = useState<PricingExceptionType | "">("");
+  const currencyCode = appConfig.store.defaultCurrency;
 
   const loadReport = async () => {
     setLoading(true);
@@ -175,9 +180,9 @@ export const PricingExceptionsPage = () => {
                     <div className="table-secondary">Variant pricing check for current catalogue and purchasing data</div>
                   </td>
                   <td className="mono-text">{row.sku}</td>
-                  <td>{formatMoney(row.cost)}</td>
-                  <td>{formatMoney(row.retailPrice)}</td>
-                  <td>{formatMargin(row.apparentMarginPence, row.apparentMarginPercent)}</td>
+                  <td>{formatMoney(row.cost, currencyCode)}</td>
+                  <td>{formatMoney(row.retailPrice, currencyCode)}</td>
+                  <td>{formatMargin(row.apparentMarginPence, row.apparentMarginPercent, currencyCode)}</td>
                   <td><span className={badgeClass[row.exceptionType]}>{exceptionLabel[row.exceptionType]}</span></td>
                   <td><span className={reportSeverityBadgeClass[pricingExceptionSeverity(row.exceptionType)]}>{pricingExceptionSeverity(row.exceptionType)}</span></td>
                   <td>

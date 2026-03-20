@@ -5,6 +5,11 @@ GET {{baseUrl}}/api/settings
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Get public app config (STAFF+)
+GET {{baseUrl}}/api/config
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
 ### Get Store Info (ADMIN)
 GET {{baseUrl}}/api/settings/store-info
 X-Staff-Role: ADMIN

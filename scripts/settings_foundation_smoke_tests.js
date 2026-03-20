@@ -86,6 +86,12 @@ const run = async () => {
         },
       },
     });
+    await prisma.receiptSettings.deleteMany({
+      where: { id: 1 },
+    });
+    await prisma.bookingSettings.deleteMany({
+      where: { id: 1 },
+    });
 
     const defaultRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(defaultRes.status, 200, JSON.stringify(defaultRes.json));
@@ -106,6 +112,16 @@ const run = async () => {
     assert.equal(defaultRes.json.settings.pos.defaultTaxRatePercent, 20);
     assert.equal(defaultRes.json.settings.workshop.defaultDepositPence, 1000);
     assert.equal(defaultRes.json.settings.operations.lowStockThreshold, 3);
+
+    const publicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
+    assert.equal(publicConfigRes.status, 200, JSON.stringify(publicConfigRes.json));
+    assert.equal(publicConfigRes.json.config.store.name, "Bike EPOS");
+    assert.equal(publicConfigRes.json.config.store.defaultCurrency, "GBP");
+    assert.equal(publicConfigRes.json.config.workshop.defaultDepositPence, 1000);
+    assert.equal("vatNumber" in publicConfigRes.json.config.store, false);
+    assert.equal("companyNumber" in publicConfigRes.json.config.store, false);
+    assert.equal("latitude" in publicConfigRes.json.config.store, false);
+    assert.equal("longitude" in publicConfigRes.json.config.store, false);
 
     const patchRes = await fetchJson("/api/settings", {
       method: "PATCH",
@@ -150,6 +166,7 @@ const run = async () => {
         },
         workshop: {
           defaultJobDurationMinutes: 75,
+          defaultDepositPence: 1500,
         },
         operations: {
           lowStockThreshold: 6,
@@ -182,12 +199,23 @@ const run = async () => {
     assert.equal(patchRes.json.settings.pos.defaultTaxRatePercent, 17.5);
     assert.equal(patchRes.json.settings.pos.barcodeSearchAutoFocus, false);
     assert.equal(patchRes.json.settings.workshop.defaultJobDurationMinutes, 75);
-    assert.equal(patchRes.json.settings.workshop.defaultDepositPence, 1000);
+    assert.equal(patchRes.json.settings.workshop.defaultDepositPence, 1500);
     assert.equal(patchRes.json.settings.operations.lowStockThreshold, 6);
+
+    const bookingSettings = await prisma.bookingSettings.findUnique({
+      where: { id: 1 },
+    });
+    assert.ok(bookingSettings, "Expected workshop booking settings compatibility record to exist");
+    assert.equal(bookingSettings.defaultDepositPence, 1500);
 
     const persistedRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(persistedRes.status, 200, JSON.stringify(persistedRes.json));
     assert.equal(persistedRes.json.settings.store.name, "CorePOS Cycles");
+
+    const persistedPublicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
+    assert.equal(persistedPublicConfigRes.status, 200, JSON.stringify(persistedPublicConfigRes.json));
+    assert.equal(persistedPublicConfigRes.json.config.store.name, "CorePOS Cycles");
+    assert.equal(persistedPublicConfigRes.json.config.workshop.defaultDepositPence, 1500);
 
     const storeInfoRes = await fetchJson("/api/settings/store-info", { headers: ADMIN_HEADERS });
     assert.equal(storeInfoRes.status, 200, JSON.stringify(storeInfoRes.json));
@@ -246,6 +274,13 @@ const run = async () => {
     assert.equal(receiptSettings.vatNumber, "GB987654321");
     assert.equal(receiptSettings.footerText, "See you in the workshop soon.");
 
+    const publicStoreInfoRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
+    assert.equal(publicStoreInfoRes.status, 200, JSON.stringify(publicStoreInfoRes.json));
+    assert.equal(publicStoreInfoRes.json.config.store.name, "CorePOS Workshop & Retail");
+    assert.equal(publicStoreInfoRes.json.config.store.footerText, "See you in the workshop soon.");
+    assert.equal(publicStoreInfoRes.json.config.workshop.defaultDepositPence, 1500);
+    assert.equal("vatNumber" in publicStoreInfoRes.json.config.store, false);
+
     const staffRes = await fetchJson("/api/settings", { headers: STAFF_HEADERS });
     assert.equal(staffRes.status, 403, JSON.stringify(staffRes.json));
     assert.equal(staffRes.json.error.code, "INSUFFICIENT_ROLE");
@@ -261,6 +296,19 @@ const run = async () => {
 
     console.log("[settings-smoke] persisted settings API passed");
   } finally {
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: SETTINGS_KEYS,
+        },
+      },
+    });
+    await prisma.receiptSettings.deleteMany({
+      where: { id: 1 },
+    });
+    await prisma.bookingSettings.deleteMany({
+      where: { id: 1 },
+    });
     await prisma.$disconnect();
     await serverController.stop();
   }

@@ -1,6 +1,7 @@
 import { Prisma, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { HttpError } from "../../utils/http";
+import { getStoreLocaleSettings } from "../configurationService";
 import {
   OPEN_WORKSHOP_STATUSES,
   addDaysUtc,
@@ -12,6 +13,7 @@ import {
 
 export const getWorkshopDailyReport = async (from?: string, to?: string, locationId?: string) => {
   const range = getDateRangeOrThrow(from, to);
+  const { timeZone } = await getStoreLocaleSettings();
   const days = listDateKeys(range.from, range.to);
   const workshopLocationFilter = locationId
     ? Prisma.sql`AND w."locationId" = ${locationId}`
@@ -19,7 +21,7 @@ export const getWorkshopDailyReport = async (from?: string, to?: string, locatio
 
   const rows = await prisma.$queryRaw<Array<{ date: string; jobCount: number; revenuePence: number }>>`
     SELECT
-      to_char((w."completedAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD') AS "date",
+      to_char((w."completedAt" AT TIME ZONE ${timeZone})::date, 'YYYY-MM-DD') AS "date",
       COUNT(*)::int AS "jobCount",
       COALESCE(SUM(s."totalPence"), 0)::bigint AS "revenuePence"
     FROM "WorkshopJob" w
@@ -27,7 +29,7 @@ export const getWorkshopDailyReport = async (from?: string, to?: string, locatio
     WHERE
       w.status = 'COMPLETED'
       AND w."completedAt" IS NOT NULL
-      AND (w."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      AND (w."completedAt" AT TIME ZONE ${timeZone})::date BETWEEN ${range.from}::date AND ${range.to}::date
       ${workshopLocationFilter}
     GROUP BY "date"
     ORDER BY "date" ASC

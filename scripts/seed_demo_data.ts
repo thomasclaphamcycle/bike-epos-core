@@ -156,10 +156,79 @@ const toRelativeIso = (dayOffset: number, hour = 10, minute = 0) => {
   return date.toISOString();
 };
 
+const startOfUtcDay = (value: Date) =>
+  new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+
 const DEMO_STOCK_LOCATION = {
   id: "40000000-0000-4000-8000-000000000001",
   name: "Main Stock",
 };
+
+const DEMO_STORE_OPENING_HOURS = {
+  MONDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  TUESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  WEDNESDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  THURSDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  FRIDAY: { isClosed: false, opensAt: "10:00", closesAt: "18:30" },
+  SATURDAY: { isClosed: false, opensAt: "09:00", closesAt: "16:30" },
+  SUNDAY: { isClosed: true, opensAt: "", closesAt: "" },
+} satisfies Prisma.InputJsonValue;
+
+const DEMO_STORE_PROFILE = {
+  name: "CorePOS Demo Store",
+  businessName: "CorePOS Demo Store Ltd",
+  email: "hello@corepos.demo",
+  phone: "01234 567890",
+  website: "https://demo.corepos.local",
+  addressLine1: "1 Demo High Street",
+  addressLine2: "",
+  city: "Clapham",
+  region: "Greater London",
+  postcode: "SW4 0HY",
+  country: "United Kingdom",
+  vatNumber: "GB123456789",
+  companyNumber: "01234567",
+  defaultCurrency: "GBP",
+  timeZone: "Europe/London",
+  logoUrl: "",
+  footerText: "Thanks for riding with CorePOS.",
+} as const;
+
+const DEMO_BOOKING_DEFAULTS = {
+  maxBookingsPerDay: 8,
+  defaultDepositPence: 1000,
+} as const;
+
+const DEMO_RECEIPT_ADDRESS = [
+  DEMO_STORE_PROFILE.addressLine1,
+  DEMO_STORE_PROFILE.addressLine2,
+  [DEMO_STORE_PROFILE.city, DEMO_STORE_PROFILE.region].filter(Boolean).join(", "),
+  [DEMO_STORE_PROFILE.postcode, DEMO_STORE_PROFILE.country].filter(Boolean).join(" "),
+]
+  .filter(Boolean)
+  .join(", ");
+
+const DEMO_APP_CONFIG_ROWS: Array<{ key: string; value: Prisma.InputJsonValue }> = [
+  { key: "store.name", value: DEMO_STORE_PROFILE.name },
+  { key: "store.businessName", value: DEMO_STORE_PROFILE.businessName },
+  { key: "store.email", value: DEMO_STORE_PROFILE.email },
+  { key: "store.phone", value: DEMO_STORE_PROFILE.phone },
+  { key: "store.website", value: DEMO_STORE_PROFILE.website },
+  { key: "store.addressLine1", value: DEMO_STORE_PROFILE.addressLine1 },
+  { key: "store.addressLine2", value: DEMO_STORE_PROFILE.addressLine2 },
+  { key: "store.city", value: DEMO_STORE_PROFILE.city },
+  { key: "store.region", value: DEMO_STORE_PROFILE.region },
+  { key: "store.postcode", value: DEMO_STORE_PROFILE.postcode },
+  { key: "store.country", value: DEMO_STORE_PROFILE.country },
+  { key: "store.openingHours", value: DEMO_STORE_OPENING_HOURS },
+  { key: "store.vatNumber", value: DEMO_STORE_PROFILE.vatNumber },
+  { key: "store.companyNumber", value: DEMO_STORE_PROFILE.companyNumber },
+  { key: "store.defaultCurrency", value: DEMO_STORE_PROFILE.defaultCurrency },
+  { key: "store.timeZone", value: DEMO_STORE_PROFILE.timeZone },
+  { key: "store.logoUrl", value: DEMO_STORE_PROFILE.logoUrl },
+  { key: "store.footerText", value: DEMO_STORE_PROFILE.footerText },
+  { key: "workshop.defaultDepositPence", value: DEMO_BOOKING_DEFAULTS.defaultDepositPence },
+];
 
 const LEGACY_REMOVED_USERS = [
   {
@@ -466,15 +535,43 @@ const DEMO_SALES: DemoSale[] = [
 ];
 
 const toReceiptSettings = async () => {
+  for (const row of DEMO_APP_CONFIG_ROWS) {
+    await prisma.appConfig.upsert({
+      where: { key: row.key },
+      update: { value: row.value },
+      create: row,
+    });
+  }
+
   await prisma.receiptSettings.upsert({
     where: { id: 1 },
     create: {
       id: 1,
-      shopName: "CorePOS Demo Store",
-      shopAddress: "1 Demo High Street",
-      footerText: "Thanks for riding with CorePOS.",
+      shopName: DEMO_STORE_PROFILE.name,
+      shopAddress: DEMO_RECEIPT_ADDRESS,
+      vatNumber: DEMO_STORE_PROFILE.vatNumber,
+      footerText: DEMO_STORE_PROFILE.footerText,
     },
-    update: {},
+    update: {
+      shopName: DEMO_STORE_PROFILE.name,
+      shopAddress: DEMO_RECEIPT_ADDRESS,
+      vatNumber: DEMO_STORE_PROFILE.vatNumber,
+      footerText: DEMO_STORE_PROFILE.footerText,
+    },
+  });
+
+  await prisma.bookingSettings.upsert({
+    where: { id: 1 },
+    create: {
+      id: 1,
+      minBookableDate: startOfUtcDay(new Date()),
+      maxBookingsPerDay: DEMO_BOOKING_DEFAULTS.maxBookingsPerDay,
+      defaultDepositPence: DEMO_BOOKING_DEFAULTS.defaultDepositPence,
+    },
+    update: {
+      maxBookingsPerDay: DEMO_BOOKING_DEFAULTS.maxBookingsPerDay,
+      defaultDepositPence: DEMO_BOOKING_DEFAULTS.defaultDepositPence,
+    },
   });
 };
 
