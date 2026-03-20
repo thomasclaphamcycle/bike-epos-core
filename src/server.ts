@@ -61,7 +61,7 @@ import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLoggingMiddleware } from "./middleware/requestLogging";
 import { enforceAuthMode, requireRoleAtLeast } from "./middleware/staffRole";
-import { isCorePosDebugEnabled, logCorePosDebug, logCorePosEvent } from "./lib/operationalLogger";
+import { isCorePosDebugEnabled, logCorePosDebug, logCorePosError, logCorePosEvent } from "./lib/operationalLogger";
 import { HttpError } from "./utils/http";
 import { bootstrapHandler } from "./controllers/authController";
 import { registerInternalEventSubscribers } from "./core/eventSubscribers";
@@ -293,10 +293,52 @@ app.use(errorHandler);
 
 const port = Number(process.env.PORT || 3000);
 
+const registerRuntimeDiagnostics = () => {
+  process.on("unhandledRejection", (reason) => {
+    logCorePosError(
+      "process.unhandled_rejection",
+      reason,
+      {
+        resultStatus: "unhandled",
+      },
+      "error",
+    );
+  });
+
+  process.on("uncaughtExceptionMonitor", (error, origin) => {
+    logCorePosError(
+      "process.uncaught_exception",
+      error,
+      {
+        resultStatus: "unhandled",
+        origin,
+      },
+      "error",
+    );
+  });
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      logCorePosEvent(
+        "process.signal",
+        {
+          resultStatus: "received",
+          signal,
+          pid: process.pid,
+        },
+        "warn",
+      );
+    });
+  }
+};
+
 const startServer = async () => {
   const startupPayload: Record<string, unknown> = {
     environment: process.env.NODE_ENV || "development",
     port,
+    pid: process.pid,
+    version: appVersion,
+    nodeVersion: process.version,
   };
 
   try {
@@ -329,12 +371,26 @@ const startServer = async () => {
         checks,
       });
     }
+
+    logCorePosEvent("server.startup.preflight", {
+      ...startupPayload,
+      resultStatus:
+        startupPayload.databaseStatus === "ok" && startupPayload.migrationStatus === "ok"
+          ? "ready"
+          : "degraded",
+    });
   } catch (error) {
     startupPayload.databaseStatus = "error";
     startupPayload.migrationStatus = "error";
-    startupPayload.preflightError =
-      error instanceof Error ? error.message : String(error);
-    logCorePosEvent("server.startup.preflight_failed", startupPayload, "warn");
+    logCorePosError(
+      "server.startup.preflight_failed",
+      error,
+      {
+        ...startupPayload,
+        resultStatus: "failed",
+      },
+      "error",
+    );
   }
 
   app.listen(port, () => {
@@ -346,4 +402,5 @@ const startServer = async () => {
   });
 };
 
+registerRuntimeDiagnostics();
 void startServer();

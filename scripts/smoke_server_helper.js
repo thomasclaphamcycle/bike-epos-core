@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 require("dotenv/config");
 
-const { spawn } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -41,6 +41,13 @@ const createSmokeServerController = ({
       .map((value) => value.replace(/\/$/, "")),
   ));
   const defaultBaseUrl = normalizedBaseUrls[0];
+  const listenPorts = normalizedBaseUrls.map((value) => {
+    const parsed = new URL(value);
+    if (parsed.port) {
+      return Number(parsed.port);
+    }
+    return parsed.protocol === "https:" ? 443 : 80;
+  });
   const log = (message) => {
     console.log(`[${label}] ${message}`);
   };
@@ -159,6 +166,37 @@ const createSmokeServerController = ({
     throw new Error(`Server still responded on /health after ${shutdownTimeoutMs}ms`);
   };
 
+  const listListeningPidsForPort = (port) => {
+    try {
+      const output = execFileSync(
+        "lsof",
+        ["-tiTCP:" + String(port), "-sTCP:LISTEN"],
+        { encoding: "utf8" },
+      ).trim();
+
+      if (!output) {
+        return [];
+      }
+
+      return output
+        .split(/\s+/)
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0 && value !== process.pid);
+    } catch (error) {
+      if (error && typeof error === "object" && error.status === 1) {
+        return [];
+      }
+      throw error;
+    }
+  };
+
+  const listLingeringServerPids = () =>
+    Array.from(
+      new Set(
+        listenPorts.flatMap((port) => listListeningPidsForPort(port)),
+      ),
+    );
+
   const useProcessGroup = process.platform !== "win32";
   const resolvedCommand =
     process.platform === "win32" && startup.command === "npm"
@@ -185,6 +223,44 @@ const createSmokeServerController = ({
 
   let serverProcess = null;
   let startedServer = false;
+
+  const terminatePid = (pid, signal) => {
+    try {
+      process.kill(pid, signal);
+      return true;
+    } catch (error) {
+      if (error && typeof error === "object" && error.code === "ESRCH") {
+        return false;
+      }
+      throw error;
+    }
+  };
+
+  const cleanupLingeringServerListeners = async () => {
+    let lingeringPids = listLingeringServerPids();
+    if (lingeringPids.length === 0) {
+      return false;
+    }
+
+    log(`Detected lingering server listeners on ${listenPorts.join(", ")}: ${lingeringPids.join(", ")}`);
+
+    for (const pid of lingeringPids) {
+      terminatePid(pid, "SIGTERM");
+    }
+    await sleep(500);
+
+    lingeringPids = listLingeringServerPids();
+    if (lingeringPids.length === 0) {
+      return true;
+    }
+
+    log(`Force killing lingering server listeners: ${lingeringPids.join(", ")}`);
+    for (const pid of lingeringPids) {
+      terminatePid(pid, "SIGKILL");
+    }
+    await sleep(250);
+    return true;
+  };
 
   return {
     log,
@@ -255,7 +331,16 @@ const createSmokeServerController = ({
         log("Server process exited after SIGKILL");
       }
 
-      const shutdownMs = await waitForServerShutdown();
+      let shutdownMs;
+      try {
+        shutdownMs = await waitForServerShutdown();
+      } catch (error) {
+        const cleanedLingeringListeners = await cleanupLingeringServerListeners();
+        if (!cleanedLingeringListeners) {
+          throw error;
+        }
+        shutdownMs = await waitForServerShutdown();
+      }
       log(`API server shutdown confirmed after cleanup (${shutdownMs}ms)`);
     },
   };

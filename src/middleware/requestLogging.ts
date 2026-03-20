@@ -1,16 +1,38 @@
 import { randomUUID } from "node:crypto";
 import { NextFunction, Request, Response } from "express";
 import { isCorePosDebugEnabled, logCorePosDebug, logCorePosEvent } from "../lib/operationalLogger";
+import { runWithRequestContext } from "../lib/requestContext";
 
 const REQUEST_ID_HEADER = "X-Request-Id";
 
+const sanitizeRequestId = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 128) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const createRequestId = () => {
+  try {
+    return randomUUID();
+  } catch {
+    return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+};
+
 const getOrCreateRequestId = (req: Request) => {
-  const existing = req.header(REQUEST_ID_HEADER)?.trim();
+  const existing = sanitizeRequestId(req.header(REQUEST_ID_HEADER));
   if (existing) {
     return existing;
   }
 
-  return randomUUID();
+  return createRequestId();
 };
 
 const getRouteLabel = (req: Request) => {
@@ -63,8 +85,16 @@ export const requestLoggingMiddleware = (
     logCorePosEvent("http.request", payload, res.statusCode >= 500 ? "error" : "info");
   };
 
-  res.on("finish", () => writeLog("completed"));
-  res.on("close", () => writeLog("aborted"));
-
-  next();
+  runWithRequestContext(
+    {
+      requestId,
+      method: req.method,
+      route: req.originalUrl || req.url,
+    },
+    () => {
+      res.on("finish", () => writeLog("completed"));
+      res.on("close", () => writeLog("aborted"));
+      next();
+    },
+  );
 };
