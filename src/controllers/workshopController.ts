@@ -44,6 +44,7 @@ import {
   updateWorkshopJobLine,
   updateWorkshopJob,
 } from "../services/workshopService";
+import { saveWorkshopEstimate } from "../services/workshopEstimateService";
 import { HttpError } from "../utils/http";
 
 const parsePaymentMethod = (
@@ -120,14 +121,22 @@ const parseOptionalIntegerQuery = (value: unknown, field: string): number | unde
 
 export const createWorkshopJobHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
+    customerId?: string | null;
     customerName?: string;
+    bikeId?: string | null;
     bikeDescription?: string;
     notes?: string;
     status?: string;
   };
 
+  if (body.customerId !== undefined && body.customerId !== null && typeof body.customerId !== "string") {
+    throw new HttpError(400, "customerId must be a string or null", "INVALID_WORKSHOP_JOB");
+  }
   if (body.customerName !== undefined && typeof body.customerName !== "string") {
     throw new HttpError(400, "customerName must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (body.bikeId !== undefined && body.bikeId !== null && typeof body.bikeId !== "string") {
+    throw new HttpError(400, "bikeId must be a string or null", "INVALID_WORKSHOP_JOB");
   }
   if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
     throw new HttpError(400, "bikeDescription must be a string", "INVALID_WORKSHOP_JOB");
@@ -177,6 +186,7 @@ export const getWorkshopJobHandler = async (req: Request, res: Response) => {
 export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     customerName?: string;
+    bikeId?: string | null;
     bikeDescription?: string;
     notes?: string;
     status?: string;
@@ -184,6 +194,9 @@ export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
 
   if (body.customerName !== undefined && typeof body.customerName !== "string") {
     throw new HttpError(400, "customerName must be a string", "INVALID_WORKSHOP_JOB_UPDATE");
+  }
+  if (body.bikeId !== undefined && body.bikeId !== null && typeof body.bikeId !== "string") {
+    throw new HttpError(400, "bikeId must be a string or null", "INVALID_WORKSHOP_JOB_UPDATE");
   }
   if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
     throw new HttpError(
@@ -610,6 +623,14 @@ export const changeWorkshopJobStatusHandler = async (req: Request, res: Response
     },
     getRequestAuditActor(req),
   );
+
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const saveWorkshopEstimateHandler = async (req: Request, res: Response) => {
+  const result = await saveWorkshopEstimate(req.params.id, {
+    actor: getRequestAuditActor(req),
+  });
 
   res.status(result.idempotent ? 200 : 201).json(result);
 };

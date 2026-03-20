@@ -4,6 +4,7 @@ import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { setWorkshopEstimateStatus } from "./workshopEstimateService";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
 type WorkflowStage = "BOOKED" | "IN_PROGRESS" | "READY" | "COMPLETED" | "CANCELLED";
@@ -85,23 +86,6 @@ const parseTargetStageOrThrow = (inputStatus: string): WorkflowStage => {
         "INVALID_STATUS",
       );
   }
-};
-
-const parseApprovalStatusOrThrow = (inputStatus: string): WorkshopJobStatus => {
-  const normalized = inputStatus.trim().toUpperCase();
-
-  if (normalized === "WAITING_FOR_APPROVAL") {
-    return "WAITING_FOR_APPROVAL";
-  }
-  if (normalized === "APPROVED") {
-    return "APPROVED";
-  }
-
-  throw new HttpError(
-    400,
-    "status must be WAITING_FOR_APPROVAL or APPROVED",
-    "INVALID_APPROVAL_STATUS",
-  );
 };
 
 const assertCanAssignOrUnassign = (jobAssignedStaffId: string | null, input: AssignWorkshopJobInput) => {
@@ -527,75 +511,21 @@ export const setWorkshopJobApprovalStatus = async (
   input: SetWorkshopApprovalStatusInput,
   auditActor?: AuditActor,
 ) => {
-  if (!isUuid(workshopJobId)) {
-    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
-  }
+  const result = await setWorkshopEstimateStatus(
+    workshopJobId,
+    {
+      status: input.status,
+      actor: auditActor,
+    },
+  );
 
-  const targetStatus = parseApprovalStatusOrThrow(input.status);
-
-  return prisma.$transaction(async (tx) => {
-    const job = await tx.workshopJob.findUnique({
-      where: { id: workshopJobId },
-    });
-
-    if (!job) {
-      throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
-    }
-
-    if (job.status === targetStatus) {
-      return {
-        job: {
-          id: job.id,
-          status: job.status,
-          cancelledAt: job.cancelledAt,
-          updatedAt: job.updatedAt,
-        },
-        idempotent: true,
-      };
-    }
-
-    if (
-      job.status === "WAITING_FOR_PARTS" ||
-      job.status === "BIKE_READY" ||
-      job.status === "COMPLETED" ||
-      job.status === "CANCELLED"
-    ) {
-      throw new HttpError(
-        409,
-        "Approval state can only be set before the job is ready, completed, cancelled, or waiting for parts",
-        "INVALID_APPROVAL_STATE_TRANSITION",
-      );
-    }
-
-    const updated = await tx.workshopJob.update({
-      where: { id: workshopJobId },
-      data: {
-        status: targetStatus,
-      },
-    });
-
-    await createAuditEventTx(
-      tx,
-      {
-        action: "JOB_APPROVAL_STATUS_CHANGED",
-        entityType: "WORKSHOP_JOB",
-        entityId: workshopJobId,
-        metadata: {
-          fromStatus: job.status,
-          toStatus: updated.status,
-        },
-      },
-      auditActor,
-    );
-
-    return {
-      job: {
-        id: updated.id,
-        status: updated.status,
-        cancelledAt: updated.cancelledAt,
-        updatedAt: updated.updatedAt,
-      },
-      idempotent: false,
-    };
-  });
+  return {
+    job: {
+      id: result.job.id,
+      status: result.job.status,
+      cancelledAt: null,
+      updatedAt: result.estimate.updatedAt,
+    },
+    idempotent: result.idempotent,
+  };
 };

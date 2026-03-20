@@ -89,6 +89,55 @@ type WorkshopPartsResponse = PartsOverview & {
   };
 };
 
+type CustomerBikeRecord = {
+  id: string;
+  customerId: string;
+  label: string | null;
+  make: string | null;
+  model: string | null;
+  colour: string | null;
+  frameNumber: string | null;
+  serialNumber: string | null;
+  registrationNumber: string | null;
+  notes: string | null;
+  displayName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CustomerBikesResponse = {
+  customerId: string;
+  bikes: CustomerBikeRecord[];
+};
+
+type WorkshopEstimateRecord = {
+  id: string;
+  workshopJobId: string;
+  version: number;
+  status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  labourTotalPence: number;
+  partsTotalPence: number;
+  subtotalPence: number;
+  lineCount: number;
+  requestedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  supersededAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isCurrent: boolean;
+  createdByStaff: {
+    id: string;
+    username: string;
+    name: string | null;
+  } | null;
+  decisionByStaff: {
+    id: string;
+    username: string;
+    name: string | null;
+  } | null;
+};
+
 type WorkshopJobResponse = {
   job: {
     id: string;
@@ -96,7 +145,9 @@ type WorkshopJobResponse = {
     rawStatus?: string | null;
     customerId: string | null;
     customerName: string | null;
+    bikeId: string | null;
     bikeDescription: string | null;
+    bike: CustomerBikeRecord | null;
     notes: string | null;
     depositRequiredPence: number;
     depositStatus: string;
@@ -111,6 +162,9 @@ type WorkshopJobResponse = {
   };
   lines: WorkshopLine[];
   partsOverview: PartsOverview;
+  currentEstimate: WorkshopEstimateRecord | null;
+  estimateHistory: WorkshopEstimateRecord[];
+  hasApprovedEstimate: boolean;
 };
 
 type WorkshopNote = {
@@ -146,40 +200,44 @@ type EditableLine = {
   unitPricePence: number;
 };
 
-type ApprovalState = "pending" | "approved" | "notRequested";
-
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
-const toApprovalState = (status: string): ApprovalState => {
-  if (status === "WAITING_FOR_APPROVAL") {
-    return "pending";
-  }
-  if (status === "APPROVED") {
-    return "approved";
-  }
-  return "notRequested";
-};
-
-const approvalBadgeClass = (state: ApprovalState) => {
-  if (state === "pending") {
+const estimateStatusClass = (
+  status: WorkshopEstimateRecord["status"] | null | undefined,
+) => {
+  if (status === "PENDING_APPROVAL") {
     return "status-badge status-warning";
   }
-  if (state === "approved") {
+  if (status === "APPROVED") {
     return "status-badge status-info";
+  }
+  if (status === "REJECTED") {
+    return "status-badge status-cancelled";
+  }
+  if (status === "DRAFT") {
+    return "status-badge";
   }
   return "status-badge";
 };
 
-const approvalLabel = (state: ApprovalState) => {
-  if (state === "pending") {
+const estimateStatusLabel = (
+  status: WorkshopEstimateRecord["status"] | null | undefined,
+) => {
+  if (status === "PENDING_APPROVAL") {
     return "Awaiting Approval";
   }
-  if (state === "approved") {
+  if (status === "APPROVED") {
     return "Approved";
   }
-  return "Not Requested";
+  if (status === "REJECTED") {
+    return "Rejected";
+  }
+  if (status === "DRAFT") {
+    return "Draft";
+  }
+  return "Not Saved";
 };
 
 const partsStatusClass = (status: WorkshopPartsStatus | undefined) => {
@@ -239,6 +297,9 @@ const workflowStatusLabel = (status: string) => {
 
 const truncateText = (value: string, limit = 96) =>
   value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
+
+const formatOptionalDateTime = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleString() : "-";
 
 const getWorkflowGuidance = (input: {
   rawStatus: string;
@@ -344,6 +405,8 @@ export const WorkshopJobPage = () => {
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [partsLoading, setPartsLoading] = useState(false);
+  const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
+  const [customerBikesLoading, setCustomerBikesLoading] = useState(false);
 
   const [editableByLineId, setEditableByLineId] = useState<Record<string, EditableLine>>({});
 
@@ -360,6 +423,19 @@ export const WorkshopJobPage = () => {
   const [noteDraft, setNoteDraft] = useState("");
   const [noteVisibility, setNoteVisibility] = useState<"INTERNAL" | "CUSTOMER">("INTERNAL");
   const [savingNote, setSavingNote] = useState(false);
+  const [selectedBikeId, setSelectedBikeId] = useState("");
+  const [bikeDescriptionDraft, setBikeDescriptionDraft] = useState("");
+  const [createBikeInline, setCreateBikeInline] = useState(false);
+  const [bikeLabelDraft, setBikeLabelDraft] = useState("");
+  const [bikeMakeDraft, setBikeMakeDraft] = useState("");
+  const [bikeModelDraft, setBikeModelDraft] = useState("");
+  const [bikeColourDraft, setBikeColourDraft] = useState("");
+  const [bikeFrameDraft, setBikeFrameDraft] = useState("");
+  const [bikeSerialDraft, setBikeSerialDraft] = useState("");
+  const [bikeRegistrationDraft, setBikeRegistrationDraft] = useState("");
+  const [bikeNotesDraft, setBikeNotesDraft] = useState("");
+  const [savingBikeLink, setSavingBikeLink] = useState(false);
+  const [savingEstimate, setSavingEstimate] = useState(false);
 
   const canPostCustomerNotes = isManagerPlus(user?.role);
 
@@ -384,11 +460,28 @@ export const WorkshopJobPage = () => {
           ]),
         ),
       );
+      setSelectedBikeId(response.job.bike?.id ?? "");
+      setBikeDescriptionDraft(response.job.bikeDescription ?? "");
+      setCreateBikeInline(false);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load workshop job";
       error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCustomerBikes = async (customerId: string) => {
+    setCustomerBikesLoading(true);
+    try {
+      const response = await apiGet<CustomerBikesResponse>(`/api/customers/${encodeURIComponent(customerId)}/bikes`);
+      setCustomerBikes(response.bikes || []);
+    } catch (loadError) {
+      setCustomerBikes([]);
+      const message = loadError instanceof Error ? loadError.message : "Failed to load customer bikes";
+      error(message);
+    } finally {
+      setCustomerBikesLoading(false);
     }
   };
 
@@ -430,6 +523,19 @@ export const WorkshopJobPage = () => {
     void Promise.all([loadJob(), loadNotes(), loadParts()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    const customerId = payload?.job.customerId;
+    if (!customerId) {
+      setCustomerBikes([]);
+      setSelectedBikeId("");
+      setCreateBikeInline(false);
+      return;
+    }
+
+    void loadCustomerBikes(customerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload?.job.customerId]);
 
   useEffect(() => {
     if (!debouncedPartSearch.trim()) {
@@ -477,18 +583,99 @@ export const WorkshopJobPage = () => {
     }
   };
 
-  const updateApprovalStatus = async (nextStatus: "WAITING_FOR_APPROVAL" | "APPROVED") => {
+  const saveEstimateSnapshot = async () => {
+    if (!id) {
+      return;
+    }
+
+    setSavingEstimate(true);
+    try {
+      const response = await apiPost<{ idempotent: boolean }>(`/api/workshop/jobs/${encodeURIComponent(id)}/estimate`, {});
+      success(response.idempotent ? "Current estimate snapshot already matches the live lines" : "Estimate snapshot saved");
+      await loadJob();
+    } catch (estimateError) {
+      const message = estimateError instanceof Error ? estimateError.message : "Failed to save estimate";
+      error(message);
+    } finally {
+      setSavingEstimate(false);
+    }
+  };
+
+  const updateApprovalStatus = async (
+    nextStatus: "WAITING_FOR_APPROVAL" | "APPROVED" | "REJECTED",
+  ) => {
     if (!id) {
       return;
     }
 
     try {
       await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/approval`, { status: nextStatus });
-      success(nextStatus === "APPROVED" ? "Estimate marked approved" : "Estimate marked awaiting approval");
+      success(
+        nextStatus === "APPROVED"
+          ? "Estimate marked approved"
+          : nextStatus === "REJECTED"
+            ? "Estimate marked rejected"
+            : "Estimate marked awaiting approval",
+      );
       await loadJob();
     } catch (approvalError) {
       const message = approvalError instanceof Error ? approvalError.message : "Failed to update approval state";
       error(message);
+    }
+  };
+
+  const saveBikeRecordLink = async () => {
+    if (!id || !payload) {
+      return;
+    }
+
+    if (!bikeDescriptionDraft.trim()) {
+      error("Bike summary is required for the workshop job.");
+      return;
+    }
+
+    setSavingBikeLink(true);
+    try {
+      let bikeId: string | null = createBikeInline ? null : selectedBikeId || null;
+
+      if (payload.job.customerId && createBikeInline) {
+        const created = await apiPost<{ bike: CustomerBikeRecord }>(
+          `/api/customers/${encodeURIComponent(payload.job.customerId)}/bikes`,
+          {
+            label: bikeLabelDraft || undefined,
+            make: bikeMakeDraft || undefined,
+            model: bikeModelDraft || undefined,
+            colour: bikeColourDraft || undefined,
+            frameNumber: bikeFrameDraft || undefined,
+            serialNumber: bikeSerialDraft || undefined,
+            registrationNumber: bikeRegistrationDraft || undefined,
+            notes: bikeNotesDraft || undefined,
+          },
+        );
+        bikeId = created.bike.id;
+      }
+
+      await apiPatch(`/api/workshop/jobs/${encodeURIComponent(id)}`, {
+        bikeId,
+        bikeDescription: bikeDescriptionDraft.trim(),
+      });
+
+      setBikeLabelDraft("");
+      setBikeMakeDraft("");
+      setBikeModelDraft("");
+      setBikeColourDraft("");
+      setBikeFrameDraft("");
+      setBikeSerialDraft("");
+      setBikeRegistrationDraft("");
+      setBikeNotesDraft("");
+      setCreateBikeInline(false);
+      success("Workshop bike details updated");
+      await loadJob();
+    } catch (bikeError) {
+      const message = bikeError instanceof Error ? bikeError.message : "Failed to update bike details";
+      error(message);
+    } finally {
+      setSavingBikeLink(false);
     }
   };
 
@@ -746,6 +933,8 @@ export const WorkshopJobPage = () => {
   );
   const subtotalPence = labourSubtotalPence + partsSubtotalPence;
   const rawStatus = useMemo(() => toRawStatus(payload?.job), [payload?.job]);
+  const currentEstimate = payload?.currentEstimate ?? null;
+  const estimateHistory = payload?.estimateHistory ?? [];
   const partsOverview = useMemo<PartsOverview | null>(
     () => partsPayload ?? payload?.partsOverview ?? null,
     [partsPayload, payload?.partsOverview],
@@ -759,10 +948,6 @@ export const WorkshopJobPage = () => {
     [partsPayload?.parts],
   );
 
-  const approvalState = useMemo(
-    () => toApprovalState(rawStatus),
-    [rawStatus],
-  );
   const stageActions = useMemo(() => getStageActions(rawStatus), [rawStatus]);
 
   const customerNotes = useMemo(
@@ -846,8 +1031,10 @@ export const WorkshopJobPage = () => {
               </div>
               <div><strong>Next Step:</strong> {workflowGuidance}</div>
               <div>
-                <strong>Approval State:</strong>{" "}
-                <span className={approvalBadgeClass(approvalState)}>{approvalLabel(approvalState)}</span>
+                <strong>Estimate Status:</strong>{" "}
+                <span className={estimateStatusClass(currentEstimate?.status)}>
+                  {estimateStatusLabel(currentEstimate?.status)}
+                </span>
               </div>
               <div>
                 <strong>System Status:</strong> {rawStatus || "-"}
@@ -860,6 +1047,7 @@ export const WorkshopJobPage = () => {
               </div>
               <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
+              <div><strong>Linked Bike Record:</strong> {payload.job.bike?.displayName || "No linked bike record"}</div>
               <div><strong>Check-in Notes:</strong> {payload.job.notes || "-"}</div>
               <div><strong>Collection Handoff:</strong> {collectionSummary ?? "Not ready for collection yet."}</div>
               <div><strong>Updated:</strong> {new Date(payload.job.updatedAt).toLocaleString()}</div>
@@ -878,17 +1066,31 @@ export const WorkshopJobPage = () => {
                 <>
                   <button
                     type="button"
+                    onClick={() => void saveEstimateSnapshot()}
+                    disabled={savingEstimate || payload.lines.length === 0}
+                  >
+                    {savingEstimate ? "Saving Estimate..." : "Save Estimate"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void updateApprovalStatus("WAITING_FOR_APPROVAL")}
-                    disabled={approvalState === "pending"}
+                    disabled={currentEstimate?.status === "PENDING_APPROVAL" || payload.lines.length === 0}
                   >
                     Request Approval
                   </button>
                   <button
                     type="button"
                     onClick={() => void updateApprovalStatus("APPROVED")}
-                    disabled={approvalState === "approved"}
+                    disabled={currentEstimate?.status === "APPROVED" || payload.lines.length === 0}
                   >
                     Mark Approved
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void updateApprovalStatus("REJECTED")}
+                    disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
+                  >
+                    Mark Rejected
                   </button>
                 </>
               ) : null}
@@ -896,11 +1098,6 @@ export const WorkshopJobPage = () => {
                 <span className="muted-text">No manual workflow status changes are available for this job right now.</span>
               ) : null}
             </div>
-
-            <p className="muted-text">
-              Estimate approval is stored using the existing raw workshop job status. This keeps the
-              workflow additive, but approval does not live in a separate estimate object in v1.
-            </p>
 
             {latestInternalNote || latestCustomerNote ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
@@ -945,8 +1142,140 @@ export const WorkshopJobPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
+            <h2>Bike Record</h2>
+            <p className="muted-text">
+              Keep the workshop job summary compatible with existing flows, and optionally link a reusable customer bike record for future service history.
+            </p>
+          </div>
+          {payload?.job.customerId ? (
+            <div className="table-secondary">
+              {customerBikesLoading ? "Loading customer bikes..." : `${customerBikes.length} bike record${customerBikes.length === 1 ? "" : "s"}`}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="job-meta-grid">
+          <label className="grow">
+            Workshop bike summary
+            <input
+              value={bikeDescriptionDraft}
+              onChange={(event) => setBikeDescriptionDraft(event.target.value)}
+              placeholder="Shown across workshop, collection, and POS handoff surfaces"
+            />
+          </label>
+          {payload?.job.customerId ? (
+            <label>
+              Linked customer bike
+              <select
+                value={createBikeInline ? "__new__" : selectedBikeId}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (nextValue === "__new__") {
+                    setCreateBikeInline(true);
+                    setSelectedBikeId("");
+                    return;
+                  }
+
+                  setCreateBikeInline(false);
+                  setSelectedBikeId(nextValue);
+                  const matchedBike = customerBikes.find((bike) => bike.id === nextValue);
+                  if (matchedBike) {
+                    setBikeDescriptionDraft(matchedBike.displayName);
+                  }
+                }}
+              >
+                <option value="">No linked bike record</option>
+                {customerBikes.map((bike) => (
+                  <option key={bike.id} value={bike.id}>
+                    {bike.displayName}
+                  </option>
+                ))}
+                <option value="__new__">Create new bike record</option>
+              </select>
+            </label>
+          ) : (
+            <div className="restricted-panel">
+              Attach a customer first if you want this job linked to a reusable bike record.
+            </div>
+          )}
+        </div>
+
+        {payload?.job.bike ? (
+          <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+            <div className="job-meta-grid">
+              <div><strong>Current record:</strong> {payload.job.bike.displayName}</div>
+              <div><strong>Make / Model:</strong> {[payload.job.bike.make, payload.job.bike.model].filter(Boolean).join(" ") || "-"}</div>
+              <div><strong>Colour:</strong> {payload.job.bike.colour || "-"}</div>
+              <div><strong>Frame #:</strong> {payload.job.bike.frameNumber || "-"}</div>
+              <div><strong>Serial #:</strong> {payload.job.bike.serialNumber || "-"}</div>
+              <div><strong>Registration:</strong> {payload.job.bike.registrationNumber || "-"}</div>
+              <div><strong>Bike notes:</strong> {payload.job.bike.notes || "-"}</div>
+            </div>
+          </div>
+        ) : null}
+
+        {payload?.job.customerId && createBikeInline ? (
+          <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+            <label>
+              Nickname / label
+              <input value={bikeLabelDraft} onChange={(event) => setBikeLabelDraft(event.target.value)} placeholder="e.g. Winter commuter" />
+            </label>
+            <label>
+              Make
+              <input value={bikeMakeDraft} onChange={(event) => setBikeMakeDraft(event.target.value)} placeholder="Trek" />
+            </label>
+            <label>
+              Model
+              <input value={bikeModelDraft} onChange={(event) => setBikeModelDraft(event.target.value)} placeholder="Domane AL 2" />
+            </label>
+            <label>
+              Colour
+              <input value={bikeColourDraft} onChange={(event) => setBikeColourDraft(event.target.value)} placeholder="Blue" />
+            </label>
+            <label>
+              Frame number
+              <input value={bikeFrameDraft} onChange={(event) => setBikeFrameDraft(event.target.value)} />
+            </label>
+            <label>
+              Serial number
+              <input value={bikeSerialDraft} onChange={(event) => setBikeSerialDraft(event.target.value)} />
+            </label>
+            <label>
+              Registration
+              <input value={bikeRegistrationDraft} onChange={(event) => setBikeRegistrationDraft(event.target.value)} />
+            </label>
+            <label className="grow">
+              Bike notes
+              <textarea value={bikeNotesDraft} onChange={(event) => setBikeNotesDraft(event.target.value)} rows={3} />
+            </label>
+          </div>
+        ) : null}
+
+        <div className="actions-inline" style={{ marginTop: "12px" }}>
+          <button type="button" className="primary" onClick={() => void saveBikeRecordLink()} disabled={savingBikeLink}>
+            {savingBikeLink ? "Saving..." : "Save Bike Details"}
+          </button>
+          {payload?.job.customerId && !createBikeInline ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCreateBikeInline(true);
+                setSelectedBikeId("");
+              }}
+            >
+              Create Bike Record
+            </button>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
             <h2>Estimate</h2>
-            <p className="muted-text">Existing labour and part lines are used as the live estimate contents.</p>
+            <p className="muted-text">
+              Live labour and part lines still drive workshop pricing, while saved estimate snapshots preserve approval state and quote history.
+            </p>
           </div>
         </div>
 
@@ -973,11 +1302,76 @@ export const WorkshopJobPage = () => {
           </div>
         </div>
 
+        {currentEstimate ? (
+          <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+            <div className="job-meta-grid">
+              <div>
+                <strong>Current estimate:</strong>{" "}
+                <span className={estimateStatusClass(currentEstimate.status)}>
+                  v{currentEstimate.version} · {estimateStatusLabel(currentEstimate.status)}
+                </span>
+              </div>
+              <div><strong>Saved total:</strong> {formatMoney(currentEstimate.subtotalPence)}</div>
+              <div><strong>Requested:</strong> {formatOptionalDateTime(currentEstimate.requestedAt)}</div>
+              <div><strong>Approved:</strong> {formatOptionalDateTime(currentEstimate.approvedAt)}</div>
+              <div><strong>Rejected:</strong> {formatOptionalDateTime(currentEstimate.rejectedAt)}</div>
+              <div><strong>Created by:</strong> {currentEstimate.createdByStaff?.name || currentEstimate.createdByStaff?.username || "-"}</div>
+              <div><strong>Decided by:</strong> {currentEstimate.decisionByStaff?.name || currentEstimate.decisionByStaff?.username || "-"}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="restricted-panel" style={{ marginTop: "12px" }}>
+            No saved estimate snapshot yet. Save the current line set or request approval to capture the first estimate version.
+          </div>
+        )}
+
         {payload && payload.lines.length === 0 ? (
           <div className="restricted-panel">
             Add labour and part lines below to create the first estimate for this job.
           </div>
         ) : null}
+
+        <div className="table-wrap" style={{ marginTop: "12px" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Total</th>
+                <th>Requested</th>
+                <th>Decision</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estimateHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>No estimate history yet.</td>
+                </tr>
+              ) : (
+                estimateHistory.map((estimate) => (
+                  <tr key={estimate.id}>
+                    <td>
+                      <div className="table-primary">v{estimate.version}</div>
+                      <div className="table-secondary">
+                        {estimate.isCurrent ? "Current" : `Superseded ${formatOptionalDateTime(estimate.supersededAt)}`}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={estimateStatusClass(estimate.status)}>
+                        {estimateStatusLabel(estimate.status)}
+                      </span>
+                    </td>
+                    <td>{formatMoney(estimate.subtotalPence)}</td>
+                    <td>{formatOptionalDateTime(estimate.requestedAt)}</td>
+                    <td>{formatOptionalDateTime(estimate.approvedAt ?? estimate.rejectedAt)}</td>
+                    <td>{formatOptionalDateTime(estimate.createdAt)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="table-wrap">
           <table>
