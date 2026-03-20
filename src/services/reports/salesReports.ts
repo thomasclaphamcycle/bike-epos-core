@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
+import { getStoreLocaleSettings } from "../configurationService";
 import { getPaymentsReportRows } from "../paymentIntentService";
 import {
   buildDailyAmountMap,
@@ -12,6 +13,7 @@ import {
 
 export const getSalesDailyReport = async (from?: string, to?: string, locationId?: string) => {
   const range = getDateRangeOrThrow(from, to);
+  const { timeZone } = await getStoreLocaleSettings();
   const days = listDateKeys(range.from, range.to);
   const salesLocationFilter = locationId
     ? Prisma.sql`AND s."locationId" = ${locationId}`
@@ -21,11 +23,11 @@ export const getSalesDailyReport = async (from?: string, to?: string, locationId
     Array<{ date: string; saleCount: number; grossPence: number }>
   >`
     SELECT
-      to_char((s."createdAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD') AS "date",
+      to_char((s."createdAt" AT TIME ZONE ${timeZone})::date, 'YYYY-MM-DD') AS "date",
       COUNT(*)::int AS "saleCount",
       COALESCE(SUM(s."totalPence"), 0)::bigint AS "grossPence"
     FROM "Sale" s
-    WHERE (s."createdAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+    WHERE (s."createdAt" AT TIME ZONE ${timeZone})::date BETWEEN ${range.from}::date AND ${range.to}::date
       ${salesLocationFilter}
     GROUP BY "date"
     ORDER BY "date" ASC
@@ -33,12 +35,12 @@ export const getSalesDailyReport = async (from?: string, to?: string, locationId
 
   const refundRows = await prisma.$queryRaw<Array<{ date: string; refundsPence: number }>>`
     SELECT
-      to_char((p."createdAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD') AS "date",
+      to_char((p."createdAt" AT TIME ZONE ${timeZone})::date, 'YYYY-MM-DD') AS "date",
       COALESCE(SUM(ABS(p."amountPence")), 0)::bigint AS "refundsPence"
     FROM "Payment" p
     WHERE
       p."amountPence" < 0
-      AND (p."createdAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      AND (p."createdAt" AT TIME ZONE ${timeZone})::date BETWEEN ${range.from}::date AND ${range.to}::date
     GROUP BY "date"
     ORDER BY "date" ASC
   `;

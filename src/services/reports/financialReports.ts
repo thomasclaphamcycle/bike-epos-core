@@ -1,7 +1,7 @@
 import { prisma } from "../../lib/prisma";
+import { getStoreLocaleSettings } from "../configurationService";
 import { getDateRangeOrThrow } from "./shared";
 
-const REPORT_TIMEZONE = "Europe/London";
 const UNCATEGORIZED_LABEL = "Uncategorised";
 const WORKSHOP_LABOUR_LABEL = "Workshop Labour";
 const UNCLASSIFIED_LABEL = "Unclassified";
@@ -10,7 +10,7 @@ type FinancialDateRange = {
   from: string;
   to: string;
   preset: "current_month_to_date" | "custom";
-  timezone: typeof REPORT_TIMEZONE;
+  timezone: string;
   label: string;
 };
 
@@ -108,37 +108,37 @@ const formatDateKeyInTimezone = (value: Date, timeZone: string) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatMonthLabel = (dateKey: string) => {
+const formatMonthLabel = (dateKey: string, timeZone: string) => {
   const value = new Date(`${dateKey}T00:00:00.000Z`);
   return new Intl.DateTimeFormat("en-GB", {
-    timeZone: REPORT_TIMEZONE,
+    timeZone,
     month: "long",
     year: "numeric",
   }).format(value);
 };
 
-const getFinancialDateRange = (from?: string, to?: string): FinancialDateRange => {
+const getFinancialDateRange = (timeZone: string, from?: string, to?: string): FinancialDateRange => {
   if (from || to) {
     const range = getDateRangeOrThrow(from, to);
     return {
       ...range,
       preset: "custom",
-      timezone: REPORT_TIMEZONE,
-      label: formatMonthLabel(range.from),
+      timezone: timeZone,
+      label: formatMonthLabel(range.from, timeZone),
     };
   }
 
-  const today = formatDateKeyInTimezone(new Date(), REPORT_TIMEZONE);
+  const today = formatDateKeyInTimezone(new Date(), timeZone);
   return {
     from: `${today.slice(0, 7)}-01`,
     to: today,
     preset: "current_month_to_date",
-    timezone: REPORT_TIMEZONE,
-    label: formatMonthLabel(today),
+    timezone: timeZone,
+    label: formatMonthLabel(today, timeZone),
   };
 };
 
-const shiftDateKeyByYears = (dateKey: string, yearDelta: number) => {
+const shiftDateKeyByYears = (dateKey: string, yearDelta: number, timeZone: string) => {
   const [yearPart = "0", monthPart = "1", dayPart = "1"] = dateKey.split("-");
   const year = Number(yearPart);
   const month = Number(monthPart);
@@ -146,15 +146,15 @@ const shiftDateKeyByYears = (dateKey: string, yearDelta: number) => {
   const targetYear = year + yearDelta;
   const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
   const shifted = new Date(Date.UTC(targetYear, month - 1, Math.min(day, lastDayOfTargetMonth)));
-  return formatDateKeyInTimezone(shifted, REPORT_TIMEZONE);
+  return formatDateKeyInTimezone(shifted, timeZone);
 };
 
 const getPreviousYearRange = (range: FinancialDateRange): FinancialDateRange => ({
-  from: shiftDateKeyByYears(range.from, -1),
-  to: shiftDateKeyByYears(range.to, -1),
+  from: shiftDateKeyByYears(range.from, -1, range.timezone),
+  to: shiftDateKeyByYears(range.to, -1, range.timezone),
   preset: "custom",
   timezone: range.timezone,
-  label: formatMonthLabel(shiftDateKeyByYears(range.to, -1)),
+  label: formatMonthLabel(shiftDateKeyByYears(range.to, -1, range.timezone), range.timezone),
 });
 
 const buildYearOverYearComparison = (
@@ -305,7 +305,7 @@ const getCompletedSaleIdsForRange = async (range: FinancialDateRange) => {
     FROM "Sale" s
     WHERE
       s."completedAt" IS NOT NULL
-      AND (s."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      AND (s."completedAt" AT TIME ZONE ${range.timezone})::date BETWEEN ${range.from}::date AND ${range.to}::date
   `;
 
   return rows.map((row) => row.id);
@@ -318,7 +318,7 @@ const getCompletedRefundIdsForRange = async (range: FinancialDateRange) => {
     WHERE
       r.status = 'COMPLETED'
       AND r."completedAt" IS NOT NULL
-      AND (r."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${range.from}::date AND ${range.to}::date
+      AND (r."completedAt" AT TIME ZONE ${range.timezone})::date BETWEEN ${range.from}::date AND ${range.to}::date
   `;
 
   return rows.map((row) => row.id);
@@ -331,7 +331,8 @@ const getFinancialCostBasisNotes = () => [
 ];
 
 const buildFinancialSnapshot = async (from?: string, to?: string) => {
-  const range = getFinancialDateRange(from, to);
+  const { timeZone } = await getStoreLocaleSettings();
+  const range = getFinancialDateRange(timeZone, from, to);
   const [saleIds, refundIds] = await Promise.all([
     getCompletedSaleIdsForRange(range),
     getCompletedRefundIdsForRange(range),
@@ -583,8 +584,8 @@ const buildFinancialSnapshot = async (from?: string, to?: string) => {
 export const getFinancialMonthlyMarginReport = async (from?: string, to?: string) => {
   const snapshot = await buildFinancialSnapshot(from, to);
   const previousSnapshot = await buildFinancialSnapshot(
-    shiftDateKeyByYears(snapshot.filters.from, -1),
-    shiftDateKeyByYears(snapshot.filters.to, -1),
+    shiftDateKeyByYears(snapshot.filters.from, -1, snapshot.filters.timezone),
+    shiftDateKeyByYears(snapshot.filters.to, -1, snapshot.filters.timezone),
   );
 
   return {
@@ -604,8 +605,8 @@ export const getFinancialMonthlyMarginReport = async (from?: string, to?: string
 export const getFinancialMonthlySalesSummaryReport = async (from?: string, to?: string) => {
   const snapshot = await buildFinancialSnapshot(from, to);
   const previousSnapshot = await buildFinancialSnapshot(
-    shiftDateKeyByYears(snapshot.filters.from, -1),
-    shiftDateKeyByYears(snapshot.filters.to, -1),
+    shiftDateKeyByYears(snapshot.filters.from, -1, snapshot.filters.timezone),
+    shiftDateKeyByYears(snapshot.filters.to, -1, snapshot.filters.timezone),
   );
 
   return {

@@ -1,6 +1,7 @@
 import { PaymentMethod, Prisma, RefundTenderType, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { buildLegacyReceiptSettingsFromStore, listShopSettings } from "./configurationService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -79,17 +80,36 @@ const refundTenderTypeToPaymentMethod = (tenderType: RefundTenderType): PaymentM
   return "OTHER";
 };
 
-const getOrCreateReceiptSettingsTx = async (tx: Prisma.TransactionClient) =>
-  tx.receiptSettings.upsert({
+const getOrCreateReceiptSettingsTx = async (tx: Prisma.TransactionClient) => {
+  const settings = await listShopSettings(tx);
+  const desiredSettings = buildLegacyReceiptSettingsFromStore(settings.store);
+  const existing = await tx.receiptSettings.findUnique({
     where: { id: 1 },
-    create: {
-      id: 1,
-      shopName: "Bike EPOS",
-      shopAddress: "123 Service Lane",
-      footerText: "Thank you for your custom.",
-    },
-    update: {},
   });
+
+  if (!existing) {
+    return tx.receiptSettings.create({
+      data: {
+        id: 1,
+        ...desiredSettings,
+      },
+    });
+  }
+
+  if (
+    existing.shopName === desiredSettings.shopName
+    && existing.shopAddress === desiredSettings.shopAddress
+    && existing.vatNumber === desiredSettings.vatNumber
+    && existing.footerText === desiredSettings.footerText
+  ) {
+    return existing;
+  }
+
+  return tx.receiptSettings.update({
+    where: { id: 1 },
+    data: desiredSettings,
+  });
+};
 
 const getNextReceiptNumberTx = async (tx: Prisma.TransactionClient) => {
   await tx.receiptCounter.upsert({

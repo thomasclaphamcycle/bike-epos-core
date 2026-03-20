@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { invalidateAppConfigCache } from "../config/appConfig";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { SectionHeader } from "../components/ui/SectionHeader";
@@ -331,6 +332,7 @@ export const SystemSettingsPage = () => {
     try {
       const payload = await apiPatch<StoreInfoResponse>("/api/settings/store-info", normalized);
       const normalizedStore = toStoreInfoFormState(payload.store as unknown as Record<string, unknown>);
+      invalidateAppConfigCache();
       setStore(normalizedStore);
       setInitialStore(normalizedStore);
       success("Store Info updated.");

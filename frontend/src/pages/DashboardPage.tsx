@@ -14,6 +14,8 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { SurfaceCard } from "../components/ui/SurfaceCard";
 import { EmptyState } from "../components/ui/EmptyState";
+import { useAppConfig } from "../config/appConfig";
+import { formatCurrencyFromPence } from "../utils/currency";
 
 type SalesDailyRow = {
   date: string;
@@ -143,15 +145,6 @@ type DashboardActionLink = {
   to?: string;
   disabledReason?: string;
 };
-
-const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-const formatDashboardCurrency = (valueGbp: number) =>
-  new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: 0,
-  }).format(valueGbp);
-const formatDashboardCurrencyFromPence = (valuePence: number) => formatDashboardCurrency(valuePence / 100);
 
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
@@ -353,10 +346,13 @@ const DashboardActionButton = ({ label, to, disabledReason }: DashboardActionLin
   );
 };
 
-const buildMonthlyMarginTileDetail = (report: FinancialMonthlyMarginReport) => {
+const buildMonthlyMarginTileDetail = (
+  report: FinancialMonthlyMarginReport,
+  currencyCode: string,
+) => {
   const parts = [
-    `Revenue ${formatDashboardCurrencyFromPence(report.summary.revenuePence)}`,
-    `Cost ${formatDashboardCurrencyFromPence(report.summary.cogsPence)}`,
+    `Revenue ${formatCurrencyFromPence(report.summary.revenuePence, currencyCode, { maximumFractionDigits: 0 })}`,
+    `Cost ${formatCurrencyFromPence(report.summary.cogsPence, currencyCode, { maximumFractionDigits: 0 })}`,
     `${report.summary.grossMarginPercent.toFixed(1)}% margin`,
   ];
 
@@ -367,20 +363,24 @@ const buildMonthlyMarginTileDetail = (report: FinancialMonthlyMarginReport) => {
   return parts.join(" · ");
 };
 
-const buildMonthlySalesTileDetail = (report: FinancialMonthlySalesSummaryReport) => {
+const buildMonthlySalesTileDetail = (
+  report: FinancialMonthlySalesSummaryReport,
+  currencyCode: string,
+) => {
   const parts = [
     `${report.summary.transactions} transaction${report.summary.transactions === 1 ? "" : "s"}`,
-    `Avg ${formatDashboardCurrencyFromPence(report.summary.averageSaleValuePence)}`,
+    `Avg ${formatCurrencyFromPence(report.summary.averageSaleValuePence, currencyCode, { maximumFractionDigits: 0 })}`,
   ];
 
   if (report.summary.refundsPence > 0) {
-    parts.push(`Refunds ${formatDashboardCurrencyFromPence(report.summary.refundsPence)}`);
+    parts.push(`Refunds ${formatCurrencyFromPence(report.summary.refundsPence, currencyCode, { maximumFractionDigits: 0 })}`);
   }
 
   return parts.join(" · ");
 };
 
 export const DashboardPage = () => {
+  const appConfig = useAppConfig();
   const { user } = useAuth();
   const { error } = useToasts();
   const [clock, setClock] = useState(() => new Date());
@@ -394,6 +394,10 @@ export const DashboardPage = () => {
   const [weather, setWeather] = useState<DashboardWeatherPayload["weather"] | null>(null);
   const [staffToday, setStaffToday] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
   const [staffTomorrow, setStaffTomorrow] = useState<DashboardStaffTodayPayload["staffToday"] | null>(null);
+  const currencyCode = appConfig.store.defaultCurrency;
+  const formatMoney = (pence: number) => formatCurrencyFromPence(pence, currencyCode);
+  const formatDashboardCurrencyFromPence = (valuePence: number) =>
+    formatCurrencyFromPence(valuePence, currencyCode, { maximumFractionDigits: 0 });
 
   const canViewManagerWidgets = useMemo(() => isManagerPlus(user?.role), [user?.role]);
 
@@ -886,7 +890,7 @@ export const DashboardPage = () => {
                 ? "—"
                 : "Manager only"}
             detail={monthlySalesReport
-              ? buildMonthlySalesTileDetail(monthlySalesReport)
+              ? buildMonthlySalesTileDetail(monthlySalesReport, currencyCode)
               : canViewManagerWidgets
                 ? "Current-month sales summary is unavailable."
                 : "Financial analytics are visible to managers and admins."}
@@ -902,7 +906,7 @@ export const DashboardPage = () => {
                 ? "—"
                 : "Manager only"}
             detail={monthlyMarginReport
-              ? buildMonthlyMarginTileDetail(monthlyMarginReport)
+              ? buildMonthlyMarginTileDetail(monthlyMarginReport, currencyCode)
               : canViewManagerWidgets
                 ? "Current-month financial summary is unavailable."
                 : "Financial analytics are visible to managers and admins."}

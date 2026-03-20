@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { getStoreLocaleSettings } from "./configurationService";
 import { ensureDefaultLocationTx, resolveLocationByCodeOrThrowTx } from "./locationService";
 import { listDateKeys, parseDateOnlyOrThrow, toInteger } from "./reports/shared";
 import { DEFAULT_CASH_LOCATION_ID } from "./tillService";
@@ -18,9 +19,9 @@ type HistoricalFinancialSummaryImportRow = {
   transactionCount: number;
 };
 
-const getDateKeyInLondon = (value = new Date()) => {
+const getDateKeyInTimeZone = (timeZone: string, value = new Date()) => {
   const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -210,7 +211,7 @@ export const importHistoricalFinancialSummaries = async (csv: string) => {
   };
 };
 
-const getLiveFinancialMonthToDate = async (from: string, to: string) => {
+const getLiveFinancialMonthToDate = async (from: string, to: string, timeZone: string) => {
   const [grossRows, refundRows, salesCostRows] = await Promise.all([
     prisma.$queryRaw<Array<{ grossPence: number; saleCount: number }>>`
       SELECT
@@ -218,7 +219,7 @@ const getLiveFinancialMonthToDate = async (from: string, to: string) => {
         COUNT(*)::int AS "saleCount"
       FROM "Sale" s
       WHERE s."completedAt" IS NOT NULL
-        AND (s."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${from}::date AND ${to}::date
+        AND (s."completedAt" AT TIME ZONE ${timeZone})::date BETWEEN ${from}::date AND ${to}::date
     `,
     prisma.$queryRaw<Array<{ refundsPence: number }>>`
       SELECT
@@ -226,7 +227,7 @@ const getLiveFinancialMonthToDate = async (from: string, to: string) => {
       FROM "Refund" r
       WHERE r.status = 'COMPLETED'
         AND r."completedAt" IS NOT NULL
-        AND (r."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${from}::date AND ${to}::date
+        AND (r."completedAt" AT TIME ZONE ${timeZone})::date BETWEEN ${from}::date AND ${to}::date
     `,
     prisma.$queryRaw<Array<{ costOfGoodsPence: number }>>`
       SELECT
@@ -235,7 +236,7 @@ const getLiveFinancialMonthToDate = async (from: string, to: string) => {
       INNER JOIN "Sale" s ON s.id = si."saleId"
       INNER JOIN "Variant" v ON v.id = si."variantId"
       WHERE s."completedAt" IS NOT NULL
-        AND (s."completedAt" AT TIME ZONE 'Europe/London')::date BETWEEN ${from}::date AND ${to}::date
+        AND (s."completedAt" AT TIME ZONE ${timeZone})::date BETWEEN ${from}::date AND ${to}::date
     `,
   ]);
 
@@ -349,9 +350,10 @@ const buildComparisonMetric = (
   };
 };
 
-const resolveFinancialAsOfDateOrThrow = (value?: string) => {
+const resolveFinancialAsOfDateOrThrow = async (value?: string) => {
   if (value === undefined) {
-    return getDateKeyInLondon();
+    const { timeZone } = await getStoreLocaleSettings();
+    return getDateKeyInTimeZone(timeZone);
   }
 
   const trimmed = value.trim();
@@ -360,13 +362,14 @@ const resolveFinancialAsOfDateOrThrow = (value?: string) => {
 };
 
 export const getFinancialMonthlySalesSummary = async (asOf?: string) => {
-  const asOfDate = resolveFinancialAsOfDateOrThrow(asOf);
+  const asOfDate = await resolveFinancialAsOfDateOrThrow(asOf);
   const from = getMonthStartKey(asOfDate);
   const lastYearFrom = shiftDateKeyByYears(from, -1);
   const lastYearTo = shiftDateKeyByYears(asOfDate, -1);
+  const { timeZone } = await getStoreLocaleSettings();
 
   const [liveTotals, historical] = await Promise.all([
-    getLiveFinancialMonthToDate(from, asOfDate),
+    getLiveFinancialMonthToDate(from, asOfDate, timeZone),
     getHistoricalSummaryAggregate(lastYearFrom, lastYearTo),
   ]);
 
@@ -395,13 +398,14 @@ export const getFinancialMonthlySalesSummary = async (asOf?: string) => {
 };
 
 export const getFinancialMonthlyMarginSummary = async (asOf?: string) => {
-  const asOfDate = resolveFinancialAsOfDateOrThrow(asOf);
+  const asOfDate = await resolveFinancialAsOfDateOrThrow(asOf);
   const from = getMonthStartKey(asOfDate);
   const lastYearFrom = shiftDateKeyByYears(from, -1);
   const lastYearTo = shiftDateKeyByYears(asOfDate, -1);
+  const { timeZone } = await getStoreLocaleSettings();
 
   const [liveTotals, historical] = await Promise.all([
-    getLiveFinancialMonthToDate(from, asOfDate),
+    getLiveFinancialMonthToDate(from, asOfDate, timeZone),
     getHistoricalSummaryAggregate(lastYearFrom, lastYearTo),
   ]);
 

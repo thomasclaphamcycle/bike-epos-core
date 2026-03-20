@@ -9,13 +9,8 @@ import {
   type FinancialSalesByCategoryReport,
 } from "../api/financialReports";
 import { useToasts } from "../components/ToastProvider";
-
-const formatCurrencyFromPence = (valuePence: number) =>
-  new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: 0,
-  }).format(valuePence / 100);
+import { useAppConfig } from "../config/appConfig";
+import { formatCurrencyFromPence } from "../utils/currency";
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
@@ -31,12 +26,15 @@ const formatRevenueShare = (valuePence: number, totalPence: number) => {
 };
 
 export const FinancialReportsPage = () => {
+  const appConfig = useAppConfig();
   const { error } = useToasts();
   const [loading, setLoading] = useState(false);
   const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [monthlySales, setMonthlySales] = useState<FinancialMonthlySalesSummaryReport | null>(null);
   const [monthlyMargin, setMonthlyMargin] = useState<FinancialMonthlyMarginReport | null>(null);
   const [salesByCategory, setSalesByCategory] = useState<FinancialSalesByCategoryReport | null>(null);
+  const currencyCode = appConfig.store.defaultCurrency;
+  const formatMoney = (valuePence: number) => formatCurrencyFromPence(valuePence, currencyCode);
 
   const loadReports = async () => {
     setLoading(true);
@@ -87,8 +85,8 @@ export const FinancialReportsPage = () => {
       return "Cost coverage is complete for the current month so far.";
     }
 
-    return `${formatCurrencyFromPence(monthlyMargin.costBasis.revenueWithoutCostBasisPence)} of revenue currently has no recorded cost basis.`;
-  }, [monthlyMargin]);
+    return `${formatMoney(monthlyMargin.costBasis.revenueWithoutCostBasisPence)} of revenue currently has no recorded cost basis.`;
+  }, [monthlyMargin, currencyCode]);
 
   const filtersLabel = useMemo(
     () => monthlySales?.filters.label ?? monthlyMargin?.filters.label ?? salesByCategory?.filters.label ?? "Month to date",
@@ -110,7 +108,7 @@ export const FinancialReportsPage = () => {
     if (salesByCategory?.summary.topCategoryName) {
       items.push({
         label: "Top category",
-        detail: `${salesByCategory.summary.topCategoryName} leads with ${formatCurrencyFromPence(salesByCategory.summary.topCategoryRevenuePence)} (${formatRevenueShare(
+        detail: `${salesByCategory.summary.topCategoryName} leads with ${formatMoney(salesByCategory.summary.topCategoryRevenuePence)} (${formatRevenueShare(
           salesByCategory.summary.topCategoryRevenuePence,
           salesByCategory.summary.revenuePence,
         )} of current-month revenue).`,
@@ -120,7 +118,7 @@ export const FinancialReportsPage = () => {
     if (monthlyMargin) {
       items.push({
         label: "Margin signal",
-        detail: `${formatPercent(monthlyMargin.summary.grossMarginPercent)} gross margin on ${formatCurrencyFromPence(monthlyMargin.summary.revenuePence)} revenue month to date.`,
+        detail: `${formatPercent(monthlyMargin.summary.grossMarginPercent)} gross margin on ${formatMoney(monthlyMargin.summary.revenuePence)} revenue month to date.`,
       });
     }
 
@@ -128,7 +126,7 @@ export const FinancialReportsPage = () => {
       items.push({
         label: "Refund signal",
         detail: monthlySales.summary.refundCount > 0
-          ? `${formatCurrencyFromPence(monthlySales.summary.refundsPence)} refunded across ${formatCount(monthlySales.summary.refundCount, "refund", "refunds")}.`
+          ? `${formatMoney(monthlySales.summary.refundsPence)} refunded across ${formatCount(monthlySales.summary.refundCount, "refund", "refunds")}.`
           : "No refunds have been recorded so far this month.",
       });
     }
@@ -137,13 +135,13 @@ export const FinancialReportsPage = () => {
       items.push({
         label: "Cost coverage",
         detail: monthlyMargin.costBasis.revenueWithoutCostBasisPence > 0
-          ? `${formatPercent(monthlyMargin.costBasis.knownCostCoveragePercent)} of revenue has known cost basis, with ${formatCurrencyFromPence(monthlyMargin.costBasis.revenueWithoutCostBasisPence)} still awaiting cost coverage.`
+          ? `${formatPercent(monthlyMargin.costBasis.knownCostCoveragePercent)} of revenue has known cost basis, with ${formatMoney(monthlyMargin.costBasis.revenueWithoutCostBasisPence)} still awaiting cost coverage.`
           : "All current-month revenue has a known recorded cost basis.",
       });
     }
 
     return items;
-  }, [monthlyMargin, monthlySales, salesByCategory]);
+  }, [currencyCode, monthlyMargin, monthlySales, salesByCategory]);
 
   return (
     <div className="page-shell">
@@ -190,13 +188,13 @@ export const FinancialReportsPage = () => {
             <div className="metric-card">
               <span className="metric-label">Revenue</span>
               <strong className="metric-value">
-                {monthlySales ? formatCurrencyFromPence(monthlySales.summary.revenuePence) : monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.revenuePence) : "—"}
+                {monthlySales ? formatMoney(monthlySales.summary.revenuePence) : monthlyMargin ? formatMoney(monthlyMargin.summary.revenuePence) : "—"}
               </strong>
               <span className="dashboard-metric-detail">Current-month net sales revenue.</span>
             </div>
             <div className="metric-card">
               <span className="metric-label">Gross Margin</span>
-              <strong className="metric-value">{monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.grossMarginPence) : "—"}</strong>
+              <strong className="metric-value">{monthlyMargin ? formatMoney(monthlyMargin.summary.grossMarginPence) : "—"}</strong>
               <span className="dashboard-metric-detail">Revenue less known costs.</span>
             </div>
             <div className="metric-card">
@@ -209,7 +207,7 @@ export const FinancialReportsPage = () => {
               <strong className="metric-value">{salesByCategory?.summary.topCategoryName ?? "—"}</strong>
               <span className="dashboard-metric-detail">
                 {salesByCategory?.summary.topCategoryName
-                  ? `${formatCurrencyFromPence(salesByCategory.summary.topCategoryRevenuePence)} · ${formatRevenueShare(
+                  ? `${formatMoney(salesByCategory.summary.topCategoryRevenuePence)} · ${formatRevenueShare(
                     salesByCategory.summary.topCategoryRevenuePence,
                     salesByCategory.summary.revenuePence,
                   )} share`
@@ -230,9 +228,9 @@ export const FinancialReportsPage = () => {
         <div className="dashboard-summary-grid">
           <div className="metric-card">
             <span className="metric-label">Revenue</span>
-            <strong className="metric-value">{monthlySales ? formatCurrencyFromPence(monthlySales.summary.revenuePence) : "—"}</strong>
+            <strong className="metric-value">{monthlySales ? formatMoney(monthlySales.summary.revenuePence) : "—"}</strong>
             <span className="dashboard-metric-detail">
-              {monthlySales ? `Gross ${formatCurrencyFromPence(monthlySales.summary.grossSalesPence)} month to date.` : "Monthly sales summary unavailable."}
+              {monthlySales ? `Gross ${formatMoney(monthlySales.summary.grossSalesPence)} month to date.` : "Monthly sales summary unavailable."}
             </span>
           </div>
           <div className="metric-card">
@@ -244,12 +242,12 @@ export const FinancialReportsPage = () => {
           </div>
           <div className="metric-card">
             <span className="metric-label">Average Sale</span>
-            <strong className="metric-value">{monthlySales ? formatCurrencyFromPence(monthlySales.summary.averageSaleValuePence) : "—"}</strong>
+            <strong className="metric-value">{monthlySales ? formatMoney(monthlySales.summary.averageSaleValuePence) : "—"}</strong>
             <span className="dashboard-metric-detail">Revenue divided by completed sales.</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Refunds</span>
-            <strong className="metric-value">{monthlySales ? formatCurrencyFromPence(monthlySales.summary.refundsPence) : "—"}</strong>
+            <strong className="metric-value">{monthlySales ? formatMoney(monthlySales.summary.refundsPence) : "—"}</strong>
             <span className="dashboard-metric-detail">
               {monthlySales ? formatCount(monthlySales.summary.refundCount, "refund", "refunds") : "Refund totals unavailable."}
             </span>
@@ -270,17 +268,17 @@ export const FinancialReportsPage = () => {
         <div className="dashboard-summary-grid">
           <div className="metric-card">
             <span className="metric-label">Revenue</span>
-            <strong className="metric-value">{monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.revenuePence) : "—"}</strong>
+            <strong className="metric-value">{monthlyMargin ? formatMoney(monthlyMargin.summary.revenuePence) : "—"}</strong>
             <span className="dashboard-metric-detail">Net of refunds for the current month.</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">COGS</span>
-            <strong className="metric-value">{monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.cogsPence) : "—"}</strong>
+            <strong className="metric-value">{monthlyMargin ? formatMoney(monthlyMargin.summary.cogsPence) : "—"}</strong>
             <span className="dashboard-metric-detail">Known recorded cost basis only.</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Gross Margin</span>
-            <strong className="metric-value">{monthlyMargin ? formatCurrencyFromPence(monthlyMargin.summary.grossMarginPence) : "—"}</strong>
+            <strong className="metric-value">{monthlyMargin ? formatMoney(monthlyMargin.summary.grossMarginPence) : "—"}</strong>
             <span className="dashboard-metric-detail">Revenue less known costs.</span>
           </div>
           <div className="metric-card">
@@ -346,7 +344,7 @@ export const FinancialReportsPage = () => {
             <strong className="metric-value">{salesByCategory?.summary.topCategoryName ?? "—"}</strong>
             <span className="dashboard-metric-detail">
               {salesByCategory?.summary.topCategoryName
-                ? formatCurrencyFromPence(salesByCategory.summary.topCategoryRevenuePence)
+                ? formatMoney(salesByCategory.summary.topCategoryRevenuePence)
                 : "No category revenue recorded yet."}
             </span>
           </div>
@@ -382,13 +380,13 @@ export const FinancialReportsPage = () => {
                     <div className="table-primary">{row.categoryName}</div>
                     <div className="table-secondary">
                       {row.revenueWithoutCostBasisPence > 0
-                        ? `${formatCurrencyFromPence(row.revenueWithoutCostBasisPence)} revenue missing cost basis`
+                        ? `${formatMoney(row.revenueWithoutCostBasisPence)} revenue missing cost basis`
                         : "Complete cost basis for this category."}
                     </div>
                   </td>
                   <td>{salesByCategory ? formatRevenueShare(row.revenuePence, salesByCategory.summary.revenuePence) : "—"}</td>
-                  <td>{formatCurrencyFromPence(row.revenuePence)}</td>
-                  <td>{formatCurrencyFromPence(row.grossMarginPence)}</td>
+                  <td>{formatMoney(row.revenuePence)}</td>
+                  <td>{formatMoney(row.grossMarginPence)}</td>
                   <td>{formatPercent(row.grossMarginPercent)}</td>
                   <td>{row.netQuantity}</td>
                   <td>{formatPercent(row.knownCostCoveragePercent)}</td>

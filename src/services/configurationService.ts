@@ -58,6 +58,34 @@ export type ShopSettingsPatch = Partial<{
 }>;
 
 export type StoreInfoSettings = ShopSettings["store"];
+export type PublicShopConfig = {
+  store: Pick<
+    StoreInfoSettings,
+    | "name"
+    | "businessName"
+    | "email"
+    | "phone"
+    | "website"
+    | "addressLine1"
+    | "addressLine2"
+    | "city"
+    | "region"
+    | "postcode"
+    | "country"
+    | "defaultCurrency"
+    | "timeZone"
+    | "logoUrl"
+    | "footerText"
+    | "openingHours"
+  >;
+  pos: ShopSettings["pos"];
+  workshop: ShopSettings["workshop"];
+  operations: ShopSettings["operations"];
+};
+
+const DEFAULT_RECEIPT_SHOP_ADDRESS = "123 Service Lane";
+const DEFAULT_RECEIPT_FOOTER_TEXT = "Thank you for your custom.";
+const DEFAULT_MAX_BOOKINGS_PER_DAY = 8;
 
 const normalizeTextSetting = (
   value: unknown,
@@ -482,7 +510,7 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
 };
 
 const flattenPatch = (patch: ShopSettingsPatch) => {
-  const updates = new Map<string, unknown>();
+  const updates = new Map<string, Prisma.InputJsonValue | typeof Prisma.JsonNull>();
 
   for (const [sectionKey, sectionValue] of Object.entries(patch)) {
     if (!sectionValue || typeof sectionValue !== "object" || Array.isArray(sectionValue)) {
@@ -495,7 +523,13 @@ const flattenPatch = (patch: ShopSettingsPatch) => {
       if (!definition) {
         throw new HttpError(400, `Unknown setting ${configKey}`, "INVALID_SETTINGS");
       }
-      updates.set(configKey, definition.validate(value));
+      const normalizedValue = definition.validate(value);
+      updates.set(
+        configKey,
+        normalizedValue === null
+          ? Prisma.JsonNull
+          : normalizedValue as Prisma.InputJsonValue,
+      );
     }
   }
 
@@ -513,24 +547,47 @@ const buildReceiptAddress = (store: StoreInfoSettings) =>
     .filter((part) => part.length > 0)
     .join(", ");
 
+const startOfUtcDay = (value: Date) =>
+  new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+
+export const buildLegacyReceiptSettingsFromStore = (store: StoreInfoSettings) => ({
+  shopName: store.name,
+  shopAddress: buildReceiptAddress(store) || DEFAULT_RECEIPT_SHOP_ADDRESS,
+  vatNumber: store.vatNumber || null,
+  footerText: store.footerText || DEFAULT_RECEIPT_FOOTER_TEXT,
+});
+
 const syncLegacyReceiptSettingsTx = async (
   tx: Prisma.TransactionClient,
   store: StoreInfoSettings,
 ) => {
+  const legacySettings = buildLegacyReceiptSettingsFromStore(store);
   await tx.receiptSettings.upsert({
     where: { id: 1 },
     create: {
       id: 1,
-      shopName: store.name,
-      shopAddress: buildReceiptAddress(store) || "123 Service Lane",
-      vatNumber: store.vatNumber || null,
-      footerText: store.footerText || "Thank you for your custom.",
+      ...legacySettings,
     },
     update: {
-      shopName: store.name,
-      shopAddress: buildReceiptAddress(store) || "123 Service Lane",
-      vatNumber: store.vatNumber || null,
-      footerText: store.footerText || "Thank you for your custom.",
+      ...legacySettings,
+    },
+  });
+};
+
+const syncLegacyWorkshopBookingSettingsTx = async (
+  tx: Prisma.TransactionClient,
+  workshop: ShopSettings["workshop"],
+) => {
+  await tx.bookingSettings.upsert({
+    where: { id: 1 },
+    create: {
+      id: 1,
+      minBookableDate: startOfUtcDay(new Date()),
+      maxBookingsPerDay: DEFAULT_MAX_BOOKINGS_PER_DAY,
+      defaultDepositPence: workshop.defaultDepositPence,
+    },
+    update: {
+      defaultDepositPence: workshop.defaultDepositPence,
     },
   });
 };
@@ -549,6 +606,43 @@ export const listShopSettings = async (db: SettingsClient = prisma): Promise<Sho
   });
 
   return toSettingsSnapshot(rows);
+};
+
+export const listPublicShopConfig = async (
+  db: SettingsClient = prisma,
+): Promise<PublicShopConfig> => {
+  const settings = await listShopSettings(db);
+  return {
+    store: {
+      name: settings.store.name,
+      businessName: settings.store.businessName,
+      email: settings.store.email,
+      phone: settings.store.phone,
+      website: settings.store.website,
+      addressLine1: settings.store.addressLine1,
+      addressLine2: settings.store.addressLine2,
+      city: settings.store.city,
+      region: settings.store.region,
+      postcode: settings.store.postcode,
+      country: settings.store.country,
+      defaultCurrency: settings.store.defaultCurrency,
+      timeZone: settings.store.timeZone,
+      logoUrl: settings.store.logoUrl,
+      footerText: settings.store.footerText,
+      openingHours: settings.store.openingHours,
+    },
+    pos: settings.pos,
+    workshop: settings.workshop,
+    operations: settings.operations,
+  };
+};
+
+export const getStoreLocaleSettings = async (db: SettingsClient = prisma) => {
+  const settings = await listShopSettings(db);
+  return {
+    currency: settings.store.defaultCurrency,
+    timeZone: settings.store.timeZone,
+  };
 };
 
 export const updateShopSettings = async (
@@ -574,6 +668,9 @@ export const updateShopSettings = async (
       if (patch.store) {
         await syncLegacyReceiptSettingsTx(tx, settings.store);
       }
+      if (patch.workshop) {
+        await syncLegacyWorkshopBookingSettingsTx(tx, settings.workshop);
+      }
 
       return settings;
     });
@@ -587,7 +684,15 @@ export const updateShopSettings = async (
     });
   }
 
-  return listShopSettings(db);
+  const settings = await listShopSettings(db);
+  if (patch.store) {
+    await syncLegacyReceiptSettingsTx(db, settings.store);
+  }
+  if (patch.workshop) {
+    await syncLegacyWorkshopBookingSettingsTx(db, settings.workshop);
+  }
+
+  return settings;
 };
 
 export const listStoreInfoSettings = async (
