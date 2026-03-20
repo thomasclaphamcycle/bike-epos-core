@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { apiGet, apiPatch, apiPost } from "../api/client";
+import { apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 
@@ -17,6 +17,27 @@ type CustomerSearchResponse = {
 
 type CustomerResponse = CustomerRow & {
   notes: string | null;
+};
+
+type CustomerBikeRecord = {
+  id: string;
+  customerId: string;
+  label: string | null;
+  make: string | null;
+  model: string | null;
+  colour: string | null;
+  frameNumber: string | null;
+  serialNumber: string | null;
+  registrationNumber: string | null;
+  notes: string | null;
+  displayName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CustomerBikesResponse = {
+  customerId: string;
+  bikes: CustomerBikeRecord[];
 };
 
 const stepTitles = [
@@ -50,6 +71,8 @@ export const WorkshopCheckInPage = () => {
   const [customerResults, setCustomerResults] = useState<CustomerRow[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
+  const [loadingCustomerBikes, setLoadingCustomerBikes] = useState(false);
 
   const [manualCustomerName, setManualCustomerName] = useState("");
   const [createCustomerInline, setCreateCustomerInline] = useState(false);
@@ -58,6 +81,16 @@ export const WorkshopCheckInPage = () => {
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   const [bikeDescription, setBikeDescription] = useState("");
+  const [selectedBikeId, setSelectedBikeId] = useState("");
+  const [createBikeInline, setCreateBikeInline] = useState(false);
+  const [bikeLabel, setBikeLabel] = useState("");
+  const [bikeMake, setBikeMake] = useState("");
+  const [bikeModel, setBikeModel] = useState("");
+  const [bikeColour, setBikeColour] = useState("");
+  const [bikeFrameNumber, setBikeFrameNumber] = useState("");
+  const [bikeSerialNumber, setBikeSerialNumber] = useState("");
+  const [bikeRegistrationNumber, setBikeRegistrationNumber] = useState("");
+  const [bikeRecordNotes, setBikeRecordNotes] = useState("");
   const [issueSummary, setIssueSummary] = useState("");
   const [requestedWork, setRequestedWork] = useState("");
   const [intakeNotes, setIntakeNotes] = useState("");
@@ -78,6 +111,7 @@ export const WorkshopCheckInPage = () => {
     () => buildCheckInNotes({ issueSummary, requestedWork, intakeNotes }),
     [issueSummary, requestedWork, intakeNotes],
   );
+  const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
 
   useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
@@ -147,6 +181,42 @@ export const WorkshopCheckInPage = () => {
     };
   }, [error, initialCustomerId]);
 
+  useEffect(() => {
+    if (!selectedCustomer?.id) {
+      setCustomerBikes([]);
+      setSelectedBikeId("");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCustomerBikes = async () => {
+      setLoadingCustomerBikes(true);
+      try {
+        const payload = await apiGet<CustomerBikesResponse>(
+          `/api/customers/${encodeURIComponent(selectedCustomer.id)}/bikes`,
+        );
+        if (!cancelled) {
+          setCustomerBikes(payload.bikes || []);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setCustomerBikes([]);
+          error(loadError instanceof Error ? loadError.message : "Failed to load customer bikes");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingCustomerBikes(false);
+        }
+      }
+    };
+
+    void loadCustomerBikes();
+    return () => {
+      cancelled = true;
+    };
+  }, [error, selectedCustomer?.id]);
+
   const goNext = () => {
     if (step === 0) {
       if (!resolvedCustomerName) {
@@ -193,18 +263,32 @@ export const WorkshopCheckInPage = () => {
         customerId = createdCustomer.id;
       }
 
+      let bikeId = selectedBikeId || null;
+      if (customerId && createBikeInline) {
+        const createdBike = await apiPost<{ bike: CustomerBikeRecord }>(
+          `/api/customers/${encodeURIComponent(customerId)}/bikes`,
+          {
+            label: bikeLabel.trim() || undefined,
+            make: bikeMake.trim() || undefined,
+            model: bikeModel.trim() || undefined,
+            colour: bikeColour.trim() || undefined,
+            frameNumber: bikeFrameNumber.trim() || undefined,
+            serialNumber: bikeSerialNumber.trim() || undefined,
+            registrationNumber: bikeRegistrationNumber.trim() || undefined,
+            notes: bikeRecordNotes.trim() || undefined,
+          },
+        );
+        bikeId = createdBike.bike.id;
+      }
+
       const created = await apiPost<{ id: string }>("/api/workshop/jobs", {
+        customerId,
         customerName: resolvedCustomerName,
+        bikeId,
         bikeDescription: bikeDescription.trim(),
         notes: checkInNotes || undefined,
         status: "BOOKED",
       });
-
-      if (customerId) {
-        await apiPatch(`/api/workshop/jobs/${encodeURIComponent(created.id)}/customer`, {
-          customerId,
-        });
-      }
 
       setCreatedJobId(created.id);
       success("Workshop check-in created");
@@ -293,6 +377,7 @@ export const WorkshopCheckInPage = () => {
                             setSelectedCustomer(customer);
                             setCreateCustomerInline(false);
                             setManualCustomerName("");
+                            setCreateBikeInline(false);
                           }}
                         >
                           Select
@@ -319,6 +404,8 @@ export const WorkshopCheckInPage = () => {
                 onClick={() => {
                   setCreateCustomerInline(false);
                   setSelectedCustomer(null);
+                  setSelectedBikeId("");
+                  setCreateBikeInline(false);
                 }}
               >
                 Use walk-in/manual name
@@ -329,6 +416,7 @@ export const WorkshopCheckInPage = () => {
                   setCreateCustomerInline(true);
                   setSelectedCustomer(null);
                   setManualCustomerName("");
+                  setSelectedBikeId("");
                 }}
               >
                 Create new customer
@@ -370,6 +458,89 @@ export const WorkshopCheckInPage = () => {
         {step === 1 ? (
           <section className="card">
             <h2>Bike & Requested Work</h2>
+            {canCreateBikeRecord ? (
+              <>
+                <div className="job-meta-grid">
+                  <label>
+                    Linked bike record
+                    <select
+                      value={createBikeInline ? "__new__" : selectedBikeId}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        if (nextValue === "__new__") {
+                          setCreateBikeInline(true);
+                          setSelectedBikeId("");
+                          return;
+                        }
+
+                        setCreateBikeInline(false);
+                        setSelectedBikeId(nextValue);
+                        const matchedBike = customerBikes.find((bike) => bike.id === nextValue);
+                        if (matchedBike) {
+                          setBikeDescription(matchedBike.displayName);
+                        }
+                      }}
+                    >
+                      <option value="">No linked bike record</option>
+                      {customerBikes.map((bike) => (
+                        <option key={bike.id} value={bike.id}>
+                          {bike.displayName}
+                        </option>
+                      ))}
+                      <option value="__new__">Create new bike record</option>
+                    </select>
+                  </label>
+                  <div className="table-secondary">
+                    {loadingCustomerBikes
+                      ? "Loading existing bike records..."
+                      : selectedCustomer
+                        ? `${customerBikes.length} bike record${customerBikes.length === 1 ? "" : "s"} found for ${selectedCustomer.name}.`
+                        : "New customer will receive the bike record when the check-in is created."}
+                  </div>
+                </div>
+
+                {createBikeInline ? (
+                  <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+                    <label>
+                      Nickname / label
+                      <input value={bikeLabel} onChange={(event) => setBikeLabel(event.target.value)} placeholder="Winter commuter" />
+                    </label>
+                    <label>
+                      Make
+                      <input value={bikeMake} onChange={(event) => setBikeMake(event.target.value)} placeholder="Trek" />
+                    </label>
+                    <label>
+                      Model
+                      <input value={bikeModel} onChange={(event) => setBikeModel(event.target.value)} placeholder="Domane AL 2" />
+                    </label>
+                    <label>
+                      Colour
+                      <input value={bikeColour} onChange={(event) => setBikeColour(event.target.value)} placeholder="Blue" />
+                    </label>
+                    <label>
+                      Frame number
+                      <input value={bikeFrameNumber} onChange={(event) => setBikeFrameNumber(event.target.value)} />
+                    </label>
+                    <label>
+                      Serial number
+                      <input value={bikeSerialNumber} onChange={(event) => setBikeSerialNumber(event.target.value)} />
+                    </label>
+                    <label>
+                      Registration
+                      <input value={bikeRegistrationNumber} onChange={(event) => setBikeRegistrationNumber(event.target.value)} />
+                    </label>
+                    <label className="grow">
+                      Bike record notes
+                      <textarea value={bikeRecordNotes} onChange={(event) => setBikeRecordNotes(event.target.value)} rows={3} />
+                    </label>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="muted-text">
+                Bike records can be linked once you choose or create a customer. Manual walk-in check-ins still use the bike summary below.
+              </p>
+            )}
             <div className="job-meta-grid">
               <label>
                 Bike description
@@ -417,6 +588,14 @@ export const WorkshopCheckInPage = () => {
             <div className="job-meta-grid">
               <div><strong>Customer:</strong> {resolvedCustomerName}</div>
               <div><strong>Bike:</strong> {bikeDescription || "-"}</div>
+              <div>
+                <strong>Bike record:</strong>{" "}
+                {createBikeInline
+                  ? "Create new bike record with this check-in"
+                  : selectedBikeId
+                    ? customerBikes.find((bike) => bike.id === selectedBikeId)?.displayName || "Existing bike selected"
+                    : "No linked bike record"}
+              </div>
             </div>
             <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
               <strong>Check-in summary</strong>

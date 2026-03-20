@@ -35,6 +35,7 @@ model Product {
 
   variants      Variant[]
   workshopLines WorkshopJobLine[]
+  estimateLines WorkshopEstimateLine[]
 }
 
 model Supplier {
@@ -128,6 +129,7 @@ model Variant {
   supplierLinks      SupplierProductLink[]
   stocktakeLines     StocktakeLine[]
   workshopLines      WorkshopJobLine[]
+  estimateLines      WorkshopEstimateLine[]
   stockTransferLines StockTransferLine[]
   hireAssets         HireAsset[]
 }
@@ -944,12 +946,36 @@ model Customer {
   sales              Sale[]
   customerCaptureSessions SaleCustomerCaptureSession[]
   workshopJobs       WorkshopJob[]
+  bikes              CustomerBike[]
   creditAccounts     CreditAccount[]
   reminderCandidates ReminderCandidate[]
   hireBookings       HireBooking[]
 
   @@index([name])
   @@index([phone])
+}
+
+model CustomerBike {
+  id                 String   @id @default(uuid()) @db.Uuid
+  customerId         String   @db.Uuid
+  label              String?
+  make               String?
+  model              String?
+  colour             String?
+  frameNumber        String?
+  serialNumber       String?
+  registrationNumber String?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workshopJobs WorkshopJob[]
+
+  @@index([customerId, createdAt])
+  @@index([frameNumber])
+  @@index([serialNumber])
+  @@index([registrationNumber])
 }
 
 enum ReminderCandidateStatus {
@@ -991,6 +1017,7 @@ enum CancellationOutcome {
 model WorkshopJob {
   id                   String                @id @default(uuid()) @db.Uuid
   customerId           String?               @db.Uuid
+  bikeId               String?               @db.Uuid
   locationId           String
   customerName         String?
   bikeDescription      String?
@@ -1012,6 +1039,7 @@ model WorkshopJob {
   updatedAt            DateTime              @updatedAt
 
   customer           Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  bike               CustomerBike?          @relation(fields: [bikeId], references: [id], onDelete: SetNull)
   location           Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
   assignedStaff      User?                  @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
   sale               Sale?
@@ -1020,6 +1048,7 @@ model WorkshopJob {
   jobNotes           WorkshopJobNote[]
   parts              WorkshopJobPart[]
   lines              WorkshopJobLine[]
+  estimates          WorkshopEstimate[]
   reminderCandidates ReminderCandidate[]
 
   @@index([scheduledDate])
@@ -1027,7 +1056,68 @@ model WorkshopJob {
   @@index([status])
   @@index([status, completedAt])
   @@index([assignedStaffId])
+  @@index([bikeId])
   @@index([finalizedBasketId])
+}
+
+enum WorkshopEstimateStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SUPERSEDED
+}
+
+model WorkshopEstimate {
+  id               String                 @id @default(uuid()) @db.Uuid
+  workshopJobId    String                 @db.Uuid
+  version          Int
+  status           WorkshopEstimateStatus @default(DRAFT)
+  labourTotalPence Int                    @default(0)
+  partsTotalPence  Int                    @default(0)
+  subtotalPence    Int                    @default(0)
+  lineCount        Int                    @default(0)
+  createdByStaffId String?
+  decisionByStaffId String?
+  requestedAt      DateTime?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  supersededAt     DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  workshopJob     WorkshopJob           @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  createdByStaff  User?                 @relation("WorkshopEstimateCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  decisionByStaff User?                 @relation("WorkshopEstimateDecisionBy", fields: [decisionByStaffId], references: [id], onDelete: SetNull)
+  lines           WorkshopEstimateLine[]
+
+  @@unique([workshopJobId, version])
+  @@index([workshopJobId, createdAt])
+  @@index([workshopJobId, status])
+  @@index([createdByStaffId])
+  @@index([decisionByStaffId])
+}
+
+model WorkshopEstimateLine {
+  id               String              @id @default(uuid()) @db.Uuid
+  estimateId       String              @db.Uuid
+  workshopJobLineId String?            @db.Uuid
+  sortOrder        Int
+  type             WorkshopJobLineType
+  productId        String?
+  variantId        String?
+  description      String
+  qty              Int
+  unitPricePence   Int
+  lineTotalPence   Int
+  createdAt        DateTime            @default(now())
+
+  estimate WorkshopEstimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  product  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant  Variant?         @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([estimateId, sortOrder])
+  @@index([workshopJobLineId])
 }
 
 model ReminderCandidate {
@@ -1234,6 +1324,8 @@ model User {
 
   assignedWorkshopJobs WorkshopJob[]      @relation("WorkshopJobAssignedStaff")
   workshopJobNotes     WorkshopJobNote[]  @relation("WorkshopJobNoteAuthor")
+  createdWorkshopEstimates WorkshopEstimate[] @relation("WorkshopEstimateCreatedBy")
+  decidedWorkshopEstimates WorkshopEstimate[] @relation("WorkshopEstimateDecisionBy")
   stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
   createdSales         Sale[]             @relation("SaleCreatedByStaff")
   saleTenders          SaleTender[]       @relation("SaleTenderCreatedByStaff")

@@ -18,6 +18,24 @@ GET {{baseUrl}}/api/customers/{{customerId}}
 ### Search customers by name/email/phone
 GET {{baseUrl}}/api/customers?query=jane
 
+### List reusable bike records for a customer
+GET {{baseUrl}}/api/customers/{{customerId}}/bikes
+
+### Create reusable bike record for a customer
+POST {{baseUrl}}/api/customers/{{customerId}}/bikes
+Content-Type: application/json
+
+{
+  "label": "Winter commuter",
+  "make": "Genesis",
+  "model": "Croix de Fer",
+  "colour": "Blue",
+  "frameNumber": "FRAME-12345",
+  "serialNumber": "SER-12345",
+  "registrationNumber": "REG-12345",
+  "notes": "Rear rack fitted, customer prefers puncture-resistant tyres"
+}
+
 ### Attach customer to sale
 PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
 Content-Type: application/json

@@ -7,6 +7,7 @@ import {
   listCustomerWorkshopJobs,
   searchCustomers,
 } from "../services/customerService";
+import { createCustomerBike, listCustomerBikes } from "../services/customerBikeService";
 import { HttpError } from "../utils/http";
 
 export const createCustomerHandler = async (req: Request, res: Response) => {
@@ -141,6 +142,62 @@ export const listCustomerWorkshopJobsHandler = async (req: Request, res: Respons
     take,
   });
   res.json(result);
+};
+
+export const listCustomerBikesHandler = async (req: Request, res: Response) => {
+  const result = await listCustomerBikes(req.params.id);
+  res.json(result);
+};
+
+export const createCustomerBikeHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    label?: unknown;
+    make?: unknown;
+    model?: unknown;
+    colour?: unknown;
+    frameNumber?: unknown;
+    serialNumber?: unknown;
+    registrationNumber?: unknown;
+    notes?: unknown;
+  };
+
+  if (body.label !== undefined && typeof body.label !== "string") {
+    throw new HttpError(400, "label must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.make !== undefined && typeof body.make !== "string") {
+    throw new HttpError(400, "make must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.model !== undefined && typeof body.model !== "string") {
+    throw new HttpError(400, "model must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.colour !== undefined && typeof body.colour !== "string") {
+    throw new HttpError(400, "colour must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.frameNumber !== undefined && typeof body.frameNumber !== "string") {
+    throw new HttpError(400, "frameNumber must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.serialNumber !== undefined && typeof body.serialNumber !== "string") {
+    throw new HttpError(400, "serialNumber must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.registrationNumber !== undefined && typeof body.registrationNumber !== "string") {
+    throw new HttpError(400, "registrationNumber must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+  if (body.notes !== undefined && typeof body.notes !== "string") {
+    throw new HttpError(400, "notes must be a string", "INVALID_CUSTOMER_BIKE");
+  }
+
+  const result = await createCustomerBike(req.params.id, {
+    label: body.label as string | undefined,
+    make: body.make as string | undefined,
+    model: body.model as string | undefined,
+    colour: body.colour as string | undefined,
+    frameNumber: body.frameNumber as string | undefined,
+    serialNumber: body.serialNumber as string | undefined,
+    registrationNumber: body.registrationNumber as string | undefined,
+    notes: body.notes as string | undefined,
+  });
+
+  res.status(201).json(result);
 };
 
 export const getCustomerTimelineHandler = async (req: Request, res: Response) => {

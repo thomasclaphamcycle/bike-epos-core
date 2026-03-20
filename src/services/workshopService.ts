@@ -3,14 +3,22 @@ import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  buildCustomerBikeDisplayName,
+  getCustomerBikeByIdTx,
+  toWorkshopBikeResponse,
+} from "./customerBikeService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
+import { getWorkshopJobEstimateData, invalidateCurrentWorkshopEstimateTx } from "./workshopEstimateService";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 
 type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
 
 type CreateWorkshopJobInput = {
+  customerId?: string | null;
   customerName?: string;
+  bikeId?: string | null;
   bikeDescription?: string;
   notes?: string;
   locationId?: string;
@@ -19,6 +27,7 @@ type CreateWorkshopJobInput = {
 
 type UpdateWorkshopJobInput = {
   customerName?: string;
+  bikeId?: string | null;
   bikeDescription?: string;
   notes?: string;
   status?: string;
@@ -56,6 +65,34 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const normalizeOptionalUuid = (
+  value: string | undefined | null,
+  field: string,
+  code: string,
+) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return undefined;
+  }
+  if (!isUuid(normalized)) {
+    throw new HttpError(400, `Invalid ${field}`, code);
+  }
+  return normalized;
+};
+
+const buildCustomerDisplayName = (customer: {
+  name: string;
+  firstName: string;
+  lastName: string;
+}) => {
+  const explicitName = normalizeOptionalText(customer.name);
+  if (explicitName) {
+    return explicitName;
+  }
+
+  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
 };
 
 const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
@@ -213,6 +250,86 @@ const ensureProductExistsTx = async (tx: Prisma.TransactionClient, productId: st
   }
 
   return product;
+};
+
+const getCustomerByIdTx = async (
+  tx: Prisma.TransactionClient,
+  customerId: string,
+) => {
+  const customer = await tx.customer.findUnique({
+    where: { id: customerId },
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+    },
+  });
+
+  if (!customer) {
+    throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+  }
+
+  return customer;
+};
+
+const resolveWorkshopJobCustomerAndBikeTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    currentCustomerId?: string | null;
+    requestedCustomerId?: string;
+    currentBikeId?: string | null;
+    requestedBikeId?: string | null;
+    requestedBikeDescription?: string;
+    currentBikeDescription?: string | null;
+  },
+) => {
+  let customerId = input.requestedCustomerId ?? input.currentCustomerId ?? null;
+  let customerName: string | undefined;
+  let bikeId =
+    input.requestedBikeId === null
+      ? null
+      : input.requestedBikeId ?? input.currentBikeId ?? null;
+  let bikeDescription = input.requestedBikeDescription;
+  let bike: Awaited<ReturnType<typeof getCustomerBikeByIdTx>> | null = null;
+
+  if (bikeId) {
+    bike = await getCustomerBikeByIdTx(tx, bikeId);
+    if (customerId && bike.customerId !== customerId) {
+      throw new HttpError(
+        409,
+        "Linked bike belongs to a different customer",
+        "WORKSHOP_BIKE_CUSTOMER_MISMATCH",
+      );
+    }
+
+    if (!customerId) {
+      customerId = bike.customerId;
+    }
+
+    if (!bikeDescription) {
+      const currentDescription = normalizeOptionalText(input.currentBikeDescription);
+      const bikeDisplayName = buildCustomerBikeDisplayName(bike);
+      if (!currentDescription || input.requestedBikeId !== undefined) {
+        bikeDescription = bikeDisplayName;
+      } else {
+        bikeDescription = currentDescription;
+      }
+    }
+  }
+
+  if (customerId) {
+    const customer = await getCustomerByIdTx(tx, customerId);
+    customerName = buildCustomerDisplayName(customer);
+  }
+
+  return {
+    customerId,
+    customerName,
+    bikeId,
+    bike,
+    bikeDescription,
+  };
 };
 
 const ensureVariantForPartTx = async (
@@ -375,6 +492,7 @@ const toLineResponse = (line: {
 const toJobResponse = (job: {
   id: string;
   customerId: string | null;
+  bikeId: string | null;
   locationId: string;
   customerName: string | null;
   bikeDescription: string | null;
@@ -386,6 +504,7 @@ const toJobResponse = (job: {
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  bike?: Awaited<ReturnType<typeof getCustomerBikeByIdTx>> | null;
   sale?: {
     id: string;
     totalPence: number;
@@ -394,9 +513,11 @@ const toJobResponse = (job: {
 }) => ({
   id: job.id,
   customerId: job.customerId,
+  bikeId: job.bikeId,
   locationId: job.locationId,
   customerName: job.customerName,
-  bikeDescription: job.bikeDescription,
+  bikeDescription: job.bikeDescription ?? (job.bike ? buildCustomerBikeDisplayName(job.bike) : null),
+  bike: toWorkshopBikeResponse(job.bike ?? null),
   status: toWorkflowStatus(job),
   rawStatus: job.status,
   notes: job.notes,
@@ -466,23 +587,47 @@ const buildBasketResponseTx = async (tx: Prisma.TransactionClient, basketId: str
 };
 
 export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
+  const customerId = input.customerId === null
+    ? null
+    : normalizeOptionalUuid(input.customerId, "customer id", "INVALID_CUSTOMER_ID");
+  const bikeId = input.bikeId === null
+    ? null
+    : normalizeOptionalUuid(input.bikeId, "bike id", "INVALID_CUSTOMER_BIKE_ID");
   const customerName = normalizeOptionalText(input.customerName);
   const bikeDescription = normalizeOptionalText(input.bikeDescription);
   const locationId = normalizeOptionalText(input.locationId);
   const notes = normalizeOptionalText(input.notes);
-
-  if (!customerName) {
-    throw new HttpError(400, "customerName is required", "INVALID_WORKSHOP_JOB");
-  }
-  if (!bikeDescription) {
-    throw new HttpError(400, "bikeDescription is required", "INVALID_WORKSHOP_JOB");
-  }
 
   const targetStatus = input.status
     ? parseWorkflowStatus(input.status)
     : ("BOOKED" as WorkflowStatus);
 
   return prisma.$transaction(async (tx) => {
+    const resolvedCustomerAndBike = await resolveWorkshopJobCustomerAndBikeTx(tx, {
+      requestedCustomerId: customerId ?? undefined,
+      requestedBikeId: bikeId,
+      requestedBikeDescription: bikeDescription,
+    });
+
+    const resolvedCustomerName = customerName ?? resolvedCustomerAndBike.customerName;
+    const resolvedBikeDescription =
+      bikeDescription ?? resolvedCustomerAndBike.bikeDescription;
+
+    if (!resolvedCustomerName) {
+      throw new HttpError(
+        400,
+        "customerName is required unless a linked customer or bike supplies it",
+        "INVALID_WORKSHOP_JOB",
+      );
+    }
+    if (!resolvedBikeDescription) {
+      throw new HttpError(
+        400,
+        "bikeDescription is required unless a linked bike supplies it",
+        "INVALID_WORKSHOP_JOB",
+      );
+    }
+
     const location = locationId
       ? await tx.location.findUnique({
           where: { id: locationId },
@@ -496,8 +641,10 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
 
     const job = await tx.workshopJob.create({
       data: {
-        customerName,
-        bikeDescription,
+        customerId: resolvedCustomerAndBike.customerId,
+        bikeId: resolvedCustomerAndBike.bikeId,
+        customerName: resolvedCustomerName,
+        bikeDescription: resolvedBikeDescription,
         notes,
         status: toWorkshopJobStatus(targetStatus),
         source: "IN_STORE",
@@ -544,6 +691,11 @@ export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {
             OR: [
               { customerName: { contains: q, mode: "insensitive" } },
               { bikeDescription: { contains: q, mode: "insensitive" } },
+              { bike: { is: { label: { contains: q, mode: "insensitive" } } } },
+              { bike: { is: { make: { contains: q, mode: "insensitive" } } } },
+              { bike: { is: { model: { contains: q, mode: "insensitive" } } } },
+              { bike: { is: { frameNumber: { contains: q, mode: "insensitive" } } } },
+              { bike: { is: { serialNumber: { contains: q, mode: "insensitive" } } } },
               { notes: { contains: q, mode: "insensitive" } },
             ],
           }
@@ -577,6 +729,22 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
   const job = await prisma.workshopJob.findUnique({
     where: { id: workshopJobId },
     include: {
+      bike: {
+        select: {
+          id: true,
+          customerId: true,
+          label: true,
+          make: true,
+          model: true,
+          colour: true,
+          frameNumber: true,
+          serialNumber: true,
+          registrationNumber: true,
+          notes: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
       sale: {
         select: {
           id: true,
@@ -609,12 +777,16 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
   }
 
-  const partsOverview = await getWorkshopJobPartsOverview(workshopJobId);
+  const [partsOverview, estimateData] = await Promise.all([
+    getWorkshopJobPartsOverview(workshopJobId),
+    getWorkshopJobEstimateData(workshopJobId),
+  ]);
 
   return {
     job: toJobResponse(job),
     lines: job.lines.map((line) => toLineResponse(line)),
     partsOverview,
+    ...estimateData,
   };
 };
 
@@ -625,6 +797,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
 
   const hasAnyField =
     Object.prototype.hasOwnProperty.call(input, "customerName") ||
+    Object.prototype.hasOwnProperty.call(input, "bikeId") ||
     Object.prototype.hasOwnProperty.call(input, "bikeDescription") ||
     Object.prototype.hasOwnProperty.call(input, "notes") ||
     Object.prototype.hasOwnProperty.call(input, "status");
@@ -637,6 +810,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
     const data: Prisma.WorkshopJobUpdateInput = {};
     let shouldEmitCompletion = false;
+    let customerNamePatchedExplicitly = false;
 
     if (Object.prototype.hasOwnProperty.call(input, "customerName")) {
       const customerName = normalizeOptionalText(input.customerName);
@@ -644,18 +818,59 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
         throw new HttpError(400, "customerName cannot be empty", "INVALID_WORKSHOP_JOB_UPDATE");
       }
       data.customerName = customerName;
+      customerNamePatchedExplicitly = true;
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "bikeDescription")) {
-      const bikeDescription = normalizeOptionalText(input.bikeDescription);
-      if (!bikeDescription) {
+    const bikeIdProvided = Object.prototype.hasOwnProperty.call(input, "bikeId");
+    const bikeDescriptionProvided = Object.prototype.hasOwnProperty.call(input, "bikeDescription");
+
+    if (bikeIdProvided || bikeDescriptionProvided) {
+      const resolvedBikeId = input.bikeId === null
+        ? null
+        : normalizeOptionalUuid(input.bikeId, "bike id", "INVALID_CUSTOMER_BIKE_ID");
+      const resolvedBikeDescription = bikeDescriptionProvided
+        ? normalizeOptionalText(input.bikeDescription)
+        : undefined;
+
+      if (bikeDescriptionProvided && !resolvedBikeDescription) {
         throw new HttpError(
           400,
           "bikeDescription cannot be empty",
           "INVALID_WORKSHOP_JOB_UPDATE",
         );
       }
-      data.bikeDescription = bikeDescription;
+
+      const resolvedCustomerAndBike = await resolveWorkshopJobCustomerAndBikeTx(tx, {
+        currentCustomerId: job.customerId,
+        requestedBikeId: bikeIdProvided ? resolvedBikeId : undefined,
+        currentBikeId: job.bikeId,
+        requestedBikeDescription: resolvedBikeDescription,
+        currentBikeDescription: job.bikeDescription,
+      });
+
+      if (bikeIdProvided) {
+        data.bikeId = resolvedCustomerAndBike.bikeId;
+      }
+
+      if (bikeDescriptionProvided || bikeIdProvided) {
+        const nextBikeDescription =
+          resolvedBikeDescription ?? resolvedCustomerAndBike.bikeDescription;
+        if (!nextBikeDescription) {
+          throw new HttpError(
+            400,
+            "bikeDescription cannot be empty",
+            "INVALID_WORKSHOP_JOB_UPDATE",
+          );
+        }
+        data.bikeDescription = nextBikeDescription;
+      }
+
+      if (!job.customerId && resolvedCustomerAndBike.customerId) {
+        data.customerId = resolvedCustomerAndBike.customerId;
+        if (!customerNamePatchedExplicitly && !normalizeOptionalText(job.customerName)) {
+          data.customerName = resolvedCustomerAndBike.customerName ?? job.customerName;
+        }
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "notes")) {
@@ -732,26 +947,31 @@ export const attachCustomerToWorkshopJob = async (
     const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
 
     let customerNameToSet: string | undefined;
-    if (customerId !== null) {
-      const customer = await tx.customer.findUnique({
-        where: { id: customerId },
-        select: {
-          id: true,
-          name: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
-
-      if (!customer) {
-        throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+    if (job.bikeId) {
+      if (customerId === null) {
+        throw new HttpError(
+          409,
+          "Cannot remove the customer while a bike record is linked",
+          "WORKSHOP_BIKE_REQUIRES_CUSTOMER",
+        );
       }
+
+      const linkedBike = await getCustomerBikeByIdTx(tx, job.bikeId);
+      if (linkedBike.customerId !== customerId) {
+        throw new HttpError(
+          409,
+          "Linked bike belongs to a different customer",
+          "WORKSHOP_BIKE_CUSTOMER_MISMATCH",
+        );
+      }
+    }
+
+    if (customerId !== null) {
+      const customer = await getCustomerByIdTx(tx, customerId);
 
       const existingName = normalizeOptionalText(job.customerName);
       if (!existingName) {
-        const explicitName = normalizeOptionalText(customer.name);
-        customerNameToSet =
-          explicitName ?? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
+        customerNameToSet = buildCustomerDisplayName(customer);
       }
     }
 
@@ -870,6 +1090,12 @@ export const addWorkshopJobLine = async (
         },
       });
     }
+
+    await invalidateCurrentWorkshopEstimateTx(
+      tx,
+      workshopJobId,
+      "Workshop estimate lines changed",
+    );
 
     return {
       line: toLineResponse(line),
@@ -994,6 +1220,12 @@ export const updateWorkshopJobLine = async (
       },
     });
 
+    await invalidateCurrentWorkshopEstimateTx(
+      tx,
+      workshopJobId,
+      "Workshop estimate lines changed",
+    );
+
     return {
       line: toLineResponse(updatedLine),
     };
@@ -1018,6 +1250,12 @@ export const deleteWorkshopJobLine = async (workshopJobId: string, lineId: strin
     await tx.workshopJobLine.delete({
       where: { id: lineId },
     });
+
+    await invalidateCurrentWorkshopEstimateTx(
+      tx,
+      workshopJobId,
+      "Workshop estimate lines changed",
+    );
 
     return { ok: true };
   });
