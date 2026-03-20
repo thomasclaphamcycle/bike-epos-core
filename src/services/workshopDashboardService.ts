@@ -3,6 +3,12 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 import { getWorkshopStaffingToday } from "./rotaService";
+import {
+  expandWorkshopStatusFilter,
+  normalizeWorkshopExecutionStatus,
+  WORKSHOP_ACTIVE_WORKLOAD_DB_STATUSES,
+  WORKSHOP_OPEN_DB_STATUSES,
+} from "./workshopStatusService";
 
 type WorkshopDashboardInput = {
   staffDate?: string;
@@ -30,8 +36,12 @@ const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
 
-const VALID_STATUSES: WorkshopJobStatus[] = [
+const VALID_STATUSES: string[] = [
   "BOOKING_MADE",
+  "READY_FOR_WORK",
+  "IN_PROGRESS",
+  "PAUSED",
+  "READY_FOR_COLLECTION",
   "BIKE_ARRIVED",
   "WAITING_FOR_APPROVAL",
   "APPROVED",
@@ -40,25 +50,17 @@ const VALID_STATUSES: WorkshopJobStatus[] = [
   "BIKE_READY",
   "COMPLETED",
   "CANCELLED",
+  "BOOKED",
+  "READY",
+  "COLLECTED",
+  "CLOSED",
+  "CHECKED_IN",
+  "START_WORK",
 ];
 
 const VALID_SOURCES: WorkshopJobSource[] = ["ONLINE", "IN_STORE"];
-const CAPACITY_OPEN_JOB_STATUSES: WorkshopJobStatus[] = [
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-  "BIKE_READY",
-];
-const CAPACITY_ACTIVE_WORKLOAD_STATUSES: WorkshopJobStatus[] = [
-  "BIKE_ARRIVED",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-  "BIKE_READY",
-];
+const CAPACITY_OPEN_JOB_STATUSES: WorkshopJobStatus[] = WORKSHOP_OPEN_DB_STATUSES;
+const CAPACITY_ACTIVE_WORKLOAD_STATUSES: WorkshopJobStatus[] = WORKSHOP_ACTIVE_WORKLOAD_DB_STATUSES;
 const WORKSHOP_STAFFING_FOUNDATION_TABLES = [
   "public.appconfig",
   "public.rotaassignment",
@@ -127,13 +129,17 @@ const parseStatusFilterOrThrow = (value: string | undefined): WorkshopJobStatus[
     return [];
   }
 
+  const expandedStatuses = new Set<WorkshopJobStatus>();
   for (const status of statuses) {
-    if (!VALID_STATUSES.includes(status as WorkshopJobStatus)) {
+    if (!VALID_STATUSES.includes(status)) {
       throw new HttpError(400, `Invalid status filter: ${status}`, "INVALID_FILTER");
     }
+    expandWorkshopStatusFilter(status).forEach((expandedStatus) => {
+      expandedStatuses.add(expandedStatus);
+    });
   }
 
-  return statuses as WorkshopJobStatus[];
+  return [...expandedStatuses];
 };
 
 const parseSourceFilterOrThrow = (value: string | undefined): WorkshopJobSource[] => {
@@ -637,6 +643,9 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
   }, {});
 
   const statusSummary = VALID_STATUSES.reduce<Record<string, number>>((acc, status) => {
+    if (status === "BOOKED" || status === "READY" || status === "COLLECTED" || status === "CLOSED" || status === "CHECKED_IN" || status === "START_WORK") {
+      return acc;
+    }
     acc[status] = 0;
     return acc;
   }, {});
@@ -657,6 +666,23 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
   );
 
   const partsOverviewByJobId = new Map(partsOverviewEntries);
+  const currentEstimates = jobs.length > 0
+    ? await prisma.workshopEstimate.findMany({
+        where: {
+          workshopJobId: {
+            in: jobs.map((job) => job.id),
+          },
+          supersededAt: null,
+        },
+        select: {
+          workshopJobId: true,
+          status: true,
+        },
+      })
+    : [];
+  const currentEstimateByJobId = new Map(
+    currentEstimates.map((estimate) => [estimate.workshopJobId, estimate]),
+  );
 
   const capacityToday = deriveWorkshopCapacityToday({
     staffingToday,
@@ -699,6 +725,7 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
       return {
       id: job.id,
       status: job.status,
+      executionStatus: normalizeWorkshopExecutionStatus(job.status),
       source: job.source,
       finalizedBasketId: job.finalizedBasketId,
       scheduledDate: job.scheduledDate,
@@ -707,6 +734,8 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
       depositStatus: job.depositStatus,
       assignedStaffId: job.assignedStaffId,
       assignedStaffName: job.assignedStaffName,
+      currentEstimateStatus: currentEstimateByJobId.get(job.id)?.status ?? null,
+      hasApprovedEstimate: currentEstimateByJobId.get(job.id)?.status === "APPROVED",
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
       cancelledAt: job.cancelledAt,

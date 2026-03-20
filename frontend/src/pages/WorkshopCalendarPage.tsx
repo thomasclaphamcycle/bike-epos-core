@@ -12,6 +12,7 @@ type DailyRow = {
 type DashboardJob = {
   id: string;
   status: string;
+  currentEstimateStatus?: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | null;
   scheduledDate: string | null;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
@@ -47,6 +48,10 @@ const shiftDays = (date: Date, days: number) => {
 
 const OPEN_STATUSES = new Set([
   "BOOKING_MADE",
+  "READY_FOR_WORK",
+  "IN_PROGRESS",
+  "PAUSED",
+  "READY_FOR_COLLECTION",
   "BIKE_ARRIVED",
   "WAITING_FOR_APPROVAL",
   "APPROVED",
@@ -104,7 +109,7 @@ export const WorkshopCalendarPage = () => {
       const dateKey = formatDateKey(date);
       const dayJobs = jobs.filter((job) => (job.scheduledDate || "").slice(0, 10) === dateKey);
       const bookingCount = dayJobs.length;
-      const approvalCount = dayJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
+      const approvalCount = dayJobs.filter((job) => job.currentEstimateStatus === "PENDING_APPROVAL").length;
       const waitingPartsCount = dayJobs.filter((job) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT").length;
       const unassignedCount = dayJobs.filter((job) => !job.assignedStaffId).length;
       const pressureBase = averageCompletedPerDay > 0 ? bookingCount / averageCompletedPerDay : (bookingCount > 0 ? 99 : 0);

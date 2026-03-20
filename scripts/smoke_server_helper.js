@@ -157,7 +157,9 @@ const createSmokeServerController = ({
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < shutdownTimeoutMs) {
-      if (!(await serverIsHealthy())) {
+      const healthy = await serverIsHealthy();
+      const lingeringPids = listLingeringServerPids();
+      if (!healthy && lingeringPids.length === 0) {
         return Date.now() - startedAt;
       }
       await sleep(shutdownPollMs);
@@ -170,7 +172,7 @@ const createSmokeServerController = ({
     try {
       const output = execFileSync(
         "lsof",
-        ["-tiTCP:" + String(port), "-sTCP:LISTEN"],
+        ["-nP", "-tiTCP:" + String(port), "-sTCP:LISTEN"],
         { encoding: "utf8" },
       ).trim();
 
@@ -331,11 +333,14 @@ const createSmokeServerController = ({
         log("Server process exited after SIGKILL");
       }
 
+      const cleanedImmediatelyAfterExit = await cleanupLingeringServerListeners();
+
       let shutdownMs;
       try {
         shutdownMs = await waitForServerShutdown();
       } catch (error) {
-        const cleanedLingeringListeners = await cleanupLingeringServerListeners();
+        const cleanedLingeringListeners =
+          cleanedImmediatelyAfterExit || await cleanupLingeringServerListeners();
         if (!cleanedLingeringListeners) {
           throw error;
         }

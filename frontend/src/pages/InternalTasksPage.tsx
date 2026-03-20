@@ -3,6 +3,11 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+  isWorkshopWaitingForParts,
+} from "../utils/workshopStatus";
 
 type ReminderRow = {
   customerId: string;
@@ -19,6 +24,8 @@ type ReminderResponse = {
 type WorkshopJob = {
   id: string;
   status: string;
+  executionStatus?: string | null;
+  currentEstimateStatus?: string | null;
   scheduledDate: string | null;
   bikeDescription: string | null;
   partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
@@ -157,7 +164,7 @@ export const InternalTasksPage = () => {
     const items: TaskItem[] = [];
 
     for (const job of jobs) {
-      if (job.status === "WAITING_FOR_APPROVAL") {
+      if (isWorkshopAwaitingApproval(job)) {
         items.push({
           key: `approval-${job.id}`,
           reason: "WAITING_APPROVAL",
@@ -170,7 +177,7 @@ export const InternalTasksPage = () => {
         });
       }
 
-      if (job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT") {
+      if (isWorkshopWaitingForParts(job)) {
         items.push({
           key: `parts-${job.id}`,
           reason: "WAITING_PARTS",
@@ -183,7 +190,7 @@ export const InternalTasksPage = () => {
         });
       }
 
-      if (job.status === "BIKE_READY") {
+      if (isWorkshopReadyForCollection(job)) {
         items.push({
           key: `ready-${job.id}`,
           reason: "READY_COLLECTION",

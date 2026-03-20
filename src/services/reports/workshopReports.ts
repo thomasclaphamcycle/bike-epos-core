@@ -72,13 +72,26 @@ export const getWorkshopCapacityReport = async () => {
       status: true,
       createdAt: true,
       completedAt: true,
+      estimates: {
+        where: {
+          supersededAt: null,
+        },
+        take: 1,
+        select: {
+          status: true,
+        },
+      },
     },
   });
 
   const openJobs = jobs.filter((job) => WORKSHOP_CAPACITY_OPEN_STATUSES.has(job.status));
-  const waitingForApprovalCount = openJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
+  const waitingForApprovalCount = openJobs.filter((job) => (
+    job.estimates[0]?.status === "PENDING_APPROVAL" || job.status === "WAITING_FOR_APPROVAL"
+  )).length;
   const waitingForPartsCount = openJobs.filter((job) => job.status === "WAITING_FOR_PARTS").length;
-  const readyForCollectionCount = openJobs.filter((job) => job.status === "BIKE_READY").length;
+  const readyForCollectionCount = openJobs.filter((job) => (
+    job.status === "READY_FOR_COLLECTION" || job.status === "BIKE_READY"
+  )).length;
   const completedJobsInLookback = jobs.filter((job) => (
     job.completedAt !== null
     && job.completedAt >= completedFrom

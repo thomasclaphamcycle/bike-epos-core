@@ -4,6 +4,10 @@ import { apiGet } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
 import { toReorderSuggestionRow } from "../utils/reordering";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopWaitingForParts,
+} from "../utils/workshopStatus";
 
 type CashSession = { id: string; status: "OPEN" | "CLOSED" };
 type CashSessionListResponse = { sessions: CashSession[] };
@@ -21,6 +25,8 @@ type WorkshopDashboardResponse = {
   jobs: Array<{
     id: string;
     status: string;
+    executionStatus?: string | null;
+    currentEstimateStatus?: string | null;
     partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
   }>;
 };
@@ -117,8 +123,8 @@ export const OpsHealthPage = () => {
     () => purchaseOrders.filter((po) => po.status !== "RECEIVED" && po.status !== "CANCELLED" && po.totals.quantityRemaining > 0 && po.expectedAt && new Date(po.expectedAt).getTime() < Date.now()),
     [purchaseOrders],
   );
-  const waitingForParts = useMemo(() => (workshop?.jobs || []).filter((job) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT"), [workshop]);
-  const waitingForApproval = useMemo(() => (workshop?.jobs || []).filter((job) => job.status === "WAITING_FOR_APPROVAL"), [workshop]);
+  const waitingForParts = useMemo(() => (workshop?.jobs || []).filter(isWorkshopWaitingForParts), [workshop]);
+  const waitingForApproval = useMemo(() => (workshop?.jobs || []).filter(isWorkshopAwaitingApproval), [workshop]);
   const stockExceptions = useMemo(() => {
     if (!velocity) return { negative: 0, zeroWithSales: 0, reorderNow: 0 };
     const suggestions = velocity.products.map((row) => toReorderSuggestionRow(row, velocity.filters.rangeDays));

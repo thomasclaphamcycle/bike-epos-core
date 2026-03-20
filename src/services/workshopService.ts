@@ -12,8 +12,11 @@ import { getOrCreateDefaultLocationTx } from "./locationService";
 import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
 import { getWorkshopJobEstimateData, invalidateCurrentWorkshopEstimateTx } from "./workshopEstimateService";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
-
-type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
+import {
+  normalizeWorkshopExecutionStatus,
+  toLegacyWorkflowStatus,
+  type WorkflowStatus,
+} from "./workshopStatusService";
 
 type CreateWorkshopJobInput = {
   customerId?: string | null;
@@ -160,35 +163,13 @@ const toWorkshopJobStatus = (status: WorkflowStatus): WorkshopJobStatus => {
     case "BOOKED":
       return "BOOKING_MADE";
     case "IN_PROGRESS":
-      return "BIKE_ARRIVED";
+      return "IN_PROGRESS";
     case "READY":
-      return "BIKE_READY";
+      return "READY_FOR_COLLECTION";
     case "COLLECTED":
       return "COMPLETED";
     case "CLOSED":
       return "COMPLETED";
-  }
-};
-
-const toWorkflowStatus = (job: {
-  status: WorkshopJobStatus;
-  closedAt: Date | null;
-}): WorkflowStatus => {
-  if (job.closedAt) {
-    return "CLOSED";
-  }
-
-  switch (job.status) {
-    case "BOOKING_MADE":
-      return "BOOKED";
-    case "BIKE_READY":
-      return "READY";
-    case "COMPLETED":
-      return "COLLECTED";
-    case "CANCELLED":
-      return "CLOSED";
-    default:
-      return "IN_PROGRESS";
   }
 };
 
@@ -496,6 +477,8 @@ const toJobResponse = (job: {
   locationId: string;
   customerName: string | null;
   bikeDescription: string | null;
+  assignedStaffId?: string | null;
+  assignedStaffName?: string | null;
   status: WorkshopJobStatus;
   notes: string | null;
   depositRequiredPence: number;
@@ -518,8 +501,11 @@ const toJobResponse = (job: {
   customerName: job.customerName,
   bikeDescription: job.bikeDescription ?? (job.bike ? buildCustomerBikeDisplayName(job.bike) : null),
   bike: toWorkshopBikeResponse(job.bike ?? null),
-  status: toWorkflowStatus(job),
+  status: toLegacyWorkflowStatus(job),
   rawStatus: job.status,
+  executionStatus: normalizeWorkshopExecutionStatus(job.status),
+  assignedStaffId: job.assignedStaffId ?? null,
+  assignedStaffName: job.assignedStaffName ?? null,
   notes: job.notes,
   depositRequiredPence: job.depositRequiredPence,
   depositStatus: job.depositStatus,
@@ -598,9 +584,9 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
   const locationId = normalizeOptionalText(input.locationId);
   const notes = normalizeOptionalText(input.notes);
 
-  const targetStatus = input.status
-    ? parseWorkflowStatus(input.status)
-    : ("BOOKED" as WorkflowStatus);
+    const targetStatus = input.status
+      ? parseWorkflowStatus(input.status)
+      : ("BOOKED" as WorkflowStatus);
 
   return prisma.$transaction(async (tx) => {
     const resolvedCustomerAndBike = await resolveWorkshopJobCustomerAndBikeTx(tx, {
@@ -1389,8 +1375,9 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
       where: { id: workshopJobId },
       data: {
         finalizedBasketId: basket.id,
-        ...(job.status === "BOOKING_MADE" || job.status === "BIKE_ARRIVED"
-          ? { status: "BIKE_READY" }
+        ...(normalizeWorkshopExecutionStatus(job.status) !== "COMPLETED" &&
+        normalizeWorkshopExecutionStatus(job.status) !== "CANCELLED"
+          ? { status: "READY_FOR_COLLECTION" }
           : {}),
       },
     });

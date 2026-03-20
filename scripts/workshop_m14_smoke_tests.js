@@ -2,14 +2,14 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
-const HEALTH_URL = `${BASE_URL}/health`;
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+const MAX_STARTUP_LOG_CHARS = 4000;
 
 const portFromBaseUrl = () => {
   const url = new URL(BASE_URL);
@@ -39,7 +39,35 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 });
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
+
+  try {
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Keep the primary URL only if parsing fails unexpectedly.
+  }
+
+  return urls;
+})();
+let activeAppBaseUrl = appBaseUrlCandidates[0];
+const serverStartedPattern = /Server running on http:\/\/localhost:\d+/i;
+const serverController = createSmokeServerController({
+  label: "m14-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupLogCharLimit: MAX_STARTUP_LOG_CHARS,
+  startupReadyPattern: serverStartedPattern,
+  envOverrides: {
+    PORT: portFromBaseUrl(),
+  },
+});
 
 const todayUtc = () => {
   const now = new Date();
@@ -68,8 +96,13 @@ const MANAGER_HEADERS = {
   "X-Staff-Id": MANAGER_USER_ID,
 };
 
+const fetchFromApp = async (path, options = {}) => {
+  activeAppBaseUrl = serverController.getBaseUrl();
+  return fetch(`${activeAppBaseUrl}${path}`, options);
+};
+
 const fetchJson = async (path, options = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchFromApp(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -86,25 +119,6 @@ const fetchJson = async (path, options = {}) => {
   }
 
   return { status: response.status, json };
-};
-
-const serverIsHealthy = async () => {
-  try {
-    const response = await fetch(HEALTH_URL);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-const waitForServer = async () => {
-  for (let i = 0; i < 60; i++) {
-    if (await serverIsHealthy()) {
-      return;
-    }
-    await sleep(500);
-  }
-  throw new Error("Server did not become healthy on /health");
 };
 
 const createCustomerAndJob = async (state, overrides = {}) => {
@@ -179,9 +193,6 @@ const run = async () => {
     userIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   const runTest = async (name, fn, results) => {
     try {
       await fn();
@@ -195,28 +206,7 @@ const run = async () => {
   };
 
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: portFromBaseUrl(),
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const staffUser = await prisma.user.create({
       data: {
@@ -342,10 +332,26 @@ const run = async () => {
       const invalid = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY" }),
+        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
       });
       assert.equal(invalid.status, 409, JSON.stringify(invalid.json));
       assert.equal(invalid.json.error.code, "INVALID_STATUS_TRANSITION");
+
+      const toReadyForWork = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "READY_FOR_WORK" }),
+      });
+      assert.equal(toReadyForWork.status, 201, JSON.stringify(toReadyForWork.json));
+      assert.equal(toReadyForWork.json.job.status, "READY_FOR_WORK");
+
+      const toReadyForWorkReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "READY_FOR_WORK" }),
+      });
+      assert.equal(toReadyForWorkReplay.status, 200, JSON.stringify(toReadyForWorkReplay.json));
+      assert.equal(toReadyForWorkReplay.json.idempotent, true);
 
       const toInProgress = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -353,23 +359,31 @@ const run = async () => {
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
       assert.equal(toInProgress.status, 201, JSON.stringify(toInProgress.json));
-      assert.equal(toInProgress.json.job.status, "BIKE_ARRIVED");
+      assert.equal(toInProgress.json.job.status, "IN_PROGRESS");
 
-      const toInProgressReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+      const toWaitingParts = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_PARTS" }),
+      });
+      assert.equal(toWaitingParts.status, 201, JSON.stringify(toWaitingParts.json));
+      assert.equal(toWaitingParts.json.job.status, "WAITING_FOR_PARTS");
+
+      const resumeWork = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
-      assert.equal(toInProgressReplay.status, 200, JSON.stringify(toInProgressReplay.json));
-      assert.equal(toInProgressReplay.json.idempotent, true);
+      assert.equal(resumeWork.status, 201, JSON.stringify(resumeWork.json));
+      assert.equal(resumeWork.json.job.status, "IN_PROGRESS");
 
       const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY" }),
+        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
       });
       assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
-      assert.equal(toReady.json.job.status, "BIKE_READY");
+      assert.equal(toReady.json.job.status, "READY_FOR_COLLECTION");
 
       const toCompleted = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -379,7 +393,8 @@ const run = async () => {
       assert.equal(toCompleted.status, 409, JSON.stringify(toCompleted.json));
       assert.equal(toCompleted.json.error.code, "WORKSHOP_COLLECTION_REQUIRES_SALE");
 
-      const toCancelled = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+      const { job: cancelJob } = await createCustomerAndJob(state);
+      const toCancelled = await fetchJson(`/api/workshop/jobs/${cancelJob.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "CANCELLED" }),
@@ -392,7 +407,7 @@ const run = async () => {
         { headers: MANAGER_HEADERS },
       );
       assert.equal(audit.status, 200, JSON.stringify(audit.json));
-      assert.ok(audit.json.events.length >= 3, JSON.stringify(audit.json));
+      assert.ok(audit.json.events.length >= 4, JSON.stringify(audit.json));
     }, results);
 
     await runTest("dashboard includes assignment + note stats and new filters", async () => {
@@ -464,9 +479,7 @@ const run = async () => {
   } finally {
     await cleanup(state);
     await prisma.$disconnect();
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-    }
+    await serverController.stop();
   }
 };
 

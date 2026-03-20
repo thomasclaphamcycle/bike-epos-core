@@ -2,6 +2,7 @@ import { Prisma, WorkshopEstimateStatus, WorkshopJobStatus } from "@prisma/clien
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { normalizeWorkshopExecutionStatus } from "./workshopStatusService";
 
 type SaveWorkshopEstimateInput = {
   actor?: AuditActor;
@@ -57,8 +58,12 @@ const normalizeOptionalText = (value: string | undefined | null) => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const canPersistEstimateForJobStatus = (status: WorkshopJobStatus) =>
-  !["WAITING_FOR_PARTS", "BIKE_READY", "COMPLETED", "CANCELLED"].includes(status);
+const canPersistEstimateForJobStatus = (status: WorkshopJobStatus) => {
+  const executionStatus = normalizeWorkshopExecutionStatus(status);
+  return executionStatus !== "READY_FOR_COLLECTION"
+    && executionStatus !== "COMPLETED"
+    && executionStatus !== "CANCELLED";
+};
 
 const parseEstimateStatus = (value: string) => {
   const normalized = value.trim().toUpperCase();
@@ -78,21 +83,6 @@ const parseEstimateStatus = (value: string) => {
     "status must be WAITING_FOR_APPROVAL, APPROVED, or REJECTED",
     "INVALID_APPROVAL_STATUS",
   );
-};
-
-const toWorkshopJobStatusForEstimate = (
-  status: WorkshopEstimateStatus,
-): WorkshopJobStatus => {
-  switch (status) {
-    case "PENDING_APPROVAL":
-      return "WAITING_FOR_APPROVAL";
-    case "APPROVED":
-      return "APPROVED";
-    case "REJECTED":
-      return "ON_HOLD";
-    default:
-      return "BIKE_ARRIVED";
-  }
 };
 
 const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
@@ -320,30 +310,6 @@ const createEstimateVersionTx = async (
   return created;
 };
 
-const updateWorkshopJobStatusFromEstimateTx = async (
-  tx: Prisma.TransactionClient,
-  jobId: string,
-  currentStatus: WorkshopJobStatus,
-  estimateStatus: WorkshopEstimateStatus,
-) => {
-  const nextStatus = toWorkshopJobStatusForEstimate(estimateStatus);
-  if (currentStatus === nextStatus) {
-    return currentStatus;
-  }
-
-  const updated = await tx.workshopJob.update({
-    where: { id: jobId },
-    data: {
-      status: nextStatus,
-    },
-    select: {
-      status: true,
-    },
-  });
-
-  return updated.status;
-};
-
 const updateEstimateStatusTx = async (
   tx: Prisma.TransactionClient,
   estimate: WorkshopEstimateRecord,
@@ -440,19 +406,6 @@ export const invalidateCurrentWorkshopEstimateTx = async (
 
   const fromJobStatus = job.status;
   let toJobStatus = job.status;
-  if (job.status === "WAITING_FOR_APPROVAL" || job.status === "APPROVED") {
-    const updated = await tx.workshopJob.update({
-      where: { id: workshopJobId },
-      data: {
-        status: "BIKE_ARRIVED",
-      },
-      select: {
-        status: true,
-      },
-    });
-    toJobStatus = updated.status;
-  }
-
   await createAuditEventTx(
     tx,
     {
@@ -509,7 +462,7 @@ export const saveWorkshopEstimate = async (
     if (!canPersistEstimateForJobStatus(job.status)) {
       throw new HttpError(
         409,
-        "Estimate snapshots can only be saved before the job is ready, completed, cancelled, or waiting for parts",
+        "Estimate snapshots can only be saved before the job is ready for collection, completed, or cancelled",
         "INVALID_ESTIMATE_STATE_TRANSITION",
       );
     }
@@ -553,7 +506,7 @@ export const setWorkshopEstimateStatus = async (
     if (!canPersistEstimateForJobStatus(job.status)) {
       throw new HttpError(
         409,
-        "Approval state can only be set before the job is ready, completed, cancelled, or waiting for parts",
+        "Approval state can only be set before the job is ready for collection, completed, or cancelled",
         "INVALID_APPROVAL_STATE_TRANSITION",
       );
     }
@@ -566,12 +519,6 @@ export const setWorkshopEstimateStatus = async (
         status: targetStatus,
         actor: input.actor,
       });
-      const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
-        tx,
-        workshopJobId,
-        job.status,
-        targetStatus,
-      );
       await writeApprovalAuditEventsTx(
         tx,
         {
@@ -580,7 +527,7 @@ export const setWorkshopEstimateStatus = async (
           fromEstimateStatus: null,
           toEstimateStatus: targetStatus,
           fromJobStatus,
-          toJobStatus,
+          toJobStatus: job.status,
         },
         input.actor,
       );
@@ -589,7 +536,7 @@ export const setWorkshopEstimateStatus = async (
         estimate: toEstimateResponse(created),
         job: {
           id: workshopJobId,
-          status: toJobStatus,
+          status: job.status,
         },
         idempotent: false,
       };
@@ -657,13 +604,6 @@ export const setWorkshopEstimateStatus = async (
       nextEstimateStatus = "REJECTED";
     }
 
-    const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
-      tx,
-      workshopJobId,
-      job.status,
-      nextEstimateStatus,
-    );
-
     await writeApprovalAuditEventsTx(
       tx,
       {
@@ -672,7 +612,7 @@ export const setWorkshopEstimateStatus = async (
         fromEstimateStatus,
         toEstimateStatus: nextEstimateStatus,
         fromJobStatus,
-        toJobStatus,
+        toJobStatus: job.status,
       },
       input.actor,
     );
@@ -681,7 +621,7 @@ export const setWorkshopEstimateStatus = async (
       estimate: toEstimateResponse(nextEstimate),
       job: {
         id: workshopJobId,
-        status: toJobStatus,
+        status: job.status,
       },
       idempotent: false,
     };

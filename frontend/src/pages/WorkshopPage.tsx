@@ -8,32 +8,48 @@ import { useToasts } from "../components/ToastProvider";
 const statusOptions = [
   "",
   "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
+  "READY_FOR_WORK",
+  "IN_PROGRESS",
+  "PAUSED",
   "WAITING_FOR_PARTS",
-  "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
   "COMPLETED",
   "CANCELLED",
 ] as const;
 
 type ViewMode = "board" | "list";
-type DisplayBucket = "booked" | "inProgress" | "waitingParts" | "ready" | "completed";
+type DisplayBucket =
+  | "booked"
+  | "readyForWork"
+  | "inProgress"
+  | "blocked"
+  | "ready"
+  | "completed";
 type QuickAction = {
   label: string;
   kind: "status" | "approval" | "navigate";
   value: string;
 };
+type ActiveLoginUser = {
+  id: string;
+  displayName: string;
+  role: "STAFF" | "MANAGER" | "ADMIN";
+  hasPin: boolean;
+};
 
 type DashboardJob = {
   id: string;
   status: string;
+  executionStatus: string;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
   scheduledDate: string | null;
   bikeDescription: string | null;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  currentEstimateStatus: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | null;
+  hasApprovedEstimate: boolean;
   customer: {
     id: string;
     firstName: string;
@@ -117,9 +133,10 @@ const boardColumns: Array<{
   description: string;
 }> = [
   { key: "booked", label: "Booked", description: "New and scheduled work" },
+  { key: "readyForWork", label: "Ready For Work", description: "Checked in and ready for a technician" },
   { key: "inProgress", label: "In Progress", description: "Actively being worked" },
-  { key: "waitingParts", label: "Waiting Parts", description: "Blocked on parts" },
-  { key: "ready", label: "Ready", description: "Ready for collection or close-out" },
+  { key: "blocked", label: "Blocked", description: "Paused, awaiting approval, or waiting on parts" },
+  { key: "ready", label: "Ready For Collection", description: "Ready for handover or close-out" },
   { key: "completed", label: "Completed", description: "Collected or completed work" },
 ];
 
@@ -173,17 +190,15 @@ const toStatusLabel = (status: string) => {
   switch (status) {
     case "BOOKING_MADE":
       return "Booked In";
-    case "BIKE_ARRIVED":
-      return "Bike Arrived";
-    case "WAITING_FOR_APPROVAL":
-      return "Awaiting Approval";
-    case "APPROVED":
-      return "Approved";
+    case "READY_FOR_WORK":
+      return "Ready For Work";
+    case "IN_PROGRESS":
+      return "In Progress";
+    case "PAUSED":
+      return "Paused";
     case "WAITING_FOR_PARTS":
       return "Waiting for Parts";
-    case "ON_HOLD":
-      return "On Hold";
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return "Ready for Collection";
     case "COMPLETED":
       return "Completed";
@@ -202,12 +217,14 @@ const toBucketLabel = (bucket: DisplayBucket | null) => {
   switch (bucket) {
     case "booked":
       return "Booked";
+    case "readyForWork":
+      return "Ready For Work";
     case "inProgress":
       return "In Progress";
-    case "waitingParts":
-      return "Waiting Parts";
+    case "blocked":
+      return "Blocked";
     case "ready":
-      return "Ready";
+      return "Ready For Collection";
     case "completed":
       return "Completed";
     default:
@@ -218,9 +235,9 @@ const toBucketLabel = (bucket: DisplayBucket | null) => {
 const toStatusBadgeClass = (status: string) => {
   if (status === "CANCELLED") return "status-badge status-cancelled";
   if (status === "COMPLETED") return "status-badge status-complete";
-  if (status === "BIKE_READY") return "status-badge status-ready";
+  if (status === "READY_FOR_COLLECTION") return "status-badge status-ready";
   if (status === "WAITING_FOR_PARTS") return "status-badge status-warning";
-  if (status === "APPROVED" || status === "ON_HOLD" || status === "WAITING_FOR_APPROVAL") {
+  if (status === "PAUSED" || status === "READY_FOR_WORK") {
     return "status-badge status-info";
   }
   return "status-badge";
@@ -245,34 +262,37 @@ const toPartsStatus = (job: DashboardJob) => {
   if (job.partsStatus) {
     return job.partsStatus;
   }
-  return job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
+  return job.executionStatus === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
 };
 
-const getApprovalLabel = (status: string) => {
-  if (status === "WAITING_FOR_APPROVAL") {
+const getApprovalLabel = (status: DashboardJob["currentEstimateStatus"]) => {
+  if (status === "PENDING_APPROVAL") {
     return "Awaiting Approval";
   }
   if (status === "APPROVED") {
     return "Approved Estimate";
   }
+  if (status === "REJECTED") {
+    return "Estimate Rejected";
+  }
   return null;
 };
 
 const getNextStepHint = (job: DashboardJob) => {
-  switch (job.status) {
+  switch (job.executionStatus) {
     case "BOOKING_MADE":
-      return "Confirm the estimate or start workshop work.";
-    case "WAITING_FOR_APPROVAL":
-      return "Chase approval before booking bench time.";
-    case "BIKE_ARRIVED":
-      return "Bike is on site and ready to move into active work.";
-    case "APPROVED":
-      return "Estimate is approved. Keep the job moving toward ready.";
+      return "Check the bike in and put it into the technician queue.";
+    case "READY_FOR_WORK":
+      return job.currentEstimateStatus === "PENDING_APPROVAL"
+        ? "Estimate is still awaiting approval. Start work only if that is already agreed with the customer."
+        : "Assign a technician and start bench work when ready.";
+    case "IN_PROGRESS":
+      return "Continue work, log progress updates, and move to ready when bench work is complete.";
     case "WAITING_FOR_PARTS":
       return "Check the parts gap before promising collection.";
-    case "ON_HOLD":
+    case "PAUSED":
       return "Resolve the hold reason before resuming work.";
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return job.finalizedBasketId ? "Handoff is ready in the collection queue." : "Open the collection handoff when the customer arrives.";
     case "COMPLETED":
       return "Job is finished and can be reviewed for any follow-up.";
@@ -332,58 +352,65 @@ const compareJobs = (left: DashboardJob, right: DashboardJob) => {
 
 const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
   const partsStatus = toPartsStatus(job);
-  switch (job.status) {
+  switch (job.executionStatus) {
     case "BOOKING_MADE":
-    case "WAITING_FOR_APPROVAL":
       return "booked";
+    case "READY_FOR_WORK":
+      return "readyForWork";
     case "WAITING_FOR_PARTS":
-      return "waitingParts";
-    case "BIKE_READY":
+    case "PAUSED":
+      return "blocked";
+    case "READY_FOR_COLLECTION":
       return "ready";
     case "COMPLETED":
       return "completed";
     case "CANCELLED":
       return null;
     default:
-      return partsStatus === "SHORT" ? "waitingParts" : "inProgress";
+      return partsStatus === "SHORT" ? "blocked" : "inProgress";
   }
 };
 
 const getQuickActions = (job: DashboardJob): QuickAction[] => {
-  switch (job.status) {
+  switch (job.executionStatus) {
     case "BOOKING_MADE":
       return [
-        { label: "Request Approval", kind: "approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Ready For Work", kind: "status", value: "READY_FOR_WORK" },
+        { label: "Cancel", kind: "status", value: "CANCELLED" },
+      ];
+    case "READY_FOR_WORK":
+      return [
         { label: "Start Work", kind: "status", value: "IN_PROGRESS" },
+        { label: "Pause", kind: "status", value: "PAUSED" },
+        { label: "Waiting Parts", kind: "status", value: "WAITING_FOR_PARTS" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "WAITING_FOR_APPROVAL":
+    case "IN_PROGRESS":
       return [
-        { label: "Approve Estimate", kind: "approval", value: "APPROVED" },
+        { label: "Pause", kind: "status", value: "PAUSED" },
+        { label: "Waiting Parts", kind: "status", value: "WAITING_FOR_PARTS" },
+        { label: "Ready For Collection", kind: "status", value: "READY_FOR_COLLECTION" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "BIKE_ARRIVED":
-    case "ON_HOLD":
+    case "PAUSED":
       return [
-        { label: "Request Approval", kind: "approval", value: "WAITING_FOR_APPROVAL" },
-        { label: "Ready", kind: "status", value: "READY" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
-      ];
-    case "APPROVED":
-      return [
-        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Ready For Work", kind: "status", value: "READY_FOR_WORK" },
+        { label: "Start Work", kind: "status", value: "IN_PROGRESS" },
+        { label: "Waiting Parts", kind: "status", value: "WAITING_FOR_PARTS" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     case "WAITING_FOR_PARTS":
       return [
+        { label: "Ready For Work", kind: "status", value: "READY_FOR_WORK" },
         { label: "Resume", kind: "status", value: "IN_PROGRESS" },
-        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Pause", kind: "status", value: "PAUSED" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return [
-        { label: "Collection Queue", kind: "navigate", value: "/workshop/collection" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
+        ...(job.sale ? [{ label: "Complete", kind: "status" as const, value: "COMPLETED" }] : []),
+        ...(!job.sale ? [{ label: "Collection Queue", kind: "navigate" as const, value: "/workshop/collection" }] : []),
+        { label: "Resume Work", kind: "status", value: "IN_PROGRESS" },
       ];
     default:
       return [];
@@ -398,9 +425,11 @@ export const WorkshopPage = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [status, setStatus] = useState<(typeof statusOptions)[number]>("");
   const [search, setSearch] = useState("");
+  const [assignmentFilter, setAssignmentFilter] = useState<"all" | "mine" | "unassigned" | string>("all");
   const debouncedSearch = useDebouncedValue(search, 250);
 
   const [jobs, setJobs] = useState<DashboardJob[]>([]);
+  const [activeUsers, setActiveUsers] = useState<ActiveLoginUser[]>([]);
   const [staffingToday, setStaffingToday] = useState<DashboardResponse["staffingToday"] | null>(null);
   const [capacityToday, setCapacityToday] = useState<DashboardResponse["capacityToday"] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -415,8 +444,15 @@ export const WorkshopPage = () => {
     if (debouncedSearch.trim()) {
       query.set("search", debouncedSearch.trim());
     }
+    if (assignmentFilter === "mine" && user?.id) {
+      query.set("assignedTo", user.id);
+    } else if (assignmentFilter === "unassigned") {
+      query.set("unassigned", "true");
+    } else if (assignmentFilter !== "all") {
+      query.set("assignedTo", assignmentFilter);
+    }
     return query.toString();
-  }, [status, debouncedSearch]);
+  }, [assignmentFilter, debouncedSearch, status, user?.id]);
 
   const loadJobs = async () => {
     setLoading(true);
@@ -437,6 +473,28 @@ export const WorkshopPage = () => {
     void loadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadActiveUsers = async () => {
+      try {
+        const payload = await apiGet<{ users: ActiveLoginUser[] }>("/api/auth/active-users");
+        if (!cancelled) {
+          setActiveUsers(Array.isArray(payload.users) ? payload.users : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveUsers([]);
+        }
+      }
+    };
+
+    void loadActiveUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateStatus = async (jobId: string, nextStatus: string) => {
     try {
@@ -508,6 +566,13 @@ export const WorkshopPage = () => {
       partsBlockedCount,
     };
   }, [jobs]);
+
+  const visibleAssignees = useMemo(() => {
+    if (user?.role === "STAFF") {
+      return activeUsers.filter((activeUser) => activeUser.id === user.id);
+    }
+    return activeUsers;
+  }, [activeUsers, user?.id, user?.role]);
 
   const staffingWindow = staffingToday
     ? formatTradingWindow(staffingToday.summary.opensAt, staffingToday.summary.closesAt)
@@ -703,7 +768,7 @@ export const WorkshopPage = () => {
             <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
               {statusOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option || "All"}
+                  {option ? toStatusLabel(option) : "All"}
                 </option>
               ))}
             </select>
@@ -716,6 +781,23 @@ export const WorkshopPage = () => {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="search notes, customer, contact"
             />
+          </label>
+
+          <label>
+            Technician
+            <select
+              value={assignmentFilter}
+              onChange={(event) => setAssignmentFilter(event.target.value)}
+            >
+              <option value="all">All jobs</option>
+              {user?.id ? <option value="mine">My jobs</option> : null}
+              <option value="unassigned">Unassigned</option>
+              {visibleAssignees.map((activeUser) => (
+                <option key={activeUser.id} value={activeUser.id}>
+                  {activeUser.displayName}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -782,11 +864,14 @@ export const WorkshopPage = () => {
                               <div>
                                 <strong>{job.bikeDescription || "Workshop job"}</strong>
                                 <div className="table-secondary mono-text">{job.id.slice(0, 8)}</div>
+                                <div className="table-secondary">
+                                  {job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Unassigned"}
+                                </div>
                               </div>
                               <div className="status-stack">
-                                <span className={toStatusBadgeClass(job.status)}>{toStatusLabel(job.status)}</span>
-                                {getApprovalLabel(job.status) ? (
-                                  <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
+                                <span className={toStatusBadgeClass(job.executionStatus)}>{toStatusLabel(job.executionStatus)}</span>
+                                {getApprovalLabel(job.currentEstimateStatus) ? (
+                                  <span className="status-badge status-info">{getApprovalLabel(job.currentEstimateStatus)}</span>
                                 ) : null}
                                 {getUrgency(job) ? (
                                   <span className={getUrgency(job)?.className}>{getUrgency(job)?.label}</span>
@@ -854,11 +939,11 @@ export const WorkshopPage = () => {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr>
+                        <tr>
                   <th>Job</th>
                   <th>Title</th>
                   <th>Board Bucket</th>
-                  <th>Raw Status</th>
+                  <th>Execution Status</th>
                   <th>Promised</th>
                   <th>Customer</th>
                   <th>Totals</th>
@@ -879,13 +964,16 @@ export const WorkshopPage = () => {
                       <td>{toBucketLabel(toDisplayBucket(job))}</td>
                       <td>
                         <div className="status-stack">
-                          <span className={toStatusBadgeClass(job.status)}>{toStatusLabel(job.status)}</span>
-                          {getApprovalLabel(job.status) ? (
-                            <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
+                          <span className={toStatusBadgeClass(job.executionStatus)}>{toStatusLabel(job.executionStatus)}</span>
+                          {getApprovalLabel(job.currentEstimateStatus) ? (
+                            <span className="status-badge status-info">{getApprovalLabel(job.currentEstimateStatus)}</span>
                           ) : null}
                           {getUrgency(job) ? (
                             <span className={getUrgency(job)?.className}>{getUrgency(job)?.label}</span>
                           ) : null}
+                        </div>
+                        <div className="table-secondary">
+                          {job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Unassigned"}
                         </div>
                       </td>
                       <td>{formatDate(job.scheduledDate)}</td>

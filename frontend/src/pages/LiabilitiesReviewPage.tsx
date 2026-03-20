@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+} from "../utils/workshopStatus";
 
 type RangePreset = "30" | "90" | "365";
 
@@ -153,8 +157,8 @@ export const LiabilitiesReviewPage = () => {
       }
 
       if (workshopPayload) {
-        const readyJobs = workshopPayload.jobs.filter((job) => job.status === "BIKE_READY");
-        const waitingApprovalJobs = workshopPayload.jobs.filter((job) => job.status === "WAITING_FOR_APPROVAL");
+        const readyJobs = workshopPayload.jobs.filter(isWorkshopReadyForCollection);
+        const waitingApprovalJobs = workshopPayload.jobs.filter(isWorkshopAwaitingApproval);
 
         const readySales = await Promise.allSettled(
           readyJobs

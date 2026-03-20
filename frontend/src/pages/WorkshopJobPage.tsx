@@ -6,6 +6,12 @@ import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
+type ActiveLoginUser = {
+  id: string;
+  displayName: string;
+  role: "STAFF" | "MANAGER" | "ADMIN";
+  hasPin: boolean;
+};
 
 type WorkshopLine = {
   id: string;
@@ -143,11 +149,14 @@ type WorkshopJobResponse = {
     id: string;
     status: string;
     rawStatus?: string | null;
+    executionStatus?: string | null;
     customerId: string | null;
     customerName: string | null;
     bikeId: string | null;
     bikeDescription: string | null;
     bike: CustomerBikeRecord | null;
+    assignedStaffId: string | null;
+    assignedStaffName: string | null;
     notes: string | null;
     depositRequiredPence: number;
     depositStatus: string;
@@ -252,14 +261,13 @@ const partsStatusClass = (status: WorkshopPartsStatus | undefined) => {
 
 const workflowStatusClass = (status: string) => {
   switch (status) {
-    case "WAITING_FOR_APPROVAL":
-      return "status-badge status-warning";
-    case "APPROVED":
-    case "ON_HOLD":
+    case "READY_FOR_WORK":
       return "status-badge status-info";
+    case "PAUSED":
+      return "status-badge status-warning";
     case "WAITING_FOR_PARTS":
       return "status-badge status-warning";
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return "status-badge status-ready";
     case "COMPLETED":
       return "status-badge status-complete";
@@ -274,17 +282,15 @@ const workflowStatusLabel = (status: string) => {
   switch (status) {
     case "BOOKING_MADE":
       return "Booked";
-    case "BIKE_ARRIVED":
+    case "READY_FOR_WORK":
+      return "Ready For Work";
+    case "IN_PROGRESS":
       return "In Progress";
-    case "WAITING_FOR_APPROVAL":
-      return "Awaiting Approval";
-    case "APPROVED":
-      return "Approved";
+    case "PAUSED":
+      return "Paused";
     case "WAITING_FOR_PARTS":
       return "Waiting For Parts";
-    case "ON_HOLD":
-      return "On Hold";
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return "Ready For Collection";
     case "COMPLETED":
       return "Collected";
@@ -302,28 +308,33 @@ const formatOptionalDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
 
 const getWorkflowGuidance = (input: {
-  rawStatus: string;
+  executionStatus: string;
+  estimateStatus: WorkshopEstimateRecord["status"] | null;
   partsStatus: WorkshopPartsStatus | undefined;
   hasSale: boolean;
   hasBasket: boolean;
 }) => {
-  if (input.rawStatus === "WAITING_FOR_APPROVAL") {
-    return "Pause workshop work until the estimate is approved or updated for the customer.";
+  if (input.estimateStatus === "PENDING_APPROVAL" && input.executionStatus !== "COMPLETED") {
+    return "Estimate approval is still pending. Keep technician work aligned with what has actually been agreed with the customer.";
   }
 
-  if (input.rawStatus === "WAITING_FOR_PARTS" || input.partsStatus === "SHORT") {
+  if (input.executionStatus === "WAITING_FOR_PARTS" || input.partsStatus === "SHORT") {
     return "This job is blocked on parts. Reserve stock or receive missing parts before pushing it forward.";
   }
 
-  if (input.rawStatus === "BOOKING_MADE") {
-    return "The bike is checked in and ready for the mechanic to start work or request approval.";
+  if (input.executionStatus === "BOOKING_MADE") {
+    return "Book the bike in properly, assign it if needed, and move it into the ready-for-work queue.";
   }
 
-  if (input.rawStatus === "BIKE_ARRIVED" || input.rawStatus === "APPROVED" || input.rawStatus === "ON_HOLD") {
-    return "Continue work, update notes as progress changes, and mark the bike ready when the bench work is complete.";
+  if (input.executionStatus === "READY_FOR_WORK") {
+    return "The bike is checked in and ready for a technician to start bench work.";
   }
 
-  if (input.rawStatus === "BIKE_READY") {
+  if (input.executionStatus === "IN_PROGRESS" || input.executionStatus === "PAUSED") {
+    return "Continue work, update progress notes as things change, and mark the bike ready when the bench work is complete.";
+  }
+
+  if (input.executionStatus === "READY_FOR_COLLECTION") {
     if (input.hasSale) {
       return "A sale is already linked. Open the sale to collect payment and finish the handover.";
     }
@@ -333,11 +344,11 @@ const getWorkflowGuidance = (input: {
     return "Workshop work is finished. Send the job to POS to create the collection handoff.";
   }
 
-  if (input.rawStatus === "COMPLETED") {
+  if (input.executionStatus === "COMPLETED") {
     return "This job has already been collected through POS checkout.";
   }
 
-  if (input.rawStatus === "CANCELLED") {
+  if (input.executionStatus === "CANCELLED") {
     return "This job is cancelled and is no longer part of the active workshop queue.";
   }
 
@@ -349,6 +360,10 @@ const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
     return "";
   }
 
+  if (job.executionStatus) {
+    return job.executionStatus;
+  }
+
   if (job.rawStatus) {
     return job.rawStatus;
   }
@@ -357,36 +372,57 @@ const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
     case "BOOKED":
       return "BOOKING_MADE";
     case "READY":
-      return "BIKE_READY";
+      return "READY_FOR_COLLECTION";
     case "COLLECTED":
     case "CLOSED":
       return "COMPLETED";
     case "IN_PROGRESS":
-      return "BIKE_ARRIVED";
+      return "IN_PROGRESS";
     default:
       return job.status;
   }
 };
 
 const canPersistApprovalStatus = (status: string) =>
-  ["BOOKING_MADE", "BIKE_ARRIVED", "WAITING_FOR_APPROVAL", "APPROVED", "ON_HOLD"].includes(status);
+  ["BOOKING_MADE", "READY_FOR_WORK", "IN_PROGRESS", "PAUSED", "WAITING_FOR_PARTS"].includes(status);
 
 const getStageActions = (status: string): Array<{ label: string; value: string }> => {
   switch (status) {
     case "BOOKING_MADE":
       return [
-        { label: "Start Work", value: "IN_PROGRESS" },
+        { label: "Ready For Work", value: "READY_FOR_WORK" },
         { label: "Cancel", value: "CANCELLED" },
       ];
-    case "BIKE_ARRIVED":
-    case "APPROVED":
-    case "ON_HOLD":
+    case "READY_FOR_WORK":
       return [
-        { label: "Ready", value: "READY" },
+        { label: "Start Work", value: "IN_PROGRESS" },
+        { label: "Pause", value: "PAUSED" },
+        { label: "Waiting For Parts", value: "WAITING_FOR_PARTS" },
         { label: "Cancel", value: "CANCELLED" },
       ];
-    case "WAITING_FOR_APPROVAL":
-      return [{ label: "Cancel", value: "CANCELLED" }];
+    case "IN_PROGRESS":
+      return [
+        { label: "Pause", value: "PAUSED" },
+        { label: "Waiting For Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Ready For Collection", value: "READY_FOR_COLLECTION" },
+        { label: "Cancel", value: "CANCELLED" },
+      ];
+    case "PAUSED":
+      return [
+        { label: "Ready For Work", value: "READY_FOR_WORK" },
+        { label: "Start Work", value: "IN_PROGRESS" },
+        { label: "Waiting For Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Cancel", value: "CANCELLED" },
+      ];
+    case "WAITING_FOR_PARTS":
+      return [
+        { label: "Ready For Work", value: "READY_FOR_WORK" },
+        { label: "Start Work", value: "IN_PROGRESS" },
+        { label: "Pause", value: "PAUSED" },
+        { label: "Cancel", value: "CANCELLED" },
+      ];
+    case "READY_FOR_COLLECTION":
+      return [{ label: "Resume Work", value: "IN_PROGRESS" }];
     default:
       return [];
   }
@@ -407,6 +443,8 @@ export const WorkshopJobPage = () => {
   const [partsLoading, setPartsLoading] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
   const [customerBikesLoading, setCustomerBikesLoading] = useState(false);
+  const [activeUsers, setActiveUsers] = useState<ActiveLoginUser[]>([]);
+  const [assigningStaff, setAssigningStaff] = useState(false);
 
   const [editableByLineId, setEditableByLineId] = useState<Record<string, EditableLine>>({});
 
@@ -538,6 +576,28 @@ export const WorkshopJobPage = () => {
   }, [payload?.job.customerId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadActiveUsers = async () => {
+      try {
+        const response = await apiGet<{ users: ActiveLoginUser[] }>("/api/auth/active-users");
+        if (!cancelled) {
+          setActiveUsers(Array.isArray(response.users) ? response.users : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveUsers([]);
+        }
+      }
+    };
+
+    void loadActiveUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!debouncedPartSearch.trim()) {
       setPartResults([]);
       return;
@@ -580,6 +640,26 @@ export const WorkshopJobPage = () => {
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update status";
       error(message);
+    }
+  };
+
+  const updateAssignedStaff = async (staffId: string | null) => {
+    if (!id) {
+      return;
+    }
+
+    setAssigningStaff(true);
+    try {
+      await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/assign`, {
+        staffId,
+      });
+      success(staffId ? "Technician assignment updated" : "Technician unassigned");
+      await loadJob();
+    } catch (assignError) {
+      const message = assignError instanceof Error ? assignError.message : "Failed to update technician assignment";
+      error(message);
+    } finally {
+      setAssigningStaff(false);
     }
   };
 
@@ -949,6 +1029,14 @@ export const WorkshopJobPage = () => {
   );
 
   const stageActions = useMemo(() => getStageActions(rawStatus), [rawStatus]);
+  const visibleTechnicians = useMemo(() => {
+    if (user?.role === "STAFF") {
+      return activeUsers.filter((activeUser) => (
+        activeUser.id === user.id || activeUser.id === payload?.job.assignedStaffId
+      ));
+    }
+    return activeUsers;
+  }, [activeUsers, payload?.job.assignedStaffId, user?.id, user?.role]);
 
   const customerNotes = useMemo(
     () => notes.filter((note) => note.visibility === "CUSTOMER"),
@@ -963,12 +1051,13 @@ export const WorkshopJobPage = () => {
   const workflowGuidance = useMemo(
     () =>
       getWorkflowGuidance({
-        rawStatus,
+        executionStatus: rawStatus,
+        estimateStatus: currentEstimate?.status ?? null,
         partsStatus: partsOverview?.summary.partsStatus,
         hasSale: Boolean(payload?.job.sale),
         hasBasket: Boolean(payload?.job.finalizedBasketId),
       }),
-    [partsOverview?.summary.partsStatus, payload?.job.finalizedBasketId, payload?.job.sale, rawStatus],
+    [currentEstimate?.status, partsOverview?.summary.partsStatus, payload?.job.finalizedBasketId, payload?.job.sale, rawStatus],
   );
   const collectionSummary = useMemo(() => {
     if (!payload) {
@@ -983,7 +1072,7 @@ export const WorkshopJobPage = () => {
       return `POS basket ${payload.job.finalizedBasketId.slice(0, 8)} is ready for collection handoff.`;
     }
 
-    if (rawStatus === "BIKE_READY") {
+    if (rawStatus === "READY_FOR_COLLECTION") {
       return "Ready for collection, but the POS handoff has not been opened yet.";
     }
 
@@ -1000,7 +1089,7 @@ export const WorkshopJobPage = () => {
         <div className="card-header-row">
           <h1>Workshop Job {id.slice(0, 8)}</h1>
           <div className="actions-inline">
-            {payload && payload.job.status !== "CLOSED" && payload.job.status !== "CANCELLED" ? (
+            {payload && payload.job.status !== "CLOSED" && rawStatus !== "CANCELLED" && rawStatus !== "COMPLETED" ? (
               <button type="button" className="primary" onClick={openPosHandoff}>
                 {payload.job.sale
                   ? "Open sale"
@@ -1037,7 +1126,7 @@ export const WorkshopJobPage = () => {
                 </span>
               </div>
               <div>
-                <strong>System Status:</strong> {rawStatus || "-"}
+                <strong>Stored Status:</strong> {payload.job.rawStatus || rawStatus || "-"}
               </div>
               <div>
                 <strong>Parts State:</strong>{" "}
@@ -1045,6 +1134,7 @@ export const WorkshopJobPage = () => {
                   {partsOverview?.summary.partsStatus ?? "OK"}
                 </span>
               </div>
+              <div><strong>Technician:</strong> {payload.job.assignedStaffName || "Unassigned"}</div>
               <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
               <div><strong>Linked Bike Record:</strong> {payload.job.bike?.displayName || "No linked bike record"}</div>
@@ -1056,12 +1146,53 @@ export const WorkshopJobPage = () => {
               </div>
             </div>
 
+            <div className="filter-row" style={{ marginTop: "12px" }}>
+              <label>
+                Technician Assignment
+                <select
+                  value={payload.job.assignedStaffId ?? ""}
+                  onChange={(event) => void updateAssignedStaff(event.target.value || null)}
+                  disabled={assigningStaff}
+                >
+                  <option value="">Unassigned</option>
+                  {visibleTechnicians.map((activeUser) => (
+                    <option key={activeUser.id} value={activeUser.id}>
+                      {activeUser.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {user?.id ? (
+                <div className="actions-inline">
+                  <button
+                    type="button"
+                    onClick={() => void updateAssignedStaff(user.id)}
+                    disabled={assigningStaff || payload.job.assignedStaffId === user.id}
+                  >
+                    Assign To Me
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void updateAssignedStaff(null)}
+                    disabled={assigningStaff || !payload.job.assignedStaffId}
+                  >
+                    Unassign
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
             <div className="action-wrap" style={{ marginBottom: "10px" }}>
               {stageActions.map((action) => (
                 <button key={action.value} type="button" onClick={() => void updateStageStatus(action.value)}>
                   {action.label}
                 </button>
               ))}
+              {rawStatus === "READY_FOR_COLLECTION" && payload.job.sale ? (
+                <button type="button" onClick={() => void updateStageStatus("COMPLETED")}>
+                  Complete Job
+                </button>
+              ) : null}
               {canPersistApprovalStatus(rawStatus) ? (
                 <>
                   <button
@@ -1103,7 +1234,7 @@ export const WorkshopJobPage = () => {
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 <div className="job-meta-grid">
                   <div>
-                    <strong>Latest internal note:</strong>{" "}
+                    <strong>Latest technician update:</strong>{" "}
                     {latestInternalNote ? truncateText(latestInternalNote.note) : "No internal notes yet."}
                   </div>
                   <div>
@@ -1114,7 +1245,7 @@ export const WorkshopJobPage = () => {
               </div>
             ) : null}
 
-            {rawStatus === "BIKE_READY" ? (
+            {rawStatus === "READY_FOR_COLLECTION" ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 Collection is completed through POS checkout. Use the POS handoff button above instead of
                 manually marking the job collected.
@@ -1678,7 +1809,7 @@ export const WorkshopJobPage = () => {
           <div>
             <h2>Progress & Notes</h2>
             <p className="muted-text">
-              Use internal notes for staff context. Use customer-visible notes for quote or approval messaging.
+              Use internal notes as technician progress updates, blockers, and handover context. Use customer-visible notes for quote or approval messaging.
             </p>
           </div>
         </div>
@@ -1689,7 +1820,7 @@ export const WorkshopJobPage = () => {
             <textarea
               value={noteDraft}
               onChange={(event) => setNoteDraft(event.target.value)}
-              placeholder="Add internal note or customer-visible quote note"
+              placeholder="Add technician progress update, blocker note, or customer-visible quote message"
             />
           </label>
           <label>
@@ -1736,10 +1867,10 @@ export const WorkshopJobPage = () => {
           </section>
 
           <section className="notes-panel">
-            <h3>Internal Notes</h3>
+            <h3>Technician Progress Notes</h3>
             {notesLoading ? <p>Loading notes...</p> : null}
             {internalNotes.length === 0 ? (
-              <p className="muted-text">No internal notes yet.</p>
+              <p className="muted-text">No technician progress notes yet.</p>
             ) : (
               internalNotes.map((note) => (
                 <article key={note.id} className="note-card">

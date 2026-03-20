@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { reorderUrgencyRank, toReorderSuggestionRow } from "../utils/reordering";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopWaitingForParts,
+} from "../utils/workshopStatus";
 
 type RangePreset = "30" | "90";
 
@@ -29,6 +33,8 @@ type WorkshopDashboardResponse = {
   jobs: Array<{
     id: string;
     status: string;
+    executionStatus?: string | null;
+    currentEstimateStatus?: string | null;
     scheduledDate: string | null;
     partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
     customer: { firstName: string; lastName: string } | null;
@@ -148,8 +154,8 @@ export const AlertsCentrePage = () => {
 
   const lowStockItems = reorderSuggestions.filter((row) => row.currentOnHand <= 2).slice(0, 10);
   const reorderNowItems = reorderSuggestions.filter((row) => row.urgency === "Reorder Now").slice(0, 10);
-  const awaitingApproval = (workshop?.jobs || []).filter((job) => job.status === "WAITING_FOR_APPROVAL");
-  const waitingForParts = (workshop?.jobs || []).filter((job) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT");
+  const awaitingApproval = (workshop?.jobs || []).filter(isWorkshopAwaitingApproval);
+  const waitingForParts = (workshop?.jobs || []).filter(isWorkshopWaitingForParts);
   const overduePurchaseOrders = purchaseOrders
     .filter((po) => po.status !== "RECEIVED" && po.status !== "CANCELLED")
     .filter((po) => po.expectedAt && new Date(po.expectedAt).getTime() < Date.now())

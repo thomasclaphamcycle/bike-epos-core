@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+} from "../utils/workshopStatus";
 
 type ReminderRow = {
   customerId: string;
@@ -23,6 +27,8 @@ type RemindersResponse = {
 type WorkshopJob = {
   id: string;
   status: string;
+  executionStatus?: string | null;
+  currentEstimateStatus?: string | null;
   scheduledDate: string | null;
   bikeDescription: string | null;
   customer: {
@@ -139,7 +145,7 @@ export const CustomerCommunicationQueuePage = () => {
       if (!job.customer) {
         continue;
       }
-      if (job.status === "WAITING_FOR_APPROVAL") {
+      if (isWorkshopAwaitingApproval(job)) {
         items.push({
           key: `approval-${job.id}`,
           reason: "WAITING_APPROVAL",
@@ -153,7 +159,7 @@ export const CustomerCommunicationQueuePage = () => {
           priority: 5,
         });
       }
-      if (job.status === "BIKE_READY") {
+      if (isWorkshopReadyForCollection(job)) {
         items.push({
           key: `ready-${job.id}`,
           reason: "READY_COLLECTION",

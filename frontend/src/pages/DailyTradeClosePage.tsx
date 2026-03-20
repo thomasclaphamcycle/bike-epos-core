@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { isWorkshopReadyForCollection } from "../utils/workshopStatus";
 
 type SalesDailyRow = {
   date: string;
@@ -228,7 +229,7 @@ export const DailyTradeClosePage = () => {
   }), [sessionSummaries, sessions]);
 
   const workshopReadyCount = useMemo(
-    () => workshop?.jobs.filter((job) => job.status === "BIKE_READY").length ?? 0,
+    () => workshop?.jobs.filter(isWorkshopReadyForCollection).length ?? 0,
     [workshop],
   );
 

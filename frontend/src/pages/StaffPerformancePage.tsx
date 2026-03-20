@@ -2,12 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+  isWorkshopWaitingForParts,
+  isWorkshopOpen,
+} from "../utils/workshopStatus";
 
 type RangePreset = "7" | "30" | "90";
 
 type DashboardJob = {
   id: string;
   status: string;
+  executionStatus?: string | null;
+  currentEstimateStatus?: string | null;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
   partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
@@ -55,16 +63,6 @@ type StaffRow = {
   salesValuePence: number;
 };
 
-const OPEN_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-  "BIKE_READY",
-]);
-
 const formatMoney = (pence: number | null | undefined) =>
   pence === null || pence === undefined ? "-" : `£${(pence / 100).toFixed(2)}`;
 
@@ -80,8 +78,6 @@ const shiftDays = (date: Date, days: number) => {
   next.setDate(next.getDate() + days);
   return next;
 };
-
-const isWaitingForParts = (job: DashboardJob) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT";
 
 const groupKey = (staffId: string | null, staffName: string | null) => ({
   key: staffId ?? "unassigned",
@@ -195,7 +191,7 @@ export const StaffPerformancePage = () => {
     const grouped = new Map<string, StaffRow>(completedByStaff);
 
     for (const job of openJobs) {
-      if (!OPEN_STATUSES.has(job.status)) {
+      if (!isWorkshopOpen(job)) {
         continue;
       }
       const { key, label } = groupKey(job.assignedStaffId, job.assignedStaffName);
@@ -211,13 +207,13 @@ export const StaffPerformancePage = () => {
         salesValuePence: 0,
       };
       row.openJobs += 1;
-      if (job.status === "WAITING_FOR_APPROVAL") {
+      if (isWorkshopAwaitingApproval(job)) {
         row.awaitingApproval += 1;
       }
-      if (isWaitingForParts(job)) {
+      if (isWorkshopWaitingForParts(job)) {
         row.waitingForParts += 1;
       }
-      if (job.status === "BIKE_READY") {
+      if (isWorkshopReadyForCollection(job)) {
         row.ready += 1;
       }
       grouped.set(key, row);
@@ -253,8 +249,8 @@ export const StaffPerformancePage = () => {
 
   const summary = useMemo(() => ({
     workshopCompleted: completedJobsInRange.length,
-    assignedOpenJobs: openJobs.filter((job) => job.assignedStaffId).length,
-    unassignedJobs: openJobs.filter((job) => !job.assignedStaffId && OPEN_STATUSES.has(job.status)).length,
+    assignedOpenJobs: openJobs.filter((job) => job.assignedStaffId && isWorkshopOpen(job)).length,
+    unassignedJobs: openJobs.filter((job) => !job.assignedStaffId && isWorkshopOpen(job)).length,
     visibleSales: saleDetails.length,
   }), [completedJobsInRange.length, openJobs, saleDetails.length]);
 

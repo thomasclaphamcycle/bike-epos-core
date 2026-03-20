@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import {
+  isWorkshopActiveExecution,
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+  isWorkshopWaitingForParts,
+} from "../utils/workshopStatus";
 
 type SalesDailyRow = {
   date: string;
@@ -32,6 +38,8 @@ type WorkshopDashboardResponse = {
   jobs: Array<{
     id: string;
     status: string;
+    executionStatus?: string | null;
+    currentEstimateStatus?: string | null;
     scheduledDate: string | null;
     partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
     customer: { firstName: string; lastName: string } | null;
@@ -102,15 +110,6 @@ const formatLabel = (value: string) =>
     .join(" ");
 
 const OPEN_PO_STATUSES = new Set(["DRAFT", "SENT", "PARTIALLY_RECEIVED"]);
-const WORKSHOP_IN_PROGRESS_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-]);
-
 export const OperationsSummaryPage = () => {
   const { error } = useToasts();
 
@@ -197,12 +196,12 @@ export const OperationsSummaryPage = () => {
   }, []);
 
   const waitingForApprovalCount = useMemo(
-    () => workshopDashboard?.jobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length ?? 0,
+    () => workshopDashboard?.jobs.filter(isWorkshopAwaitingApproval).length ?? 0,
     [workshopDashboard],
   );
 
   const waitingForPartsCount = useMemo(
-    () => workshopDashboard?.jobs.filter((job) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT").length ?? 0,
+    () => workshopDashboard?.jobs.filter(isWorkshopWaitingForParts).length ?? 0,
     [workshopDashboard],
   );
 
@@ -219,11 +218,11 @@ export const OperationsSummaryPage = () => {
   const lowStockCount = lowestStockRows.filter((row) => row.onHand <= 2).length;
   const criticalStockCount = lowestStockRows.filter((row) => row.onHand <= 0).length;
   const workshopInProgressCount = useMemo(
-    () => workshopDashboard?.jobs.filter((job) => WORKSHOP_IN_PROGRESS_STATUSES.has(job.status)).length ?? 0,
+    () => workshopDashboard?.jobs.filter(isWorkshopActiveExecution).length ?? 0,
     [workshopDashboard],
   );
   const bikesReadyCount = useMemo(
-    () => workshopDashboard?.jobs.filter((job) => job.status === "BIKE_READY").length ?? 0,
+    () => workshopDashboard?.jobs.filter(isWorkshopReadyForCollection).length ?? 0,
     [workshopDashboard],
   );
 

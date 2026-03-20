@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import {
+  isWorkshopAwaitingApproval,
+  isWorkshopWaitingForParts,
+} from "../utils/workshopStatus";
 import { toReorderSuggestionRow } from "../utils/reordering";
 
 type VelocityRow = {
@@ -186,8 +190,8 @@ export const DataIntegrityPage = () => {
   ], [variants]);
 
   const workflowRows = useMemo<IntegrityRow[]>(() => {
-    const waitingForApproval = (workshop?.jobs || []).filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
-    const waitingForParts = (workshop?.jobs || []).filter((job) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT").length;
+    const waitingForApproval = (workshop?.jobs || []).filter(isWorkshopAwaitingApproval).length;
+    const waitingForParts = (workshop?.jobs || []).filter(isWorkshopWaitingForParts).length;
     const partialPo = purchaseOrders.filter((po) => po.status === "PARTIALLY_RECEIVED" && po.totals.quantityRemaining > 0).length;
     const overduePo = purchaseOrders.filter((po) =>
       po.status !== "RECEIVED"

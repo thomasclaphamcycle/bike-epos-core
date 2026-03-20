@@ -45,7 +45,7 @@ export const WorkshopCollectionPage = () => {
   const loadReadyJobs = async () => {
     setLoading(true);
     try {
-      const payload = await apiGet<DashboardResponse>("/api/workshop/dashboard?status=BIKE_READY&includeCancelled=false&limit=100");
+      const payload = await apiGet<DashboardResponse>("/api/workshop/dashboard?status=READY_FOR_COLLECTION&includeCancelled=false&limit=100");
       setJobs(payload.jobs || []);
     } catch (loadError) {
       setJobs([]);
@@ -133,7 +133,7 @@ export const WorkshopCollectionPage = () => {
           <div className="metric-card">
             <span className="metric-label">Ready For Collection</span>
             <strong className="metric-value">{summary.readyCount}</strong>
-            <span className="dashboard-metric-detail">Jobs currently in BIKE_READY state</span>
+            <span className="dashboard-metric-detail">Jobs currently in the ready-for-collection state</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Linked Sale Visible</span>

@@ -15,6 +15,7 @@ type RangePreset = "30" | "90" | "365";
 type DashboardJob = {
   id: string;
   status: string;
+  currentEstimateStatus?: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | null;
   scheduledDate: string | null;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
@@ -79,6 +80,10 @@ const shiftDays = (date: Date, days: number) => {
 
 const OPEN_STATUSES = new Set([
   "BOOKING_MADE",
+  "READY_FOR_WORK",
+  "IN_PROGRESS",
+  "PAUSED",
+  "READY_FOR_COLLECTION",
   "BIKE_ARRIVED",
   "WAITING_FOR_APPROVAL",
   "APPROVED",
@@ -161,7 +166,7 @@ export const WorkshopPerformancePage = () => {
   const dashboardJobs = dashboard?.jobs ?? [];
 
   const awaitingApprovalCount = useMemo(
-    () => dashboardJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length,
+    () => dashboardJobs.filter((job) => job.currentEstimateStatus === "PENDING_APPROVAL").length,
     [dashboardJobs],
   );
 
@@ -200,13 +205,13 @@ export const WorkshopPerformancePage = () => {
       };
 
       existing.openJobs += 1;
-      if (job.status === "WAITING_FOR_APPROVAL") {
+      if (job.currentEstimateStatus === "PENDING_APPROVAL") {
         existing.awaitingApproval += 1;
       }
       if (isWaitingForParts(job)) {
         existing.waitingForParts += 1;
       }
-      if (job.status === "BIKE_READY") {
+      if (job.status === "READY_FOR_COLLECTION" || job.status === "BIKE_READY") {
         existing.ready += 1;
       }
 

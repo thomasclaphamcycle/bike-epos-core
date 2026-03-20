@@ -8,6 +8,12 @@ import {
   loadManagementWidgetPrefs,
   ManagementWidgetKey,
 } from "../utils/dashboardPrefs";
+import {
+  isWorkshopActiveExecution,
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+  isWorkshopWaitingForParts,
+} from "../utils/workshopStatus";
 
 type SalesDailyRow = {
   date: string;
@@ -27,6 +33,8 @@ type WorkshopDashboardResponse = {
   jobs: Array<{
     id: string;
     status: string;
+    executionStatus?: string | null;
+    currentEstimateStatus?: string | null;
     scheduledDate: string | null;
     notes: string | null;
     partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
@@ -114,15 +122,6 @@ const formatStatusLabel = (value: string) =>
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-
-const WORKSHOP_ACTIVE_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-]);
 
 export const ManagementDashboardPage = () => {
   const { user } = useAuth();
@@ -250,22 +249,22 @@ export const ManagementDashboardPage = () => {
   const workshopJobs = workshopPayload?.jobs ?? [];
 
   const awaitingApproval = useMemo(
-    () => workshopJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL"),
+    () => workshopJobs.filter(isWorkshopAwaitingApproval),
     [workshopJobs],
   );
 
   const waitingForParts = useMemo(
-    () => workshopJobs.filter((job) => job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT"),
+    () => workshopJobs.filter(isWorkshopWaitingForParts),
     [workshopJobs],
   );
 
   const activeWorkshopCount = useMemo(
-    () => workshopJobs.filter((job) => WORKSHOP_ACTIVE_STATUSES.has(job.status)).length,
+    () => workshopJobs.filter(isWorkshopActiveExecution).length,
     [workshopJobs],
   );
 
   const bikeReadyCount = useMemo(
-    () => workshopJobs.filter((job) => job.status === "BIKE_READY").length,
+    () => workshopJobs.filter(isWorkshopReadyForCollection).length,
     [workshopJobs],
   );
 

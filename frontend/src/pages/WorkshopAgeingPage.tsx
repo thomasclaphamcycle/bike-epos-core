@@ -6,6 +6,7 @@ import { useToasts } from "../components/ToastProvider";
 type DashboardJob = {
   id: string;
   status: string;
+  currentEstimateStatus?: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | null;
   scheduledDate: string | null;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +29,10 @@ type DashboardResponse = {
 
 const OPEN_STATUSES = new Set([
   "BOOKING_MADE",
+  "READY_FOR_WORK",
+  "IN_PROGRESS",
+  "PAUSED",
+  "READY_FOR_COLLECTION",
   "BIKE_ARRIVED",
   "WAITING_FOR_APPROVAL",
   "APPROVED",
@@ -104,7 +109,7 @@ export const WorkshopAgeingPage = () => {
 
   const awaitingApproval = useMemo(
     () => openJobs
-      .filter((job) => job.status === "WAITING_FOR_APPROVAL")
+      .filter((job) => job.currentEstimateStatus === "PENDING_APPROVAL")
       .sort((left, right) => dayDiff(right.updatedAt) - dayDiff(left.updatedAt)),
     [openJobs],
   );

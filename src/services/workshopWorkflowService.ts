@@ -5,9 +5,14 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { setWorkshopEstimateStatus } from "./workshopEstimateService";
+import {
+  normalizeWorkshopExecutionStatus,
+  parseWorkshopExecutionStatusOrThrow,
+  toStoredWorkshopJobStatus,
+  type WorkshopExecutionStatus,
+} from "./workshopStatusService";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
-type WorkflowStage = "BOOKED" | "IN_PROGRESS" | "READY" | "COMPLETED" | "CANCELLED";
 
 type AssignWorkshopJobInput = {
   staffId: string | null;
@@ -38,53 +43,47 @@ const normalizeText = (value: string | undefined | null): string | undefined => 
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const stageByStatus: Record<WorkshopJobStatus, WorkflowStage> = {
-  BOOKING_MADE: "BOOKED",
-  BIKE_ARRIVED: "IN_PROGRESS",
-  WAITING_FOR_APPROVAL: "IN_PROGRESS",
-  APPROVED: "IN_PROGRESS",
-  WAITING_FOR_PARTS: "IN_PROGRESS",
-  ON_HOLD: "IN_PROGRESS",
-  BIKE_READY: "READY",
-  COMPLETED: "COMPLETED",
-  CANCELLED: "CANCELLED",
-};
+const canTransitionExecutionStatus = (
+  fromStatus: WorkshopExecutionStatus,
+  toStatus: WorkshopExecutionStatus,
+) => {
+  if (fromStatus === toStatus) {
+    return true;
+  }
 
-const canonicalStatusByStage: Record<WorkflowStage, WorkshopJobStatus> = {
-  BOOKED: "BOOKING_MADE",
-  IN_PROGRESS: "BIKE_ARRIVED",
-  READY: "BIKE_READY",
-  COMPLETED: "COMPLETED",
-  CANCELLED: "CANCELLED",
-};
-
-const parseTargetStageOrThrow = (inputStatus: string): WorkflowStage => {
-  const normalized = inputStatus.trim().toUpperCase();
-
-  switch (normalized) {
-    case "BOOKED":
+  switch (fromStatus) {
     case "BOOKING_MADE":
-      return "BOOKED";
+      return toStatus === "READY_FOR_WORK"
+        || toStatus === "IN_PROGRESS"
+        || toStatus === "CANCELLED";
+    case "READY_FOR_WORK":
+      return toStatus === "IN_PROGRESS"
+        || toStatus === "PAUSED"
+        || toStatus === "WAITING_FOR_PARTS"
+        || toStatus === "CANCELLED";
     case "IN_PROGRESS":
-    case "BIKE_ARRIVED":
-    case "WAITING_FOR_APPROVAL":
-    case "APPROVED":
+      return toStatus === "PAUSED"
+        || toStatus === "WAITING_FOR_PARTS"
+        || toStatus === "READY_FOR_COLLECTION"
+        || toStatus === "CANCELLED";
+    case "PAUSED":
+      return toStatus === "READY_FOR_WORK"
+        || toStatus === "IN_PROGRESS"
+        || toStatus === "WAITING_FOR_PARTS"
+        || toStatus === "CANCELLED";
     case "WAITING_FOR_PARTS":
-    case "ON_HOLD":
-      return "IN_PROGRESS";
-    case "READY":
-    case "BIKE_READY":
-      return "READY";
+      return toStatus === "READY_FOR_WORK"
+        || toStatus === "IN_PROGRESS"
+        || toStatus === "PAUSED"
+        || toStatus === "CANCELLED";
+    case "READY_FOR_COLLECTION":
+      return toStatus === "IN_PROGRESS"
+        || toStatus === "PAUSED"
+        || toStatus === "WAITING_FOR_PARTS"
+        || toStatus === "COMPLETED";
     case "COMPLETED":
-      return "COMPLETED";
     case "CANCELLED":
-      return "CANCELLED";
-    default:
-      throw new HttpError(
-        400,
-        "status must be one of BOOKED, IN_PROGRESS, READY, COMPLETED, CANCELLED",
-        "INVALID_STATUS",
-      );
+      return false;
   }
 };
 
@@ -170,6 +169,7 @@ export const assignWorkshopJob = async (
         job: {
           id: job.id,
           status: job.status,
+          executionStatus: normalizeWorkshopExecutionStatus(job.status),
           assignedStaffId: job.assignedStaffId,
           assignedStaffName: job.assignedStaffName,
           updatedAt: job.updatedAt,
@@ -206,6 +206,7 @@ export const assignWorkshopJob = async (
       job: {
         id: updated.id,
         status: updated.status,
+        executionStatus: normalizeWorkshopExecutionStatus(updated.status),
         assignedStaffId: updated.assignedStaffId,
         assignedStaffName: updated.assignedStaffName,
         updatedAt: updated.updatedAt,
@@ -213,6 +214,8 @@ export const assignWorkshopJob = async (
       idempotent: false,
     };
   });
+
+  return result;
 };
 
 export const addWorkshopJobNote = async (
@@ -365,8 +368,8 @@ export const changeWorkshopJobStatus = async (
     throw new HttpError(400, "status is required", "INVALID_STATUS");
   }
 
-  const targetStage = parseTargetStageOrThrow(rawStatus);
-  const targetStatus = canonicalStatusByStage[targetStage];
+  const targetExecutionStatus = parseWorkshopExecutionStatusOrThrow(rawStatus);
+  const targetStatus = toStoredWorkshopJobStatus(targetExecutionStatus);
 
   const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
@@ -384,12 +387,13 @@ export const changeWorkshopJobStatus = async (
       throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
     }
 
-    const fromStage = stageByStatus[job.status];
-    if (fromStage === targetStage) {
+    const fromExecutionStatus = normalizeWorkshopExecutionStatus(job.status);
+    if (fromExecutionStatus === targetExecutionStatus) {
       return {
         job: {
           id: job.id,
           status: job.status,
+          executionStatus: fromExecutionStatus,
           cancelledAt: job.cancelledAt,
           updatedAt: job.updatedAt,
           completedAt: job.completedAt,
@@ -397,17 +401,11 @@ export const changeWorkshopJobStatus = async (
         fromStatus: job.status,
         toStatus: job.status,
         idempotent: true,
-        emittedStage: targetStage,
+        emittedExecutionStatus: targetExecutionStatus,
       };
     }
 
-    const isAllowed =
-      targetStage === "CANCELLED" ||
-      (fromStage === "BOOKED" && targetStage === "IN_PROGRESS") ||
-      (fromStage === "IN_PROGRESS" && targetStage === "READY") ||
-      (fromStage === "READY" && targetStage === "COMPLETED");
-
-    if (!isAllowed) {
+    if (!canTransitionExecutionStatus(fromExecutionStatus, targetExecutionStatus)) {
       throw new HttpError(
         409,
         "Invalid workshop status transition",
@@ -415,7 +413,7 @@ export const changeWorkshopJobStatus = async (
       );
     }
 
-    if (fromStage === "READY" && targetStage === "COMPLETED" && !job.sale) {
+    if (targetExecutionStatus === "COMPLETED" && !job.sale) {
       throw new HttpError(
         409,
         "Workshop job must be checked out to a sale before collection",
@@ -427,11 +425,11 @@ export const changeWorkshopJobStatus = async (
       status: targetStatus,
     };
 
-    if (targetStage === "COMPLETED" && !job.completedAt) {
+    if (targetExecutionStatus === "COMPLETED" && !job.completedAt) {
       data.completedAt = new Date();
     }
 
-    if (targetStage === "CANCELLED") {
+    if (targetExecutionStatus === "CANCELLED") {
       data.cancelledAt = new Date();
     }
 
@@ -449,8 +447,8 @@ export const changeWorkshopJobStatus = async (
         metadata: {
           fromStatus: job.status,
           toStatus: updated.status,
-          fromStage,
-          toStage: targetStage,
+          fromExecutionStatus,
+          toExecutionStatus: targetExecutionStatus,
           requestedStatus: rawStatus,
         },
       },
@@ -461,6 +459,7 @@ export const changeWorkshopJobStatus = async (
       job: {
         id: updated.id,
         status: updated.status,
+        executionStatus: normalizeWorkshopExecutionStatus(updated.status),
         cancelledAt: updated.cancelledAt,
         updatedAt: updated.updatedAt,
         completedAt: updated.completedAt,
@@ -468,7 +467,7 @@ export const changeWorkshopJobStatus = async (
       fromStatus: job.status,
       toStatus: updated.status,
       idempotent: false,
-      emittedStage: targetStage,
+      emittedExecutionStatus: targetExecutionStatus,
     };
   });
 
@@ -478,12 +477,13 @@ export const changeWorkshopJobStatus = async (
     workshopJobId: result.job.id,
     fromStatus: result.fromStatus,
     toStatus: result.toStatus,
-    stage: result.emittedStage,
+    fromExecutionStatus: normalizeWorkshopExecutionStatus(result.fromStatus),
+    toExecutionStatus: result.emittedExecutionStatus,
     idempotent: result.idempotent,
     completedAt: result.job.completedAt?.toISOString(),
   });
 
-  if (!result.idempotent && result.emittedStage === "COMPLETED") {
+  if (!result.idempotent && result.emittedExecutionStatus === "COMPLETED") {
     emit("workshop.job.completed", {
       id: result.job.id,
       type: "workshop.job.completed",
@@ -498,6 +498,7 @@ export const changeWorkshopJobStatus = async (
     job: {
       id: result.job.id,
       status: result.job.status,
+      executionStatus: result.job.executionStatus,
       cancelledAt: result.job.cancelledAt,
       updatedAt: result.job.updatedAt,
       completedAt: result.job.completedAt,
@@ -523,6 +524,7 @@ export const setWorkshopJobApprovalStatus = async (
     job: {
       id: result.job.id,
       status: result.job.status,
+      executionStatus: normalizeWorkshopExecutionStatus(result.job.status),
       cancelledAt: null,
       updatedAt: result.estimate.updatedAt,
     },

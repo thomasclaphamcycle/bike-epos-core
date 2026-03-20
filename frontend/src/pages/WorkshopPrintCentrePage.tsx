@@ -4,10 +4,18 @@ import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { toBackendUrl } from "../utils/backendUrl";
+import {
+  getWorkshopExecutionStatus,
+  isWorkshopAwaitingApproval,
+  isWorkshopReadyForCollection,
+  toWorkshopStatusBadgeClass,
+} from "../utils/workshopStatus";
 
 type PrintJob = {
   id: string;
   status: string;
+  executionStatus?: string | null;
+  currentEstimateStatus?: string | null;
   scheduledDate: string | null;
   bikeDescription: string | null;
   createdAt: string;
@@ -32,14 +40,6 @@ const customerName = (job: PrintJob) =>
   job.customer ? [job.customer.firstName, job.customer.lastName].filter(Boolean).join(" ") || "-" : "-";
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-
-const toStatusBadgeClass = (status: string) => {
-  if (status === "COMPLETED") return "status-badge status-complete";
-  if (status === "BIKE_READY") return "status-badge status-ready";
-  if (status === "WAITING_FOR_APPROVAL" || status === "WAITING_FOR_PARTS") return "status-badge status-warning";
-  if (status === "CANCELLED") return "status-badge status-cancelled";
-  return "status-badge status-info";
-};
 
 export const WorkshopPrintCentrePage = () => {
   const { error } = useToasts();
@@ -80,8 +80,8 @@ export const WorkshopPrintCentrePage = () => {
   const summary = useMemo(() => ({
     jobsVisible: jobs.length,
     withSale: jobs.filter((job) => Boolean(job.sale)).length,
-    readyCollection: jobs.filter((job) => job.status === "BIKE_READY").length,
-    awaitingApproval: jobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length,
+    readyCollection: jobs.filter(isWorkshopReadyForCollection).length,
+    awaitingApproval: jobs.filter(isWorkshopAwaitingApproval).length,
   }), [jobs]);
 
   return (
@@ -116,9 +116,11 @@ export const WorkshopPrintCentrePage = () => {
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">All visible statuses</option>
               <option value="BOOKING_MADE">Booking Made</option>
-              <option value="WAITING_FOR_APPROVAL">Waiting For Approval</option>
+              <option value="READY_FOR_WORK">Ready For Work</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="PAUSED">Paused</option>
               <option value="WAITING_FOR_PARTS">Waiting For Parts</option>
-              <option value="BIKE_READY">Ready</option>
+              <option value="READY_FOR_COLLECTION">Ready For Collection</option>
               <option value="COMPLETED">Completed</option>
             </select>
           </label>
@@ -186,7 +188,7 @@ export const WorkshopPrintCentrePage = () => {
                     <div className="table-primary">{customerName(job)}</div>
                     <div className="table-secondary">{job.customer?.phone || job.customer?.email || "-"}</div>
                   </td>
-                  <td><span className={toStatusBadgeClass(job.status)}>{job.status}</span></td>
+                  <td><span className={toWorkshopStatusBadgeClass(job)}>{getWorkshopExecutionStatus(job) ?? job.status}</span></td>
                   <td>{job.bikeDescription || "-"}</td>
                   <td>
                     {job.sale ? (

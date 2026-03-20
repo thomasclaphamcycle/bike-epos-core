@@ -2,10 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import {
+  getWorkshopExecutionStatus,
+  isWorkshopOpen,
+  toWorkshopStatusBadgeClass,
+} from "../utils/workshopStatus";
 
 type BookingJob = {
   id: string;
   status: string;
+  executionStatus?: string | null;
+  currentEstimateStatus?: string | null;
   source?: string;
   scheduledDate: string | null;
   bikeDescription: string | null;
@@ -52,15 +59,7 @@ const shiftDays = (date: Date, days: number) => {
 const formatCustomerName = (customer: BookingJob["customer"]) =>
   customer ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || "-" : "-";
 
-const toStatusClass = (status: string) => {
-  if (status === "CANCELLED") return "status-badge status-cancelled";
-  if (status === "COMPLETED") return "status-badge status-complete";
-  if (status === "BIKE_READY") return "status-badge status-ready";
-  if (status === "WAITING_FOR_PARTS" || status === "WAITING_FOR_APPROVAL") return "status-badge status-warning";
-  return "status-badge";
-};
-
-const isOpenBookingLike = (job: BookingJob) => job.status !== "COMPLETED" && job.status !== "CANCELLED";
+const isOpenBookingLike = (job: BookingJob) => isWorkshopOpen(job);
 
 export const WorkshopBookingsPage = () => {
   const { error } = useToasts();
@@ -196,7 +195,7 @@ export const WorkshopBookingsPage = () => {
                         <div className="table-secondary">{job.customer?.phone || job.customer?.email || "-"}</div>
                       </td>
                       <td>{job.bikeDescription || "-"}</td>
-                      <td><span className={toStatusClass(job.status)}>{job.status}</span></td>
+                      <td><span className={toWorkshopStatusBadgeClass(job)}>{getWorkshopExecutionStatus(job) ?? job.status}</span></td>
                       <td>{job.source || "-"}</td>
                       <td>{job.depositStatus || "-"}</td>
                       <td><Link to={`/workshop/${job.id}`}>Open job</Link></td>

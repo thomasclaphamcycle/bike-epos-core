@@ -265,7 +265,9 @@ Milestone:
 The shop can manage repair, service history, bike-build workflow, and workshop customer communication in one connected system.
 
 Implementation status:
-- substantially implemented, with additional bike-record depth and build-specific refinement still possible
+- substantially implemented, with dedicated bike records, estimate snapshots/approval history, and a first technician workflow layer now present on the current working line
+- workshop execution now has explicit technician-facing progression, assignment filtering, and floor-ready action controls without replacing legacy job compatibility
+- additional bike-record depth, build-specific refinement, richer technician timing/planning, and customer-facing workshop communications are still meaningful follow-on work
 
 ---
 

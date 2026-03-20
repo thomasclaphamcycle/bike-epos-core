@@ -10,7 +10,7 @@ GET {{baseUrl}}/api/workshop/availability?from=2026-03-06&to=2026-03-10
 
 ### Workshop dashboard (STAFF+)
 ### includes rota-backed staffingToday summary and capacityToday awareness
-GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
+GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,READY_FOR_COLLECTION&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
@@ -241,14 +241,14 @@ X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
 ### Change workshop status (M14)
-### Allowed progression: BOOKED -> IN_PROGRESS -> READY -> COMPLETED, and any -> CANCELLED
+### Allowed progression: BOOKED -> READY_FOR_WORK -> IN_PROGRESS -> READY_FOR_COLLECTION -> COMPLETED
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
 {
-  "status": "IN_PROGRESS"
+  "status": "READY_FOR_WORK"
 }
 
 ### Invalid status transition example (expect 409 INVALID_STATUS_TRANSITION)
@@ -258,7 +258,7 @@ X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
 {
-  "status": "READY"
+  "status": "READY_FOR_COLLECTION"
 }
 
 ### Create workshop job linked to an existing customer bike record (M83)

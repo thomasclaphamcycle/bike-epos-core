@@ -334,7 +334,7 @@ const run = async () => {
         body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
       });
       assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
-      assert.equal(waitingApproval.json.job.status, "WAITING_FOR_APPROVAL");
+      assert.equal(waitingApproval.json.job.status, "BOOKING_MADE");
 
       const replay = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
         method: "POST",
@@ -348,20 +348,21 @@ const run = async () => {
         headers: STAFF_HEADERS,
       });
       assert.equal(detail.status, 200, JSON.stringify(detail.json));
-      assert.equal(detail.json.job.rawStatus, "WAITING_FOR_APPROVAL");
+      assert.equal(detail.json.job.executionStatus, "BOOKING_MADE");
       assert.equal(detail.json.lines.length, 1);
       assert.equal(detail.json.currentEstimate.status, "PENDING_APPROVAL");
       assert.equal(detail.json.currentEstimate.version, 1);
       assert.equal(detail.json.estimateHistory.length, 1);
       assert.equal(detail.json.currentEstimate.subtotalPence, 4500);
 
-      const dashboard = await fetchJson(
-        `/api/workshop/dashboard?status=WAITING_FOR_APPROVAL&limit=20`,
-        { headers: STAFF_HEADERS },
-      );
+      const dashboard = await fetchJson("/api/workshop/dashboard?limit=20", {
+        headers: STAFF_HEADERS,
+      });
       assert.equal(dashboard.status, 200, JSON.stringify(dashboard.json));
       assert.ok(
-        dashboard.json.jobs.some((dashboardJob) => dashboardJob.id === job.id),
+        dashboard.json.jobs.some((dashboardJob) => (
+          dashboardJob.id === job.id && dashboardJob.currentEstimateStatus === "PENDING_APPROVAL"
+        )),
         JSON.stringify(dashboard.json),
       );
 
@@ -394,7 +395,7 @@ const run = async () => {
         body: JSON.stringify({ status: "APPROVED" }),
       });
       assert.equal(approved.status, 201, JSON.stringify(approved.json));
-      assert.equal(approved.json.job.status, "APPROVED");
+      assert.equal(approved.json.job.status, "BOOKING_MADE");
 
       const updateLine = await fetchJson(
         `/api/workshop/jobs/${job.id}/lines/${addLine.json.line.id}`,
@@ -415,7 +416,7 @@ const run = async () => {
       });
       assert.equal(invalidatedDetail.status, 200, JSON.stringify(invalidatedDetail.json));
       assert.equal(invalidatedDetail.json.currentEstimate, null);
-      assert.equal(invalidatedDetail.json.job.rawStatus, "BIKE_ARRIVED");
+      assert.equal(invalidatedDetail.json.job.executionStatus, "BOOKING_MADE");
       assert.equal(invalidatedDetail.json.estimateHistory.length, 1);
       assert.ok(invalidatedDetail.json.estimateHistory[0].supersededAt, JSON.stringify(invalidatedDetail.json));
 
@@ -436,7 +437,7 @@ const run = async () => {
 
       await prisma.workshopJob.update({
         where: { id: job.id },
-        data: { status: "BIKE_READY" },
+        data: { status: "READY_FOR_COLLECTION" },
       });
 
       const invalid = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
