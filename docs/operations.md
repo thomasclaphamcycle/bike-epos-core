@@ -7,7 +7,7 @@ For operator-managed database backup and restore in local or non-production envi
 - `npm run db:backup`
 - `npm run db:restore`
 
-These scripts wrap the repo backup helpers under `scripts/db_backup.sh` and `scripts/db_restore.sh`.
+These scripts wrap the repo backup helpers under `scripts/backup_database.sh` and `scripts/db_restore.sh`.
 
 Safety notes:
 

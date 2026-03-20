@@ -15,12 +15,19 @@ const attempts = new Map<string, AttemptState>();
 
 const now = () => Date.now();
 
-export const getPinLoginClientKey = (req: Request) => {
-  const ip = req.ip?.trim();
-  if (ip) {
-    return ip;
+const normalizeRequestedUserId = (value: unknown) => {
+  if (typeof value !== "string") {
+    return "anonymous";
   }
-  return "unknown";
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "anonymous";
+};
+
+export const getPinLoginClientKey = (req: Request, requestedUserId?: unknown) => {
+  const ip = req.ip?.trim();
+  const ipKey = ip || "unknown";
+  const userKey = normalizeRequestedUserId(requestedUserId);
+  return `${ipKey}:${userKey}`;
 };
 
 const getState = (clientKey: string) => {
@@ -71,7 +78,8 @@ export const clearPinLoginFailures = (clientKey: string) => {
 };
 
 export const pinLoginRateLimit = (req: Request, _res: Response, next: NextFunction) => {
-  const clientKey = getPinLoginClientKey(req);
+  const requestedUserId = (req.body ?? {}) as { userId?: unknown };
+  const clientKey = getPinLoginClientKey(req, requestedUserId.userId);
   const existing = getState(clientKey);
   if (existing?.blockedUntil && existing.blockedUntil > now()) {
     return next(

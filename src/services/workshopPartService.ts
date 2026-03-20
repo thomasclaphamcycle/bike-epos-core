@@ -361,10 +361,13 @@ const getLocationAvailabilityTx = async (
     restoreConsumedQty?: number;
   },
 ) => {
-  const [onHandAtLocation, reservedPlannedQty] = await Promise.all([
-    getLocationOnHandTx(tx, input.variantId, input.stockLocationId),
-    getPlannedReservedQtyTx(tx, input.variantId, input.stockLocationId, input.excludePartId),
-  ]);
+  const onHandAtLocation = await getLocationOnHandTx(tx, input.variantId, input.stockLocationId);
+  const reservedPlannedQty = await getPlannedReservedQtyTx(
+    tx,
+    input.variantId,
+    input.stockLocationId,
+    input.excludePartId,
+  );
 
   const availableToAllocate = onHandAtLocation + (input.restoreConsumedQty ?? 0) - reservedPlannedQty;
 
@@ -500,34 +503,32 @@ export const getWorkshopJobPartsOverviewTx = async (
   const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
   const resolvedStockLocation = await resolveWorkshopJobStockLocationTx(tx, job);
 
-  const [parts, partLines] = await Promise.all([
-    loadWorkshopPartsTx(tx, workshopJobId),
-    tx.workshopJobLine.findMany({
-      where: {
-        jobId: workshopJobId,
-        type: "PART",
-        variantId: {
-          not: null,
+  const parts = await loadWorkshopPartsTx(tx, workshopJobId);
+  const partLines = await tx.workshopJobLine.findMany({
+    where: {
+      jobId: workshopJobId,
+      type: "PART",
+      variantId: {
+        not: null,
+      },
+    },
+    orderBy: [{ createdAt: "asc" }],
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
         },
       },
-      orderBy: [{ createdAt: "asc" }],
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        variant: {
-          select: {
-            id: true,
-            sku: true,
-            name: true,
-          },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
         },
       },
-    }),
-  ]);
+    },
+  });
 
   const requirementSeed = new Map<string, JobPartRequirement>();
   for (const line of partLines) {
@@ -563,16 +564,14 @@ export const getWorkshopJobPartsOverviewTx = async (
 
   const onHandByVariantId = new Map<string, number>();
   const availableByVariantId = new Map<string, number>();
-  await Promise.all(
-    Array.from(requirementSeed.keys()).map(async (variantId) => {
-      const availability = await getLocationAvailabilityTx(tx, {
-        variantId,
-        stockLocationId: resolvedStockLocation.id,
-      });
-      onHandByVariantId.set(variantId, availability.onHandAtLocation);
-      availableByVariantId.set(variantId, Math.max(0, availability.availableToAllocate));
-    }),
-  );
+  for (const variantId of requirementSeed.keys()) {
+    const availability = await getLocationAvailabilityTx(tx, {
+      variantId,
+      stockLocationId: resolvedStockLocation.id,
+    });
+    onHandByVariantId.set(variantId, availability.onHandAtLocation);
+    availableByVariantId.set(variantId, Math.max(0, availability.availableToAllocate));
+  }
 
   for (const part of parts) {
     const requirement = requirementSeed.get(part.variantId);
@@ -636,10 +635,8 @@ const getWorkshopJobPartsSnapshotTx = async (
   tx: Prisma.TransactionClient,
   workshopJobId: string,
 ) => {
-  const [parts, overview] = await Promise.all([
-    loadWorkshopPartsTx(tx, workshopJobId),
-    getWorkshopJobPartsOverviewTx(tx, workshopJobId),
-  ]);
+  const parts = await loadWorkshopPartsTx(tx, workshopJobId);
+  const overview = await getWorkshopJobPartsOverviewTx(tx, workshopJobId);
 
   const partsUsedTotalPence = parts
     .filter((part) => part.status === "USED")

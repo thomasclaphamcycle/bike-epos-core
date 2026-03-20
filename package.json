@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.0.101",
+  "version": "1.0.102",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,7 @@
     "db:seed:dev": "npm run db:dev:migrate && ts-node --transpile-only scripts/seed_demo_data.ts",
     "db:seed:test": "node scripts/run_with_test_env.js ts-node --transpile-only scripts/seed_demo_data.ts",
     "dev:create-thomas": "ts-node --transpile-only scripts/dev/create_thomas_admin.ts",
-    "db:backup": "bash scripts/db_backup.sh",
+    "db:backup": "bash scripts/backup_database.sh",
     "db:restore": "bash scripts/db_restore.sh",
     "import:rota-spreadsheet": "ts-node --transpile-only scripts/import_rota_spreadsheet.ts",
     "typecheck:reports": "tsc -p tsconfig.reports.json --noEmit",

@@ -78,9 +78,11 @@ export const adminUpdateUserHandler = async (req: Request, res: Response) => {
   const user = await adminUpdateUser(
     req.params.id,
     {
-      name: body.name,
-      role: body.role,
-      isActive: body.isActive,
+      ...(Object.prototype.hasOwnProperty.call(body, "name") ? { name: body.name } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, "role") ? { role: body.role } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, "isActive")
+        ? { isActive: body.isActive }
+        : {}),
     },
     getRequestStaffActorId(req),
     getRequestAuditActor(req),
