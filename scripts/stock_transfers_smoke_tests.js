@@ -311,6 +311,52 @@ const main = async () => {
       ),
     );
 
+    const insufficientTransferRes = await fetchJson("/api/stock-transfers", {
+      method: "POST",
+      body: JSON.stringify({
+        fromLocationId: sourceLocation.id,
+        toLocationId: targetLocation.id,
+        notes: "Insufficient stock transfer",
+        lines: [
+          {
+            variantId: product.variants[0].id,
+            quantity: 3,
+          },
+        ],
+      }),
+    });
+    assert.equal(insufficientTransferRes.status, 201, JSON.stringify(insufficientTransferRes.json));
+    state.transferIds.push(insufficientTransferRes.json.id);
+
+    const insufficientSendRes = await fetchJson(
+      `/api/stock-transfers/${encodeURIComponent(insufficientTransferRes.json.id)}/send`,
+      {
+        method: "POST",
+      },
+    );
+    assert.equal(insufficientSendRes.status, 200, JSON.stringify(insufficientSendRes.json));
+
+    const consumeRes = await fetchJson("/api/inventory/adjustments", {
+      method: "POST",
+      body: JSON.stringify({
+        variantId: product.variants[0].id,
+        locationId: sourceLocation.id,
+        quantityDelta: -2,
+        reason: "COUNT_CORRECTION",
+        note: "Reduce source stock before transfer receive",
+      }),
+    });
+    assert.equal(consumeRes.status, 201, JSON.stringify(consumeRes.json));
+
+    const blockedReceiveRes = await fetchJson(
+      `/api/stock-transfers/${encodeURIComponent(insufficientTransferRes.json.id)}/receive`,
+      {
+        method: "POST",
+      },
+    );
+    assert.equal(blockedReceiveRes.status, 409, JSON.stringify(blockedReceiveRes.json));
+    assert.equal(blockedReceiveRes.json.error.code, "STOCK_TRANSFER_INSUFFICIENT_STOCK");
+
     console.log("[transfer-smoke] stock transfer workflow passed");
   } finally {
     try {

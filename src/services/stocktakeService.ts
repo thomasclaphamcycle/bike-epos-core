@@ -2,6 +2,7 @@ import { Prisma, StocktakeStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { lockVariantRowsTx } from "./inventoryLedgerService";
 import {
   createStockAdjustmentTx,
   emitStockAdjusted,
@@ -1008,6 +1009,7 @@ export const postStocktake = async (stocktakeId: string, auditActor?: AuditActor
     ensureStocktakeHasLines(lines.length);
 
     const variantIds = lines.map((line) => line.variantId);
+    await lockVariantRowsTx(tx, variantIds);
     const onHandByVariant = await buildOnHandPreviewMapTx(tx, locked.locationId, variantIds);
     const adjustments: StockAdjustmentResult[] = [];
 
@@ -1035,6 +1037,7 @@ export const postStocktake = async (stocktakeId: string, auditActor?: AuditActor
         referenceType: "STOCKTAKE_LINE",
         referenceId: line.id,
         createdByStaffId: actorId,
+        skipVariantLock: true,
       });
 
       adjustments.push(adjustment);

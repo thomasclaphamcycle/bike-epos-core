@@ -321,6 +321,31 @@ const getTotalOnHandTx = async (
   return aggregate._sum.quantityDelta ?? 0;
 };
 
+export const lockVariantRowsTx = async (
+  tx: Prisma.TransactionClient,
+  variantIds: Array<string | null | undefined>,
+) => {
+  const uniqueVariantIds = Array.from(
+    new Set(
+      variantIds
+        .map((variantId) => normalizeOptionalText(variantId))
+        .filter((variantId): variantId is string => Boolean(variantId)),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
+  if (uniqueVariantIds.length === 0) {
+    return;
+  }
+
+  await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM "Variant"
+    WHERE id IN (${Prisma.join(uniqueVariantIds)})
+    ORDER BY id
+    FOR UPDATE
+  `);
+};
+
 export const assertNonNegativeProjectedStockTx = async (
   tx: Prisma.TransactionClient,
   input: {
@@ -376,11 +401,17 @@ const recordMovementTx = async (
   const unitCost = parseUnitCost(input.unitCost);
   const location = await resolveStockLocationTx(tx, input.locationId);
 
+  if (!input.allowNegativeStock && input.quantity < 0) {
+    await lockVariantRowsTx(tx, [input.variantId]);
+  }
+
   await assertNonNegativeProjectedStockTx(tx, {
     variantId: input.variantId,
     locationId: location.id,
     quantityDelta: input.quantity,
-    allowNegativeStock: input.allowNegativeStock,
+    ...(input.allowNegativeStock !== undefined
+      ? { allowNegativeStock: input.allowNegativeStock }
+      : {}),
   });
 
   const movement = await tx.inventoryMovement.create({
@@ -443,18 +474,25 @@ export const recordMovement = async (input: RecordMovementInput) => {
     );
   }
 
+  const type = input.type;
+  const quantity = input.quantity as number;
+
   const movement = await prisma.$transaction((tx) =>
     recordMovementTx(tx, {
       variantId,
-      locationId: input.locationId,
-      type: input.type,
-      quantity: input.quantity,
-      unitCost: input.unitCost,
-      referenceType: input.referenceType,
-      referenceId: input.referenceId,
-      note: input.note,
-      createdByStaffId: input.createdByStaffId,
-      allowNegativeStock: input.allowNegativeStock,
+      type,
+      quantity,
+      ...(input.locationId !== undefined ? { locationId: input.locationId } : {}),
+      ...(input.unitCost !== undefined ? { unitCost: input.unitCost } : {}),
+      ...(input.referenceType !== undefined ? { referenceType: input.referenceType } : {}),
+      ...(input.referenceId !== undefined ? { referenceId: input.referenceId } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.createdByStaffId !== undefined
+        ? { createdByStaffId: input.createdByStaffId }
+        : {}),
+      ...(input.allowNegativeStock !== undefined
+        ? { allowNegativeStock: input.allowNegativeStock }
+        : {}),
     }),
   );
 
@@ -482,18 +520,24 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
   }
 
   const createdByStaffId = normalizeOptionalText(input.createdByStaffId);
+  const quantityDelta = input.quantityDelta as number;
 
   const result = await prisma.$transaction(async (tx) => {
+    const locationId = normalizeOptionalText(input.locationId);
+    const note = normalizeOptionalText(input.note);
+
     const movement = await recordMovementTx(tx, {
       variantId,
-      locationId: normalizeOptionalText(input.locationId),
       type: "ADJUSTMENT",
-      quantity: input.quantityDelta,
+      quantity: quantityDelta,
       referenceType: "ADJUSTMENT",
-      referenceId: input.reason,
-      note: normalizeOptionalText(input.note) ?? undefined,
-      createdByStaffId,
-      allowNegativeStock: input.allowNegativeStock,
+      ...(locationId !== undefined ? { locationId } : {}),
+      ...(input.reason !== undefined ? { referenceId: input.reason } : {}),
+      ...(note !== undefined ? { note } : {}),
+      ...(createdByStaffId !== undefined ? { createdByStaffId } : {}),
+      ...(input.allowNegativeStock !== undefined
+        ? { allowNegativeStock: input.allowNegativeStock }
+        : {}),
     });
 
     await createAuditEventTx(

@@ -261,6 +261,18 @@ const run = async () => {
     assert.equal(onHandAfterRefund.status, 200, JSON.stringify(onHandAfterRefund.json));
     assert.equal(onHandAfterRefund.json.onHand, 9);
 
+    const reduceStockBeforeExchange = await fetchJson("/api/inventory/adjustments", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        variantId: created.variantId,
+        quantityDelta: -8,
+        reason: "COUNT_CORRECTION",
+        note: "m77 reduce stock before exchange",
+      }),
+    });
+    assert.equal(reduceStockBeforeExchange.status, 201, JSON.stringify(reduceStockBeforeExchange.json));
+
     const completeAgain = await fetchJson(`/api/refunds/${created.refundId}/complete`, {
       method: "POST",
       headers: managerHeaders,
@@ -288,8 +300,28 @@ const run = async () => {
       headers: managerHeaders,
       body: JSON.stringify({}),
     });
-    assert.equal(createExchange.status, 201, JSON.stringify(createExchange.json));
-    const exchangeSaleId = createExchange.json.saleId;
+    assert.equal(createExchange.status, 409, JSON.stringify(createExchange.json));
+    assert.equal(createExchange.json.error.code, "EXCHANGE_INSUFFICIENT_STOCK");
+
+    const restockForExchange = await fetchJson("/api/inventory/adjustments", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        variantId: created.variantId,
+        quantityDelta: 1,
+        reason: "COUNT_CORRECTION",
+        note: "m77 restore stock for exchange",
+      }),
+    });
+    assert.equal(restockForExchange.status, 201, JSON.stringify(restockForExchange.json));
+
+    const createExchangeAfterRestock = await fetchJson(`/api/sales/${saleId}/exchange`, {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(createExchangeAfterRestock.status, 201, JSON.stringify(createExchangeAfterRestock.json));
+    const exchangeSaleId = createExchangeAfterRestock.json.saleId;
     created.saleIds.push(exchangeSaleId);
 
     const createExchangeAgain = await fetchJson(`/api/sales/${saleId}/exchange`, {

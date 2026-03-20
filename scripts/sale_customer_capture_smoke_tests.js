@@ -222,6 +222,20 @@ const run = async () => {
     });
     created.variantIds.add(variant.id);
 
+    await apiJsonOrThrow({
+      path: "/api/inventory/movements",
+      method: "POST",
+      body: {
+        variantId: variant.id,
+        type: "PURCHASE",
+        quantity: 6,
+        unitCost: 1200,
+        referenceType: "SALE_CUSTOMER_CAPTURE_SEED",
+        referenceId: token,
+      },
+      headers: STAFF_HEADERS,
+    });
+
     const emailMatchCustomer = await prisma.customer.create({
       data: {
         name: `Email Match ${token}`,

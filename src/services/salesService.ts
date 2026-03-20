@@ -3,7 +3,12 @@ import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockVariantRowsTx,
+} from "./inventoryLedgerService";
 import { ensureDefaultLocationTx } from "./locationService";
+import { toPosLineItemType } from "./posLineItemType";
 import {
   recordCashRefundMovementForPaymentTx,
   recordCashSaleMovementForSaleTx,
@@ -187,6 +192,55 @@ const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) =
       isDefault: true,
     },
   });
+};
+
+const isInventoryTrackedSaleVariant = (sku: string | null | undefined) =>
+  sku == null ? true : toPosLineItemType(sku) === "PART";
+
+const assertInventoryAvailableForSaleItemsTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    locationId: string;
+    items: Array<{
+      variantId: string;
+      quantity: number;
+      variant?: {
+        sku: string | null;
+      } | null;
+    }>;
+    message: string;
+    code: string;
+  },
+) => {
+  const quantityByVariantId = new Map<string, number>();
+
+  for (const item of input.items) {
+    if (!isInventoryTrackedSaleVariant(item.variant?.sku)) {
+      continue;
+    }
+
+    quantityByVariantId.set(
+      item.variantId,
+      (quantityByVariantId.get(item.variantId) ?? 0) + item.quantity,
+    );
+  }
+
+  const requestedVariants = Array.from(quantityByVariantId.keys());
+  if (requestedVariants.length === 0) {
+    return;
+  }
+
+  await lockVariantRowsTx(tx, requestedVariants);
+
+  for (const [variantId, quantity] of quantityByVariantId.entries()) {
+    await assertNonNegativeProjectedStockTx(tx, {
+      variantId,
+      locationId: input.locationId,
+      quantityDelta: -quantity,
+      message: input.message,
+      code: input.code,
+    });
+  }
 };
 
 const getWorkshopJobForBasketTx = async (
@@ -948,7 +1002,15 @@ export const checkoutBasketToSale = async (
     const basket = await tx.basket.findUnique({
       where: { id: basketId },
       include: {
-        items: true,
+        items: {
+          include: {
+            variant: {
+              select: {
+                sku: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1058,6 +1120,12 @@ export const checkoutBasketToSale = async (
     }
 
     const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    await assertInventoryAvailableForSaleItemsTx(tx, {
+      locationId: defaultLocation.id,
+      items: basket.items,
+      message: "Not enough stock to complete checkout",
+      code: "SALE_INSUFFICIENT_STOCK",
+    });
 
     for (const item of basket.items) {
       const saleItem = await tx.saleItem.create({
@@ -1182,6 +1250,11 @@ export const createExchangeSale = async (
             variantId: true,
             quantity: true,
             unitPricePence: true,
+            variant: {
+              select: {
+                sku: true,
+              },
+            },
           },
         },
       },
@@ -1271,6 +1344,12 @@ export const createExchangeSale = async (
     });
 
     const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    await assertInventoryAvailableForSaleItemsTx(tx, {
+      locationId: defaultLocation.id,
+      items: sourceSale.items,
+      message: "Not enough stock to create exchange sale",
+      code: "EXCHANGE_INSUFFICIENT_STOCK",
+    });
     for (const item of sourceSale.items) {
       const saleItem = await tx.saleItem.create({
         data: {

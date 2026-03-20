@@ -2,6 +2,10 @@ import { Prisma, WorkshopJobPartStatus, WorkshopJobStatus } from "@prisma/client
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockVariantRowsTx,
+} from "./inventoryLedgerService";
 
 type AddWorkshopJobPartInput = {
   variantId?: string;
@@ -425,6 +429,17 @@ const writeWorkshopStockLedgerDeltaTx = async (
     if (!staff) {
       throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
     }
+  }
+
+  if (input.quantityDelta < 0) {
+    await lockVariantRowsTx(tx, [input.variantId]);
+    await assertNonNegativeProjectedStockTx(tx, {
+      variantId: input.variantId,
+      locationId: location.id,
+      quantityDelta: input.quantityDelta,
+      message: "Insufficient available stock at the selected location",
+      code: "INSUFFICIENT_WORKSHOP_PART_STOCK",
+    });
   }
 
   await tx.stockLedgerEntry.create({

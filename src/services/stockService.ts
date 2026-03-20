@@ -4,7 +4,10 @@ import { emit } from "../core/events";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { assertNonNegativeProjectedStockTx } from "./inventoryLedgerService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockVariantRowsTx,
+} from "./inventoryLedgerService";
 import { ensureVariantExistsById } from "./productService";
 
 type CreateStockAdjustmentInput = {
@@ -247,6 +250,7 @@ export const createStockAdjustmentTx = async (
     referenceId: string;
     createdByStaffId?: string;
     allowNegativeStock?: boolean;
+    skipVariantLock?: boolean;
   },
 ): Promise<StockAdjustmentResult> => {
   const note = normalizeOptionalText(input.note) ?? null;
@@ -262,6 +266,10 @@ export const createStockAdjustmentTx = async (
   }
 
   const location = await resolveLocationTx(tx, input.locationId);
+
+  if (!input.skipVariantLock && !input.allowNegativeStock && input.quantityDelta < 0) {
+    await lockVariantRowsTx(tx, [input.variantId]);
+  }
 
   await assertNonNegativeProjectedStockTx(tx, {
     variantId: input.variantId,

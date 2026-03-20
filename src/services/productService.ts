@@ -489,12 +489,14 @@ export const createProduct = async (input: CreateProductInput) => {
     && Object.values(input.defaultVariant).some((value) => value !== undefined);
 
   return prisma.$transaction(async (tx) => {
+    const brand = normalizeOptionalText(input.brand);
+    const description = normalizeOptionalText(input.description);
     const product = await tx.product.create({
       data: {
         name,
-        category,
-        brand: normalizeOptionalText(input.brand),
-        description: normalizeOptionalText(input.description),
+        ...(category !== undefined ? { category } : {}),
+        ...(brand !== undefined ? { brand } : {}),
+        ...(description !== undefined ? { description } : {}),
         isActive: input.isActive ?? true,
       },
     });
@@ -526,7 +528,7 @@ export const createProduct = async (input: CreateProductInput) => {
         data: {
           productId: product.id,
           sku,
-          barcode,
+          ...(barcode !== undefined ? { barcode } : {}),
           retailPrice: parsedRetailPrice.retailPrice,
           retailPricePence: parsedRetailPrice.retailPricePence,
           isActive: input.defaultVariant?.isActive ?? input.isActive ?? true,
@@ -595,7 +597,7 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
     const product = await tx.product.create({
       data: {
         name,
-        category,
+        ...(category !== undefined ? { category } : {}),
         isActive: true,
       },
     });
@@ -604,7 +606,7 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
       data: {
         productId: product.id,
         sku,
-        barcode,
+        ...(barcode !== undefined ? { barcode } : {}),
         retailPrice: parsedRetailPrice.retailPrice,
         retailPricePence: parsedRetailPrice.retailPricePence,
         costPricePence: input.costPricePence ?? null,
@@ -640,7 +642,7 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
           referenceType: "PRODUCT_IMPORT",
           referenceId: importReferenceId,
           note: "Product CSV import opening stock",
-          createdByStaffId,
+          ...(createdByStaffId !== undefined ? { createdByStaffId } : {}),
         },
       });
     }
@@ -701,15 +703,24 @@ export const updateProductById = async (productId: string, input: UpdateProductI
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "category")) {
-    data.category = normalizeOptionalNullableText(input.category);
+    const category = normalizeOptionalNullableText(input.category);
+    if (category !== undefined) {
+      data.category = category;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "brand")) {
-    data.brand = normalizeOptionalNullableText(input.brand);
+    const brand = normalizeOptionalNullableText(input.brand);
+    if (brand !== undefined) {
+      data.brand = brand;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "description")) {
-    data.description = normalizeOptionalNullableText(input.description);
+    const description = normalizeOptionalNullableText(input.description);
+    if (description !== undefined) {
+      data.description = description;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "isActive")) {
@@ -1100,13 +1111,13 @@ export const createVariant = async (input: CreateVariantInput) => {
         data: {
           productId,
           sku,
-          barcode,
-          name,
-          option,
+          ...(barcode !== undefined ? { barcode } : {}),
+          ...(name !== undefined ? { name } : {}),
+          ...(option !== undefined ? { option } : {}),
           retailPrice: parsedRetailPrice.retailPrice,
           retailPricePence: parsedRetailPrice.retailPricePence,
-          costPricePence: input.costPricePence,
-          taxCode,
+          ...(input.costPricePence !== undefined ? { costPricePence: input.costPricePence } : {}),
+          ...(taxCode !== undefined ? { taxCode } : {}),
           isActive: input.isActive ?? true,
         },
       });
@@ -1190,7 +1201,11 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
         throw new HttpError(400, "productId cannot be empty", "INVALID_VARIANT_UPDATE");
       }
       await ensureProductExists(tx, normalizedProductId);
-      data.productId = normalizedProductId;
+      data.product = {
+        connect: {
+          id: normalizedProductId,
+        },
+      };
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "sku")) {
@@ -1212,15 +1227,23 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
       if (normalizedBarcode) {
         await ensureBarcodeAvailable(tx, normalizedBarcode, variantId);
       }
-      data.barcode = normalizedBarcode;
+      if (normalizedBarcode !== undefined) {
+        data.barcode = normalizedBarcode;
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "name")) {
-      data.name = normalizeOptionalNullableText(input.name);
+      const name = normalizeOptionalNullableText(input.name);
+      if (name !== undefined) {
+        data.name = name;
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "option")) {
-      data.option = normalizeOptionalNullableText(input.option);
+      const option = normalizeOptionalNullableText(input.option);
+      if (option !== undefined) {
+        data.option = option;
+      }
     }
 
     const retailPricePatch = parseRetailPricePatch(input, "INVALID_VARIANT_UPDATE");
@@ -1242,11 +1265,14 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
           "INVALID_VARIANT_UPDATE",
         );
       }
-      data.costPricePence = input.costPricePence;
+      data.costPricePence = input.costPricePence ?? null;
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "taxCode")) {
-      data.taxCode = normalizeOptionalNullableText(input.taxCode);
+      const taxCode = normalizeOptionalNullableText(input.taxCode);
+      if (taxCode !== undefined) {
+        data.taxCode = taxCode;
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "isActive")) {

@@ -403,6 +403,40 @@ const run = async () => {
     assert.equal(stockAfterFinalizeRes.json.locations.length, 1);
     assert.equal(stockAfterFinalizeRes.json.locations[0].onHand, 6);
 
+    const shortJobRes = await fetchJson("/api/workshop/jobs", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        customerName: "M30 Short Stock Customer",
+        bikeDescription: "M30 Short Stock Bike",
+        notes: "Should fail finalize when stock is short",
+      }),
+    });
+    assert.equal(shortJobRes.status, 201, JSON.stringify(shortJobRes.json));
+    const shortWorkshopJobId = shortJobRes.json.id;
+    state.workshopJobIds.add(shortWorkshopJobId);
+
+    const shortPartLineRes = await fetchJson(`/api/workshop/jobs/${shortWorkshopJobId}/lines`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        type: "PART",
+        productId: productRes.json.id,
+        variantId: variantRes.json.id,
+        qty: 7,
+        unitPricePence: 2199,
+      }),
+    });
+    assert.equal(shortPartLineRes.status, 201, JSON.stringify(shortPartLineRes.json));
+
+    const blockedFinalizeRes = await fetchJson(`/api/workshop/jobs/${shortWorkshopJobId}/finalize`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(blockedFinalizeRes.status, 409, JSON.stringify(blockedFinalizeRes.json));
+    assert.equal(blockedFinalizeRes.json.error.code, "WORKSHOP_FINALIZE_INSUFFICIENT_STOCK");
+
     const getJobRes = await fetchJson(`/api/workshop/jobs/${workshopJobId}`, {
       headers: staffHeaders,
     });

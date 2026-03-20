@@ -2,6 +2,10 @@ import { Prisma, StockTransferStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockVariantRowsTx,
+} from "./inventoryLedgerService";
 
 type CreateStockTransferInput = {
   fromLocationId?: string;
@@ -444,31 +448,19 @@ export const receiveStockTransfer = async (stockTransferId: string, auditActor?:
       throw new HttpError(409, "Only sent transfers can be received", "STOCK_TRANSFER_NOT_SENT");
     }
 
-    const onHandRows = await tx.stockLedgerEntry.groupBy({
-      by: ["variantId"],
-      where: {
-        locationId: current.fromLocation.id,
-        variantId: {
-          in: current.lines.map((line) => line.variant.id),
-        },
-      },
-      _sum: {
-        quantityDelta: true,
-      },
-    });
-    const onHandByVariantId = new Map(
-      onHandRows.map((row) => [row.variantId, row._sum.quantityDelta ?? 0]),
+    await lockVariantRowsTx(
+      tx,
+      current.lines.map((line) => line.variant.id),
     );
 
     for (const line of current.lines) {
-      const available = onHandByVariantId.get(line.variant.id) ?? 0;
-      if (available < line.quantity) {
-        throw new HttpError(
-          409,
-          `Not enough stock in ${current.fromLocation.name} to transfer ${line.variant.product.name}`,
-          "STOCK_TRANSFER_INSUFFICIENT_STOCK",
-        );
-      }
+      await assertNonNegativeProjectedStockTx(tx, {
+        variantId: line.variant.id,
+        locationId: current.fromLocation.id,
+        quantityDelta: -line.quantity,
+        message: `Not enough stock in ${current.fromLocation.name} to transfer ${line.variant.product.name}`,
+        code: "STOCK_TRANSFER_INSUFFICIENT_STOCK",
+      });
     }
 
     for (const line of current.lines) {

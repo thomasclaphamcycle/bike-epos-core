@@ -363,6 +363,35 @@ const run = async () => {
     assert.equal(onHandRes.status, 200, JSON.stringify(onHandRes.json));
     assert.equal(onHandRes.json.onHand, 7);
 
+    const shortBasketRes = await fetchJson("/api/baskets", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(shortBasketRes.status, 201, JSON.stringify(shortBasketRes.json));
+    state.basketIds.add(shortBasketRes.json.id);
+
+    const shortLineRes = await fetchJson(`/api/baskets/${shortBasketRes.json.id}/lines`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        variantId: variantRes.json.id,
+        quantity: 8,
+      }),
+    });
+    assert.equal(shortLineRes.status, 201, JSON.stringify(shortLineRes.json));
+
+    const shortCheckoutRes = await fetchJson(`/api/baskets/${shortBasketRes.json.id}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        paymentMethod: "CARD",
+        amountPence: shortLineRes.json.totals.totalPence,
+      }),
+    });
+    assert.equal(shortCheckoutRes.status, 409, JSON.stringify(shortCheckoutRes.json));
+    assert.equal(shortCheckoutRes.json.error.code, "SALE_INSUFFICIENT_STOCK");
+
     const saleMovement = await prisma.inventoryMovement.findFirst({
       where: {
         type: "SALE",

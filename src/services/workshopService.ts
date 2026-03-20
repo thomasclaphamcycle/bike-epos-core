@@ -3,6 +3,10 @@ import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockVariantRowsTx,
+} from "./inventoryLedgerService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
@@ -1072,6 +1076,10 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
 
     const labourVariant = await getOrCreateLabourVariantTx(tx);
     const defaultStockLocation = await getOrCreateDefaultStockLocationTx(tx);
+    const preparedLines: Array<{
+      line: (typeof job.lines)[number];
+      variantId: string;
+    }> = [];
 
     for (const line of job.lines) {
       let variantId: string;
@@ -1098,6 +1106,37 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
       } else {
         variantId = labourVariant.id;
       }
+
+      preparedLines.push({
+        line,
+        variantId,
+      });
+    }
+
+    const partQuantityByVariantId = new Map<string, number>();
+    for (const preparedLine of preparedLines) {
+      if (preparedLine.line.type !== "PART") {
+        continue;
+      }
+
+      partQuantityByVariantId.set(
+        preparedLine.variantId,
+        (partQuantityByVariantId.get(preparedLine.variantId) ?? 0) + preparedLine.line.qty,
+      );
+    }
+
+    await lockVariantRowsTx(tx, Array.from(partQuantityByVariantId.keys()));
+    for (const [variantId, quantity] of partQuantityByVariantId.entries()) {
+      await assertNonNegativeProjectedStockTx(tx, {
+        variantId,
+        locationId: defaultStockLocation.id,
+        quantityDelta: -quantity,
+        message: "Not enough stock to finalize workshop job",
+        code: "WORKSHOP_FINALIZE_INSUFFICIENT_STOCK",
+      });
+    }
+
+    for (const { line, variantId } of preparedLines) {
 
       await tx.basketItem.upsert({
         where: {
