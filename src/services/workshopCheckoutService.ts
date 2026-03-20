@@ -1,5 +1,6 @@
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { emit } from "../core/events";
+import { logCorePosError, logCorePosEvent, logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -264,6 +265,26 @@ const toWorkshopCheckoutResponse = (
   };
 };
 
+const logWorkshopCheckoutResult = (
+  workshopJobId: string,
+  result: WorkshopCheckoutResult,
+  paymentMethod: PaymentMethod | null,
+) => {
+  logOperationalEvent("workshop.checkout.completed", {
+    entityId: result.sale.id,
+    workshopJobId,
+    saleId: result.sale.id,
+    customerId: result.sale.customerId,
+    saleTotalPence: result.saleTotalPence,
+    outstandingPence: result.outstandingPence,
+    creditPence: result.creditPence,
+    depositPaidPence: result.depositPaidPence,
+    paymentMethod,
+    idempotent: result.idempotent,
+    resultStatus: result.idempotent ? "reused" : "succeeded",
+  });
+};
+
 export const checkoutWorkshopJobToSale = async (
   workshopJobId: string,
   input: WorkshopCheckoutInput,
@@ -294,6 +315,12 @@ export const checkoutWorkshopJobToSale = async (
 
   const existingCheckout = await loadExistingWorkshopCheckoutResult(workshopJobId);
   if (existingCheckout) {
+    logCorePosEvent("workshop.checkout.reused_existing_sale", {
+      resultStatus: "reused",
+      workshopJobId,
+      saleId: existingCheckout.sale.id,
+    });
+    logWorkshopCheckoutResult(workshopJobId, existingCheckout, null);
     return toWorkshopCheckoutResponse(workshopJobId, existingCheckout);
   }
 
@@ -545,15 +572,42 @@ export const checkoutWorkshopJobToSale = async (
       const recovered =
         error instanceof HttpError ? null : await recoverWorkshopCheckoutRace(workshopJobId);
       if (recovered) {
+        logCorePosEvent("workshop.checkout.recovered_after_race", {
+          resultStatus: "recovered",
+          workshopJobId,
+          attempt: attempt + 1,
+          saleId: recovered.sale.id,
+        });
         result = recovered;
         lastRecoverableError = undefined;
         break;
       }
 
       if (!isRecoverableWorkshopCheckoutRace(error)) {
+        logCorePosError(
+          "workshop.checkout.failed",
+          error,
+          {
+            resultStatus: "failed",
+            workshopJobId,
+            attempt: attempt + 1,
+          },
+          error instanceof HttpError && error.status < 500 ? "warn" : "error",
+        );
         throw error;
       }
 
+      logCorePosError(
+        "workshop.checkout.recoverable_race",
+        error,
+        {
+          resultStatus: "retrying",
+          workshopJobId,
+          attempt: attempt + 1,
+          maxAttempts: WORKSHOP_CHECKOUT_TRANSACTION_RETRIES,
+        },
+        "warn",
+      );
       lastRecoverableError = error;
       if (attempt === WORKSHOP_CHECKOUT_TRANSACTION_RETRIES - 1) {
         const extendedRecovered = await recoverWorkshopCheckoutRace(
@@ -561,10 +615,27 @@ export const checkoutWorkshopJobToSale = async (
           WORKSHOP_CHECKOUT_FINAL_RECOVERY_MAX_WAIT_MS,
         );
         if (extendedRecovered) {
+          logCorePosEvent("workshop.checkout.recovered_after_extended_wait", {
+            resultStatus: "recovered",
+            workshopJobId,
+            attempt: attempt + 1,
+            saleId: extendedRecovered.sale.id,
+          });
           result = extendedRecovered;
           lastRecoverableError = undefined;
           break;
         }
+        logCorePosError(
+          "workshop.checkout.recovery_exhausted",
+          error,
+          {
+            resultStatus: "failed",
+            workshopJobId,
+            attempt: attempt + 1,
+            maxAttempts: WORKSHOP_CHECKOUT_TRANSACTION_RETRIES,
+          },
+          "error",
+        );
         throw error;
       }
 
@@ -573,8 +644,13 @@ export const checkoutWorkshopJobToSale = async (
   }
 
   if (!result) {
+    logCorePosEvent("workshop.checkout.missing_result", {
+      resultStatus: "failed",
+      workshopJobId,
+    }, "error");
     throw lastRecoverableError ?? new Error("Workshop checkout transaction did not produce a result");
   }
 
+  logWorkshopCheckoutResult(workshopJobId, result, result.payment?.method ?? null);
   return toWorkshopCheckoutResponse(workshopJobId, result);
 };

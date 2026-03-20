@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { logCorePosEvent, logOperationalEvent } from "../lib/operationalLogger";
 import {
   getActionCentreReport,
   getCustomerServiceRemindersReport,
@@ -250,6 +251,12 @@ export const importHistoricalFinancialSummariesHandler = async (req: Request, re
   }
 
   const result = await importHistoricalFinancialSummaries(csv);
+  logOperationalEvent("reports.historical_summary.imported", {
+    resultStatus: result.skippedCount > 0 ? "partial" : "succeeded",
+    importedCount: result.importedCount,
+    skippedCount: result.skippedCount,
+    actorId: getRequestStaffActorId(req),
+  });
   res.status(201).json(result);
 };
 
@@ -289,6 +296,14 @@ export const runDailyCloseHandler = async (req: Request, res: Response) => {
   }
 
   const report = await runDailyCloseReport(input);
+  logCorePosEvent("reports.daily_close.generated", {
+    resultStatus: "succeeded",
+    actorId: getRequestStaffActorId(req),
+    date: report.date,
+    locationId: report.location.id,
+    salesCount: report.sales.count,
+    totalTakingsPence: report.netSalesPence,
+  });
   res.status(201).json(report);
 };
 

@@ -78,32 +78,47 @@ export const getHealthStatus = async (includeDetails = false): Promise<HealthRes
   const checks: Record<string, unknown> = {};
   let hasError = false;
 
+  const databaseStartedAt = process.hrtime.bigint();
   try {
     await prisma.$queryRaw`SELECT 1`;
     checks.database = {
       status: "ok",
+      durationMs: Number(process.hrtime.bigint() - databaseStartedAt) / 1_000_000,
     };
   } catch (error) {
     hasError = true;
     checks.database = {
       status: "error",
+      durationMs: Number(process.hrtime.bigint() - databaseStartedAt) / 1_000_000,
       message: error instanceof Error ? error.message : String(error),
     };
   }
 
+  const migrationStartedAt = process.hrtime.bigint();
   try {
     const migrationStatus = await getMigrationHealthCheck();
     if (migrationStatus.status !== "ok") {
       hasError = true;
     }
-    checks.migrations = migrationStatus;
+    checks.migrations = {
+      ...migrationStatus,
+      durationMs: Number(process.hrtime.bigint() - migrationStartedAt) / 1_000_000,
+    };
   } catch (error) {
     hasError = true;
     checks.migrations = {
       status: "error",
+      durationMs: Number(process.hrtime.bigint() - migrationStartedAt) / 1_000_000,
       message: error instanceof Error ? error.message : String(error),
     };
   }
+
+  checks.runtime = {
+    status: "ok",
+    pid: process.pid,
+    nodeVersion: process.version,
+    uptimeSeconds: Number(process.uptime().toFixed(3)),
+  };
 
   return {
     httpStatus: hasError ? 503 : 200,

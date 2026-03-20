@@ -1,3 +1,5 @@
+import { getRequestContext } from "./requestContext";
+
 type OperationalLogPayload = Record<string, unknown>;
 
 const isOperationalLoggingEnabled = () => process.env.OPS_LOGGING === "1";
@@ -13,14 +15,75 @@ const omitReservedKeys = (payload: OperationalLogPayload) =>
     Object.entries(payload).filter(([key]) => !RESERVED_KEYS.has(key)),
   );
 
+const stringifyLogValue = (value: unknown) => {
+  const seen = new WeakSet<object>();
+
+  try {
+    return JSON.stringify(value, (_key, currentValue) => {
+      if (typeof currentValue === "bigint") {
+        return currentValue.toString();
+      }
+
+      if (currentValue && typeof currentValue === "object") {
+        if (seen.has(currentValue)) {
+          return "[Circular]";
+        }
+        seen.add(currentValue);
+      }
+
+      return currentValue;
+    });
+  } catch (error) {
+    return JSON.stringify({
+      serializationError: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+const withRequestContext = (payload: OperationalLogPayload) => {
+  const requestContext = getRequestContext();
+  if (!requestContext) {
+    return payload;
+  }
+
+  return {
+    requestId: requestContext.requestId,
+    method: requestContext.method,
+    route: requestContext.route,
+    ...payload,
+  };
+};
+
+const toErrorMetadata = (error: unknown) => {
+  if (error instanceof Error) {
+    const errorWithCode = error as Error & { code?: unknown };
+    return {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCode:
+        typeof errorWithCode.code === "string" || typeof errorWithCode.code === "number"
+          ? String(errorWithCode.code)
+          : null,
+      stack: error.stack ?? null,
+    };
+  }
+
+  return {
+    errorName: "NonErrorThrown",
+    errorMessage: typeof error === "string" ? error : stringifyLogValue(error),
+    errorCode: null,
+    stack: null,
+  };
+};
+
 const writeStructuredLog = (
   channel: string,
   payload: OperationalLogPayload,
   level: "info" | "warn" | "error" = "info",
 ) => {
-  console[level](`[${channel}] ${JSON.stringify({
+  console[level](`[${channel}] ${stringifyLogValue({
     timestamp: new Date().toISOString(),
-    ...omitUndefined(payload),
+    ...omitUndefined(withRequestContext(payload)),
   })}`);
 };
 
@@ -66,4 +129,33 @@ export const logCorePosDebug = (operation: string, payload: OperationalLogPayloa
   }
 
   writeStructuredLog("corepos-debug", { operation, ...payload });
+};
+
+export const logCorePosError = (
+  operation: string,
+  error: unknown,
+  payload: OperationalLogPayload = {},
+  level: "warn" | "error" = "error",
+) => {
+  const metadata = toErrorMetadata(error);
+  logCorePosEvent(
+    operation,
+    {
+      ...payload,
+      errorName: metadata.errorName,
+      errorMessage: metadata.errorMessage,
+      errorCode: metadata.errorCode,
+    },
+    level,
+  );
+
+  if (isCorePosDebugEnabled()) {
+    logCorePosDebug(`${operation}.detail`, {
+      ...payload,
+      errorName: metadata.errorName,
+      errorMessage: metadata.errorMessage,
+      errorCode: metadata.errorCode,
+      stack: metadata.stack,
+    });
+  }
 };
