@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { isCorePosDebugEnabled, logCorePosDebug, logCorePosEvent } from "../lib/operationalLogger";
+import { isCorePosDebugEnabled, logCorePosError } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 
 const getApiErrorPayload = (req: Request, code: string, message: string) => ({
@@ -9,6 +9,26 @@ const getApiErrorPayload = (req: Request, code: string, message: string) => ({
     requestId: req.requestId ?? "unknown",
   },
 });
+
+const getBodyDescriptor = (body: unknown) => {
+  if (Array.isArray(body)) {
+    return {
+      bodyType: "array",
+      bodyItemCount: body.length,
+    };
+  }
+
+  if (body && typeof body === "object") {
+    return {
+      bodyType: "object",
+      bodyKeys: Object.keys(body).sort(),
+    };
+  }
+
+  return {
+    bodyType: typeof body,
+  };
+};
 
 export const errorHandler = (
   err: unknown,
@@ -22,17 +42,21 @@ export const errorHandler = (
     requestId,
     method: req.method,
     route: req.originalUrl || req.url,
+    userId: req.user?.id ?? null,
+    userRole: req.user?.role ?? null,
+    queryKeys: Object.keys(req.query ?? {}).sort(),
+    ...getBodyDescriptor(req.body),
   };
 
   if (err instanceof SyntaxError && isApiRoute) {
-    logCorePosEvent(
+    logCorePosError(
       "http.error",
+      err,
       {
         ...basePayload,
         resultStatus: "handled",
         statusCode: 400,
         errorCode: "INVALID_JSON_BODY",
-        message: err.message,
       },
       "warn",
     );
@@ -44,14 +68,14 @@ export const errorHandler = (
 
   if (err instanceof HttpError) {
     if (err.status >= 500 || isCorePosDebugEnabled()) {
-      logCorePosEvent(
+      logCorePosError(
         "http.error",
+        err,
         {
           ...basePayload,
           resultStatus: "handled",
           statusCode: err.status,
           errorCode: err.code,
-          message: err.message,
         },
         err.status >= 500 ? "error" : "warn",
       );
@@ -66,24 +90,17 @@ export const errorHandler = (
     err instanceof Error
       ? err
       : new Error(typeof err === "string" ? err : "Unexpected non-error thrown");
-  logCorePosEvent(
+  logCorePosError(
     "http.error",
+    error,
     {
       ...basePayload,
       resultStatus: "unhandled",
       statusCode: 500,
       errorCode: "INTERNAL_SERVER_ERROR",
-      message: error.message,
     },
     "error",
   );
-  if (isCorePosDebugEnabled()) {
-    logCorePosDebug("http.error.detail", {
-      ...basePayload,
-      name: error.name,
-      stack: error.stack ?? null,
-    });
-  }
   res.status(500).json({
     ...getApiErrorPayload(req, "INTERNAL_SERVER_ERROR", "Something went wrong"),
   });

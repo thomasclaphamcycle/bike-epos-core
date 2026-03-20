@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { logCorePosEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 
 type AttemptState = {
@@ -82,6 +83,16 @@ export const pinLoginRateLimit = (req: Request, _res: Response, next: NextFuncti
   const clientKey = getPinLoginClientKey(req, requestedUserId.userId);
   const existing = getState(clientKey);
   if (existing?.blockedUntil && existing.blockedUntil > now()) {
+    logCorePosEvent(
+      "auth.pin_login.rate_limited",
+      {
+        resultStatus: "rejected",
+        userId: normalizeRequestedUserId(requestedUserId.userId),
+        blockedUntil: new Date(existing.blockedUntil).toISOString(),
+        failureCount: existing.failures,
+      },
+      "warn",
+    );
     return next(
       new HttpError(
         429,
