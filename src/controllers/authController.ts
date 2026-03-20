@@ -70,7 +70,7 @@ export const pinLoginHandler = async (req: Request, res: Response) => {
     throw new HttpError(400, "pin must be a string", "INVALID_PIN_LOGIN");
   }
 
-  const clientKey = getPinLoginClientKey(req);
+  const clientKey = getPinLoginClientKey(req, body.userId);
 
   try {
     const user = await authenticateWithPin(body.userId, body.pin);
