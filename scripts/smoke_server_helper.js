@@ -155,22 +155,33 @@ const createSmokeServerController = ({
 
   const waitForServerShutdown = async () => {
     const startedAt = Date.now();
+    let lastHealthy = false;
+    let lastLingeringPids = [];
 
     while (Date.now() - startedAt < shutdownTimeoutMs) {
-      if (!(await serverIsHealthy())) {
+      lastHealthy = await serverIsHealthy();
+      lastLingeringPids = listLingeringServerPids();
+
+      if (!lastHealthy && lastLingeringPids.length === 0) {
         return Date.now() - startedAt;
       }
       await sleep(shutdownPollMs);
     }
 
-    throw new Error(`Server still responded on /health after ${shutdownTimeoutMs}ms`);
+    const lingeringDetail =
+      lastLingeringPids.length > 0
+        ? `; lingering listeners: ${lastLingeringPids.join(", ")}`
+        : "";
+    throw new Error(
+      `Server shutdown not confirmed after ${shutdownTimeoutMs}ms (${lastHealthy ? "health endpoint still responded" : "listener still present"}${lingeringDetail})`,
+    );
   };
 
   const listListeningPidsForPort = (port) => {
     try {
       const output = execFileSync(
         "lsof",
-        ["-tiTCP:" + String(port), "-sTCP:LISTEN"],
+        ["-nP", "-tiTCP:" + String(port), "-sTCP:LISTEN"],
         { encoding: "utf8" },
       ).trim();
 
@@ -329,6 +340,14 @@ const createSmokeServerController = ({
         sendSignal(serverProcess, "SIGKILL");
         await waitForProcessExit(serverProcess, 2000);
         log("Server process exited after SIGKILL");
+      }
+
+      const lingeringPidsAfterExit = listLingeringServerPids();
+      if (lingeringPidsAfterExit.length > 0) {
+        log(
+          `Server process exited but listeners remained on ${listenPorts.join(", ")}: ${lingeringPidsAfterExit.join(", ")}`,
+        );
+        await cleanupLingeringServerListeners();
       }
 
       let shutdownMs;
