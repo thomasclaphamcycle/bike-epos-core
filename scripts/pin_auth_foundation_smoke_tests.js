@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -21,6 +22,31 @@ if (process.env.ALLOW_NON_TEST_DB !== "1" && !DATABASE_URL.toLowerCase().include
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+
+const appBaseUrlCandidates = (() => {
+  const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
+  const urls = [primary];
+
+  try {
+    const fallback = new URL(primary);
+    if (fallback.hostname === "localhost") {
+      fallback.hostname = "127.0.0.1";
+      urls.push(fallback.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Ignore malformed URL handling here; the primary URL will surface the failure.
+  }
+
+  return urls;
+})();
+
+const serverController = createSmokeServerController({
+  label: "pin-auth-smoke",
+  baseUrls: appBaseUrlCandidates,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
+  startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
 });
 
 const RUN_REF = `pin_${Date.now()}`;
@@ -42,20 +68,34 @@ const toCookieHeader = (response) => {
 };
 
 const fetchJson = async (path, init = {}) => {
-  const response = await fetch(`${BASE_URL}${path}`, init);
+  const response = await fetch(`${serverController.getBaseUrl()}${path}`, init);
   const text = await response.text();
   const json = text ? JSON.parse(text) : null;
   return { status: response.status, json, response };
 };
 
 const main = async () => {
+  await serverController.startIfNeeded();
+
   const password = "temp-pass-123";
+  const managerSetPin = "2468";
   const user = await prisma.user.create({
     data: {
       username: `pin-${RUN_REF}`,
       email: `pin-${RUN_REF}@local`,
       name: `PIN Test ${RUN_REF}`,
       passwordHash: await bcrypt.hash(password, 12),
+      role: "STAFF",
+      isActive: true,
+    },
+  });
+  const secondUser = await prisma.user.create({
+    data: {
+      username: `pin-secondary-${RUN_REF}`,
+      email: `pin-secondary-${RUN_REF}@local`,
+      name: `PIN Secondary ${RUN_REF}`,
+      passwordHash: await bcrypt.hash(password, 12),
+      pinHash: await bcrypt.hash(managerSetPin, 12),
       role: "STAFF",
       isActive: true,
     },
@@ -136,28 +176,19 @@ const main = async () => {
     });
     assert.equal(oldPinResult.status, 401);
 
-<<<<<<< HEAD
     const setPinResultByManager = await fetchJson(`/api/admin/users/${user.id}/set-pin`, {
       method: "POST",
       headers: { ...MANAGER_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: "2468" }),
+      body: JSON.stringify({ pin: managerSetPin }),
     });
     assert.equal(setPinResultByManager.status, 200);
 
     const reloginResult = await fetchJson("/api/auth/pin-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, pin: "2468" }),
+      body: JSON.stringify({ userId: user.id, pin: managerSetPin }),
     });
     assert.equal(reloginResult.status, 200);
-=======
-    const managerSetPinLogin = await fetchJson("/api/auth/pin-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, pin: "9999" }),
-    });
-    assert.equal(managerSetPinLogin.status, 200);
->>>>>>> feat/staff-set-pin
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const retry = await fetchJson("/api/auth/pin-login", {
@@ -175,7 +206,16 @@ const main = async () => {
     });
     assert.equal(limitedResult.status, 429);
 
-    const disableResult = await fetchJson(`/api/admin/users/${user.id}`, {
+    const secondUserPinLogin = await fetchJson("/api/auth/pin-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: secondUser.id, pin: managerSetPin }),
+    });
+    assert.equal(secondUserPinLogin.status, 200);
+    const secondUserCookie = toCookieHeader(secondUserPinLogin.response);
+    assert.ok(secondUserCookie.includes("bike_epos_auth"));
+
+    const disableResult = await fetchJson(`/api/admin/users/${secondUser.id}`, {
       method: "PATCH",
       headers: { ...ADMIN_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: false }),
@@ -186,38 +226,41 @@ const main = async () => {
     const activeUsersAfterDisable = await fetchJson("/api/auth/active-users");
     assert.equal(activeUsersAfterDisable.status, 200);
     assert.equal(
-      activeUsersAfterDisable.json.users.some((row) => row.id === user.id),
+      activeUsersAfterDisable.json.users.some((row) => row.id === secondUser.id),
       false,
     );
 
     const disabledPasswordResult = await fetchJson("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: user.email, password }),
+      body: JSON.stringify({ email: secondUser.email, password }),
     });
     assert.equal(disabledPasswordResult.status, 401);
 
     const disabledPinResult = await fetchJson("/api/auth/pin-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, pin: "2468" }),
+      body: JSON.stringify({ userId: secondUser.id, pin: managerSetPin }),
     });
     assert.equal(disabledPinResult.status, 401);
 
     const meAfterDisable = await fetchJson("/api/auth/me", {
-      headers: { cookie: pinCookie },
+      headers: { cookie: secondUserCookie },
     });
     assert.equal(meAfterDisable.status, 401);
 
     console.log("[pin-auth-smoke] pin auth foundation passed");
   } finally {
     await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+    await prisma.user.delete({ where: { id: secondUser.id } }).catch(() => {});
     await prisma.$disconnect();
+    await serverController.stop().catch(() => {});
   }
 };
 
 main().catch(async (error) => {
   console.error(error);
   await prisma.$disconnect();
+  await serverController.stop().catch(() => {});
   process.exit(1);
 });

@@ -1,81 +1,83 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Layout } from "./components/Layout";
-import { LoginPage } from "./pages/LoginPage";
-import { HomeRedirectPage } from "./pages/HomeRedirectPage";
-import { PosPage } from "./pages/PosPage";
-import { WorkshopPage } from "./pages/WorkshopPage";
-import { WorkshopJobPage } from "./pages/WorkshopJobPage";
-import { CustomersPage } from "./pages/CustomersPage";
-import { CustomerProfilePage } from "./pages/CustomerProfilePage";
-import { CustomerTimelinePage } from "./pages/CustomerTimelinePage";
-import { InventoryPage } from "./pages/InventoryPage";
-import { InventoryItemPage } from "./pages/InventoryItemPage";
-import { InventoryLocationsPage } from "./pages/InventoryLocationsPage";
-import { InventoryStocktakesPage } from "./pages/InventoryStocktakesPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { SuppliersPage } from "./pages/SuppliersPage";
-import { PurchasingPage } from "./pages/PurchasingPage";
-import { PurchaseOrderPage } from "./pages/PurchaseOrderPage";
-import { SupplierReceivingPage } from "./pages/SupplierReceivingPage";
-import { ManagementDashboardPage } from "./pages/ManagementDashboardPage";
-import { DashboardSettingsPage } from "./pages/DashboardSettingsPage";
-import { SalesAnalyticsPage } from "./pages/SalesAnalyticsPage";
-import { WorkshopPerformancePage } from "./pages/WorkshopPerformancePage";
-import { ProductSalesAnalyticsPage } from "./pages/ProductSalesAnalyticsPage";
-import { InventoryVelocityPage } from "./pages/InventoryVelocityPage";
-import { SupplierPerformancePage } from "./pages/SupplierPerformancePage";
-import { ReorderSuggestionsPage } from "./pages/ReorderSuggestionsPage";
-import { WorkshopCapacityPage } from "./pages/WorkshopCapacityPage";
-import { StaffManagementPage } from "./pages/StaffManagementPage";
-import { ActivityPage } from "./pages/ActivityPage";
-import { CustomerInsightsPage } from "./pages/CustomerInsightsPage";
-import { PurchaseOrderActionPage } from "./pages/PurchaseOrderActionPage";
-import { RefundOversightPage } from "./pages/RefundOversightPage";
-import { CashOversightPage } from "./pages/CashOversightPage";
-import { OperationsSummaryPage } from "./pages/OperationsSummaryPage";
-import { AlertsCentrePage } from "./pages/AlertsCentrePage";
-import { ActionCentrePage } from "./pages/ActionCentrePage";
-import { OperationsExceptionsPage } from "./pages/OperationsExceptionsPage";
-import { StockInvestigationsPage } from "./pages/StockInvestigationsPage";
-import { SavedViewsPage } from "./pages/SavedViewsPage";
-import { ExportHubPage } from "./pages/ExportHubPage";
-import { ServiceRemindersPage } from "./pages/ServiceRemindersPage";
-import { SupplierCataloguePage } from "./pages/SupplierCataloguePage";
-import { WorkshopBookingsPage } from "./pages/WorkshopBookingsPage";
-import { WorkshopCalendarPage } from "./pages/WorkshopCalendarPage";
-import { CustomerCommunicationQueuePage } from "./pages/CustomerCommunicationQueuePage";
-import { WorkshopCheckInPage } from "./pages/WorkshopCheckInPage";
-import { WorkshopCollectionPage } from "./pages/WorkshopCollectionPage";
-import { WarrantyTrackingPage } from "./pages/WarrantyTrackingPage";
-import { WorkshopPrintCentrePage } from "./pages/WorkshopPrintCentrePage";
-import { InternalTasksPage } from "./pages/InternalTasksPage";
-import { StockExceptionsPage } from "./pages/StockExceptionsPage";
-import { TransferQueuePage } from "./pages/TransferQueuePage";
-import { BikeHirePage } from "./pages/BikeHirePage";
-import { WorkshopAgeingPage } from "./pages/WorkshopAgeingPage";
-import { ProductDataQueuePage } from "./pages/ProductDataQueuePage";
-import { AdminReviewPage } from "./pages/AdminReviewPage";
-import { PricingExceptionsPage } from "./pages/PricingExceptionsPage";
-import { SupplierReturnsPage } from "./pages/SupplierReturnsPage";
-import { OpsHealthPage } from "./pages/OpsHealthPage";
-import { DailyTradeClosePage } from "./pages/DailyTradeClosePage";
-import { LiabilitiesReviewPage } from "./pages/LiabilitiesReviewPage";
-import { StaffPerformancePage } from "./pages/StaffPerformancePage";
-import { FinancialReportsPage } from "./pages/FinancialReportsPage";
-import { DataIntegrityPage } from "./pages/DataIntegrityPage";
-import { BackupToolkitPage } from "./pages/BackupToolkitPage";
-import { SystemSettingsPage } from "./pages/SystemSettingsPage";
-import { StaffRotaPage } from "./pages/StaffRotaPage";
-import { StaffRotaToolsPage } from "./pages/StaffRotaToolsPage";
-import { OnboardingPage } from "./pages/OnboardingPage";
-import { DocumentationHubPage } from "./pages/DocumentationHubPage";
-import { PinSettingsPage } from "./pages/PinSettingsPage";
-import { CashReceiptUploadPage } from "./pages/CashReceiptUploadPage";
-import { CustomerSitePage } from "./pages/CustomerSitePage";
-import { CustomerCapturePage } from "./pages/CustomerCapturePage";
-import { NavigationPlaceholderPage } from "./pages/NavigationPlaceholderPage";
+import {
+  ActionCentrePage,
+  ActivityPage,
+  AdminReviewPage,
+  AlertsCentrePage,
+  BackupToolkitPage,
+  BikeHirePage,
+  CashOversightPage,
+  CashReceiptUploadPage,
+  CustomerCapturePage,
+  CustomerCommunicationQueuePage,
+  CustomerInsightsPage,
+  CustomerProfilePage,
+  CustomerSitePage,
+  CustomersPage,
+  CustomerTimelinePage,
+  DailyTradeClosePage,
+  DashboardPage,
+  DashboardSettingsPage,
+  DataIntegrityPage,
+  DocumentationHubPage,
+  ExportHubPage,
+  FinancialReportsPage,
+  HomeRedirectPage,
+  InternalTasksPage,
+  InventoryItemPage,
+  InventoryLocationsPage,
+  InventoryPage,
+  InventoryStocktakesPage,
+  InventoryVelocityPage,
+  LiabilitiesReviewPage,
+  LoginPage,
+  ManagementDashboardPage,
+  NavigationPlaceholderPage,
+  OnboardingPage,
+  OperationsExceptionsPage,
+  OperationsSummaryPage,
+  OpsHealthPage,
+  PinSettingsPage,
+  PosPage,
+  PricingExceptionsPage,
+  ProductDataQueuePage,
+  ProductSalesAnalyticsPage,
+  PurchaseOrderActionPage,
+  PurchaseOrderPage,
+  PurchasingPage,
+  RefundOversightPage,
+  ReorderSuggestionsPage,
+  SalesAnalyticsPage,
+  SavedViewsPage,
+  ServiceRemindersPage,
+  StaffManagementPage,
+  StaffPerformancePage,
+  StaffRotaPage,
+  StaffRotaToolsPage,
+  StockExceptionsPage,
+  StockInvestigationsPage,
+  SupplierCataloguePage,
+  SupplierPerformancePage,
+  SupplierReceivingPage,
+  SupplierReturnsPage,
+  SuppliersPage,
+  SystemSettingsPage,
+  TransferQueuePage,
+  WarrantyTrackingPage,
+  WorkshopAgeingPage,
+  WorkshopBookingsPage,
+  WorkshopCalendarPage,
+  WorkshopCapacityPage,
+  WorkshopCheckInPage,
+  WorkshopCollectionPage,
+  WorkshopJobPage,
+  WorkshopPage,
+  WorkshopPerformancePage,
+  WorkshopPrintCentrePage,
+} from "./lazyPages";
 
 const managerOnly = (element: ReactNode) => (
   <ProtectedRoute minimumRole="MANAGER">{element}</ProtectedRoute>
@@ -716,16 +718,18 @@ const AuthedApp = () => (
 
 export const App = () => {
   return (
-    <Routes>
-      <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
-      <Route path="/customer-capture" element={<CustomerCapturePage />} />
-      <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
-      <Route path="/site" element={<CustomerSitePage variant="home" />} />
-      <Route path="/site/services" element={<CustomerSitePage variant="services" />} />
-      <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
-      <Route path="/site/contact" element={<CustomerSitePage variant="contact" />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="*" element={<AuthedApp />} />
-    </Routes>
+    <Suspense fallback={null}>
+      <Routes>
+        <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
+        <Route path="/customer-capture" element={<CustomerCapturePage />} />
+        <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
+        <Route path="/site" element={<CustomerSitePage variant="home" />} />
+        <Route path="/site/services" element={<CustomerSitePage variant="services" />} />
+        <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
+        <Route path="/site/contact" element={<CustomerSitePage variant="contact" />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<AuthedApp />} />
+      </Routes>
+    </Suspense>
   );
 };
