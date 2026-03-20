@@ -53,6 +53,16 @@ type WorkshopCheckoutResult = {
   workshopCompletedAt: Date;
 };
 
+type ExistingWorkshopCheckoutMarker = {
+  kind: "existing-sale";
+  saleId: string;
+};
+
+const isExistingWorkshopCheckoutMarker = (
+  value: WorkshopCheckoutResult | ExistingWorkshopCheckoutMarker,
+): value is ExistingWorkshopCheckoutMarker =>
+  "kind" in value && value.kind === "existing-sale";
+
 const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -329,7 +339,7 @@ export const checkoutWorkshopJobToSale = async (
 
   for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_TRANSACTION_RETRIES; attempt += 1) {
     try {
-      result = await withWorkshopCheckoutTransaction(async (tx) => {
+      const transactionResult = await withWorkshopCheckoutTransaction(async (tx) => {
         // Serialize checkout attempts per workshop job to prevent unique-key races
         // on Sale(workshopJobId) and keep idempotent behavior deterministic.
         const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
@@ -340,60 +350,34 @@ export const checkoutWorkshopJobToSale = async (
           throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
         }
 
+        const existingSale = await tx.sale.findUnique({
+          where: { workshopJobId },
+          select: { id: true },
+        });
+
+        if (existingSale) {
+          return {
+            kind: "existing-sale",
+            saleId: existingSale.id,
+          };
+        }
+
         const workshopJob = await tx.workshopJob.findUnique({
           where: { id: workshopJobId },
-          include: { customer: true },
+          select: {
+            id: true,
+            customerId: true,
+            locationId: true,
+            source: true,
+            depositStatus: true,
+            depositRequiredPence: true,
+            status: true,
+            completedAt: true,
+          },
         });
 
         if (!workshopJob) {
           throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
-        }
-
-        const partsTotalPence = await getWorkshopJobUsedPartsTotalPenceTx(tx, workshopJobId);
-
-        const existingSale = await tx.sale.findUnique({
-          where: { workshopJobId },
-        });
-
-        if (existingSale) {
-          if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-            const data: { status: "COMPLETED"; completedAt?: Date } = {
-              status: "COMPLETED",
-            };
-            if (!workshopJob.completedAt) {
-              data.completedAt = new Date();
-            }
-
-            await tx.workshopJob.update({
-              where: { id: workshopJob.id },
-              data,
-            });
-          }
-
-          const depositPaidPence = workshopJob.depositStatus === "PAID" ? workshopJob.depositRequiredPence : 0;
-          const creditPence = Math.max(0, depositPaidPence - existingSale.totalPence);
-          const outstandingPence = Math.max(0, existingSale.totalPence - depositPaidPence);
-
-          return {
-            sale: {
-              id: existingSale.id,
-              workshopJobId: existingSale.workshopJobId,
-              customerId: existingSale.customerId,
-              totalPence: existingSale.totalPence,
-              createdAt: existingSale.createdAt,
-            },
-            serviceTotalPence: Math.max(0, existingSale.totalPence - partsTotalPence),
-            partsTotalPence,
-            saleTotalPence: existingSale.totalPence,
-            depositPaidPence,
-            creditPence,
-            outstandingPence,
-            payment: null,
-            idempotent: true,
-            emittedWorkshopCompletion: workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED",
-            workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
-            workshopCompletedAt: workshopJob.completedAt ?? new Date(),
-          };
         }
 
         if (workshopJob.status === "CANCELLED") {
@@ -416,6 +400,7 @@ export const checkoutWorkshopJobToSale = async (
           );
         }
 
+        const partsTotalPence = await getWorkshopJobUsedPartsTotalPenceTx(tx, workshopJobId);
         const serviceTotalPence = input.saleTotalPence;
         const saleTotalPence = serviceTotalPence + partsTotalPence;
 
@@ -566,6 +551,26 @@ export const checkoutWorkshopJobToSale = async (
           workshopCompletedAt: workshopJob.completedAt ?? new Date(),
         };
       });
+
+      if (isExistingWorkshopCheckoutMarker(transactionResult)) {
+        const recoveredExistingCheckout = await loadExistingWorkshopCheckoutResult(workshopJobId);
+        if (!recoveredExistingCheckout) {
+          throw new Error(
+            `Workshop checkout detected existing sale ${transactionResult.saleId} but could not reload the checkout result`,
+          );
+        }
+
+        logCorePosEvent("workshop.checkout.reused_existing_sale_after_lock", {
+          resultStatus: "reused",
+          workshopJobId,
+          attempt: attempt + 1,
+          saleId: transactionResult.saleId,
+        });
+        result = recoveredExistingCheckout;
+      } else {
+        result = transactionResult;
+      }
+
       lastRecoverableError = undefined;
       break;
     } catch (error) {
