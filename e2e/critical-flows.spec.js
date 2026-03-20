@@ -482,7 +482,6 @@ test("React POS product search supports keyboard navigation and quick add quanti
   });
   await expect(addTwoButton).toBeVisible();
   const addTwoDiagnosticsBeforeClick = await collectPosAddTwoDiagnostics(page, firstProduct.variant.id);
-  console.log(`[pos-add-two-before-click] ${JSON.stringify(addTwoDiagnosticsBeforeClick)}`);
   await test.info().attach("pos-add-two-before-click", {
     body: JSON.stringify(addTwoDiagnosticsBeforeClick, null, 2),
     contentType: "application/json",
@@ -492,7 +491,6 @@ test("React POS product search supports keyboard navigation and quick add quanti
     await addTwoButton.click();
   } catch (error) {
     const addTwoDiagnosticsAfterFailure = await collectPosAddTwoDiagnostics(page, firstProduct.variant.id);
-    console.log(`[pos-add-two-click-failure] ${JSON.stringify(addTwoDiagnosticsAfterFailure)}`);
     await test.info().attach("pos-add-two-click-failure", {
       body: JSON.stringify(addTwoDiagnosticsAfterFailure, null, 2),
       contentType: "application/json",
