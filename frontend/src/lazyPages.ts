@@ -30,6 +30,10 @@ export const CustomerProfilePage = lazyPage(
   () => import("./pages/CustomerProfilePage"),
   "CustomerProfilePage",
 );
+export const BikeHistoryPage = lazyPage(
+  () => import("./pages/BikeHistoryPage"),
+  "BikeHistoryPage",
+);
 export const CustomerTimelinePage = lazyPage(
   () => import("./pages/CustomerTimelinePage"),
   "CustomerTimelinePage",

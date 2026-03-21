@@ -1,6 +1,7 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type CreateCustomerBikeInput = {
   label?: string;
@@ -32,6 +33,33 @@ type CustomerBikeRecord = Prisma.CustomerBikeGetPayload<{
   select: typeof customerBikeSelect;
 }>;
 
+const customerBikeListSelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
+  ...customerBikeSelect,
+  workshopJobs: {
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      completedAt: true,
+      closedAt: true,
+    },
+  },
+});
+
+const customerBikeHistorySelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
+  ...customerBikeSelect,
+  customer: {
+    select: {
+      id: true,
+      name: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+    },
+  },
+});
+
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
@@ -39,6 +67,19 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const buildCustomerDisplayName = (customer: {
+  name: string;
+  firstName: string;
+  lastName: string;
+}) => {
+  const explicitName = normalizeOptionalText(customer.name);
+  if (explicitName) {
+    return explicitName;
+  }
+
+  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
 };
 
 const buildIdentifier = (input: {
@@ -108,6 +149,46 @@ const toCustomerBikeResponse = (bike: CustomerBikeRecord) => ({
   createdAt: bike.createdAt,
   updatedAt: bike.updatedAt,
 });
+
+const buildBikeServiceSummary = (
+  jobs: Array<{
+    id: string;
+    status: WorkshopJobStatus;
+    createdAt: Date;
+    completedAt: Date | null;
+    closedAt: Date | null;
+  }>,
+) => {
+  const linkedJobCount = jobs.length;
+  const completedJobCount = jobs.filter((job) => job.completedAt !== null).length;
+  const openJobCount = jobs.filter((job) => {
+    const status = toWorkshopExecutionStatus({
+      status: job.status,
+      closedAt: job.closedAt,
+    });
+    return status === "BOOKED" || status === "IN_PROGRESS" || status === "READY";
+  }).length;
+
+  const jobDates = jobs
+    .map((job) => job.completedAt ?? job.createdAt)
+    .sort((left, right) => right.getTime() - left.getTime());
+
+  return {
+    linkedJobCount,
+    openJobCount,
+    completedJobCount,
+    firstJobAt: jobs.length > 0
+      ? jobs
+          .map((job) => job.createdAt)
+          .sort((left, right) => left.getTime() - right.getTime())[0]
+      : null,
+    latestJobAt: jobDates[0] ?? null,
+    latestCompletedAt: jobs
+      .map((job) => job.completedAt)
+      .filter((value): value is Date => Boolean(value))
+      .sort((left, right) => right.getTime() - left.getTime())[0] ?? null,
+  };
+};
 
 const assertCustomerExistsTx = async (
   tx: Prisma.TransactionClient | typeof prisma,
@@ -183,12 +264,15 @@ export const listCustomerBikes = async (customerId: string) => {
   const bikes = await prisma.customerBike.findMany({
     where: { customerId },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: customerBikeSelect,
+    select: customerBikeListSelect,
   });
 
   return {
     customerId,
-    bikes: bikes.map(toCustomerBikeResponse),
+    bikes: bikes.map((bike) => ({
+      ...toCustomerBikeResponse(bike),
+      serviceSummary: buildBikeServiceSummary(bike.workshopJobs),
+    })),
   };
 };
 
@@ -245,3 +329,190 @@ export const toWorkshopBikeResponse = (bike: CustomerBikeRecord | null) =>
         ...toCustomerBikeResponse(bike),
       }
     : null;
+
+export const getCustomerBikeHistory = async (customerBikeId: string) => {
+  if (!isUuid(customerBikeId)) {
+    throw new HttpError(400, "Invalid customer bike id", "INVALID_CUSTOMER_BIKE_ID");
+  }
+
+  const bike = await prisma.customerBike.findUnique({
+    where: { id: customerBikeId },
+    select: customerBikeHistorySelect,
+  });
+
+  if (!bike) {
+    throw new HttpError(404, "Bike record not found", "CUSTOMER_BIKE_NOT_FOUND");
+  }
+
+  const workshopJobs = await prisma.workshopJob.findMany({
+    where: { bikeId: customerBikeId },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      customerId: true,
+      customerName: true,
+      bikeDescription: true,
+      assignedStaffId: true,
+      assignedStaffName: true,
+      status: true,
+      scheduledDate: true,
+      notes: true,
+      depositRequiredPence: true,
+      depositStatus: true,
+      finalizedBasketId: true,
+      createdAt: true,
+      updatedAt: true,
+      completedAt: true,
+      closedAt: true,
+      sale: {
+        select: {
+          id: true,
+          totalPence: true,
+          createdAt: true,
+          completedAt: true,
+        },
+      },
+      lines: {
+        select: {
+          id: true,
+          type: true,
+          qty: true,
+          unitPricePence: true,
+        },
+      },
+      estimates: {
+        orderBy: [{ version: "desc" }],
+        select: {
+          id: true,
+          version: true,
+          status: true,
+          labourTotalPence: true,
+          partsTotalPence: true,
+          subtotalPence: true,
+          lineCount: true,
+          requestedAt: true,
+          approvedAt: true,
+          rejectedAt: true,
+          supersededAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      jobNotes: {
+        take: 1,
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          note: true,
+          visibility: true,
+          createdAt: true,
+          authorStaff: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          jobNotes: true,
+        },
+      },
+    },
+  });
+
+  return {
+    bike: toCustomerBikeResponse(bike),
+    customer: {
+      id: bike.customer.id,
+      name: buildCustomerDisplayName(bike.customer),
+      email: bike.customer.email,
+      phone: bike.customer.phone,
+    },
+    serviceSummary: buildBikeServiceSummary(workshopJobs),
+    historyScope: "LINKED_BIKE_JOBS_ONLY",
+    limitations: [
+      "Only workshop jobs linked directly to this bike record are included. Legacy free-text workshop jobs without a bike link remain outside formal bike history.",
+    ],
+    history: workshopJobs.map((job) => {
+      const latestEstimate = job.estimates[0] ?? null;
+      const latestNote = job.jobNotes[0] ?? null;
+      const labourTotalPence = job.lines
+        .filter((line) => line.type === "LABOUR")
+        .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
+      const partsTotalPence = job.lines
+        .filter((line) => line.type === "PART")
+        .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
+
+      return {
+        id: job.id,
+        customerId: job.customerId,
+        customerName: job.customerName,
+        bikeDescription: job.bikeDescription ?? buildCustomerBikeDisplayName(bike),
+        status: toWorkshopExecutionStatus(job),
+        rawStatus: job.status,
+        scheduledDate: job.scheduledDate,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        completedAt: job.completedAt,
+        closedAt: job.closedAt,
+        depositRequiredPence: job.depositRequiredPence,
+        depositStatus: job.depositStatus,
+        finalizedBasketId: job.finalizedBasketId,
+        assignedTechnician: job.assignedStaffId || job.assignedStaffName
+          ? {
+              id: job.assignedStaffId,
+              name: job.assignedStaffName,
+            }
+          : null,
+        notes: {
+          jobNotes: job.notes,
+          noteCount: job._count.jobNotes,
+          latestNote: latestNote
+            ? {
+                id: latestNote.id,
+                note: latestNote.note,
+                visibility: latestNote.visibility,
+                createdAt: latestNote.createdAt,
+                authorName: latestNote.authorStaff?.name ?? latestNote.authorStaff?.username ?? null,
+              }
+            : null,
+        },
+        liveTotals: {
+          lineCount: job.lines.length,
+          labourTotalPence,
+          partsTotalPence,
+          subtotalPence: labourTotalPence + partsTotalPence,
+        },
+        estimate: latestEstimate
+          ? {
+              id: latestEstimate.id,
+              version: latestEstimate.version,
+              status: latestEstimate.status,
+              labourTotalPence: latestEstimate.labourTotalPence,
+              partsTotalPence: latestEstimate.partsTotalPence,
+              subtotalPence: latestEstimate.subtotalPence,
+              lineCount: latestEstimate.lineCount,
+              requestedAt: latestEstimate.requestedAt,
+              approvedAt: latestEstimate.approvedAt,
+              rejectedAt: latestEstimate.rejectedAt,
+              supersededAt: latestEstimate.supersededAt,
+              createdAt: latestEstimate.createdAt,
+              updatedAt: latestEstimate.updatedAt,
+              isCurrent: latestEstimate.supersededAt === null,
+            }
+          : null,
+        sale: job.sale
+          ? {
+              id: job.sale.id,
+              totalPence: job.sale.totalPence,
+              createdAt: job.sale.createdAt,
+              completedAt: job.sale.completedAt,
+            }
+          : null,
+      };
+    }),
+  };
+};

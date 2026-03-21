@@ -3,6 +3,7 @@ import {
   createCustomerBikeHandler,
   createCustomerHandler,
   getCustomerHandler,
+  getCustomerBikeHistoryHandler,
   getCustomerTimelineHandler,
   listCustomersHandler,
   listCustomerBikesHandler,
@@ -17,6 +18,7 @@ export const customerRouter = Router();
 customerRouter.post("/", requireRoleAtLeast("STAFF"), createCustomerHandler);
 customerRouter.get("/", requireRoleAtLeast("STAFF"), listCustomersHandler);
 customerRouter.get("/search", requireRoleAtLeast("STAFF"), searchCustomersHandler);
+customerRouter.get("/bikes/:bikeId", requireRoleAtLeast("STAFF"), getCustomerBikeHistoryHandler);
 customerRouter.get("/:id/bikes", requireRoleAtLeast("STAFF"), listCustomerBikesHandler);
 customerRouter.post("/:id/bikes", requireRoleAtLeast("STAFF"), createCustomerBikeHandler);
 customerRouter.get("/:id/sales", requireRoleAtLeast("STAFF"), listCustomerSalesHandler);

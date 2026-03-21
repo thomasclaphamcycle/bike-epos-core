@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type CreateCustomerInput = {
   name?: string;
@@ -277,6 +278,7 @@ export const listCustomerWorkshopJobs = async (input: {
     take,
     select: {
       id: true,
+      bikeId: true,
       status: true,
       customerName: true,
       bikeDescription: true,
@@ -288,9 +290,24 @@ export const listCustomerWorkshopJobs = async (input: {
     },
   });
 
+  const workshopJobs = jobs.map((job) => ({
+    id: job.id,
+    bikeId: job.bikeId,
+    status: toWorkshopExecutionStatus(job),
+    rawStatus: job.status,
+    customerName: job.customerName,
+    bikeDescription: job.bikeDescription,
+    notes: job.notes,
+    scheduledDate: job.scheduledDate,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
+  }));
+
   return {
     customerId: input.customerId,
-    workshopJobs: jobs,
+    workshopJobs,
+    jobs: workshopJobs,
   };
 };
 

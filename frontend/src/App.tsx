@@ -8,6 +8,7 @@ import {
   AdminReviewPage,
   AlertsCentrePage,
   BackupToolkitPage,
+  BikeHistoryPage,
   BikeHirePage,
   CashOversightPage,
   CashReceiptUploadPage,
@@ -441,6 +442,7 @@ const AuthedApp = () => (
         />
         <Route path="/tasks" element={<InternalTasksPage />} />
         <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/customers/bikes/:bikeId" element={<BikeHistoryPage />} />
         <Route
           path="/customers/bikes"
           element={(

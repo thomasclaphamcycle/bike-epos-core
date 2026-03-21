@@ -7,7 +7,11 @@ import {
   listCustomerWorkshopJobs,
   searchCustomers,
 } from "../services/customerService";
-import { createCustomerBike, listCustomerBikes } from "../services/customerBikeService";
+import {
+  createCustomerBike,
+  getCustomerBikeHistory,
+  listCustomerBikes,
+} from "../services/customerBikeService";
 import { HttpError } from "../utils/http";
 
 export const createCustomerHandler = async (req: Request, res: Response) => {
@@ -146,6 +150,11 @@ export const listCustomerWorkshopJobsHandler = async (req: Request, res: Respons
 
 export const listCustomerBikesHandler = async (req: Request, res: Response) => {
   const result = await listCustomerBikes(req.params.id);
+  res.json(result);
+};
+
+export const getCustomerBikeHistoryHandler = async (req: Request, res: Response) => {
+  const result = await getCustomerBikeHistory(req.params.bikeId);
   res.json(result);
 };
 

@@ -36,6 +36,9 @@ Content-Type: application/json
   "notes": "Rear rack fitted, customer prefers puncture-resistant tyres"
 }
 
+### Get reusable bike profile and linked workshop history
+GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
+
 ### Attach customer to sale
 PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
 Content-Type: application/json

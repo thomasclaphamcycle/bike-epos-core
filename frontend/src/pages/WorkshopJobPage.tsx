@@ -4,6 +4,7 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
+import { workshopRawStatusClass, workshopRawStatusLabel } from "../features/workshop/status";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
 
@@ -149,6 +150,9 @@ type WorkshopJobResponse = {
     bikeDescription: string | null;
     bike: CustomerBikeRecord | null;
     notes: string | null;
+    assignedStaffId: string | null;
+    assignedStaffName: string | null;
+    scheduledDate: string | null;
     depositRequiredPence: number;
     depositStatus: string;
     finalizedBasketId: string | null;
@@ -157,6 +161,8 @@ type WorkshopJobResponse = {
       totalPence: number;
       createdAt: string;
     } | null;
+    completedAt: string | null;
+    closedAt: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -248,51 +254,6 @@ const partsStatusClass = (status: WorkshopPartsStatus | undefined) => {
     return "status-badge";
   }
   return "status-badge status-complete";
-};
-
-const workflowStatusClass = (status: string) => {
-  switch (status) {
-    case "WAITING_FOR_APPROVAL":
-      return "status-badge status-warning";
-    case "APPROVED":
-    case "ON_HOLD":
-      return "status-badge status-info";
-    case "WAITING_FOR_PARTS":
-      return "status-badge status-warning";
-    case "BIKE_READY":
-      return "status-badge status-ready";
-    case "COMPLETED":
-      return "status-badge status-complete";
-    case "CANCELLED":
-      return "status-badge status-cancelled";
-    default:
-      return "status-badge";
-  }
-};
-
-const workflowStatusLabel = (status: string) => {
-  switch (status) {
-    case "BOOKING_MADE":
-      return "Booked";
-    case "BIKE_ARRIVED":
-      return "In Progress";
-    case "WAITING_FOR_APPROVAL":
-      return "Awaiting Approval";
-    case "APPROVED":
-      return "Approved";
-    case "WAITING_FOR_PARTS":
-      return "Waiting For Parts";
-    case "ON_HOLD":
-      return "On Hold";
-    case "BIKE_READY":
-      return "Ready For Collection";
-    case "COMPLETED":
-      return "Collected";
-    case "CANCELLED":
-      return "Cancelled";
-    default:
-      return status || "-";
-  }
 };
 
 const truncateText = (value: string, limit = 96) =>
@@ -1000,6 +961,11 @@ export const WorkshopJobPage = () => {
         <div className="card-header-row">
           <h1>Workshop Job {id.slice(0, 8)}</h1>
           <div className="actions-inline">
+            {payload?.job.bike ? (
+              <Link to={`/customers/bikes/${payload.job.bike.id}`} className="button-link">
+                Bike History
+              </Link>
+            ) : null}
             {payload && payload.job.status !== "CLOSED" && payload.job.status !== "CANCELLED" ? (
               <button type="button" className="primary" onClick={openPosHandoff}>
                 {payload.job.sale
@@ -1027,7 +993,7 @@ export const WorkshopJobPage = () => {
             <div className="job-meta-grid">
               <div>
                 <strong>Workflow Status:</strong>{" "}
-                <span className={workflowStatusClass(rawStatus)}>{workflowStatusLabel(rawStatus)}</span>
+                <span className={workshopRawStatusClass(rawStatus)}>{workshopRawStatusLabel(rawStatus)}</span>
               </div>
               <div><strong>Next Step:</strong> {workflowGuidance}</div>
               <div>
@@ -1047,7 +1013,16 @@ export const WorkshopJobPage = () => {
               </div>
               <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
-              <div><strong>Linked Bike Record:</strong> {payload.job.bike?.displayName || "No linked bike record"}</div>
+              <div>
+                <strong>Linked Bike Record:</strong>{" "}
+                {payload.job.bike ? (
+                  <Link to={`/customers/bikes/${payload.job.bike.id}`}>{payload.job.bike.displayName}</Link>
+                ) : (
+                  "No linked bike record"
+                )}
+              </div>
+              <div><strong>Assigned Technician:</strong> {payload.job.assignedStaffName || "Unassigned"}</div>
+              <div><strong>Scheduled:</strong> {formatOptionalDateTime(payload.job.scheduledDate)}</div>
               <div><strong>Check-in Notes:</strong> {payload.job.notes || "-"}</div>
               <div><strong>Collection Handoff:</strong> {collectionSummary ?? "Not ready for collection yet."}</div>
               <div><strong>Updated:</strong> {new Date(payload.job.updatedAt).toLocaleString()}</div>
@@ -1147,6 +1122,11 @@ export const WorkshopJobPage = () => {
               Keep the workshop job summary compatible with existing flows, and optionally link a reusable customer bike record for future service history.
             </p>
           </div>
+          {payload?.job.bike ? (
+            <Link to={`/customers/bikes/${payload.job.bike.id}`} className="button-link">
+              View Bike History
+            </Link>
+          ) : null}
           {payload?.job.customerId ? (
             <div className="table-secondary">
               {customerBikesLoading ? "Loading customer bikes..." : `${customerBikes.length} bike record${customerBikes.length === 1 ? "" : "s"}`}
@@ -1204,6 +1184,10 @@ export const WorkshopJobPage = () => {
           <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
             <div className="job-meta-grid">
               <div><strong>Current record:</strong> {payload.job.bike.displayName}</div>
+              <div>
+                <strong>History:</strong>{" "}
+                <Link to={`/customers/bikes/${payload.job.bike.id}`}>Open linked bike service history</Link>
+              </div>
               <div><strong>Make / Model:</strong> {[payload.job.bike.make, payload.job.bike.model].filter(Boolean).join(" ") || "-"}</div>
               <div><strong>Colour:</strong> {payload.job.bike.colour || "-"}</div>
               <div><strong>Frame #:</strong> {payload.job.bike.frameNumber || "-"}</div>
@@ -1211,6 +1195,12 @@ export const WorkshopJobPage = () => {
               <div><strong>Registration:</strong> {payload.job.bike.registrationNumber || "-"}</div>
               <div><strong>Bike notes:</strong> {payload.job.bike.notes || "-"}</div>
             </div>
+          </div>
+        ) : null}
+
+        {!payload?.job.bike && payload?.job.bikeDescription ? (
+          <div className="restricted-panel" style={{ marginTop: "12px" }}>
+            This job still uses a free-text bike summary only. It stays operationally compatible, but it will not appear in reusable bike service history until a real bike record is linked.
           </div>
         ) : null}
 
