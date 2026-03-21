@@ -10,6 +10,7 @@ import {
 import {
   createCustomerBike,
   getCustomerBikeHistory,
+  getCustomerBikeWorkshopStartContext,
   listCustomerBikes,
 } from "../services/customerBikeService";
 import { HttpError } from "../utils/http";
@@ -155,6 +156,14 @@ export const listCustomerBikesHandler = async (req: Request, res: Response) => {
 
 export const getCustomerBikeHistoryHandler = async (req: Request, res: Response) => {
   const result = await getCustomerBikeHistory(req.params.bikeId);
+  res.json(result);
+};
+
+export const getCustomerBikeWorkshopStartContextHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getCustomerBikeWorkshopStartContext(req.params.bikeId);
   res.json(result);
 };
 

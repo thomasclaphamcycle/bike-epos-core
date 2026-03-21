@@ -82,6 +82,54 @@ const buildCustomerDisplayName = (customer: {
   return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
 };
 
+const buildWorkshopStartContext = (input: {
+  bike: {
+    id: string;
+    customerId: string;
+    label?: string | null;
+    make?: string | null;
+    model?: string | null;
+    colour?: string | null;
+    frameNumber?: string | null;
+    serialNumber?: string | null;
+    registrationNumber?: string | null;
+    notes?: string | null;
+    createdAt?: Date;
+    updatedAt?: Date;
+  };
+  customer: {
+    id: string;
+    name: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  };
+}) => {
+  const customerName = buildCustomerDisplayName(input.customer);
+  const bikeDescription = buildCustomerBikeDisplayName(input.bike);
+
+  return {
+    customer: {
+      id: input.customer.id,
+      name: customerName,
+      email: input.customer.email,
+      phone: input.customer.phone,
+    },
+    bike: {
+      ...toCustomerBikeResponse(input.bike),
+    },
+    defaults: {
+      customerId: input.customer.id,
+      customerName,
+      bikeId: input.bike.id,
+      bikeDescription,
+      status: "BOOKED" as const,
+    },
+    startPath: `/workshop/check-in?bikeId=${encodeURIComponent(input.bike.id)}`,
+  };
+};
+
 const buildIdentifier = (input: {
   frameNumber?: string | null;
   serialNumber?: string | null;
@@ -431,6 +479,10 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
       email: bike.customer.email,
       phone: bike.customer.phone,
     },
+    workshopStartContext: buildWorkshopStartContext({
+      bike,
+      customer: bike.customer,
+    }),
     serviceSummary: buildBikeServiceSummary(workshopJobs),
     historyScope: "LINKED_BIKE_JOBS_ONLY",
     limitations: [
@@ -515,4 +567,26 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
       };
     }),
   };
+};
+
+export const getCustomerBikeWorkshopStartContext = async (
+  customerBikeId: string,
+) => {
+  if (!isUuid(customerBikeId)) {
+    throw new HttpError(400, "Invalid customer bike id", "INVALID_CUSTOMER_BIKE_ID");
+  }
+
+  const bike = await prisma.customerBike.findUnique({
+    where: { id: customerBikeId },
+    select: customerBikeHistorySelect,
+  });
+
+  if (!bike) {
+    throw new HttpError(404, "Bike record not found", "CUSTOMER_BIKE_NOT_FOUND");
+  }
+
+  return buildWorkshopStartContext({
+    bike,
+    customer: bike.customer,
+  });
 };

@@ -39,6 +39,9 @@ Content-Type: application/json
 ### Get reusable bike profile and linked workshop history
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
 
+### Get workshop start defaults for a reusable bike
+GET {{baseUrl}}/api/customers/bikes/{{bikeId}}/workshop-start
+
 ### Attach customer to sale
 PATCH {{baseUrl}}/api/sales/{{saleId}}/customer
 Content-Type: application/json

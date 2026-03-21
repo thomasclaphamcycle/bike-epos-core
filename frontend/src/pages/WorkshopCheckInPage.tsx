@@ -40,6 +40,24 @@ type CustomerBikesResponse = {
   bikes: CustomerBikeRecord[];
 };
 
+type CustomerBikeWorkshopStartContextResponse = {
+  customer: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  };
+  bike: CustomerBikeRecord;
+  defaults: {
+    customerId: string;
+    customerName: string;
+    bikeId: string;
+    bikeDescription: string;
+    status: "BOOKED";
+  };
+  startPath: string;
+};
+
 const stepTitles = [
   "Customer",
   "Bike & Work",
@@ -62,8 +80,9 @@ const buildCheckInNotes = (input: {
 
 export const WorkshopCheckInPage = () => {
   const { success, error } = useToasts();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
+  const initialBikeId = searchParams.get("bikeId");
 
   const [step, setStep] = useState(0);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -73,6 +92,8 @@ export const WorkshopCheckInPage = () => {
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
   const [loadingCustomerBikes, setLoadingCustomerBikes] = useState(false);
+  const [workshopStartContext, setWorkshopStartContext] = useState<CustomerBikeWorkshopStartContextResponse | null>(null);
+  const [loadingWorkshopStartContext, setLoadingWorkshopStartContext] = useState(false);
 
   const [manualCustomerName, setManualCustomerName] = useState("");
   const [createCustomerInline, setCreateCustomerInline] = useState(false);
@@ -110,6 +131,10 @@ export const WorkshopCheckInPage = () => {
   const checkInNotes = useMemo(
     () => buildCheckInNotes({ issueSummary, requestedWork, intakeNotes }),
     [issueSummary, requestedWork, intakeNotes],
+  );
+  const selectedBikeRecord = useMemo(
+    () => customerBikes.find((bike) => bike.id === selectedBikeId) ?? workshopStartContext?.bike ?? null,
+    [customerBikes, selectedBikeId, workshopStartContext?.bike],
   );
   const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
 
@@ -151,6 +176,53 @@ export const WorkshopCheckInPage = () => {
   }, [debouncedCustomerSearch, error]);
 
   useEffect(() => {
+    if (!initialBikeId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadWorkshopStartContext = async () => {
+      setLoadingWorkshopStartContext(true);
+      try {
+        const payload = await apiGet<CustomerBikeWorkshopStartContextResponse>(
+          `/api/customers/bikes/${encodeURIComponent(initialBikeId)}/workshop-start`,
+        );
+        if (!cancelled) {
+          setWorkshopStartContext(payload);
+          setSelectedCustomer(payload.customer);
+          setCreateCustomerInline(false);
+          setManualCustomerName("");
+          setSelectedBikeId(payload.defaults.bikeId);
+          setCreateBikeInline(false);
+          setBikeDescription(payload.defaults.bikeDescription);
+          setStep((current) => Math.max(current, 1));
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          const message = loadError instanceof Error
+            ? loadError.message
+            : "Failed to load selected bike";
+          error(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWorkshopStartContext(false);
+        }
+      }
+    };
+
+    void loadWorkshopStartContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [error, initialBikeId]);
+
+  useEffect(() => {
+    if (initialBikeId) {
+      return;
+    }
+
     if (!initialCustomerId) {
       return;
     }
@@ -179,7 +251,7 @@ export const WorkshopCheckInPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [error, initialCustomerId]);
+  }, [error, initialBikeId, initialCustomerId]);
 
   useEffect(() => {
     if (!selectedCustomer?.id) {
@@ -283,7 +355,7 @@ export const WorkshopCheckInPage = () => {
 
       const created = await apiPost<{ id: string }>("/api/workshop/jobs", {
         customerId,
-        customerName: resolvedCustomerName,
+        customerName: selectedCustomer ? undefined : resolvedCustomerName,
         bikeId,
         bikeDescription: bikeDescription.trim(),
         notes: checkInNotes || undefined,
@@ -297,6 +369,21 @@ export const WorkshopCheckInPage = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const clearBikeLedContext = () => {
+    setWorkshopStartContext(null);
+    setSelectedCustomer(null);
+    setSelectedBikeId("");
+    setBikeDescription("");
+    setCustomerBikes([]);
+    setCreateBikeInline(false);
+    setCreateCustomerInline(false);
+    setStep(0);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("bikeId");
+    setSearchParams(nextParams);
   };
 
   return (
@@ -332,132 +419,167 @@ export const WorkshopCheckInPage = () => {
         {step === 0 ? (
           <section className="card">
             <h2>Customer</h2>
-            <div className="filter-row">
-              <label className="grow">
-                Search existing customer
-                <input
-                  value={customerSearch}
-                  onChange={(event) => setCustomerSearch(event.target.value)}
-                  placeholder="name, phone, email"
-                />
-              </label>
-            </div>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Contact</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customerResults.length === 0 ? (
-                    <tr>
-                      <td colSpan={3}>
-                        {loadingCustomers
-                          ? "Searching..."
-                          : customerSearch.trim()
-                            ? "No existing customers matched that search."
-                            : "Search for an existing customer, create one inline, or use a manual intake name."}
-                      </td>
-                    </tr>
-                  ) : customerResults.map((customer) => (
-                    <tr key={customer.id}>
-                      <td>{customer.name}</td>
-                      <td>
-                        <div>{customer.email || "-"}</div>
-                        <div className="table-secondary">{customer.phone || "-"}</div>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedCustomer(customer);
-                            setCreateCustomerInline(false);
-                            setManualCustomerName("");
-                            setCreateBikeInline(false);
-                          }}
-                        >
-                          Select
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="job-meta-grid" style={{ marginTop: "12px" }}>
-              <div>
-                <strong>Selected customer:</strong> {selectedCustomer?.name || "-"}
+            {workshopStartContext ? (
+              <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
+                <div className="job-meta-grid">
+                  <div><strong>Starting from bike:</strong> <Link to={`/customers/bikes/${workshopStartContext.bike.id}`}>{workshopStartContext.bike.displayName}</Link></div>
+                  <div><strong>Linked customer:</strong> <Link to={`/customers/${workshopStartContext.customer.id}`}>{workshopStartContext.customer.name}</Link></div>
+                </div>
+                <div className="actions-inline" style={{ marginTop: "8px" }}>
+                  <button type="button" onClick={clearBikeLedContext}>
+                    Use different customer or bike
+                  </button>
+                  <button type="button" className="primary" onClick={() => setStep(1)}>
+                    Continue with linked bike
+                  </button>
+                </div>
               </div>
-              <div>
-                <strong>Manual intake name:</strong> {manualCustomerName || "-"}
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="filter-row">
+                  <label className="grow">
+                    Search existing customer
+                    <input
+                      value={customerSearch}
+                      onChange={(event) => setCustomerSearch(event.target.value)}
+                      placeholder="name, phone, email"
+                    />
+                  </label>
+                </div>
 
-            <div className="actions-inline" style={{ marginTop: "12px" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateCustomerInline(false);
-                  setSelectedCustomer(null);
-                  setSelectedBikeId("");
-                  setCreateBikeInline(false);
-                }}
-              >
-                Use walk-in/manual name
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateCustomerInline(true);
-                  setSelectedCustomer(null);
-                  setManualCustomerName("");
-                  setSelectedBikeId("");
-                }}
-              >
-                Create new customer
-              </button>
-            </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Contact</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerResults.length === 0 ? (
+                        <tr>
+                          <td colSpan={3}>
+                            {loadingCustomers
+                              ? "Searching..."
+                              : customerSearch.trim()
+                                ? "No existing customers matched that search."
+                                : "Search for an existing customer, create one inline, or use a manual intake name."}
+                          </td>
+                        </tr>
+                      ) : customerResults.map((customer) => (
+                        <tr key={customer.id}>
+                          <td>{customer.name}</td>
+                          <td>
+                            <div>{customer.email || "-"}</div>
+                            <div className="table-secondary">{customer.phone || "-"}</div>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomer(customer);
+                                setCreateCustomerInline(false);
+                                setManualCustomerName("");
+                                setCreateBikeInline(false);
+                              }}
+                            >
+                              Select
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-            {!selectedCustomer && !createCustomerInline ? (
-              <div className="filter-row" style={{ marginTop: "12px" }}>
-                <label className="grow">
-                  Customer name for intake
-                  <input
-                    value={manualCustomerName}
-                    onChange={(event) => setManualCustomerName(event.target.value)}
-                    placeholder="Walk-in customer or quick manual entry"
-                  />
-                </label>
-              </div>
-            ) : null}
+                <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+                  <div>
+                    <strong>Selected customer:</strong> {selectedCustomer?.name || "-"}
+                  </div>
+                  <div>
+                    <strong>Manual intake name:</strong> {manualCustomerName || "-"}
+                  </div>
+                </div>
 
-            {createCustomerInline ? (
-              <div className="job-meta-grid" style={{ marginTop: "12px" }}>
-                <label>
-                  New customer name
-                  <input value={newCustomerName} onChange={(event) => setNewCustomerName(event.target.value)} />
-                </label>
-                <label>
-                  Email
-                  <input value={newCustomerEmail} onChange={(event) => setNewCustomerEmail(event.target.value)} />
-                </label>
-                <label>
-                  Phone
-                  <input value={newCustomerPhone} onChange={(event) => setNewCustomerPhone(event.target.value)} />
-                </label>
-              </div>
-            ) : null}
+                <div className="actions-inline" style={{ marginTop: "12px" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateCustomerInline(false);
+                      setSelectedCustomer(null);
+                      setSelectedBikeId("");
+                      setCreateBikeInline(false);
+                    }}
+                  >
+                    Use walk-in/manual name
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateCustomerInline(true);
+                      setSelectedCustomer(null);
+                      setManualCustomerName("");
+                      setSelectedBikeId("");
+                    }}
+                  >
+                    Create new customer
+                  </button>
+                </div>
+
+                {!selectedCustomer && !createCustomerInline ? (
+                  <div className="filter-row" style={{ marginTop: "12px" }}>
+                    <label className="grow">
+                      Customer name for intake
+                      <input
+                        value={manualCustomerName}
+                        onChange={(event) => setManualCustomerName(event.target.value)}
+                        placeholder="Walk-in customer or quick manual entry"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                {createCustomerInline ? (
+                  <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+                    <label>
+                      New customer name
+                      <input value={newCustomerName} onChange={(event) => setNewCustomerName(event.target.value)} />
+                    </label>
+                    <label>
+                      Email
+                      <input value={newCustomerEmail} onChange={(event) => setNewCustomerEmail(event.target.value)} />
+                    </label>
+                    <label>
+                      Phone
+                      <input value={newCustomerPhone} onChange={(event) => setNewCustomerPhone(event.target.value)} />
+                    </label>
+                  </div>
+                ) : null}
+              </>
+            )}
           </section>
         ) : null}
 
         {step === 1 ? (
           <section className="card">
             <h2>Bike & Requested Work</h2>
+            {loadingWorkshopStartContext ? <p>Loading selected bike...</p> : null}
+            {workshopStartContext ? (
+              <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
+                <div className="job-meta-grid">
+                  <div><strong>Known bike:</strong> <Link to={`/customers/bikes/${workshopStartContext.bike.id}`}>{workshopStartContext.bike.displayName}</Link></div>
+                  <div><strong>Customer:</strong> <Link to={`/customers/${workshopStartContext.customer.id}`}>{workshopStartContext.customer.name}</Link></div>
+                  <div><strong>Bike notes:</strong> {workshopStartContext.bike.notes || "-"}</div>
+                  <div><strong>Prefilled summary:</strong> {workshopStartContext.defaults.bikeDescription}</div>
+                </div>
+                <div className="actions-inline" style={{ marginTop: "8px" }}>
+                  <button type="button" onClick={clearBikeLedContext}>
+                    Change bike / customer
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {canCreateBikeRecord ? (
               <>
                 <div className="job-meta-grid">
@@ -547,7 +669,7 @@ export const WorkshopCheckInPage = () => {
                 <input
                   value={bikeDescription}
                   onChange={(event) => setBikeDescription(event.target.value)}
-                  placeholder="e.g. Trek road bike, blue, 56cm"
+                  placeholder={workshopStartContext ? "Prefilled from the linked bike record" : "e.g. Trek road bike, blue, 56cm"}
                 />
               </label>
               <label>
@@ -593,8 +715,14 @@ export const WorkshopCheckInPage = () => {
                 {createBikeInline
                   ? "Create new bike record with this check-in"
                   : selectedBikeId
-                    ? customerBikes.find((bike) => bike.id === selectedBikeId)?.displayName || "Existing bike selected"
+                    ? selectedBikeRecord?.displayName || "Existing bike selected"
                     : "No linked bike record"}
+              </div>
+              <div>
+                <strong>Bike-led intake:</strong>{" "}
+                {workshopStartContext
+                  ? `Started from ${workshopStartContext.bike.displayName}`
+                  : "Manual check-in flow"}
               </div>
             </div>
             <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>

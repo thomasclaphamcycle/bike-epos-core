@@ -561,6 +561,49 @@ const run = async () => {
         history.json.limitations[0].includes("Legacy free-text workshop jobs without a bike link"),
         JSON.stringify(history.json),
       );
+      assert.equal(history.json.workshopStartContext.defaults.customerId, customer.id);
+      assert.equal(history.json.workshopStartContext.defaults.bikeId, bike.id);
+      assert.match(history.json.workshopStartContext.defaults.bikeDescription, /History bike/);
+      assert.equal(history.json.workshopStartContext.startPath, `/workshop/check-in?bikeId=${bike.id}`);
+    }, results);
+
+    await runTest("bike workshop-start context returns safe defaults and mismatched customer-bike creation is rejected", async () => {
+      const customer = await createCustomer(state, {
+        name: `Bike Start Customer ${uniqueRef()}`,
+      });
+      const otherCustomer = await createCustomer(state, {
+        name: `Bike Start Other Customer ${uniqueRef()}`,
+      });
+      const bike = await createBike(state, customer.id, {
+        label: "Workshop start bike",
+        make: "Cannondale",
+        model: "Synapse",
+      });
+
+      const startContext = await fetchJson(`/api/customers/bikes/${bike.id}/workshop-start`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(startContext.status, 200, JSON.stringify(startContext.json));
+      assert.equal(startContext.json.customer.id, customer.id);
+      assert.equal(startContext.json.bike.id, bike.id);
+      assert.equal(startContext.json.defaults.customerId, customer.id);
+      assert.equal(startContext.json.defaults.customerName, customer.name);
+      assert.equal(startContext.json.defaults.bikeId, bike.id);
+      assert.equal(startContext.json.defaults.status, "BOOKED");
+      assert.match(startContext.json.defaults.bikeDescription, /Workshop start bike/);
+      assert.equal(startContext.json.startPath, `/workshop/check-in?bikeId=${bike.id}`);
+
+      const mismatch = await fetchJson("/api/workshop/jobs", {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          customerId: otherCustomer.id,
+          bikeId: bike.id,
+          status: "BOOKED",
+        }),
+      });
+      assert.equal(mismatch.status, 409, JSON.stringify(mismatch.json));
+      assert.equal(mismatch.json.error.code, "WORKSHOP_BIKE_CUSTOMER_MISMATCH");
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {
