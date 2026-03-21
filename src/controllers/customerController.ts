@@ -6,6 +6,7 @@ import {
   listCustomerSales,
   listCustomerWorkshopJobs,
   searchCustomers,
+  updateCustomerCommunicationPreferences,
 } from "../services/customerService";
 import {
   createCustomerBike,
@@ -57,6 +58,46 @@ export const createCustomerHandler = async (req: Request, res: Response) => {
 
 export const getCustomerHandler = async (req: Request, res: Response) => {
   const customer = await getCustomerById(req.params.id);
+  res.json(customer);
+};
+
+export const updateCustomerCommunicationPreferencesHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    emailAllowed?: unknown;
+    smsAllowed?: unknown;
+    whatsappAllowed?: unknown;
+  };
+
+  if (typeof body.emailAllowed !== "boolean") {
+    throw new HttpError(
+      400,
+      "emailAllowed must be a boolean",
+      "INVALID_CUSTOMER_COMMUNICATION_PREFERENCES",
+    );
+  }
+  if (typeof body.smsAllowed !== "boolean") {
+    throw new HttpError(
+      400,
+      "smsAllowed must be a boolean",
+      "INVALID_CUSTOMER_COMMUNICATION_PREFERENCES",
+    );
+  }
+  if (typeof body.whatsappAllowed !== "boolean") {
+    throw new HttpError(
+      400,
+      "whatsappAllowed must be a boolean",
+      "INVALID_CUSTOMER_COMMUNICATION_PREFERENCES",
+    );
+  }
+
+  const customer = await updateCustomerCommunicationPreferences(req.params.id, {
+    emailAllowed: body.emailAllowed,
+    smsAllowed: body.smsAllowed,
+    whatsappAllowed: body.whatsappAllowed,
+  });
   res.json(customer);
 };
 

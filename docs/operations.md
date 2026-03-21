@@ -71,6 +71,7 @@ Automated reminder groundwork is now present behind the event bus and is intenti
 - managers can now review or dismiss reminder candidates from the internal report/page without triggering delivery
 - candidates are not delivered automatically and do not change customer-facing flows
 - separate workshop notifications now use smart channel selection for quote-ready and ready-for-collection events, preferring one primary path with fallback across email, SMS, and WhatsApp only when needed
+- staff can now manage simple operational communication permissions from the customer profile, and disabled channels are recorded as truthful notification skips rather than silent failures
 
 Intentionally deferred:
 

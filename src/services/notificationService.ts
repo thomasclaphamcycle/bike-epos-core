@@ -96,6 +96,9 @@ const quoteEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()(
           lastName: true,
           email: true,
           phone: true,
+          emailAllowed: true,
+          smsAllowed: true,
+          whatsappAllowed: true,
         },
       },
       bike: {
@@ -127,6 +130,9 @@ const readyJobInclude = Prisma.validator<Prisma.WorkshopJobInclude>()({
       lastName: true,
       email: true,
       phone: true,
+      emailAllowed: true,
+      smsAllowed: true,
+      whatsappAllowed: true,
     },
   },
   bike: {
@@ -156,6 +162,11 @@ type ReadyJobRecord = Prisma.WorkshopJobGetPayload<{
 }>;
 
 type WorkshopNotificationRecord = WorkshopNotificationModel;
+type NotificationCustomerPreferences = {
+  emailAllowed: boolean;
+  smsAllowed: boolean;
+  whatsappAllowed: boolean;
+};
 
 const normalizeOptionalText = (value: string | null | undefined) => {
   if (value === undefined || value === null) {
@@ -396,6 +407,41 @@ const isNotificationChannelEnabled = (channel: WorkshopNotificationChannel) => {
 const buildChannelDisabledReasonMessage = (channel: WorkshopNotificationChannel) =>
   `${notificationChannelLabel(channel)} notifications are disabled, so this delivery path was skipped.`;
 
+const isCustomerChannelAllowed = (
+  customer: NotificationCustomerPreferences | null | undefined,
+  channel: WorkshopNotificationChannel,
+) => {
+  if (!customer) {
+    return true;
+  }
+
+  switch (channel) {
+    case "EMAIL":
+      return customer.emailAllowed;
+    case "SMS":
+      return customer.smsAllowed;
+    case "WHATSAPP":
+      return customer.whatsappAllowed;
+    default:
+      return true;
+  }
+};
+
+const buildCustomerChannelDisabledReasonMessage = (
+  channel: WorkshopNotificationChannel,
+) => {
+  switch (channel) {
+    case "EMAIL":
+      return "Customer has email updates disabled, so this delivery path was skipped.";
+    case "SMS":
+      return "Customer has SMS updates disabled, so this delivery path was skipped.";
+    case "WHATSAPP":
+      return "Customer has WhatsApp updates disabled, so this delivery path was skipped.";
+    default:
+      return `Customer has ${notificationChannelLabel(channel)} updates disabled, so this delivery path was skipped.`;
+  }
+};
+
 const buildFallbackNotRequiredReasonMessage = (
   deliveredChannel: WorkshopNotificationChannel,
   skippedChannel: WorkshopNotificationChannel,
@@ -497,14 +543,14 @@ const buildQuoteReadyDecisions = async (
   const customerName = estimate.workshopJob.customer
     ? buildCustomerDisplayName(estimate.workshopJob.customer)
     : normalizeOptionalText(estimate.workshopJob.customerName) ?? "Workshop customer";
+  const customer = estimate.workshopJob.customer;
   const bikeDisplayName = buildBikeDisplayName({
     bike: estimate.workshopJob.bike,
     bikeDescription: estimate.workshopJob.bikeDescription,
   });
-  const recipientEmail = normalizeOptionalEmail(estimate.workshopJob.customer?.email);
-  const recipientPhone = normalizeOptionalPhone(estimate.workshopJob.customer?.phone);
-  const customerId =
-    estimate.workshopJob.customer?.id ?? estimate.workshopJob.customerId ?? null;
+  const recipientEmail = normalizeOptionalEmail(customer?.email);
+  const recipientPhone = normalizeOptionalPhone(customer?.phone);
+  const customerId = customer?.id ?? estimate.workshopJob.customerId ?? null;
   const quotePath = estimate.customerQuoteToken
     ? `/quote/${encodeURIComponent(estimate.customerQuoteToken)}`
     : null;
@@ -586,25 +632,8 @@ const buildQuoteReadyDecisions = async (
   const whatsAppText = `Hi ${customerName}, your quote for ${bikeDisplayName} is ready to review: ${quoteUrl}`;
 
   return [
-    recipientEmail
-      ? {
-          channel: "EMAIL",
-          action: "send",
-          strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
-          recipientEmail,
-          recipientPhone: null,
-          subject: emailSubject,
-          text: emailText,
-          html: emailHtml,
-          payload: {
-            ...basePayload,
-            quoteUrl,
-          },
-          customerId,
-          workshopEstimateId: estimate.id,
-          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "EMAIL"),
-        }
-      : buildSkipDecision({
+    !recipientEmail
+      ? buildSkipDecision({
           channel: "EMAIL",
           strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
           recipientPhone,
@@ -615,26 +644,40 @@ const buildQuoteReadyDecisions = async (
           reasonCode: "CUSTOMER_EMAIL_MISSING",
           reasonMessage:
             "Customer email is missing, so the workshop quote email was not sent.",
-        }),
-    recipientPhone
-      ? {
-          channel: "SMS",
-          action: "send",
-          strategyRank: getStrategyRank("QUOTE_READY", "SMS"),
-          recipientEmail: null,
-          recipientPhone,
-          subject: null,
-          text: smsText,
-          html: null,
-          payload: {
-            ...basePayload,
-            quoteUrl,
+        })
+      : !isCustomerChannelAllowed(customer, "EMAIL")
+        ? buildSkipDecision({
+            channel: "EMAIL",
+            strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
+            recipientEmail,
+            recipientPhone: null,
+            subject: emailSubject,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: estimate.id,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("EMAIL"),
+          })
+        : {
+            channel: "EMAIL",
+            action: "send",
+            strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
+            recipientEmail,
+            recipientPhone: null,
+            subject: emailSubject,
+            text: emailText,
+            html: emailHtml,
+            payload: {
+              ...basePayload,
+              quoteUrl,
+            },
+            customerId,
+            workshopEstimateId: estimate.id,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "EMAIL"),
           },
-          customerId,
-          workshopEstimateId: estimate.id,
-          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "SMS"),
-        }
-      : buildSkipDecision({
+    !recipientPhone
+      ? buildSkipDecision({
           channel: "SMS",
           strategyRank: getStrategyRank("QUOTE_READY", "SMS"),
           recipientEmail,
@@ -645,26 +688,39 @@ const buildQuoteReadyDecisions = async (
           reasonCode: "CUSTOMER_PHONE_MISSING",
           reasonMessage:
             "Customer phone number is missing, so the workshop quote SMS was not sent.",
-        }),
-    recipientPhone
-      ? {
-          channel: "WHATSAPP",
-          action: "send",
-          strategyRank: getStrategyRank("QUOTE_READY", "WHATSAPP"),
-          recipientEmail: null,
-          recipientPhone,
-          subject: null,
-          text: whatsAppText,
-          html: null,
-          payload: {
-            ...basePayload,
-            quoteUrl,
+        })
+      : !isCustomerChannelAllowed(customer, "SMS")
+        ? buildSkipDecision({
+            channel: "SMS",
+            strategyRank: getStrategyRank("QUOTE_READY", "SMS"),
+            recipientEmail: null,
+            recipientPhone,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: estimate.id,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("SMS"),
+          })
+        : {
+            channel: "SMS",
+            action: "send",
+            strategyRank: getStrategyRank("QUOTE_READY", "SMS"),
+            recipientEmail: null,
+            recipientPhone,
+            subject: null,
+            text: smsText,
+            html: null,
+            payload: {
+              ...basePayload,
+              quoteUrl,
+            },
+            customerId,
+            workshopEstimateId: estimate.id,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "SMS"),
           },
-          customerId,
-          workshopEstimateId: estimate.id,
-          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
-        }
-      : buildSkipDecision({
+    !recipientPhone
+      ? buildSkipDecision({
           channel: "WHATSAPP",
           strategyRank: getStrategyRank("QUOTE_READY", "WHATSAPP"),
           recipientEmail,
@@ -675,7 +731,37 @@ const buildQuoteReadyDecisions = async (
           reasonCode: "CUSTOMER_PHONE_MISSING",
           reasonMessage:
             "Customer phone number is missing, so the workshop quote WhatsApp message was not sent.",
-        }),
+        })
+      : !isCustomerChannelAllowed(customer, "WHATSAPP")
+        ? buildSkipDecision({
+            channel: "WHATSAPP",
+            strategyRank: getStrategyRank("QUOTE_READY", "WHATSAPP"),
+            recipientEmail: null,
+            recipientPhone,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: estimate.id,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("WHATSAPP"),
+          })
+        : {
+            channel: "WHATSAPP",
+            action: "send",
+            strategyRank: getStrategyRank("QUOTE_READY", "WHATSAPP"),
+            recipientEmail: null,
+            recipientPhone,
+            subject: null,
+            text: whatsAppText,
+            html: null,
+            payload: {
+              ...basePayload,
+              quoteUrl,
+            },
+            customerId,
+            workshopEstimateId: estimate.id,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
+          },
   ];
 };
 
@@ -710,13 +796,14 @@ const buildReadyForCollectionDecisions = async (
   const customerName = job.customer
     ? buildCustomerDisplayName(job.customer)
     : normalizeOptionalText(job.customerName) ?? "Workshop customer";
+  const customer = job.customer;
   const bikeDisplayName = buildBikeDisplayName({
     bike: job.bike,
     bikeDescription: job.bikeDescription,
   });
-  const recipientEmail = normalizeOptionalEmail(job.customer?.email);
-  const recipientPhone = normalizeOptionalPhone(job.customer?.phone);
-  const customerId = job.customer?.id ?? job.customerId ?? null;
+  const recipientEmail = normalizeOptionalEmail(customer?.email);
+  const recipientPhone = normalizeOptionalPhone(customer?.phone);
+  const customerId = customer?.id ?? job.customerId ?? null;
   const baseDedupeKey = `workshop:ready-for-collection:${job.id}`;
   const basePayload: Prisma.JsonObject = {
     workshopJobId: job.id,
@@ -770,22 +857,8 @@ const buildReadyForCollectionDecisions = async (
   const whatsAppText = `Hi ${customerName}, ${bikeDisplayName} is ready for collection from ${store.name}. Please contact the shop if you need to confirm a collection time.`;
 
   return [
-    recipientEmail
-      ? {
-          channel: "EMAIL",
-          action: "send",
-          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "EMAIL"),
-          recipientEmail,
-          recipientPhone: null,
-          subject: emailSubject,
-          text: emailText,
-          html: emailHtml,
-          payload: basePayload,
-          customerId,
-          workshopEstimateId: null,
-          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "EMAIL"),
-        }
-      : buildSkipDecision({
+    !recipientEmail
+      ? buildSkipDecision({
           channel: "EMAIL",
           strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "EMAIL"),
           recipientPhone,
@@ -796,23 +869,37 @@ const buildReadyForCollectionDecisions = async (
           reasonCode: "CUSTOMER_EMAIL_MISSING",
           reasonMessage:
             "Customer email is missing, so the ready-for-collection email was not sent.",
-        }),
-    recipientPhone
-      ? {
-          channel: "SMS",
-          action: "send",
-          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "SMS"),
-          recipientEmail: null,
-          recipientPhone,
-          subject: null,
-          text: smsText,
-          html: null,
-          payload: basePayload,
-          customerId,
-          workshopEstimateId: null,
-          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "SMS"),
-        }
-      : buildSkipDecision({
+        })
+      : !isCustomerChannelAllowed(customer, "EMAIL")
+        ? buildSkipDecision({
+            channel: "EMAIL",
+            strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "EMAIL"),
+            recipientEmail,
+            recipientPhone: null,
+            subject: emailSubject,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: null,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("EMAIL"),
+          })
+        : {
+            channel: "EMAIL",
+            action: "send",
+            strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "EMAIL"),
+            recipientEmail,
+            recipientPhone: null,
+            subject: emailSubject,
+            text: emailText,
+            html: emailHtml,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: null,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "EMAIL"),
+          },
+    !recipientPhone
+      ? buildSkipDecision({
           channel: "SMS",
           strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "SMS"),
           recipientEmail,
@@ -823,23 +910,36 @@ const buildReadyForCollectionDecisions = async (
           reasonCode: "CUSTOMER_PHONE_MISSING",
           reasonMessage:
             "Customer phone number is missing, so the ready-for-collection SMS was not sent.",
-        }),
-    recipientPhone
-      ? {
-          channel: "WHATSAPP",
-          action: "send",
-          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "WHATSAPP"),
-          recipientEmail: null,
-          recipientPhone,
-          subject: null,
-          text: whatsAppText,
-          html: null,
-          payload: basePayload,
-          customerId,
-          workshopEstimateId: null,
-          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
-        }
-      : buildSkipDecision({
+        })
+      : !isCustomerChannelAllowed(customer, "SMS")
+        ? buildSkipDecision({
+            channel: "SMS",
+            strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "SMS"),
+            recipientEmail: null,
+            recipientPhone,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: null,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("SMS"),
+          })
+        : {
+            channel: "SMS",
+            action: "send",
+            strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "SMS"),
+            recipientEmail: null,
+            recipientPhone,
+            subject: null,
+            text: smsText,
+            html: null,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: null,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "SMS"),
+          },
+    !recipientPhone
+      ? buildSkipDecision({
           channel: "WHATSAPP",
           strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "WHATSAPP"),
           recipientEmail,
@@ -850,7 +950,34 @@ const buildReadyForCollectionDecisions = async (
           reasonCode: "CUSTOMER_PHONE_MISSING",
           reasonMessage:
             "Customer phone number is missing, so the ready-for-collection WhatsApp message was not sent.",
-        }),
+        })
+      : !isCustomerChannelAllowed(customer, "WHATSAPP")
+        ? buildSkipDecision({
+            channel: "WHATSAPP",
+            strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "WHATSAPP"),
+            recipientEmail: null,
+            recipientPhone,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: null,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("WHATSAPP"),
+          })
+        : {
+            channel: "WHATSAPP",
+            action: "send",
+            strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "WHATSAPP"),
+            recipientEmail: null,
+            recipientPhone,
+            subject: null,
+            text: whatsAppText,
+            html: null,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: null,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
+          },
   ];
 };
 

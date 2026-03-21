@@ -272,6 +272,7 @@ Implementation status:
 - the `v1.1.0` workshop shaping pass now aligns execution, quote, and collection wording across workshop jobs, bike history, customer profiles, check-in, and customer quote review so the full workflow reads as one coherent milestone
 - the workshop notification layer now uses deterministic smart delivery for quote-ready and ready-for-collection events, choosing one primary channel with truthful fallback, skip, and failure history across email, SMS, and WhatsApp
 - workshop job detail now exposes notification history plus safe resend controls, so staff can review delivery outcomes and retry customer emails without leaving the live job
+- customer profiles now include simple operational communication permissions for email, SMS, and WhatsApp, and smart workshop delivery respects those channel settings with truthful skip history when a customer has updates disabled
 
 ---
 

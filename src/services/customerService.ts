@@ -11,6 +11,12 @@ type CreateCustomerInput = {
   notes?: string;
 };
 
+type UpdateCustomerCommunicationPreferencesInput = {
+  emailAllowed: boolean;
+  smsAllowed: boolean;
+  whatsappAllowed: boolean;
+};
+
 const normalizeOptionalText = (value: string | undefined): string | undefined => {
   if (value === undefined) {
     return undefined;
@@ -93,6 +99,9 @@ const toCustomerResponse = (customer: {
   lastName: string;
   email: string | null;
   phone: string | null;
+  emailAllowed: boolean;
+  smsAllowed: boolean;
+  whatsappAllowed: boolean;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -106,6 +115,9 @@ const toCustomerResponse = (customer: {
     lastName: customer.lastName,
     email: customer.email,
     phone: customer.phone,
+    emailAllowed: customer.emailAllowed,
+    smsAllowed: customer.smsAllowed,
+    whatsappAllowed: customer.whatsappAllowed,
     notes: customer.notes,
     createdAt: customer.createdAt,
     updatedAt: customer.updatedAt,
@@ -182,6 +194,24 @@ export const createCustomer = async (input: CreateCustomerInput) => {
 
 export const getCustomerById = async (customerId: string) => {
   const customer = await assertCustomerExists(customerId);
+  return toCustomerResponse(customer);
+};
+
+export const updateCustomerCommunicationPreferences = async (
+  customerId: string,
+  input: UpdateCustomerCommunicationPreferencesInput,
+) => {
+  await assertCustomerExists(customerId);
+
+  const customer = await prisma.customer.update({
+    where: { id: customerId },
+    data: {
+      emailAllowed: input.emailAllowed,
+      smsAllowed: input.smsAllowed,
+      whatsappAllowed: input.whatsappAllowed,
+    },
+  });
+
   return toCustomerResponse(customer);
 };
 

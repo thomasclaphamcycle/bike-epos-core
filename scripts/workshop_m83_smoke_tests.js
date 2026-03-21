@@ -212,6 +212,23 @@ const createCustomer = async (state, overrides = {}) => {
   return response.json;
 };
 
+const updateCustomerCommunicationPreferences = async (
+  customerId,
+  communicationPreferences,
+) => {
+  const response = await fetchJson(
+    `/api/customers/${encodeURIComponent(customerId)}/communication-preferences`,
+    {
+      method: "PATCH",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify(communicationPreferences),
+    },
+  );
+
+  assert.equal(response.status, 200, JSON.stringify(response.json));
+  return response.json;
+};
+
 const createBike = async (state, customerId, overrides = {}) => {
   const ref = uniqueRef();
   const response = await fetchJson(`/api/customers/${customerId}/bikes`, {
@@ -1039,6 +1056,90 @@ const run = async () => {
       assert.ok(skippedWhatsAppNotification, "Expected skipped quote-ready WhatsApp row");
       assert.equal(skippedWhatsAppNotification.deliveryStatus, "SKIPPED");
       assert.equal(skippedWhatsAppNotification.reasonCode, "CUSTOMER_PHONE_MISSING");
+
+      const disabledWhatsAppCustomer = await createCustomer(state, {
+        name: "Disabled WhatsApp Quote Customer",
+        email: `disabled-whatsapp-${uniqueRef()}@example.com`,
+      });
+      const disabledWhatsAppPreferences = await updateCustomerCommunicationPreferences(
+        disabledWhatsAppCustomer.id,
+        {
+          emailAllowed: true,
+          smsAllowed: true,
+          whatsappAllowed: false,
+        },
+      );
+      assert.equal(disabledWhatsAppPreferences.whatsappAllowed, false);
+
+      const disabledWhatsAppJob = await createJob(state, {
+        customerId: disabledWhatsAppCustomer.id,
+        bikeDescription: "WhatsApp disabled commuter",
+      });
+
+      const disabledWhatsAppLine = await fetchJson(
+        `/api/workshop/jobs/${disabledWhatsAppJob.job.id}/lines`,
+        {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({
+            type: "LABOUR",
+            description: "WhatsApp disabled quote labour",
+            qty: 1,
+            unitPricePence: 3900,
+          }),
+        },
+      );
+      assert.equal(disabledWhatsAppLine.status, 201, JSON.stringify(disabledWhatsAppLine.json));
+
+      const disabledWhatsAppApproval = await fetchJson(
+        `/api/workshop/jobs/${disabledWhatsAppJob.job.id}/approval`,
+        {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+        },
+      );
+      assert.equal(disabledWhatsAppApproval.status, 201, JSON.stringify(disabledWhatsAppApproval.json));
+
+      const skippedWhatsAppByPreference = await waitForNotification(
+        {
+          workshopJobId: disabledWhatsAppJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "WHATSAPP",
+        },
+        "SKIPPED",
+      );
+      assert.ok(
+        skippedWhatsAppByPreference,
+        "Expected skipped quote-ready WhatsApp notification when disabled by customer preference",
+      );
+      assert.equal(skippedWhatsAppByPreference.reasonCode, "CUSTOMER_CHANNEL_DISABLED");
+      assert.match(
+        skippedWhatsAppByPreference.reasonMessage || "",
+        /WhatsApp updates disabled/i,
+      );
+
+      const sentSmsWithDisabledWhatsApp = await waitForNotification(
+        {
+          workshopJobId: disabledWhatsAppJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "SMS",
+        },
+        "SENT",
+      );
+      assert.ok(sentSmsWithDisabledWhatsApp, "Expected quote-ready SMS fallback after WhatsApp preference skip");
+      assert.equal(sentSmsWithDisabledWhatsApp.recipientPhone, disabledWhatsAppCustomer.phone);
+
+      const skippedEmailAfterSmsFallback = await waitForNotification(
+        {
+          workshopJobId: disabledWhatsAppJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "EMAIL",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedEmailAfterSmsFallback, "Expected quote-ready email fallback row after SMS delivery");
+      assert.equal(skippedEmailAfterSmsFallback.reasonCode, "FALLBACK_NOT_REQUIRED");
     }, results);
 
     await runTest("customer quote links can be reused safely and customer rejection is idempotent", async () => {
@@ -1250,6 +1351,82 @@ const run = async () => {
         },
       });
       assert.equal(resentNotificationCount, 4);
+
+      const disabledSmsCustomer = await createCustomer(state, {
+        name: "Disabled SMS Ready Customer",
+        email: `disabled-sms-${uniqueRef()}@example.com`,
+      });
+      const disabledSmsPreferences = await updateCustomerCommunicationPreferences(
+        disabledSmsCustomer.id,
+        {
+          emailAllowed: true,
+          smsAllowed: false,
+          whatsappAllowed: true,
+        },
+      );
+      assert.equal(disabledSmsPreferences.smsAllowed, false);
+
+      const disabledSmsJob = await createJob(state, {
+        customerId: disabledSmsCustomer.id,
+        bikeDescription: "SMS disabled hybrid",
+      });
+
+      const disabledSmsInProgress = await fetchJson(
+        `/api/workshop/jobs/${disabledSmsJob.job.id}/status`,
+        {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({ status: "IN_PROGRESS" }),
+        },
+      );
+      assert.equal(disabledSmsInProgress.status, 201, JSON.stringify(disabledSmsInProgress.json));
+
+      const disabledSmsReady = await fetchJson(`/api/workshop/jobs/${disabledSmsJob.job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "READY" }),
+      });
+      assert.equal(disabledSmsReady.status, 201, JSON.stringify(disabledSmsReady.json));
+
+      const skippedSmsByPreference = await waitForNotification(
+        {
+          workshopJobId: disabledSmsJob.job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "SMS",
+        },
+        "SKIPPED",
+      );
+      assert.ok(
+        skippedSmsByPreference,
+        "Expected skipped ready-for-collection SMS notification when disabled by customer preference",
+      );
+      assert.equal(skippedSmsByPreference.reasonCode, "CUSTOMER_CHANNEL_DISABLED");
+      assert.match(skippedSmsByPreference.reasonMessage || "", /SMS updates disabled/i);
+
+      const sentWhatsAppAfterSmsSkip = await waitForNotification(
+        {
+          workshopJobId: disabledSmsJob.job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "WHATSAPP",
+        },
+        "SENT",
+      );
+      assert.ok(sentWhatsAppAfterSmsSkip, "Expected ready-for-collection WhatsApp fallback after SMS preference skip");
+      assert.equal(sentWhatsAppAfterSmsSkip.recipientPhone, disabledSmsCustomer.phone);
+
+      const skippedEmailAfterWhatsAppFallback = await waitForNotification(
+        {
+          workshopJobId: disabledSmsJob.job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "EMAIL",
+        },
+        "SKIPPED",
+      );
+      assert.ok(
+        skippedEmailAfterWhatsAppFallback,
+        "Expected ready-for-collection email fallback row after WhatsApp delivery",
+      );
+      assert.equal(skippedEmailAfterWhatsAppFallback.reasonCode, "FALLBACK_NOT_REQUIRED");
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {
