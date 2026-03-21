@@ -14,7 +14,7 @@ export const workshopExecutionStatusLabel = (
     case "IN_PROGRESS":
       return "In Progress";
     case "READY":
-      return "Ready";
+      return "Ready for Collection";
     case "COLLECTED":
       return "Collected";
     case "CLOSED":
@@ -51,17 +51,17 @@ export const workshopRawStatusLabel = (
     case "BOOKING_MADE":
       return "Booked";
     case "BIKE_ARRIVED":
-      return "In Progress";
+      return "Ready for Work";
     case "WAITING_FOR_APPROVAL":
-      return "Awaiting Approval";
+      return "Quote Pending";
     case "APPROVED":
-      return "Approved";
+      return "Quote Approved";
     case "WAITING_FOR_PARTS":
-      return "Waiting For Parts";
+      return "Waiting for Parts";
     case "ON_HOLD":
-      return "On Hold";
+      return "Paused / On Hold";
     case "BIKE_READY":
-      return "Ready For Collection";
+      return "Ready for Collection";
     case "COMPLETED":
       return "Collected";
     case "CANCELLED":

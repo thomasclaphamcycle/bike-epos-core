@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { workshopRawStatusClass, workshopRawStatusLabel } from "../features/workshop/status";
 
 const statusOptions = [
   "",
@@ -116,11 +117,11 @@ const boardColumns: Array<{
   label: string;
   description: string;
 }> = [
-  { key: "booked", label: "Booked", description: "New and scheduled work" },
-  { key: "inProgress", label: "In Progress", description: "Actively being worked" },
-  { key: "waitingParts", label: "Waiting Parts", description: "Blocked on parts" },
-  { key: "ready", label: "Ready", description: "Ready for collection or close-out" },
-  { key: "completed", label: "Completed", description: "Collected or completed work" },
+  { key: "booked", label: "Booked", description: "Checked in or waiting for quote approval" },
+  { key: "inProgress", label: "In Progress", description: "On the bench, approved, or paused safely" },
+  { key: "waitingParts", label: "Waiting for Parts", description: "Blocked on stock or supplier lead time" },
+  { key: "ready", label: "Ready for Collection", description: "Bench work is complete and handover can begin" },
+  { key: "completed", label: "Collected", description: "Already handed over and out of the live queue" },
 ];
 
 const getCustomerName = (job: DashboardJob) => {
@@ -169,31 +170,6 @@ const toCapacityBadgeClass = (
   }
 };
 
-const toStatusLabel = (status: string) => {
-  switch (status) {
-    case "BOOKING_MADE":
-      return "Booked In";
-    case "BIKE_ARRIVED":
-      return "Bike Arrived";
-    case "WAITING_FOR_APPROVAL":
-      return "Awaiting Approval";
-    case "APPROVED":
-      return "Approved";
-    case "WAITING_FOR_PARTS":
-      return "Waiting for Parts";
-    case "ON_HOLD":
-      return "On Hold";
-    case "BIKE_READY":
-      return "Ready for Collection";
-    case "COMPLETED":
-      return "Completed";
-    case "CANCELLED":
-      return "Cancelled";
-    default:
-      return status;
-  }
-};
-
 const toBucketLabel = (bucket: DisplayBucket | null) => {
   if (!bucket) {
     return "-";
@@ -205,25 +181,14 @@ const toBucketLabel = (bucket: DisplayBucket | null) => {
     case "inProgress":
       return "In Progress";
     case "waitingParts":
-      return "Waiting Parts";
+      return "Waiting for Parts";
     case "ready":
-      return "Ready";
+      return "Ready for Collection";
     case "completed":
-      return "Completed";
+      return "Collected";
     default:
       return bucket;
   }
-};
-
-const toStatusBadgeClass = (status: string) => {
-  if (status === "CANCELLED") return "status-badge status-cancelled";
-  if (status === "COMPLETED") return "status-badge status-complete";
-  if (status === "BIKE_READY") return "status-badge status-ready";
-  if (status === "WAITING_FOR_PARTS") return "status-badge status-warning";
-  if (status === "APPROVED" || status === "ON_HOLD" || status === "WAITING_FOR_APPROVAL") {
-    return "status-badge status-info";
-  }
-  return "status-badge";
 };
 
 const toShiftLabel = (shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY") => {
@@ -248,34 +213,24 @@ const toPartsStatus = (job: DashboardJob) => {
   return job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
 };
 
-const getApprovalLabel = (status: string) => {
-  if (status === "WAITING_FOR_APPROVAL") {
-    return "Awaiting Approval";
-  }
-  if (status === "APPROVED") {
-    return "Approved Estimate";
-  }
-  return null;
-};
-
 const getNextStepHint = (job: DashboardJob) => {
   switch (job.status) {
     case "BOOKING_MADE":
-      return "Confirm the estimate or start workshop work.";
+      return "Check-in is complete. Start work or send the quote for approval when needed.";
     case "WAITING_FOR_APPROVAL":
-      return "Chase approval before booking bench time.";
+      return "Quote is pending. Pause bench work until the customer approves or the quote is revised.";
     case "BIKE_ARRIVED":
-      return "Bike is on site and ready to move into active work.";
+      return "Bike is on site and ready for bench work.";
     case "APPROVED":
-      return "Estimate is approved. Keep the job moving toward ready.";
+      return "Quote is approved. Keep the job moving toward ready for collection.";
     case "WAITING_FOR_PARTS":
       return "Check the parts gap before promising collection.";
     case "ON_HOLD":
-      return "Resolve the hold reason before resuming work.";
+      return "Job is paused. Resolve the hold reason before resuming work.";
     case "BIKE_READY":
       return job.finalizedBasketId ? "Handoff is ready in the collection queue." : "Open the collection handoff when the customer arrives.";
     case "COMPLETED":
-      return "Job is finished and can be reviewed for any follow-up.";
+      return "Bike has been collected. Review only for any follow-up.";
     default:
       return "Open the job for full details and actions.";
   }
@@ -353,31 +308,31 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
   switch (job.status) {
     case "BOOKING_MADE":
       return [
-        { label: "Request Approval", kind: "approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
         { label: "Start Work", kind: "status", value: "IN_PROGRESS" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     case "WAITING_FOR_APPROVAL":
       return [
-        { label: "Approve Estimate", kind: "approval", value: "APPROVED" },
+        { label: "Mark Quote Approved", kind: "approval", value: "APPROVED" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     case "BIKE_ARRIVED":
     case "ON_HOLD":
       return [
-        { label: "Request Approval", kind: "approval", value: "WAITING_FOR_APPROVAL" },
-        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Ready for Collection", kind: "status", value: "READY" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     case "APPROVED":
       return [
-        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Ready for Collection", kind: "status", value: "READY" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     case "WAITING_FOR_PARTS":
       return [
         { label: "Resume", kind: "status", value: "IN_PROGRESS" },
-        { label: "Ready", kind: "status", value: "READY" },
+        { label: "Ready for Collection", kind: "status", value: "READY" },
         { label: "Cancel", kind: "status", value: "CANCELLED" },
       ];
     case "BIKE_READY":
@@ -459,7 +414,7 @@ export const WorkshopPage = () => {
       await apiPost(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
         status: nextStatus,
       });
-      success(nextStatus === "APPROVED" ? "Estimate approved" : "Estimate marked awaiting approval");
+      success(nextStatus === "APPROVED" ? "Quote marked approved" : "Quote marked pending approval");
       await loadJobs();
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update approval";
@@ -521,7 +476,7 @@ export const WorkshopPage = () => {
           <div>
             <h1>Workshop Dashboard</h1>
             <p className="muted-text">
-              Track work by board bucket or switch to list view for the full raw status set and queue search.
+              Track execution flow on the board or switch to list view for workflow detail, quote state, and queue search.
             </p>
           </div>
           <div className="actions-inline">
@@ -703,7 +658,7 @@ export const WorkshopPage = () => {
             <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
               {statusOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option || "All"}
+                  {option ? workshopRawStatusLabel(option) : "All"}
                 </option>
               ))}
             </select>
@@ -747,7 +702,7 @@ export const WorkshopPage = () => {
             {hiddenFromBoardCount > 0 ? (
               <div className="restricted-panel">
                 {hiddenFromBoardCount} job{hiddenFromBoardCount === 1 ? "" : "s"} currently sit outside the
-                board buckets. Switch to list view to see every raw status and find the next action.
+                board buckets. Switch to list view to review every raw workflow state and find the next action.
               </div>
             ) : null}
 
@@ -784,10 +739,7 @@ export const WorkshopPage = () => {
                                 <div className="table-secondary mono-text">{job.id.slice(0, 8)}</div>
                               </div>
                               <div className="status-stack">
-                                <span className={toStatusBadgeClass(job.status)}>{toStatusLabel(job.status)}</span>
-                                {getApprovalLabel(job.status) ? (
-                                  <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
-                                ) : null}
+                                <span className={workshopRawStatusClass(job.status)}>{workshopRawStatusLabel(job.status)}</span>
                                 {getUrgency(job) ? (
                                   <span className={getUrgency(job)?.className}>{getUrgency(job)?.label}</span>
                                 ) : null}
@@ -858,7 +810,7 @@ export const WorkshopPage = () => {
                   <th>Job</th>
                   <th>Title</th>
                   <th>Board Bucket</th>
-                  <th>Raw Status</th>
+                  <th>Workflow Detail</th>
                   <th>Promised</th>
                   <th>Customer</th>
                   <th>Totals</th>
@@ -879,10 +831,7 @@ export const WorkshopPage = () => {
                       <td>{toBucketLabel(toDisplayBucket(job))}</td>
                       <td>
                         <div className="status-stack">
-                          <span className={toStatusBadgeClass(job.status)}>{toStatusLabel(job.status)}</span>
-                          {getApprovalLabel(job.status) ? (
-                            <span className="status-badge status-info">{getApprovalLabel(job.status)}</span>
-                          ) : null}
+                          <span className={workshopRawStatusClass(job.status)}>{workshopRawStatusLabel(job.status)}</span>
                           {getUrgency(job) ? (
                             <span className={getUrgency(job)?.className}>{getUrgency(job)?.label}</span>
                           ) : null}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { workshopEstimateStatusLabel } from "../features/workshop/estimateStatus";
 import {
   workshopExecutionStatusClass,
   workshopExecutionStatusLabel,
@@ -120,25 +121,6 @@ const formatOptionalDateTime = (value: string | null | undefined) =>
 const truncateText = (value: string, limit = 140) =>
   value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
 
-const estimateStatusLabel = (
-  status: BikeHistoryPayload["history"][number]["estimate"]["status"] | null | undefined,
-) => {
-  switch (status) {
-    case "PENDING_APPROVAL":
-      return "Awaiting Approval";
-    case "APPROVED":
-      return "Approved";
-    case "REJECTED":
-      return "Rejected";
-    case "SUPERSEDED":
-      return "Superseded";
-    case "DRAFT":
-      return "Draft";
-    default:
-      return "No saved estimate";
-  }
-};
-
 const buildEstimateSummary = (
   estimate: BikeHistoryPayload["history"][number]["estimate"],
 ) => {
@@ -147,7 +129,7 @@ const buildEstimateSummary = (
   }
 
   const scope = estimate.isCurrent ? "current" : "latest saved";
-  return `v${estimate.version} ${estimateStatusLabel(estimate.status)} · ${formatMoney(estimate.subtotalPence)} · ${scope}`;
+  return `v${estimate.version} ${workshopEstimateStatusLabel(estimate.status)} · ${formatMoney(estimate.subtotalPence)} · ${scope}`;
 };
 
 const buildOutcomeSummary = (
@@ -234,7 +216,7 @@ export const BikeHistoryPage = () => {
           <div>
             <h1>Bike Service History</h1>
             <p className="muted-text">
-              Review the linked workshop record for this bike without guessing across legacy free-text jobs.
+              Review the linked workshop record for this bike while keeping older free-text-only jobs clearly separate.
             </p>
           </div>
           {payload ? (
@@ -243,10 +225,10 @@ export const BikeHistoryPage = () => {
                 Start Workshop Job
               </Link>
               <Link to={`/customers/${payload.customer.id}`} className="button-link">
-                Open Customer
+                Customer Profile
               </Link>
               <Link to={`/customers/${payload.customer.id}/timeline`} className="button-link">
-                Customer Timeline
+                Open Timeline
               </Link>
             </div>
           ) : null}
@@ -292,7 +274,7 @@ export const BikeHistoryPage = () => {
           <div>
             <h2>Workshop History</h2>
             <p className="muted-text">
-              Most recent linked workshop jobs first, using the newer execution status as the primary operational signal.
+              Most recent linked workshop jobs first, with execution progress shown separately from quote state.
             </p>
           </div>
           {payload ? (

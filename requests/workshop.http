@@ -293,7 +293,7 @@ X-Staff-Id: demo-staff
 
 {}
 
-### Mark estimate as waiting for approval (M83)
+### Mark quote as waiting for customer approval (M83)
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
@@ -303,7 +303,7 @@ X-Staff-Id: demo-staff
   "status": "WAITING_FOR_APPROVAL"
 }
 
-### Mark estimate approved (M83)
+### Mark quote approved (M83)
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
@@ -313,7 +313,7 @@ X-Staff-Id: demo-staff
   "status": "APPROVED"
 }
 
-### Mark estimate rejected (M83)
+### Mark quote rejected (M83)
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/approval
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
@@ -323,7 +323,7 @@ X-Staff-Id: demo-staff
   "status": "REJECTED"
 }
 
-### Create or retrieve the secure customer quote link for the current estimate
+### Create or retrieve the secure customer quote review link for the current estimate
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/customer-quote-link
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
@@ -331,10 +331,10 @@ X-Staff-Id: demo-staff
 
 {}
 
-### Public quote review by secure token
+### Public customer quote review by secure token
 GET {{baseUrl}}/api/public/workshop-quotes/{{quoteToken}}
 
-### Public quote approval by secure token
+### Public customer quote approval by secure token
 POST {{baseUrl}}/api/public/workshop-quotes/{{quoteToken}}
 Content-Type: application/json
 
@@ -342,7 +342,7 @@ Content-Type: application/json
   "status": "APPROVED"
 }
 
-### Public quote rejection by secure token
+### Public customer quote rejection by secure token
 POST {{baseUrl}}/api/public/workshop-quotes/{{quoteToken}}
 Content-Type: application/json
 
