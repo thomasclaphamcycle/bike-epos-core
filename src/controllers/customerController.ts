@@ -13,8 +13,25 @@ import {
   getCustomerBikeHistory,
   getCustomerBikeWorkshopStartContext,
   listCustomerBikes,
+  updateCustomerBike,
 } from "../services/customerBikeService";
 import { HttpError } from "../utils/http";
+
+const assertOptionalBikeString = (
+  value: unknown,
+  field: string,
+  code: string,
+) => {
+  if (value !== undefined && value !== null && typeof value !== "string") {
+    throw new HttpError(400, `${field} must be a string`, code);
+  }
+};
+
+const assertOptionalBikeYear = (value: unknown, code: string) => {
+  if (value !== undefined && value !== null && (!Number.isInteger(value) || typeof value !== "number")) {
+    throw new HttpError(400, "year must be an integer", code);
+  }
+};
 
 export const createCustomerHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
@@ -213,50 +230,117 @@ export const createCustomerBikeHandler = async (req: Request, res: Response) => 
     label?: unknown;
     make?: unknown;
     model?: unknown;
+    year?: unknown;
+    bikeType?: unknown;
     colour?: unknown;
+    wheelSize?: unknown;
+    frameSize?: unknown;
+    groupset?: unknown;
+    motorBrand?: unknown;
+    motorModel?: unknown;
+    batterySerial?: unknown;
     frameNumber?: unknown;
     serialNumber?: unknown;
     registrationNumber?: unknown;
     notes?: unknown;
   };
 
-  if (body.label !== undefined && typeof body.label !== "string") {
-    throw new HttpError(400, "label must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.make !== undefined && typeof body.make !== "string") {
-    throw new HttpError(400, "make must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.model !== undefined && typeof body.model !== "string") {
-    throw new HttpError(400, "model must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.colour !== undefined && typeof body.colour !== "string") {
-    throw new HttpError(400, "colour must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.frameNumber !== undefined && typeof body.frameNumber !== "string") {
-    throw new HttpError(400, "frameNumber must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.serialNumber !== undefined && typeof body.serialNumber !== "string") {
-    throw new HttpError(400, "serialNumber must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.registrationNumber !== undefined && typeof body.registrationNumber !== "string") {
-    throw new HttpError(400, "registrationNumber must be a string", "INVALID_CUSTOMER_BIKE");
-  }
-  if (body.notes !== undefined && typeof body.notes !== "string") {
-    throw new HttpError(400, "notes must be a string", "INVALID_CUSTOMER_BIKE");
-  }
+  assertOptionalBikeString(body.label, "label", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.make, "make", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.model, "model", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeYear(body.year, "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.bikeType, "bikeType", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.colour, "colour", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.wheelSize, "wheelSize", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.frameSize, "frameSize", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.groupset, "groupset", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.motorBrand, "motorBrand", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.motorModel, "motorModel", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.batterySerial, "batterySerial", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.frameNumber, "frameNumber", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.serialNumber, "serialNumber", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.registrationNumber, "registrationNumber", "INVALID_CUSTOMER_BIKE");
+  assertOptionalBikeString(body.notes, "notes", "INVALID_CUSTOMER_BIKE");
 
   const result = await createCustomerBike(req.params.id, {
-    label: body.label as string | undefined,
-    make: body.make as string | undefined,
-    model: body.model as string | undefined,
-    colour: body.colour as string | undefined,
-    frameNumber: body.frameNumber as string | undefined,
-    serialNumber: body.serialNumber as string | undefined,
-    registrationNumber: body.registrationNumber as string | undefined,
-    notes: body.notes as string | undefined,
+    label: body.label as string | null | undefined,
+    make: body.make as string | null | undefined,
+    model: body.model as string | null | undefined,
+    year: body.year as number | null | undefined,
+    bikeType: body.bikeType as string | null | undefined,
+    colour: body.colour as string | null | undefined,
+    wheelSize: body.wheelSize as string | null | undefined,
+    frameSize: body.frameSize as string | null | undefined,
+    groupset: body.groupset as string | null | undefined,
+    motorBrand: body.motorBrand as string | null | undefined,
+    motorModel: body.motorModel as string | null | undefined,
+    batterySerial: body.batterySerial as string | null | undefined,
+    frameNumber: body.frameNumber as string | null | undefined,
+    serialNumber: body.serialNumber as string | null | undefined,
+    registrationNumber: body.registrationNumber as string | null | undefined,
+    notes: body.notes as string | null | undefined,
   });
 
   res.status(201).json(result);
+};
+
+export const updateCustomerBikeHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    label?: unknown;
+    make?: unknown;
+    model?: unknown;
+    year?: unknown;
+    bikeType?: unknown;
+    colour?: unknown;
+    wheelSize?: unknown;
+    frameSize?: unknown;
+    groupset?: unknown;
+    motorBrand?: unknown;
+    motorModel?: unknown;
+    batterySerial?: unknown;
+    frameNumber?: unknown;
+    serialNumber?: unknown;
+    registrationNumber?: unknown;
+    notes?: unknown;
+  };
+
+  assertOptionalBikeString(body.label, "label", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.make, "make", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.model, "model", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeYear(body.year, "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.bikeType, "bikeType", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.colour, "colour", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.wheelSize, "wheelSize", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.frameSize, "frameSize", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.groupset, "groupset", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.motorBrand, "motorBrand", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.motorModel, "motorModel", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.batterySerial, "batterySerial", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.frameNumber, "frameNumber", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.serialNumber, "serialNumber", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.registrationNumber, "registrationNumber", "INVALID_CUSTOMER_BIKE_UPDATE");
+  assertOptionalBikeString(body.notes, "notes", "INVALID_CUSTOMER_BIKE_UPDATE");
+
+  const result = await updateCustomerBike(req.params.bikeId, {
+    label: body.label as string | null | undefined,
+    make: body.make as string | null | undefined,
+    model: body.model as string | null | undefined,
+    year: body.year as number | null | undefined,
+    bikeType: body.bikeType as string | null | undefined,
+    colour: body.colour as string | null | undefined,
+    wheelSize: body.wheelSize as string | null | undefined,
+    frameSize: body.frameSize as string | null | undefined,
+    groupset: body.groupset as string | null | undefined,
+    motorBrand: body.motorBrand as string | null | undefined,
+    motorModel: body.motorModel as string | null | undefined,
+    batterySerial: body.batterySerial as string | null | undefined,
+    frameNumber: body.frameNumber as string | null | undefined,
+    serialNumber: body.serialNumber as string | null | undefined,
+    registrationNumber: body.registrationNumber as string | null | undefined,
+    notes: body.notes as string | null | undefined,
+  });
+
+  res.json(result);
 };
 
 export const getCustomerTimelineHandler = async (req: Request, res: Response) => {

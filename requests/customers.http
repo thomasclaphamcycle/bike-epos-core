@@ -39,11 +39,34 @@ Content-Type: application/json
   "label": "Winter commuter",
   "make": "Genesis",
   "model": "Croix de Fer",
+  "year": 2024,
+  "bikeType": "ROAD",
   "colour": "Blue",
+  "wheelSize": "700c",
+  "frameSize": "54cm",
+  "groupset": "Shimano 105",
+  "motorBrand": null,
+  "motorModel": null,
+  "batterySerial": null,
   "frameNumber": "FRAME-12345",
   "serialNumber": "SER-12345",
   "registrationNumber": "REG-12345",
   "notes": "Rear rack fitted, customer prefers puncture-resistant tyres"
+}
+
+### Update reusable bike structured profile
+PATCH {{baseUrl}}/api/customers/bikes/{{bikeId}}
+Content-Type: application/json
+
+{
+  "year": 2025,
+  "bikeType": "E-BIKE",
+  "wheelSize": "29\"",
+  "frameSize": "Large",
+  "groupset": "Shimano XT",
+  "motorBrand": "Bosch",
+  "motorModel": "Performance Line CX",
+  "batterySerial": "BAT-67890"
 }
 
 ### Get reusable bike profile and linked service history

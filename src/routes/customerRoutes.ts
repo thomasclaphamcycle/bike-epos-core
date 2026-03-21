@@ -11,6 +11,7 @@ import {
   listCustomerSalesHandler,
   listCustomerWorkshopJobsHandler,
   searchCustomersHandler,
+  updateCustomerBikeHandler,
   updateCustomerCommunicationPreferencesHandler,
 } from "../controllers/customerController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
@@ -22,6 +23,7 @@ customerRouter.get("/", requireRoleAtLeast("STAFF"), listCustomersHandler);
 customerRouter.get("/search", requireRoleAtLeast("STAFF"), searchCustomersHandler);
 customerRouter.get("/bikes/:bikeId/workshop-start", requireRoleAtLeast("STAFF"), getCustomerBikeWorkshopStartContextHandler);
 customerRouter.get("/bikes/:bikeId", requireRoleAtLeast("STAFF"), getCustomerBikeHistoryHandler);
+customerRouter.patch("/bikes/:bikeId", requireRoleAtLeast("STAFF"), updateCustomerBikeHandler);
 customerRouter.get("/:id/bikes", requireRoleAtLeast("STAFF"), listCustomerBikesHandler);
 customerRouter.post("/:id/bikes", requireRoleAtLeast("STAFF"), createCustomerBikeHandler);
 customerRouter.patch(

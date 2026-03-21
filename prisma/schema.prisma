@@ -965,7 +965,15 @@ model CustomerBike {
   label              String?
   make               String?
   model              String?
+  year               Int?
+  bikeType           String?
   colour             String?
+  wheelSize          String?
+  frameSize          String?
+  groupset           String?
+  motorBrand         String?
+  motorModel         String?
+  batterySerial      String?
   frameNumber        String?
   serialNumber       String?
   registrationNumber String?
