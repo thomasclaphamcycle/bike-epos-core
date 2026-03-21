@@ -18,10 +18,18 @@ type Customer = {
   lastName: string;
   email: string | null;
   phone: string | null;
+  emailAllowed: boolean;
+  smsAllowed: boolean;
+  whatsappAllowed: boolean;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+type CustomerCommunicationPreferences = Pick<
+  Customer,
+  "emailAllowed" | "smsAllowed" | "whatsappAllowed"
+>;
 
 type CustomerSales = {
   sales: Array<{
@@ -89,7 +97,10 @@ export const CustomerProfilePage = () => {
   const [sales, setSales] = useState<CustomerSales["sales"]>([]);
   const [jobs, setJobs] = useState<CustomerWorkshopJob[]>([]);
   const [bikes, setBikes] = useState<CustomerBikeRecord[]>([]);
+  const [communicationPreferences, setCommunicationPreferences] =
+    useState<CustomerCommunicationPreferences | null>(null);
   const [loading, setLoading] = useState(false);
+  const [savingCommunicationPreferences, setSavingCommunicationPreferences] = useState(false);
 
   const activeSaleId = useMemo(() => localStorage.getItem(ACTIVE_SALE_KEY), []);
 
@@ -107,6 +118,11 @@ export const CustomerProfilePage = () => {
         apiGet<CustomerBikesResponse>(`/api/customers/${encodeURIComponent(id)}/bikes`),
       ]);
       setCustomer(customerPayload);
+      setCommunicationPreferences({
+        emailAllowed: customerPayload.emailAllowed,
+        smsAllowed: customerPayload.smsAllowed,
+        whatsappAllowed: customerPayload.whatsappAllowed,
+      });
       setSales(salesPayload.sales || []);
       setJobs(jobsPayload.workshopJobs || jobsPayload.jobs || []);
       setBikes(bikesPayload.bikes || []);
@@ -115,6 +131,57 @@ export const CustomerProfilePage = () => {
       error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const communicationPreferencesDirty = Boolean(
+    customer &&
+      communicationPreferences &&
+      (customer.emailAllowed !== communicationPreferences.emailAllowed ||
+        customer.smsAllowed !== communicationPreferences.smsAllowed ||
+        customer.whatsappAllowed !== communicationPreferences.whatsappAllowed),
+  );
+
+  const updateCommunicationPreference = (
+    field: keyof CustomerCommunicationPreferences,
+    value: boolean,
+  ) => {
+    setCommunicationPreferences((current) =>
+      current
+        ? {
+            ...current,
+            [field]: value,
+          }
+        : current,
+    );
+  };
+
+  const saveCommunicationPreferences = async () => {
+    if (!id || !communicationPreferences) {
+      return;
+    }
+
+    setSavingCommunicationPreferences(true);
+    try {
+      const updatedCustomer = await apiPatch<Customer>(
+        `/api/customers/${encodeURIComponent(id)}/communication-preferences`,
+        communicationPreferences,
+      );
+      setCustomer(updatedCustomer);
+      setCommunicationPreferences({
+        emailAllowed: updatedCustomer.emailAllowed,
+        smsAllowed: updatedCustomer.smsAllowed,
+        whatsappAllowed: updatedCustomer.whatsappAllowed,
+      });
+      success("Customer communication settings saved.");
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error
+          ? saveError.message
+          : "Failed to save customer communication settings";
+      error(message);
+    } finally {
+      setSavingCommunicationPreferences(false);
     }
   };
 
@@ -162,6 +229,70 @@ export const CustomerProfilePage = () => {
               <div><strong>Phone:</strong> {customer.phone || "-"}</div>
               <div><strong>Notes:</strong> {customer.notes || "-"}</div>
             </div>
+
+            {communicationPreferences ? (
+              <div style={{ marginTop: "16px" }}>
+                <h2 style={{ fontSize: "1rem", marginBottom: "8px" }}>Workshop Updates</h2>
+                <p className="muted-text">
+                  Staff-controlled permissions for operational quote, collection, and workshop updates.
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "10px",
+                    marginTop: "12px",
+                  }}
+                >
+                  <label className="staff-toggle">
+                    <input
+                      type="checkbox"
+                      checked={communicationPreferences.emailAllowed}
+                      disabled={savingCommunicationPreferences}
+                      onChange={(event) =>
+                        updateCommunicationPreference("emailAllowed", event.target.checked)
+                      }
+                    />
+                    <span>Email updates</span>
+                  </label>
+                  <label className="staff-toggle">
+                    <input
+                      type="checkbox"
+                      checked={communicationPreferences.smsAllowed}
+                      disabled={savingCommunicationPreferences}
+                      onChange={(event) =>
+                        updateCommunicationPreference("smsAllowed", event.target.checked)
+                      }
+                    />
+                    <span>SMS updates</span>
+                  </label>
+                  <label className="staff-toggle">
+                    <input
+                      type="checkbox"
+                      checked={communicationPreferences.whatsappAllowed}
+                      disabled={savingCommunicationPreferences}
+                      onChange={(event) =>
+                        updateCommunicationPreference("whatsappAllowed", event.target.checked)
+                      }
+                    />
+                    <span>WhatsApp updates</span>
+                  </label>
+                </div>
+                <div className="actions-inline" style={{ marginTop: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={saveCommunicationPreferences}
+                    disabled={!communicationPreferencesDirty || savingCommunicationPreferences}
+                  >
+                    {savingCommunicationPreferences ? "Saving..." : "Save Communication Settings"}
+                  </button>
+                  <span className="muted-text">
+                    {communicationPreferencesDirty
+                      ? "Unsaved changes"
+                      : "Saved customer communication settings"}
+                  </span>
+                </div>
+              </div>
+            ) : null}
 
             <div className="actions-inline" style={{ marginTop: "10px" }}>
               <button type="button" onClick={attachToActiveSale} disabled={!activeSaleId}>

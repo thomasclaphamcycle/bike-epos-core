@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Customer"
+ADD COLUMN "emailAllowed" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "smsAllowed" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "whatsappAllowed" BOOLEAN NOT NULL DEFAULT true;

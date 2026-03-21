@@ -18,6 +18,16 @@ GET {{baseUrl}}/api/customers/{{customerId}}
 ### Search customers by name/email/phone
 GET {{baseUrl}}/api/customers?query=jane
 
+### Update customer communication preferences
+PATCH {{baseUrl}}/api/customers/{{customerId}}/communication-preferences
+Content-Type: application/json
+
+{
+  "emailAllowed": true,
+  "smsAllowed": false,
+  "whatsappAllowed": true
+}
+
 ### List reusable bike records for a customer
 GET {{baseUrl}}/api/customers/{{customerId}}/bikes
 
