@@ -1068,27 +1068,35 @@ enum WorkshopEstimateStatus {
   SUPERSEDED
 }
 
-model WorkshopEstimate {
-  id               String                 @id @default(uuid()) @db.Uuid
-  workshopJobId    String                 @db.Uuid
-  version          Int
-  status           WorkshopEstimateStatus @default(DRAFT)
-  labourTotalPence Int                    @default(0)
-  partsTotalPence  Int                    @default(0)
-  subtotalPence    Int                    @default(0)
-  lineCount        Int                    @default(0)
-  createdByStaffId String?
-  decisionByStaffId String?
-  requestedAt      DateTime?
-  approvedAt       DateTime?
-  rejectedAt       DateTime?
-  supersededAt     DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+enum WorkshopEstimateDecisionSource {
+  STAFF
+  CUSTOMER
+}
 
-  workshopJob     WorkshopJob           @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
-  createdByStaff  User?                 @relation("WorkshopEstimateCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  decisionByStaff User?                 @relation("WorkshopEstimateDecisionBy", fields: [decisionByStaffId], references: [id], onDelete: SetNull)
+model WorkshopEstimate {
+  id                    String                        @id @default(uuid()) @db.Uuid
+  workshopJobId         String                        @db.Uuid
+  version               Int
+  status                WorkshopEstimateStatus        @default(DRAFT)
+  labourTotalPence      Int                           @default(0)
+  partsTotalPence       Int                           @default(0)
+  subtotalPence         Int                           @default(0)
+  lineCount             Int                           @default(0)
+  createdByStaffId      String?
+  decisionByStaffId String?
+  decisionSource        WorkshopEstimateDecisionSource?
+  requestedAt           DateTime?
+  approvedAt            DateTime?
+  rejectedAt            DateTime?
+  supersededAt          DateTime?
+  customerQuoteToken    String?                       @unique
+  customerQuoteTokenExpiresAt DateTime?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  workshopJob     WorkshopJob                  @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  createdByStaff  User?                        @relation("WorkshopEstimateCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  decisionByStaff User?                        @relation("WorkshopEstimateDecisionBy", fields: [decisionByStaffId], references: [id], onDelete: SetNull)
   lines           WorkshopEstimateLine[]
 
   @@unique([workshopJobId, version])
@@ -1096,6 +1104,7 @@ model WorkshopEstimate {
   @@index([workshopJobId, status])
   @@index([createdByStaffId])
   @@index([decisionByStaffId])
+  @@index([customerQuoteTokenExpiresAt])
 }
 
 model WorkshopEstimateLine {

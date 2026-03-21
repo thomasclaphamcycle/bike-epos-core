@@ -215,6 +215,12 @@ const createBike = async (state, customerId, overrides = {}) => {
   return response.json.bike;
 };
 
+const extractQuoteToken = (publicPath) => {
+  const match = publicPath.match(/\/quote\/([^/?#]+)/);
+  assert.ok(match, `Expected quote token in public path: ${publicPath}`);
+  return decodeURIComponent(match[1]);
+};
+
 const cleanup = async (state) => {
   const workshopJobIds = Array.from(state.workshopJobIds);
   const customerIds = Array.from(state.customerIds);
@@ -604,6 +610,156 @@ const run = async () => {
       });
       assert.equal(mismatch.status, 409, JSON.stringify(mismatch.json));
       assert.equal(mismatch.json.error.code, "WORKSHOP_BIKE_CUSTOMER_MISMATCH");
+    }, results);
+
+    await runTest("customer quote links allow safe approval and stale links cannot approve superseded estimates", async () => {
+      const { job } = await createJob(state);
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Customer quote labour",
+          qty: 1,
+          unitPricePence: 6500,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const waitingApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
+
+      const link = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(link.status, 201, JSON.stringify(link.json));
+      assert.equal(link.json.customerQuote.status, "ACTIVE");
+      const quoteToken = extractQuoteToken(link.json.customerQuote.publicPath);
+
+      const publicQuote = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`);
+      assert.equal(publicQuote.status, 200, JSON.stringify(publicQuote.json));
+      assert.equal(publicQuote.json.quote.accessStatus, "ACTIVE");
+      assert.equal(publicQuote.json.estimate.status, "PENDING_APPROVAL");
+      assert.equal(publicQuote.json.estimate.lines.length, 1);
+
+      const approved = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+        method: "POST",
+        body: JSON.stringify({ status: "APPROVED" }),
+      });
+      assert.equal(approved.status, 201, JSON.stringify(approved.json));
+      assert.equal(approved.json.estimate.status, "APPROVED");
+      assert.equal(approved.json.estimate.decisionSource, "CUSTOMER");
+
+      const approvedReplay = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+        method: "POST",
+        body: JSON.stringify({ status: "APPROVED" }),
+      });
+      assert.equal(approvedReplay.status, 200, JSON.stringify(approvedReplay.json));
+      assert.equal(approvedReplay.json.quote.idempotent, true);
+
+      const approvedDetail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(approvedDetail.status, 200, JSON.stringify(approvedDetail.json));
+      assert.equal(approvedDetail.json.currentEstimate.status, "APPROVED");
+      assert.equal(approvedDetail.json.currentEstimate.decisionSource, "CUSTOMER");
+      assert.equal(approvedDetail.json.currentEstimate.customerQuote.status, "ACTIVE");
+
+      const updateLine = await fetchJson(
+        `/api/workshop/jobs/${job.id}/lines/${addLine.json.line.id}`,
+        {
+          method: "PATCH",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({
+            description: "Customer quote labour plus extra fitting",
+            qty: 1,
+            unitPricePence: 7800,
+          }),
+        },
+      );
+      assert.equal(updateLine.status, 200, JSON.stringify(updateLine.json));
+
+      const staleQuote = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`);
+      assert.equal(staleQuote.status, 200, JSON.stringify(staleQuote.json));
+      assert.equal(staleQuote.json.quote.accessStatus, "SUPERSEDED");
+      assert.equal(staleQuote.json.quote.canApprove, false);
+
+      const staleApprove = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+        method: "POST",
+        body: JSON.stringify({ status: "APPROVED" }),
+      });
+      assert.equal(staleApprove.status, 409, JSON.stringify(staleApprove.json));
+      assert.equal(staleApprove.json.error.code, "WORKSHOP_QUOTE_SUPERSEDED");
+    }, results);
+
+    await runTest("customer quote links can be reused safely and customer rejection is idempotent", async () => {
+      const { job } = await createJob(state);
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Quote rejection labour",
+          qty: 1,
+          unitPricePence: 3200,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const waitingApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
+
+      const firstLink = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(firstLink.status, 201, JSON.stringify(firstLink.json));
+
+      const replayLink = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(replayLink.status, 200, JSON.stringify(replayLink.json));
+      assert.equal(replayLink.json.idempotent, true);
+      assert.equal(replayLink.json.customerQuote.publicPath, firstLink.json.customerQuote.publicPath);
+
+      const quoteToken = extractQuoteToken(firstLink.json.customerQuote.publicPath);
+      const rejected = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+        method: "POST",
+        body: JSON.stringify({ status: "REJECTED" }),
+      });
+      assert.equal(rejected.status, 201, JSON.stringify(rejected.json));
+      assert.equal(rejected.json.estimate.status, "REJECTED");
+      assert.equal(rejected.json.estimate.decisionSource, "CUSTOMER");
+
+      const rejectedReplay = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+        method: "POST",
+        body: JSON.stringify({ status: "REJECTED" }),
+      });
+      assert.equal(rejectedReplay.status, 200, JSON.stringify(rejectedReplay.json));
+      assert.equal(rejectedReplay.json.quote.idempotent, true);
+
+      const rejectedDetail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(rejectedDetail.status, 200, JSON.stringify(rejectedDetail.json));
+      assert.equal(rejectedDetail.json.currentEstimate.status, "REJECTED");
+      assert.equal(rejectedDetail.json.currentEstimate.decisionSource, "CUSTOMER");
+      assert.equal(rejectedDetail.json.job.rawStatus, "ON_HOLD");
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {

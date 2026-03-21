@@ -323,6 +323,33 @@ X-Staff-Id: demo-staff
   "status": "REJECTED"
 }
 
+### Create or retrieve the secure customer quote link for the current estimate
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/customer-quote-link
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{}
+
+### Public quote review by secure token
+GET {{baseUrl}}/api/public/workshop-quotes/{{quoteToken}}
+
+### Public quote approval by secure token
+POST {{baseUrl}}/api/public/workshop-quotes/{{quoteToken}}
+Content-Type: application/json
+
+{
+  "status": "APPROVED"
+}
+
+### Public quote rejection by secure token
+POST {{baseUrl}}/api/public/workshop-quotes/{{quoteToken}}
+Content-Type: application/json
+
+{
+  "status": "REJECTED"
+}
+
 ### Refund any payment by id
 ### Response: 201 created, 200 idempotent replay, 409 REFUND_EXCEEDS_PAYMENT
 ### Permissions: MANAGER+

@@ -1,7 +1,15 @@
-import { Prisma, WorkshopEstimateStatus, WorkshopJobStatus } from "@prisma/client";
+import crypto from "node:crypto";
+import {
+  Prisma,
+  WorkshopEstimateDecisionSource,
+  WorkshopEstimateStatus,
+  WorkshopJobNoteVisibility,
+  WorkshopJobStatus,
+} from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { buildCustomerBikeDisplayName } from "./customerBikeService";
 
 type SaveWorkshopEstimateInput = {
   actor?: AuditActor;
@@ -10,7 +18,19 @@ type SaveWorkshopEstimateInput = {
 type SetWorkshopEstimateStatusInput = {
   status: string;
   actor?: AuditActor;
+  decisionSource?: WorkshopEstimateDecisionSource;
 };
+
+type PublicWorkshopQuoteDecisionInput = {
+  status: string;
+};
+
+const CUSTOMER_QUOTE_TTL_DAYS = 30;
+
+const createSecureToken = () => crypto.randomBytes(24).toString("base64url");
+
+const resolveCustomerQuoteExpiryDate = () =>
+  new Date(Date.now() + CUSTOMER_QUOTE_TTL_DAYS * 24 * 60 * 60 * 1000);
 
 const estimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
   createdByStaff: {
@@ -29,8 +49,87 @@ const estimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
   },
 });
 
+const publicEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
+  ...estimateInclude,
+  lines: {
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  },
+  workshopJob: {
+    select: {
+      id: true,
+      status: true,
+      scheduledDate: true,
+      bikeDescription: true,
+      customerName: true,
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+      bike: {
+        select: {
+          id: true,
+          customerId: true,
+          label: true,
+          make: true,
+          model: true,
+          colour: true,
+          frameNumber: true,
+          serialNumber: true,
+          registrationNumber: true,
+          notes: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      jobNotes: {
+        where: {
+          visibility: "CUSTOMER" satisfies WorkshopJobNoteVisibility,
+        },
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          note: true,
+          createdAt: true,
+          authorStaff: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
 type WorkshopEstimateRecord = Prisma.WorkshopEstimateGetPayload<{
   include: typeof estimateInclude;
+}>;
+
+type PublicWorkshopEstimateRecord = Prisma.WorkshopEstimateGetPayload<{
+  include: typeof publicEstimateInclude;
 }>;
 
 type WorkshopJobWithLinesRecord = {
@@ -80,6 +179,23 @@ const parseEstimateStatus = (value: string) => {
   );
 };
 
+const parsePublicEstimateDecisionStatus = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+
+  if (normalized === "APPROVED") {
+    return "APPROVED" as WorkshopEstimateStatus;
+  }
+  if (normalized === "REJECTED") {
+    return "REJECTED" as WorkshopEstimateStatus;
+  }
+
+  throw new HttpError(
+    400,
+    "status must be APPROVED or REJECTED",
+    "INVALID_QUOTE_DECISION_STATUS",
+  );
+};
+
 const toWorkshopJobStatusForEstimate = (
   status: WorkshopEstimateStatus,
 ): WorkshopJobStatus => {
@@ -95,6 +211,24 @@ const toWorkshopJobStatusForEstimate = (
   }
 };
 
+const getCustomerQuoteStatus = (estimate: {
+  customerQuoteToken: string | null;
+  customerQuoteTokenExpiresAt: Date | null;
+}) => {
+  if (!estimate.customerQuoteToken || !estimate.customerQuoteTokenExpiresAt) {
+    return null;
+  }
+
+  return {
+    publicPath: `/quote/${encodeURIComponent(estimate.customerQuoteToken)}`,
+    expiresAt: estimate.customerQuoteTokenExpiresAt,
+    status:
+      estimate.customerQuoteTokenExpiresAt.getTime() < Date.now()
+        ? ("EXPIRED" as const)
+        : ("ACTIVE" as const),
+  };
+};
+
 const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
   id: estimate.id,
   workshopJobId: estimate.workshopJobId,
@@ -108,9 +242,11 @@ const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
   approvedAt: estimate.approvedAt,
   rejectedAt: estimate.rejectedAt,
   supersededAt: estimate.supersededAt,
+  decisionSource: estimate.decisionSource,
   createdAt: estimate.createdAt,
   updatedAt: estimate.updatedAt,
   isCurrent: estimate.supersededAt === null,
+  customerQuote: getCustomerQuoteStatus(estimate),
   createdByStaff: estimate.createdByStaff
     ? {
         id: estimate.createdByStaff.id,
@@ -127,6 +263,92 @@ const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
     : null,
 });
 
+const buildCustomerDisplayName = (customer: {
+  name: string;
+  firstName: string;
+  lastName: string;
+}) => {
+  const explicitName = normalizeOptionalText(customer.name);
+  if (explicitName) {
+    return explicitName;
+  }
+
+  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
+};
+
+const toPublicQuoteResponse = (
+  estimate: PublicWorkshopEstimateRecord,
+  input: {
+    accessStatus: "ACTIVE" | "EXPIRED" | "SUPERSEDED";
+    canApprove: boolean;
+    canReject: boolean;
+    idempotent?: boolean;
+  },
+) => {
+  const customerName = estimate.workshopJob.customer
+    ? buildCustomerDisplayName(estimate.workshopJob.customer)
+    : normalizeOptionalText(estimate.workshopJob.customerName) ?? "Workshop customer";
+  const bikeDisplayName = estimate.workshopJob.bike
+    ? buildCustomerBikeDisplayName(estimate.workshopJob.bike)
+    : normalizeOptionalText(estimate.workshopJob.bikeDescription) ?? "Bike";
+
+  return {
+    quote: {
+      accessStatus: input.accessStatus,
+      canApprove: input.canApprove,
+      canReject: input.canReject,
+      idempotent: input.idempotent ?? false,
+      customerQuote: getCustomerQuoteStatus(estimate),
+    },
+    job: {
+      id: estimate.workshopJob.id,
+      status: estimate.workshopJob.status,
+      scheduledDate: estimate.workshopJob.scheduledDate,
+      customerName,
+      bikeDescription: estimate.workshopJob.bikeDescription,
+      bikeDisplayName,
+      bike: estimate.workshopJob.bike
+        ? {
+            id: estimate.workshopJob.bike.id,
+            displayName: bikeDisplayName,
+            label: estimate.workshopJob.bike.label,
+            make: estimate.workshopJob.bike.make,
+            model: estimate.workshopJob.bike.model,
+            colour: estimate.workshopJob.bike.colour,
+          }
+        : null,
+    },
+    customer: estimate.workshopJob.customer
+      ? {
+          id: estimate.workshopJob.customer.id,
+          name: customerName,
+          email: estimate.workshopJob.customer.email,
+          phone: estimate.workshopJob.customer.phone,
+        }
+      : null,
+    estimate: {
+      ...toEstimateResponse(estimate),
+      lines: estimate.lines.map((line) => ({
+        id: line.id,
+        type: line.type,
+        description: line.description,
+        qty: line.qty,
+        unitPricePence: line.unitPricePence,
+        lineTotalPence: line.lineTotalPence,
+        productName: line.product?.name ?? null,
+        variantName: line.variant?.name ?? null,
+        variantSku: line.variant?.sku ?? null,
+      })),
+    },
+    customerNotes: estimate.workshopJob.jobNotes.map((note) => ({
+      id: note.id,
+      note: note.note,
+      createdAt: note.createdAt,
+      authorName: note.authorStaff?.name ?? note.authorStaff?.username ?? null,
+    })),
+  };
+};
+
 const resolveActorStaffIdTx = async (
   tx: Prisma.TransactionClient,
   actor?: AuditActor,
@@ -142,6 +364,52 @@ const resolveActorStaffIdTx = async (
   });
 
   return user?.id ?? null;
+};
+
+const ensureCustomerQuoteTokenTx = async (
+  tx: Prisma.TransactionClient,
+  estimate: WorkshopEstimateRecord,
+  actor?: AuditActor,
+) => {
+  const existingQuote = getCustomerQuoteStatus(estimate);
+  if (existingQuote && existingQuote.status === "ACTIVE") {
+    return {
+      estimate,
+      customerQuote: existingQuote,
+      idempotent: true,
+    };
+  }
+
+  const updated = await tx.workshopEstimate.update({
+    where: { id: estimate.id },
+    data: {
+      customerQuoteToken: estimate.customerQuoteToken ?? createSecureToken(),
+      customerQuoteTokenExpiresAt: resolveCustomerQuoteExpiryDate(),
+    },
+    include: estimateInclude,
+  });
+
+  await createAuditEventTx(
+    tx,
+    {
+      action: "WORKSHOP_ESTIMATE_CUSTOMER_QUOTE_LINK_READY",
+      entityType: "WORKSHOP_ESTIMATE",
+      entityId: updated.id,
+      metadata: {
+        workshopJobId: updated.workshopJobId,
+        version: updated.version,
+        refreshed: Boolean(estimate.customerQuoteToken),
+        quoteTokenExpiresAt: updated.customerQuoteTokenExpiresAt?.toISOString() ?? null,
+      },
+    },
+    actor,
+  );
+
+  return {
+    estimate: updated,
+    customerQuote: getCustomerQuoteStatus(updated),
+    idempotent: false,
+  };
 };
 
 const ensureWorkshopJobWithLinesTx = async (
@@ -203,6 +471,15 @@ const listWorkshopEstimatesTx = async (
     orderBy: [{ version: "desc" }],
   });
 
+const getWorkshopEstimateByCustomerQuoteTokenTx = async (
+  tx: Prisma.TransactionClient | typeof prisma,
+  token: string,
+) =>
+  tx.workshopEstimate.findUnique({
+    where: { customerQuoteToken: token },
+    include: publicEstimateInclude,
+  });
+
 const getNextWorkshopEstimateVersionTx = async (
   tx: Prisma.TransactionClient,
   workshopJobId: string,
@@ -260,6 +537,7 @@ const createEstimateVersionTx = async (
     status: WorkshopEstimateStatus;
     actor?: AuditActor;
     supersedeEstimateId?: string;
+    decisionSource?: WorkshopEstimateDecisionSource | null;
   },
 ) => {
   const actorStaffId = await resolveActorStaffIdTx(tx, input.actor);
@@ -289,6 +567,10 @@ const createEstimateVersionTx = async (
       decisionByStaffId:
         input.status === "APPROVED" || input.status === "REJECTED"
           ? actorStaffId
+          : null,
+      decisionSource:
+        input.status === "APPROVED" || input.status === "REJECTED"
+          ? (input.decisionSource ?? "STAFF")
           : null,
       requestedAt: input.status === "PENDING_APPROVAL" ? now : null,
       approvedAt: input.status === "APPROVED" ? now : null,
@@ -349,6 +631,7 @@ const updateEstimateStatusTx = async (
   estimate: WorkshopEstimateRecord,
   status: WorkshopEstimateStatus,
   actor?: AuditActor,
+  decisionSource: WorkshopEstimateDecisionSource | null = "STAFF",
 ) => {
   const actorStaffId = await resolveActorStaffIdTx(tx, actor);
   const now = new Date();
@@ -359,6 +642,10 @@ const updateEstimateStatusTx = async (
       status,
       decisionByStaffId:
         status === "APPROVED" || status === "REJECTED" ? actorStaffId : null,
+      decisionSource:
+        status === "APPROVED" || status === "REJECTED"
+          ? decisionSource
+          : null,
       requestedAt:
         status === "PENDING_APPROVAL"
           ? now
@@ -393,6 +680,7 @@ const writeApprovalAuditEventsTx = async (
         estimateVersion: input.estimate.version,
         fromEstimateStatus: input.fromEstimateStatus,
         toEstimateStatus: input.toEstimateStatus,
+        decisionSource: input.estimate.decisionSource,
         fromStatus: input.fromJobStatus,
         toStatus: input.toJobStatus,
       },
@@ -411,6 +699,7 @@ const writeApprovalAuditEventsTx = async (
         version: input.estimate.version,
         fromStatus: input.fromEstimateStatus,
         toStatus: input.toEstimateStatus,
+        decisionSource: input.estimate.decisionSource,
       },
     },
     actor,
@@ -543,6 +832,7 @@ export const setWorkshopEstimateStatus = async (
   }
 
   const targetStatus = parseEstimateStatus(input.status);
+  const decisionSource = input.decisionSource ?? "STAFF";
 
   return prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobWithLinesTx(tx, workshopJobId);
@@ -565,6 +855,7 @@ export const setWorkshopEstimateStatus = async (
       const created = await createEstimateVersionTx(tx, job, {
         status: targetStatus,
         actor: input.actor,
+        decisionSource,
       });
       const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
         tx,
@@ -612,7 +903,13 @@ export const setWorkshopEstimateStatus = async (
       }
 
       if (currentEstimate.status === "DRAFT") {
-        nextEstimate = await updateEstimateStatusTx(tx, currentEstimate, "PENDING_APPROVAL", input.actor);
+        nextEstimate = await updateEstimateStatusTx(
+          tx,
+          currentEstimate,
+          "PENDING_APPROVAL",
+          input.actor,
+          null,
+        );
       } else {
         nextEstimate = await createEstimateVersionTx(tx, job, {
           status: "PENDING_APPROVAL",
@@ -637,9 +934,16 @@ export const setWorkshopEstimateStatus = async (
           status: "APPROVED",
           actor: input.actor,
           supersedeEstimateId: currentEstimate.id,
+          decisionSource,
         });
       } else {
-        nextEstimate = await updateEstimateStatusTx(tx, currentEstimate, "APPROVED", input.actor);
+        nextEstimate = await updateEstimateStatusTx(
+          tx,
+          currentEstimate,
+          "APPROVED",
+          input.actor,
+          decisionSource,
+        );
       }
     } else {
       if (currentEstimate.status === "REJECTED") {
@@ -653,7 +957,13 @@ export const setWorkshopEstimateStatus = async (
         };
       }
 
-      nextEstimate = await updateEstimateStatusTx(tx, currentEstimate, "REJECTED", input.actor);
+      nextEstimate = await updateEstimateStatusTx(
+        tx,
+        currentEstimate,
+        "REJECTED",
+        input.actor,
+        decisionSource,
+      );
       nextEstimateStatus = "REJECTED";
     }
 
@@ -685,6 +995,171 @@ export const setWorkshopEstimateStatus = async (
       },
       idempotent: false,
     };
+  });
+};
+
+export const createWorkshopEstimateCustomerQuoteLink = async (
+  workshopJobId: string,
+  input: SaveWorkshopEstimateInput = {},
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const job = await ensureWorkshopJobWithLinesTx(tx, workshopJobId);
+
+    if (job.closedAt) {
+      throw new HttpError(409, "Closed jobs cannot share customer quotes", "WORKSHOP_JOB_CLOSED");
+    }
+
+    const currentEstimate = await getCurrentWorkshopEstimateTx(tx, workshopJobId);
+    if (!currentEstimate) {
+      throw new HttpError(
+        409,
+        "Save or request an estimate before sharing a customer quote link",
+        "WORKSHOP_ESTIMATE_NOT_READY",
+      );
+    }
+
+    const prepared = await ensureCustomerQuoteTokenTx(tx, currentEstimate, input.actor);
+
+    return {
+      estimate: toEstimateResponse(prepared.estimate),
+      customerQuote: prepared.customerQuote,
+      idempotent: prepared.idempotent,
+    };
+  });
+};
+
+export const getPublicWorkshopEstimateQuote = async (tokenValue: string) => {
+  const token = normalizeOptionalText(tokenValue);
+  if (!token) {
+    throw new HttpError(400, "Quote token is required", "INVALID_QUOTE_TOKEN");
+  }
+
+  const estimate = await getWorkshopEstimateByCustomerQuoteTokenTx(prisma, token);
+  if (!estimate) {
+    throw new HttpError(404, "Quote link not found", "WORKSHOP_QUOTE_NOT_FOUND");
+  }
+
+  const currentEstimate = await getCurrentWorkshopEstimateTx(prisma, estimate.workshopJobId);
+  const customerQuote = getCustomerQuoteStatus(estimate);
+  const isCurrent = currentEstimate?.id === estimate.id && estimate.supersededAt === null;
+  const accessStatus =
+    !isCurrent
+      ? ("SUPERSEDED" as const)
+      : customerQuote?.status === "EXPIRED"
+        ? ("EXPIRED" as const)
+        : ("ACTIVE" as const);
+  const canRespond =
+    accessStatus === "ACTIVE" && estimate.status === "PENDING_APPROVAL";
+
+  return toPublicQuoteResponse(estimate, {
+    accessStatus,
+    canApprove: canRespond,
+    canReject: canRespond,
+  });
+};
+
+export const submitPublicWorkshopEstimateQuoteDecision = async (
+  tokenValue: string,
+  input: PublicWorkshopQuoteDecisionInput,
+) => {
+  const token = normalizeOptionalText(tokenValue);
+  if (!token) {
+    throw new HttpError(400, "Quote token is required", "INVALID_QUOTE_TOKEN");
+  }
+
+  const targetStatus = parsePublicEstimateDecisionStatus(input.status);
+
+  return prisma.$transaction(async (tx) => {
+    const estimate = await getWorkshopEstimateByCustomerQuoteTokenTx(tx, token);
+    if (!estimate) {
+      throw new HttpError(404, "Quote link not found", "WORKSHOP_QUOTE_NOT_FOUND");
+    }
+
+    const customerQuote = getCustomerQuoteStatus(estimate);
+    if (!customerQuote || customerQuote.status === "EXPIRED") {
+      throw new HttpError(410, "This quote link has expired", "WORKSHOP_QUOTE_EXPIRED");
+    }
+
+    const currentEstimate = await getCurrentWorkshopEstimateTx(tx, estimate.workshopJobId);
+    if (!currentEstimate || currentEstimate.id !== estimate.id || estimate.supersededAt !== null) {
+      throw new HttpError(
+        409,
+        "This quote is no longer current. Please contact the shop for the latest estimate.",
+        "WORKSHOP_QUOTE_SUPERSEDED",
+      );
+    }
+
+    if (estimate.status === targetStatus) {
+      return toPublicQuoteResponse(estimate, {
+        accessStatus: "ACTIVE",
+        canApprove: false,
+        canReject: false,
+        idempotent: true,
+      });
+    }
+
+    if (estimate.status !== "PENDING_APPROVAL") {
+      throw new HttpError(
+        409,
+        "This quote is not awaiting customer approval.",
+        "WORKSHOP_QUOTE_NOT_ACTIONABLE",
+      );
+    }
+
+    const nextEstimate = await updateEstimateStatusTx(
+      tx,
+      estimate,
+      targetStatus,
+      undefined,
+      "CUSTOMER",
+    );
+    const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
+      tx,
+      estimate.workshopJobId,
+      estimate.workshopJob.status,
+      targetStatus,
+    );
+
+    await writeApprovalAuditEventsTx(
+      tx,
+      {
+        workshopJobId: estimate.workshopJobId,
+        estimate: nextEstimate,
+        fromEstimateStatus: estimate.status,
+        toEstimateStatus: targetStatus,
+        fromJobStatus: estimate.workshopJob.status,
+        toJobStatus,
+      },
+      undefined,
+    );
+
+    await createAuditEventTx(tx, {
+      action: "WORKSHOP_ESTIMATE_CUSTOMER_DECISION",
+      entityType: "WORKSHOP_ESTIMATE",
+      entityId: nextEstimate.id,
+      metadata: {
+        workshopJobId: nextEstimate.workshopJobId,
+        version: nextEstimate.version,
+        decisionStatus: targetStatus,
+        quoteTokenLastEight: token.slice(-8),
+      },
+    });
+
+    const refreshed = await getWorkshopEstimateByCustomerQuoteTokenTx(tx, token);
+    if (!refreshed) {
+      throw new HttpError(500, "Quote decision could not be reloaded", "WORKSHOP_QUOTE_RELOAD_FAILED");
+    }
+
+    return toPublicQuoteResponse(refreshed, {
+      accessStatus: "ACTIVE",
+      canApprove: false,
+      canReject: false,
+      idempotent: false,
+    });
   });
 };
 

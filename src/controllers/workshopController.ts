@@ -44,7 +44,12 @@ import {
   updateWorkshopJobLine,
   updateWorkshopJob,
 } from "../services/workshopService";
-import { saveWorkshopEstimate } from "../services/workshopEstimateService";
+import {
+  createWorkshopEstimateCustomerQuoteLink,
+  getPublicWorkshopEstimateQuote,
+  saveWorkshopEstimate,
+  submitPublicWorkshopEstimateQuoteDecision,
+} from "../services/workshopEstimateService";
 import { HttpError } from "../utils/http";
 
 const parsePaymentMethod = (
@@ -653,4 +658,38 @@ export const setWorkshopJobApprovalStatusHandler = async (req: Request, res: Res
   );
 
   res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const createWorkshopEstimateCustomerQuoteLinkHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await createWorkshopEstimateCustomerQuoteLink(req.params.id, {
+    actor: getRequestAuditActor(req),
+  });
+
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const getPublicWorkshopEstimateQuoteHandler = async (req: Request, res: Response) => {
+  const result = await getPublicWorkshopEstimateQuote(req.params.token);
+  res.json(result);
+};
+
+export const submitPublicWorkshopEstimateQuoteDecisionHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    status?: unknown;
+  };
+
+  if (body.status !== undefined && typeof body.status !== "string") {
+    throw new HttpError(400, "status must be a string", "INVALID_QUOTE_DECISION_STATUS");
+  }
+
+  const result = await submitPublicWorkshopEstimateQuoteDecision(req.params.token, {
+    status: typeof body.status === "string" ? body.status : "",
+  });
+  res.status(result.quote.idempotent ? 200 : 201).json(result);
 };

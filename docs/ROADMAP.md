@@ -268,6 +268,7 @@ Implementation status:
 - substantially implemented, with additional bike-record depth and build-specific refinement still possible
 - reusable customer bike records now expose linked bike service history for workshop and customer staff flows, while still excluding truthful-but-unlinked legacy free-text jobs
 - known-bike workshop intake can now start directly from a customer bike profile or bike history view, preloading the linked customer and bike context into workshop check-in
+- workshop estimates can now generate secure customer quote-review links, with customer approvals or rejections flowing back into the existing estimate history and audit trail without weakening stale-quote handling
 
 ---
 

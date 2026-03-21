@@ -124,9 +124,15 @@ type WorkshopEstimateRecord = {
   approvedAt: string | null;
   rejectedAt: string | null;
   supersededAt: string | null;
+  decisionSource: "STAFF" | "CUSTOMER" | null;
   createdAt: string;
   updatedAt: string;
   isCurrent: boolean;
+  customerQuote: {
+    publicPath: string;
+    expiresAt: string;
+    status: "ACTIVE" | "EXPIRED";
+  } | null;
   createdByStaff: {
     id: string;
     username: string;
@@ -208,6 +214,18 @@ type EditableLine = {
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
+const getPublicAppOrigin = () => {
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return "";
+};
+
+const toPublicAppUrl = (path: string) => {
+  const origin = getPublicAppOrigin();
+  return origin ? `${origin}${path.startsWith("/") ? path : `/${path}`}` : path;
+};
+
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
 const estimateStatusClass = (
@@ -244,6 +262,18 @@ const estimateStatusLabel = (
     return "Draft";
   }
   return "Not Saved";
+};
+
+const estimateDecisionSourceLabel = (
+  source: WorkshopEstimateRecord["decisionSource"] | null | undefined,
+) => {
+  if (source === "CUSTOMER") {
+    return "Customer";
+  }
+  if (source === "STAFF") {
+    return "Staff";
+  }
+  return "-";
 };
 
 const partsStatusClass = (status: WorkshopPartsStatus | undefined) => {
@@ -397,6 +427,7 @@ export const WorkshopJobPage = () => {
   const [bikeNotesDraft, setBikeNotesDraft] = useState("");
   const [savingBikeLink, setSavingBikeLink] = useState(false);
   const [savingEstimate, setSavingEstimate] = useState(false);
+  const [preparingCustomerQuote, setPreparingCustomerQuote] = useState(false);
 
   const canPostCustomerNotes = isManagerPlus(user?.role);
 
@@ -582,6 +613,56 @@ export const WorkshopJobPage = () => {
     } catch (approvalError) {
       const message = approvalError instanceof Error ? approvalError.message : "Failed to update approval state";
       error(message);
+    }
+  };
+
+  const prepareCustomerQuoteLink = async () => {
+    if (!id || !payload || payload.lines.length === 0) {
+      return;
+    }
+
+    setPreparingCustomerQuote(true);
+    try {
+      let estimateStatus = payload.currentEstimate?.status ?? null;
+
+      if (!payload.currentEstimate) {
+        await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/estimate`, {});
+        estimateStatus = "DRAFT";
+      }
+
+      if (estimateStatus === "DRAFT" || estimateStatus === "REJECTED") {
+        await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/approval`, {
+          status: "WAITING_FOR_APPROVAL",
+        });
+      }
+
+      const response = await apiPost<{
+        idempotent: boolean;
+        customerQuote: {
+          publicPath: string;
+          expiresAt: string;
+          status: "ACTIVE" | "EXPIRED";
+        } | null;
+      }>(`/api/workshop/jobs/${encodeURIComponent(id)}/customer-quote-link`, {});
+
+      const publicPath = response.customerQuote?.publicPath;
+      if (!publicPath) {
+        throw new Error("Customer quote link was not returned.");
+      }
+
+      const publicUrl = toPublicAppUrl(publicPath);
+      await navigator.clipboard.writeText(publicUrl);
+      success(
+        response.idempotent
+          ? "Customer quote link copied"
+          : "Customer quote link prepared and copied",
+      );
+      await loadJob();
+    } catch (quoteError) {
+      const message = quoteError instanceof Error ? quoteError.message : "Failed to prepare customer quote link";
+      error(message);
+    } finally {
+      setPreparingCustomerQuote(false);
     }
   };
 
@@ -896,6 +977,9 @@ export const WorkshopJobPage = () => {
   const rawStatus = useMemo(() => toRawStatus(payload?.job), [payload?.job]);
   const currentEstimate = payload?.currentEstimate ?? null;
   const estimateHistory = payload?.estimateHistory ?? [];
+  const currentEstimateQuoteUrl = currentEstimate?.customerQuote?.publicPath
+    ? toPublicAppUrl(currentEstimate.customerQuote.publicPath)
+    : null;
   const partsOverview = useMemo<PartsOverview | null>(
     () => partsPayload ?? payload?.partsOverview ?? null,
     [partsPayload, payload?.partsOverview],
@@ -1066,6 +1150,18 @@ export const WorkshopJobPage = () => {
                     disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
                   >
                     Mark Rejected
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => void prepareCustomerQuoteLink()}
+                    disabled={preparingCustomerQuote || payload.lines.length === 0}
+                  >
+                    {preparingCustomerQuote
+                      ? "Preparing Quote Link..."
+                      : currentEstimate?.customerQuote?.status === "ACTIVE"
+                        ? "Copy Customer Quote Link"
+                        : "Prepare Customer Quote Link"}
                   </button>
                 </>
               ) : null}
@@ -1305,9 +1401,29 @@ export const WorkshopJobPage = () => {
               <div><strong>Requested:</strong> {formatOptionalDateTime(currentEstimate.requestedAt)}</div>
               <div><strong>Approved:</strong> {formatOptionalDateTime(currentEstimate.approvedAt)}</div>
               <div><strong>Rejected:</strong> {formatOptionalDateTime(currentEstimate.rejectedAt)}</div>
+              <div><strong>Decision source:</strong> {estimateDecisionSourceLabel(currentEstimate.decisionSource)}</div>
               <div><strong>Created by:</strong> {currentEstimate.createdByStaff?.name || currentEstimate.createdByStaff?.username || "-"}</div>
               <div><strong>Decided by:</strong> {currentEstimate.decisionByStaff?.name || currentEstimate.decisionByStaff?.username || "-"}</div>
+              <div>
+                <strong>Customer quote link:</strong>{" "}
+                {currentEstimate.customerQuote ? (
+                  <span className={currentEstimate.customerQuote.status === "ACTIVE" ? "status-badge status-complete" : "status-badge status-warning"}>
+                    {currentEstimate.customerQuote.status}
+                  </span>
+                ) : (
+                  "Not prepared"
+                )}
+              </div>
+              <div><strong>Quote expires:</strong> {formatOptionalDateTime(currentEstimate.customerQuote?.expiresAt ?? null)}</div>
             </div>
+            {currentEstimateQuoteUrl ? (
+              <div className="actions-inline" style={{ marginTop: "12px" }}>
+                <a href={currentEstimateQuoteUrl} target="_blank" rel="noreferrer" className="button-link button-link-compact">
+                  Open Customer Quote
+                </a>
+                <code>{currentEstimateQuoteUrl}</code>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="restricted-panel" style={{ marginTop: "12px" }}>
