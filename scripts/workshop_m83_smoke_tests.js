@@ -814,6 +814,35 @@ const run = async () => {
         sentSmsNotification.bodyText,
       );
 
+      const notificationHistory = await fetchJson(
+        `/api/workshop/jobs/${job.id}/notifications`,
+        {
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(notificationHistory.status, 200, JSON.stringify(notificationHistory.json));
+      assert.equal(notificationHistory.json.workshopJobId, job.id);
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "QUOTE_READY" &&
+            notification.channel === "EMAIL" &&
+            notification.deliveryStatus === "SENT" &&
+            notification.recipientEmail === customer.email,
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "QUOTE_READY" &&
+            notification.channel === "SMS" &&
+            notification.deliveryStatus === "SENT" &&
+            notification.recipientPhone === customer.phone,
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
+
       const replayApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
         method: "POST",
         headers: STAFF_HEADERS,
@@ -828,6 +857,30 @@ const run = async () => {
         },
       });
       assert.equal(notificationCount, 2);
+
+      const resendQuote = await fetchJson(
+        `/api/workshop/jobs/${job.id}/notifications/resend`,
+        {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({
+            eventType: "QUOTE_READY",
+          }),
+        },
+      );
+      assert.equal(resendQuote.status, 201, JSON.stringify(resendQuote.json));
+      assert.equal(resendQuote.json.notification.eventType, "QUOTE_READY");
+      assert.equal(resendQuote.json.notification.channel, "EMAIL");
+      assert.equal(resendQuote.json.notification.deliveryStatus, "SENT");
+      assert.notEqual(resendQuote.json.notification.id, sentEmailNotification.id);
+
+      const resentNotificationCount = await prisma.workshopNotification.count({
+        where: {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+        },
+      });
+      assert.equal(resentNotificationCount, 3);
 
       const noEmailCustomer = await createCustomer(state, {
         name: "No Email Quote Customer",
@@ -1046,6 +1099,34 @@ const run = async () => {
       assert.equal(sentSmsNotification.deliveryStatus, "SENT");
       assert.equal(sentSmsNotification.recipientPhone, customer.phone);
 
+      const notificationHistory = await fetchJson(
+        `/api/workshop/jobs/${job.id}/notifications`,
+        {
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(notificationHistory.status, 200, JSON.stringify(notificationHistory.json));
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "JOB_READY_FOR_COLLECTION" &&
+            notification.channel === "EMAIL" &&
+            notification.deliveryStatus === "SENT" &&
+            notification.recipientEmail === customer.email,
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "JOB_READY_FOR_COLLECTION" &&
+            notification.channel === "SMS" &&
+            notification.deliveryStatus === "SENT" &&
+            notification.recipientPhone === customer.phone,
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
+
       const readyReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
@@ -1060,6 +1141,30 @@ const run = async () => {
         },
       });
       assert.equal(notificationCount, 2);
+
+      const resendReady = await fetchJson(
+        `/api/workshop/jobs/${job.id}/notifications/resend`,
+        {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({
+            eventType: "JOB_READY_FOR_COLLECTION",
+          }),
+        },
+      );
+      assert.equal(resendReady.status, 201, JSON.stringify(resendReady.json));
+      assert.equal(resendReady.json.notification.eventType, "JOB_READY_FOR_COLLECTION");
+      assert.equal(resendReady.json.notification.channel, "EMAIL");
+      assert.equal(resendReady.json.notification.deliveryStatus, "SENT");
+      assert.notEqual(resendReady.json.notification.id, sentEmailNotification.id);
+
+      const resentNotificationCount = await prisma.workshopNotification.count({
+        where: {
+          workshopJobId: job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+        },
+      });
+      assert.equal(resentNotificationCount, 3);
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {

@@ -1,5 +1,7 @@
+import crypto from "node:crypto";
 import {
   Prisma,
+  WorkshopNotification as WorkshopNotificationModel,
   WorkshopNotificationChannel,
   WorkshopNotificationEventType,
 } from "@prisma/client";
@@ -14,6 +16,7 @@ import { listStoreInfoSettings } from "./configurationService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { sendEmailMessage } from "./emailService";
 import { sendSmsMessage } from "./smsService";
+import { HttpError, isUuid } from "../utils/http";
 
 type WorkshopNotificationEventInput =
   | {
@@ -25,6 +28,10 @@ type WorkshopNotificationEventInput =
       type: "JOB_READY_FOR_COLLECTION";
       workshopJobId: string;
     };
+
+type ResendWorkshopNotificationInput = {
+  eventType: WorkshopNotificationEventType;
+};
 
 type NotificationChannelDecision =
   | {
@@ -133,6 +140,8 @@ type ReadyJobRecord = Prisma.WorkshopJobGetPayload<{
   include: typeof readyJobInclude;
 }>;
 
+type WorkshopNotificationRecord = WorkshopNotificationModel;
+
 const normalizeOptionalText = (value: string | null | undefined) => {
   if (value === undefined || value === null) {
     return undefined;
@@ -147,6 +156,71 @@ const normalizeOptionalEmail = (value: string | null | undefined) =>
 
 const normalizeOptionalPhone = (value: string | null | undefined) =>
   normalizeOptionalText(value) ?? null;
+
+const buildNotificationAttemptDedupeKey = (
+  baseKey: string,
+  options: {
+    forceUniqueAttempt?: boolean;
+  } = {},
+) =>
+  options.forceUniqueAttempt
+    ? `${baseKey}:manual:${Date.now()}:${crypto.randomUUID()}`
+    : baseKey;
+
+const ensureWorkshopJobExists = async (workshopJobId: string) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  const job = await prisma.workshopJob.findUnique({
+    where: { id: workshopJobId },
+    select: {
+      id: true,
+      customerId: true,
+    },
+  });
+
+  if (!job) {
+    throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+  }
+
+  return job;
+};
+
+const summarizeNotificationText = (value: string | null | undefined) => {
+  const lines =
+    value
+      ?.split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean) ?? [];
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return lines.find((line) => !/^hi\b/i.test(line)) ?? lines[0] ?? null;
+};
+
+const toWorkshopNotificationResponse = (notification: WorkshopNotificationRecord) => ({
+  id: notification.id,
+  workshopJobId: notification.workshopJobId,
+  workshopEstimateId: notification.workshopEstimateId,
+  channel: notification.channel,
+  eventType: notification.eventType,
+  deliveryStatus: notification.deliveryStatus,
+  recipientEmail: notification.recipientEmail,
+  recipientPhone: notification.recipientPhone,
+  subject: notification.subject,
+  messageSummary:
+    normalizeOptionalText(notification.subject) ??
+    summarizeNotificationText(notification.bodyText) ??
+    null,
+  reasonCode: notification.reasonCode,
+  reasonMessage: notification.reasonMessage,
+  sentAt: notification.sentAt,
+  createdAt: notification.createdAt,
+  updatedAt: notification.updatedAt,
+});
 
 const buildCustomerDisplayName = (customer: {
   name: string;
@@ -177,6 +251,54 @@ const buildBikeDisplayName = (input: {
 
   return normalizeOptionalText(input.bikeDescription) ?? "your bike";
 };
+
+const buildChannelDedupeKey = (
+  baseKey: string,
+  channel: WorkshopNotificationChannel,
+) => `${baseKey}:${channel.toLowerCase()}`;
+
+const buildSkipDecision = (input: {
+  channel: WorkshopNotificationChannel;
+  recipientEmail?: string | null;
+  recipientPhone?: string | null;
+  subject?: string | null;
+  payload: Prisma.JsonObject;
+  customerId: string | null;
+  workshopEstimateId: string | null;
+  baseDedupeKey: string;
+  reasonCode: string;
+  reasonMessage: string;
+}): NotificationChannelDecision => ({
+  channel: input.channel,
+  action: "skip",
+  recipientEmail: input.recipientEmail ?? null,
+  recipientPhone: input.recipientPhone ?? null,
+  subject: input.subject ?? null,
+  text: null,
+  html: null,
+  payload: input.payload,
+  customerId: input.customerId,
+  workshopEstimateId: input.workshopEstimateId,
+  dedupeKey: buildChannelDedupeKey(input.baseDedupeKey, input.channel),
+  reasonCode: input.reasonCode,
+  reasonMessage: input.reasonMessage,
+});
+
+const buildQuoteNotReadyDecision = (
+  workshopJobId: string,
+  customerId: string | null,
+): NotificationChannelDecision =>
+  buildSkipDecision({
+    channel: "EMAIL",
+    payload: {
+      workshopJobId,
+    },
+    customerId,
+    workshopEstimateId: null,
+    baseDedupeKey: `workshop:quote-ready:${workshopJobId}:quote-not-ready`,
+    reasonCode: "QUOTE_NOT_READY",
+    reasonMessage: "There is no current quote awaiting approval for this job.",
+  });
 
 const escapeHtml = (value: string) =>
   value
@@ -226,38 +348,6 @@ const resolveStoreContext = async () => {
     smsFrom: normalizeOptionalText(process.env.SMS_FROM) ?? null,
   };
 };
-
-const buildChannelDedupeKey = (
-  baseKey: string,
-  channel: WorkshopNotificationChannel,
-) => `${baseKey}:${channel.toLowerCase()}`;
-
-const buildSkipDecision = (input: {
-  channel: WorkshopNotificationChannel;
-  recipientEmail?: string | null;
-  recipientPhone?: string | null;
-  subject?: string | null;
-  payload: Prisma.JsonObject;
-  customerId: string | null;
-  workshopEstimateId: string | null;
-  baseDedupeKey: string;
-  reasonCode: string;
-  reasonMessage: string;
-}) => ({
-  channel: input.channel,
-  action: "skip" as const,
-  recipientEmail: input.recipientEmail ?? null,
-  recipientPhone: input.recipientPhone ?? null,
-  subject: input.subject ?? null,
-  text: null,
-  html: null,
-  payload: input.payload,
-  customerId: input.customerId,
-  workshopEstimateId: input.workshopEstimateId,
-  dedupeKey: buildChannelDedupeKey(input.baseDedupeKey, input.channel),
-  reasonCode: input.reasonCode,
-  reasonMessage: input.reasonMessage,
-});
 
 const buildQuoteReadyDecisions = async (
   workshopJobId: string,
@@ -390,8 +480,8 @@ const buildQuoteReadyDecisions = async (
   return [
     recipientEmail
       ? {
-          channel: "EMAIL" as const,
-          action: "send" as const,
+          channel: "EMAIL",
+          action: "send",
           recipientEmail,
           recipientPhone: null,
           subject: emailSubject,
@@ -418,8 +508,8 @@ const buildQuoteReadyDecisions = async (
         }),
     recipientPhone
       ? {
-          channel: "SMS" as const,
-          action: "send" as const,
+          channel: "SMS",
+          action: "send",
           recipientEmail: null,
           recipientPhone,
           subject: null,
@@ -537,8 +627,8 @@ const buildReadyForCollectionDecisions = async (
   return [
     recipientEmail
       ? {
-          channel: "EMAIL" as const,
-          action: "send" as const,
+          channel: "EMAIL",
+          action: "send",
           recipientEmail,
           recipientPhone: null,
           subject: emailSubject,
@@ -562,8 +652,8 @@ const buildReadyForCollectionDecisions = async (
         }),
     recipientPhone
       ? {
-          channel: "SMS" as const,
-          action: "send" as const,
+          channel: "SMS",
+          action: "send",
           recipientEmail: null,
           recipientPhone,
           subject: null,
@@ -680,19 +770,38 @@ const failureReasonCodeByChannel = (
   channel: WorkshopNotificationChannel,
 ) => (channel === "SMS" ? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED");
 
+const requireRecipient = (value: string | null, field: string) => {
+  if (!value) {
+    throw new Error(`${field} is required for notification delivery`);
+  }
+
+  return value;
+};
+
 const sendWorkshopNotification = async (
   workshopJobId: string,
   eventType: WorkshopNotificationEventType,
   decision: NotificationChannelDecision,
+  options: {
+    forceUniqueAttempt?: boolean;
+  } = {},
 ) => {
-  const claim = await claimWorkshopNotification(workshopJobId, eventType, decision);
+  const attemptDecision = {
+    ...decision,
+    dedupeKey: buildNotificationAttemptDedupeKey(decision.dedupeKey, options),
+  };
+  const claim = await claimWorkshopNotification(
+    workshopJobId,
+    eventType,
+    attemptDecision,
+  );
   if (claim.idempotent) {
     logOperationalEvent("workshop.notification.duplicate", {
       entityId: claim.notification.id,
       workshopJobId,
       eventType,
-      channel: decision.channel,
-      dedupeKey: decision.dedupeKey,
+      channel: attemptDecision.channel,
+      dedupeKey: attemptDecision.dedupeKey,
       resultStatus: "noop",
     });
 
@@ -704,25 +813,25 @@ const sendWorkshopNotification = async (
     };
   }
 
-  if (decision.action === "skip") {
+  if (attemptDecision.action === "skip") {
     await finalizeWorkshopNotification(claim.notification.id, {
       deliveryStatus: "SKIPPED",
-      reasonCode: decision.reasonCode,
-      reasonMessage: decision.reasonMessage,
+      reasonCode: attemptDecision.reasonCode,
+      reasonMessage: attemptDecision.reasonMessage,
     });
     logOperationalEvent("workshop.notification.skipped", {
       entityId: claim.notification.id,
       workshopJobId,
       eventType,
-      channel: decision.channel,
-      reasonCode: decision.reasonCode,
+      channel: attemptDecision.channel,
+      reasonCode: attemptDecision.reasonCode,
       resultStatus: "noop",
     });
 
     return {
       notificationId: claim.notification.id,
       deliveryStatus: "SKIPPED" as const,
-      channel: decision.channel,
+      channel: attemptDecision.channel,
       idempotent: false,
     };
   }
@@ -730,18 +839,18 @@ const sendWorkshopNotification = async (
   try {
     const sender = await resolveStoreContext();
     const result =
-      decision.channel === "SMS"
+      attemptDecision.channel === "SMS"
         ? await sendSmsMessage({
-            to: decision.recipientPhone,
+            to: requireRecipient(attemptDecision.recipientPhone, "recipientPhone"),
             from: sender.smsFrom,
-            text: decision.text,
+            text: attemptDecision.text,
           })
         : await sendEmailMessage({
-            to: decision.recipientEmail,
+            to: requireRecipient(attemptDecision.recipientEmail, "recipientEmail"),
             from: sender.emailFrom,
-            subject: decision.subject ?? "CorePOS notification",
-            text: decision.text,
-            ...(decision.html ? { html: decision.html } : {}),
+            subject: attemptDecision.subject ?? "CorePOS notification",
+            text: attemptDecision.text,
+            ...(attemptDecision.html ? { html: attemptDecision.html } : {}),
           });
 
     await finalizeWorkshopNotification(claim.notification.id, {
@@ -754,22 +863,22 @@ const sendWorkshopNotification = async (
       entityId: claim.notification.id,
       workshopJobId,
       eventType,
-      channel: decision.channel,
+      channel: attemptDecision.channel,
       deliveryMode: result.deliveryMode,
-      recipientEmail: decision.recipientEmail,
-      recipientPhone: decision.recipientPhone,
+      recipientEmail: attemptDecision.recipientEmail,
+      recipientPhone: attemptDecision.recipientPhone,
       resultStatus: "succeeded",
     });
 
     return {
       notificationId: claim.notification.id,
       deliveryStatus: "SENT" as const,
-      channel: decision.channel,
+      channel: attemptDecision.channel,
       idempotent: false,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const reasonCode = failureReasonCodeByChannel(decision.channel);
+    const reasonCode = failureReasonCodeByChannel(attemptDecision.channel);
     await finalizeWorkshopNotification(claim.notification.id, {
       deliveryStatus: "FAILED",
       reasonCode,
@@ -779,13 +888,13 @@ const sendWorkshopNotification = async (
       notificationId: claim.notification.id,
       workshopJobId,
       eventType,
-      channel: decision.channel,
+      channel: attemptDecision.channel,
     });
     logOperationalEvent("workshop.notification.failed", {
       entityId: claim.notification.id,
       workshopJobId,
       eventType,
-      channel: decision.channel,
+      channel: attemptDecision.channel,
       resultStatus: "failed",
       reasonCode,
     });
@@ -793,7 +902,7 @@ const sendWorkshopNotification = async (
     return {
       notificationId: claim.notification.id,
       deliveryStatus: "FAILED" as const,
-      channel: decision.channel,
+      channel: attemptDecision.channel,
       idempotent: false,
     };
   }
@@ -831,6 +940,8 @@ export const deliverWorkshopNotificationEvent = async (
 };
 
 export const listWorkshopNotificationsForJob = async (workshopJobId: string) => {
+  await ensureWorkshopJobExists(workshopJobId);
+
   const notifications = await prisma.workshopNotification.findMany({
     where: {
       workshopJobId,
@@ -843,5 +954,90 @@ export const listWorkshopNotificationsForJob = async (workshopJobId: string) => 
     count: notifications.length,
   });
 
-  return notifications;
+  return {
+    workshopJobId,
+    notifications: notifications.map(toWorkshopNotificationResponse),
+  };
+};
+
+export const resendWorkshopNotificationForJob = async (
+  workshopJobId: string,
+  input: ResendWorkshopNotificationInput,
+) => {
+  const job = await ensureWorkshopJobExists(workshopJobId);
+
+  const delivery =
+    input.eventType === "QUOTE_READY"
+      ? await (async () => {
+          const currentEstimate = await prisma.workshopEstimate.findFirst({
+            where: {
+              workshopJobId,
+              supersededAt: null,
+            },
+            select: {
+              id: true,
+            },
+            orderBy: [{ version: "desc" }],
+          });
+
+          const decisions = currentEstimate
+            ? await buildQuoteReadyDecisions(workshopJobId, currentEstimate.id)
+            : [buildQuoteNotReadyDecision(workshopJobId, job.customerId ?? null)];
+          const emailDecision = decisions.find((decision) => decision.channel === "EMAIL");
+
+          if (!emailDecision) {
+            throw new HttpError(
+              500,
+              "Workshop quote resend could not resolve an email notification decision",
+              "WORKSHOP_NOTIFICATION_DECISION_MISSING",
+            );
+          }
+
+          return sendWorkshopNotification(workshopJobId, "QUOTE_READY", emailDecision, {
+            forceUniqueAttempt: true,
+          });
+        })()
+      : await (async () => {
+          const decisions = await buildReadyForCollectionDecisions(workshopJobId);
+          const emailDecision = decisions.find((decision) => decision.channel === "EMAIL");
+
+          if (!emailDecision) {
+            throw new HttpError(
+              500,
+              "Workshop ready-for-collection resend could not resolve an email notification decision",
+              "WORKSHOP_NOTIFICATION_DECISION_MISSING",
+            );
+          }
+
+          return sendWorkshopNotification(
+            workshopJobId,
+            "JOB_READY_FOR_COLLECTION",
+            emailDecision,
+            {
+              forceUniqueAttempt: true,
+            },
+          );
+        })();
+
+  const notification = await prisma.workshopNotification.findUnique({
+    where: {
+      id: delivery.notificationId,
+    },
+  });
+
+  if (!notification) {
+    throw new HttpError(
+      500,
+      "Workshop notification resend completed without a saved notification row",
+      "WORKSHOP_NOTIFICATION_MISSING",
+    );
+  }
+
+  return {
+    notification: toWorkshopNotificationResponse(notification),
+    attempt: {
+      idempotent: delivery.idempotent,
+      deliveryStatus: delivery.deliveryStatus,
+    },
+  };
 };
