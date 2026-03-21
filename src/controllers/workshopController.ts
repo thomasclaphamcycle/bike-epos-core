@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   CancellationOutcome,
   PaymentMethod,
+  WorkshopNotificationEventType,
   WorkshopJobNoteVisibility,
 } from "@prisma/client";
 import {
@@ -50,6 +51,10 @@ import {
   saveWorkshopEstimate,
   submitPublicWorkshopEstimateQuoteDecision,
 } from "../services/workshopEstimateService";
+import {
+  listWorkshopNotificationsForJob,
+  resendWorkshopNotificationForJob,
+} from "../services/notificationService";
 import { HttpError } from "../utils/http";
 
 const parsePaymentMethod = (
@@ -124,6 +129,20 @@ const parseOptionalIntegerQuery = (value: unknown, field: string): number | unde
   return parsed;
 };
 
+const parseWorkshopNotificationEventType = (
+  value: unknown,
+): WorkshopNotificationEventType => {
+  if (value === "QUOTE_READY" || value === "JOB_READY_FOR_COLLECTION") {
+    return value;
+  }
+
+  throw new HttpError(
+    400,
+    "eventType must be QUOTE_READY or JOB_READY_FOR_COLLECTION",
+    "INVALID_NOTIFICATION_EVENT_TYPE",
+  );
+};
+
 export const createWorkshopJobHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     customerId?: string | null;
@@ -186,6 +205,29 @@ export const listWorkshopJobsHandler = async (req: Request, res: Response) => {
 export const getWorkshopJobHandler = async (req: Request, res: Response) => {
   const result = await getWorkshopJobById(req.params.id);
   res.json(result);
+};
+
+export const listWorkshopJobNotificationsHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await listWorkshopNotificationsForJob(req.params.id);
+  res.json(result);
+};
+
+export const resendWorkshopJobNotificationHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    eventType?: unknown;
+  };
+
+  const result = await resendWorkshopNotificationForJob(req.params.id, {
+    eventType: parseWorkshopNotificationEventType(body.eventType),
+  });
+
+  res.status(201).json(result);
 };
 
 export const patchWorkshopJobHandler = async (req: Request, res: Response) => {

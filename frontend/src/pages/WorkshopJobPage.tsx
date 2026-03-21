@@ -15,6 +15,11 @@ import {
   workshopEstimateStatusClass,
   workshopEstimateStatusLabel,
 } from "../features/workshop/estimateStatus";
+import {
+  workshopNotificationDeliveryStatusClass,
+  workshopNotificationDeliveryStatusLabel,
+  workshopNotificationEventLabel,
+} from "../features/workshop/notificationStatus";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
 
@@ -207,6 +212,28 @@ type WorkshopNotesResponse = {
   notes: WorkshopNote[];
 };
 
+type WorkshopNotificationRecord = {
+  id: string;
+  workshopJobId: string;
+  workshopEstimateId: string | null;
+  channel: "EMAIL";
+  eventType: "QUOTE_READY" | "JOB_READY_FOR_COLLECTION";
+  deliveryStatus: "PENDING" | "SENT" | "SKIPPED" | "FAILED";
+  recipientEmail: string | null;
+  subject: string | null;
+  messageSummary: string | null;
+  reasonCode: string | null;
+  reasonMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WorkshopNotificationsResponse = {
+  workshopJobId: string;
+  notifications: WorkshopNotificationRecord[];
+};
+
 type ProductSearchRow = {
   id: string;
   productId: string;
@@ -265,6 +292,11 @@ const truncateText = (value: string, limit = 96) =>
 
 const formatOptionalDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
+
+const notificationActionLabel = (
+  eventType: WorkshopNotificationRecord["eventType"],
+) =>
+  eventType === "QUOTE_READY" ? "quote email" : "ready-for-collection email";
 
 const getWorkflowGuidance = (input: {
   rawStatus: string;
@@ -365,9 +397,11 @@ export const WorkshopJobPage = () => {
 
   const [payload, setPayload] = useState<WorkshopJobResponse | null>(null);
   const [notes, setNotes] = useState<WorkshopNote[]>([]);
+  const [notifications, setNotifications] = useState<WorkshopNotificationRecord[]>([]);
   const [partsPayload, setPartsPayload] = useState<WorkshopPartsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [partsLoading, setPartsLoading] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
   const [customerBikesLoading, setCustomerBikesLoading] = useState(false);
@@ -401,6 +435,9 @@ export const WorkshopJobPage = () => {
   const [savingBikeLink, setSavingBikeLink] = useState(false);
   const [savingEstimate, setSavingEstimate] = useState(false);
   const [preparingCustomerQuote, setPreparingCustomerQuote] = useState(false);
+  const [resendingNotificationType, setResendingNotificationType] = useState<
+    WorkshopNotificationRecord["eventType"] | null
+  >(null);
 
   const canPostCustomerNotes = isManagerPlus(user?.role);
 
@@ -467,6 +504,28 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const loadNotifications = async () => {
+    if (!id) {
+      return;
+    }
+
+    setNotificationsLoading(true);
+    try {
+      const response = await apiGet<WorkshopNotificationsResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(id)}/notifications`,
+      );
+      setNotifications(response.notifications || []);
+    } catch (loadError) {
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load workshop notifications";
+      error(message);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
   const loadParts = async () => {
     if (!id) {
       return;
@@ -485,7 +544,7 @@ export const WorkshopJobPage = () => {
   };
 
   useEffect(() => {
-    void Promise.all([loadJob(), loadNotes(), loadParts()]);
+    void Promise.all([loadJob(), loadNotes(), loadNotifications(), loadParts()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -541,7 +600,7 @@ export const WorkshopJobPage = () => {
     try {
       await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/status`, { status: nextStatus });
       success("Workflow status updated");
-      await loadJob();
+      await Promise.all([loadJob(), loadNotifications()]);
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update status";
       error(message);
@@ -582,7 +641,7 @@ export const WorkshopJobPage = () => {
             ? "Quote marked rejected"
             : "Quote marked pending approval",
       );
-      await loadJob();
+      await Promise.all([loadJob(), loadNotifications()]);
     } catch (approvalError) {
       const message = approvalError instanceof Error ? approvalError.message : "Failed to update approval state";
       error(message);
@@ -630,12 +689,62 @@ export const WorkshopJobPage = () => {
           ? "Customer quote link copied"
           : "Customer quote link prepared and copied",
       );
-      await loadJob();
+      await Promise.all([loadJob(), loadNotifications()]);
     } catch (quoteError) {
       const message = quoteError instanceof Error ? quoteError.message : "Failed to prepare customer quote link";
       error(message);
     } finally {
       setPreparingCustomerQuote(false);
+    }
+  };
+
+  const resendNotification = async (
+    eventType: WorkshopNotificationRecord["eventType"],
+  ) => {
+    if (!id) {
+      return;
+    }
+
+    setResendingNotificationType(eventType);
+    try {
+      const response = await apiPost<{
+        notification: WorkshopNotificationRecord;
+        attempt: {
+          idempotent: boolean;
+          deliveryStatus: WorkshopNotificationRecord["deliveryStatus"];
+        };
+      }>(`/api/workshop/jobs/${encodeURIComponent(id)}/notifications/resend`, {
+        eventType,
+      });
+
+      const actionLabel = notificationActionLabel(eventType);
+      const reasonMessage =
+        response.notification.reasonMessage ||
+        "The current job state prevented this email from being sent.";
+
+      if (response.notification.deliveryStatus === "SENT") {
+        success(
+          eventType === "QUOTE_READY"
+            ? "Quote email sent again"
+            : "Ready-for-collection email sent again",
+        );
+      } else if (response.notification.deliveryStatus === "SKIPPED") {
+        error(`The ${actionLabel} was skipped. ${reasonMessage}`);
+      } else if (response.notification.deliveryStatus === "FAILED") {
+        error(`The ${actionLabel} failed to send. ${reasonMessage}`);
+      } else {
+        success(`The ${actionLabel} is being sent.`);
+      }
+
+      await loadNotifications();
+    } catch (resendError) {
+      const message =
+        resendError instanceof Error
+          ? resendError.message
+          : "Failed to resend workshop notification";
+      error(message);
+    } finally {
+      setResendingNotificationType(null);
     }
   };
 
@@ -950,6 +1059,8 @@ export const WorkshopJobPage = () => {
   const rawStatus = useMemo(() => toRawStatus(payload?.job), [payload?.job]);
   const currentEstimate = payload?.currentEstimate ?? null;
   const estimateHistory = payload?.estimateHistory ?? [];
+  const canResendQuoteNotification = currentEstimate?.status === "PENDING_APPROVAL";
+  const canResendReadyNotification = rawStatus === "BIKE_READY";
   const currentEstimateQuoteUrl = currentEstimate?.customerQuote?.publicPath
     ? toPublicAppUrl(currentEstimate.customerQuote.publicPath)
     : null;
@@ -1550,6 +1661,104 @@ export const WorkshopJobPage = () => {
                     </tr>
                   );
                 })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Notifications</h2>
+            <p className="muted-text">
+              Review workshop email attempts here and resend the current quote or collection email when the job state still supports it.
+            </p>
+          </div>
+          <div className="actions-inline">
+            <button
+              type="button"
+              onClick={() => void resendNotification("QUOTE_READY")}
+              disabled={!canResendQuoteNotification || resendingNotificationType !== null}
+            >
+              {resendingNotificationType === "QUOTE_READY"
+                ? "Resending Quote Email..."
+                : "Resend Quote Email"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void resendNotification("JOB_READY_FOR_COLLECTION")}
+              disabled={!canResendReadyNotification || resendingNotificationType !== null}
+            >
+              {resendingNotificationType === "JOB_READY_FOR_COLLECTION"
+                ? "Resending Collection Email..."
+                : "Resend Collection Email"}
+            </button>
+          </div>
+        </div>
+
+        <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
+          Quote email resend stays available while a current quote is awaiting approval. Collection email resend stays available while the bike is ready for collection.
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Notification</th>
+                <th>Attempted</th>
+                <th>Status</th>
+                <th>Recipient</th>
+                <th>Summary</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {notificationsLoading ? (
+                <tr>
+                  <td colSpan={6}>Loading notifications...</td>
+                </tr>
+              ) : notifications.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>No workshop emails have been attempted for this job yet.</td>
+                </tr>
+              ) : (
+                notifications.map((notification) => (
+                  <tr key={notification.id}>
+                    <td>
+                      <div className="table-primary">
+                        {workshopNotificationEventLabel(notification.eventType)}
+                      </div>
+                      <div className="table-secondary">
+                        {notification.channel === "EMAIL" ? "Email" : notification.channel}
+                      </div>
+                    </td>
+                    <td>{formatOptionalDateTime(notification.createdAt)}</td>
+                    <td>
+                      <span
+                        className={workshopNotificationDeliveryStatusClass(
+                          notification.deliveryStatus,
+                        )}
+                      >
+                        {workshopNotificationDeliveryStatusLabel(
+                          notification.deliveryStatus,
+                        )}
+                      </span>
+                    </td>
+                    <td>{notification.recipientEmail || "No customer email"}</td>
+                    <td>{notification.subject || notification.messageSummary || "-"}</td>
+                    <td>
+                      {notification.reasonMessage ||
+                        (notification.deliveryStatus === "SENT"
+                          ? `Sent ${formatOptionalDateTime(
+                              notification.sentAt || notification.createdAt,
+                            )}`
+                          : notification.deliveryStatus === "PENDING"
+                            ? "Delivery is still being recorded."
+                            : "-")}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
