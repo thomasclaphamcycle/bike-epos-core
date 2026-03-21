@@ -159,8 +159,8 @@ Current internal subscribers are:
 - notification subscribers in `src/core/notificationSubscribers.ts`
   - currently listen to `workshop.quote.ready` and `workshop.job.ready_for_collection`
   - create persistent `WorkshopNotification` rows for sent, skipped, failed, and duplicate-safe notification outcomes
-  - send simple email-first workshop customer messages through `src/services/notificationService.ts` and `src/services/emailService.ts`
-  - default to log-mode delivery locally, while allowing SMTP delivery from environment configuration
+  - send simple workshop customer messages through `src/services/notificationService.ts`, `src/services/emailService.ts`, and `src/services/smsService.ts`
+  - default to log-mode delivery locally, while allowing SMTP email delivery and Twilio-backed SMS delivery from environment configuration
 
 Manager-facing internal visibility now exists through:
 
@@ -171,4 +171,4 @@ Manager-facing internal visibility now exists through:
 
 These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow email-first notification events above; SMS, WhatsApp, push notifications, webhooks, customer preferences, and background scheduling remain intentionally out of scope.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow quote-ready and ready-for-collection notification events above; WhatsApp, push notifications, webhooks, customer preferences, and background scheduling remain intentionally out of scope.

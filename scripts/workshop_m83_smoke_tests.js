@@ -182,9 +182,16 @@ const createCustomer = async (state, overrides = {}) => {
   const ref = uniqueRef();
   const body = {
     name: overrides.name || `M83 Customer ${ref}`,
-    phone: overrides.phone || `07000${String(Math.floor(Math.random() * 90000) + 10000)}`,
     notes: overrides.notes || "M83 customer for workshop estimate coverage",
   };
+
+  if (Object.prototype.hasOwnProperty.call(overrides, "phone")) {
+    if (typeof overrides.phone === "string") {
+      body.phone = overrides.phone;
+    }
+  } else {
+    body.phone = `07000${String(Math.floor(Math.random() * 90000) + 10000)}`;
+  }
 
   if (Object.prototype.hasOwnProperty.call(overrides, "email")) {
     if (typeof overrides.email === "string") {
@@ -738,7 +745,7 @@ const run = async () => {
       assert.equal(staleApprove.json.error.code, "WORKSHOP_QUOTE_SUPERSEDED");
     }, results);
 
-    await runTest("quote-ready notifications are logged, deduplicated, and skipped safely without email", async () => {
+    await runTest("quote-ready notifications are logged, deduplicated, and skipped safely by channel", async () => {
       const customer = await createCustomer(state, {
         name: "Quote Email Customer",
         email: `quote-ready-${uniqueRef()}@example.com`,
@@ -773,20 +780,38 @@ const run = async () => {
       assert.equal(pendingDetail.status, 200, JSON.stringify(pendingDetail.json));
       assert.equal(pendingDetail.json.currentEstimate.customerQuote.status, "ACTIVE");
 
-      const sentNotification = await waitForNotification(
+      const sentEmailNotification = await waitForNotification(
         {
           workshopJobId: job.id,
           eventType: "QUOTE_READY",
+          channel: "EMAIL",
         },
         "SENT",
       );
-      assert.ok(sentNotification, "Expected quote-ready notification row");
-      assert.equal(sentNotification.deliveryStatus, "SENT");
-      assert.equal(sentNotification.recipientEmail, customer.email);
+      assert.ok(sentEmailNotification, "Expected quote-ready email notification row");
+      assert.equal(sentEmailNotification.deliveryStatus, "SENT");
+      assert.equal(sentEmailNotification.recipientEmail, customer.email);
       assert.ok(
-        typeof sentNotification.subject === "string" &&
-          sentNotification.subject.toLowerCase().includes("quote"),
-        sentNotification.subject,
+        typeof sentEmailNotification.subject === "string" &&
+          sentEmailNotification.subject.toLowerCase().includes("quote"),
+        sentEmailNotification.subject,
+      );
+
+      const sentSmsNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+          channel: "SMS",
+        },
+        "SENT",
+      );
+      assert.ok(sentSmsNotification, "Expected quote-ready SMS notification row");
+      assert.equal(sentSmsNotification.deliveryStatus, "SENT");
+      assert.equal(sentSmsNotification.recipientPhone, customer.phone);
+      assert.ok(
+        typeof sentSmsNotification.bodyText === "string" &&
+          sentSmsNotification.bodyText.toLowerCase().includes("quote"),
+        sentSmsNotification.bodyText,
       );
 
       const replayApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
@@ -802,7 +827,7 @@ const run = async () => {
           eventType: "QUOTE_READY",
         },
       });
-      assert.equal(notificationCount, 1);
+      assert.equal(notificationCount, 2);
 
       const noEmailCustomer = await createCustomer(state, {
         name: "No Email Quote Customer",
@@ -832,16 +857,80 @@ const run = async () => {
       });
       assert.equal(noEmailApproval.status, 201, JSON.stringify(noEmailApproval.json));
 
-      const skippedNotification = await waitForNotification(
+      const skippedEmailNotification = await waitForNotification(
         {
           workshopJobId: noEmailJob.job.id,
           eventType: "QUOTE_READY",
+          channel: "EMAIL",
         },
         "SKIPPED",
       );
-      assert.ok(skippedNotification, "Expected skipped quote-ready notification row");
-      assert.equal(skippedNotification.deliveryStatus, "SKIPPED");
-      assert.equal(skippedNotification.reasonCode, "CUSTOMER_EMAIL_MISSING");
+      assert.ok(skippedEmailNotification, "Expected skipped quote-ready email notification row");
+      assert.equal(skippedEmailNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedEmailNotification.reasonCode, "CUSTOMER_EMAIL_MISSING");
+
+      const sentSmsWithoutEmail = await waitForNotification(
+        {
+          workshopJobId: noEmailJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "SMS",
+        },
+        "SENT",
+      );
+      assert.ok(sentSmsWithoutEmail, "Expected quote-ready SMS without email");
+      assert.equal(sentSmsWithoutEmail.deliveryStatus, "SENT");
+      assert.equal(sentSmsWithoutEmail.recipientPhone, noEmailCustomer.phone);
+
+      const noPhoneCustomer = await createCustomer(state, {
+        name: "No Phone Quote Customer",
+        phone: undefined,
+      });
+      const noPhoneJob = await createJob(state, {
+        customerId: noPhoneCustomer.id,
+        bikeDescription: "No phone city bike",
+      });
+
+      const noPhoneLine = await fetchJson(`/api/workshop/jobs/${noPhoneJob.job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "No phone quote labour",
+          qty: 1,
+          unitPricePence: 4300,
+        }),
+      });
+      assert.equal(noPhoneLine.status, 201, JSON.stringify(noPhoneLine.json));
+
+      const noPhoneApproval = await fetchJson(`/api/workshop/jobs/${noPhoneJob.job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(noPhoneApproval.status, 201, JSON.stringify(noPhoneApproval.json));
+
+      const sentEmailWithoutPhone = await waitForNotification(
+        {
+          workshopJobId: noPhoneJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "EMAIL",
+        },
+        "SENT",
+      );
+      assert.ok(sentEmailWithoutPhone, "Expected quote-ready email without phone");
+      assert.equal(sentEmailWithoutPhone.recipientEmail, noPhoneCustomer.email);
+
+      const skippedSmsNotification = await waitForNotification(
+        {
+          workshopJobId: noPhoneJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "SMS",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedSmsNotification, "Expected skipped quote-ready SMS row");
+      assert.equal(skippedSmsNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedSmsNotification.reasonCode, "CUSTOMER_PHONE_MISSING");
     }, results);
 
     await runTest("customer quote links can be reused safely and customer rejection is idempotent", async () => {
@@ -933,16 +1022,29 @@ const run = async () => {
       assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
       assert.equal(toReady.json.job.status, "BIKE_READY");
 
-      const sentNotification = await waitForNotification(
+      const sentEmailNotification = await waitForNotification(
         {
           workshopJobId: job.id,
           eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "EMAIL",
         },
         "SENT",
       );
-      assert.ok(sentNotification, "Expected ready-for-collection notification row");
-      assert.equal(sentNotification.deliveryStatus, "SENT");
-      assert.equal(sentNotification.recipientEmail, customer.email);
+      assert.ok(sentEmailNotification, "Expected ready-for-collection email notification row");
+      assert.equal(sentEmailNotification.deliveryStatus, "SENT");
+      assert.equal(sentEmailNotification.recipientEmail, customer.email);
+
+      const sentSmsNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "SMS",
+        },
+        "SENT",
+      );
+      assert.ok(sentSmsNotification, "Expected ready-for-collection SMS notification row");
+      assert.equal(sentSmsNotification.deliveryStatus, "SENT");
+      assert.equal(sentSmsNotification.recipientPhone, customer.phone);
 
       const readyReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -957,7 +1059,7 @@ const run = async () => {
           eventType: "JOB_READY_FOR_COLLECTION",
         },
       });
-      assert.equal(notificationCount, 1);
+      assert.equal(notificationCount, 2);
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {
