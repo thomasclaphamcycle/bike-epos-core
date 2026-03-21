@@ -25,10 +25,13 @@ Optional operational variable:
 - `SMTP_URL`: required when `EMAIL_DELIVERY_MODE=smtp`
 - `EMAIL_FROM`: optional sender email override for workshop notifications
 - `EMAIL_FROM_NAME`: optional sender display-name override for workshop notifications
+- `WORKSHOP_NOTIFICATION_EMAIL_ENABLED=0|1`: optional smart-delivery gate for workshop email notifications, defaults to enabled
 - `SMS_DELIVERY_MODE=log|twilio`: `log` is safe for evaluation and local testing, while `twilio` enables real SMS delivery
 - `SMS_FROM`: optional sender override for workshop SMS notifications and required when `SMS_DELIVERY_MODE=twilio`
+- `WORKSHOP_NOTIFICATION_SMS_ENABLED=0|1`: optional smart-delivery gate for workshop SMS notifications, defaults to enabled
 - `WHATSAPP_DELIVERY_MODE=log|twilio`: `log` is safe for evaluation and local testing, while `twilio` enables real WhatsApp delivery
 - `WHATSAPP_FROM`: optional sender override for workshop WhatsApp notifications and required when `WHATSAPP_DELIVERY_MODE=twilio`
+- `WORKSHOP_NOTIFICATION_WHATSAPP_ENABLED=0|1`: optional smart-delivery gate for workshop WhatsApp notifications, defaults to enabled
 - `TWILIO_ACCOUNT_SID`: required when `SMS_DELIVERY_MODE=twilio` or `WHATSAPP_DELIVERY_MODE=twilio`
 - `TWILIO_AUTH_TOKEN`: required when `SMS_DELIVERY_MODE=twilio` or `WHATSAPP_DELIVERY_MODE=twilio`
 

@@ -10,6 +10,13 @@ export type WorkshopNotificationDeliveryStatus =
 
 export type WorkshopNotificationChannel = "EMAIL" | "SMS" | "WHATSAPP";
 
+export type WorkshopNotificationStrategy = {
+  mode: "AUTOMATED" | "MANUAL_RESEND";
+  priorityRank: number | null;
+  priorityType: "PRIMARY" | "FALLBACK" | null;
+  label: string | null;
+};
+
 export const workshopNotificationEventLabel = (
   eventType: WorkshopNotificationEventType | string | null | undefined,
 ) => {
@@ -69,3 +76,7 @@ export const workshopNotificationChannelLabel = (
       return channel || "-";
   }
 };
+
+export const workshopNotificationStrategyLabel = (
+  strategy: WorkshopNotificationStrategy | null | undefined,
+) => strategy?.label || null;

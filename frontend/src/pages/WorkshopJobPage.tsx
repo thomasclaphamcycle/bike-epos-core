@@ -20,6 +20,7 @@ import {
   workshopNotificationDeliveryStatusClass,
   workshopNotificationDeliveryStatusLabel,
   workshopNotificationEventLabel,
+  workshopNotificationStrategyLabel,
 } from "../features/workshop/notificationStatus";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
@@ -229,6 +230,12 @@ type WorkshopNotificationRecord = {
   sentAt: string | null;
   createdAt: string;
   updatedAt: string;
+  strategy: {
+    mode: "AUTOMATED" | "MANUAL_RESEND";
+    priorityRank: number | null;
+    priorityType: "PRIMARY" | "FALLBACK" | null;
+    label: string | null;
+  } | null;
 };
 
 type WorkshopNotificationsResponse = {
@@ -304,6 +311,11 @@ const notificationRecipientLabel = (notification: WorkshopNotificationRecord) =>
   notification.channel === "EMAIL"
     ? notification.recipientEmail || "No customer email"
     : notification.recipientPhone || "No customer phone";
+
+const notificationChannelSummaryLabel = (notification: WorkshopNotificationRecord) =>
+  [workshopNotificationChannelLabel(notification.channel), workshopNotificationStrategyLabel(notification.strategy)]
+    .filter(Boolean)
+    .join(" • ");
 
 const getWorkflowGuidance = (input: {
   rawStatus: string;
@@ -1705,7 +1717,7 @@ export const WorkshopJobPage = () => {
         </div>
 
         <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
-          Notification history shows email, SMS, and WhatsApp attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
+          Smart delivery now chooses one primary channel with fallback only when needed, so this history shows the final delivery path plus any skipped or failed fallback attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
         </div>
 
         <div className="table-wrap">
@@ -1737,7 +1749,7 @@ export const WorkshopJobPage = () => {
                         {workshopNotificationEventLabel(notification.eventType)}
                       </div>
                       <div className="table-secondary">
-                        {workshopNotificationChannelLabel(notification.channel)}
+                        {notificationChannelSummaryLabel(notification)}
                       </div>
                     </td>
                     <td>{formatOptionalDateTime(notification.createdAt)}</td>
