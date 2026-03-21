@@ -238,13 +238,34 @@ const createBike = async (state, customerId, overrides = {}) => {
       label: overrides.label || `M83 Bike ${ref}`,
       make: overrides.make || "Trek",
       model: overrides.model || "Domane",
+      year: Object.prototype.hasOwnProperty.call(overrides, "year") ? overrides.year : undefined,
+      bikeType: overrides.bikeType || undefined,
       colour: overrides.colour || "Blue",
+      wheelSize: overrides.wheelSize || undefined,
+      frameSize: overrides.frameSize || undefined,
+      groupset: overrides.groupset || undefined,
+      motorBrand: overrides.motorBrand || undefined,
+      motorModel: overrides.motorModel || undefined,
+      batterySerial: overrides.batterySerial || undefined,
       frameNumber: overrides.frameNumber || `FRAME-${ref}`,
+      serialNumber: overrides.serialNumber || undefined,
+      registrationNumber: overrides.registrationNumber || undefined,
       notes: overrides.notes || "Workshop-linked bike record",
     }),
   });
 
   assert.equal(response.status, 201, JSON.stringify(response.json));
+  return response.json.bike;
+};
+
+const updateBike = async (bikeId, overrides = {}) => {
+  const response = await fetchJson(`/api/customers/bikes/${bikeId}`, {
+    method: "PATCH",
+    headers: STAFF_HEADERS,
+    body: JSON.stringify(overrides),
+  });
+
+  assert.equal(response.status, 200, JSON.stringify(response.json));
   return response.json.bike;
 };
 
@@ -535,6 +556,65 @@ const run = async () => {
       assert.equal(detail.json.job.bike.id, bike.id);
       assert.match(detail.json.job.bikeDescription, /Blue commuter/);
       assert.match(detail.json.job.bikeDescription, /Genesis Croix de Fer/);
+    }, results);
+
+    await runTest("customer bike structured profile fields round-trip through create and update flows", async () => {
+      const customer = await createCustomer(state, {
+        name: `Bike Profile Customer ${uniqueRef()}`,
+      });
+      const bike = await createBike(state, customer.id, {
+        label: "Structured bike",
+        make: "Specialized",
+        model: "Turbo Vado",
+        year: 2024,
+        bikeType: "e-bike",
+        wheelSize: "700c",
+        frameSize: "L",
+        groupset: "Shimano Deore",
+        motorBrand: "Brose",
+        motorModel: "Drive S Mag",
+        batterySerial: "BAT-12345",
+      });
+
+      assert.equal(bike.year, 2024);
+      assert.equal(bike.bikeType, "E-BIKE");
+      assert.equal(bike.wheelSize, "700c");
+      assert.equal(bike.frameSize, "L");
+      assert.equal(bike.groupset, "Shimano Deore");
+      assert.equal(bike.motorBrand, "Brose");
+      assert.equal(bike.motorModel, "Drive S Mag");
+      assert.equal(bike.batterySerial, "BAT-12345");
+      assert.match(bike.displayName, /Structured bike/);
+      assert.doesNotMatch(bike.displayName, /E-BIKE/);
+
+      const updatedBike = await updateBike(bike.id, {
+        year: 2025,
+        bikeType: "hybrid",
+        wheelSize: "650b",
+        frameSize: "M",
+        groupset: "Shimano GRX",
+        motorBrand: null,
+        motorModel: null,
+        batterySerial: null,
+      });
+
+      assert.equal(updatedBike.year, 2025);
+      assert.equal(updatedBike.bikeType, "HYBRID");
+      assert.equal(updatedBike.wheelSize, "650b");
+      assert.equal(updatedBike.frameSize, "M");
+      assert.equal(updatedBike.groupset, "Shimano GRX");
+      assert.equal(updatedBike.motorBrand, null);
+      assert.equal(updatedBike.motorModel, null);
+      assert.equal(updatedBike.batterySerial, null);
+
+      const history = await fetchJson(`/api/customers/bikes/${bike.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(history.status, 200, JSON.stringify(history.json));
+      assert.equal(history.json.bike.year, 2025);
+      assert.equal(history.json.bike.bikeType, "HYBRID");
+      assert.equal(history.json.bike.groupset, "Shimano GRX");
+      assert.equal(history.json.bike.motorBrand, null);
     }, results);
 
     await runTest("bike history only includes truly linked jobs and exposes workshop history details", async () => {

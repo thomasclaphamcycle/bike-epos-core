@@ -7,11 +7,38 @@ type CreateCustomerBikeInput = {
   label?: string;
   make?: string;
   model?: string;
+  year?: number | null;
+  bikeType?: string | null;
   colour?: string;
+  wheelSize?: string | null;
+  frameSize?: string | null;
+  groupset?: string | null;
+  motorBrand?: string | null;
+  motorModel?: string | null;
+  batterySerial?: string | null;
   frameNumber?: string;
   serialNumber?: string;
   registrationNumber?: string;
   notes?: string;
+};
+
+type UpdateCustomerBikeInput = {
+  label?: string | null;
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  bikeType?: string | null;
+  colour?: string | null;
+  wheelSize?: string | null;
+  frameSize?: string | null;
+  groupset?: string | null;
+  motorBrand?: string | null;
+  motorModel?: string | null;
+  batterySerial?: string | null;
+  frameNumber?: string | null;
+  serialNumber?: string | null;
+  registrationNumber?: string | null;
+  notes?: string | null;
 };
 
 const customerBikeSelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
@@ -20,7 +47,15 @@ const customerBikeSelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
   label: true,
   make: true,
   model: true,
+  year: true,
+  bikeType: true,
   colour: true,
+  wheelSize: true,
+  frameSize: true,
+  groupset: true,
+  motorBrand: true,
+  motorModel: true,
+  batterySerial: true,
   frameNumber: true,
   serialNumber: true,
   registrationNumber: true,
@@ -69,6 +104,19 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const normalizeOptionalBikeType = (value: string | undefined | null): string | undefined => {
+  const normalized = normalizeOptionalText(value);
+  return normalized ? normalized.toUpperCase() : undefined;
+};
+
+const normalizeOptionalYear = (value: number | undefined | null): number | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return value;
+};
+
 const buildCustomerDisplayName = (customer: {
   name: string;
   firstName: string;
@@ -83,18 +131,26 @@ const buildCustomerDisplayName = (customer: {
 };
 
 const buildWorkshopStartContext = (input: {
-  bike: {
-    id: string;
-    customerId: string;
-    label?: string | null;
-    make?: string | null;
-    model?: string | null;
-    colour?: string | null;
-    frameNumber?: string | null;
-    serialNumber?: string | null;
-    registrationNumber?: string | null;
-    notes?: string | null;
-    createdAt?: Date;
+    bike: {
+      id: string;
+      customerId: string;
+      label?: string | null;
+      make?: string | null;
+      model?: string | null;
+      year?: number | null;
+      bikeType?: string | null;
+      colour?: string | null;
+      wheelSize?: string | null;
+      frameSize?: string | null;
+      groupset?: string | null;
+      motorBrand?: string | null;
+      motorModel?: string | null;
+      batterySerial?: string | null;
+      frameNumber?: string | null;
+      serialNumber?: string | null;
+      registrationNumber?: string | null;
+      notes?: string | null;
+      createdAt?: Date;
     updatedAt?: Date;
   };
   customer: {
@@ -157,7 +213,15 @@ export const buildCustomerBikeDisplayName = (input: {
   label?: string | null;
   make?: string | null;
   model?: string | null;
+  year?: number | null;
+  bikeType?: string | null;
   colour?: string | null;
+  wheelSize?: string | null;
+  frameSize?: string | null;
+  groupset?: string | null;
+  motorBrand?: string | null;
+  motorModel?: string | null;
+  batterySerial?: string | null;
   frameNumber?: string | null;
   serialNumber?: string | null;
   registrationNumber?: string | null;
@@ -188,7 +252,15 @@ const toCustomerBikeResponse = (bike: CustomerBikeRecord) => ({
   label: bike.label,
   make: bike.make,
   model: bike.model,
+  year: bike.year,
+  bikeType: bike.bikeType,
   colour: bike.colour,
+  wheelSize: bike.wheelSize,
+  frameSize: bike.frameSize,
+  groupset: bike.groupset,
+  motorBrand: bike.motorBrand,
+  motorModel: bike.motorModel,
+  batterySerial: bike.batterySerial,
   frameNumber: bike.frameNumber,
   serialNumber: bike.serialNumber,
   registrationNumber: bike.registrationNumber,
@@ -331,7 +403,15 @@ export const createCustomerBike = async (
   const label = normalizeOptionalText(input.label);
   const make = normalizeOptionalText(input.make);
   const model = normalizeOptionalText(input.model);
+  const year = normalizeOptionalYear(input.year);
+  const bikeType = normalizeOptionalBikeType(input.bikeType);
   const colour = normalizeOptionalText(input.colour);
+  const wheelSize = normalizeOptionalText(input.wheelSize);
+  const frameSize = normalizeOptionalText(input.frameSize);
+  const groupset = normalizeOptionalText(input.groupset);
+  const motorBrand = normalizeOptionalText(input.motorBrand);
+  const motorModel = normalizeOptionalText(input.motorModel);
+  const batterySerial = normalizeOptionalText(input.batterySerial);
   const frameNumber = normalizeOptionalText(input.frameNumber);
   const serialNumber = normalizeOptionalText(input.serialNumber);
   const registrationNumber = normalizeOptionalText(input.registrationNumber);
@@ -356,7 +436,15 @@ export const createCustomerBike = async (
         label,
         make,
         model,
+        year,
+        bikeType,
         colour,
+        wheelSize,
+        frameSize,
+        groupset,
+        motorBrand,
+        motorModel,
+        batterySerial,
         frameNumber,
         serialNumber,
         registrationNumber,
@@ -369,6 +457,108 @@ export const createCustomerBike = async (
       bike: toCustomerBikeResponse(bike),
     };
   });
+};
+
+export const updateCustomerBike = async (
+  customerBikeId: string,
+  input: UpdateCustomerBikeInput,
+) => {
+  const bike = await getCustomerBikeByIdTx(prisma, customerBikeId);
+
+  const resolveUpdatedText = (
+    value: string | null | undefined,
+    currentValue: string | null,
+  ) => (value !== undefined ? normalizeOptionalText(value) ?? null : currentValue);
+  const resolveUpdatedBikeType = (
+    value: string | null | undefined,
+    currentValue: string | null,
+  ) => (value !== undefined ? normalizeOptionalBikeType(value) ?? null : currentValue);
+
+  const label = input.label !== undefined
+    ? resolveUpdatedText(input.label, bike.label)
+    : bike.label;
+  const make = input.make !== undefined
+    ? resolveUpdatedText(input.make, bike.make)
+    : bike.make;
+  const model = input.model !== undefined
+    ? resolveUpdatedText(input.model, bike.model)
+    : bike.model;
+  const year = input.year !== undefined
+    ? normalizeOptionalYear(input.year)
+    : bike.year ?? undefined;
+  const bikeType = input.bikeType !== undefined
+    ? resolveUpdatedBikeType(input.bikeType, bike.bikeType)
+    : bike.bikeType;
+  const colour = input.colour !== undefined
+    ? resolveUpdatedText(input.colour, bike.colour)
+    : bike.colour;
+  const wheelSize = input.wheelSize !== undefined
+    ? resolveUpdatedText(input.wheelSize, bike.wheelSize)
+    : bike.wheelSize;
+  const frameSize = input.frameSize !== undefined
+    ? resolveUpdatedText(input.frameSize, bike.frameSize)
+    : bike.frameSize;
+  const groupset = input.groupset !== undefined
+    ? resolveUpdatedText(input.groupset, bike.groupset)
+    : bike.groupset;
+  const motorBrand = input.motorBrand !== undefined
+    ? resolveUpdatedText(input.motorBrand, bike.motorBrand)
+    : bike.motorBrand;
+  const motorModel = input.motorModel !== undefined
+    ? resolveUpdatedText(input.motorModel, bike.motorModel)
+    : bike.motorModel;
+  const batterySerial = input.batterySerial !== undefined
+    ? resolveUpdatedText(input.batterySerial, bike.batterySerial)
+    : bike.batterySerial;
+  const frameNumber = input.frameNumber !== undefined
+    ? resolveUpdatedText(input.frameNumber, bike.frameNumber)
+    : bike.frameNumber;
+  const serialNumber = input.serialNumber !== undefined
+    ? resolveUpdatedText(input.serialNumber, bike.serialNumber)
+    : bike.serialNumber;
+  const registrationNumber = input.registrationNumber !== undefined
+    ? resolveUpdatedText(input.registrationNumber, bike.registrationNumber)
+    : bike.registrationNumber;
+  const notes = input.notes !== undefined
+    ? resolveUpdatedText(input.notes, bike.notes)
+    : bike.notes;
+
+  validateCustomerBikeIdentity({
+    label: label ?? undefined,
+    make: make ?? undefined,
+    model: model ?? undefined,
+    colour: colour ?? undefined,
+    frameNumber: frameNumber ?? undefined,
+    serialNumber: serialNumber ?? undefined,
+    registrationNumber: registrationNumber ?? undefined,
+  });
+
+  const updatedBike = await prisma.customerBike.update({
+    where: { id: customerBikeId },
+    data: {
+      label,
+      make,
+      model,
+      year: year ?? null,
+      bikeType,
+      colour,
+      wheelSize,
+      frameSize,
+      groupset,
+      motorBrand,
+      motorModel,
+      batterySerial,
+      frameNumber,
+      serialNumber,
+      registrationNumber,
+      notes,
+    },
+    select: customerBikeSelect,
+  });
+
+  return {
+    bike: toCustomerBikeResponse(updatedBike),
+  };
 };
 
 export const toWorkshopBikeResponse = (bike: CustomerBikeRecord | null) =>
