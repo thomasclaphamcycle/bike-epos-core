@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
+import {
+  workshopEstimateStatusClass,
+  workshopEstimateStatusLabel,
+  workshopQuoteAccessStatusClass,
+  workshopQuoteAccessStatusLabel,
+} from "../features/workshop/estimateStatus";
 
 type PublicWorkshopQuotePayload = {
   quote: {
@@ -87,54 +93,6 @@ const formatOptionalDateTime = (value: string | null | undefined) => {
   return date.toLocaleString();
 };
 
-const estimateStatusLabel = (status: PublicWorkshopQuotePayload["estimate"]["status"]) => {
-  switch (status) {
-    case "PENDING_APPROVAL":
-      return "Pending approval";
-    case "APPROVED":
-      return "Approved";
-    case "REJECTED":
-      return "Rejected";
-    default:
-      return "Draft";
-  }
-};
-
-const accessStatusLabel = (status: PublicWorkshopQuotePayload["quote"]["accessStatus"]) => {
-  switch (status) {
-    case "SUPERSEDED":
-      return "Superseded";
-    case "EXPIRED":
-      return "Expired";
-    default:
-      return "Ready to review";
-  }
-};
-
-const accessStatusClass = (status: PublicWorkshopQuotePayload["quote"]["accessStatus"]) => {
-  switch (status) {
-    case "SUPERSEDED":
-      return "status-badge status-warning";
-    case "EXPIRED":
-      return "status-badge status-cancelled";
-    default:
-      return "status-badge status-complete";
-  }
-};
-
-const estimateStatusClass = (status: PublicWorkshopQuotePayload["estimate"]["status"]) => {
-  switch (status) {
-    case "PENDING_APPROVAL":
-      return "status-badge status-warning";
-    case "APPROVED":
-      return "status-badge status-complete";
-    case "REJECTED":
-      return "status-badge status-cancelled";
-    default:
-      return "status-badge";
-  }
-};
-
 export const WorkshopQuotePage = () => {
   const { token: routeToken } = useParams();
   const [searchParams] = useSearchParams();
@@ -195,19 +153,19 @@ export const WorkshopQuotePage = () => {
     if (!payload) {
       return "Workshop quote review";
     }
-    return `${payload.job.bikeDisplayName} quote`;
+    return `Workshop quote for ${payload.job.bikeDisplayName}`;
   }, [payload]);
 
   return (
     <div className="page-shell cash-upload-shell">
       <section className="card cash-upload-card customer-capture-card">
         <div className="cash-upload-heading">
-          <span className={payload ? accessStatusClass(payload.quote.accessStatus) : "status-badge"}>
-            {payload ? accessStatusLabel(payload.quote.accessStatus) : "Workshop quote"}
+          <span className={payload ? workshopQuoteAccessStatusClass(payload.quote.accessStatus) : "status-badge"}>
+            {payload ? workshopQuoteAccessStatusLabel(payload.quote.accessStatus) : "Workshop quote"}
           </span>
           <h1>{heading}</h1>
           <p className="muted-text">
-            Review the latest workshop estimate and let the shop know whether you&apos;d like them to continue with this work.
+            Review the latest workshop quote and let the shop know whether you&apos;d like them to continue with the quoted work.
           </p>
         </div>
 
@@ -233,17 +191,18 @@ export const WorkshopQuotePage = () => {
             <div className="job-meta-grid">
               <div><strong>Customer:</strong> {payload.job.customerName}</div>
               <div><strong>Bike:</strong> {payload.job.bikeDisplayName}</div>
-              <div><strong>Estimate:</strong> <span className={estimateStatusClass(payload.estimate.status)}>v{payload.estimate.version} · {estimateStatusLabel(payload.estimate.status)}</span></div>
+              <div><strong>Quote status:</strong> <span className={workshopEstimateStatusClass(payload.estimate.status)}>v{payload.estimate.version} · {workshopEstimateStatusLabel(payload.estimate.status, "customer")}</span></div>
               <div><strong>Requested:</strong> {formatOptionalDateTime(payload.estimate.requestedAt)}</div>
               <div><strong>Total:</strong> {formatMoney(payload.estimate.subtotalPence)}</div>
+              <div><strong>Link status:</strong> <span className={workshopQuoteAccessStatusClass(payload.quote.accessStatus)}>{workshopQuoteAccessStatusLabel(payload.quote.accessStatus)}</span></div>
               <div><strong>Quote valid until:</strong> {formatOptionalDateTime(payload.quote.customerQuote?.expiresAt)}</div>
             </div>
 
             {payload.quote.accessStatus === "SUPERSEDED" ? (
               <div className="quick-create-panel" style={{ marginTop: "12px" }}>
-                <strong>This quote is no longer current.</strong>
+                <strong>A newer quote is now in place.</strong>
                 <p className="muted-text">
-                  The workshop estimate has changed since this link was shared. Please contact the shop for the latest quote before approving any work.
+                  The workshop estimate changed after this link was shared. Please contact the shop for the latest quote before approving any work.
                 </p>
               </div>
             ) : null}
@@ -260,7 +219,7 @@ export const WorkshopQuotePage = () => {
                 <div className="success-panel-heading">
                   <strong>Quote approved</strong>
                   <span className="status-badge status-complete">
-                    {payload.estimate.decisionSource === "CUSTOMER" ? "Recorded from this link" : "Recorded by shop"}
+                    {payload.estimate.decisionSource === "CUSTOMER" ? "Approved from this link" : "Recorded by shop"}
                   </span>
                 </div>
                 <p>The shop now has approval to proceed with the quoted work.</p>
@@ -282,7 +241,7 @@ export const WorkshopQuotePage = () => {
                   onClick={() => void handleDecision("APPROVED")}
                   disabled={submitting !== null}
                 >
-                  {submitting === "APPROVED" ? "Approving..." : "Approve Quote"}
+                  {submitting === "APPROVED" ? "Approving..." : "Approve Quoted Work"}
                 </button>
                 <button
                   type="button"

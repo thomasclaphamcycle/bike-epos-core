@@ -168,7 +168,7 @@ export const CustomerProfilePage = () => {
                 Attach To Active POS Sale
               </button>
               <Link to={`/customers/${customer.id}/timeline`} className="button-link">
-                View Timeline
+                Open Timeline
               </Link>
               <span className="muted-text">
                 {activeSaleId ? `Active sale: ${activeSaleId.slice(0, 8)}` : "No active POS sale in this browser."}
@@ -204,7 +204,7 @@ export const CustomerProfilePage = () => {
                         <Link to={`/customers/bikes/${bike.id}`}>{bike.displayName}</Link>
                       </div>
                       <div className="table-secondary">
-                        {bike.notes || "Reusable bike record for service history"}
+                        {bike.notes || "Reusable bike record for workshop history and intake"}
                       </div>
                     </td>
                     <td>
@@ -222,8 +222,8 @@ export const CustomerProfilePage = () => {
                     <td>{formatOptionalDateTime(bike.serviceSummary.latestJobAt)}</td>
                     <td>
                       <div className="actions-inline">
-                        <Link to={`/customers/bikes/${bike.id}`}>History</Link>
-                        <Link to={`/workshop/check-in?bikeId=${encodeURIComponent(bike.id)}`}>Start Job</Link>
+                        <Link to={`/customers/bikes/${bike.id}`}>Service History</Link>
+                        <Link to={`/workshop/check-in?bikeId=${encodeURIComponent(bike.id)}`}>Start Workshop Job</Link>
                       </div>
                     </td>
                   </tr>

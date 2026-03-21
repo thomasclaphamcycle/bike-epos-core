@@ -1,10 +1,20 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
-import { workshopRawStatusClass, workshopRawStatusLabel } from "../features/workshop/status";
+import {
+  workshopExecutionStatusClass,
+  workshopExecutionStatusLabel,
+  workshopRawStatusClass,
+  workshopRawStatusLabel,
+} from "../features/workshop/status";
+import {
+  workshopCustomerQuoteLinkStatusLabel,
+  workshopEstimateStatusClass,
+  workshopEstimateStatusLabel,
+} from "../features/workshop/estimateStatus";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
 
@@ -228,42 +238,6 @@ const toPublicAppUrl = (path: string) => {
 
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
-const estimateStatusClass = (
-  status: WorkshopEstimateRecord["status"] | null | undefined,
-) => {
-  if (status === "PENDING_APPROVAL") {
-    return "status-badge status-warning";
-  }
-  if (status === "APPROVED") {
-    return "status-badge status-info";
-  }
-  if (status === "REJECTED") {
-    return "status-badge status-cancelled";
-  }
-  if (status === "DRAFT") {
-    return "status-badge";
-  }
-  return "status-badge";
-};
-
-const estimateStatusLabel = (
-  status: WorkshopEstimateRecord["status"] | null | undefined,
-) => {
-  if (status === "PENDING_APPROVAL") {
-    return "Awaiting Approval";
-  }
-  if (status === "APPROVED") {
-    return "Approved";
-  }
-  if (status === "REJECTED") {
-    return "Rejected";
-  }
-  if (status === "DRAFT") {
-    return "Draft";
-  }
-  return "Not Saved";
-};
-
 const estimateDecisionSourceLabel = (
   source: WorkshopEstimateRecord["decisionSource"] | null | undefined,
 ) => {
@@ -299,7 +273,7 @@ const getWorkflowGuidance = (input: {
   hasBasket: boolean;
 }) => {
   if (input.rawStatus === "WAITING_FOR_APPROVAL") {
-    return "Pause workshop work until the estimate is approved or updated for the customer.";
+    return "Quote approval is still pending. Pause bench work until the customer approves or the quote is revised.";
   }
 
   if (input.rawStatus === "WAITING_FOR_PARTS" || input.partsStatus === "SHORT") {
@@ -307,7 +281,7 @@ const getWorkflowGuidance = (input: {
   }
 
   if (input.rawStatus === "BOOKING_MADE") {
-    return "The bike is checked in and ready for the mechanic to start work or request approval.";
+    return "The bike is checked in and ready to move onto the bench or into quote approval.";
   }
 
   if (input.rawStatus === "BIKE_ARRIVED" || input.rawStatus === "APPROVED" || input.rawStatus === "ON_HOLD") {
@@ -373,7 +347,7 @@ const getStageActions = (status: string): Array<{ label: string; value: string }
     case "APPROVED":
     case "ON_HOLD":
       return [
-        { label: "Ready", value: "READY" },
+        { label: "Ready for Collection", value: "READY" },
         { label: "Cancel", value: "CANCELLED" },
       ];
     case "WAITING_FOR_APPROVAL":
@@ -385,7 +359,6 @@ const getStageActions = (status: string): Array<{ label: string; value: string }
 
 export const WorkshopJobPage = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const openPosWithContext = useOpenPosWithContext();
   const { user } = useAuth();
   const { success, error } = useToasts();
@@ -604,10 +577,10 @@ export const WorkshopJobPage = () => {
       await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/approval`, { status: nextStatus });
       success(
         nextStatus === "APPROVED"
-          ? "Estimate marked approved"
+          ? "Quote marked approved"
           : nextStatus === "REJECTED"
-            ? "Estimate marked rejected"
-            : "Estimate marked awaiting approval",
+            ? "Quote marked rejected"
+            : "Quote marked pending approval",
       );
       await loadJob();
     } catch (approvalError) {
@@ -1076,19 +1049,33 @@ export const WorkshopJobPage = () => {
           <>
             <div className="job-meta-grid">
               <div>
-                <strong>Workflow Status:</strong>{" "}
+                <strong>Execution Status:</strong>{" "}
+                <span className={workshopExecutionStatusClass(payload.job.status, rawStatus)}>
+                  {workshopExecutionStatusLabel(payload.job.status)}
+                </span>
+              </div>
+              <div>
+                <strong>Workflow Detail:</strong>{" "}
                 <span className={workshopRawStatusClass(rawStatus)}>{workshopRawStatusLabel(rawStatus)}</span>
               </div>
               <div><strong>Next Step:</strong> {workflowGuidance}</div>
               <div>
-                <strong>Estimate Status:</strong>{" "}
-                <span className={estimateStatusClass(currentEstimate?.status)}>
-                  {estimateStatusLabel(currentEstimate?.status)}
+                <strong>Quote Status:</strong>{" "}
+                <span className={workshopEstimateStatusClass(currentEstimate?.status)}>
+                  {workshopEstimateStatusLabel(currentEstimate?.status)}
                 </span>
               </div>
               <div>
-                <strong>System Status:</strong> {rawStatus || "-"}
+                <strong>Customer Quote:</strong>{" "}
+                {currentEstimate?.customerQuote ? (
+                  <span className={currentEstimate.customerQuote.status === "ACTIVE" ? "status-badge status-complete" : "status-badge status-warning"}>
+                    {workshopCustomerQuoteLinkStatusLabel(currentEstimate.customerQuote.status)}
+                  </span>
+                ) : (
+                  "Not prepared"
+                )}
               </div>
+              <div><strong>Legacy Status Code:</strong> {rawStatus || "-"}</div>
               <div>
                 <strong>Parts State:</strong>{" "}
                 <span className={partsStatusClass(partsOverview?.summary.partsStatus)}>
@@ -1128,28 +1115,28 @@ export const WorkshopJobPage = () => {
                     onClick={() => void saveEstimateSnapshot()}
                     disabled={savingEstimate || payload.lines.length === 0}
                   >
-                    {savingEstimate ? "Saving Estimate..." : "Save Estimate"}
+                    {savingEstimate ? "Saving Snapshot..." : "Save Quote Snapshot"}
                   </button>
                   <button
                     type="button"
                     onClick={() => void updateApprovalStatus("WAITING_FOR_APPROVAL")}
                     disabled={currentEstimate?.status === "PENDING_APPROVAL" || payload.lines.length === 0}
                   >
-                    Request Approval
+                    Send Quote
                   </button>
                   <button
                     type="button"
                     onClick={() => void updateApprovalStatus("APPROVED")}
                     disabled={currentEstimate?.status === "APPROVED" || payload.lines.length === 0}
                   >
-                    Mark Approved
+                    Mark Quote Approved
                   </button>
                   <button
                     type="button"
                     onClick={() => void updateApprovalStatus("REJECTED")}
                     disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
                   >
-                    Mark Rejected
+                    Mark Quote Rejected
                   </button>
                   <button
                     type="button"
@@ -1215,12 +1202,12 @@ export const WorkshopJobPage = () => {
           <div>
             <h2>Bike Record</h2>
             <p className="muted-text">
-              Keep the workshop job summary compatible with existing flows, and optionally link a reusable customer bike record for future service history.
+              Keep the workshop summary compatible with existing flows, and optionally link a reusable customer bike record for future service history and faster intake.
             </p>
           </div>
           {payload?.job.bike ? (
             <Link to={`/customers/bikes/${payload.job.bike.id}`} className="button-link">
-              View Bike History
+              Bike Service History
             </Link>
           ) : null}
           {payload?.job.customerId ? (
@@ -1360,7 +1347,7 @@ export const WorkshopJobPage = () => {
           <div>
             <h2>Estimate</h2>
             <p className="muted-text">
-              Live labour and part lines still drive workshop pricing, while saved estimate snapshots preserve approval state and quote history.
+              Live labour and parts still drive workshop pricing, while saved quote snapshots preserve approval state, customer links, and audit history.
             </p>
           </div>
         </div>
@@ -1393,8 +1380,8 @@ export const WorkshopJobPage = () => {
             <div className="job-meta-grid">
               <div>
                 <strong>Current estimate:</strong>{" "}
-                <span className={estimateStatusClass(currentEstimate.status)}>
-                  v{currentEstimate.version} · {estimateStatusLabel(currentEstimate.status)}
+                <span className={workshopEstimateStatusClass(currentEstimate.status)}>
+                  v{currentEstimate.version} · {workshopEstimateStatusLabel(currentEstimate.status)}
                 </span>
               </div>
               <div><strong>Saved total:</strong> {formatMoney(currentEstimate.subtotalPence)}</div>
@@ -1408,7 +1395,7 @@ export const WorkshopJobPage = () => {
                 <strong>Customer quote link:</strong>{" "}
                 {currentEstimate.customerQuote ? (
                   <span className={currentEstimate.customerQuote.status === "ACTIVE" ? "status-badge status-complete" : "status-badge status-warning"}>
-                    {currentEstimate.customerQuote.status}
+                    {workshopCustomerQuoteLinkStatusLabel(currentEstimate.customerQuote.status)}
                   </span>
                 ) : (
                   "Not prepared"
@@ -1419,7 +1406,7 @@ export const WorkshopJobPage = () => {
             {currentEstimateQuoteUrl ? (
               <div className="actions-inline" style={{ marginTop: "12px" }}>
                 <a href={currentEstimateQuoteUrl} target="_blank" rel="noreferrer" className="button-link button-link-compact">
-                  Open Customer Quote
+                  Open Customer Quote Page
                 </a>
                 <code>{currentEstimateQuoteUrl}</code>
               </div>
@@ -1427,7 +1414,7 @@ export const WorkshopJobPage = () => {
           </div>
         ) : (
           <div className="restricted-panel" style={{ marginTop: "12px" }}>
-            No saved estimate snapshot yet. Save the current line set or request approval to capture the first estimate version.
+            No saved quote snapshot yet. Save the current line set or send a quote for approval to capture the first version.
           </div>
         )}
 
@@ -1460,12 +1447,12 @@ export const WorkshopJobPage = () => {
                     <td>
                       <div className="table-primary">v{estimate.version}</div>
                       <div className="table-secondary">
-                        {estimate.isCurrent ? "Current" : `Superseded ${formatOptionalDateTime(estimate.supersededAt)}`}
+                        {estimate.isCurrent ? "Current quote" : `Superseded ${formatOptionalDateTime(estimate.supersededAt)}`}
                       </div>
                     </td>
                     <td>
-                      <span className={estimateStatusClass(estimate.status)}>
-                        {estimateStatusLabel(estimate.status)}
+                      <span className={workshopEstimateStatusClass(estimate.status)}>
+                        {workshopEstimateStatusLabel(estimate.status)}
                       </span>
                     </td>
                     <td>{formatMoney(estimate.subtotalPence)}</td>

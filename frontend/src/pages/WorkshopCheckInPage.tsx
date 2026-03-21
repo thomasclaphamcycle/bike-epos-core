@@ -60,7 +60,7 @@ type CustomerBikeWorkshopStartContextResponse = {
 
 const stepTitles = [
   "Customer",
-  "Bike & Work",
+  "Bike & Intake",
   "Review",
 ] as const;
 
@@ -393,7 +393,7 @@ export const WorkshopCheckInPage = () => {
           <div>
             <h1>Workshop Check-In</h1>
             <p className="muted-text">
-              Capture customer, bike, and issue details before the job moves onto the workshop board.
+              Capture customer, bike, and intake details before the job moves onto the workshop board.
             </p>
           </div>
           <div className="actions-inline">
@@ -427,7 +427,7 @@ export const WorkshopCheckInPage = () => {
                 </div>
                 <div className="actions-inline" style={{ marginTop: "8px" }}>
                   <button type="button" onClick={clearBikeLedContext}>
-                    Use different customer or bike
+                    Use different bike / customer
                   </button>
                   <button type="button" className="primary" onClick={() => setStep(1)}>
                     Continue with linked bike
@@ -563,7 +563,7 @@ export const WorkshopCheckInPage = () => {
 
         {step === 1 ? (
           <section className="card">
-            <h2>Bike & Requested Work</h2>
+            <h2>Bike & Intake</h2>
             {loadingWorkshopStartContext ? <p>Loading selected bike...</p> : null}
             {workshopStartContext ? (
               <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
@@ -665,7 +665,7 @@ export const WorkshopCheckInPage = () => {
             )}
             <div className="job-meta-grid">
               <label>
-                Bike description
+                Workshop bike summary
                 <input
                   value={bikeDescription}
                   onChange={(event) => setBikeDescription(event.target.value)}
@@ -709,7 +709,7 @@ export const WorkshopCheckInPage = () => {
             <p className="muted-text">Create the check-in to open the job and continue progress from the workshop dashboard.</p>
             <div className="job-meta-grid">
               <div><strong>Customer:</strong> {resolvedCustomerName}</div>
-              <div><strong>Bike:</strong> {bikeDescription || "-"}</div>
+              <div><strong>Workshop bike summary:</strong> {bikeDescription || "-"}</div>
               <div>
                 <strong>Bike record:</strong>{" "}
                 {createBikeInline
