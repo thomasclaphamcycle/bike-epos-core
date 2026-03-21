@@ -188,12 +188,13 @@ export const CustomerProfilePage = () => {
                 <th>Identity</th>
                 <th>Linked Jobs</th>
                 <th>Latest Linked Service</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {bikes.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No bike records linked to this customer yet.</td>
+                  <td colSpan={5}>No bike records linked to this customer yet.</td>
                 </tr>
               ) : (
                 bikes.map((bike) => (
@@ -219,6 +220,12 @@ export const CustomerProfilePage = () => {
                       </div>
                     </td>
                     <td>{formatOptionalDateTime(bike.serviceSummary.latestJobAt)}</td>
+                    <td>
+                      <div className="actions-inline">
+                        <Link to={`/customers/bikes/${bike.id}`}>History</Link>
+                        <Link to={`/workshop/check-in?bikeId=${encodeURIComponent(bike.id)}`}>Start Job</Link>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}

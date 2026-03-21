@@ -32,6 +32,16 @@ type BikeHistoryPayload = {
     email: string | null;
     phone: string | null;
   };
+  workshopStartContext: {
+    startPath: string;
+    defaults: {
+      customerId: string;
+      customerName: string;
+      bikeId: string;
+      bikeDescription: string;
+      status: "BOOKED";
+    };
+  };
   serviceSummary: {
     linkedJobCount: number;
     openJobCount: number;
@@ -229,6 +239,9 @@ export const BikeHistoryPage = () => {
           </div>
           {payload ? (
             <div className="actions-inline">
+              <Link to={payload.workshopStartContext.startPath} className="button-link">
+                Start Workshop Job
+              </Link>
               <Link to={`/customers/${payload.customer.id}`} className="button-link">
                 Open Customer
               </Link>
@@ -259,6 +272,10 @@ export const BikeHistoryPage = () => {
               <div><strong>Open Jobs:</strong> {payload.serviceSummary.openJobCount}</div>
               <div><strong>Completed Jobs:</strong> {payload.serviceSummary.completedJobCount}</div>
               <div><strong>Latest Completed Service:</strong> {formatOptionalDateTime(payload.serviceSummary.latestCompletedAt)}</div>
+              <div>
+                <strong>Workshop Intake:</strong>{" "}
+                <Link to={payload.workshopStartContext.startPath}>Start a new job for this bike</Link>
+              </div>
             </div>
 
             {latestLimitation ? (
