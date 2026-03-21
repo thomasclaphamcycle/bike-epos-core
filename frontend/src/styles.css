@@ -121,12 +121,19 @@ textarea {
   resize: vertical;
 }
 
+/*
+  SCROLL MODEL (IMPORTANT)
+
+  - Normal routes use OUTER page scroll (no overflow on .app-main)
+  - Do NOT add overflow: auto or height: 100vh to shell containers
+  - POS (.app-main--pos) is the ONLY intentional nested scroll layout
+
+  Breaking this will reintroduce trapped scroll / inner pane scroll bugs.
+*/
 .layout-root {
-  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  overflow: hidden;
   background:
     radial-gradient(circle at 12% 8%, var(--cp-page-glow) 0%, transparent 26%),
     radial-gradient(circle at 88% 12%, var(--cp-page-warm) 0%, transparent 20%),
@@ -292,9 +299,8 @@ textarea {
 .app-shell {
   min-width: 0;
   display: grid;
-  grid-template-rows: 1fr auto;
-  height: 100%;
-  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100vh;
 }
 
 .brand {
@@ -496,6 +502,7 @@ textarea {
   width: min(var(--cp-width-standard), 100%);
   margin: 0 auto;
   padding: 18px 20px 20px;
+  min-height: 0;
 }
 
 .app-main--workspace {
