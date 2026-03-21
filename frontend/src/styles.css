@@ -121,6 +121,15 @@ textarea {
   resize: vertical;
 }
 
+/*
+  SCROLL MODEL (IMPORTANT)
+
+  - Normal routes use OUTER page scroll (no overflow on .app-main)
+  - Do NOT add overflow: auto or height: 100vh to shell containers
+  - POS (.app-main--pos) is the ONLY intentional nested scroll layout
+
+  Breaking this will reintroduce trapped scroll / inner pane scroll bugs.
+*/
 .layout-root {
   min-height: 100vh;
   display: grid;
