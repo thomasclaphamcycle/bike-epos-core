@@ -16,6 +16,7 @@ import { listStoreInfoSettings } from "./configurationService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { sendEmailMessage } from "./emailService";
 import { sendSmsMessage } from "./smsService";
+import { sendWhatsAppMessage } from "./whatsappService";
 import { HttpError, isUuid } from "../utils/http";
 
 type WorkshopNotificationEventInput =
@@ -63,7 +64,11 @@ type NotificationChannelDecision =
       reasonMessage: string;
     };
 
-const notificationChannels: WorkshopNotificationChannel[] = ["EMAIL", "SMS"];
+const notificationChannels: WorkshopNotificationChannel[] = [
+  "EMAIL",
+  "SMS",
+  "WHATSAPP",
+];
 
 const quoteEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
   workshopJob: {
@@ -346,6 +351,7 @@ const resolveStoreContext = async () => {
       name: fromName,
     },
     smsFrom: normalizeOptionalText(process.env.SMS_FROM) ?? null,
+    whatsappFrom: normalizeOptionalText(process.env.WHATSAPP_FROM) ?? null,
   };
 };
 
@@ -476,6 +482,7 @@ const buildQuoteReadyDecisions = async (
     }${store.email ? `<br />${escapeHtml(store.email)}` : ""}</p>`,
   ].join("");
   const smsText = `${store.name}: your bike quote for ${bikeDisplayName} is ready. Review it here: ${quoteUrl}`;
+  const whatsAppText = `Hi ${customerName}, your quote for ${bikeDisplayName} is ready to review: ${quoteUrl}`;
 
   return [
     recipientEmail
@@ -533,6 +540,34 @@ const buildQuoteReadyDecisions = async (
           reasonCode: "CUSTOMER_PHONE_MISSING",
           reasonMessage:
             "Customer phone number is missing, so the workshop quote SMS was not sent.",
+        }),
+    recipientPhone
+      ? {
+          channel: "WHATSAPP",
+          action: "send",
+          recipientEmail: null,
+          recipientPhone,
+          subject: null,
+          text: whatsAppText,
+          html: null,
+          payload: {
+            ...basePayload,
+            quoteUrl,
+          },
+          customerId,
+          workshopEstimateId: estimate.id,
+          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
+        }
+      : buildSkipDecision({
+          channel: "WHATSAPP",
+          recipientEmail,
+          payload: basePayload,
+          customerId,
+          workshopEstimateId: estimate.id,
+          baseDedupeKey,
+          reasonCode: "CUSTOMER_PHONE_MISSING",
+          reasonMessage:
+            "Customer phone number is missing, so the workshop quote WhatsApp message was not sent.",
         }),
   ];
 };
@@ -623,6 +658,7 @@ const buildReadyForCollectionDecisions = async (
     }${store.email ? `<br />${escapeHtml(store.email)}` : ""}</p>`,
   ].join("");
   const smsText = `${store.name}: ${bikeDisplayName} is ready for collection. Please contact the shop if you need to confirm a collection time.`;
+  const whatsAppText = `Hi ${customerName}, ${bikeDisplayName} is ready for collection from ${store.name}. Please contact the shop if you need to confirm a collection time.`;
 
   return [
     recipientEmail
@@ -674,6 +710,31 @@ const buildReadyForCollectionDecisions = async (
           reasonCode: "CUSTOMER_PHONE_MISSING",
           reasonMessage:
             "Customer phone number is missing, so the ready-for-collection SMS was not sent.",
+        }),
+    recipientPhone
+      ? {
+          channel: "WHATSAPP",
+          action: "send",
+          recipientEmail: null,
+          recipientPhone,
+          subject: null,
+          text: whatsAppText,
+          html: null,
+          payload: basePayload,
+          customerId,
+          workshopEstimateId: null,
+          dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
+        }
+      : buildSkipDecision({
+          channel: "WHATSAPP",
+          recipientEmail,
+          payload: basePayload,
+          customerId,
+          workshopEstimateId: null,
+          baseDedupeKey,
+          reasonCode: "CUSTOMER_PHONE_MISSING",
+          reasonMessage:
+            "Customer phone number is missing, so the ready-for-collection WhatsApp message was not sent.",
         }),
   ];
 };
@@ -768,7 +829,17 @@ const finalizeWorkshopNotification = async (
 
 const failureReasonCodeByChannel = (
   channel: WorkshopNotificationChannel,
-) => (channel === "SMS" ? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED");
+) => {
+  if (channel === "SMS") {
+    return "SMS_SEND_FAILED";
+  }
+
+  if (channel === "WHATSAPP") {
+    return "WHATSAPP_SEND_FAILED";
+  }
+
+  return "EMAIL_SEND_FAILED";
+};
 
 const requireRecipient = (value: string | null, field: string) => {
   if (!value) {
@@ -845,13 +916,19 @@ const sendWorkshopNotification = async (
             from: sender.smsFrom,
             text: attemptDecision.text,
           })
-        : await sendEmailMessage({
-            to: requireRecipient(attemptDecision.recipientEmail, "recipientEmail"),
-            from: sender.emailFrom,
-            subject: attemptDecision.subject ?? "CorePOS notification",
-            text: attemptDecision.text,
-            ...(attemptDecision.html ? { html: attemptDecision.html } : {}),
-          });
+        : attemptDecision.channel === "WHATSAPP"
+          ? await sendWhatsAppMessage({
+              to: requireRecipient(attemptDecision.recipientPhone, "recipientPhone"),
+              from: sender.whatsappFrom,
+              text: attemptDecision.text,
+            })
+          : await sendEmailMessage({
+              to: requireRecipient(attemptDecision.recipientEmail, "recipientEmail"),
+              from: sender.emailFrom,
+              subject: attemptDecision.subject ?? "CorePOS notification",
+              text: attemptDecision.text,
+              ...(attemptDecision.html ? { html: attemptDecision.html } : {}),
+            });
 
     await finalizeWorkshopNotification(claim.notification.id, {
       deliveryStatus: "SENT",

@@ -31,9 +31,10 @@ cp .env.test.example .env.test
 
 Optional workshop notification delivery settings:
 
-- leave `EMAIL_DELIVERY_MODE=log` and `SMS_DELIVERY_MODE=log` for safe local and test runs that only log outbound workshop notifications
+- leave `EMAIL_DELIVERY_MODE=log`, `SMS_DELIVERY_MODE=log`, and `WHATSAPP_DELIVERY_MODE=log` for safe local and test runs that only log outbound workshop notifications
 - set `EMAIL_DELIVERY_MODE=smtp` plus `SMTP_URL` when you want real email delivery
 - set `SMS_DELIVERY_MODE=twilio` plus `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `SMS_FROM` when you want real SMS delivery
+- set `WHATSAPP_DELIVERY_MODE=twilio` plus `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `WHATSAPP_FROM` when you want real WhatsApp delivery
 - set `PUBLIC_APP_URL` so customer quote emails use the correct externally reachable URL
 - optionally set `EMAIL_FROM` and `EMAIL_FROM_NAME` to override the sender identity
 

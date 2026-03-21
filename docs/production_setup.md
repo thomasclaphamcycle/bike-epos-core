@@ -27,8 +27,10 @@ Optional operational variable:
 - `EMAIL_FROM_NAME`: optional sender display-name override for workshop notifications
 - `SMS_DELIVERY_MODE=log|twilio`: `log` is safe for evaluation and local testing, while `twilio` enables real SMS delivery
 - `SMS_FROM`: optional sender override for workshop SMS notifications and required when `SMS_DELIVERY_MODE=twilio`
-- `TWILIO_ACCOUNT_SID`: required when `SMS_DELIVERY_MODE=twilio`
-- `TWILIO_AUTH_TOKEN`: required when `SMS_DELIVERY_MODE=twilio`
+- `WHATSAPP_DELIVERY_MODE=log|twilio`: `log` is safe for evaluation and local testing, while `twilio` enables real WhatsApp delivery
+- `WHATSAPP_FROM`: optional sender override for workshop WhatsApp notifications and required when `WHATSAPP_DELIVERY_MODE=twilio`
+- `TWILIO_ACCOUNT_SID`: required when `SMS_DELIVERY_MODE=twilio` or `WHATSAPP_DELIVERY_MODE=twilio`
+- `TWILIO_AUTH_TOKEN`: required when `SMS_DELIVERY_MODE=twilio` or `WHATSAPP_DELIVERY_MODE=twilio`
 
 Operational guidance:
 
