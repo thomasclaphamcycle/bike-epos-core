@@ -475,6 +475,94 @@ const run = async () => {
       assert.match(detail.json.job.bikeDescription, /Genesis Croix de Fer/);
     }, results);
 
+    await runTest("bike history only includes truly linked jobs and exposes workshop history details", async () => {
+      const customer = await createCustomer(state, {
+        name: `Bike History Customer ${uniqueRef()}`,
+      });
+      const bike = await createBike(state, customer.id, {
+        label: "History bike",
+        make: "Specialized",
+        model: "Sirrus",
+      });
+
+      const { job: linkedJob } = await createJob(state, {
+        customerId: customer.id,
+        bikeId: bike.id,
+        customerName: undefined,
+        bikeDescription: undefined,
+      });
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${linkedJob.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Bike history labour",
+          qty: 1,
+          unitPricePence: 4800,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const requestApproval = await fetchJson(`/api/workshop/jobs/${linkedJob.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(requestApproval.status, 201, JSON.stringify(requestApproval.json));
+
+      const addNote = await fetchJson(`/api/workshop/jobs/${linkedJob.id}/notes`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          visibility: "INTERNAL",
+          note: "Bike history inspection note",
+        }),
+      });
+      assert.equal(addNote.status, 201, JSON.stringify(addNote.json));
+
+      await prisma.workshopJob.update({
+        where: { id: linkedJob.id },
+        data: {
+          assignedStaffId: managerUser.id,
+          assignedStaffName: managerUser.name,
+        },
+      });
+
+      const { job: legacyJob } = await createJob(state, {
+        customerId: customer.id,
+        customerName: undefined,
+        bikeDescription: "History bike | Specialized Sirrus",
+      });
+      assert.ok(legacyJob.id);
+
+      const bikeList = await fetchJson(`/api/customers/${customer.id}/bikes`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(bikeList.status, 200, JSON.stringify(bikeList.json));
+      const listedBike = bikeList.json.bikes.find((row) => row.id === bike.id);
+      assert.ok(listedBike, JSON.stringify(bikeList.json));
+      assert.equal(listedBike.serviceSummary.linkedJobCount, 1);
+
+      const history = await fetchJson(`/api/customers/bikes/${bike.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(history.status, 200, JSON.stringify(history.json));
+      assert.equal(history.json.bike.id, bike.id);
+      assert.equal(history.json.customer.id, customer.id);
+      assert.equal(history.json.serviceSummary.linkedJobCount, 1);
+      assert.equal(history.json.history.length, 1);
+      assert.equal(history.json.history[0].id, linkedJob.id);
+      assert.equal(history.json.history[0].assignedTechnician.name, managerUser.name);
+      assert.equal(history.json.history[0].liveTotals.subtotalPence, 4800);
+      assert.equal(history.json.history[0].estimate.status, "PENDING_APPROVAL");
+      assert.match(history.json.history[0].notes.latestNote.note, /Bike history inspection note/);
+      assert.ok(
+        history.json.limitations[0].includes("Legacy free-text workshop jobs without a bike link"),
+        JSON.stringify(history.json),
+      );
+    }, results);
+
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {
       const { job } = await createJob(state);
 

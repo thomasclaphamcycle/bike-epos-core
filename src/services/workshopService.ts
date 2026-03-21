@@ -12,8 +12,12 @@ import { getOrCreateDefaultLocationTx } from "./locationService";
 import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
 import { getWorkshopJobEstimateData, invalidateCurrentWorkshopEstimateTx } from "./workshopEstimateService";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
-
-type WorkflowStatus = "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
+import {
+  parseWorkshopExecutionStatus,
+  toWorkshopExecutionStatus,
+  toWorkshopJobStatus,
+  type WorkshopExecutionStatus,
+} from "./workshopStatusService";
 
 type CreateWorkshopJobInput = {
   customerId?: string | null;
@@ -131,65 +135,6 @@ const normalizeSkip = (skip: number | undefined): number => {
     throw new HttpError(400, "skip must be an integer >= 0", "INVALID_FILTER");
   }
   return skip;
-};
-
-const parseWorkflowStatus = (value: string): WorkflowStatus => {
-  const normalized = value.trim().toUpperCase();
-  switch (normalized) {
-    case "BOOKED":
-      return "BOOKED";
-    case "IN_PROGRESS":
-      return "IN_PROGRESS";
-    case "READY":
-      return "READY";
-    case "COLLECTED":
-      return "COLLECTED";
-    case "CLOSED":
-      return "CLOSED";
-    default:
-      throw new HttpError(
-        400,
-        "status must be BOOKED, IN_PROGRESS, READY, COLLECTED, or CLOSED",
-        "INVALID_WORKSHOP_STATUS",
-      );
-  }
-};
-
-const toWorkshopJobStatus = (status: WorkflowStatus): WorkshopJobStatus => {
-  switch (status) {
-    case "BOOKED":
-      return "BOOKING_MADE";
-    case "IN_PROGRESS":
-      return "BIKE_ARRIVED";
-    case "READY":
-      return "BIKE_READY";
-    case "COLLECTED":
-      return "COMPLETED";
-    case "CLOSED":
-      return "COMPLETED";
-  }
-};
-
-const toWorkflowStatus = (job: {
-  status: WorkshopJobStatus;
-  closedAt: Date | null;
-}): WorkflowStatus => {
-  if (job.closedAt) {
-    return "CLOSED";
-  }
-
-  switch (job.status) {
-    case "BOOKING_MADE":
-      return "BOOKED";
-    case "BIKE_READY":
-      return "READY";
-    case "COMPLETED":
-      return "COLLECTED";
-    case "CANCELLED":
-      return "CLOSED";
-    default:
-      return "IN_PROGRESS";
-  }
 };
 
 const ensureWorkshopJobExistsTx = async (
@@ -498,9 +443,13 @@ const toJobResponse = (job: {
   bikeDescription: string | null;
   status: WorkshopJobStatus;
   notes: string | null;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  scheduledDate: Date | null;
   depositRequiredPence: number;
   depositStatus: string;
   finalizedBasketId: string | null;
+  completedAt: Date | null;
   closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -518,9 +467,12 @@ const toJobResponse = (job: {
   customerName: job.customerName,
   bikeDescription: job.bikeDescription ?? (job.bike ? buildCustomerBikeDisplayName(job.bike) : null),
   bike: toWorkshopBikeResponse(job.bike ?? null),
-  status: toWorkflowStatus(job),
+  status: toWorkshopExecutionStatus(job),
   rawStatus: job.status,
   notes: job.notes,
+  assignedStaffId: job.assignedStaffId,
+  assignedStaffName: job.assignedStaffName,
+  scheduledDate: job.scheduledDate,
   depositRequiredPence: job.depositRequiredPence,
   depositStatus: job.depositStatus,
   finalizedBasketId: job.finalizedBasketId,
@@ -531,6 +483,7 @@ const toJobResponse = (job: {
         createdAt: job.sale.createdAt,
       }
     : null,
+  completedAt: job.completedAt,
   closedAt: job.closedAt,
   createdAt: job.createdAt,
   updatedAt: job.updatedAt,
@@ -599,8 +552,8 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
   const notes = normalizeOptionalText(input.notes);
 
   const targetStatus = input.status
-    ? parseWorkflowStatus(input.status)
-    : ("BOOKED" as WorkflowStatus);
+    ? parseWorkshopExecutionStatus(input.status)
+    : ("BOOKED" as WorkshopExecutionStatus);
 
   return prisma.$transaction(async (tx) => {
     const resolvedCustomerAndBike = await resolveWorkshopJobCustomerAndBikeTx(tx, {
@@ -673,7 +626,7 @@ export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {
   const locationId = normalizeOptionalText(filters.locationId);
   const take = normalizeTake(filters.take);
   const skip = normalizeSkip(filters.skip);
-  const requestedStatus = filters.status ? parseWorkflowStatus(filters.status) : undefined;
+  const requestedStatus = filters.status ? parseWorkshopExecutionStatus(filters.status) : undefined;
 
   const jobs = await prisma.workshopJob.findMany({
     where: {
@@ -878,7 +831,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "status")) {
-      const parsed = parseWorkflowStatus(input.status ?? "");
+      const parsed = parseWorkshopExecutionStatus(input.status ?? "");
       if (parsed === "COLLECTED" || parsed === "CLOSED") {
         const existingSale = await tx.sale.findUnique({
           where: { workshopJobId },
