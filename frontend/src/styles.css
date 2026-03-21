@@ -122,11 +122,9 @@ textarea {
 }
 
 .layout-root {
-  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  overflow: hidden;
   background:
     radial-gradient(circle at 12% 8%, var(--cp-page-glow) 0%, transparent 26%),
     radial-gradient(circle at 88% 12%, var(--cp-page-warm) 0%, transparent 20%),
@@ -293,9 +291,7 @@ textarea {
   min-width: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
+  min-height: 100vh;
 }
 
 .brand {
@@ -498,8 +494,6 @@ textarea {
   margin: 0 auto;
   padding: 18px 20px 20px;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .app-main--workspace {
