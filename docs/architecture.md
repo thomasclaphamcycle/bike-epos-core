@@ -140,6 +140,8 @@ It exists as a safe extension point for future integrations and internal automat
 - `sale.completed`
 - `purchaseOrder.received`
 - `workshop.job.completed`
+- `workshop.quote.ready`
+- `workshop.job.ready_for_collection`
 - `stock.adjusted`
 
 These emissions are additive only. They do not change route behavior or API contracts. Internal subscribers may now perform narrow internal persistence where explicitly documented.
@@ -154,6 +156,11 @@ Current internal subscribers are:
   - only create or refresh internal `ReminderCandidate` records when the job is actually completed and linked to a customer
   - derive a default `dueAt` at 90 days after completion and store `PENDING`, `READY`, or `DISMISSED`
   - preserve idempotency by keeping at most one reminder candidate per workshop job
+- notification subscribers in `src/core/notificationSubscribers.ts`
+  - currently listen to `workshop.quote.ready` and `workshop.job.ready_for_collection`
+  - create persistent `WorkshopNotification` rows for sent, skipped, failed, and duplicate-safe notification outcomes
+  - send simple email-first workshop customer messages through `src/services/notificationService.ts` and `src/services/emailService.ts`
+  - default to log-mode delivery locally, while allowing SMTP delivery from environment configuration
 
 Manager-facing internal visibility now exists through:
 
@@ -162,6 +169,6 @@ Manager-facing internal visibility now exists through:
 - `POST /api/reports/reminder-candidates/:reminderCandidateId/dismiss`
 - the React management route `/management/reminders`
 
-These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform delivery.
+These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork is intentionally internal only. It does not send SMS, email, push notifications, or webhooks, and it does not include background scheduling or delivery orchestration yet.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow email-first notification events above; SMS, WhatsApp, push notifications, webhooks, customer preferences, and background scheduling remain intentionally out of scope.

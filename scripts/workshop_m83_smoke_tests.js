@@ -180,15 +180,24 @@ const createJob = async (state, overrides = {}) => {
 
 const createCustomer = async (state, overrides = {}) => {
   const ref = uniqueRef();
+  const body = {
+    name: overrides.name || `M83 Customer ${ref}`,
+    phone: overrides.phone || `07000${String(Math.floor(Math.random() * 90000) + 10000)}`,
+    notes: overrides.notes || "M83 customer for workshop estimate coverage",
+  };
+
+  if (Object.prototype.hasOwnProperty.call(overrides, "email")) {
+    if (typeof overrides.email === "string") {
+      body.email = overrides.email;
+    }
+  } else {
+    body.email = `m83-${ref}@example.com`;
+  }
+
   const response = await fetchJson("/api/customers", {
     method: "POST",
     headers: STAFF_HEADERS,
-    body: JSON.stringify({
-      name: overrides.name || `M83 Customer ${ref}`,
-      email: overrides.email || `m83-${ref}@example.com`,
-      phone: overrides.phone || `07000${String(Math.floor(Math.random() * 90000) + 10000)}`,
-      notes: overrides.notes || "M83 customer for workshop estimate coverage",
-    }),
+    body: JSON.stringify(body),
   });
 
   assert.equal(response.status, 201, JSON.stringify(response.json));
@@ -221,6 +230,26 @@ const extractQuoteToken = (publicPath) => {
   return decodeURIComponent(match[1]);
 };
 
+const waitForNotification = async (where, expectedStatus) => {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const notification = await prisma.workshopNotification.findFirst({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (notification && (!expectedStatus || notification.deliveryStatus === expectedStatus)) {
+      return notification;
+    }
+
+    await sleep(100);
+  }
+
+  return prisma.workshopNotification.findFirst({
+    where,
+    orderBy: { createdAt: "desc" },
+  });
+};
+
 const cleanup = async (state) => {
   const workshopJobIds = Array.from(state.workshopJobIds);
   const customerIds = Array.from(state.customerIds);
@@ -236,6 +265,9 @@ const cleanup = async (state) => {
   });
 
   if (workshopJobIds.length > 0) {
+    await prisma.workshopNotification.deleteMany({
+      where: { workshopJobId: { in: workshopJobIds } },
+    });
     await prisma.workshopEstimateLine.deleteMany({
       where: {
         estimate: {
@@ -634,12 +666,19 @@ const run = async () => {
       });
       assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
 
+      const pendingDetail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(pendingDetail.status, 200, JSON.stringify(pendingDetail.json));
+      assert.equal(pendingDetail.json.currentEstimate.customerQuote.status, "ACTIVE");
+
       const link = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
         method: "POST",
         headers: STAFF_HEADERS,
         body: JSON.stringify({}),
       });
-      assert.equal(link.status, 201, JSON.stringify(link.json));
+      assert.equal(link.status, 200, JSON.stringify(link.json));
+      assert.equal(link.json.idempotent, true);
       assert.equal(link.json.customerQuote.status, "ACTIVE");
       const quoteToken = extractQuoteToken(link.json.customerQuote.publicPath);
 
@@ -699,6 +738,112 @@ const run = async () => {
       assert.equal(staleApprove.json.error.code, "WORKSHOP_QUOTE_SUPERSEDED");
     }, results);
 
+    await runTest("quote-ready notifications are logged, deduplicated, and skipped safely without email", async () => {
+      const customer = await createCustomer(state, {
+        name: "Quote Email Customer",
+        email: `quote-ready-${uniqueRef()}@example.com`,
+      });
+      const { job } = await createJob(state, {
+        customerId: customer.id,
+        bikeDescription: "Notification commuter",
+      });
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Notification labour",
+          qty: 1,
+          unitPricePence: 5400,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const waitingApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
+
+      const pendingDetail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(pendingDetail.status, 200, JSON.stringify(pendingDetail.json));
+      assert.equal(pendingDetail.json.currentEstimate.customerQuote.status, "ACTIVE");
+
+      const sentNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+        },
+        "SENT",
+      );
+      assert.ok(sentNotification, "Expected quote-ready notification row");
+      assert.equal(sentNotification.deliveryStatus, "SENT");
+      assert.equal(sentNotification.recipientEmail, customer.email);
+      assert.ok(
+        typeof sentNotification.subject === "string" &&
+          sentNotification.subject.toLowerCase().includes("quote"),
+        sentNotification.subject,
+      );
+
+      const replayApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(replayApproval.status, 200, JSON.stringify(replayApproval.json));
+
+      const notificationCount = await prisma.workshopNotification.count({
+        where: {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+        },
+      });
+      assert.equal(notificationCount, 1);
+
+      const noEmailCustomer = await createCustomer(state, {
+        name: "No Email Quote Customer",
+        email: undefined,
+      });
+      const noEmailJob = await createJob(state, {
+        customerId: noEmailCustomer.id,
+        bikeDescription: "No email city bike",
+      });
+
+      const noEmailLine = await fetchJson(`/api/workshop/jobs/${noEmailJob.job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "No email quote labour",
+          qty: 1,
+          unitPricePence: 4100,
+        }),
+      });
+      assert.equal(noEmailLine.status, 201, JSON.stringify(noEmailLine.json));
+
+      const noEmailApproval = await fetchJson(`/api/workshop/jobs/${noEmailJob.job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(noEmailApproval.status, 201, JSON.stringify(noEmailApproval.json));
+
+      const skippedNotification = await waitForNotification(
+        {
+          workshopJobId: noEmailJob.job.id,
+          eventType: "QUOTE_READY",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedNotification, "Expected skipped quote-ready notification row");
+      assert.equal(skippedNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedNotification.reasonCode, "CUSTOMER_EMAIL_MISSING");
+    }, results);
+
     await runTest("customer quote links can be reused safely and customer rejection is idempotent", async () => {
       const { job } = await createJob(state);
 
@@ -726,7 +871,8 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({}),
       });
-      assert.equal(firstLink.status, 201, JSON.stringify(firstLink.json));
+      assert.equal(firstLink.status, 200, JSON.stringify(firstLink.json));
+      assert.equal(firstLink.json.idempotent, true);
 
       const replayLink = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
         method: "POST",
@@ -760,6 +906,58 @@ const run = async () => {
       assert.equal(rejectedDetail.json.currentEstimate.status, "REJECTED");
       assert.equal(rejectedDetail.json.currentEstimate.decisionSource, "CUSTOMER");
       assert.equal(rejectedDetail.json.job.rawStatus, "ON_HOLD");
+    }, results);
+
+    await runTest("ready-for-collection notifications are sent once when the job reaches BIKE_READY", async () => {
+      const customer = await createCustomer(state, {
+        name: "Ready Collection Customer",
+        email: `ready-collection-${uniqueRef()}@example.com`,
+      });
+      const { job } = await createJob(state, {
+        customerId: customer.id,
+        bikeDescription: "Ready collection hybrid",
+      });
+
+      const toInProgress = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      });
+      assert.equal(toInProgress.status, 201, JSON.stringify(toInProgress.json));
+
+      const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "READY" }),
+      });
+      assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
+      assert.equal(toReady.json.job.status, "BIKE_READY");
+
+      const sentNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+        },
+        "SENT",
+      );
+      assert.ok(sentNotification, "Expected ready-for-collection notification row");
+      assert.equal(sentNotification.deliveryStatus, "SENT");
+      assert.equal(sentNotification.recipientEmail, customer.email);
+
+      const readyReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "READY" }),
+      });
+      assert.equal(readyReplay.status, 200, JSON.stringify(readyReplay.json));
+
+      const notificationCount = await prisma.workshopNotification.count({
+        where: {
+          workshopJobId: job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+        },
+      });
+      assert.equal(notificationCount, 1);
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {
