@@ -41,6 +41,30 @@ type UpdateCustomerBikeInput = {
   notes?: string | null;
 };
 
+const CUSTOMER_BIKE_YEAR_MIN = 1900;
+const CUSTOMER_BIKE_TYPES = [
+  "ROAD",
+  "MTB",
+  "E_BIKE",
+  "HYBRID",
+  "GRAVEL",
+  "COMMUTER",
+  "BMX",
+  "KIDS",
+  "CARGO",
+  "FOLDING",
+  "OTHER",
+] as const;
+
+const CUSTOMER_BIKE_TYPE_SET = new Set<string>(CUSTOMER_BIKE_TYPES);
+const CUSTOMER_BIKE_TYPE_ALIASES: Record<string, string> = {
+  EBIKE: "E_BIKE",
+  ELECTRIC: "E_BIKE",
+  ELECTRIC_BIKE: "E_BIKE",
+  MOUNTAIN: "MTB",
+  MOUNTAIN_BIKE: "MTB",
+};
+
 const customerBikeSelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
   id: true,
   customerId: true,
@@ -106,12 +130,38 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
 const normalizeOptionalBikeType = (value: string | undefined | null): string | undefined => {
   const normalized = normalizeOptionalText(value);
-  return normalized ? normalized.toUpperCase() : undefined;
+  if (!normalized) {
+    return undefined;
+  }
+
+  const canonicalCandidate = normalized
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  const canonical = CUSTOMER_BIKE_TYPE_ALIASES[canonicalCandidate] ?? canonicalCandidate;
+
+  if (!CUSTOMER_BIKE_TYPE_SET.has(canonical)) {
+    throw new HttpError(
+      400,
+      `bikeType must be one of ${CUSTOMER_BIKE_TYPES.join(", ")}`,
+      "INVALID_CUSTOMER_BIKE_TYPE",
+    );
+  }
+
+  return canonical;
 };
 
 const normalizeOptionalYear = (value: number | undefined | null): number | undefined => {
   if (value === undefined || value === null) {
     return undefined;
+  }
+
+  const maxYear = new Date().getUTCFullYear() + 1;
+  if (value < CUSTOMER_BIKE_YEAR_MIN || value > maxYear) {
+    throw new HttpError(
+      400,
+      `year must be between ${CUSTOMER_BIKE_YEAR_MIN} and ${maxYear}`,
+      "INVALID_CUSTOMER_BIKE_YEAR",
+    );
   }
 
   return value;
