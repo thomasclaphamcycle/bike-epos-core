@@ -60,7 +60,7 @@ Content-Type: application/json
 
 {
   "year": 2025,
-  "bikeType": "E-BIKE",
+  "bikeType": "E_BIKE",
   "wheelSize": "29\"",
   "frameSize": "Large",
   "groupset": "Shimano XT",

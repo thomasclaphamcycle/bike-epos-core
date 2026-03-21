@@ -130,6 +130,10 @@ const addDays = (date, days) => {
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
+const CURRENT_YEAR = new Date().getUTCFullYear();
+const MAX_VALID_BIKE_YEAR = CURRENT_YEAR + 1;
+const TOO_LOW_BIKE_YEAR = 1899;
+const TOO_HIGH_BIKE_YEAR = MAX_VALID_BIKE_YEAR + 1;
 
 const RUN_REF = uniqueRef();
 const STAFF_USER_ID = `m83-staff-${RUN_REF}`;
@@ -566,8 +570,8 @@ const run = async () => {
         label: "Structured bike",
         make: "Specialized",
         model: "Turbo Vado",
-        year: 2024,
-        bikeType: "e-bike",
+        year: MAX_VALID_BIKE_YEAR,
+        bikeType: "ROAD",
         wheelSize: "700c",
         frameSize: "L",
         groupset: "Shimano Deore",
@@ -576,8 +580,8 @@ const run = async () => {
         batterySerial: "BAT-12345",
       });
 
-      assert.equal(bike.year, 2024);
-      assert.equal(bike.bikeType, "E-BIKE");
+      assert.equal(bike.year, MAX_VALID_BIKE_YEAR);
+      assert.equal(bike.bikeType, "ROAD");
       assert.equal(bike.wheelSize, "700c");
       assert.equal(bike.frameSize, "L");
       assert.equal(bike.groupset, "Shimano Deore");
@@ -588,8 +592,8 @@ const run = async () => {
       assert.doesNotMatch(bike.displayName, /E-BIKE/);
 
       const updatedBike = await updateBike(bike.id, {
-        year: 2025,
-        bikeType: "hybrid",
+        year: CURRENT_YEAR,
+        bikeType: "E-BIKE",
         wheelSize: "650b",
         frameSize: "M",
         groupset: "Shimano GRX",
@@ -598,8 +602,8 @@ const run = async () => {
         batterySerial: null,
       });
 
-      assert.equal(updatedBike.year, 2025);
-      assert.equal(updatedBike.bikeType, "HYBRID");
+      assert.equal(updatedBike.year, CURRENT_YEAR);
+      assert.equal(updatedBike.bikeType, "E_BIKE");
       assert.equal(updatedBike.wheelSize, "650b");
       assert.equal(updatedBike.frameSize, "M");
       assert.equal(updatedBike.groupset, "Shimano GRX");
@@ -611,10 +615,75 @@ const run = async () => {
         headers: STAFF_HEADERS,
       });
       assert.equal(history.status, 200, JSON.stringify(history.json));
-      assert.equal(history.json.bike.year, 2025);
-      assert.equal(history.json.bike.bikeType, "HYBRID");
+      assert.equal(history.json.bike.year, CURRENT_YEAR);
+      assert.equal(history.json.bike.bikeType, "E_BIKE");
       assert.equal(history.json.bike.groupset, "Shimano GRX");
       assert.equal(history.json.bike.motorBrand, null);
+    }, results);
+
+    await runTest("customer bike year bounds and bike type vocabulary reject invalid input on create and update", async () => {
+      const customer = await createCustomer(state, {
+        name: `Bike Validation Customer ${uniqueRef()}`,
+      });
+
+      const invalidYearLow = await fetchJson(`/api/customers/${customer.id}/bikes`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          label: "Too old bike",
+          year: TOO_LOW_BIKE_YEAR,
+        }),
+      });
+      assert.equal(invalidYearLow.status, 400, JSON.stringify(invalidYearLow.json));
+      assert.equal(invalidYearLow.json.error.code, "INVALID_CUSTOMER_BIKE_YEAR");
+
+      const invalidYearHigh = await fetchJson(`/api/customers/${customer.id}/bikes`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          label: "Future bike",
+          year: TOO_HIGH_BIKE_YEAR,
+        }),
+      });
+      assert.equal(invalidYearHigh.status, 400, JSON.stringify(invalidYearHigh.json));
+      assert.equal(invalidYearHigh.json.error.code, "INVALID_CUSTOMER_BIKE_YEAR");
+
+      const invalidBikeType = await fetchJson(`/api/customers/${customer.id}/bikes`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          label: "Mystery bike",
+          bikeType: "SPACESHIP",
+        }),
+      });
+      assert.equal(invalidBikeType.status, 400, JSON.stringify(invalidBikeType.json));
+      assert.equal(invalidBikeType.json.error.code, "INVALID_CUSTOMER_BIKE_TYPE");
+
+      const bike = await createBike(state, customer.id, {
+        label: "Validation parity bike",
+        year: CURRENT_YEAR,
+        bikeType: "GRAVEL",
+      });
+
+      const updateInvalidYear = await fetchJson(`/api/customers/bikes/${bike.id}`, {
+        method: "PATCH",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          year: TOO_HIGH_BIKE_YEAR,
+        }),
+      });
+      assert.equal(updateInvalidYear.status, 400, JSON.stringify(updateInvalidYear.json));
+      assert.equal(updateInvalidYear.json.error.code, "INVALID_CUSTOMER_BIKE_YEAR");
+
+      const updateInvalidBikeType = await fetchJson(`/api/customers/bikes/${bike.id}`, {
+        method: "PATCH",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          bikeType: "UNKNOWN_FAST_BIKE",
+        }),
+      });
+      assert.equal(updateInvalidBikeType.status, 400, JSON.stringify(updateInvalidBikeType.json));
+      assert.equal(updateInvalidBikeType.json.error.code, "INVALID_CUSTOMER_BIKE_TYPE");
     }, results);
 
     await runTest("bike history only includes truly linked jobs and exposes workshop history details", async () => {
