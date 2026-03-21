@@ -1,4 +1,5 @@
 import { on, type CoreEventMap } from "./events";
+import { registerNotificationSubscribers } from "./notificationSubscribers";
 import { registerReminderSubscribers } from "./reminderSubscribers";
 
 type DiagnosticEventName = keyof CoreEventMap;
@@ -57,6 +58,17 @@ const toLogSummary = <TEventName extends DiagnosticEventName>(
         status: payload.status,
         saleId: payload.saleId ?? null,
       };
+    case "workshop.quote.ready":
+      return {
+        workshopJobId: payload.workshopJobId,
+        workshopEstimateId: payload.workshopEstimateId,
+        estimateVersion: payload.estimateVersion,
+      };
+    case "workshop.job.ready_for_collection":
+      return {
+        workshopJobId: payload.workshopJobId,
+        status: payload.status,
+      };
     case "stock.adjusted":
       return {
         variantId: payload.variantId,
@@ -74,6 +86,7 @@ export const registerInternalEventSubscribers = () => {
 
   subscribersRegistered = true;
   registerReminderSubscribers();
+  registerNotificationSubscribers();
 
   on("sale.completed", (payload) => {
     recordDiagnosticEvent("sale.completed", payload);
@@ -85,6 +98,14 @@ export const registerInternalEventSubscribers = () => {
 
   on("workshop.job.completed", (payload) => {
     recordDiagnosticEvent("workshop.job.completed", payload);
+  });
+
+  on("workshop.quote.ready", (payload) => {
+    recordDiagnosticEvent("workshop.quote.ready", payload);
+  });
+
+  on("workshop.job.ready_for_collection", (payload) => {
+    recordDiagnosticEvent("workshop.job.ready_for_collection", payload);
   });
 
   on("stock.adjusted", (payload) => {

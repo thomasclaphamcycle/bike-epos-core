@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -99,7 +99,7 @@
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
-    "verify": "npm run prisma:generate && NODE_ENV=test npm test && npm run build && NODE_ENV=test npm run e2e && NODE_ENV=test npm run test:m38 && NODE_ENV=test npm run test:m24 && NODE_ENV=test npm run test:m27 && NODE_ENV=test npm run test:m30 && npm run db:seed:dev",
+    "verify": "npm run prisma:generate && NODE_ENV=test npm test && npm run build && NODE_ENV=test npm run e2e && NODE_ENV=test npm run test:m38 && NODE_ENV=test npm run test:m24 && NODE_ENV=test npm run test:m27 && NODE_ENV=test npm run test:m30 && NODE_ENV=test npm run test:m83 && npm run db:seed:dev",
     "roadmap": "node scripts/roadmap/report.js",
     "roadmap:json": "node scripts/roadmap/report.js --json",
     "roadmap1": "node scripts/roadmap/chart.js"
@@ -128,6 +128,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^8.0.3",
     "pg": "^8.19.0"
   },
   "devDependencies": {
@@ -135,6 +136,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.3.3",
+    "@types/nodemailer": "^7.0.11",
     "prisma": "^7.4.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

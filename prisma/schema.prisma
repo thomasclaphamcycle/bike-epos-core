@@ -949,6 +949,7 @@ model Customer {
   bikes              CustomerBike[]
   creditAccounts     CreditAccount[]
   reminderCandidates ReminderCandidate[]
+  workshopNotifications WorkshopNotification[]
   hireBookings       HireBooking[]
 
   @@index([name])
@@ -1049,6 +1050,7 @@ model WorkshopJob {
   parts              WorkshopJobPart[]
   lines              WorkshopJobLine[]
   estimates          WorkshopEstimate[]
+  notifications      WorkshopNotification[]
   reminderCandidates ReminderCandidate[]
 
   @@index([scheduledDate])
@@ -1098,6 +1100,7 @@ model WorkshopEstimate {
   createdByStaff  User?                        @relation("WorkshopEstimateCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   decisionByStaff User?                        @relation("WorkshopEstimateDecisionBy", fields: [decisionByStaffId], references: [id], onDelete: SetNull)
   lines           WorkshopEstimateLine[]
+  notifications   WorkshopNotification[]
 
   @@unique([workshopJobId, version])
   @@index([workshopJobId, createdAt])
@@ -1105,6 +1108,53 @@ model WorkshopEstimate {
   @@index([createdByStaffId])
   @@index([decisionByStaffId])
   @@index([customerQuoteTokenExpiresAt])
+}
+
+enum WorkshopNotificationChannel {
+  EMAIL
+}
+
+enum WorkshopNotificationEventType {
+  QUOTE_READY
+  JOB_READY_FOR_COLLECTION
+}
+
+enum WorkshopNotificationDeliveryStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
+}
+
+model WorkshopNotification {
+  id              String                             @id @default(uuid()) @db.Uuid
+  workshopJobId   String                             @db.Uuid
+  workshopEstimateId String?                         @db.Uuid
+  customerId      String?                            @db.Uuid
+  channel         WorkshopNotificationChannel
+  eventType       WorkshopNotificationEventType
+  deliveryStatus  WorkshopNotificationDeliveryStatus @default(PENDING)
+  recipientEmail  String?
+  subject         String?
+  bodyText        String?
+  bodyHtml        String?
+  dedupeKey       String                             @unique
+  reasonCode      String?
+  reasonMessage   String?
+  providerMessageId String?
+  payload         Json?
+  sentAt          DateTime?
+  createdAt       DateTime                           @default(now())
+  updatedAt       DateTime                           @updatedAt
+
+  workshopJob      WorkshopJob       @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  workshopEstimate WorkshopEstimate? @relation(fields: [workshopEstimateId], references: [id], onDelete: SetNull)
+  customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([workshopJobId, createdAt])
+  @@index([workshopEstimateId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([eventType, deliveryStatus, createdAt])
 }
 
 model WorkshopEstimateLine {

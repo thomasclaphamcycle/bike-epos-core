@@ -6,6 +6,7 @@ import {
   WorkshopJobNoteVisibility,
   WorkshopJobStatus,
 } from "@prisma/client";
+import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -834,7 +835,7 @@ export const setWorkshopEstimateStatus = async (
   const targetStatus = parseEstimateStatus(input.status);
   const decisionSource = input.decisionSource ?? "STAFF";
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await ensureWorkshopJobWithLinesTx(tx, workshopJobId);
 
     if (job.closedAt) {
@@ -852,11 +853,15 @@ export const setWorkshopEstimateStatus = async (
     const fromJobStatus = job.status;
 
     if (!currentEstimate) {
-      const created = await createEstimateVersionTx(tx, job, {
+      let created = await createEstimateVersionTx(tx, job, {
         status: targetStatus,
         actor: input.actor,
         decisionSource,
       });
+      if (targetStatus === "PENDING_APPROVAL") {
+        const preparedQuote = await ensureCustomerQuoteTokenTx(tx, created, input.actor);
+        created = preparedQuote.estimate;
+      }
       const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
         tx,
         workshopJobId,
@@ -917,6 +922,8 @@ export const setWorkshopEstimateStatus = async (
           supersedeEstimateId: currentEstimate.id,
         });
       }
+      const preparedQuote = await ensureCustomerQuoteTokenTx(tx, nextEstimate, input.actor);
+      nextEstimate = preparedQuote.estimate;
     } else if (targetStatus === "APPROVED") {
       if (currentEstimate.status === "APPROVED") {
         return {
@@ -996,6 +1003,22 @@ export const setWorkshopEstimateStatus = async (
       idempotent: false,
     };
   });
+
+  if (!result.idempotent && targetStatus === "PENDING_APPROVAL") {
+    emit("workshop.quote.ready", {
+      id: result.estimate.id,
+      type: "workshop.quote.ready",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      workshopEstimateId: result.estimate.id,
+      estimateVersion: result.estimate.version,
+      ...(result.estimate.customerQuote?.publicPath
+        ? { quotePublicPath: result.estimate.customerQuote.publicPath }
+        : {}),
+    });
+  }
+
+  return result;
 };
 
 export const createWorkshopEstimateCustomerQuoteLink = async (

@@ -20,6 +20,11 @@ Optional operational variable:
 
 - `OPS_LOGGING=1`: enables concise structured lifecycle logs for auth, workshop status changes, stock adjustments, and purchase-order receiving
 - `COREPOS_DEBUG=1`: enables concise request, error, and startup diagnostics for troubleshooting without changing API responses
+- `PUBLIC_APP_URL`: base customer-facing CorePOS URL used in workshop quote emails, for example `https://corepos.example.com`
+- `EMAIL_DELIVERY_MODE=log|smtp`: `log` is safe for evaluation and local testing, while `smtp` enables real delivery
+- `SMTP_URL`: required when `EMAIL_DELIVERY_MODE=smtp`
+- `EMAIL_FROM`: optional sender email override for workshop notifications
+- `EMAIL_FROM_NAME`: optional sender display-name override for workshop notifications
 
 Operational guidance:
 

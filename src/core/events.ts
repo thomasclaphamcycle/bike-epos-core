@@ -28,6 +28,22 @@ export type CoreEventMap = {
     completedAt?: string;
     saleId?: string;
   };
+  "workshop.quote.ready": {
+    id: string;
+    type: "workshop.quote.ready";
+    timestamp: string;
+    workshopJobId: string;
+    workshopEstimateId: string;
+    estimateVersion: number;
+    quotePublicPath?: string;
+  };
+  "workshop.job.ready_for_collection": {
+    id: string;
+    type: "workshop.job.ready_for_collection";
+    timestamp: string;
+    workshopJobId: string;
+    status: string;
+  };
   "stock.adjusted": {
     id: string;
     type: "stock.adjusted";

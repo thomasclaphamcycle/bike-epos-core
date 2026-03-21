@@ -494,6 +494,16 @@ export const changeWorkshopJobStatus = async (
     });
   }
 
+  if (!result.idempotent && result.emittedStage === "READY") {
+    emit("workshop.job.ready_for_collection", {
+      id: result.job.id,
+      type: "workshop.job.ready_for_collection",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      status: result.job.status,
+    });
+  }
+
   return {
     job: {
       id: result.job.id,

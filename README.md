@@ -29,6 +29,13 @@ cp .env.example .env
 cp .env.test.example .env.test
 ```
 
+Optional workshop notification email settings:
+
+- leave `EMAIL_DELIVERY_MODE=log` for safe local and test runs that only log outbound workshop emails
+- set `EMAIL_DELIVERY_MODE=smtp` plus `SMTP_URL` when you want real delivery
+- set `PUBLIC_APP_URL` so customer quote emails use the correct externally reachable URL
+- optionally set `EMAIL_FROM` and `EMAIL_FROM_NAME` to override the sender identity
+
 4. Prepare the local development database:
 
 ```bash
