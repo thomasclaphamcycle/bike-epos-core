@@ -8,6 +8,8 @@ export type WorkshopNotificationDeliveryStatus =
   | "SKIPPED"
   | "FAILED";
 
+export type WorkshopNotificationChannel = "EMAIL" | "SMS" | "WHATSAPP";
+
 export const workshopNotificationEventLabel = (
   eventType: WorkshopNotificationEventType | string | null | undefined,
 ) => {
@@ -50,5 +52,20 @@ export const workshopNotificationDeliveryStatusClass = (
       return "status-badge status-cancelled";
     default:
       return "status-badge";
+  }
+};
+
+export const workshopNotificationChannelLabel = (
+  channel: WorkshopNotificationChannel | string | null | undefined,
+) => {
+  switch (channel) {
+    case "EMAIL":
+      return "Email";
+    case "SMS":
+      return "SMS";
+    case "WHATSAPP":
+      return "WhatsApp";
+    default:
+      return channel || "-";
   }
 };

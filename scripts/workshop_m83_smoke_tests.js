@@ -814,6 +814,23 @@ const run = async () => {
         sentSmsNotification.bodyText,
       );
 
+      const sentWhatsAppNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+          channel: "WHATSAPP",
+        },
+        "SENT",
+      );
+      assert.ok(sentWhatsAppNotification, "Expected quote-ready WhatsApp notification row");
+      assert.equal(sentWhatsAppNotification.deliveryStatus, "SENT");
+      assert.equal(sentWhatsAppNotification.recipientPhone, customer.phone);
+      assert.ok(
+        typeof sentWhatsAppNotification.bodyText === "string" &&
+          sentWhatsAppNotification.bodyText.toLowerCase().includes("quote"),
+        sentWhatsAppNotification.bodyText,
+      );
+
       const notificationHistory = await fetchJson(
         `/api/workshop/jobs/${job.id}/notifications`,
         {
@@ -842,6 +859,16 @@ const run = async () => {
         ),
         JSON.stringify(notificationHistory.json),
       );
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "QUOTE_READY" &&
+            notification.channel === "WHATSAPP" &&
+            notification.deliveryStatus === "SENT" &&
+            notification.recipientPhone === customer.phone,
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
 
       const replayApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
         method: "POST",
@@ -856,7 +883,7 @@ const run = async () => {
           eventType: "QUOTE_READY",
         },
       });
-      assert.equal(notificationCount, 2);
+      assert.equal(notificationCount, 3);
 
       const resendQuote = await fetchJson(
         `/api/workshop/jobs/${job.id}/notifications/resend`,
@@ -880,7 +907,7 @@ const run = async () => {
           eventType: "QUOTE_READY",
         },
       });
-      assert.equal(resentNotificationCount, 3);
+      assert.equal(resentNotificationCount, 4);
 
       const noEmailCustomer = await createCustomer(state, {
         name: "No Email Quote Customer",
@@ -934,6 +961,18 @@ const run = async () => {
       assert.equal(sentSmsWithoutEmail.deliveryStatus, "SENT");
       assert.equal(sentSmsWithoutEmail.recipientPhone, noEmailCustomer.phone);
 
+      const sentWhatsAppWithoutEmail = await waitForNotification(
+        {
+          workshopJobId: noEmailJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "WHATSAPP",
+        },
+        "SENT",
+      );
+      assert.ok(sentWhatsAppWithoutEmail, "Expected quote-ready WhatsApp without email");
+      assert.equal(sentWhatsAppWithoutEmail.deliveryStatus, "SENT");
+      assert.equal(sentWhatsAppWithoutEmail.recipientPhone, noEmailCustomer.phone);
+
       const noPhoneCustomer = await createCustomer(state, {
         name: "No Phone Quote Customer",
         phone: undefined,
@@ -984,6 +1023,18 @@ const run = async () => {
       assert.ok(skippedSmsNotification, "Expected skipped quote-ready SMS row");
       assert.equal(skippedSmsNotification.deliveryStatus, "SKIPPED");
       assert.equal(skippedSmsNotification.reasonCode, "CUSTOMER_PHONE_MISSING");
+
+      const skippedWhatsAppNotification = await waitForNotification(
+        {
+          workshopJobId: noPhoneJob.job.id,
+          eventType: "QUOTE_READY",
+          channel: "WHATSAPP",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedWhatsAppNotification, "Expected skipped quote-ready WhatsApp row");
+      assert.equal(skippedWhatsAppNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedWhatsAppNotification.reasonCode, "CUSTOMER_PHONE_MISSING");
     }, results);
 
     await runTest("customer quote links can be reused safely and customer rejection is idempotent", async () => {
@@ -1099,6 +1150,21 @@ const run = async () => {
       assert.equal(sentSmsNotification.deliveryStatus, "SENT");
       assert.equal(sentSmsNotification.recipientPhone, customer.phone);
 
+      const sentWhatsAppNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "WHATSAPP",
+        },
+        "SENT",
+      );
+      assert.ok(
+        sentWhatsAppNotification,
+        "Expected ready-for-collection WhatsApp notification row",
+      );
+      assert.equal(sentWhatsAppNotification.deliveryStatus, "SENT");
+      assert.equal(sentWhatsAppNotification.recipientPhone, customer.phone);
+
       const notificationHistory = await fetchJson(
         `/api/workshop/jobs/${job.id}/notifications`,
         {
@@ -1126,6 +1192,16 @@ const run = async () => {
         ),
         JSON.stringify(notificationHistory.json),
       );
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "JOB_READY_FOR_COLLECTION" &&
+            notification.channel === "WHATSAPP" &&
+            notification.deliveryStatus === "SENT" &&
+            notification.recipientPhone === customer.phone,
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
 
       const readyReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -1140,7 +1216,7 @@ const run = async () => {
           eventType: "JOB_READY_FOR_COLLECTION",
         },
       });
-      assert.equal(notificationCount, 2);
+      assert.equal(notificationCount, 3);
 
       const resendReady = await fetchJson(
         `/api/workshop/jobs/${job.id}/notifications/resend`,
@@ -1164,7 +1240,7 @@ const run = async () => {
           eventType: "JOB_READY_FOR_COLLECTION",
         },
       });
-      assert.equal(resentNotificationCount, 3);
+      assert.equal(resentNotificationCount, 4);
     }, results);
 
     await runTest("manager can add and retrieve customer-visible quote notes", async () => {

@@ -1113,6 +1113,7 @@ model WorkshopEstimate {
 enum WorkshopNotificationChannel {
   EMAIL
   SMS
+  WHATSAPP
 }
 
 enum WorkshopNotificationEventType {

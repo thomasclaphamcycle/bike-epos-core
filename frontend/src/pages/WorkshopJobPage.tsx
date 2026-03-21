@@ -16,6 +16,7 @@ import {
   workshopEstimateStatusLabel,
 } from "../features/workshop/estimateStatus";
 import {
+  workshopNotificationChannelLabel,
   workshopNotificationDeliveryStatusClass,
   workshopNotificationDeliveryStatusLabel,
   workshopNotificationEventLabel,
@@ -216,7 +217,7 @@ type WorkshopNotificationRecord = {
   id: string;
   workshopJobId: string;
   workshopEstimateId: string | null;
-  channel: "EMAIL" | "SMS";
+  channel: "EMAIL" | "SMS" | "WHATSAPP";
   eventType: "QUOTE_READY" | "JOB_READY_FOR_COLLECTION";
   deliveryStatus: "PENDING" | "SENT" | "SKIPPED" | "FAILED";
   recipientEmail: string | null;
@@ -298,6 +299,11 @@ const notificationActionLabel = (
   eventType: WorkshopNotificationRecord["eventType"],
 ) =>
   eventType === "QUOTE_READY" ? "quote email" : "ready-for-collection email";
+
+const notificationRecipientLabel = (notification: WorkshopNotificationRecord) =>
+  notification.channel === "EMAIL"
+    ? notification.recipientEmail || "No customer email"
+    : notification.recipientPhone || "No customer phone";
 
 const getWorkflowGuidance = (input: {
   rawStatus: string;
@@ -1673,7 +1679,7 @@ export const WorkshopJobPage = () => {
           <div>
             <h2>Notifications</h2>
             <p className="muted-text">
-              Review workshop email attempts here and resend the current quote or collection email when the job state still supports it.
+              Review workshop notification attempts here and resend the current quote or collection email when the job state still supports it.
             </p>
           </div>
           <div className="actions-inline">
@@ -1699,7 +1705,7 @@ export const WorkshopJobPage = () => {
         </div>
 
         <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
-          Notification history shows both email and SMS attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
+          Notification history shows email, SMS, and WhatsApp attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
         </div>
 
         <div className="table-wrap">
@@ -1731,7 +1737,7 @@ export const WorkshopJobPage = () => {
                         {workshopNotificationEventLabel(notification.eventType)}
                       </div>
                       <div className="table-secondary">
-                        {notification.channel === "EMAIL" ? "Email" : notification.channel}
+                        {workshopNotificationChannelLabel(notification.channel)}
                       </div>
                     </td>
                     <td>{formatOptionalDateTime(notification.createdAt)}</td>
@@ -1746,11 +1752,7 @@ export const WorkshopJobPage = () => {
                         )}
                       </span>
                     </td>
-                    <td>
-                      {notification.channel === "SMS"
-                        ? notification.recipientPhone || "No customer phone"
-                        : notification.recipientEmail || "No customer email"}
-                    </td>
+                    <td>{notificationRecipientLabel(notification)}</td>
                     <td>{notification.subject || notification.messageSummary || "-"}</td>
                     <td>
                       {notification.reasonMessage ||
