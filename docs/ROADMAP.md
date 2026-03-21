@@ -270,7 +270,7 @@ Implementation status:
 - known-bike workshop intake can now start directly from a customer bike profile or bike history view, preloading the linked customer and bike context into workshop check-in
 - workshop estimates can now generate secure customer quote-review links, with customer approvals or rejections flowing back into the existing estimate history and audit trail without weakening stale-quote handling
 - the `v1.1.0` workshop shaping pass now aligns execution, quote, and collection wording across workshop jobs, bike history, customer profiles, check-in, and customer quote review so the full workflow reads as one coherent milestone
-- the first event-driven workshop notification layer now sends email-first quote-ready and ready-for-collection messages when customer email is available, while logging skipped or duplicate-safe outcomes for later channel expansion
+- the first event-driven workshop notification layer now sends quote-ready and ready-for-collection messages over email and SMS when customer contact details are available, while still logging skipped or duplicate-safe outcomes per channel
 - workshop job detail now exposes notification history plus safe resend controls, so staff can review delivery outcomes and retry customer emails without leaving the live job
 
 ---

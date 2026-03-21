@@ -1112,6 +1112,7 @@ model WorkshopEstimate {
 
 enum WorkshopNotificationChannel {
   EMAIL
+  SMS
 }
 
 enum WorkshopNotificationEventType {
@@ -1135,6 +1136,7 @@ model WorkshopNotification {
   eventType       WorkshopNotificationEventType
   deliveryStatus  WorkshopNotificationDeliveryStatus @default(PENDING)
   recipientEmail  String?
+  recipientPhone  String?
   subject         String?
   bodyText        String?
   bodyHtml        String?

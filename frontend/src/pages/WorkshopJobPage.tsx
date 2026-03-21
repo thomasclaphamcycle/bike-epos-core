@@ -216,10 +216,11 @@ type WorkshopNotificationRecord = {
   id: string;
   workshopJobId: string;
   workshopEstimateId: string | null;
-  channel: "EMAIL";
+  channel: "EMAIL" | "SMS";
   eventType: "QUOTE_READY" | "JOB_READY_FOR_COLLECTION";
   deliveryStatus: "PENDING" | "SENT" | "SKIPPED" | "FAILED";
   recipientEmail: string | null;
+  recipientPhone: string | null;
   subject: string | null;
   messageSummary: string | null;
   reasonCode: string | null;
@@ -1698,7 +1699,7 @@ export const WorkshopJobPage = () => {
         </div>
 
         <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
-          Quote email resend stays available while a current quote is awaiting approval. Collection email resend stays available while the bike is ready for collection.
+          Notification history shows both email and SMS attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
         </div>
 
         <div className="table-wrap">
@@ -1720,7 +1721,7 @@ export const WorkshopJobPage = () => {
                 </tr>
               ) : notifications.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No workshop emails have been attempted for this job yet.</td>
+                  <td colSpan={6}>No workshop notifications have been attempted for this job yet.</td>
                 </tr>
               ) : (
                 notifications.map((notification) => (
@@ -1745,7 +1746,11 @@ export const WorkshopJobPage = () => {
                         )}
                       </span>
                     </td>
-                    <td>{notification.recipientEmail || "No customer email"}</td>
+                    <td>
+                      {notification.channel === "SMS"
+                        ? notification.recipientPhone || "No customer phone"
+                        : notification.recipientEmail || "No customer email"}
+                    </td>
                     <td>{notification.subject || notification.messageSummary || "-"}</td>
                     <td>
                       {notification.reasonMessage ||

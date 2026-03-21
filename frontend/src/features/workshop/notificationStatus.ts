@@ -13,9 +13,9 @@ export const workshopNotificationEventLabel = (
 ) => {
   switch (eventType) {
     case "QUOTE_READY":
-      return "Quote Ready Email";
+      return "Quote Ready";
     case "JOB_READY_FOR_COLLECTION":
-      return "Ready for Collection Email";
+      return "Ready for Collection";
     default:
       return eventType || "-";
   }
