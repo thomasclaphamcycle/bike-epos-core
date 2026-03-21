@@ -160,7 +160,9 @@ Current internal subscribers are:
   - currently listen to `workshop.quote.ready` and `workshop.job.ready_for_collection`
   - create persistent `WorkshopNotification` rows for sent, skipped, failed, and duplicate-safe notification outcomes
   - send simple workshop customer messages through `src/services/notificationService.ts`, `src/services/emailService.ts`, `src/services/smsService.ts`, and `src/services/whatsappService.ts`
+  - apply deterministic primary-channel selection plus fallback inside `notificationService.ts`, so quote-ready prefers WhatsApp then SMS then email, while ready-for-collection prefers SMS then WhatsApp then email
   - default to log-mode delivery locally, while allowing SMTP email delivery plus Twilio-backed SMS and WhatsApp delivery from environment configuration
+  - support simple channel gating via environment flags without creating a separate preference system or admin UI
 
 Manager-facing internal visibility now exists through:
 

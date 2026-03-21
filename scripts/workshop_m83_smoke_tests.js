@@ -780,40 +780,6 @@ const run = async () => {
       assert.equal(pendingDetail.status, 200, JSON.stringify(pendingDetail.json));
       assert.equal(pendingDetail.json.currentEstimate.customerQuote.status, "ACTIVE");
 
-      const sentEmailNotification = await waitForNotification(
-        {
-          workshopJobId: job.id,
-          eventType: "QUOTE_READY",
-          channel: "EMAIL",
-        },
-        "SENT",
-      );
-      assert.ok(sentEmailNotification, "Expected quote-ready email notification row");
-      assert.equal(sentEmailNotification.deliveryStatus, "SENT");
-      assert.equal(sentEmailNotification.recipientEmail, customer.email);
-      assert.ok(
-        typeof sentEmailNotification.subject === "string" &&
-          sentEmailNotification.subject.toLowerCase().includes("quote"),
-        sentEmailNotification.subject,
-      );
-
-      const sentSmsNotification = await waitForNotification(
-        {
-          workshopJobId: job.id,
-          eventType: "QUOTE_READY",
-          channel: "SMS",
-        },
-        "SENT",
-      );
-      assert.ok(sentSmsNotification, "Expected quote-ready SMS notification row");
-      assert.equal(sentSmsNotification.deliveryStatus, "SENT");
-      assert.equal(sentSmsNotification.recipientPhone, customer.phone);
-      assert.ok(
-        typeof sentSmsNotification.bodyText === "string" &&
-          sentSmsNotification.bodyText.toLowerCase().includes("quote"),
-        sentSmsNotification.bodyText,
-      );
-
       const sentWhatsAppNotification = await waitForNotification(
         {
           workshopJobId: job.id,
@@ -831,6 +797,31 @@ const run = async () => {
         sentWhatsAppNotification.bodyText,
       );
 
+      const skippedSmsNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+          channel: "SMS",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedSmsNotification, "Expected skipped quote-ready SMS fallback row");
+      assert.equal(skippedSmsNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedSmsNotification.reasonCode, "FALLBACK_NOT_REQUIRED");
+
+      const skippedEmailNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "QUOTE_READY",
+          channel: "EMAIL",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedEmailNotification, "Expected skipped quote-ready email fallback row");
+      assert.equal(skippedEmailNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedEmailNotification.reasonCode, "FALLBACK_NOT_REQUIRED");
+      assert.equal(skippedEmailNotification.recipientEmail, customer.email);
+
       const notificationHistory = await fetchJson(
         `/api/workshop/jobs/${job.id}/notifications`,
         {
@@ -843,9 +834,10 @@ const run = async () => {
         notificationHistory.json.notifications.some(
           (notification) =>
             notification.eventType === "QUOTE_READY" &&
-            notification.channel === "EMAIL" &&
+            notification.channel === "WHATSAPP" &&
             notification.deliveryStatus === "SENT" &&
-            notification.recipientEmail === customer.email,
+            notification.recipientPhone === customer.phone &&
+            notification.strategy?.label === "Primary",
         ),
         JSON.stringify(notificationHistory.json),
       );
@@ -854,8 +846,9 @@ const run = async () => {
           (notification) =>
             notification.eventType === "QUOTE_READY" &&
             notification.channel === "SMS" &&
-            notification.deliveryStatus === "SENT" &&
-            notification.recipientPhone === customer.phone,
+            notification.deliveryStatus === "SKIPPED" &&
+            notification.reasonCode === "FALLBACK_NOT_REQUIRED" &&
+            notification.strategy?.label === "Fallback 2",
         ),
         JSON.stringify(notificationHistory.json),
       );
@@ -863,9 +856,10 @@ const run = async () => {
         notificationHistory.json.notifications.some(
           (notification) =>
             notification.eventType === "QUOTE_READY" &&
-            notification.channel === "WHATSAPP" &&
-            notification.deliveryStatus === "SENT" &&
-            notification.recipientPhone === customer.phone,
+            notification.channel === "EMAIL" &&
+            notification.deliveryStatus === "SKIPPED" &&
+            notification.reasonCode === "FALLBACK_NOT_REQUIRED" &&
+            notification.strategy?.label === "Fallback 3",
         ),
         JSON.stringify(notificationHistory.json),
       );
@@ -899,7 +893,8 @@ const run = async () => {
       assert.equal(resendQuote.json.notification.eventType, "QUOTE_READY");
       assert.equal(resendQuote.json.notification.channel, "EMAIL");
       assert.equal(resendQuote.json.notification.deliveryStatus, "SENT");
-      assert.notEqual(resendQuote.json.notification.id, sentEmailNotification.id);
+      assert.equal(resendQuote.json.notification.strategy?.label, "Manual resend");
+      assert.notEqual(resendQuote.json.notification.id, skippedEmailNotification.id);
 
       const resentNotificationCount = await prisma.workshopNotification.count({
         where: {
@@ -937,7 +932,7 @@ const run = async () => {
       });
       assert.equal(noEmailApproval.status, 201, JSON.stringify(noEmailApproval.json));
 
-      const skippedEmailNotification = await waitForNotification(
+      const skippedEmailWithoutAddressNotification = await waitForNotification(
         {
           workshopJobId: noEmailJob.job.id,
           eventType: "QUOTE_READY",
@@ -945,21 +940,27 @@ const run = async () => {
         },
         "SKIPPED",
       );
-      assert.ok(skippedEmailNotification, "Expected skipped quote-ready email notification row");
-      assert.equal(skippedEmailNotification.deliveryStatus, "SKIPPED");
-      assert.equal(skippedEmailNotification.reasonCode, "CUSTOMER_EMAIL_MISSING");
+      assert.ok(
+        skippedEmailWithoutAddressNotification,
+        "Expected skipped quote-ready email notification row",
+      );
+      assert.equal(skippedEmailWithoutAddressNotification.deliveryStatus, "SKIPPED");
+      assert.equal(
+        skippedEmailWithoutAddressNotification.reasonCode,
+        "CUSTOMER_EMAIL_MISSING",
+      );
 
-      const sentSmsWithoutEmail = await waitForNotification(
+      const skippedSmsWithoutEmail = await waitForNotification(
         {
           workshopJobId: noEmailJob.job.id,
           eventType: "QUOTE_READY",
           channel: "SMS",
         },
-        "SENT",
+        "SKIPPED",
       );
-      assert.ok(sentSmsWithoutEmail, "Expected quote-ready SMS without email");
-      assert.equal(sentSmsWithoutEmail.deliveryStatus, "SENT");
-      assert.equal(sentSmsWithoutEmail.recipientPhone, noEmailCustomer.phone);
+      assert.ok(skippedSmsWithoutEmail, "Expected skipped quote-ready SMS fallback without email");
+      assert.equal(skippedSmsWithoutEmail.deliveryStatus, "SKIPPED");
+      assert.equal(skippedSmsWithoutEmail.reasonCode, "FALLBACK_NOT_REQUIRED");
 
       const sentWhatsAppWithoutEmail = await waitForNotification(
         {
@@ -1012,7 +1013,7 @@ const run = async () => {
       assert.ok(sentEmailWithoutPhone, "Expected quote-ready email without phone");
       assert.equal(sentEmailWithoutPhone.recipientEmail, noPhoneCustomer.email);
 
-      const skippedSmsNotification = await waitForNotification(
+      const skippedSmsWithoutPhoneNotification = await waitForNotification(
         {
           workshopJobId: noPhoneJob.job.id,
           eventType: "QUOTE_READY",
@@ -1020,9 +1021,12 @@ const run = async () => {
         },
         "SKIPPED",
       );
-      assert.ok(skippedSmsNotification, "Expected skipped quote-ready SMS row");
-      assert.equal(skippedSmsNotification.deliveryStatus, "SKIPPED");
-      assert.equal(skippedSmsNotification.reasonCode, "CUSTOMER_PHONE_MISSING");
+      assert.ok(skippedSmsWithoutPhoneNotification, "Expected skipped quote-ready SMS row");
+      assert.equal(skippedSmsWithoutPhoneNotification.deliveryStatus, "SKIPPED");
+      assert.equal(
+        skippedSmsWithoutPhoneNotification.reasonCode,
+        "CUSTOMER_PHONE_MISSING",
+      );
 
       const skippedWhatsAppNotification = await waitForNotification(
         {
@@ -1126,18 +1130,6 @@ const run = async () => {
       assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
       assert.equal(toReady.json.job.status, "BIKE_READY");
 
-      const sentEmailNotification = await waitForNotification(
-        {
-          workshopJobId: job.id,
-          eventType: "JOB_READY_FOR_COLLECTION",
-          channel: "EMAIL",
-        },
-        "SENT",
-      );
-      assert.ok(sentEmailNotification, "Expected ready-for-collection email notification row");
-      assert.equal(sentEmailNotification.deliveryStatus, "SENT");
-      assert.equal(sentEmailNotification.recipientEmail, customer.email);
-
       const sentSmsNotification = await waitForNotification(
         {
           workshopJobId: job.id,
@@ -1150,20 +1142,33 @@ const run = async () => {
       assert.equal(sentSmsNotification.deliveryStatus, "SENT");
       assert.equal(sentSmsNotification.recipientPhone, customer.phone);
 
-      const sentWhatsAppNotification = await waitForNotification(
+      const skippedWhatsAppNotification = await waitForNotification(
         {
           workshopJobId: job.id,
           eventType: "JOB_READY_FOR_COLLECTION",
           channel: "WHATSAPP",
         },
-        "SENT",
+        "SKIPPED",
       );
       assert.ok(
-        sentWhatsAppNotification,
-        "Expected ready-for-collection WhatsApp notification row",
+        skippedWhatsAppNotification,
+        "Expected skipped ready-for-collection WhatsApp fallback row",
       );
-      assert.equal(sentWhatsAppNotification.deliveryStatus, "SENT");
-      assert.equal(sentWhatsAppNotification.recipientPhone, customer.phone);
+      assert.equal(skippedWhatsAppNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedWhatsAppNotification.reasonCode, "FALLBACK_NOT_REQUIRED");
+
+      const skippedEmailNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "JOB_READY_FOR_COLLECTION",
+          channel: "EMAIL",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedEmailNotification, "Expected skipped ready-for-collection email fallback row");
+      assert.equal(skippedEmailNotification.deliveryStatus, "SKIPPED");
+      assert.equal(skippedEmailNotification.reasonCode, "FALLBACK_NOT_REQUIRED");
+      assert.equal(skippedEmailNotification.recipientEmail, customer.email);
 
       const notificationHistory = await fetchJson(
         `/api/workshop/jobs/${job.id}/notifications`,
@@ -1176,19 +1181,10 @@ const run = async () => {
         notificationHistory.json.notifications.some(
           (notification) =>
             notification.eventType === "JOB_READY_FOR_COLLECTION" &&
-            notification.channel === "EMAIL" &&
-            notification.deliveryStatus === "SENT" &&
-            notification.recipientEmail === customer.email,
-        ),
-        JSON.stringify(notificationHistory.json),
-      );
-      assert.ok(
-        notificationHistory.json.notifications.some(
-          (notification) =>
-            notification.eventType === "JOB_READY_FOR_COLLECTION" &&
             notification.channel === "SMS" &&
             notification.deliveryStatus === "SENT" &&
-            notification.recipientPhone === customer.phone,
+            notification.recipientPhone === customer.phone &&
+            notification.strategy?.label === "Primary",
         ),
         JSON.stringify(notificationHistory.json),
       );
@@ -1197,8 +1193,20 @@ const run = async () => {
           (notification) =>
             notification.eventType === "JOB_READY_FOR_COLLECTION" &&
             notification.channel === "WHATSAPP" &&
-            notification.deliveryStatus === "SENT" &&
-            notification.recipientPhone === customer.phone,
+            notification.deliveryStatus === "SKIPPED" &&
+            notification.reasonCode === "FALLBACK_NOT_REQUIRED" &&
+            notification.strategy?.label === "Fallback 2",
+        ),
+        JSON.stringify(notificationHistory.json),
+      );
+      assert.ok(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "JOB_READY_FOR_COLLECTION" &&
+            notification.channel === "EMAIL" &&
+            notification.deliveryStatus === "SKIPPED" &&
+            notification.reasonCode === "FALLBACK_NOT_REQUIRED" &&
+            notification.strategy?.label === "Fallback 3",
         ),
         JSON.stringify(notificationHistory.json),
       );
@@ -1232,7 +1240,8 @@ const run = async () => {
       assert.equal(resendReady.json.notification.eventType, "JOB_READY_FOR_COLLECTION");
       assert.equal(resendReady.json.notification.channel, "EMAIL");
       assert.equal(resendReady.json.notification.deliveryStatus, "SENT");
-      assert.notEqual(resendReady.json.notification.id, sentEmailNotification.id);
+      assert.equal(resendReady.json.notification.strategy?.label, "Manual resend");
+      assert.notEqual(resendReady.json.notification.id, skippedEmailNotification.id);
 
       const resentNotificationCount = await prisma.workshopNotification.count({
         where: {

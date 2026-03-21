@@ -70,7 +70,7 @@ Automated reminder groundwork is now present behind the event bus and is intenti
 - manager visibility is available through `GET /api/reports/reminder-candidates` and `/management/reminders`
 - managers can now review or dismiss reminder candidates from the internal report/page without triggering delivery
 - candidates are not delivered automatically and do not change customer-facing flows
-- separate workshop notifications can now send quote-ready and ready-for-collection messages over email, SMS, and WhatsApp without changing reminder-candidate behavior
+- separate workshop notifications now use smart channel selection for quote-ready and ready-for-collection events, preferring one primary path with fallback across email, SMS, and WhatsApp only when needed
 
 Intentionally deferred:
 

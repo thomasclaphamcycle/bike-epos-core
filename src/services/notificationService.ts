@@ -38,6 +38,7 @@ type NotificationChannelDecision =
   | {
       channel: WorkshopNotificationChannel;
       action: "send";
+      strategyRank: number;
       recipientEmail: string | null;
       recipientPhone: string | null;
       subject: string | null;
@@ -51,6 +52,7 @@ type NotificationChannelDecision =
   | {
       channel: WorkshopNotificationChannel;
       action: "skip";
+      strategyRank: number;
       recipientEmail: string | null;
       recipientPhone: string | null;
       subject: string | null;
@@ -69,6 +71,14 @@ const notificationChannels: WorkshopNotificationChannel[] = [
   "SMS",
   "WHATSAPP",
 ];
+
+const automaticChannelOrderByEvent: Record<
+  WorkshopNotificationEventType,
+  readonly WorkshopNotificationChannel[]
+> = {
+  QUOTE_READY: ["WHATSAPP", "SMS", "EMAIL"],
+  JOB_READY_FOR_COLLECTION: ["SMS", "WHATSAPP", "EMAIL"],
+};
 
 const quoteEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
   workshopJob: {
@@ -206,6 +216,41 @@ const summarizeNotificationText = (value: string | null | undefined) => {
   return lines.find((line) => !/^hi\b/i.test(line)) ?? lines[0] ?? null;
 };
 
+const notificationChannelLabel = (channel: WorkshopNotificationChannel) => {
+  switch (channel) {
+    case "EMAIL":
+      return "Email";
+    case "SMS":
+      return "SMS";
+    case "WHATSAPP":
+      return "WhatsApp";
+    default:
+      return channel;
+  }
+};
+
+const getStrategyRank = (
+  eventType: WorkshopNotificationEventType,
+  channel: WorkshopNotificationChannel,
+) => {
+  const rank = automaticChannelOrderByEvent[eventType].indexOf(channel);
+  return rank >= 0 ? rank + 1 : automaticChannelOrderByEvent[eventType].length + 1;
+};
+
+const isManualNotificationAttempt = (dedupeKey: string) => dedupeKey.includes(":manual:");
+
+const buildNotificationStrategy = (notification: WorkshopNotificationRecord) => {
+  const priorityRank = getStrategyRank(notification.eventType, notification.channel);
+  const isManual = isManualNotificationAttempt(notification.dedupeKey);
+
+  return {
+    mode: isManual ? "MANUAL_RESEND" : "AUTOMATED",
+    priorityRank,
+    priorityType: priorityRank === 1 ? "PRIMARY" : "FALLBACK",
+    label: isManual ? "Manual resend" : priorityRank === 1 ? "Primary" : `Fallback ${priorityRank}`,
+  };
+};
+
 const toWorkshopNotificationResponse = (notification: WorkshopNotificationRecord) => ({
   id: notification.id,
   workshopJobId: notification.workshopJobId,
@@ -225,6 +270,7 @@ const toWorkshopNotificationResponse = (notification: WorkshopNotificationRecord
   sentAt: notification.sentAt,
   createdAt: notification.createdAt,
   updatedAt: notification.updatedAt,
+  strategy: buildNotificationStrategy(notification),
 });
 
 const buildCustomerDisplayName = (customer: {
@@ -264,6 +310,7 @@ const buildChannelDedupeKey = (
 
 const buildSkipDecision = (input: {
   channel: WorkshopNotificationChannel;
+  strategyRank: number;
   recipientEmail?: string | null;
   recipientPhone?: string | null;
   subject?: string | null;
@@ -276,6 +323,7 @@ const buildSkipDecision = (input: {
 }): NotificationChannelDecision => ({
   channel: input.channel,
   action: "skip",
+  strategyRank: input.strategyRank,
   recipientEmail: input.recipientEmail ?? null,
   recipientPhone: input.recipientPhone ?? null,
   subject: input.subject ?? null,
@@ -295,6 +343,7 @@ const buildQuoteNotReadyDecision = (
 ): NotificationChannelDecision =>
   buildSkipDecision({
     channel: "EMAIL",
+    strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
     payload: {
       workshopJobId,
     },
@@ -304,6 +353,56 @@ const buildQuoteNotReadyDecision = (
     reasonCode: "QUOTE_NOT_READY",
     reasonMessage: "There is no current quote awaiting approval for this job.",
   });
+
+const buildDerivedSkipDecision = (
+  decision: NotificationChannelDecision,
+  input: {
+    reasonCode: string;
+    reasonMessage: string;
+  },
+): NotificationChannelDecision => ({
+  channel: decision.channel,
+  action: "skip",
+  strategyRank: decision.strategyRank,
+  recipientEmail: decision.recipientEmail,
+  recipientPhone: decision.recipientPhone,
+  subject: decision.subject,
+  text: null,
+  html: null,
+  payload: decision.payload,
+  customerId: decision.customerId,
+  workshopEstimateId: decision.workshopEstimateId,
+  dedupeKey: decision.dedupeKey,
+  reasonCode: input.reasonCode,
+  reasonMessage: input.reasonMessage,
+});
+
+const isFalseLike = (value: string | null | undefined) => {
+  const normalized = normalizeOptionalText(value)?.toLowerCase();
+  return normalized === "0" || normalized === "false" || normalized === "off" || normalized === "no";
+};
+
+const isNotificationChannelEnabled = (channel: WorkshopNotificationChannel) => {
+  const envKey =
+    channel === "EMAIL"
+      ? "WORKSHOP_NOTIFICATION_EMAIL_ENABLED"
+      : channel === "SMS"
+        ? "WORKSHOP_NOTIFICATION_SMS_ENABLED"
+        : "WORKSHOP_NOTIFICATION_WHATSAPP_ENABLED";
+
+  return !isFalseLike(process.env[envKey]);
+};
+
+const buildChannelDisabledReasonMessage = (channel: WorkshopNotificationChannel) =>
+  `${notificationChannelLabel(channel)} notifications are disabled, so this delivery path was skipped.`;
+
+const buildFallbackNotRequiredReasonMessage = (
+  deliveredChannel: WorkshopNotificationChannel,
+  skippedChannel: WorkshopNotificationChannel,
+) =>
+  `${notificationChannelLabel(deliveredChannel)} delivered successfully, so the ${notificationChannelLabel(
+    skippedChannel,
+  )} fallback was not needed.`;
 
 const escapeHtml = (value: string) =>
   value
@@ -373,6 +472,7 @@ const buildQuoteReadyDecisions = async (
     return notificationChannels.map((channel) =>
       buildSkipDecision({
         channel,
+        strategyRank: getStrategyRank("QUOTE_READY", channel),
         payload: missingEstimatePayload,
         customerId: null,
         workshopEstimateId,
@@ -436,6 +536,7 @@ const buildQuoteReadyDecisions = async (
     return notificationChannels.map((channel) =>
       buildSkipDecision({
         channel,
+        strategyRank: getStrategyRank("QUOTE_READY", channel),
         recipientEmail,
         recipientPhone,
         payload,
@@ -489,6 +590,7 @@ const buildQuoteReadyDecisions = async (
       ? {
           channel: "EMAIL",
           action: "send",
+          strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
           recipientEmail,
           recipientPhone: null,
           subject: emailSubject,
@@ -504,6 +606,7 @@ const buildQuoteReadyDecisions = async (
         }
       : buildSkipDecision({
           channel: "EMAIL",
+          strategyRank: getStrategyRank("QUOTE_READY", "EMAIL"),
           recipientPhone,
           payload: basePayload,
           customerId,
@@ -517,6 +620,7 @@ const buildQuoteReadyDecisions = async (
       ? {
           channel: "SMS",
           action: "send",
+          strategyRank: getStrategyRank("QUOTE_READY", "SMS"),
           recipientEmail: null,
           recipientPhone,
           subject: null,
@@ -532,6 +636,7 @@ const buildQuoteReadyDecisions = async (
         }
       : buildSkipDecision({
           channel: "SMS",
+          strategyRank: getStrategyRank("QUOTE_READY", "SMS"),
           recipientEmail,
           payload: basePayload,
           customerId,
@@ -545,6 +650,7 @@ const buildQuoteReadyDecisions = async (
       ? {
           channel: "WHATSAPP",
           action: "send",
+          strategyRank: getStrategyRank("QUOTE_READY", "WHATSAPP"),
           recipientEmail: null,
           recipientPhone,
           subject: null,
@@ -560,6 +666,7 @@ const buildQuoteReadyDecisions = async (
         }
       : buildSkipDecision({
           channel: "WHATSAPP",
+          strategyRank: getStrategyRank("QUOTE_READY", "WHATSAPP"),
           recipientEmail,
           payload: basePayload,
           customerId,
@@ -588,6 +695,7 @@ const buildReadyForCollectionDecisions = async (
     return notificationChannels.map((channel) =>
       buildSkipDecision({
         channel,
+        strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", channel),
         payload: missingJobPayload,
         customerId: null,
         workshopEstimateId: null,
@@ -621,6 +729,7 @@ const buildReadyForCollectionDecisions = async (
     return notificationChannels.map((channel) =>
       buildSkipDecision({
         channel,
+        strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", channel),
         recipientEmail,
         recipientPhone,
         payload: basePayload,
@@ -665,6 +774,7 @@ const buildReadyForCollectionDecisions = async (
       ? {
           channel: "EMAIL",
           action: "send",
+          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "EMAIL"),
           recipientEmail,
           recipientPhone: null,
           subject: emailSubject,
@@ -677,6 +787,7 @@ const buildReadyForCollectionDecisions = async (
         }
       : buildSkipDecision({
           channel: "EMAIL",
+          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "EMAIL"),
           recipientPhone,
           payload: basePayload,
           customerId,
@@ -690,6 +801,7 @@ const buildReadyForCollectionDecisions = async (
       ? {
           channel: "SMS",
           action: "send",
+          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "SMS"),
           recipientEmail: null,
           recipientPhone,
           subject: null,
@@ -702,6 +814,7 @@ const buildReadyForCollectionDecisions = async (
         }
       : buildSkipDecision({
           channel: "SMS",
+          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "SMS"),
           recipientEmail,
           payload: basePayload,
           customerId,
@@ -715,6 +828,7 @@ const buildReadyForCollectionDecisions = async (
       ? {
           channel: "WHATSAPP",
           action: "send",
+          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "WHATSAPP"),
           recipientEmail: null,
           recipientPhone,
           subject: null,
@@ -727,6 +841,7 @@ const buildReadyForCollectionDecisions = async (
         }
       : buildSkipDecision({
           channel: "WHATSAPP",
+          strategyRank: getStrategyRank("JOB_READY_FOR_COLLECTION", "WHATSAPP"),
           recipientEmail,
           payload: basePayload,
           customerId,
@@ -857,10 +972,18 @@ const sendWorkshopNotification = async (
     forceUniqueAttempt?: boolean;
   } = {},
 ) => {
-  const attemptDecision = {
+  const rawAttemptDecision = {
     ...decision,
     dedupeKey: buildNotificationAttemptDedupeKey(decision.dedupeKey, options),
   };
+  const attemptDecision =
+    rawAttemptDecision.action === "send" &&
+    !isNotificationChannelEnabled(rawAttemptDecision.channel)
+      ? buildDerivedSkipDecision(rawAttemptDecision, {
+          reasonCode: "CHANNEL_DISABLED",
+          reasonMessage: buildChannelDisabledReasonMessage(rawAttemptDecision.channel),
+        })
+      : rawAttemptDecision;
   const claim = await claimWorkshopNotification(
     workshopJobId,
     eventType,
@@ -1002,11 +1125,30 @@ export const deliverWorkshopNotificationEvent = async (
     channel: WorkshopNotificationChannel;
     idempotent: boolean;
   }>;
+  let deliveredChannel: WorkshopNotificationChannel | null = null;
 
-  for (const decision of decisions) {
-    results.push(
-      await sendWorkshopNotification(input.workshopJobId, eventType, decision),
+  for (const decision of [...decisions].sort((left, right) => left.strategyRank - right.strategyRank)) {
+    const automaticDecision =
+      deliveredChannel && decision.action === "send"
+        ? buildDerivedSkipDecision(decision, {
+            reasonCode: "FALLBACK_NOT_REQUIRED",
+            reasonMessage: buildFallbackNotRequiredReasonMessage(
+              deliveredChannel,
+              decision.channel,
+            ),
+          })
+        : decision;
+
+    const result = await sendWorkshopNotification(
+      input.workshopJobId,
+      eventType,
+      automaticDecision,
     );
+    results.push(result);
+
+    if (!deliveredChannel && result.deliveryStatus === "SENT") {
+      deliveredChannel = decision.channel;
+    }
   }
 
   return {
