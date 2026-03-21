@@ -8,6 +8,7 @@ import {
   changeWorkshopJobStatusHandler,
   closeWorkshopJobHandler,
   checkoutWorkshopJobHandler,
+  createWorkshopEstimateCustomerQuoteLinkHandler,
   createWorkshopJobHandler,
   deleteWorkshopJobLineHandler,
   finalizeWorkshopJobHandler,
@@ -36,6 +37,7 @@ workshopRouter.post("/jobs/:id/lines", requireRoleAtLeast("STAFF"), addWorkshopJ
 workshopRouter.patch("/jobs/:id/lines/:lineId", requireRoleAtLeast("STAFF"), patchWorkshopJobLineHandler);
 workshopRouter.delete("/jobs/:id/lines/:lineId", requireRoleAtLeast("STAFF"), deleteWorkshopJobLineHandler);
 workshopRouter.post("/jobs/:id/estimate", requireRoleAtLeast("STAFF"), saveWorkshopEstimateHandler);
+workshopRouter.post("/jobs/:id/customer-quote-link", requireRoleAtLeast("STAFF"), createWorkshopEstimateCustomerQuoteLinkHandler);
 workshopRouter.post("/jobs/:id/finalize", requireRoleAtLeast("STAFF"), finalizeWorkshopJobHandler);
 workshopRouter.post("/jobs/:id/close", requireRoleAtLeast("STAFF"), closeWorkshopJobHandler);
 workshopRouter.post("/jobs/:id/assign", requireRoleAtLeast("STAFF"), assignWorkshopJobHandler);

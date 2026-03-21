@@ -78,6 +78,7 @@ import {
   WorkshopPage,
   WorkshopPerformancePage,
   WorkshopPrintCentrePage,
+  WorkshopQuotePage,
 } from "./lazyPages";
 
 const managerOnly = (element: ReactNode) => (
@@ -723,6 +724,7 @@ export const App = () => {
     <Suspense fallback={null}>
       <Routes>
         <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
+        <Route path="/quote/:token" element={<WorkshopQuotePage />} />
         <Route path="/customer-capture" element={<CustomerCapturePage />} />
         <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
         <Route path="/site" element={<CustomerSitePage variant="home" />} />

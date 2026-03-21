@@ -298,6 +298,10 @@ export const CustomerCapturePage = lazyPage(
   () => import("./pages/CustomerCapturePage"),
   "CustomerCapturePage",
 );
+export const WorkshopQuotePage = lazyPage(
+  () => import("./pages/WorkshopQuotePage"),
+  "WorkshopQuotePage",
+);
 export const NavigationPlaceholderPage = lazyPage(
   () => import("./pages/NavigationPlaceholderPage"),
   "NavigationPlaceholderPage",
