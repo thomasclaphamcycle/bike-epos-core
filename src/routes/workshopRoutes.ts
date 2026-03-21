@@ -16,9 +16,11 @@ import {
   getWorkshopDashboardHandler,
   getWorkshopJobHandler,
   getWorkshopJobNotesHandler,
+  listWorkshopJobNotificationsHandler,
   listWorkshopJobsHandler,
   patchWorkshopJobLineHandler,
   patchWorkshopJobHandler,
+  resendWorkshopJobNotificationHandler,
   saveWorkshopEstimateHandler,
   setWorkshopJobApprovalStatusHandler,
 } from "../controllers/workshopController";
@@ -31,6 +33,8 @@ workshopRouter.get("/dashboard", requireRoleAtLeast("STAFF"), getWorkshopDashboa
 workshopRouter.post("/jobs", requireRoleAtLeast("STAFF"), createWorkshopJobHandler);
 workshopRouter.get("/jobs", requireRoleAtLeast("STAFF"), listWorkshopJobsHandler);
 workshopRouter.get("/jobs/:id", requireRoleAtLeast("STAFF"), getWorkshopJobHandler);
+workshopRouter.get("/jobs/:id/notifications", requireRoleAtLeast("STAFF"), listWorkshopJobNotificationsHandler);
+workshopRouter.post("/jobs/:id/notifications/resend", requireRoleAtLeast("STAFF"), resendWorkshopJobNotificationHandler);
 workshopRouter.patch("/jobs/:id", requireRoleAtLeast("STAFF"), patchWorkshopJobHandler);
 workshopRouter.patch("/jobs/:id/customer", requireRoleAtLeast("STAFF"), attachWorkshopJobCustomerHandler);
 workshopRouter.post("/jobs/:id/lines", requireRoleAtLeast("STAFF"), addWorkshopJobLineHandler);

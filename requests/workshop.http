@@ -240,6 +240,31 @@ GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notes
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
+### List workshop notification attempts
+GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notifications
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Resend a workshop quote-ready email
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notifications/resend
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "eventType": "QUOTE_READY"
+}
+
+### Resend a ready-for-collection email
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notifications/resend
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "eventType": "JOB_READY_FOR_COLLECTION"
+}
+
 ### Change workshop status (M14)
 ### Allowed progression: BOOKED -> IN_PROGRESS -> READY -> COMPLETED, and any -> CANCELLED
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
