@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
-import { workshopEstimateStatusLabel } from "../features/workshop/estimateStatus";
+import {
+  workshopEstimateStatusClass,
+  workshopEstimateStatusLabel,
+} from "../features/workshop/estimateStatus";
 import {
   workshopExecutionStatusClass,
   workshopExecutionStatusLabel,
@@ -18,7 +21,15 @@ type BikeHistoryPayload = {
     label: string | null;
     make: string | null;
     model: string | null;
+    year: number | null;
+    bikeType: string | null;
     colour: string | null;
+    wheelSize: string | null;
+    frameSize: string | null;
+    groupset: string | null;
+    motorBrand: string | null;
+    motorModel: string | null;
+    batterySerial: string | null;
     frameNumber: string | null;
     serialNumber: string | null;
     registrationNumber: string | null;
@@ -54,9 +65,11 @@ type BikeHistoryPayload = {
   limitations: string[];
   history: Array<{
     id: string;
+    jobPath: string;
     customerId: string | null;
     customerName: string | null;
     bikeDescription: string | null;
+    serviceSummaryText: string;
     status: WorkshopExecutionStatus;
     rawStatus: string;
     scheduledDate: string | null;
@@ -88,6 +101,15 @@ type BikeHistoryPayload = {
       partsTotalPence: number;
       subtotalPence: number;
     };
+    moneySummary: {
+      labourTotalPence: number;
+      partsTotalPence: number;
+      liveSubtotalPence: number;
+      estimateSubtotalPence: number | null;
+      finalTotalPence: number | null;
+      primaryTotalPence: number;
+      primaryTotalSource: "FINAL_SALE" | "ESTIMATE" | "LIVE_TOTAL";
+    };
     estimate: {
       id: string;
       version: number;
@@ -114,12 +136,28 @@ type BikeHistoryPayload = {
 };
 
 const formatMoney = (pence: number) => `GBP ${(pence / 100).toFixed(2)}`;
+const BIKE_TYPE_LABELS: Record<string, string> = {
+  ROAD: "Road",
+  MTB: "Mountain bike",
+  E_BIKE: "E-bike",
+  HYBRID: "Hybrid",
+  GRAVEL: "Gravel",
+  COMMUTER: "Commuter",
+  BMX: "BMX",
+  KIDS: "Kids",
+  CARGO: "Cargo",
+  FOLDING: "Folding",
+  OTHER: "Other",
+};
 
 const formatOptionalDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
 
 const truncateText = (value: string, limit = 140) =>
   value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
+
+const formatBikeType = (value: string | null | undefined) =>
+  value ? BIKE_TYPE_LABELS[value] ?? value : "-";
 
 const buildEstimateSummary = (
   estimate: BikeHistoryPayload["history"][number]["estimate"],
@@ -154,6 +192,53 @@ const buildOutcomeSummary = (
   }
 
   return "No sale outcome recorded yet.";
+};
+
+const buildHistoryDateSummary = (
+  entry: BikeHistoryPayload["history"][number],
+) => {
+  if (entry.scheduledDate) {
+    return `Scheduled ${formatOptionalDateTime(entry.scheduledDate)}`;
+  }
+
+  if (entry.completedAt) {
+    return `Completed ${formatOptionalDateTime(entry.completedAt)}`;
+  }
+
+  return `Created ${formatOptionalDateTime(entry.createdAt)}`;
+};
+
+const buildHistoryMoneySummary = (
+  entry: BikeHistoryPayload["history"][number],
+) => {
+  const totals = [
+    `Labour ${formatMoney(entry.moneySummary.labourTotalPence)}`,
+    `Parts ${formatMoney(entry.moneySummary.partsTotalPence)}`,
+  ];
+
+  if (entry.moneySummary.primaryTotalSource === "FINAL_SALE") {
+    totals.push(`Final ${formatMoney(entry.moneySummary.primaryTotalPence)}`);
+  } else if (entry.moneySummary.primaryTotalSource === "ESTIMATE") {
+    totals.push(`Estimate ${formatMoney(entry.moneySummary.primaryTotalPence)}`);
+  } else {
+    totals.push(`Current ${formatMoney(entry.moneySummary.primaryTotalPence)}`);
+  }
+
+  return totals.join(" · ");
+};
+
+const buildHistoryCommercialSummary = (
+  entry: BikeHistoryPayload["history"][number],
+) => {
+  if (entry.sale) {
+    return `Final sale ${entry.sale.id.slice(0, 8)} completed for ${formatMoney(entry.sale.totalPence)}.`;
+  }
+
+  if (entry.estimate) {
+    return buildEstimateSummary(entry.estimate);
+  }
+
+  return `${entry.liveTotals.lineCount} live workshop line${entry.liveTotals.lineCount === 1 ? "" : "s"} recorded.`;
 };
 
 export const BikeHistoryPage = () => {
@@ -245,10 +330,14 @@ export const BikeHistoryPage = () => {
                 <Link to={`/customers/${payload.customer.id}`}>{payload.customer.name}</Link>
               </div>
               <div><strong>Make / Model:</strong> {[payload.bike.make, payload.bike.model].filter(Boolean).join(" ") || "-"}</div>
+              <div><strong>Year / Type:</strong> {payload.bike.year ? `${payload.bike.year} · ${formatBikeType(payload.bike.bikeType)}` : formatBikeType(payload.bike.bikeType)}</div>
               <div><strong>Colour:</strong> {payload.bike.colour || "-"}</div>
+              <div><strong>Wheel / Frame:</strong> {[payload.bike.wheelSize, payload.bike.frameSize].filter(Boolean).join(" · ") || "-"}</div>
+              <div><strong>Groupset:</strong> {payload.bike.groupset || "-"}</div>
               <div><strong>Frame #:</strong> {payload.bike.frameNumber || "-"}</div>
               <div><strong>Serial #:</strong> {payload.bike.serialNumber || "-"}</div>
               <div><strong>Registration:</strong> {payload.bike.registrationNumber || "-"}</div>
+              <div><strong>E-bike:</strong> {[payload.bike.motorBrand, payload.bike.motorModel, payload.bike.batterySerial].filter(Boolean).join(" · ") || "-"}</div>
               <div><strong>Bike Notes:</strong> {payload.bike.notes || "-"}</div>
               <div><strong>Linked Jobs:</strong> {payload.serviceSummary.linkedJobCount}</div>
               <div><strong>Open Jobs:</strong> {payload.serviceSummary.openJobCount}</div>
@@ -289,49 +378,62 @@ export const BikeHistoryPage = () => {
             No linked workshop jobs yet. This bike record will start building service history as soon as jobs are linked to it.
           </div>
         ) : (
-          payload.history.map((entry) => (
-            <article key={entry.id} className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-              <div className="card-header-row">
-                <div>
-                  <strong>
-                    <Link to={`/workshop/${entry.id}`}>Workshop Job {entry.id.slice(0, 8)}</Link>
-                  </strong>
-                  <div className="table-secondary">
-                    {entry.bikeDescription || payload.bike.displayName}
+          <div className="timeline-list bike-history-list">
+            {payload.history.map((entry) => (
+              <article key={entry.id} className="timeline-card bike-history-entry">
+                <div className="bike-history-entry__header">
+                  <div>
+                    <div className="bike-history-entry__date">{buildHistoryDateSummary(entry)}</div>
+                    <strong>
+                      <Link to={entry.jobPath}>Workshop Job {entry.id.slice(0, 8)}</Link>
+                    </strong>
+                    <div className="table-secondary">
+                      {entry.bikeDescription || payload.bike.displayName}
+                    </div>
+                  </div>
+                  <div className="actions-inline">
+                    <span className={workshopExecutionStatusClass(entry.status, entry.rawStatus)}>
+                      {workshopExecutionStatusLabel(entry.status)}
+                    </span>
+                    {entry.estimate ? (
+                      <span className={workshopEstimateStatusClass(entry.estimate.status)}>
+                        {workshopEstimateStatusLabel(entry.estimate.status)}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
+
+                <div className="bike-history-entry__summary">{entry.serviceSummaryText}</div>
+
+                <div className="bike-history-entry__meta">
+                  <div><strong>Money:</strong> {buildHistoryMoneySummary(entry)}</div>
+                  <div><strong>Commercial state:</strong> {buildHistoryCommercialSummary(entry)}</div>
+                  <div><strong>Technician:</strong> {entry.assignedTechnician?.name || "Unassigned"}</div>
+                  <div><strong>Workflow detail:</strong> {workshopRawStatusLabel(entry.rawStatus)}</div>
+                </div>
+
+                {entry.notes.latestNote ? (
+                  <div className="table-secondary">
+                    Latest note: {truncateText(entry.notes.latestNote.note)} ({entry.notes.latestNote.visibility.toLowerCase()}, {formatOptionalDateTime(entry.notes.latestNote.createdAt)})
+                  </div>
+                ) : entry.notes.jobNotes ? (
+                  <div className="table-secondary">Check-in note: {truncateText(entry.notes.jobNotes)}</div>
+                ) : null}
+
                 <div className="actions-inline">
-                  <span className={workshopExecutionStatusClass(entry.status, entry.rawStatus)}>
-                    {workshopExecutionStatusLabel(entry.status)}
-                  </span>
+                  <Link to={entry.jobPath}>Open workshop job</Link>
+                  {entry.completedAt ? (
+                    <span className="table-secondary">Completed {formatOptionalDateTime(entry.completedAt)}</span>
+                  ) : (
+                    <span className="table-secondary">Updated {formatOptionalDateTime(entry.updatedAt)}</span>
+                  )}
                   <span className={workshopRawStatusClass(entry.rawStatus)}>
                     {workshopRawStatusLabel(entry.rawStatus)}
                   </span>
                 </div>
-              </div>
-
-              <div className="job-meta-grid" style={{ marginTop: "10px" }}>
-                <div><strong>Scheduled:</strong> {formatOptionalDateTime(entry.scheduledDate)}</div>
-                <div><strong>Created:</strong> {formatOptionalDateTime(entry.createdAt)}</div>
-                <div><strong>Completed:</strong> {formatOptionalDateTime(entry.completedAt)}</div>
-                <div><strong>Updated:</strong> {formatOptionalDateTime(entry.updatedAt)}</div>
-                <div><strong>Technician:</strong> {entry.assignedTechnician?.name || "Unassigned"}</div>
-                <div><strong>Estimate:</strong> {buildEstimateSummary(entry.estimate)}</div>
-                <div>
-                  <strong>Live Totals:</strong>{" "}
-                  {entry.liveTotals.lineCount} line{entry.liveTotals.lineCount === 1 ? "" : "s"} · labour {formatMoney(entry.liveTotals.labourTotalPence)} · parts {formatMoney(entry.liveTotals.partsTotalPence)} · total {formatMoney(entry.liveTotals.subtotalPence)}
-                </div>
-                <div><strong>Outcome:</strong> {buildOutcomeSummary(entry)}</div>
-                <div><strong>Check-in Notes:</strong> {entry.notes.jobNotes || "-"}</div>
-                <div>
-                  <strong>Latest Workshop Note:</strong>{" "}
-                  {entry.notes.latestNote
-                    ? `${truncateText(entry.notes.latestNote.note)} (${entry.notes.latestNote.visibility.toLowerCase()}, ${formatOptionalDateTime(entry.notes.latestNote.createdAt)})`
-                    : "No workshop notes recorded."}
-                </div>
-              </div>
-            </article>
-          ))
+              </article>
+            ))}
+          </div>
         )}
       </section>
     </div>

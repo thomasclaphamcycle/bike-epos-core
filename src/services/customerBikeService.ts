@@ -259,6 +259,70 @@ const buildIdentifier = (input: {
   return undefined;
 };
 
+const truncateText = (value: string, limit = 120) =>
+  value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
+
+const describeCount = (count: number, singular: string, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
+const buildBikeHistorySummaryText = (input: {
+  bikeDescription?: string | null;
+  jobNotes?: string | null;
+  latestNote?: string | null;
+  estimateLineCount?: number;
+  liveLineCount: number;
+}) => {
+  const latestNote = normalizeOptionalText(input.latestNote);
+  if (latestNote) {
+    return truncateText(latestNote);
+  }
+
+  const checkInNotes = normalizeOptionalText(input.jobNotes);
+  if (checkInNotes) {
+    return truncateText(checkInNotes);
+  }
+
+  if (typeof input.estimateLineCount === "number" && input.estimateLineCount > 0) {
+    return `Saved quote with ${describeCount(input.estimateLineCount, "line")} for this bike.`;
+  }
+
+  if (input.liveLineCount > 0) {
+    return `${describeCount(input.liveLineCount, "workshop line")} recorded for this bike.`;
+  }
+
+  const bikeDescription = normalizeOptionalText(input.bikeDescription);
+  if (bikeDescription) {
+    return `Workshop record linked from ${bikeDescription}.`;
+  }
+
+  return "Workshop record linked to this bike.";
+};
+
+const buildPrimaryMoneySummary = (input: {
+  saleTotalPence?: number | null;
+  estimateSubtotalPence?: number | null;
+  liveSubtotalPence: number;
+}) => {
+  if (typeof input.saleTotalPence === "number") {
+    return {
+      totalPence: input.saleTotalPence,
+      source: "FINAL_SALE" as const,
+    };
+  }
+
+  if (typeof input.estimateSubtotalPence === "number") {
+    return {
+      totalPence: input.estimateSubtotalPence,
+      source: "ESTIMATE" as const,
+    };
+  }
+
+  return {
+    totalPence: input.liveSubtotalPence,
+    source: "LIVE_TOTAL" as const,
+  };
+};
+
 export const buildCustomerBikeDisplayName = (input: {
   label?: string | null;
   make?: string | null;
@@ -737,12 +801,27 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
       const partsTotalPence = job.lines
         .filter((line) => line.type === "PART")
         .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
+      const liveSubtotalPence = labourTotalPence + partsTotalPence;
+      const primaryMoney = buildPrimaryMoneySummary({
+        saleTotalPence: job.sale?.totalPence,
+        estimateSubtotalPence: latestEstimate?.subtotalPence ?? null,
+        liveSubtotalPence,
+      });
+      const serviceSummaryText = buildBikeHistorySummaryText({
+        bikeDescription: job.bikeDescription,
+        jobNotes: job.notes,
+        latestNote: latestNote?.note,
+        estimateLineCount: latestEstimate?.lineCount,
+        liveLineCount: job.lines.length,
+      });
 
       return {
         id: job.id,
+        jobPath: `/workshop/${job.id}`,
         customerId: job.customerId,
         customerName: job.customerName,
         bikeDescription: job.bikeDescription ?? buildCustomerBikeDisplayName(bike),
+        serviceSummaryText,
         status: toWorkshopExecutionStatus(job),
         rawStatus: job.status,
         scheduledDate: job.scheduledDate,
@@ -776,7 +855,16 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
           lineCount: job.lines.length,
           labourTotalPence,
           partsTotalPence,
-          subtotalPence: labourTotalPence + partsTotalPence,
+          subtotalPence: liveSubtotalPence,
+        },
+        moneySummary: {
+          labourTotalPence,
+          partsTotalPence,
+          liveSubtotalPence,
+          estimateSubtotalPence: latestEstimate?.subtotalPence ?? null,
+          finalTotalPence: job.sale?.totalPence ?? null,
+          primaryTotalPence: primaryMoney.totalPence,
+          primaryTotalSource: primaryMoney.source,
         },
         estimate: latestEstimate
           ? {

@@ -764,9 +764,15 @@ const run = async () => {
       assert.equal(history.json.serviceSummary.linkedJobCount, 1);
       assert.equal(history.json.history.length, 1);
       assert.equal(history.json.history[0].id, linkedJob.id);
+      assert.equal(history.json.history[0].jobPath, `/workshop/${linkedJob.id}`);
       assert.equal(history.json.history[0].assignedTechnician.name, managerUser.name);
       assert.equal(history.json.history[0].liveTotals.subtotalPence, 4800);
+      assert.equal(history.json.history[0].moneySummary.labourTotalPence, 4800);
+      assert.equal(history.json.history[0].moneySummary.partsTotalPence, 0);
+      assert.equal(history.json.history[0].moneySummary.primaryTotalPence, 4800);
+      assert.equal(history.json.history[0].moneySummary.primaryTotalSource, "ESTIMATE");
       assert.equal(history.json.history[0].estimate.status, "PENDING_APPROVAL");
+      assert.match(history.json.history[0].serviceSummaryText, /Bike history inspection note|quote|line/i);
       assert.match(history.json.history[0].notes.latestNote.note, /Bike history inspection note/);
       assert.ok(
         history.json.limitations[0].includes("Legacy free-text workshop jobs without a bike link"),
