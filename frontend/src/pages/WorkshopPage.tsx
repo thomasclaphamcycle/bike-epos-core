@@ -480,6 +480,9 @@ export const WorkshopPage = () => {
             </p>
           </div>
           <div className="actions-inline">
+            <Link to="/workshop/calendar" className="button-link">
+              Calendar
+            </Link>
             <div className="view-toggle">
               <button
                 type="button"

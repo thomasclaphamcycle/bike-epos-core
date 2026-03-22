@@ -170,6 +170,7 @@ Current internal subscribers are:
   - blocks overlapping timed jobs for the same assigned staff member without forcing legacy unscheduled jobs through a new scheduling flow
   - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, working hours, time off, scheduled jobs, and clipped daily capacity summaries
   - now also exposes `PATCH /api/workshop/jobs/:id/schedule` for atomic assignment plus schedule/reschedule/clear operations through the shared validation layer rather than duplicating rules in controllers
+  - the first staff-facing React surface now lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a dense day view rather than introducing a separate scheduling subsystem
 
 Manager-facing internal visibility now exists through:
 
@@ -180,4 +181,4 @@ Manager-facing internal visibility now exists through:
 
 These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow quote-ready and ready-for-collection notification events above; push notifications, webhooks, and customer self-service preference management remain intentionally out of scope, while workshop time-slot scheduling now has a backend validation/data-model foundation without a full calendar-management UI.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow quote-ready and ready-for-collection notification events above; push notifications, webhooks, and customer self-service preference management remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus an initial staff day-view calendar UI rather than a full scheduling-management suite.

@@ -860,7 +860,7 @@ export const getWorkshopCalendar = async (
     : allStaff;
   const staffIds = calendarStaff.map((staff) => staff.id);
 
-  const [workingHours, timeOff, visibleScheduledJobs, capacityScheduledJobs, days] = await Promise.all([
+  const [workingHours, timeOff, visibleScheduledJobs, capacityScheduledJobs, unscheduledJobs, days] = await Promise.all([
     staffIds.length > 0
       ? db.workshopWorkingHours.findMany({
           where: {
@@ -936,6 +936,31 @@ export const getWorkshopCalendar = async (
           },
         })
       : [],
+    db.workshopJob.findMany({
+      where: {
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        closedAt: null,
+        status: {
+          notIn: ["CANCELLED", "COMPLETED"],
+        },
+        OR: [
+          { scheduledDate: null },
+          {
+            scheduledDate: {
+              gte: fromDate,
+              lt: addDays(toDate, 1),
+            },
+          },
+        ],
+        ...(locationId ? { locationId } : {}),
+      },
+      select: CALENDAR_JOB_SELECT,
+      orderBy: [
+        { scheduledDate: "asc" },
+        { createdAt: "asc" },
+      ],
+    }) as Promise<CalendarScheduledJobRecord[]>,
     Promise.all(
       dateKeys.map((dateKey) => resolveStoreDaySchedule(toDateFromDateKey(dateKey), db)),
     ),
@@ -1002,6 +1027,7 @@ export const getWorkshopCalendar = async (
     unassignedJobs: visibleScheduledJobs
       .filter((job) => !job.assignedStaffId)
       .map(toCalendarJobSummary),
+    unscheduledJobs: unscheduledJobs.map(toCalendarJobSummary),
     workshopTimeOff: timeOff
       .filter((entry) => entry.staffId === null)
       .map((entry) => ({

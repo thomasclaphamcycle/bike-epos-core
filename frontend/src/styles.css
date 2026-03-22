@@ -1708,6 +1708,276 @@ th {
   gap: 12px;
 }
 
+.workshop-calendar-page {
+  gap: var(--cp-space-4);
+}
+
+.workshop-calendar-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.workshop-calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.workshop-calendar-board,
+.workshop-calendar-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-calendar-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.workshop-calendar-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-calendar-header-row,
+.workshop-calendar-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.workshop-calendar-staff-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 190px;
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f8fb 100%);
+  box-shadow: var(--cp-shadow-soft);
+}
+
+.workshop-calendar-staff-name {
+  font-weight: 700;
+  color: var(--cp-navy);
+}
+
+.workshop-calendar-time-col,
+.workshop-calendar-track {
+  position: relative;
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(208, 219, 230, 0.58) 0,
+      rgba(208, 219, 230, 0.58) 1px,
+      transparent 1px,
+      transparent calc(60px * 1.8)
+    ),
+    linear-gradient(180deg, #f8fbfe 0%, #eef4f8 100%);
+  overflow: hidden;
+}
+
+.workshop-calendar-time-col {
+  min-height: 48px;
+}
+
+.workshop-calendar-time-label {
+  position: absolute;
+  top: 12px;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: #526071;
+}
+
+.workshop-calendar-track {
+  min-height: 118px;
+}
+
+.workshop-calendar-track--unavailable {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(214, 222, 232, 0.38) 0,
+      rgba(214, 222, 232, 0.38) 10px,
+      rgba(245, 248, 251, 0.95) 10px,
+      rgba(245, 248, 251, 0.95) 20px
+    );
+}
+
+.workshop-calendar-working-band {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  border-radius: 10px;
+  background: rgba(188, 228, 202, 0.42);
+  border: 1px solid rgba(125, 182, 145, 0.45);
+}
+
+.workshop-calendar-timeoff {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.workshop-calendar-timeoff span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workshop-calendar-timeoff--staff {
+  background: rgba(255, 233, 187, 0.9);
+  border-color: rgba(224, 181, 95, 0.55);
+  color: #7a5200;
+}
+
+.workshop-calendar-timeoff--workshop {
+  background: rgba(248, 205, 205, 0.92);
+  border-color: rgba(205, 120, 120, 0.55);
+  color: #7f1d1d;
+}
+
+.workshop-calendar-job {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid #9cb4cb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #eaf2f8 100%);
+  box-shadow: 0 6px 16px rgba(8, 15, 31, 0.08);
+  overflow: hidden;
+}
+
+.workshop-calendar-job-link {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.workshop-calendar-job-link strong,
+.workshop-calendar-job-link span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workshop-calendar-job-link strong {
+  color: var(--cp-navy);
+  font-size: 0.85rem;
+}
+
+.workshop-calendar-job-link span {
+  color: #526071;
+  font-size: 0.76rem;
+}
+
+.workshop-calendar-job-edit {
+  align-self: start;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+
+.workshop-calendar-sidebar {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.workshop-calendar-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-calendar-editor-summary,
+.workshop-calendar-panel label {
+  display: grid;
+  gap: 5px;
+}
+
+.workshop-calendar-queue {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-calendar-queue-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.workshop-calendar-queue-card strong {
+  color: var(--cp-navy);
+}
+
+.workshop-calendar-empty {
+  border: 1px dashed #c6d3df;
+  border-radius: 12px;
+  padding: 12px;
+  color: #526071;
+  background: #f8fbfd;
+}
+
+@media (max-width: 1180px) {
+  .workshop-calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-calendar-sidebar {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .workshop-calendar-header-row,
+  .workshop-calendar-row {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .workshop-calendar-staff-col {
+    min-width: 150px;
+    padding: 10px;
+  }
+
+  .workshop-calendar-job {
+    top: 16px;
+    bottom: 16px;
+  }
+
+  .workshop-calendar-queue-card {
+    grid-template-columns: 1fr;
+  }
+}
+
 .management-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

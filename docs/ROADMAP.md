@@ -322,6 +322,7 @@ Implementation status:
 - workshop operations now also surface a simple capacity signal that combines rota-backed workshop cover with due, overdue, and active workshop workload for better daily triage
 - workshop jobs now also have an additive backend scheduling foundation with optional timed slots, staff working hours, and workshop/staff time-off blocks, while keeping legacy `scheduledDate` flows operationally compatible
 - workshop calendar now also has a production-ready backend API for date-range reads plus safe schedule/reschedule updates, so an MVP calendar UI can build on shared scheduling rules without breaking legacy workshop flows
+- workshop now also has a staff-facing calendar MVP at `/workshop/calendar`, giving the team a day view of mechanic rows, timed jobs, working hours, time off, and a live unscheduled queue without replacing the existing job board
 
 Planned item:
 
