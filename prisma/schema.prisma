@@ -116,7 +116,7 @@ model Variant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  product            Product               @relation(fields: [productId], references: [id])
+  product            Product                @relation(fields: [productId], references: [id])
   barcodes           Barcode[]
   balances           StockBalance[]
   movements          StockMovement[]
@@ -222,8 +222,8 @@ model StockLocation {
   stocktakes         Stocktake[]
   workshopParts      WorkshopJobPart[]
   inventoryMovements InventoryMovement[]
-  transfersFrom      StockTransfer[] @relation("StockTransferFromLocation")
-  transfersTo        StockTransfer[] @relation("StockTransferToLocation")
+  transfersFrom      StockTransfer[]     @relation("StockTransferFromLocation")
+  transfersTo        StockTransfer[]     @relation("StockTransferToLocation")
 
   @@index([name])
 }
@@ -249,11 +249,11 @@ model StockTransfer {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
-  fromLocation    StockLocation @relation("StockTransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
-  toLocation      StockLocation @relation("StockTransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
-  createdByStaff  User?         @relation("StockTransferCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  sentByStaff     User?         @relation("StockTransferSentByStaff", fields: [sentByStaffId], references: [id], onDelete: SetNull)
-  receivedByStaff User?         @relation("StockTransferReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
+  fromLocation    StockLocation       @relation("StockTransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation      StockLocation       @relation("StockTransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  createdByStaff  User?               @relation("StockTransferCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  sentByStaff     User?               @relation("StockTransferSentByStaff", fields: [sentByStaffId], references: [id], onDelete: SetNull)
+  receivedByStaff User?               @relation("StockTransferReceivedByStaff", fields: [receivedByStaffId], references: [id], onDelete: SetNull)
   lines           StockTransferLine[]
 
   @@index([status, createdAt])
@@ -316,24 +316,24 @@ model HireAsset {
 }
 
 model HireBooking {
-  id                  String             @id @default(uuid()) @db.Uuid
-  hireAssetId         String             @db.Uuid
-  customerId          String             @db.Uuid
-  status              HireBookingStatus  @default(RESERVED)
-  depositStatus       HireDepositStatus  @default(NONE)
+  id                  String            @id @default(uuid()) @db.Uuid
+  hireAssetId         String            @db.Uuid
+  customerId          String            @db.Uuid
+  status              HireBookingStatus @default(RESERVED)
+  depositStatus       HireDepositStatus @default(NONE)
   startsAt            DateTime
   dueBackAt           DateTime
   checkedOutAt        DateTime?
   returnedAt          DateTime?
-  hirePricePence      Int                @default(0)
-  depositPence        Int                @default(0)
-  depositHeldPence    Int                @default(0)
+  hirePricePence      Int               @default(0)
+  depositPence        Int               @default(0)
+  depositHeldPence    Int               @default(0)
   notes               String?
   createdByStaffId    String?
   checkedOutByStaffId String?
   returnedByStaffId   String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   hireAsset         HireAsset @relation(fields: [hireAssetId], references: [id], onDelete: Restrict)
   customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
@@ -384,15 +384,15 @@ enum StocktakeStatus {
 }
 
 model Stocktake {
-  id         String          @id @default(uuid()) @db.Uuid
-  locationId String          @db.Uuid
-  status     StocktakeStatus @default(OPEN)
-  startedAt  DateTime        @default(now())
+  id                String          @id @default(uuid()) @db.Uuid
+  locationId        String          @db.Uuid
+  status            StocktakeStatus @default(OPEN)
+  startedAt         DateTime        @default(now())
   reviewRequestedAt DateTime?
-  postedAt   DateTime?
-  notes      String?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  postedAt          DateTime?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   location StockLocation   @relation(fields: [locationId], references: [id], onDelete: Restrict)
   lines    StocktakeLine[]
@@ -401,13 +401,13 @@ model Stocktake {
 }
 
 model StocktakeLine {
-  id          String   @id @default(uuid()) @db.Uuid
-  stocktakeId String   @db.Uuid
-  variantId   String
+  id                  String   @id @default(uuid()) @db.Uuid
+  stocktakeId         String   @db.Uuid
+  variantId           String
   expectedQtySnapshot Int?
-  countedQty  Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  countedQty          Int
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
   variant   Variant   @relation(fields: [variantId], references: [id], onDelete: Restrict)
@@ -533,37 +533,37 @@ enum SaleCustomerCaptureSessionStatus {
 }
 
 model Sale {
-  id               String    @id @default(uuid()) @db.Uuid
-  basketId         String?   @unique @db.Uuid
-  workshopJobId    String?   @unique @db.Uuid
-  customerId       String?   @db.Uuid
-  exchangeFromSaleId String? @db.Uuid
-  locationId       String
-  subtotalPence    Int
-  taxPence         Int
-  totalPence       Int
-  changeDuePence   Int       @default(0)
-  createdAt        DateTime  @default(now())
-  completedAt      DateTime?
-  receiptNumber    String?   @unique
-  createdByStaffId String?
+  id                 String    @id @default(uuid()) @db.Uuid
+  basketId           String?   @unique @db.Uuid
+  workshopJobId      String?   @unique @db.Uuid
+  customerId         String?   @db.Uuid
+  exchangeFromSaleId String?   @db.Uuid
+  locationId         String
+  subtotalPence      Int
+  taxPence           Int
+  totalPence         Int
+  changeDuePence     Int       @default(0)
+  createdAt          DateTime  @default(now())
+  completedAt        DateTime?
+  receiptNumber      String?   @unique
+  createdByStaffId   String?
 
-  basket         Basket?         @relation(fields: [basketId], references: [id], onDelete: SetNull)
-  workshopJob    WorkshopJob?    @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
-  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  exchangeFromSale Sale?         @relation("SaleExchangeSource", fields: [exchangeFromSaleId], references: [id], onDelete: SetNull)
-  exchangeSales  Sale[]          @relation("SaleExchangeSource")
-  location       Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  createdByStaff User?           @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  items          SaleItem[]
-  payments       Payment[]
-  tenders        SaleTender[]
-  receipt        Receipt?
-  paymentIntents PaymentIntent[]
-  returns        SaleReturn[]
-  refunds        Refund[]
+  basket                  Basket?                      @relation(fields: [basketId], references: [id], onDelete: SetNull)
+  workshopJob             WorkshopJob?                 @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  customer                Customer?                    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  exchangeFromSale        Sale?                        @relation("SaleExchangeSource", fields: [exchangeFromSaleId], references: [id], onDelete: SetNull)
+  exchangeSales           Sale[]                       @relation("SaleExchangeSource")
+  location                Location                     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdByStaff          User?                        @relation("SaleCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  items                   SaleItem[]
+  payments                Payment[]
+  tenders                 SaleTender[]
+  receipt                 Receipt?
+  paymentIntents          PaymentIntent[]
+  returns                 SaleReturn[]
+  refunds                 Refund[]
   customerCaptureSessions SaleCustomerCaptureSession[]
-  cashMovements  CashMovement[]  @relation("CashMovementSale")
+  cashMovements           CashMovement[]               @relation("CashMovementSale")
 
   @@index([customerId])
   @@index([workshopJobId])
@@ -697,6 +697,37 @@ model RotaClosedDay {
   @@index([type, date])
 }
 
+model WorkshopWorkingHours {
+  id        String   @id @default(uuid()) @db.Uuid
+  staffId   String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff User @relation("WorkshopWorkingHoursStaff", fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, dayOfWeek])
+  @@index([staffId, dayOfWeek])
+}
+
+model WorkshopTimeOff {
+  id        String   @id @default(uuid()) @db.Uuid
+  staffId   String?
+  startAt   DateTime
+  endAt     DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff User? @relation("WorkshopTimeOffStaff", fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([staffId, startAt])
+  @@index([staffId, endAt])
+  @@index([startAt, endAt])
+}
+
 model HolidayRequest {
   id               String               @id @default(uuid()) @db.Uuid
   staffId          String
@@ -742,19 +773,19 @@ model Receipt {
 }
 
 model Refund {
-  id               String             @id @default(uuid()) @db.Uuid
-  saleId           String             @db.Uuid
-  status           RefundRecordStatus @default(DRAFT)
-  currency         String             @default("GBP")
-  subtotalPence    Int                @default(0)
-  taxPence         Int                @default(0)
-  totalPence       Int                @default(0)
-  returnToStock    Boolean            @default(false)
+  id                String             @id @default(uuid()) @db.Uuid
+  saleId            String             @db.Uuid
+  status            RefundRecordStatus @default(DRAFT)
+  currency          String             @default("GBP")
+  subtotalPence     Int                @default(0)
+  taxPence          Int                @default(0)
+  totalPence        Int                @default(0)
+  returnToStock     Boolean            @default(false)
   returnedToStockAt DateTime?
-  createdByStaffId String?
-  completedAt      DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdByStaffId  String?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   sale           Sale           @relation(fields: [saleId], references: [id], onDelete: Restrict)
   createdByStaff User?          @relation("RefundCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
@@ -885,7 +916,7 @@ model InventoryMovement {
   createdByStaffId String?
   createdAt        DateTime              @default(now())
 
-  variant  Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  variant  Variant        @relation(fields: [variantId], references: [id], onDelete: Restrict)
   location StockLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@index([variantId])
@@ -920,14 +951,14 @@ model SaleReturnItem {
 }
 
 model HistoricalFinancialSummary {
-  id                 String   @id @default(uuid()) @db.Uuid
-  date               DateTime @unique @db.Date
-  grossRevenuePence  Int
-  netRevenuePence    Int
-  costOfGoodsPence   Int
-  transactionCount   Int
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid()) @db.Uuid
+  date              DateTime @unique @db.Date
+  grossRevenuePence Int
+  netRevenuePence   Int
+  costOfGoodsPence  Int
+  transactionCount  Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([date])
 }
@@ -946,14 +977,14 @@ model Customer {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  sales              Sale[]
+  sales                   Sale[]
   customerCaptureSessions SaleCustomerCaptureSession[]
-  workshopJobs       WorkshopJob[]
-  bikes              CustomerBike[]
-  creditAccounts     CreditAccount[]
-  reminderCandidates ReminderCandidate[]
-  workshopNotifications WorkshopNotification[]
-  hireBookings       HireBooking[]
+  workshopJobs            WorkshopJob[]
+  bikes                   CustomerBike[]
+  creditAccounts          CreditAccount[]
+  reminderCandidates      ReminderCandidate[]
+  workshopNotifications   WorkshopNotification[]
+  hireBookings            HireBooking[]
 
   @@index([name])
   @@index([phone])
@@ -1037,6 +1068,9 @@ model WorkshopJob {
   assignedStaffName    String?
   status               WorkshopJobStatus     @default(BOOKING_MADE)
   scheduledDate        DateTime?
+  scheduledStartAt     DateTime?
+  scheduledEndAt       DateTime?
+  durationMinutes      Int?
   source               WorkshopJobSource     @default(IN_STORE)
   depositRequiredPence Int                   @default(0)
   depositStatus        WorkshopDepositStatus @default(NOT_REQUIRED)
@@ -1065,6 +1099,8 @@ model WorkshopJob {
   reminderCandidates ReminderCandidate[]
 
   @@index([scheduledDate])
+  @@index([scheduledStartAt])
+  @@index([assignedStaffId, scheduledStartAt])
   @@index([locationId])
   @@index([status])
   @@index([status, completedAt])
@@ -1087,29 +1123,29 @@ enum WorkshopEstimateDecisionSource {
 }
 
 model WorkshopEstimate {
-  id                    String                        @id @default(uuid()) @db.Uuid
-  workshopJobId         String                        @db.Uuid
-  version               Int
-  status                WorkshopEstimateStatus        @default(DRAFT)
-  labourTotalPence      Int                           @default(0)
-  partsTotalPence       Int                           @default(0)
-  subtotalPence         Int                           @default(0)
-  lineCount             Int                           @default(0)
-  createdByStaffId      String?
-  decisionByStaffId String?
-  decisionSource        WorkshopEstimateDecisionSource?
-  requestedAt           DateTime?
-  approvedAt            DateTime?
-  rejectedAt            DateTime?
-  supersededAt          DateTime?
-  customerQuoteToken    String?                       @unique
+  id                          String                          @id @default(uuid()) @db.Uuid
+  workshopJobId               String                          @db.Uuid
+  version                     Int
+  status                      WorkshopEstimateStatus          @default(DRAFT)
+  labourTotalPence            Int                             @default(0)
+  partsTotalPence             Int                             @default(0)
+  subtotalPence               Int                             @default(0)
+  lineCount                   Int                             @default(0)
+  createdByStaffId            String?
+  decisionByStaffId           String?
+  decisionSource              WorkshopEstimateDecisionSource?
+  requestedAt                 DateTime?
+  approvedAt                  DateTime?
+  rejectedAt                  DateTime?
+  supersededAt                DateTime?
+  customerQuoteToken          String?                         @unique
   customerQuoteTokenExpiresAt DateTime?
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
 
-  workshopJob     WorkshopJob                  @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
-  createdByStaff  User?                        @relation("WorkshopEstimateCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
-  decisionByStaff User?                        @relation("WorkshopEstimateDecisionBy", fields: [decisionByStaffId], references: [id], onDelete: SetNull)
+  workshopJob     WorkshopJob            @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  createdByStaff  User?                  @relation("WorkshopEstimateCreatedBy", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  decisionByStaff User?                  @relation("WorkshopEstimateDecisionBy", fields: [decisionByStaffId], references: [id], onDelete: SetNull)
   lines           WorkshopEstimateLine[]
   notifications   WorkshopNotification[]
 
@@ -1140,26 +1176,26 @@ enum WorkshopNotificationDeliveryStatus {
 }
 
 model WorkshopNotification {
-  id              String                             @id @default(uuid()) @db.Uuid
-  workshopJobId   String                             @db.Uuid
-  workshopEstimateId String?                         @db.Uuid
-  customerId      String?                            @db.Uuid
-  channel         WorkshopNotificationChannel
-  eventType       WorkshopNotificationEventType
-  deliveryStatus  WorkshopNotificationDeliveryStatus @default(PENDING)
-  recipientEmail  String?
-  recipientPhone  String?
-  subject         String?
-  bodyText        String?
-  bodyHtml        String?
-  dedupeKey       String                             @unique
-  reasonCode      String?
-  reasonMessage   String?
-  providerMessageId String?
-  payload         Json?
-  sentAt          DateTime?
-  createdAt       DateTime                           @default(now())
-  updatedAt       DateTime                           @updatedAt
+  id                 String                             @id @default(uuid()) @db.Uuid
+  workshopJobId      String                             @db.Uuid
+  workshopEstimateId String?                            @db.Uuid
+  customerId         String?                            @db.Uuid
+  channel            WorkshopNotificationChannel
+  eventType          WorkshopNotificationEventType
+  deliveryStatus     WorkshopNotificationDeliveryStatus @default(PENDING)
+  recipientEmail     String?
+  recipientPhone     String?
+  subject            String?
+  bodyText           String?
+  bodyHtml           String?
+  dedupeKey          String                             @unique
+  reasonCode         String?
+  reasonMessage      String?
+  providerMessageId  String?
+  payload            Json?
+  sentAt             DateTime?
+  createdAt          DateTime                           @default(now())
+  updatedAt          DateTime                           @updatedAt
 
   workshopJob      WorkshopJob       @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
   workshopEstimate WorkshopEstimate? @relation(fields: [workshopEstimateId], references: [id], onDelete: SetNull)
@@ -1172,18 +1208,18 @@ model WorkshopNotification {
 }
 
 model WorkshopEstimateLine {
-  id               String              @id @default(uuid()) @db.Uuid
-  estimateId       String              @db.Uuid
-  workshopJobLineId String?            @db.Uuid
-  sortOrder        Int
-  type             WorkshopJobLineType
-  productId        String?
-  variantId        String?
-  description      String
-  qty              Int
-  unitPricePence   Int
-  lineTotalPence   Int
-  createdAt        DateTime            @default(now())
+  id                String              @id @default(uuid()) @db.Uuid
+  estimateId        String              @db.Uuid
+  workshopJobLineId String?             @db.Uuid
+  sortOrder         Int
+  type              WorkshopJobLineType
+  productId         String?
+  variantId         String?
+  description       String
+  qty               Int
+  unitPricePence    Int
+  lineTotalPence    Int
+  createdAt         DateTime            @default(now())
 
   estimate WorkshopEstimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
   product  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -1395,29 +1431,31 @@ model User {
   operationalRole UserOperationalRole?
   isActive        Boolean              @default(true)
 
-  assignedWorkshopJobs WorkshopJob[]      @relation("WorkshopJobAssignedStaff")
-  workshopJobNotes     WorkshopJobNote[]  @relation("WorkshopJobNoteAuthor")
-  createdWorkshopEstimates WorkshopEstimate[] @relation("WorkshopEstimateCreatedBy")
-  decidedWorkshopEstimates WorkshopEstimate[] @relation("WorkshopEstimateDecisionBy")
-  stockLedgerEntries   StockLedgerEntry[] @relation("StockLedgerEntryCreatedByStaff")
-  createdSales         Sale[]             @relation("SaleCreatedByStaff")
-  saleTenders          SaleTender[]       @relation("SaleTenderCreatedByStaff")
-  createdRefunds       Refund[]           @relation("RefundCreatedByStaff")
-  refundTenders        RefundTender[]     @relation("RefundTenderCreatedByStaff")
-  issuedReceipts       Receipt[]          @relation("ReceiptIssuedByStaff")
-  openedCashSessions   CashSession[]      @relation("CashSessionOpenedBy")
-  closedCashSessions   CashSession[]      @relation("CashSessionClosedBy")
-  cashMovements        CashMovement[]     @relation("CashMovementCreatedBy")
-  cashCounts           CashCount[]        @relation("CashCountCountedBy")
-  createdStockTransfers  StockTransfer[]  @relation("StockTransferCreatedByStaff")
-  sentStockTransfers     StockTransfer[]  @relation("StockTransferSentByStaff")
-  receivedStockTransfers StockTransfer[]  @relation("StockTransferReceivedByStaff")
-  createdHireBookings    HireBooking[]    @relation("HireBookingCreatedByStaff")
-  checkedOutHireBookings HireBooking[]    @relation("HireBookingCheckedOutByStaff")
-  returnedHireBookings   HireBooking[]    @relation("HireBookingReturnedByStaff")
-  rotaAssignments        RotaAssignment[]
-  holidayRequests        HolidayRequest[] @relation("HolidayRequestStaff")
-  reviewedHolidayRequests HolidayRequest[] @relation("HolidayRequestReviewedBy")
+  assignedWorkshopJobs     WorkshopJob[]          @relation("WorkshopJobAssignedStaff")
+  workshopWorkingHours     WorkshopWorkingHours[] @relation("WorkshopWorkingHoursStaff")
+  workshopTimeOff          WorkshopTimeOff[]      @relation("WorkshopTimeOffStaff")
+  workshopJobNotes         WorkshopJobNote[]      @relation("WorkshopJobNoteAuthor")
+  createdWorkshopEstimates WorkshopEstimate[]     @relation("WorkshopEstimateCreatedBy")
+  decidedWorkshopEstimates WorkshopEstimate[]     @relation("WorkshopEstimateDecisionBy")
+  stockLedgerEntries       StockLedgerEntry[]     @relation("StockLedgerEntryCreatedByStaff")
+  createdSales             Sale[]                 @relation("SaleCreatedByStaff")
+  saleTenders              SaleTender[]           @relation("SaleTenderCreatedByStaff")
+  createdRefunds           Refund[]               @relation("RefundCreatedByStaff")
+  refundTenders            RefundTender[]         @relation("RefundTenderCreatedByStaff")
+  issuedReceipts           Receipt[]              @relation("ReceiptIssuedByStaff")
+  openedCashSessions       CashSession[]          @relation("CashSessionOpenedBy")
+  closedCashSessions       CashSession[]          @relation("CashSessionClosedBy")
+  cashMovements            CashMovement[]         @relation("CashMovementCreatedBy")
+  cashCounts               CashCount[]            @relation("CashCountCountedBy")
+  createdStockTransfers    StockTransfer[]        @relation("StockTransferCreatedByStaff")
+  sentStockTransfers       StockTransfer[]        @relation("StockTransferSentByStaff")
+  receivedStockTransfers   StockTransfer[]        @relation("StockTransferReceivedByStaff")
+  createdHireBookings      HireBooking[]          @relation("HireBookingCreatedByStaff")
+  checkedOutHireBookings   HireBooking[]          @relation("HireBookingCheckedOutByStaff")
+  returnedHireBookings     HireBooking[]          @relation("HireBookingReturnedByStaff")
+  rotaAssignments          RotaAssignment[]
+  holidayRequests          HolidayRequest[]       @relation("HolidayRequestStaff")
+  reviewedHolidayRequests  HolidayRequest[]       @relation("HolidayRequestReviewedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

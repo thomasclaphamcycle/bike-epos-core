@@ -320,6 +320,7 @@ Implementation status:
 - workshop operations now surface rota-backed staffing visibility for the day, including scheduled cover, holiday absences, and closed-day reasons without introducing a separate attendance model
 - staff management now includes lightweight operational role tagging so workshop views can prefer workshop-capable rota staff without changing auth roles or introducing a second scheduling model
 - workshop operations now also surface a simple capacity signal that combines rota-backed workshop cover with due, overdue, and active workshop workload for better daily triage
+- workshop jobs now also have an additive backend scheduling foundation with optional timed slots, staff working hours, and workshop/staff time-off blocks, while keeping legacy `scheduledDate` flows operationally compatible
 
 Planned item:
 

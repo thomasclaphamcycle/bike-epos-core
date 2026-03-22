@@ -138,6 +138,16 @@ const TOO_HIGH_BIKE_YEAR = MAX_VALID_BIKE_YEAR + 1;
 const RUN_REF = uniqueRef();
 const STAFF_USER_ID = `m83-staff-${RUN_REF}`;
 const MANAGER_USER_ID = `m83-manager-${RUN_REF}`;
+const WORKSHOP_TIME_ZONE = "Europe/London";
+const WORKSHOP_DAY_OF_WEEK_BY_NAME = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
 
 const STAFF_HEADERS = {
   "X-Staff-Role": "STAFF",
@@ -146,6 +156,21 @@ const STAFF_HEADERS = {
 const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": MANAGER_USER_ID,
+};
+
+const getWorkshopDayOfWeek = (value) => {
+  const weekday = new Intl.DateTimeFormat("en-GB", {
+    timeZone: WORKSHOP_TIME_ZONE,
+    weekday: "long",
+  }).format(value).toLowerCase();
+
+  return WORKSHOP_DAY_OF_WEEK_BY_NAME[weekday];
+};
+
+const toScheduledSlot = (date, hours, minutes = 0) => {
+  const slot = new Date(date);
+  slot.setUTCHours(hours, minutes, 0, 0);
+  return slot;
 };
 
 const createJob = async (state, overrides = {}) => {
@@ -164,6 +189,18 @@ const createJob = async (state, overrides = {}) => {
         Object.prototype.hasOwnProperty.call(overrides, "bikeDescription")
           ? overrides.bikeDescription
           : "Road bike service",
+      scheduledStartAt:
+        Object.prototype.hasOwnProperty.call(overrides, "scheduledStartAt")
+          ? overrides.scheduledStartAt
+          : undefined,
+      scheduledEndAt:
+        Object.prototype.hasOwnProperty.call(overrides, "scheduledEndAt")
+          ? overrides.scheduledEndAt
+          : undefined,
+      durationMinutes:
+        Object.prototype.hasOwnProperty.call(overrides, "durationMinutes")
+          ? overrides.durationMinutes
+          : undefined,
       notes: overrides.notes || `m83 job ${ref}`,
       status: overrides.status || "BOOKED",
     }),
@@ -172,14 +209,20 @@ const createJob = async (state, overrides = {}) => {
   assert.equal(response.status, 201, JSON.stringify(response.json));
   state.workshopJobIds.add(response.json.id);
 
-  await prisma.workshopJob.update({
-    where: { id: response.json.id },
-    data: {
-      scheduledDate: addDays(todayUtc(), 14),
-    },
-  });
+  if (
+    !Object.prototype.hasOwnProperty.call(overrides, "scheduledStartAt") &&
+    !Object.prototype.hasOwnProperty.call(overrides, "scheduledEndAt") &&
+    !Object.prototype.hasOwnProperty.call(overrides, "durationMinutes")
+  ) {
+    await prisma.workshopJob.update({
+      where: { id: response.json.id },
+      data: {
+        scheduledDate: addDays(todayUtc(), 14),
+      },
+    });
+  }
 
-  return { job: { id: response.json.id } };
+  return { job: response.json };
 };
 
 const createCustomer = async (state, overrides = {}) => {
@@ -299,10 +342,28 @@ const waitForNotification = async (where, expectedStatus) => {
   });
 };
 
+const createWorkshopWorkingHours = async (state, input) => {
+  const record = await prisma.workshopWorkingHours.create({
+    data: input,
+  });
+  state.workingHoursIds.add(record.id);
+  return record;
+};
+
+const createWorkshopTimeOff = async (state, input) => {
+  const record = await prisma.workshopTimeOff.create({
+    data: input,
+  });
+  state.timeOffIds.add(record.id);
+  return record;
+};
+
 const cleanup = async (state) => {
   const workshopJobIds = Array.from(state.workshopJobIds);
   const customerIds = Array.from(state.customerIds);
   const userIds = Array.from(state.userIds);
+  const workingHoursIds = Array.from(state.workingHoursIds);
+  const timeOffIds = Array.from(state.timeOffIds);
 
   await prisma.auditEvent.deleteMany({
     where: {
@@ -340,6 +401,18 @@ const cleanup = async (state) => {
     });
   }
 
+  if (timeOffIds.length > 0) {
+    await prisma.workshopTimeOff.deleteMany({
+      where: { id: { in: timeOffIds } },
+    });
+  }
+
+  if (workingHoursIds.length > 0) {
+    await prisma.workshopWorkingHours.deleteMany({
+      where: { id: { in: workingHoursIds } },
+    });
+  }
+
   if (customerIds.length > 0) {
     await prisma.customer.deleteMany({
       where: { id: { in: customerIds } },
@@ -358,6 +431,8 @@ const run = async () => {
     workshopJobIds: new Set(),
     customerIds: new Set(),
     userIds: new Set(),
+    workingHoursIds: new Set(),
+    timeOffIds: new Set(),
   };
 
   const runTest = async (name, fn, results) => {
@@ -821,6 +896,135 @@ const run = async () => {
       });
       assert.equal(mismatch.status, 409, JSON.stringify(mismatch.json));
       assert.equal(mismatch.json.error.code, "WORKSHOP_BIKE_CUSTOMER_MISMATCH");
+    }, results);
+
+    await runTest("timed workshop jobs derive schedule fields, reject store-closed slots, and validate end-time consistency", async () => {
+      const scheduledDate = addDays(todayUtc(), 16);
+      const validStart = toScheduledSlot(scheduledDate, 11, 0);
+
+      const scheduledJob = await fetchJson("/api/workshop/jobs", {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          customerName: `Scheduled Customer ${uniqueRef()}`,
+          bikeDescription: "Timed workshop job",
+          scheduledStartAt: validStart.toISOString(),
+          durationMinutes: 90,
+          status: "BOOKED",
+        }),
+      });
+      assert.equal(scheduledJob.status, 201, JSON.stringify(scheduledJob.json));
+      state.workshopJobIds.add(scheduledJob.json.id);
+      assert.equal(
+        new Date(scheduledJob.json.scheduledStartAt).toISOString(),
+        validStart.toISOString(),
+      );
+      assert.equal(scheduledJob.json.durationMinutes, 90);
+      assert.equal(
+        new Date(scheduledJob.json.scheduledEndAt).toISOString(),
+        new Date(validStart.getTime() + (90 * 60_000)).toISOString(),
+      );
+      assert.equal(
+        new Date(scheduledJob.json.scheduledDate).toISOString(),
+        new Date(validStart.toISOString().slice(0, 10) + "T00:00:00.000Z").toISOString(),
+      );
+
+      const invalidStoreHours = await fetchJson("/api/workshop/jobs", {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          customerName: `Too Early ${uniqueRef()}`,
+          bikeDescription: "Before opening",
+          scheduledStartAt: toScheduledSlot(scheduledDate, 2, 0).toISOString(),
+          durationMinutes: 60,
+          status: "BOOKED",
+        }),
+      });
+      assert.equal(invalidStoreHours.status, 409, JSON.stringify(invalidStoreHours.json));
+      assert.equal(
+        invalidStoreHours.json.error.code,
+        "WORKSHOP_SCHEDULE_OUTSIDE_STORE_HOURS",
+      );
+
+      const invalidEndTime = await fetchJson(`/api/workshop/jobs/${scheduledJob.json.id}`, {
+        method: "PATCH",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          scheduledStartAt: validStart.toISOString(),
+          durationMinutes: 90,
+          scheduledEndAt: new Date(validStart.getTime() + (30 * 60_000)).toISOString(),
+        }),
+      });
+      assert.equal(invalidEndTime.status, 400, JSON.stringify(invalidEndTime.json));
+      assert.equal(invalidEndTime.json.error.code, "INVALID_WORKSHOP_SCHEDULE");
+    }, results);
+
+    await runTest("staff assignment to timed workshop jobs respects working hours, time off, and overlap rules", async () => {
+      const scheduledDate = addDays(todayUtc(), 17);
+      const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
+      assert.notEqual(dayOfWeek, undefined);
+
+      await createWorkshopWorkingHours(state, {
+        staffId: managerUser.id,
+        dayOfWeek,
+        startTime: "00:00",
+        endTime: "23:59",
+      });
+
+      const firstStart = toScheduledSlot(scheduledDate, 11, 0);
+      const { job: firstJob } = await createJob(state, {
+        customerName: `Scheduled Assign ${uniqueRef()}`,
+        bikeDescription: "First timed assignment",
+        scheduledStartAt: firstStart.toISOString(),
+        durationMinutes: 60,
+      });
+
+      const assignFirst = await fetchJson(`/api/workshop/jobs/${firstJob.id}/assign`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({ staffId: managerUser.id }),
+      });
+      assert.equal(assignFirst.status, 201, JSON.stringify(assignFirst.json));
+
+      const overlappingStart = toScheduledSlot(scheduledDate, 11, 30);
+      const { job: overlappingJob } = await createJob(state, {
+        customerName: `Scheduled Overlap ${uniqueRef()}`,
+        bikeDescription: "Overlap timed assignment",
+        scheduledStartAt: overlappingStart.toISOString(),
+        durationMinutes: 45,
+      });
+
+      const overlapAssign = await fetchJson(`/api/workshop/jobs/${overlappingJob.id}/assign`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({ staffId: managerUser.id }),
+      });
+      assert.equal(overlapAssign.status, 409, JSON.stringify(overlapAssign.json));
+      assert.equal(overlapAssign.json.error.code, "WORKSHOP_SCHEDULE_OVERLAP");
+
+      const timeOffStart = toScheduledSlot(scheduledDate, 15, 0);
+      await createWorkshopTimeOff(state, {
+        staffId: managerUser.id,
+        startAt: timeOffStart,
+        endAt: new Date(timeOffStart.getTime() + (60 * 60_000)),
+        reason: "Annual leave",
+      });
+
+      const blockedStart = toScheduledSlot(scheduledDate, 15, 15);
+      const { job: blockedJob } = await createJob(state, {
+        customerName: `Scheduled Time Off ${uniqueRef()}`,
+        bikeDescription: "Time-off blocked assignment",
+        scheduledStartAt: blockedStart.toISOString(),
+        durationMinutes: 30,
+      });
+
+      const blockedAssign = await fetchJson(`/api/workshop/jobs/${blockedJob.id}/assign`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({ staffId: managerUser.id }),
+      });
+      assert.equal(blockedAssign.status, 409, JSON.stringify(blockedAssign.json));
+      assert.equal(blockedAssign.json.error.code, "WORKSHOP_SCHEDULE_TIME_OFF");
     }, results);
 
     await runTest("customer quote links allow safe approval and stale links cannot approve superseded estimates", async () => {

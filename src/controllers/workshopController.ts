@@ -149,6 +149,9 @@ export const createWorkshopJobHandler = async (req: Request, res: Response) => {
     customerName?: string;
     bikeId?: string | null;
     bikeDescription?: string;
+    scheduledStartAt?: string | null;
+    scheduledEndAt?: string | null;
+    durationMinutes?: number | null;
     notes?: string;
     status?: string;
   };
@@ -164,6 +167,27 @@ export const createWorkshopJobHandler = async (req: Request, res: Response) => {
   }
   if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
     throw new HttpError(400, "bikeDescription must be a string", "INVALID_WORKSHOP_JOB");
+  }
+  if (
+    body.scheduledStartAt !== undefined &&
+    body.scheduledStartAt !== null &&
+    typeof body.scheduledStartAt !== "string"
+  ) {
+    throw new HttpError(400, "scheduledStartAt must be a string or null", "INVALID_WORKSHOP_JOB");
+  }
+  if (
+    body.scheduledEndAt !== undefined &&
+    body.scheduledEndAt !== null &&
+    typeof body.scheduledEndAt !== "string"
+  ) {
+    throw new HttpError(400, "scheduledEndAt must be a string or null", "INVALID_WORKSHOP_JOB");
+  }
+  if (
+    body.durationMinutes !== undefined &&
+    body.durationMinutes !== null &&
+    typeof body.durationMinutes !== "number"
+  ) {
+    throw new HttpError(400, "durationMinutes must be a number or null", "INVALID_WORKSHOP_JOB");
   }
   if (body.notes !== undefined && typeof body.notes !== "string") {
     throw new HttpError(400, "notes must be a string", "INVALID_WORKSHOP_JOB");
@@ -235,6 +259,9 @@ export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
     customerName?: string;
     bikeId?: string | null;
     bikeDescription?: string;
+    scheduledStartAt?: string | null;
+    scheduledEndAt?: string | null;
+    durationMinutes?: number | null;
     notes?: string;
     status?: string;
   };
@@ -249,6 +276,39 @@ export const patchWorkshopJobHandler = async (req: Request, res: Response) => {
     throw new HttpError(
       400,
       "bikeDescription must be a string",
+      "INVALID_WORKSHOP_JOB_UPDATE",
+    );
+  }
+  if (
+    body.scheduledStartAt !== undefined &&
+    body.scheduledStartAt !== null &&
+    typeof body.scheduledStartAt !== "string"
+  ) {
+    throw new HttpError(
+      400,
+      "scheduledStartAt must be a string or null",
+      "INVALID_WORKSHOP_JOB_UPDATE",
+    );
+  }
+  if (
+    body.scheduledEndAt !== undefined &&
+    body.scheduledEndAt !== null &&
+    typeof body.scheduledEndAt !== "string"
+  ) {
+    throw new HttpError(
+      400,
+      "scheduledEndAt must be a string or null",
+      "INVALID_WORKSHOP_JOB_UPDATE",
+    );
+  }
+  if (
+    body.durationMinutes !== undefined &&
+    body.durationMinutes !== null &&
+    typeof body.durationMinutes !== "number"
+  ) {
+    throw new HttpError(
+      400,
+      "durationMinutes must be a number or null",
       "INVALID_WORKSHOP_JOB_UPDATE",
     );
   }
