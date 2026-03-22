@@ -569,6 +569,36 @@ textarea {
   flex-wrap: wrap;
 }
 
+.bike-profile-editor {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cp-border);
+  display: grid;
+  gap: 14px;
+}
+
+.bike-profile-section {
+  display: grid;
+  gap: 10px;
+}
+
+.bike-profile-section h4 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.bike-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.bike-profile-grid label,
+.bike-profile-notes {
+  display: grid;
+  gap: 4px;
+}
+
 .ui-page {
   display: grid;
   gap: var(--cp-space-5);
