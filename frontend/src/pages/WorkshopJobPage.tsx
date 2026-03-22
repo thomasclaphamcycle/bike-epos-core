@@ -1137,6 +1137,9 @@ export const WorkshopJobPage = () => {
 
     return null;
   }, [payload, rawStatus]);
+  const workshopCalendarPath = payload?.job.scheduledDate
+    ? `/workshop/calendar?date=${payload.job.scheduledDate.slice(0, 10)}`
+    : "/workshop/calendar";
 
   if (!id) {
     return <div className="page-shell"><p>Missing workshop job id.</p></div>;
@@ -1148,6 +1151,9 @@ export const WorkshopJobPage = () => {
         <div className="card-header-row">
           <h1>Workshop Job {id.slice(0, 8)}</h1>
           <div className="actions-inline">
+            <Link to={workshopCalendarPath} className="button-link">
+              Calendar
+            </Link>
             {payload?.job.bike ? (
               <Link to={`/customers/bikes/${payload.job.bike.id}`} className="button-link">
                 Bike History

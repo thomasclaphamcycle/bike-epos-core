@@ -1085,6 +1085,14 @@ const run = async () => {
         durationMinutes: 60,
       });
 
+      const { job: unscheduledJob } = await createJob(state, {
+        customerName: `Needs Slot ${uniqueRef()}`,
+        bikeDescription: "Unscheduled intake job",
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        durationMinutes: null,
+      });
+
       const scheduled = await patchWorkshopJobSchedule(job.id, {
         staffId: managerUser.id,
       });
@@ -1099,11 +1107,17 @@ const run = async () => {
       assert.equal(calendar.json.range.to, dateKey);
       assert.ok(Array.isArray(calendar.json.staff), JSON.stringify(calendar.json));
       assert.ok(Array.isArray(calendar.json.scheduledJobs), JSON.stringify(calendar.json));
+      assert.ok(Array.isArray(calendar.json.unscheduledJobs), JSON.stringify(calendar.json));
 
       const scheduledJob = calendar.json.scheduledJobs.find((entry) => entry.id === job.id);
       assert.ok(scheduledJob, JSON.stringify(calendar.json));
       assert.equal(scheduledJob.assignedStaffId, managerUser.id);
       assert.equal(scheduledJob.jobPath, `/workshop/${job.id}`);
+
+      const unscheduledCalendarJob = calendar.json.unscheduledJobs.find((entry) => entry.id === unscheduledJob.id);
+      assert.ok(unscheduledCalendarJob, JSON.stringify(calendar.json.unscheduledJobs));
+      assert.equal(unscheduledCalendarJob.scheduledStartAt, null);
+      assert.equal(unscheduledCalendarJob.bikeDescription, "Unscheduled intake job");
 
       const staffRow = calendar.json.staff.find((entry) => entry.id === managerUser.id);
       assert.ok(staffRow, JSON.stringify(calendar.json));

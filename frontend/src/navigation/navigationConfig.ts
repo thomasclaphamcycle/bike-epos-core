@@ -125,6 +125,13 @@ export const navigationSections: NavigationSection[] = [
       },
       {
         kind: "link",
+        label: "Calendar",
+        to: "/workshop/calendar",
+        minimumRole: "STAFF",
+        matchExact: ["/management/calendar"],
+      },
+      {
+        kind: "link",
         label: "Technician View",
         to: "/workshop/technician",
         minimumRole: "STAFF",
