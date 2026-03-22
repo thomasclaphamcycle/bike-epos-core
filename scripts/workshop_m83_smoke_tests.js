@@ -225,6 +225,50 @@ const createJob = async (state, overrides = {}) => {
   return { job: response.json };
 };
 
+const createLinkedPartVariant = async (state, overrides = {}) => {
+  const ref = uniqueRef();
+  const product = await prisma.product.create({
+    data: {
+      name: overrides.name || `M83 Template Part ${ref}`,
+      brand: "M83",
+      variants: {
+        create: {
+          sku: overrides.sku || `M83-TEMPLATE-${ref}`,
+          name: overrides.variantName || "Standard",
+          retailPrice: overrides.retailPrice || "9.50",
+          retailPricePence: overrides.retailPricePence || 950,
+        },
+      },
+    },
+    include: {
+      variants: {
+        take: 1,
+      },
+    },
+  });
+
+  state.productIds.add(product.id);
+  return {
+    productId: product.id,
+    variantId: product.variants[0].id,
+    sku: product.variants[0].sku,
+    name: product.name,
+    pricePence: product.variants[0].retailPricePence,
+  };
+};
+
+const createWorkshopServiceTemplate = async (state, body, headers = MANAGER_HEADERS) => {
+  const response = await fetchJson("/api/workshop/service-templates", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  assert.equal(response.status, 201, JSON.stringify(response.json));
+  state.templateIds.add(response.json.template.id);
+  return response.json.template;
+};
+
 const createCustomer = async (state, overrides = {}) => {
   const ref = uniqueRef();
   const body = {
@@ -372,6 +416,8 @@ const cleanup = async (state) => {
   const userIds = Array.from(state.userIds);
   const workingHoursIds = Array.from(state.workingHoursIds);
   const timeOffIds = Array.from(state.timeOffIds);
+  const templateIds = Array.from(state.templateIds);
+  const productIds = Array.from(state.productIds);
 
   await prisma.auditEvent.deleteMany({
     where: {
@@ -421,9 +467,24 @@ const cleanup = async (state) => {
     });
   }
 
+  if (templateIds.length > 0) {
+    await prisma.workshopServiceTemplate.deleteMany({
+      where: { id: { in: templateIds } },
+    });
+  }
+
   if (customerIds.length > 0) {
     await prisma.customer.deleteMany({
       where: { id: { in: customerIds } },
+    });
+  }
+
+  if (productIds.length > 0) {
+    await prisma.variant.deleteMany({
+      where: { productId: { in: productIds } },
+    });
+    await prisma.product.deleteMany({
+      where: { id: { in: productIds } },
     });
   }
 
@@ -441,6 +502,8 @@ const run = async () => {
     userIds: new Set(),
     workingHoursIds: new Set(),
     timeOffIds: new Set(),
+    templateIds: new Set(),
+    productIds: new Set(),
   };
 
   const runTest = async (name, fn, results) => {
@@ -906,6 +969,175 @@ const run = async () => {
       });
       assert.equal(mismatch.status, 409, JSON.stringify(mismatch.json));
       assert.equal(mismatch.json.error.code, "WORKSHOP_BIKE_CUSTOMER_MISMATCH");
+    }, results);
+
+    await runTest("workshop service templates can be created, listed, and updated safely", async () => {
+      const linkedPart = await createLinkedPartVariant(state, {
+        retailPrice: "12.99",
+        retailPricePence: 1299,
+      });
+
+      const template = await createWorkshopServiceTemplate(state, {
+        name: `Standard Service ${uniqueRef()}`,
+        description: "Common workshop service quote",
+        category: "Service",
+        defaultDurationMinutes: 60,
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Standard service labour",
+            qty: 1,
+            unitPricePence: 4500,
+          },
+          {
+            type: "PART",
+            productId: linkedPart.productId,
+            variantId: linkedPart.variantId,
+            description: "Fresh cable set",
+            qty: 1,
+            unitPricePence: linkedPart.pricePence,
+            isOptional: true,
+          },
+        ],
+      });
+
+      assert.equal(template.defaultDurationMinutes, 60);
+      assert.equal(template.lines.length, 2);
+      assert.equal(template.lines[1].isOptional, true);
+
+      const list = await fetchJson("/api/workshop/service-templates", {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(list.status, 200, JSON.stringify(list.json));
+      const listedTemplate = list.json.templates.find((entry) => entry.id === template.id);
+      assert.ok(listedTemplate, JSON.stringify(list.json.templates));
+
+      const updated = await fetchJson(`/api/workshop/service-templates/${template.id}`, {
+        method: "PATCH",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          description: "Updated workshop service quote",
+          isActive: false,
+          lines: [
+            {
+              type: "LABOUR",
+              description: "Standard service labour",
+              qty: 1,
+              unitPricePence: 4700,
+            },
+            {
+              type: "PART",
+              productId: linkedPart.productId,
+              variantId: linkedPart.variantId,
+              description: "Fresh cable set",
+              qty: 2,
+              unitPricePence: linkedPart.pricePence,
+              isOptional: true,
+            },
+          ],
+        }),
+      });
+      assert.equal(updated.status, 200, JSON.stringify(updated.json));
+      assert.equal(updated.json.template.isActive, false);
+      assert.equal(updated.json.template.lines[1].qty, 2);
+
+      const inactiveForStaff = await fetchJson(`/api/workshop/service-templates/${template.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(inactiveForStaff.status, 404, JSON.stringify(inactiveForStaff.json));
+
+      const inactiveForManager = await fetchJson(
+        `/api/workshop/service-templates/${template.id}?includeInactive=true`,
+        {
+          headers: MANAGER_HEADERS,
+        },
+      );
+      assert.equal(inactiveForManager.status, 200, JSON.stringify(inactiveForManager.json));
+      assert.equal(inactiveForManager.json.template.description, "Updated workshop service quote");
+    }, results);
+
+    await runTest("applying a workshop service template creates normal job lines and keeps estimate compatibility", async () => {
+      const linkedPartA = await createLinkedPartVariant(state, {
+        retailPrice: "4.99",
+        retailPricePence: 499,
+      });
+      const linkedPartB = await createLinkedPartVariant(state, {
+        retailPrice: "6.50",
+        retailPricePence: 650,
+      });
+
+      const template = await createWorkshopServiceTemplate(state, {
+        name: `Puncture Repair ${uniqueRef()}`,
+        description: "Quick puncture-repair quote",
+        category: "Repair",
+        defaultDurationMinutes: 45,
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Puncture repair labour",
+            qty: 1,
+            unitPricePence: 1800,
+          },
+          {
+            type: "PART",
+            productId: linkedPartA.productId,
+            variantId: linkedPartA.variantId,
+            description: "Tube replacement",
+            qty: 1,
+            unitPricePence: linkedPartA.pricePence,
+            isOptional: true,
+          },
+          {
+            type: "PART",
+            productId: linkedPartB.productId,
+            variantId: linkedPartB.variantId,
+            description: "Rim tape refresh",
+            qty: 1,
+            unitPricePence: linkedPartB.pricePence,
+            isOptional: true,
+          },
+        ],
+      });
+
+      const { job } = await createJob(state, {
+        bikeDescription: "Workshop template job",
+      });
+
+      const applyTemplate = await fetchJson(`/api/workshop/jobs/${job.id}/templates/apply`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          templateId: template.id,
+          selectedOptionalLineIds: [template.lines[1].id],
+        }),
+      });
+      assert.equal(applyTemplate.status, 201, JSON.stringify(applyTemplate.json));
+      assert.equal(applyTemplate.json.appliedLineCount, 2);
+
+      const detail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(detail.status, 200, JSON.stringify(detail.json));
+      assert.equal(detail.json.lines.length, 2);
+      assert.deepEqual(
+        detail.json.lines.map((line) => line.description),
+        ["Puncture repair labour", "Tube replacement"],
+      );
+      assert.equal(detail.json.lines[1].variantId, linkedPartA.variantId);
+
+      const saveEstimate = await fetchJson(`/api/workshop/jobs/${job.id}/estimate`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(saveEstimate.status, 201, JSON.stringify(saveEstimate.json));
+
+      const estimatedDetail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(estimatedDetail.status, 200, JSON.stringify(estimatedDetail.json));
+      assert.equal(estimatedDetail.json.currentEstimate.subtotalPence, 2299);
+      assert.equal(estimatedDetail.json.currentEstimate.lineCount, 2);
     }, results);
 
     await runTest("timed workshop jobs derive schedule fields, reject store-closed slots, and validate end-time consistency", async () => {

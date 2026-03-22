@@ -64,6 +64,15 @@ type AddWorkshopJobLineInput = {
   unitPricePence?: number;
 };
 
+export type WorkshopJobLineDraftInput = {
+  type: "PART" | "LABOUR";
+  productId?: string | null;
+  variantId?: string | null;
+  description?: string;
+  qty: number;
+  unitPricePence: number;
+};
+
 type UpdateWorkshopJobLineInput = {
   description?: string;
   qty?: number;
@@ -333,6 +342,151 @@ const ensureVariantForPartTx = async (
   }
 
   return firstVariant;
+};
+
+export const createWorkshopJobLineRecordTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+  input: WorkshopJobLineDraftInput,
+) => {
+  const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
+  if (job.closedAt) {
+    throw new HttpError(409, "Closed jobs cannot be edited", "WORKSHOP_JOB_CLOSED");
+  }
+
+  if (input.type !== "PART" && input.type !== "LABOUR") {
+    throw new HttpError(400, "type must be PART or LABOUR", "INVALID_WORKSHOP_LINE");
+  }
+
+  if (!Number.isInteger(input.qty) || input.qty <= 0) {
+    throw new HttpError(400, "qty must be a positive integer", "INVALID_WORKSHOP_LINE");
+  }
+
+  if (!Number.isInteger(input.unitPricePence) || input.unitPricePence < 0) {
+    throw new HttpError(
+      400,
+      "unitPricePence must be a non-negative integer",
+      "INVALID_WORKSHOP_LINE",
+    );
+  }
+
+  if (input.type === "PART") {
+    const productId = normalizeOptionalText(input.productId);
+    const variantId = normalizeOptionalText(input.variantId);
+
+    if (productId) {
+      const product = await ensureProductExistsTx(tx, productId);
+      const variant = await ensureVariantForPartTx(tx, {
+        productId,
+        variantId,
+      });
+
+      const description =
+        normalizeOptionalText(input.description)
+        ?? [product.name, variant.name ?? variant.sku].filter(Boolean).join(" - ");
+
+      return tx.workshopJobLine.create({
+        data: {
+          jobId: workshopJobId,
+          type: "PART",
+          productId,
+          variantId: variant.id,
+          description,
+          qty: input.qty,
+          unitPricePence: input.unitPricePence,
+        },
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          variant: {
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (variantId) {
+      throw new HttpError(
+        400,
+        "variantId requires productId on PART lines",
+        "INVALID_WORKSHOP_LINE",
+      );
+    }
+
+    const description = normalizeOptionalText(input.description);
+    if (!description) {
+      throw new HttpError(
+        400,
+        "PART lines without a linked product require description",
+        "INVALID_WORKSHOP_LINE",
+      );
+    }
+
+    return tx.workshopJobLine.create({
+      data: {
+        jobId: workshopJobId,
+        type: "PART",
+        productId: null,
+        variantId: null,
+        description,
+        qty: input.qty,
+        unitPricePence: input.unitPricePence,
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        variant: {
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+          },
+        },
+      },
+    });
+  }
+
+  const description = normalizeOptionalText(input.description);
+  if (!description) {
+    throw new HttpError(400, "LABOUR lines require description", "INVALID_WORKSHOP_LINE");
+  }
+
+  return tx.workshopJobLine.create({
+    data: {
+      jobId: workshopJobId,
+      type: "LABOUR",
+      description,
+      qty: input.qty,
+      unitPricePence: input.unitPricePence,
+    },
+    include: {
+      product: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+        },
+      },
+    },
+  });
 };
 
 const getOrCreateLabourVariantTx = async (tx: Prisma.TransactionClient) => {
@@ -1045,84 +1199,14 @@ export const addWorkshopJobLine = async (
   }
 
   return prisma.$transaction(async (tx) => {
-    const job = await ensureWorkshopJobExistsTx(tx, workshopJobId);
-    if (job.closedAt) {
-      throw new HttpError(409, "Closed jobs cannot be edited", "WORKSHOP_JOB_CLOSED");
-    }
-
-    let line;
-    if (input.type === "PART") {
-      const productId = normalizeOptionalText(input.productId);
-      if (!productId) {
-        throw new HttpError(400, "PART lines require productId", "INVALID_WORKSHOP_LINE");
-      }
-      const product = await ensureProductExistsTx(tx, productId);
-      const variant = await ensureVariantForPartTx(tx, {
-        productId,
-        variantId: normalizeOptionalText(input.variantId),
-      });
-
-      const description =
-        normalizeOptionalText(input.description) ??
-        [product.name, variant.name ?? variant.sku].filter(Boolean).join(" - ");
-
-      line = await tx.workshopJobLine.create({
-        data: {
-          jobId: workshopJobId,
-          type: "PART",
-          productId,
-          variantId: variant.id,
-          description,
-          qty: input.qty,
-          unitPricePence: input.unitPricePence,
-        },
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          variant: {
-            select: {
-              id: true,
-              sku: true,
-              name: true,
-            },
-          },
-        },
-      });
-    } else {
-      const description = normalizeOptionalText(input.description);
-      if (!description) {
-        throw new HttpError(400, "LABOUR lines require description", "INVALID_WORKSHOP_LINE");
-      }
-
-      line = await tx.workshopJobLine.create({
-        data: {
-          jobId: workshopJobId,
-          type: "LABOUR",
-          description,
-          qty: input.qty,
-          unitPricePence: input.unitPricePence,
-        },
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          variant: {
-            select: {
-              id: true,
-              sku: true,
-              name: true,
-            },
-          },
-        },
-      });
-    }
+    const line = await createWorkshopJobLineRecordTx(tx, workshopJobId, {
+      type: input.type,
+      productId: input.productId,
+      variantId: input.variantId,
+      description: input.description,
+      qty: input.qty,
+      unitPricePence: input.unitPricePence,
+    });
 
     await invalidateCurrentWorkshopEstimateTx(
       tx,

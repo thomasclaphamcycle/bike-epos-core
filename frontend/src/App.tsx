@@ -79,6 +79,7 @@ import {
   WorkshopPerformancePage,
   WorkshopPrintCentrePage,
   WorkshopQuotePage,
+  WorkshopServiceTemplatesPage,
 } from "./lazyPages";
 
 const managerOnly = (element: ReactNode) => (
@@ -119,6 +120,12 @@ const AuthedApp = () => (
           path="/management/workshop"
           element={(
             managerOnly(<WorkshopPerformancePage />)
+          )}
+        />
+        <Route
+          path="/management/workshop/templates"
+          element={(
+            managerOnly(<WorkshopServiceTemplatesPage />)
           )}
         />
         <Route

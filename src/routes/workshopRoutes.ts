@@ -26,6 +26,14 @@ import {
   saveWorkshopEstimateHandler,
   setWorkshopJobApprovalStatusHandler,
 } from "../controllers/workshopController";
+import {
+  applyWorkshopServiceTemplateHandler,
+  createWorkshopServiceTemplateHandler,
+  deleteWorkshopServiceTemplateHandler,
+  getWorkshopServiceTemplateHandler,
+  listWorkshopServiceTemplatesHandler,
+  patchWorkshopServiceTemplateHandler,
+} from "../controllers/workshopServiceTemplateController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
 export const workshopRouter = Router();
@@ -33,9 +41,15 @@ export const workshopRouter = Router();
 workshopRouter.get("/availability", getWorkshopAvailabilityHandler);
 workshopRouter.get("/calendar", requireRoleAtLeast("STAFF"), getWorkshopCalendarHandler);
 workshopRouter.get("/dashboard", requireRoleAtLeast("STAFF"), getWorkshopDashboardHandler);
+workshopRouter.get("/service-templates", requireRoleAtLeast("STAFF"), listWorkshopServiceTemplatesHandler);
+workshopRouter.get("/service-templates/:id", requireRoleAtLeast("STAFF"), getWorkshopServiceTemplateHandler);
+workshopRouter.post("/service-templates", requireRoleAtLeast("MANAGER"), createWorkshopServiceTemplateHandler);
+workshopRouter.patch("/service-templates/:id", requireRoleAtLeast("MANAGER"), patchWorkshopServiceTemplateHandler);
+workshopRouter.delete("/service-templates/:id", requireRoleAtLeast("MANAGER"), deleteWorkshopServiceTemplateHandler);
 workshopRouter.post("/jobs", requireRoleAtLeast("STAFF"), createWorkshopJobHandler);
 workshopRouter.get("/jobs", requireRoleAtLeast("STAFF"), listWorkshopJobsHandler);
 workshopRouter.get("/jobs/:id", requireRoleAtLeast("STAFF"), getWorkshopJobHandler);
+workshopRouter.post("/jobs/:id/templates/apply", requireRoleAtLeast("STAFF"), applyWorkshopServiceTemplateHandler);
 workshopRouter.get("/jobs/:id/notifications", requireRoleAtLeast("STAFF"), listWorkshopJobNotificationsHandler);
 workshopRouter.post("/jobs/:id/notifications/resend", requireRoleAtLeast("STAFF"), resendWorkshopJobNotificationHandler);
 workshopRouter.patch("/jobs/:id", requireRoleAtLeast("STAFF"), patchWorkshopJobHandler);

@@ -3,6 +3,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
+import {
+  getDefaultSelectedOptionalLineIds,
+  type WorkshopServiceTemplate,
+  type WorkshopServiceTemplatesResponse,
+} from "../features/workshop/serviceTemplates";
 
 type CustomerRow = {
   id: string;
@@ -117,6 +123,10 @@ export const WorkshopCheckInPage = () => {
   const [intakeNotes, setIntakeNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [createdJobId, setCreatedJobId] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<WorkshopServiceTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedOptionalTemplateLineIds, setSelectedOptionalTemplateLineIds] = useState<string[]>([]);
 
   const resolvedCustomerName = useMemo(() => {
     if (selectedCustomer) {
@@ -136,7 +146,42 @@ export const WorkshopCheckInPage = () => {
     () => customerBikes.find((bike) => bike.id === selectedBikeId) ?? workshopStartContext?.bike ?? null,
     [customerBikes, selectedBikeId, workshopStartContext?.bike],
   );
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === selectedTemplateId) ?? null,
+    [selectedTemplateId, templates],
+  );
   const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTemplates = async () => {
+      setLoadingTemplates(true);
+      try {
+        const payload = await apiGet<WorkshopServiceTemplatesResponse>("/api/workshop/service-templates");
+        if (!cancelled) {
+          setTemplates(payload.templates || []);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          error(loadError instanceof Error ? loadError.message : "Failed to load service templates");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTemplates(false);
+        }
+      }
+    };
+
+    void loadTemplates();
+    return () => {
+      cancelled = true;
+    };
+  }, [error]);
+
+  useEffect(() => {
+    setSelectedOptionalTemplateLineIds(getDefaultSelectedOptionalLineIds(selectedTemplate));
+  }, [selectedTemplate]);
 
   useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
@@ -363,7 +408,24 @@ export const WorkshopCheckInPage = () => {
       });
 
       setCreatedJobId(created.id);
-      success("Workshop check-in created");
+      if (selectedTemplateId) {
+        try {
+          await apiPost(`/api/workshop/jobs/${encodeURIComponent(created.id)}/templates/apply`, {
+            templateId: selectedTemplateId,
+            selectedOptionalLineIds: selectedOptionalTemplateLineIds,
+          });
+          success("Workshop check-in created and template applied");
+        } catch (templateError) {
+          error(
+            templateError instanceof Error
+              ? `Workshop check-in created, but the template could not be applied: ${templateError.message}`
+              : "Workshop check-in created, but the template could not be applied.",
+          );
+          return;
+        }
+      } else {
+        success("Workshop check-in created");
+      }
     } catch (submitError) {
       error(submitError instanceof Error ? submitError.message : "Failed to create workshop check-in");
     } finally {
@@ -729,6 +791,44 @@ export const WorkshopCheckInPage = () => {
               <strong>Check-in summary</strong>
               <pre className="note-pre">{checkInNotes || "No additional notes captured."}</pre>
             </div>
+            <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+              <label>
+                Service template
+                <select
+                  value={selectedTemplateId}
+                  onChange={(event) => setSelectedTemplateId(event.target.value)}
+                >
+                  <option value="">No template</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="table-secondary">
+                {loadingTemplates
+                  ? "Loading active service templates..."
+                  : selectedTemplate
+                    ? "Template lines will be applied after the check-in creates the workshop job."
+                    : "Templates can prefill common labour and part suggestions."}
+              </div>
+            </div>
+            {selectedTemplate ? (
+              <div style={{ marginTop: "12px" }}>
+                <WorkshopServiceTemplatePreview
+                  template={selectedTemplate}
+                  selectedOptionalLineIds={selectedOptionalTemplateLineIds}
+                  onToggleOptionalLine={(lineId) =>
+                    setSelectedOptionalTemplateLineIds((current) =>
+                      current.includes(lineId)
+                        ? current.filter((entry) => entry !== lineId)
+                        : [...current, lineId],
+                    )}
+                  emptyOptionalLabel="Optional part suggestions are currently included in this check-in."
+                />
+              </div>
+            ) : null}
             {createdJobId ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 Workshop job created: <Link to={`/workshop/${createdJobId}`}>{createdJobId}</Link>

@@ -144,6 +144,12 @@ export const navigationSections: NavigationSection[] = [
         minimumRole: "MANAGER",
         matchExact: ["/management/workshop"],
       },
+      {
+        kind: "link",
+        label: "Service Templates",
+        to: "/management/workshop/templates",
+        minimumRole: "MANAGER",
+      },
     ],
   },
   {

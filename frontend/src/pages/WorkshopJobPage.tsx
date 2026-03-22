@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
+import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
@@ -22,6 +23,11 @@ import {
   workshopNotificationEventLabel,
   workshopNotificationStrategyLabel,
 } from "../features/workshop/notificationStatus";
+import {
+  getDefaultSelectedOptionalLineIds,
+  type WorkshopServiceTemplate,
+  type WorkshopServiceTemplatesResponse,
+} from "../features/workshop/serviceTemplates";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
 
@@ -457,6 +463,11 @@ export const WorkshopJobPage = () => {
   const [resendingNotificationType, setResendingNotificationType] = useState<
     WorkshopNotificationRecord["eventType"] | null
   >(null);
+  const [templates, setTemplates] = useState<WorkshopServiceTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedOptionalTemplateLineIds, setSelectedOptionalTemplateLineIds] = useState<string[]>([]);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   const canPostCustomerNotes = isManagerPlus(user?.role);
 
@@ -562,8 +573,21 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const loadTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const response = await apiGet<WorkshopServiceTemplatesResponse>("/api/workshop/service-templates");
+      setTemplates(response.templates || []);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Failed to load workshop templates";
+      error(message);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
   useEffect(() => {
-    void Promise.all([loadJob(), loadNotes(), loadNotifications(), loadParts()]);
+    void Promise.all([loadJob(), loadNotes(), loadNotifications(), loadParts(), loadTemplates()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -764,6 +788,28 @@ export const WorkshopJobPage = () => {
       error(message);
     } finally {
       setResendingNotificationType(null);
+    }
+  };
+
+  const applyTemplate = async () => {
+    if (!id || !selectedTemplateId) {
+      return;
+    }
+
+    setApplyingTemplate(true);
+    try {
+      await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/templates/apply`, {
+        templateId: selectedTemplateId,
+        selectedOptionalLineIds: selectedOptionalTemplateLineIds,
+      });
+      success("Workshop service template applied");
+      setSelectedTemplateId("");
+      await Promise.all([loadJob(), loadParts()]);
+    } catch (templateError) {
+      const message = templateError instanceof Error ? templateError.message : "Failed to apply workshop template";
+      error(message);
+    } finally {
+      setApplyingTemplate(false);
     }
   };
 
@@ -1137,6 +1183,13 @@ export const WorkshopJobPage = () => {
 
     return null;
   }, [payload, rawStatus]);
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === selectedTemplateId) ?? null,
+    [selectedTemplateId, templates],
+  );
+  useEffect(() => {
+    setSelectedOptionalTemplateLineIds(getDefaultSelectedOptionalLineIds(selectedTemplate));
+  }, [selectedTemplate]);
   const workshopCalendarPath = payload?.job.scheduledDate
     ? `/workshop/calendar?date=${payload.job.scheduledDate.slice(0, 10)}`
     : "/workshop/calendar";
@@ -1559,6 +1612,60 @@ export const WorkshopJobPage = () => {
             Add labour and part lines below to create the first estimate for this job.
           </div>
         ) : null}
+
+        <div className="restricted-panel" style={{ marginTop: "12px" }}>
+          <div className="card-header-row">
+            <div>
+              <strong>Apply service template</strong>
+              <div className="table-secondary">
+                Use a common service preset to add ordinary labour and part lines, then keep editing the job as normal.
+              </div>
+            </div>
+          </div>
+          <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+            <label>
+              Template
+              <select
+                value={selectedTemplateId}
+                onChange={(event) => setSelectedTemplateId(event.target.value)}
+              >
+                <option value="">No template selected</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="table-secondary">
+              {loadingTemplates
+                ? "Loading active service templates..."
+                : selectedTemplate
+                  ? "Optional part suggestions can be unticked before you apply this template."
+                  : "Manager-maintained templates speed up common service quotes."}
+            </div>
+          </div>
+
+          {selectedTemplate ? (
+            <div style={{ marginTop: "12px" }}>
+              <WorkshopServiceTemplatePreview
+                template={selectedTemplate}
+                selectedOptionalLineIds={selectedOptionalTemplateLineIds}
+                onToggleOptionalLine={(lineId) =>
+                  setSelectedOptionalTemplateLineIds((current) =>
+                    current.includes(lineId)
+                      ? current.filter((entry) => entry !== lineId)
+                      : [...current, lineId],
+                  )}
+                actions={(
+                  <button type="button" className="primary" onClick={() => void applyTemplate()} disabled={applyingTemplate}>
+                    {applyingTemplate ? "Applying..." : "Apply Template"}
+                  </button>
+                )}
+              />
+            </div>
+          ) : null}
+        </div>
 
         <div className="table-wrap" style={{ marginTop: "12px" }}>
           <table>
