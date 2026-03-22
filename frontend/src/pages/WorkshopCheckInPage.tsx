@@ -6,6 +6,7 @@ import { useToasts } from "../components/ToastProvider";
 import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
 import {
   getDefaultSelectedOptionalLineIds,
+  type WorkshopServiceTemplateApplyResponse,
   type WorkshopServiceTemplate,
   type WorkshopServiceTemplatesResponse,
 } from "../features/workshop/serviceTemplates";
@@ -410,11 +411,18 @@ export const WorkshopCheckInPage = () => {
       setCreatedJobId(created.id);
       if (selectedTemplateId) {
         try {
-          await apiPost(`/api/workshop/jobs/${encodeURIComponent(created.id)}/templates/apply`, {
-            templateId: selectedTemplateId,
-            selectedOptionalLineIds: selectedOptionalTemplateLineIds,
-          });
-          success("Workshop check-in created and template applied");
+          const applyResponse = await apiPost<WorkshopServiceTemplateApplyResponse>(
+            `/api/workshop/jobs/${encodeURIComponent(created.id)}/templates/apply`,
+            {
+              templateId: selectedTemplateId,
+              selectedOptionalLineIds: selectedOptionalTemplateLineIds,
+            },
+          );
+          success(
+            applyResponse.durationEffect.durationUpdated
+              ? `Workshop check-in created, template applied, and planning duration set to ${applyResponse.durationEffect.appliedDurationMinutes} min`
+              : "Workshop check-in created and template applied",
+          );
         } catch (templateError) {
           error(
             templateError instanceof Error

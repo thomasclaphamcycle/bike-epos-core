@@ -25,6 +25,7 @@ import {
 } from "../features/workshop/notificationStatus";
 import {
   getDefaultSelectedOptionalLineIds,
+  type WorkshopServiceTemplateApplyResponse,
   type WorkshopServiceTemplate,
   type WorkshopServiceTemplatesResponse,
 } from "../features/workshop/serviceTemplates";
@@ -798,11 +799,18 @@ export const WorkshopJobPage = () => {
 
     setApplyingTemplate(true);
     try {
-      await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/templates/apply`, {
-        templateId: selectedTemplateId,
-        selectedOptionalLineIds: selectedOptionalTemplateLineIds,
-      });
-      success("Workshop service template applied");
+      const response = await apiPost<WorkshopServiceTemplateApplyResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(id)}/templates/apply`,
+        {
+          templateId: selectedTemplateId,
+          selectedOptionalLineIds: selectedOptionalTemplateLineIds,
+        },
+      );
+      success(
+        response.durationEffect.durationUpdated
+          ? `Workshop service template applied and planning duration set to ${response.durationEffect.appliedDurationMinutes} min`
+          : "Workshop service template applied",
+      );
       setSelectedTemplateId("");
       await Promise.all([loadJob(), loadParts()]);
     } catch (templateError) {

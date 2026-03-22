@@ -46,6 +46,12 @@ export const WorkshopServiceTemplatePreview = ({
         <p className="muted-text">{template.description}</p>
       ) : null}
 
+      {template.defaultDurationMinutes ? (
+        <p className="table-secondary">
+          Default planning duration: {template.defaultDurationMinutes} min. Applying this template fills the job duration when one has not already been set.
+        </p>
+      ) : null}
+
       <div className="workshop-template-line-list">
         {template.lines.map((line) => {
           const isSelected = !line.isOptional || selectedOptionalLineIds.includes(line.id);
