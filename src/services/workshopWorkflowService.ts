@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { setWorkshopEstimateStatus } from "./workshopEstimateService";
+import { assertWorkshopScheduleAllowed } from "./workshopCalendarService";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
 type WorkflowStage = "BOOKED" | "IN_PROGRESS" | "READY" | "COMPLETED" | "CANCELLED";
@@ -178,6 +179,17 @@ export const assignWorkshopJob = async (
       };
     }
 
+    await assertWorkshopScheduleAllowed(
+      {
+        workshopJobId,
+        staffId: assignedStaffId,
+        scheduledStartAt: job.scheduledStartAt,
+        scheduledEndAt: job.scheduledEndAt,
+        durationMinutes: job.durationMinutes,
+      },
+      tx,
+    );
+
     const updated = await tx.workshopJob.update({
       where: { id: workshopJobId },
       data: {
@@ -213,6 +225,8 @@ export const assignWorkshopJob = async (
       idempotent: false,
     };
   });
+
+  return result;
 };
 
 export const addWorkshopJobNote = async (

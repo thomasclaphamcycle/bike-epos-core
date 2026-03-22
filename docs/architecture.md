@@ -164,6 +164,10 @@ Current internal subscribers are:
   - respect explicit per-customer operational channel permissions on `Customer.emailAllowed`, `Customer.smsAllowed`, and `Customer.whatsappAllowed` before attempting a delivery or fallback
   - default to log-mode delivery locally, while allowing SMTP email delivery plus Twilio-backed SMS and WhatsApp delivery from environment configuration
   - support simple channel gating via environment flags alongside staff-managed customer communication settings on the customer profile
+- workshop calendar foundation in `src/services/workshopCalendarService.ts`
+  - keeps the existing day-level `scheduledDate` contract intact while adding optional `scheduledStartAt`, `scheduledEndAt`, and `durationMinutes` on `WorkshopJob`
+  - validates timed jobs against shared store opening hours first, then staff-specific `WorkshopWorkingHours` and `WorkshopTimeOff` when a technician is assigned
+  - blocks overlapping timed jobs for the same assigned staff member without forcing legacy unscheduled jobs through a new scheduling flow
 
 Manager-facing internal visibility now exists through:
 
@@ -174,4 +178,4 @@ Manager-facing internal visibility now exists through:
 
 These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow quote-ready and ready-for-collection notification events above; push notifications, webhooks, customer self-service preference management, and background scheduling remain intentionally out of scope.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow quote-ready and ready-for-collection notification events above; push notifications, webhooks, and customer self-service preference management remain intentionally out of scope, while workshop time-slot scheduling now has a backend validation/data-model foundation without a full calendar-management UI.

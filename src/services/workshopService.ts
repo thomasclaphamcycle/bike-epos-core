@@ -11,6 +11,10 @@ import {
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
 import { getWorkshopJobEstimateData, invalidateCurrentWorkshopEstimateTx } from "./workshopEstimateService";
+import {
+  assertWorkshopScheduleAllowed,
+  resolveWorkshopSchedulePatch,
+} from "./workshopCalendarService";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 import {
   parseWorkshopExecutionStatus,
@@ -24,6 +28,9 @@ type CreateWorkshopJobInput = {
   customerName?: string;
   bikeId?: string | null;
   bikeDescription?: string;
+  scheduledStartAt?: string | Date | null;
+  scheduledEndAt?: string | Date | null;
+  durationMinutes?: number | null;
   notes?: string;
   locationId?: string;
   status?: string;
@@ -33,6 +40,9 @@ type UpdateWorkshopJobInput = {
   customerName?: string;
   bikeId?: string | null;
   bikeDescription?: string;
+  scheduledStartAt?: string | Date | null;
+  scheduledEndAt?: string | Date | null;
+  durationMinutes?: number | null;
   notes?: string;
   status?: string;
 };
@@ -446,6 +456,9 @@ const toJobResponse = (job: {
   assignedStaffId: string | null;
   assignedStaffName: string | null;
   scheduledDate: Date | null;
+  scheduledStartAt: Date | null;
+  scheduledEndAt: Date | null;
+  durationMinutes: number | null;
   depositRequiredPence: number;
   depositStatus: string;
   finalizedBasketId: string | null;
@@ -473,6 +486,9 @@ const toJobResponse = (job: {
   assignedStaffId: job.assignedStaffId,
   assignedStaffName: job.assignedStaffName,
   scheduledDate: job.scheduledDate,
+  scheduledStartAt: job.scheduledStartAt,
+  scheduledEndAt: job.scheduledEndAt,
+  durationMinutes: job.durationMinutes,
   depositRequiredPence: job.depositRequiredPence,
   depositStatus: job.depositStatus,
   finalizedBasketId: job.finalizedBasketId,
@@ -556,6 +572,30 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
     : ("BOOKED" as WorkshopExecutionStatus);
 
   return prisma.$transaction(async (tx) => {
+    const scheduleResolution = await resolveWorkshopSchedulePatch(
+      {
+        scheduledStartAt: input.scheduledStartAt,
+        scheduledEndAt: input.scheduledEndAt,
+        durationMinutes: input.durationMinutes,
+      },
+      {
+        scheduledDate: null,
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        durationMinutes: null,
+      },
+      tx,
+    );
+
+    await assertWorkshopScheduleAllowed(
+      {
+        scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+        scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+        durationMinutes: scheduleResolution.schedule.durationMinutes,
+      },
+      tx,
+    );
+
     const resolvedCustomerAndBike = await resolveWorkshopJobCustomerAndBikeTx(tx, {
       requestedCustomerId: customerId ?? undefined,
       requestedBikeId: bikeId,
@@ -600,6 +640,10 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
         bikeDescription: resolvedBikeDescription,
         notes,
         status: toWorkshopJobStatus(targetStatus),
+        scheduledDate: scheduleResolution.schedule.scheduledDate,
+        scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+        scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+        durationMinutes: scheduleResolution.schedule.durationMinutes,
         source: "IN_STORE",
         depositStatus: "NOT_REQUIRED",
         depositRequiredPence: 0,
@@ -752,6 +796,9 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
     Object.prototype.hasOwnProperty.call(input, "customerName") ||
     Object.prototype.hasOwnProperty.call(input, "bikeId") ||
     Object.prototype.hasOwnProperty.call(input, "bikeDescription") ||
+    Object.prototype.hasOwnProperty.call(input, "scheduledStartAt") ||
+    Object.prototype.hasOwnProperty.call(input, "scheduledEndAt") ||
+    Object.prototype.hasOwnProperty.call(input, "durationMinutes") ||
     Object.prototype.hasOwnProperty.call(input, "notes") ||
     Object.prototype.hasOwnProperty.call(input, "status");
 
@@ -857,6 +904,39 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
           shouldEmitCompletion = !job.completedAt;
         }
       }
+    }
+
+    const scheduleResolution = await resolveWorkshopSchedulePatch(
+      {
+        scheduledStartAt: input.scheduledStartAt,
+        scheduledEndAt: input.scheduledEndAt,
+        durationMinutes: input.durationMinutes,
+      },
+      {
+        scheduledDate: job.scheduledDate,
+        scheduledStartAt: job.scheduledStartAt,
+        scheduledEndAt: job.scheduledEndAt,
+        durationMinutes: job.durationMinutes,
+      },
+      tx,
+    );
+
+    if (scheduleResolution.hasScheduleChanges) {
+      await assertWorkshopScheduleAllowed(
+        {
+          workshopJobId,
+          staffId: job.assignedStaffId,
+          scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+          scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+          durationMinutes: scheduleResolution.schedule.durationMinutes,
+        },
+        tx,
+      );
+
+      data.scheduledDate = scheduleResolution.schedule.scheduledDate;
+      data.scheduledStartAt = scheduleResolution.schedule.scheduledStartAt;
+      data.scheduledEndAt = scheduleResolution.schedule.scheduledEndAt;
+      data.durationMinutes = scheduleResolution.schedule.durationMinutes;
     }
 
     const updated = await tx.workshopJob.update({

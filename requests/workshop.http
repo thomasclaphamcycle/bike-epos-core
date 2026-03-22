@@ -299,6 +299,20 @@ X-Staff-Id: demo-staff
   "status": "BOOKED"
 }
 
+### Create a timed workshop job while preserving the day-level scheduledDate compatibility field
+POST {{baseUrl}}/api/workshop/jobs
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "customerName": "Timed Workshop Customer",
+  "bikeDescription": "Orange gravel bike",
+  "scheduledStartAt": "2026-03-12T11:00:00.000Z",
+  "durationMinutes": 90,
+  "status": "BOOKED"
+}
+
 ### Update a workshop job bike summary / linked bike record
 PATCH {{baseUrl}}/api/workshop/jobs/{{bookingId}}
 Content-Type: application/json
@@ -308,6 +322,17 @@ X-Staff-Id: demo-staff
 {
   "bikeId": "{{bikeId}}",
   "bikeDescription": "Winter commuter | Genesis Croix de Fer | Blue"
+}
+
+### Update a workshop job time slot
+PATCH {{baseUrl}}/api/workshop/jobs/{{bookingId}}
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "scheduledStartAt": "2026-03-12T13:30:00.000Z",
+  "durationMinutes": 60
 }
 
 ### Save an estimate snapshot from the current live labour + part lines (M83)
