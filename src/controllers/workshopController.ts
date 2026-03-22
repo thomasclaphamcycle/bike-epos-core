@@ -15,6 +15,7 @@ import { normalizeDateKeyOrThrow } from "../services/rotaService";
 import { getWorkshopDashboard } from "../services/workshopDashboardService";
 import { getWorkshopAvailability } from "../services/workshopAvailabilityService";
 import { resolveRequestLocation } from "../services/locationService";
+import { getWorkshopCalendar } from "../services/workshopCalendarService";
 import {
   createOnlineWorkshopBooking,
   getWorkshopBookingByManageToken,
@@ -32,6 +33,7 @@ import {
   changeWorkshopJobStatus,
   getWorkshopJobNotes,
   setWorkshopJobApprovalStatus,
+  updateWorkshopJobSchedule,
 } from "../services/workshopWorkflowService";
 import {
   addWorkshopJobLine,
@@ -127,6 +129,16 @@ const parseOptionalIntegerQuery = (value: unknown, field: string): number | unde
     throw new HttpError(400, `${field} must be an integer`, "INVALID_FILTER");
   }
   return parsed;
+};
+
+const parseOptionalBooleanBody = (value: unknown, field: string): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new HttpError(400, `${field} must be a boolean`, "INVALID_WORKSHOP_SCHEDULE_UPDATE");
+  }
+  return value;
 };
 
 const parseWorkshopNotificationEventType = (
@@ -434,6 +446,24 @@ export const getWorkshopAvailabilityHandler = async (req: Request, res: Response
   res.json(availability);
 };
 
+export const getWorkshopCalendarHandler = async (req: Request, res: Response) => {
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
+
+  if (!from || !to) {
+    throw new HttpError(400, "from and to are required", "INVALID_DATE_RANGE");
+  }
+
+  const location = await resolveRequestLocation(req);
+  const result = await getWorkshopCalendar({
+    from,
+    to,
+    locationId: location.id,
+  });
+
+  res.json(result);
+};
+
 export const getWorkshopDashboardHandler = async (req: Request, res: Response) => {
   const staffDate = typeof req.query.staffDate === "string"
     ? normalizeDateKeyOrThrow(req.query.staffDate, "INVALID_WORKSHOP_STAFF_DATE")
@@ -669,6 +699,69 @@ export const assignWorkshopJobHandler = async (req: Request, res: Response) => {
     req.params.id,
     {
       staffId: body.staffId ?? null,
+      actorRole: getRequestStaffRole(req),
+      actorId: getRequestStaffActorId(req),
+    },
+    getRequestAuditActor(req),
+  );
+
+  res.status(result.idempotent ? 200 : 201).json(result);
+};
+
+export const patchWorkshopJobScheduleHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    staffId?: string | null;
+    scheduledStartAt?: string | null;
+    scheduledEndAt?: string | null;
+    durationMinutes?: number | null;
+    clearSchedule?: boolean;
+  };
+
+  if (body.staffId !== undefined && body.staffId !== null && typeof body.staffId !== "string") {
+    throw new HttpError(400, "staffId must be a string or null", "INVALID_WORKSHOP_SCHEDULE_UPDATE");
+  }
+  if (
+    body.scheduledStartAt !== undefined &&
+    body.scheduledStartAt !== null &&
+    typeof body.scheduledStartAt !== "string"
+  ) {
+    throw new HttpError(
+      400,
+      "scheduledStartAt must be a string or null",
+      "INVALID_WORKSHOP_SCHEDULE_UPDATE",
+    );
+  }
+  if (
+    body.scheduledEndAt !== undefined &&
+    body.scheduledEndAt !== null &&
+    typeof body.scheduledEndAt !== "string"
+  ) {
+    throw new HttpError(
+      400,
+      "scheduledEndAt must be a string or null",
+      "INVALID_WORKSHOP_SCHEDULE_UPDATE",
+    );
+  }
+  if (
+    body.durationMinutes !== undefined &&
+    body.durationMinutes !== null &&
+    typeof body.durationMinutes !== "number"
+  ) {
+    throw new HttpError(
+      400,
+      "durationMinutes must be a number or null",
+      "INVALID_WORKSHOP_SCHEDULE_UPDATE",
+    );
+  }
+
+  const result = await updateWorkshopJobSchedule(
+    req.params.id,
+    {
+      staffId: body.staffId,
+      scheduledStartAt: body.scheduledStartAt,
+      scheduledEndAt: body.scheduledEndAt,
+      durationMinutes: body.durationMinutes,
+      clearSchedule: parseOptionalBooleanBody(body.clearSchedule, "clearSchedule"),
       actorRole: getRequestStaffRole(req),
       actorId: getRequestStaffActorId(req),
     },

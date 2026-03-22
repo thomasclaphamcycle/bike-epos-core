@@ -1,8 +1,10 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type UserOperationalRole, type UserRole, type WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { listShopSettings } from "./configurationService";
 import { resolveStoreDaySchedule } from "./storeScheduleService";
+import { parseDateOnlyOrThrow, toDateKey } from "./workshopAvailabilityService";
+import { toWorkshopExecutionStatus } from "./workshopStatusService";
 import {
   clockTimeToMinutes,
   formatDateKeyInTimeZone,
@@ -17,6 +19,7 @@ type WorkshopSchedulePatchInput = {
   scheduledStartAt?: ScheduleInputValue;
   scheduledEndAt?: ScheduleInputValue;
   durationMinutes?: number | null;
+  clearSchedule?: boolean;
 };
 
 export type WorkshopScheduleSnapshot = {
@@ -48,6 +51,39 @@ export type WorkshopCapacitySummary = {
   availableMinutes: number;
 };
 
+type CalendarScheduledJobRecord = {
+  id: string;
+  locationId: string;
+  customerId: string | null;
+  bikeId: string | null;
+  customerName: string | null;
+  bikeDescription: string | null;
+  status: WorkshopJobStatus;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  scheduledDate: Date | null;
+  scheduledStartAt: Date | null;
+  scheduledEndAt: Date | null;
+  durationMinutes: number | null;
+  notes: string | null;
+  completedAt: Date | null;
+  closedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type CalendarCapacityContext = {
+  dateKey: string;
+  timeZone: string;
+  workingHours: ResolvedWorkshopWorkingHours | null;
+  timeOff: Array<{ startAt: Date; endAt: Date }>;
+  bookedJobs: Array<{
+    scheduledStartAt: Date | null;
+    scheduledEndAt: Date | null;
+    durationMinutes: number | null;
+  }>;
+};
+
 const WORKSHOP_DAY_OF_WEEK: Record<string, number> = {
   SUNDAY: 0,
   MONDAY: 1,
@@ -58,12 +94,25 @@ const WORKSHOP_DAY_OF_WEEK: Record<string, number> = {
   SATURDAY: 6,
 };
 
-const hasOwn = <T extends object>(value: T, key: keyof T) =>
-  Object.prototype.hasOwnProperty.call(value, key);
+const WORKSHOP_MAX_CALENDAR_RANGE_DAYS = 62;
 
 const toUtcDateKey = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
 const addMinutes = (value: Date, minutes: number) => new Date(value.getTime() + (minutes * 60_000));
+
+const addDays = (value: Date, days: number) => {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+};
+
+const toDateFromDateKey = (value: string) => new Date(`${value}T12:00:00.000Z`);
+
+const isWorkshopOperationalRole = (value: UserOperationalRole | null) =>
+  value === "WORKSHOP" || value === "MIXED";
+
+const toStaffDisplayName = (staff: { name: string | null; username: string }) =>
+  staff.name?.trim() || staff.username;
 
 const getTimeZoneParts = (value: Date, timeZone: string) => {
   const formatter = new Intl.DateTimeFormat("en-GB", {
@@ -92,6 +141,43 @@ const getTimeZoneParts = (value: Date, timeZone: string) => {
 const getMinutesInTimeZone = (value: Date, timeZone: string) => {
   const parts = getTimeZoneParts(value, timeZone);
   return (parts.hour * 60) + parts.minute;
+};
+
+const getDayOfWeekForDateKey = (value: string, timeZone: string) =>
+  WORKSHOP_DAY_OF_WEEK[getStoreWeekdayKeyForDate(toDateFromDateKey(value), timeZone)] ?? 0;
+
+const listDateKeysInclusive = (from: Date, to: Date) => {
+  const keys: string[] = [];
+  let current = new Date(from);
+  while (current <= to) {
+    keys.push(toDateKey(current));
+    current = addDays(current, 1);
+  }
+  return keys;
+};
+
+const parseCalendarDateRange = (input: { from: string; to: string }) => {
+  const fromDate = parseDateOnlyOrThrow(input.from, "from");
+  const toDate = parseDateOnlyOrThrow(input.to, "to");
+
+  if (fromDate > toDate) {
+    throw new HttpError(400, "from must be before or equal to to", "INVALID_DATE_RANGE");
+  }
+
+  const totalDays = Math.floor((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1;
+  if (totalDays > WORKSHOP_MAX_CALENDAR_RANGE_DAYS) {
+    throw new HttpError(
+      400,
+      `Calendar range must be ${WORKSHOP_MAX_CALENDAR_RANGE_DAYS} days or fewer`,
+      "INVALID_DATE_RANGE",
+    );
+  }
+
+  return {
+    fromDate,
+    toDate,
+    totalDays,
+  };
 };
 
 const parseScheduledDateTime = (
@@ -148,10 +234,15 @@ export const resolveWorkshopSchedulePatch = async (
   },
   db: WorkshopCalendarClient = prisma,
 ): Promise<{ hasScheduleChanges: boolean; schedule: WorkshopScheduleSnapshot }> => {
+  const parsedStart = parseScheduledDateTime(input.scheduledStartAt, "scheduledStartAt");
+  const parsedEnd = parseScheduledDateTime(input.scheduledEndAt, "scheduledEndAt");
+  const parsedDuration = parseDurationMinutes(input.durationMinutes);
+  const clearSchedule = input.clearSchedule === true;
   const hasScheduleChanges =
-    hasOwn(input, "scheduledStartAt") ||
-    hasOwn(input, "scheduledEndAt") ||
-    hasOwn(input, "durationMinutes");
+    clearSchedule
+    || parsedStart !== undefined
+    || parsedEnd !== undefined
+    || parsedDuration !== undefined;
 
   if (!hasScheduleChanges) {
     return {
@@ -166,21 +257,34 @@ export const resolveWorkshopSchedulePatch = async (
     };
   }
 
-  const parsedStart = parseScheduledDateTime(input.scheduledStartAt, "scheduledStartAt");
-  const parsedEnd = parseScheduledDateTime(input.scheduledEndAt, "scheduledEndAt");
-  const parsedDuration = parseDurationMinutes(input.durationMinutes);
+  if (
+    clearSchedule &&
+    (
+      parsedStart !== undefined ||
+      parsedEnd !== undefined ||
+      parsedDuration !== undefined
+    )
+  ) {
+    throw new HttpError(
+      400,
+      "clearSchedule cannot be combined with scheduledStartAt, scheduledEndAt, or durationMinutes",
+      "INVALID_WORKSHOP_SCHEDULE",
+    );
+  }
 
-  const clearRequested =
-    (parsedStart === null || parsedEnd === null || parsedDuration === null) &&
-    !(parsedStart instanceof Date) &&
-    !(parsedEnd instanceof Date) &&
-    parsedDuration !== undefined;
+  const hasExplicitNullField =
+    parsedStart === null || parsedEnd === null || parsedDuration === null;
+  const hasExplicitValueField =
+    parsedStart instanceof Date
+    || parsedEnd instanceof Date
+    || (parsedDuration !== undefined && parsedDuration !== null);
+  const clearRequested = clearSchedule || (hasExplicitNullField && !hasExplicitValueField);
 
   if (clearRequested) {
     return {
       hasScheduleChanges: true,
       schedule: {
-        scheduledDate: current.scheduledDate,
+        scheduledDate: null,
         scheduledStartAt: null,
         scheduledEndAt: null,
         durationMinutes: null,
@@ -191,10 +295,17 @@ export const resolveWorkshopSchedulePatch = async (
 
   let scheduledStartAt =
     parsedStart !== undefined ? parsedStart : current.scheduledStartAt;
-  let scheduledEndAt =
-    parsedEnd !== undefined ? parsedEnd : current.scheduledEndAt;
   let durationMinutes =
     parsedDuration !== undefined ? parsedDuration : current.durationMinutes;
+  const scheduledEndProvided = parsedEnd !== undefined;
+  const startOrDurationChanged =
+    parsedStart !== undefined || parsedDuration !== undefined;
+  let scheduledEndAt =
+    scheduledEndProvided
+      ? parsedEnd
+      : startOrDurationChanged && scheduledStartAt && durationMinutes !== null && durationMinutes !== undefined
+        ? addMinutes(scheduledStartAt, durationMinutes)
+        : current.scheduledEndAt;
 
   if (scheduledStartAt && durationMinutes !== null && durationMinutes !== undefined && !scheduledEndAt) {
     scheduledEndAt = addMinutes(scheduledStartAt, durationMinutes);
@@ -204,7 +315,7 @@ export const resolveWorkshopSchedulePatch = async (
     return {
       hasScheduleChanges: true,
       schedule: {
-        scheduledDate: current.scheduledDate,
+        scheduledDate: null,
         scheduledStartAt: null,
         scheduledEndAt: null,
         durationMinutes: null,
@@ -502,31 +613,161 @@ export const assertWorkshopScheduleAllowed = async (
   };
 };
 
-const sumMergedMinutes = (ranges: Array<{ startAt: Date; endAt: Date }>) => {
+const sumMergedMinuteRanges = (ranges: Array<{ startMinutes: number; endMinutes: number }>) => {
   if (ranges.length === 0) {
     return 0;
   }
 
-  const sorted = [...ranges].sort((left, right) => left.startAt.getTime() - right.startAt.getTime());
-  const merged: Array<{ startAt: Date; endAt: Date }> = [];
+  const sorted = [...ranges].sort((left, right) => left.startMinutes - right.startMinutes);
+  const merged: Array<{ startMinutes: number; endMinutes: number }> = [];
 
   for (const range of sorted) {
     const last = merged[merged.length - 1];
-    if (!last || range.startAt > last.endAt) {
-      merged.push({ startAt: range.startAt, endAt: range.endAt });
+    if (!last || range.startMinutes > last.endMinutes) {
+      merged.push({ ...range });
       continue;
     }
 
-    if (range.endAt > last.endAt) {
-      last.endAt = range.endAt;
+    if (range.endMinutes > last.endMinutes) {
+      last.endMinutes = range.endMinutes;
     }
   }
 
-  return merged.reduce(
-    (sum, range) => sum + Math.max(0, Math.round((range.endAt.getTime() - range.startAt.getTime()) / 60_000)),
-    0,
-  );
+  return merged.reduce((sum, range) => sum + Math.max(0, range.endMinutes - range.startMinutes), 0);
 };
+
+const clipTimeOffMinutesForDate = (
+  dateKey: string,
+  timeZone: string,
+  workingHours: ResolvedWorkshopWorkingHours | null,
+  entries: Array<{ startAt: Date; endAt: Date }>,
+) => {
+  if (!workingHours || entries.length === 0) {
+    return 0;
+  }
+
+  const clippedRanges: Array<{ startMinutes: number; endMinutes: number }> = [];
+  for (const entry of entries) {
+    const startDateKey = formatDateKeyInTimeZone(entry.startAt, timeZone);
+    const endDateKey = formatDateKeyInTimeZone(entry.endAt, timeZone);
+    const startMinutes = startDateKey < dateKey ? 0 : getMinutesInTimeZone(entry.startAt, timeZone);
+    const endMinutes = endDateKey > dateKey ? 24 * 60 : getMinutesInTimeZone(entry.endAt, timeZone);
+    const clippedStart = Math.max(workingHours.startMinutes, startMinutes);
+    const clippedEnd = Math.min(workingHours.endMinutes, endMinutes);
+
+    if (clippedEnd > clippedStart) {
+      clippedRanges.push({
+        startMinutes: clippedStart,
+        endMinutes: clippedEnd,
+      });
+    }
+  }
+
+  return sumMergedMinuteRanges(clippedRanges);
+};
+
+const buildWorkshopCapacitySummary = (
+  input: CalendarCapacityContext,
+): WorkshopCapacitySummary => {
+  const bookedMinutes = input.bookedJobs.reduce((sum, job) => {
+    if (job.durationMinutes && job.durationMinutes > 0) {
+      return sum + job.durationMinutes;
+    }
+    if (job.scheduledStartAt && job.scheduledEndAt) {
+      return sum + Math.round((job.scheduledEndAt.getTime() - job.scheduledStartAt.getTime()) / 60_000);
+    }
+    return sum;
+  }, 0);
+
+  const totalMinutes = input.workingHours
+    ? input.workingHours.endMinutes - input.workingHours.startMinutes
+    : 0;
+  const timeOffMinutes = clipTimeOffMinutesForDate(
+    input.dateKey,
+    input.timeZone,
+    input.workingHours,
+    input.timeOff,
+  );
+
+  return {
+    staffId: input.workingHours?.staffId ?? "",
+    date: input.dateKey,
+    totalMinutes,
+    bookedMinutes,
+    timeOffMinutes,
+    availableMinutes: Math.max(0, totalMinutes - bookedMinutes - timeOffMinutes),
+  };
+};
+
+const toCalendarJobSummary = (job: CalendarScheduledJobRecord) => ({
+  id: job.id,
+  jobPath: `/workshop/${job.id}`,
+  locationId: job.locationId,
+  customerId: job.customerId,
+  bikeId: job.bikeId,
+  customerName: job.customerName,
+  bikeDescription: job.bikeDescription,
+  summaryText: [job.customerName, job.bikeDescription].filter(Boolean).join(" · "),
+  status: toWorkshopExecutionStatus(job),
+  rawStatus: job.status,
+  assignedStaffId: job.assignedStaffId,
+  assignedStaffName: job.assignedStaffName,
+  scheduledDate: job.scheduledDate,
+  scheduledStartAt: job.scheduledStartAt,
+  scheduledEndAt: job.scheduledEndAt,
+  durationMinutes: job.durationMinutes,
+  notes: job.notes,
+  completedAt: job.completedAt,
+  closedAt: job.closedAt,
+  createdAt: job.createdAt,
+  updatedAt: job.updatedAt,
+});
+
+const buildCalendarScheduledJobWhere = (
+  input: {
+    fromDate: Date;
+    toDate: Date;
+    locationId?: string | null;
+    assignedOnly?: boolean;
+  },
+): Prisma.WorkshopJobWhereInput => ({
+  scheduledDate: {
+    gte: input.fromDate,
+    lt: addDays(input.toDate, 1),
+  },
+  scheduledStartAt: {
+    not: null,
+  },
+  scheduledEndAt: {
+    not: null,
+  },
+  status: {
+    not: "CANCELLED",
+  },
+  ...(input.locationId ? { locationId: input.locationId } : {}),
+  ...(input.assignedOnly ? { assignedStaffId: { not: null } } : {}),
+});
+
+const CALENDAR_JOB_SELECT = {
+  id: true,
+  locationId: true,
+  customerId: true,
+  bikeId: true,
+  customerName: true,
+  bikeDescription: true,
+  status: true,
+  assignedStaffId: true,
+  assignedStaffName: true,
+  scheduledDate: true,
+  scheduledStartAt: true,
+  scheduledEndAt: true,
+  durationMinutes: true,
+  notes: true,
+  completedAt: true,
+  closedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.WorkshopJobSelect;
 
 export const getWorkshopStaffCapacityForDate = async (
   staffId: string,
@@ -536,17 +777,6 @@ export const getWorkshopStaffCapacityForDate = async (
   const settings = await listShopSettings(db);
   const workingHours = await resolveWorkshopWorkingHoursForDate(staffId, value, db);
   const dateKey = formatDateKeyInTimeZone(value, settings.store.timeZone);
-
-  if (!workingHours) {
-    return {
-      staffId,
-      date: dateKey,
-      totalMinutes: 0,
-      bookedMinutes: 0,
-      timeOffMinutes: 0,
-      availableMinutes: 0,
-    };
-  }
 
   const scheduledDate = toUtcDateKey(dateKey);
   const [timeOff, scheduledJobs] = await Promise.all([
@@ -574,30 +804,287 @@ export const getWorkshopStaffCapacityForDate = async (
     }),
   ]);
 
-  const totalMinutes = workingHours.endMinutes - workingHours.startMinutes;
-  const bookedMinutes = scheduledJobs.reduce((sum, job) => {
-    if (job.durationMinutes && job.durationMinutes > 0) {
-      return sum + job.durationMinutes;
-    }
-    if (job.scheduledStartAt && job.scheduledEndAt) {
-      return sum + Math.round((job.scheduledEndAt.getTime() - job.scheduledStartAt.getTime()) / 60_000);
-    }
-    return sum;
-  }, 0);
-
-  const timeOffMinutes = sumMergedMinutes(
-    timeOff.map((entry) => ({
+  const summary = buildWorkshopCapacitySummary({
+    dateKey,
+    timeZone: settings.store.timeZone,
+    workingHours,
+    timeOff: timeOff.map((entry) => ({
       startAt: entry.startAt,
       endAt: entry.endAt,
     })),
-  );
+    bookedJobs: scheduledJobs,
+  });
 
   return {
+    ...summary,
     staffId,
-    date: dateKey,
-    totalMinutes,
-    bookedMinutes,
-    timeOffMinutes,
-    availableMinutes: Math.max(0, totalMinutes - bookedMinutes - timeOffMinutes),
+  };
+};
+
+export const getWorkshopCalendar = async (
+  input: {
+    from: string;
+    to: string;
+    locationId?: string | null;
+  },
+  db: WorkshopCalendarClient = prisma,
+) => {
+  const locationId = input.locationId?.trim() || null;
+  const settings = await listShopSettings(db);
+  const { fromDate, toDate } = parseCalendarDateRange({
+    from: input.from,
+    to: input.to,
+  });
+  const dateKeys = listDateKeysInclusive(fromDate, toDate);
+
+  const allStaff = await db.user.findMany({
+    where: {
+      isActive: true,
+    },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+      role: true,
+      operationalRole: true,
+    },
+    orderBy: [
+      { name: "asc" },
+      { username: "asc" },
+    ],
+  });
+
+  const usesOperationalRoleTags = allStaff.some((staff) => isWorkshopOperationalRole(staff.operationalRole));
+  const calendarStaff = usesOperationalRoleTags
+    ? allStaff.filter((staff) => isWorkshopOperationalRole(staff.operationalRole))
+    : allStaff;
+  const staffIds = calendarStaff.map((staff) => staff.id);
+
+  const [workingHours, timeOff, visibleScheduledJobs, capacityScheduledJobs, days] = await Promise.all([
+    staffIds.length > 0
+      ? db.workshopWorkingHours.findMany({
+          where: {
+            staffId: {
+              in: staffIds,
+            },
+          },
+          orderBy: [
+            { staffId: "asc" },
+            { dayOfWeek: "asc" },
+          ],
+        })
+      : [],
+    db.workshopTimeOff.findMany({
+      where: {
+        startAt: {
+          lt: addDays(toDate, 1),
+        },
+        endAt: {
+          gt: fromDate,
+        },
+        ...(staffIds.length > 0
+          ? {
+              OR: [
+                { staffId: null },
+                {
+                  staffId: {
+                    in: staffIds,
+                  },
+                },
+              ],
+            }
+          : {
+              staffId: null,
+            }),
+      },
+      orderBy: [
+        { startAt: "asc" },
+        { createdAt: "asc" },
+      ],
+    }),
+    db.workshopJob.findMany({
+      where: buildCalendarScheduledJobWhere({
+        fromDate,
+        toDate,
+        locationId,
+      }),
+      select: CALENDAR_JOB_SELECT,
+      orderBy: [
+        { scheduledStartAt: "asc" },
+        { createdAt: "asc" },
+      ],
+    }) as Promise<CalendarScheduledJobRecord[]>,
+    staffIds.length > 0
+      ? db.workshopJob.findMany({
+          where: {
+            ...buildCalendarScheduledJobWhere({
+              fromDate,
+              toDate,
+              locationId,
+              assignedOnly: true,
+            }),
+            assignedStaffId: {
+              in: staffIds,
+            },
+          },
+          select: {
+            assignedStaffId: true,
+            scheduledDate: true,
+            scheduledStartAt: true,
+            scheduledEndAt: true,
+            durationMinutes: true,
+          },
+        })
+      : [],
+    Promise.all(
+      dateKeys.map((dateKey) => resolveStoreDaySchedule(toDateFromDateKey(dateKey), db)),
+    ),
+  ]);
+
+  const workingHoursByStaffDay = new Map(
+    workingHours.map((entry) => [`${entry.staffId}:${entry.dayOfWeek}`, entry] as const),
+  );
+
+  const timeOffByStaff = new Map<string, typeof timeOff>();
+  for (const staff of calendarStaff) {
+    timeOffByStaff.set(
+      staff.id,
+      timeOff.filter((entry) => entry.staffId === null || entry.staffId === staff.id),
+    );
+  }
+
+  const visibleScheduledJobsByStaff = new Map<string, CalendarScheduledJobRecord[]>();
+  for (const job of visibleScheduledJobs) {
+    if (!job.assignedStaffId) {
+      continue;
+    }
+    const bucket = visibleScheduledJobsByStaff.get(job.assignedStaffId) ?? [];
+    bucket.push(job);
+    visibleScheduledJobsByStaff.set(job.assignedStaffId, bucket);
+  }
+
+  const capacityJobsByStaffDate = new Map<
+    string,
+    Array<{ scheduledStartAt: Date | null; scheduledEndAt: Date | null; durationMinutes: number | null }>
+  >();
+  for (const job of capacityScheduledJobs) {
+    if (!job.assignedStaffId || !job.scheduledDate) {
+      continue;
+    }
+
+    const key = `${job.assignedStaffId}:${toDateKey(job.scheduledDate)}`;
+    const bucket = capacityJobsByStaffDate.get(key) ?? [];
+    bucket.push({
+      scheduledStartAt: job.scheduledStartAt,
+      scheduledEndAt: job.scheduledEndAt,
+      durationMinutes: job.durationMinutes,
+    });
+    capacityJobsByStaffDate.set(key, bucket);
+  }
+
+  return {
+    range: {
+      from: input.from,
+      to: input.to,
+      timeZone: settings.store.timeZone,
+    },
+    locationId,
+    usesOperationalRoleTags,
+    days: days.map((day) => ({
+      date: day.date,
+      weekday: day.weekday,
+      opensAt: day.isClosed ? null : day.hours.opensAt,
+      closesAt: day.isClosed ? null : day.hours.closesAt,
+      isClosed: day.isClosed,
+      closedReason: day.closedReason,
+    })),
+    scheduledJobs: visibleScheduledJobs.map(toCalendarJobSummary),
+    unassignedJobs: visibleScheduledJobs
+      .filter((job) => !job.assignedStaffId)
+      .map(toCalendarJobSummary),
+    workshopTimeOff: timeOff
+      .filter((entry) => entry.staffId === null)
+      .map((entry) => ({
+        id: entry.id,
+        scope: "WORKSHOP" as const,
+        staffId: null,
+        startAt: entry.startAt,
+        endAt: entry.endAt,
+        reason: entry.reason,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+      })),
+    staff: calendarStaff.map((staff) => {
+      const relevantTimeOff = timeOffByStaff.get(staff.id) ?? [];
+      return {
+        id: staff.id,
+        name: toStaffDisplayName(staff),
+        username: staff.username,
+        role: staff.role as UserRole,
+        operationalRole: staff.operationalRole,
+        workingHours: dateKeys.flatMap((dateKey) => {
+          const record = workingHoursByStaffDay.get(
+            `${staff.id}:${getDayOfWeekForDateKey(dateKey, settings.store.timeZone)}`,
+          );
+          if (!record) {
+            return [];
+          }
+
+          const startMinutes = clockTimeToMinutes(record.startTime);
+          const endMinutes = clockTimeToMinutes(record.endTime);
+          return [
+            {
+              id: record.id,
+              date: dateKey,
+              dayOfWeek: record.dayOfWeek,
+              startTime: record.startTime,
+              endTime: record.endTime,
+              totalMinutes:
+                startMinutes === null || endMinutes === null
+                  ? 0
+                  : Math.max(0, endMinutes - startMinutes),
+            },
+          ];
+        }),
+        timeOff: relevantTimeOff.map((entry) => ({
+          id: entry.id,
+          scope: entry.staffId ? ("STAFF" as const) : ("WORKSHOP" as const),
+          staffId: entry.staffId,
+          startAt: entry.startAt,
+          endAt: entry.endAt,
+          reason: entry.reason,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        })),
+        dailyCapacity: dateKeys.map((dateKey) => {
+          const workingHoursRecord = workingHoursByStaffDay.get(
+            `${staff.id}:${getDayOfWeekForDateKey(dateKey, settings.store.timeZone)}`,
+          );
+          const workingHoursSummary =
+            workingHoursRecord && clockTimeToMinutes(workingHoursRecord.startTime) !== null
+              && clockTimeToMinutes(workingHoursRecord.endTime) !== null
+              ? {
+                  ...workingHoursRecord,
+                  startMinutes: clockTimeToMinutes(workingHoursRecord.startTime) ?? 0,
+                  endMinutes: clockTimeToMinutes(workingHoursRecord.endTime) ?? 0,
+                }
+              : null;
+          return {
+            ...buildWorkshopCapacitySummary({
+              dateKey,
+              timeZone: settings.store.timeZone,
+              workingHours: workingHoursSummary,
+              timeOff: relevantTimeOff.map((entry) => ({
+                startAt: entry.startAt,
+                endAt: entry.endAt,
+              })),
+              bookedJobs: capacityJobsByStaffDate.get(`${staff.id}:${dateKey}`) ?? [],
+            }),
+            staffId: staff.id,
+          };
+        }),
+        scheduledJobs: (visibleScheduledJobsByStaff.get(staff.id) ?? []).map(toCalendarJobSummary),
+      };
+    }),
   };
 };
