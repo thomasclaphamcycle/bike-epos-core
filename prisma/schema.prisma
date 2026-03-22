@@ -36,6 +36,7 @@ model Product {
   variants      Variant[]
   workshopLines WorkshopJobLine[]
   estimateLines WorkshopEstimateLine[]
+  templateLines WorkshopServiceTemplateLine[]
 }
 
 model Supplier {
@@ -132,6 +133,7 @@ model Variant {
   estimateLines      WorkshopEstimateLine[]
   stockTransferLines StockTransferLine[]
   hireAssets         HireAsset[]
+  templateLines      WorkshopServiceTemplateLine[]
 }
 
 model SupplierProductLink {
@@ -1301,6 +1303,45 @@ model WorkshopJobLine {
 
   @@index([jobId, createdAt])
   @@index([type])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model WorkshopServiceTemplate {
+  id                     String   @id @default(uuid()) @db.Uuid
+  name                   String
+  description            String?
+  category               String?
+  defaultDurationMinutes Int?
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  lines WorkshopServiceTemplateLine[]
+
+  @@index([isActive, name])
+  @@index([category, isActive])
+}
+
+model WorkshopServiceTemplateLine {
+  id             String              @id @default(uuid()) @db.Uuid
+  templateId     String              @db.Uuid
+  type           WorkshopJobLineType
+  productId      String?
+  variantId      String?
+  description    String
+  qty            Int
+  unitPricePence Int?
+  isOptional     Boolean             @default(false)
+  sortOrder      Int
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  template WorkshopServiceTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  product  Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant  Variant?               @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([templateId, sortOrder])
   @@index([productId])
   @@index([variantId])
 }

@@ -171,6 +171,11 @@ Current internal subscribers are:
   - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, working hours, time off, scheduled jobs, and clipped daily capacity summaries
   - now also exposes `PATCH /api/workshop/jobs/:id/schedule` for atomic assignment plus schedule/reschedule/clear operations through the shared validation layer rather than duplicating rules in controllers
   - the first staff-facing React surface now lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a dense day view rather than introducing a separate scheduling subsystem
+- workshop service templates in `src/services/workshopServiceTemplateService.ts`
+  - store reusable workshop job starters in `WorkshopServiceTemplate` and `WorkshopServiceTemplateLine`, including labour lines plus optional part suggestions
+  - expose manager CRUD under `/api/workshop/service-templates` and application to live jobs under `POST /api/workshop/jobs/:id/templates/apply`
+  - apply templates by creating ordinary `WorkshopJobLine` records, then invalidating the current estimate through the existing estimate service so downstream quoting and approval workflows stay truthful
+  - support compact staff usage during check-in and on the workshop job page, while manager maintenance lives at `/management/workshop/templates`
 
 Manager-facing internal visibility now exists through:
 

@@ -178,6 +178,10 @@ export const WorkshopCalendarPage = lazyPage(
   () => import("./pages/WorkshopCalendarPage"),
   "WorkshopCalendarPage",
 );
+export const WorkshopServiceTemplatesPage = lazyPage(
+  () => import("./pages/WorkshopServiceTemplatesPage"),
+  "WorkshopServiceTemplatesPage",
+);
 export const CustomerCommunicationQueuePage = lazyPage(
   () => import("./pages/CustomerCommunicationQueuePage"),
   "CustomerCommunicationQueuePage",

@@ -340,6 +340,50 @@ GET {{baseUrl}}/api/workshop/calendar?from=2026-03-12&to=2026-03-16
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
+### List active workshop service templates for staff use
+GET {{baseUrl}}/api/workshop/service-templates
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Create a workshop service template (manager)
+POST {{baseUrl}}/api/workshop/service-templates
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "name": "Standard Service",
+  "description": "Common service quote with labour plus optional cable refresh.",
+  "category": "Service",
+  "defaultDurationMinutes": 60,
+  "lines": [
+    {
+      "type": "LABOUR",
+      "description": "Standard service labour",
+      "qty": 1,
+      "unitPricePence": 4500
+    },
+    {
+      "type": "PART",
+      "description": "Cable set refresh",
+      "qty": 1,
+      "unitPricePence": 1299,
+      "isOptional": true
+    }
+  ]
+}
+
+### Apply a workshop service template to a job
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/templates/apply
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "templateId": "{{templateId}}",
+  "selectedOptionalLineIds": ["{{templateLineId}}"]
+}
+
 ### Assign or reschedule a timed workshop job atomically
 PATCH {{baseUrl}}/api/workshop/jobs/{{bookingId}}/schedule
 Content-Type: application/json

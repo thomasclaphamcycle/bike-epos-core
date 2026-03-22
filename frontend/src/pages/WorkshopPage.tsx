@@ -480,6 +480,11 @@ export const WorkshopPage = () => {
             </p>
           </div>
           <div className="actions-inline">
+            {canManageStaffTags ? (
+              <Link to="/management/workshop/templates" className="button-link">
+                Service Templates
+              </Link>
+            ) : null}
             <Link to="/workshop/calendar" className="button-link">
               Calendar
             </Link>
