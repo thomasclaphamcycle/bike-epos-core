@@ -168,6 +168,8 @@ Current internal subscribers are:
   - keeps the existing day-level `scheduledDate` contract intact while adding optional `scheduledStartAt`, `scheduledEndAt`, and `durationMinutes` on `WorkshopJob`
   - validates timed jobs against shared store opening hours first, then staff-specific `WorkshopWorkingHours` and `WorkshopTimeOff` when a technician is assigned
   - blocks overlapping timed jobs for the same assigned staff member without forcing legacy unscheduled jobs through a new scheduling flow
+  - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, working hours, time off, scheduled jobs, and clipped daily capacity summaries
+  - now also exposes `PATCH /api/workshop/jobs/:id/schedule` for atomic assignment plus schedule/reschedule/clear operations through the shared validation layer rather than duplicating rules in controllers
 
 Manager-facing internal visibility now exists through:
 

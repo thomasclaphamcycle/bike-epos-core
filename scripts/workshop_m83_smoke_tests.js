@@ -358,6 +358,14 @@ const createWorkshopTimeOff = async (state, input) => {
   return record;
 };
 
+const patchWorkshopJobSchedule = async (jobId, body, headers = MANAGER_HEADERS) => {
+  return fetchJson(`/api/workshop/jobs/${jobId}/schedule`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(body),
+  });
+};
+
 const cleanup = async (state) => {
   const workshopJobIds = Array.from(state.workshopJobIds);
   const customerIds = Array.from(state.customerIds);
@@ -458,6 +466,7 @@ const run = async () => {
         name: "M83 Staff",
         passwordHash: "test",
         role: "STAFF",
+        operationalRole: "WORKSHOP",
       },
     });
     state.userIds.add(staffUser.id);
@@ -469,6 +478,7 @@ const run = async () => {
         name: "M83 Manager",
         passwordHash: "test",
         role: "MANAGER",
+        operationalRole: "WORKSHOP",
       },
     });
     state.userIds.add(managerUser.id);
@@ -1025,6 +1035,215 @@ const run = async () => {
       });
       assert.equal(blockedAssign.status, 409, JSON.stringify(blockedAssign.json));
       assert.equal(blockedAssign.json.error.code, "WORKSHOP_SCHEDULE_TIME_OFF");
+    }, results);
+
+    await runTest("calendar api returns staff rows, scheduled jobs, and capacity clipped to working hours", async () => {
+      const scheduledDate = addDays(todayUtc(), 18);
+      const dateKey = scheduledDate.toISOString().slice(0, 10);
+      const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
+      assert.notEqual(dayOfWeek, undefined);
+
+      await createWorkshopWorkingHours(state, {
+        staffId: managerUser.id,
+        dayOfWeek,
+        startTime: "09:00",
+        endTime: "17:00",
+      });
+
+      await createWorkshopTimeOff(state, {
+        staffId: managerUser.id,
+        startAt: toScheduledSlot(scheduledDate, 6, 0),
+        endAt: toScheduledSlot(scheduledDate, 10, 0),
+        reason: "Morning appointment",
+      });
+
+      await createWorkshopTimeOff(state, {
+        staffId: managerUser.id,
+        startAt: toScheduledSlot(scheduledDate, 12, 0),
+        endAt: toScheduledSlot(scheduledDate, 13, 0),
+        reason: "Lunch block",
+      });
+
+      await createWorkshopTimeOff(state, {
+        staffId: managerUser.id,
+        startAt: toScheduledSlot(scheduledDate, 17, 0),
+        endAt: toScheduledSlot(scheduledDate, 18, 0),
+        reason: "After hours hold",
+      });
+
+      await createWorkshopTimeOff(state, {
+        staffId: null,
+        startAt: toScheduledSlot(scheduledDate, 16, 0),
+        endAt: toScheduledSlot(scheduledDate, 18, 0),
+        reason: "Workshop briefing",
+      });
+
+      const { job } = await createJob(state, {
+        customerName: `Calendar Job ${uniqueRef()}`,
+        bikeDescription: "Calendar visibility job",
+        scheduledStartAt: toScheduledSlot(scheduledDate, 10, 30).toISOString(),
+        durationMinutes: 60,
+      });
+
+      const scheduled = await patchWorkshopJobSchedule(job.id, {
+        staffId: managerUser.id,
+      });
+      assert.equal(scheduled.status, 201, JSON.stringify(scheduled.json));
+
+      const calendar = await fetchJson(
+        `/api/workshop/calendar?from=${dateKey}&to=${dateKey}`,
+        { headers: STAFF_HEADERS },
+      );
+      assert.equal(calendar.status, 200, JSON.stringify(calendar.json));
+      assert.equal(calendar.json.range.from, dateKey);
+      assert.equal(calendar.json.range.to, dateKey);
+      assert.ok(Array.isArray(calendar.json.staff), JSON.stringify(calendar.json));
+      assert.ok(Array.isArray(calendar.json.scheduledJobs), JSON.stringify(calendar.json));
+
+      const scheduledJob = calendar.json.scheduledJobs.find((entry) => entry.id === job.id);
+      assert.ok(scheduledJob, JSON.stringify(calendar.json));
+      assert.equal(scheduledJob.assignedStaffId, managerUser.id);
+      assert.equal(scheduledJob.jobPath, `/workshop/${job.id}`);
+
+      const staffRow = calendar.json.staff.find((entry) => entry.id === managerUser.id);
+      assert.ok(staffRow, JSON.stringify(calendar.json));
+      assert.equal(staffRow.workingHours.length, 1);
+      assert.equal(staffRow.workingHours[0].date, dateKey);
+      assert.equal(staffRow.workingHours[0].startTime, "09:00");
+      assert.equal(staffRow.workingHours[0].endTime, "17:00");
+
+      const capacity = staffRow.dailyCapacity.find((entry) => entry.date === dateKey);
+      assert.ok(capacity, JSON.stringify(staffRow));
+      assert.equal(capacity.totalMinutes, 480);
+      assert.equal(capacity.bookedMinutes, 60);
+      assert.equal(capacity.timeOffMinutes, 180);
+      assert.equal(capacity.availableMinutes, 240);
+
+      assert.ok(
+        calendar.json.workshopTimeOff.some((entry) => entry.reason === "Workshop briefing"),
+        JSON.stringify(calendar.json.workshopTimeOff),
+      );
+      assert.ok(
+        staffRow.scheduledJobs.some((entry) => entry.id === job.id),
+        JSON.stringify(staffRow.scheduledJobs),
+      );
+    }, results);
+
+    await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
+      const scheduledDate = addDays(todayUtc(), 19);
+      const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
+      assert.notEqual(dayOfWeek, undefined);
+
+      await createWorkshopWorkingHours(state, {
+        staffId: managerUser.id,
+        dayOfWeek,
+        startTime: "09:00",
+        endTime: "17:00",
+      });
+
+      const { job: jobToSchedule } = await createJob(state, {
+        customerName: `Patch Schedule ${uniqueRef()}`,
+        bikeDescription: "Schedule patch target",
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        durationMinutes: null,
+      });
+
+      const firstPatch = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        staffId: managerUser.id,
+        scheduledStartAt: toScheduledSlot(scheduledDate, 11, 0).toISOString(),
+        durationMinutes: 45,
+      });
+      assert.equal(firstPatch.status, 201, JSON.stringify(firstPatch.json));
+      assert.equal(firstPatch.json.job.assignedStaffId, managerUser.id);
+      assert.equal(firstPatch.json.job.durationMinutes, 45);
+      assert.equal(
+        new Date(firstPatch.json.job.scheduledEndAt).toISOString(),
+        toScheduledSlot(scheduledDate, 11, 45).toISOString(),
+      );
+
+      const durationOnlyPatch = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        durationMinutes: 90,
+      });
+      assert.equal(durationOnlyPatch.status, 201, JSON.stringify(durationOnlyPatch.json));
+      assert.equal(durationOnlyPatch.json.job.durationMinutes, 90);
+      assert.equal(
+        new Date(durationOnlyPatch.json.job.scheduledStartAt).toISOString(),
+        toScheduledSlot(scheduledDate, 11, 0).toISOString(),
+      );
+      assert.equal(
+        new Date(durationOnlyPatch.json.job.scheduledEndAt).toISOString(),
+        toScheduledSlot(scheduledDate, 12, 30).toISOString(),
+      );
+
+      const startOnlyPatch = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        scheduledStartAt: toScheduledSlot(scheduledDate, 12, 0).toISOString(),
+      });
+      assert.equal(startOnlyPatch.status, 201, JSON.stringify(startOnlyPatch.json));
+      assert.equal(
+        new Date(startOnlyPatch.json.job.scheduledStartAt).toISOString(),
+        toScheduledSlot(scheduledDate, 12, 0).toISOString(),
+      );
+      assert.equal(
+        new Date(startOnlyPatch.json.job.scheduledEndAt).toISOString(),
+        toScheduledSlot(scheduledDate, 13, 30).toISOString(),
+      );
+
+      const replayPatch = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        scheduledStartAt: toScheduledSlot(scheduledDate, 12, 0).toISOString(),
+      });
+      assert.equal(replayPatch.status, 200, JSON.stringify(replayPatch.json));
+      assert.equal(replayPatch.json.idempotent, true);
+
+      const clearedPatch = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        clearSchedule: true,
+      });
+      assert.equal(clearedPatch.status, 201, JSON.stringify(clearedPatch.json));
+      assert.equal(clearedPatch.json.job.scheduledDate, null);
+      assert.equal(clearedPatch.json.job.scheduledStartAt, null);
+      assert.equal(clearedPatch.json.job.scheduledEndAt, null);
+      assert.equal(clearedPatch.json.job.durationMinutes, null);
+      assert.equal(clearedPatch.json.job.assignedStaffId, managerUser.id);
+
+      const clearReplay = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        clearSchedule: true,
+      });
+      assert.equal(clearReplay.status, 200, JSON.stringify(clearReplay.json));
+      assert.equal(clearReplay.json.idempotent, true);
+
+      const invalidPartial = await patchWorkshopJobSchedule(jobToSchedule.id, {
+        scheduledStartAt: toScheduledSlot(scheduledDate, 14, 0).toISOString(),
+      });
+      assert.equal(invalidPartial.status, 400, JSON.stringify(invalidPartial.json));
+      assert.equal(invalidPartial.json.error.code, "INVALID_WORKSHOP_SCHEDULE");
+
+      const { job: firstAssignedJob } = await createJob(state, {
+        customerName: `Scheduled Existing ${uniqueRef()}`,
+        bikeDescription: "Existing scheduled job",
+        scheduledStartAt: toScheduledSlot(scheduledDate, 15, 0).toISOString(),
+        durationMinutes: 60,
+      });
+
+      const assignExisting = await patchWorkshopJobSchedule(firstAssignedJob.id, {
+        staffId: managerUser.id,
+      });
+      assert.equal(assignExisting.status, 201, JSON.stringify(assignExisting.json));
+
+      const { job: overlappingJob } = await createJob(state, {
+        customerName: `Scheduled Candidate ${uniqueRef()}`,
+        bikeDescription: "Overlap candidate",
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        durationMinutes: null,
+      });
+
+      const overlapAttempt = await patchWorkshopJobSchedule(overlappingJob.id, {
+        staffId: managerUser.id,
+        scheduledStartAt: toScheduledSlot(scheduledDate, 15, 30).toISOString(),
+        durationMinutes: 30,
+      });
+      assert.equal(overlapAttempt.status, 409, JSON.stringify(overlapAttempt.json));
+      assert.equal(overlapAttempt.json.error.code, "WORKSHOP_SCHEDULE_OVERLAP");
     }, results);
 
     await runTest("customer quote links allow safe approval and stale links cannot approve superseded estimates", async () => {

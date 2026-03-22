@@ -5,13 +5,27 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { setWorkshopEstimateStatus } from "./workshopEstimateService";
-import { assertWorkshopScheduleAllowed } from "./workshopCalendarService";
+import {
+  assertWorkshopScheduleAllowed,
+  resolveWorkshopSchedulePatch,
+} from "./workshopCalendarService";
+import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
 type WorkflowStage = "BOOKED" | "IN_PROGRESS" | "READY" | "COMPLETED" | "CANCELLED";
 
 type AssignWorkshopJobInput = {
   staffId: string | null;
+  actorRole: StaffRole;
+  actorId?: string;
+};
+
+type UpdateWorkshopJobScheduleInput = {
+  staffId?: string | null;
+  scheduledStartAt?: string | Date | null;
+  scheduledEndAt?: string | Date | null;
+  durationMinutes?: number | null;
+  clearSchedule?: boolean;
   actorRole: StaffRole;
   actorId?: string;
 };
@@ -123,6 +137,35 @@ const assertCanAssignOrUnassign = (jobAssignedStaffId: string | null, input: Ass
   }
 };
 
+const resolveAssignedStaffTx = async (
+  tx: Prisma.TransactionClient,
+  staffId: string | null,
+) => {
+  if (!staffId) {
+    return {
+      assignedStaffId: null,
+      assignedStaffName: null,
+    };
+  }
+
+  const staff = await tx.user.findUnique({
+    where: { id: staffId },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+    },
+  });
+  if (!staff) {
+    throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
+  }
+
+  return {
+    assignedStaffId: staff.id,
+    assignedStaffName: normalizeText(staff.name) ?? staff.username,
+  };
+};
+
 export const assignWorkshopJob = async (
   workshopJobId: string,
   input: AssignWorkshopJobInput,
@@ -143,25 +186,9 @@ export const assignWorkshopJob = async (
 
     assertCanAssignOrUnassign(job.assignedStaffId, input);
 
-    let assignedStaffId: string | null = input.staffId;
-    let assignedStaffName: string | null = null;
-
-    if (assignedStaffId) {
-      const staff = await tx.user.findUnique({
-        where: { id: assignedStaffId },
-        select: {
-          id: true,
-          username: true,
-          name: true,
-        },
-      });
-      if (!staff) {
-        throw new HttpError(404, "Staff member not found", "STAFF_NOT_FOUND");
-      }
-      assignedStaffName = normalizeText(staff.name) ?? staff.username;
-    } else {
-      assignedStaffId = null;
-    }
+    const nextAssignment = await resolveAssignedStaffTx(tx, input.staffId);
+    const assignedStaffId = nextAssignment.assignedStaffId;
+    const assignedStaffName = nextAssignment.assignedStaffName;
 
     if (
       job.assignedStaffId === assignedStaffId &&
@@ -220,6 +247,164 @@ export const assignWorkshopJob = async (
         status: updated.status,
         assignedStaffId: updated.assignedStaffId,
         assignedStaffName: updated.assignedStaffName,
+        updatedAt: updated.updatedAt,
+      },
+      idempotent: false,
+    };
+  });
+
+  return result;
+};
+
+export const updateWorkshopJobSchedule = async (
+  workshopJobId: string,
+  input: UpdateWorkshopJobScheduleInput,
+  auditActor?: AuditActor,
+) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  const hasAssignmentChange = input.staffId !== undefined;
+  const hasScheduleChange =
+    Boolean(input.clearSchedule)
+    || input.scheduledStartAt !== undefined
+    || input.scheduledEndAt !== undefined
+    || input.durationMinutes !== undefined;
+
+  if (!hasAssignmentChange && !hasScheduleChange) {
+    throw new HttpError(400, "No schedule fields provided", "INVALID_WORKSHOP_SCHEDULE_UPDATE");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const job = await tx.workshopJob.findUnique({
+      where: { id: workshopJobId },
+    });
+
+    if (!job) {
+      throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+    }
+
+    if (hasAssignmentChange) {
+      assertCanAssignOrUnassign(job.assignedStaffId, {
+        staffId: input.staffId ?? null,
+        actorRole: input.actorRole,
+        actorId: input.actorId,
+      });
+    }
+
+    const nextAssignment = hasAssignmentChange
+      ? await resolveAssignedStaffTx(tx, input.staffId ?? null)
+      : {
+          assignedStaffId: job.assignedStaffId,
+          assignedStaffName: job.assignedStaffName,
+        };
+
+    const scheduleResolution = await resolveWorkshopSchedulePatch(
+      {
+        scheduledStartAt: input.scheduledStartAt,
+        scheduledEndAt: input.scheduledEndAt,
+        durationMinutes: input.durationMinutes,
+        clearSchedule: input.clearSchedule,
+      },
+      {
+        scheduledDate: job.scheduledDate,
+        scheduledStartAt: job.scheduledStartAt,
+        scheduledEndAt: job.scheduledEndAt,
+        durationMinutes: job.durationMinutes,
+      },
+      tx,
+    );
+
+    const assignmentChanged =
+      nextAssignment.assignedStaffId !== job.assignedStaffId
+      || nextAssignment.assignedStaffName !== job.assignedStaffName;
+    const scheduleChanged =
+      scheduleResolution.schedule.scheduledDate?.getTime() !== job.scheduledDate?.getTime()
+      || scheduleResolution.schedule.scheduledStartAt?.getTime() !== job.scheduledStartAt?.getTime()
+      || scheduleResolution.schedule.scheduledEndAt?.getTime() !== job.scheduledEndAt?.getTime()
+      || scheduleResolution.schedule.durationMinutes !== job.durationMinutes
+      || (scheduleResolution.schedule.scheduledDate === null) !== (job.scheduledDate === null)
+      || (scheduleResolution.schedule.scheduledStartAt === null) !== (job.scheduledStartAt === null)
+      || (scheduleResolution.schedule.scheduledEndAt === null) !== (job.scheduledEndAt === null);
+
+    if (!assignmentChanged && !scheduleChanged) {
+      return {
+        job: {
+          id: job.id,
+          status: toWorkshopExecutionStatus(job),
+          rawStatus: job.status,
+          assignedStaffId: job.assignedStaffId,
+          assignedStaffName: job.assignedStaffName,
+          scheduledDate: job.scheduledDate,
+          scheduledStartAt: job.scheduledStartAt,
+          scheduledEndAt: job.scheduledEndAt,
+          durationMinutes: job.durationMinutes,
+          updatedAt: job.updatedAt,
+        },
+        idempotent: true,
+      };
+    }
+
+    await assertWorkshopScheduleAllowed(
+      {
+        workshopJobId,
+        staffId: nextAssignment.assignedStaffId,
+        scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+        scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+        durationMinutes: scheduleResolution.schedule.durationMinutes,
+      },
+      tx,
+    );
+
+    const updated = await tx.workshopJob.update({
+      where: { id: workshopJobId },
+      data: {
+        assignedStaffId: nextAssignment.assignedStaffId,
+        assignedStaffName: nextAssignment.assignedStaffName,
+        scheduledDate: scheduleResolution.schedule.scheduledDate,
+        scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+        scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+        durationMinutes: scheduleResolution.schedule.durationMinutes,
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "JOB_SCHEDULE_UPDATED",
+        entityType: "WORKSHOP_JOB",
+        entityId: updated.id,
+        metadata: {
+          fromAssignedStaffId: job.assignedStaffId,
+          fromAssignedStaffName: job.assignedStaffName,
+          toAssignedStaffId: updated.assignedStaffId,
+          toAssignedStaffName: updated.assignedStaffName,
+          fromScheduledDate: job.scheduledDate?.toISOString() ?? null,
+          toScheduledDate: updated.scheduledDate?.toISOString() ?? null,
+          fromScheduledStartAt: job.scheduledStartAt?.toISOString() ?? null,
+          toScheduledStartAt: updated.scheduledStartAt?.toISOString() ?? null,
+          fromScheduledEndAt: job.scheduledEndAt?.toISOString() ?? null,
+          toScheduledEndAt: updated.scheduledEndAt?.toISOString() ?? null,
+          fromDurationMinutes: job.durationMinutes,
+          toDurationMinutes: updated.durationMinutes,
+          clearSchedule: input.clearSchedule === true,
+        },
+      },
+      auditActor,
+    );
+
+    return {
+      job: {
+        id: updated.id,
+        status: toWorkshopExecutionStatus(updated),
+        rawStatus: updated.status,
+        assignedStaffId: updated.assignedStaffId,
+        assignedStaffName: updated.assignedStaffName,
+        scheduledDate: updated.scheduledDate,
+        scheduledStartAt: updated.scheduledStartAt,
+        scheduledEndAt: updated.scheduledEndAt,
+        durationMinutes: updated.durationMinutes,
         updatedAt: updated.updatedAt,
       },
       idempotent: false,

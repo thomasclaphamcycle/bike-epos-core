@@ -335,6 +335,33 @@ X-Staff-Id: demo-staff
   "durationMinutes": 60
 }
 
+### Read workshop calendar rows, time off, scheduled jobs, and daily capacity for a date range
+GET {{baseUrl}}/api/workshop/calendar?from=2026-03-12&to=2026-03-16
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Assign or reschedule a timed workshop job atomically
+PATCH {{baseUrl}}/api/workshop/jobs/{{bookingId}}/schedule
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "staffId": "demo-manager",
+  "scheduledStartAt": "2026-03-12T14:00:00.000Z",
+  "durationMinutes": 90
+}
+
+### Clear a timed schedule while keeping the job valid and open
+PATCH {{baseUrl}}/api/workshop/jobs/{{bookingId}}/schedule
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "clearSchedule": true
+}
+
 ### Save an estimate snapshot from the current live labour + part lines (M83)
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/estimate
 Content-Type: application/json
