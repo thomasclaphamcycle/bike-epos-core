@@ -5244,6 +5244,42 @@ th {
   gap: 10px;
 }
 
+.bike-history-list {
+  margin-top: 12px;
+}
+
+.bike-history-entry {
+  gap: 12px;
+}
+
+.bike-history-entry__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.bike-history-entry__date {
+  color: #526071;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.bike-history-entry__summary {
+  font-weight: 600;
+  color: #22303d;
+}
+
+.bike-history-entry__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 12px;
+}
+
 @media (max-width: 900px) {
   .selected-customer-panel,
   .customer-search-panel {

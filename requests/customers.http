@@ -69,7 +69,7 @@ Content-Type: application/json
   "batterySerial": "BAT-67890"
 }
 
-### Get reusable bike profile and linked service history
+### Get reusable bike profile and linked service history timeline
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
 
 ### Get workshop start defaults for a bike-led check-in
