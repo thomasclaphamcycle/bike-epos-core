@@ -86,7 +86,7 @@ const fetchJson = async (path, options = {}) => {
   return { status: response.status, json };
 };
 
-const createOnlineBooking = async (scheduledDate) => {
+const createOnlineBooking = async (scheduledDate, overrides = {}) => {
   const ref = uniqueRef();
   const response = await fetchJson("/api/workshop-bookings", {
     method: "POST",
@@ -97,6 +97,7 @@ const createOnlineBooking = async (scheduledDate) => {
       phone: `0755${String(ref).replace(/\D/g, "").slice(-7).padStart(7, "0")}`,
       scheduledDate,
       notes: `m13 booking ${ref}`,
+      ...overrides,
     }),
   });
 
@@ -144,6 +145,7 @@ const cleanup = async (state) => {
   const creditAccountIds = Array.from(state.creditAccountIds);
   const creditEntryIds = Array.from(state.creditEntryIds);
   const refundIds = Array.from(state.refundIds);
+  const templateIds = Array.from(state.templateIds);
 
   if (workshopJobIds.length > 0) {
     const linkedSales = await prisma.sale.findMany({
@@ -259,6 +261,12 @@ const cleanup = async (state) => {
       where: { id: { in: customerIds } },
     });
   }
+
+  if (templateIds.length > 0) {
+    await prisma.workshopServiceTemplate.deleteMany({
+      where: { id: { in: templateIds } },
+    });
+  }
 };
 
 const run = async () => {
@@ -270,6 +278,7 @@ const run = async () => {
     creditAccountIds: new Set(),
     creditEntryIds: new Set(),
     refundIds: new Set(),
+    templateIds: new Set(),
   };
 
   const runTest = async (name, fn, results) => {
@@ -351,6 +360,71 @@ const run = async () => {
         readyOnly.json.jobs.every((job) => job.status === "BIKE_READY"),
         JSON.stringify(readyOnly.json),
       );
+    }, results);
+
+    await runTest("public booking flow returns richer booking metadata and manage follow-up", async () => {
+      const template = await prisma.workshopServiceTemplate.create({
+        data: {
+          name: `M13 Safety Check ${uniqueRef()}`,
+          description: "Customer-facing workshop service option",
+          category: "Safety",
+          defaultDurationMinutes: 45,
+          isActive: true,
+          lines: {
+            create: [
+              {
+                type: "LABOUR",
+                description: "Safety check labour",
+                qty: 1,
+                unitPricePence: 3500,
+                sortOrder: 0,
+              },
+            ],
+          },
+        },
+      });
+      state.templateIds.add(template.id);
+
+      const publicForm = await fetchJson("/api/workshop-bookings/public-form");
+      assert.equal(publicForm.status, 200, JSON.stringify(publicForm.json));
+      assert.equal(publicForm.json.booking.timingMode, "REQUESTED_DATE");
+      assert.ok(
+        publicForm.json.serviceOptions.some((entry) => entry.id === template.id),
+        JSON.stringify(publicForm.json.serviceOptions),
+      );
+
+      const scheduledDate = formatDateOnly(addDays(baseDate, 45));
+      const booking = await createOnlineBooking(scheduledDate, {
+        bikeDescription: "Trek FX 2, green, medium",
+        serviceTemplateId: template.id,
+        preferredTime: "AFTERNOON",
+        serviceRequest: "Rear brake rub and safety check",
+        notes: "Please text before replacing parts",
+      });
+      state.workshopJobIds.add(booking.id);
+      state.customerIds.add(booking.customer.id);
+
+      assert.equal(booking.bookingRequest.serviceLabel, template.name);
+      assert.equal(booking.bookingRequest.preferredTime, "Afternoon");
+      assert.equal(booking.bookingRequest.bikeDescription, "Trek FX 2, green, medium");
+
+      const manage = await fetchJson(`/api/workshop-bookings/manage/${booking.manageToken}`);
+      assert.equal(manage.status, 200, JSON.stringify(manage.json));
+      assert.equal(manage.json.bookingRequest.serviceLabel, template.name);
+      assert.equal(manage.json.bookingRequest.preferredTime, "Afternoon");
+      assert.equal(manage.json.bookingRequest.serviceRequest, "Rear brake rub and safety check");
+      assert.equal(manage.json.bookingRequest.additionalNotes, "Please text before replacing parts");
+      assert.equal(manage.json.bookingRequest.bikeDescription, "Trek FX 2, green, medium");
+
+      const reschedule = await fetchJson(`/api/workshop-bookings/manage/${booking.manageToken}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          scheduledDate: formatDateOnly(addDays(baseDate, 46)),
+        }),
+      });
+      assert.equal(reschedule.status, 200, JSON.stringify(reschedule.json));
+      assert.equal(reschedule.json.bookingRequest.serviceLabel, template.name);
+      assert.equal(reschedule.json.bookingRequest.preferredTime, "Afternoon");
     }, results);
 
     await runTest("permission checks enforce MANAGER+ on restricted money endpoints", async () => {

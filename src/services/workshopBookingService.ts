@@ -3,8 +3,10 @@ import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { listPublicShopConfig } from "./configurationService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { assertDateIsBookable } from "./workshopAvailabilityService";
+import { listWorkshopServiceTemplates } from "./workshopServiceTemplateService";
 import { getBookingSettings } from "./workshopSettingsService";
 
 type CreateOnlineWorkshopBookingInput = {
@@ -13,6 +15,10 @@ type CreateOnlineWorkshopBookingInput = {
   email?: string;
   phone?: string;
   scheduledDate?: string;
+  bikeDescription?: string;
+  serviceTemplateId?: string;
+  preferredTime?: string;
+  serviceRequest?: string;
   notes?: string;
 };
 
@@ -54,14 +60,126 @@ const resolveManageTokenExpiryDate = (): Date => {
 
 const generateManageToken = (): string => randomBytes(32).toString("hex");
 
+const CUSTOMER_BOOKING_REQUEST_HEADING = "Customer booking request";
+
+type ParsedBookingRequestSummary = {
+  serviceLabel: string | null;
+  preferredTime: string | null;
+  serviceRequest: string | null;
+  additionalNotes: string | null;
+};
+
+const normalizeOptionalBookingText = (
+  value: string | undefined,
+  field: string,
+  maxLength: number,
+) => {
+  const normalized = normalizeText(value);
+  if (normalized && normalized.length > maxLength) {
+    throw new HttpError(
+      400,
+      `${field} must be ${maxLength} characters or fewer`,
+      "INVALID_BOOKING",
+    );
+  }
+  return normalized;
+};
+
+const parsePreferredTime = (value: string | undefined) => {
+  const normalized = normalizeOptionalBookingText(value, "preferredTime", 80);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const canonical = normalized.trim().toUpperCase().replace(/\s+/g, "_");
+  switch (canonical) {
+    case "MORNING":
+      return "Morning";
+    case "AFTERNOON":
+      return "Afternoon";
+    case "ANYTIME":
+    case "ANY_TIME":
+    case "FLEXIBLE":
+      return "Any time";
+    default:
+      return normalized;
+  }
+};
+
+const buildBookingNotes = (input: {
+  serviceLabel?: string;
+  preferredTime?: string;
+  serviceRequest?: string;
+  additionalNotes?: string;
+}) => {
+  const lines = [CUSTOMER_BOOKING_REQUEST_HEADING];
+
+  if (input.serviceLabel) {
+    lines.push(`Service requested: ${input.serviceLabel}`);
+  }
+  if (input.preferredTime) {
+    lines.push(`Preferred time: ${input.preferredTime}`);
+  }
+  if (input.serviceRequest) {
+    lines.push(`Issue summary: ${input.serviceRequest}`);
+  }
+  if (input.additionalNotes) {
+    lines.push(`Additional notes: ${input.additionalNotes}`);
+  }
+
+  if (lines.length === 1) {
+    return null;
+  }
+
+  return lines.join("\n");
+};
+
+const parseBookingRequestSummary = (
+  value: string | null | undefined,
+): ParsedBookingRequestSummary => {
+  const notes = normalizeText(value ?? undefined);
+  if (!notes) {
+    return {
+      serviceLabel: null,
+      preferredTime: null,
+      serviceRequest: null,
+      additionalNotes: null,
+    };
+  }
+
+  const lines = notes.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines[0] !== CUSTOMER_BOOKING_REQUEST_HEADING) {
+    return {
+      serviceLabel: null,
+      preferredTime: null,
+      serviceRequest: null,
+      additionalNotes: notes,
+    };
+  }
+
+  const readValue = (prefix: string) =>
+    lines.find((line) => line.startsWith(prefix))?.slice(prefix.length).trim() ?? null;
+
+  return {
+    serviceLabel: readValue("Service requested:"),
+    preferredTime: readValue("Preferred time:"),
+    serviceRequest: readValue("Issue summary:"),
+    additionalNotes: readValue("Additional notes:"),
+  };
+};
+
 const toManageBookingResponse = (job: {
   id: string;
   status: string;
   scheduledDate: Date | null;
+  bikeDescription: string | null;
   notes: string | null;
   source: string;
   depositRequiredPence: number;
   depositStatus: string;
+  createdAt: Date;
+  updatedAt: Date;
+  manageTokenExpiresAt: Date | null;
   customer: {
     firstName: string;
     lastName: string;
@@ -69,14 +187,31 @@ const toManageBookingResponse = (job: {
     email: string | null;
   } | null;
 }) => {
+  const bookingRequest = parseBookingRequestSummary(job.notes);
+
   return {
     id: job.id,
     status: job.status,
     scheduledDate: job.scheduledDate,
     notes: job.notes,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    manageTokenExpiresAt: job.manageTokenExpiresAt,
     source: job.source,
     depositRequiredPence: job.depositRequiredPence,
     depositStatus: job.depositStatus,
+    bookingRequest: {
+      bikeDescription: job.bikeDescription,
+      serviceLabel: bookingRequest.serviceLabel,
+      preferredTime: bookingRequest.preferredTime,
+      serviceRequest: bookingRequest.serviceRequest,
+      additionalNotes: bookingRequest.additionalNotes,
+      requestedDateLabel: job.scheduledDate
+        ? job.scheduledDate.toLocaleDateString("en-GB", { dateStyle: "medium" })
+        : null,
+      timingExpectation:
+        "This is a requested workshop date. The shop will confirm the final drop-off timing if a more precise slot is needed.",
+    },
     customer: job.customer
       ? {
           firstName: job.customer.firstName,
@@ -173,8 +308,12 @@ export const createOnlineWorkshopBooking = async (
   const lastName = normalizeText(input.lastName);
   const phone = normalizeText(input.phone);
   const email = normalizeText(input.email)?.toLowerCase();
-  const notes = normalizeText(input.notes);
+  const bikeDescription = normalizeOptionalBookingText(input.bikeDescription, "bikeDescription", 160);
+  const serviceRequest = normalizeOptionalBookingText(input.serviceRequest, "serviceRequest", 1000);
+  const preferredTime = parsePreferredTime(input.preferredTime);
+  const additionalNotes = normalizeOptionalBookingText(input.notes, "notes", 1000);
   const scheduledDate = normalizeText(input.scheduledDate);
+  const serviceTemplateId = normalizeText(input.serviceTemplateId);
 
   if (!firstName || !lastName || !phone || !scheduledDate) {
     throw new HttpError(
@@ -187,13 +326,42 @@ export const createOnlineWorkshopBooking = async (
   return prisma.$transaction(async (tx) => {
     const availability = await assertDateIsBookable(tx, scheduledDate);
     const settings = await getBookingSettings(tx);
+    let serviceLabel: string | undefined;
+
+    if (serviceTemplateId) {
+      const template = await tx.workshopServiceTemplate.findFirst({
+        where: {
+          id: serviceTemplateId,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+      if (!template) {
+        throw new HttpError(
+          404,
+          "Selected service was not found",
+          "WORKSHOP_SERVICE_TEMPLATE_NOT_FOUND",
+        );
+      }
+      serviceLabel = template.name;
+    }
+
+    const notes = buildBookingNotes({
+      serviceLabel,
+      preferredTime,
+      serviceRequest,
+      additionalNotes,
+    });
 
     const customer = await getOrCreateCustomerForOnlineBooking(tx, {
       firstName,
       lastName,
       email,
       phone,
-      notes,
+      notes: additionalNotes,
     });
     const location = await getOrCreateDefaultLocationTx(tx);
 
@@ -213,6 +381,7 @@ export const createOnlineWorkshopBooking = async (
             depositRequiredPence: settings.defaultDepositPence,
             depositStatus: "REQUIRED",
             locationId: location.id,
+            bikeDescription,
             manageToken: generateManageToken(),
             manageTokenExpiresAt,
             notes,
@@ -242,6 +411,13 @@ export const createOnlineWorkshopBooking = async (
       depositRequiredPence: workshopJob.depositRequiredPence,
       depositStatus: workshopJob.depositStatus,
       notes: workshopJob.notes,
+      bookingRequest: {
+        bikeDescription,
+        serviceLabel: serviceLabel ?? null,
+        preferredTime: preferredTime ?? null,
+        serviceRequest: serviceRequest ?? null,
+        additionalNotes: additionalNotes ?? null,
+      },
       customer: {
         id: customer.id,
         firstName: customer.firstName,
@@ -385,6 +561,33 @@ export const getWorkshopBookingByManageToken = async (token: string) => {
 
   const booking = await getManageableWorkshopJobOrThrow(prisma, normalizedToken);
   return toManageBookingResponse(booking);
+};
+
+export const getPublicWorkshopBookingFormOptions = async () => {
+  const [config, bookingSettings, templates] = await Promise.all([
+    listPublicShopConfig(),
+    getBookingSettings(),
+    listWorkshopServiceTemplates(),
+  ]);
+
+  return {
+    config,
+    booking: {
+      minBookableDate: bookingSettings.minBookableDate,
+      maxBookingsPerDay: bookingSettings.maxBookingsPerDay,
+      defaultDepositPence: bookingSettings.defaultDepositPence,
+      timingMode: "REQUESTED_DATE",
+      timingMessage:
+        "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.",
+    },
+    serviceOptions: templates.templates.map((template) => ({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      defaultDurationMinutes: template.defaultDurationMinutes,
+    })),
+  };
 };
 
 export const updateWorkshopBookingByManageToken = async (

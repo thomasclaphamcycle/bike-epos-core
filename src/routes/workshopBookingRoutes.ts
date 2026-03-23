@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   cancelWorkshopBookingByManageTokenHandler,
   createOnlineWorkshopBookingHandler,
+  getPublicWorkshopBookingFormOptionsHandler,
   getWorkshopBookingByManageTokenHandler,
   payWorkshopBookingDepositByManageTokenHandler,
   updateWorkshopBookingByManageTokenHandler,
@@ -9,6 +10,7 @@ import {
 
 export const workshopBookingRouter = Router();
 
+workshopBookingRouter.get("/public-form", getPublicWorkshopBookingFormOptionsHandler);
 workshopBookingRouter.post("/", createOnlineWorkshopBookingHandler);
 workshopBookingRouter.get("/manage/:token", getWorkshopBookingByManageTokenHandler);
 workshopBookingRouter.patch("/manage/:token", updateWorkshopBookingByManageTokenHandler);

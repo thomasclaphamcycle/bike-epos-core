@@ -306,6 +306,14 @@ export const WorkshopQuotePage = lazyPage(
   () => import("./pages/WorkshopQuotePage"),
   "WorkshopQuotePage",
 );
+export const PublicWorkshopBookingPage = lazyPage(
+  () => import("./pages/PublicWorkshopBookingPage"),
+  "PublicWorkshopBookingPage",
+);
+export const PublicWorkshopBookingManagePage = lazyPage(
+  () => import("./pages/PublicWorkshopBookingManagePage"),
+  "PublicWorkshopBookingManagePage",
+);
 export const NavigationPlaceholderPage = lazyPage(
   () => import("./pages/NavigationPlaceholderPage"),
   "NavigationPlaceholderPage",

@@ -199,6 +199,11 @@ Current internal subscribers are:
   - keeps approval and rejection on the same estimate-decision workflow, so `POST /api/public/workshop/:token/decision` stays idempotent and still blocks stale or superseded quote approval
   - the frontend portal now treats that payload as a mobile-first customer summary surface with clearer next-step guidance, progress wording, and tighter hierarchy for status, quote, messages, attachments, notes, and timeline data
   - preserves existing `/quote/:token` frontend links and `/api/public/workshop-quotes/:token` API aliases for compatibility while new generated links point to `/public/workshop/:token`
+- public workshop booking flow in `src/services/workshopBookingService.ts`, `src/routes/workshopBookingRoutes.ts`, and the public SPA pages
+  - exposes `GET /api/workshop-bookings/public-form` for customer-safe booking metadata such as store contact context, booking settings, and active service-template summaries
+  - keeps `POST /api/workshop-bookings` as the single public booking intake entrypoint, while now accepting richer request capture for bike details, service choice, preferred timing, and issue summary without breaking older minimal clients
+  - keeps `GET|PATCH /api/workshop-bookings/manage/:token` as the secure booking follow-up surface, now returning a structured `bookingRequest` summary alongside the existing booking fields so public pages can render trustworthy request details without exposing internals
+  - the public SPA now uses `/site/book-workshop` for request capture and `/site/bookings/:token` for token-scoped follow-up, while staying honest that the customer is requesting a preferred date rather than claiming a confirmed live mechanic slot
 
 Manager-facing internal visibility now exists through:
 

@@ -8,6 +8,9 @@
 ### Availability for a date range
 GET {{baseUrl}}/api/workshop/availability?from=2026-03-06&to=2026-03-10
 
+### Public workshop booking form metadata
+GET {{baseUrl}}/api/workshop-bookings/public-form
+
 ### Workshop dashboard (STAFF+)
 ### includes rota-backed staffingToday summary and capacityToday awareness
 GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
@@ -35,7 +38,11 @@ Content-Type: application/json
   "email": "alex.rider@example.com",
   "phone": "07111222333",
   "scheduledDate": "2026-03-06",
-  "notes": "Gear indexing and brake check"
+  "bikeDescription": "Trek FX 2, blue, medium",
+  "serviceTemplateId": "{{serviceTemplateId}}",
+  "preferredTime": "AFTERNOON",
+  "serviceRequest": "Gear indexing and brake check",
+  "notes": "Please text before replacing any parts"
 }
 
 ### Create booking (capture manageToken from response)
@@ -47,7 +54,10 @@ Content-Type: application/json
   "lastName": "Owner",
   "phone": "07111999000",
   "scheduledDate": "2026-03-08",
-  "notes": "Needs chain replacement"
+  "bikeDescription": "Specialized Sirrus, black",
+  "serviceRequest": "Needs chain replacement",
+  "preferredTime": "MORNING",
+  "notes": "Can leave bike all day"
 }
 
 ### Pay booking deposit (£10 / 1000p) by manage token
@@ -102,6 +112,7 @@ X-Staff-Id: demo-staff
 }
 
 ### Get booking by manage token
+### bookingRequest includes customer-safe request summary for public follow-up pages
 GET {{baseUrl}}/api/workshop-bookings/manage/{{manageToken}}
 
 ### Reschedule by manage token

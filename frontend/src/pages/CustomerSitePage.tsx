@@ -17,13 +17,13 @@ const contentByVariant: Record<
     eyebrow: "CorePOS Customer Site",
     title: "Bike shop website foundation for services, workshop bookings, and store information.",
     intro:
-      "This public-facing starter gives CorePOS a practical brochure surface for store details, workshop messaging, and future online booking expansion without changing the staff app.",
+      "This public-facing starter now gives CorePOS a practical workshop booking path alongside store details, service guidance, and the secure follow-up flows customers need after they send a request.",
     highlights: [
       "Promote workshop repairs, tune-ups, and same-day triage.",
       "Show clear store information before the first pilot.",
-      "Keep a simple structure ready for future booking and marketing growth.",
+      "Give customers a real booking request flow without disturbing the staff app.",
     ],
-    primaryCta: { label: "View Services", to: "/site/services" },
+    primaryCta: { label: "Book Workshop", to: "/site/book-workshop" },
     secondaryCta: { label: "Workshop Repairs", to: "/site/workshop" },
   },
   services: {
@@ -36,20 +36,20 @@ const contentByVariant: Record<
       "Routine workshop servicing for road, commuter, and family bikes.",
       "Parts fitting, brake work, drivetrain service, and collection-ready updates.",
     ],
-    primaryCta: { label: "Contact The Shop", to: "/site/contact" },
+    primaryCta: { label: "Book Workshop", to: "/site/book-workshop" },
     secondaryCta: { label: "See Workshop Flow", to: "/site/workshop" },
   },
   workshop: {
     eyebrow: "Workshop",
     title: "Explain the repair journey before the customer reaches the counter.",
     intro:
-      "Use this page to show a clear intake-to-collection flow: check-in, approval, parts updates, and collection once the bike is ready.",
+      "Use this page to show a clear intake-to-collection flow: send a booking request, confirm the next step, approve work if needed, get updates, and collect once the bike is ready.",
     highlights: [
-      "Simple repair intake and estimate approval flow.",
+      "Simple repair intake, booking-request capture, and estimate approval flow.",
       "Parts-delay communication and realistic collection updates.",
       "Collection handoff that already matches the CorePOS workshop workflow.",
     ],
-    primaryCta: { label: "Contact The Workshop", to: "/site/contact" },
+    primaryCta: { label: "Book Workshop Visit", to: "/site/book-workshop" },
     secondaryCta: { label: "Back To Services", to: "/site/services" },
   },
   contact: {
@@ -71,6 +71,7 @@ const navigation = [
   { label: "Overview", to: "/site" },
   { label: "Services", to: "/site/services" },
   { label: "Workshop", to: "/site/workshop" },
+  { label: "Book", to: "/site/book-workshop" },
   { label: "Contact", to: "/site/contact" },
 ];
 
@@ -118,7 +119,7 @@ export const CustomerSitePage = ({ variant }: { variant: CustomerSiteVariant }) 
             <ul>
               <li>Open Tue-Sat, 9:00-17:30</li>
               <li>Workshop drop-off before 15:00 for same-day triage</li>
-              <li>Collection updates run through the existing CorePOS workshop flow</li>
+              <li>Booking requests, workshop updates, and collection status run through the existing CorePOS workshop flow</li>
             </ul>
           </aside>
         </div>
@@ -130,8 +131,8 @@ export const CustomerSitePage = ({ variant }: { variant: CustomerSiteVariant }) 
             <article key={item} className="customer-site-card">
               <h2>{item}</h2>
               <p>
-                This is intentionally lightweight brochure scaffolding so the pilot can explain services clearly before
-                deeper customer booking or marketing integrations are added.
+                This keeps the customer journey practical and trustworthy without turning the public site into a
+                heavyweight marketing surface.
               </p>
             </article>
           ))}
@@ -141,10 +142,10 @@ export const CustomerSitePage = ({ variant }: { variant: CustomerSiteVariant }) 
       <section className="customer-site-section customer-site-section-muted">
         <div className="customer-site-dual-grid">
           <article className="customer-site-card">
-            <h2>Planned customer expansion</h2>
+            <h2>Workshop booking now live</h2>
             <p>
-              Future booking forms, service request capture, marketing pages, and store updates can grow on top of this
-              structure without disturbing the staff-facing POS and workshop app.
+              Customers can now send a workshop booking request, describe the bike and issue, and keep a secure link to
+              review the request afterwards.
             </p>
           </article>
           <article className="customer-site-card">

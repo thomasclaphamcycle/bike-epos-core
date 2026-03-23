@@ -46,6 +46,8 @@ import {
   PricingExceptionsPage,
   ProductDataQueuePage,
   ProductSalesAnalyticsPage,
+  PublicWorkshopBookingManagePage,
+  PublicWorkshopBookingPage,
   PurchaseOrderActionPage,
   PurchaseOrderPage,
   PurchasingPage,
@@ -734,6 +736,8 @@ export const App = () => {
         <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
         <Route path="/public/workshop/:token" element={<WorkshopQuotePage />} />
         <Route path="/quote/:token" element={<WorkshopQuotePage />} />
+        <Route path="/site/book-workshop" element={<PublicWorkshopBookingPage />} />
+        <Route path="/site/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
         <Route path="/customer-capture" element={<CustomerCapturePage />} />
         <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
         <Route path="/site" element={<CustomerSitePage variant="home" />} />
