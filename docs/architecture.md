@@ -211,6 +211,11 @@ Current internal subscribers are:
   - keeps the existing customer-facing execution status model intact, but now preserves the richer raw workshop states that already existed for bench work instead of collapsing them all into one generic in-progress state
   - keeps quote-controlled states such as `WAITING_FOR_APPROVAL` and `APPROVED` owned by the estimate approval flow, while the staff status endpoint now safely handles operational states like `WAITING_FOR_PARTS`, `ON_HOLD`, bench resume, and collection handoff
   - surfaces a compact technician workflow summary, blocker context, and assignment coverage on the live workshop job and board views without creating a separate technician-only subsystem
+- workshop analytics and management reporting in `src/services/reports/workshopReports.ts`, `src/controllers/reportController.ts`, `src/routes/reportRoutes.ts`, and `frontend/src/pages/WorkshopPerformancePage.tsx`
+  - now exposes `GET /api/reports/workshop/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD` for one shared management payload covering turnaround, quote conversion, technician throughput, and stalled-job reporting
+  - reuses existing workshop job timestamps, estimate decisions, and current assignment fields rather than inventing speculative tracking tables, so the metrics stay grounded in the actual workshop model
+  - keeps v1 honest by reporting technician throughput from the current job assignee, quote conversion from requested estimate versions in-range, and blocked-stage age from the best available timestamps or explicit proxies where exact stage-entry tracking does not yet exist
+  - the existing manager route `/management/workshop` and `/workshop/analytics` now act as the main workshop reporting surface, while `/management/capacity` and `/management/workshop-ageing` remain narrower follow-up views
 - customer workshop portal in `src/services/workshopEstimateService.ts` and `frontend/src/pages/WorkshopQuotePage.tsx`
   - reuses the existing secure customer quote token on `WorkshopEstimate.customerQuoteToken` rather than creating a parallel public-access model
   - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing a derived customer-progress summary, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline

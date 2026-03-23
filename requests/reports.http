@@ -75,6 +75,13 @@ GET {{baseUrl}}/api/reports/workshop/daily.csv?from=2026-03-01&to=2026-03-31
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Workshop analytics report (MANAGER+)
+### Turnaround, quote conversion, technician throughput, and stalled-job reporting.
+### Quote conversion is grounded in estimate versions requested in-range.
+GET {{baseUrl}}/api/reports/workshop/analytics?from=2026-03-01&to=2026-03-31
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
 ### Inventory on-hand by location
 GET {{baseUrl}}/api/reports/inventory/on-hand?locationId={{locationId}}
 X-Staff-Role: MANAGER

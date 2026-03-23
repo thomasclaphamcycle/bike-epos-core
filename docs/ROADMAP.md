@@ -297,9 +297,13 @@ Implementation status:
 - workshop jobs now also have a real customer conversation thread, with staff-side portal messages, secure portal replies, and message-alert notifications flowing through the existing communication preference and notification history model; v1 remains portal-thread based rather than full email/SMS/WhatsApp reply ingestion
 - workshop jobs now support internal-only and customer-visible attachments/photos, with secure staff upload/list/delete flows plus portal-safe sharing of customer-visible images and PDFs; v1 stays intentionally narrow with local storage, image/PDF support, and no annotation or bulk asset-management layer
 - workshop bench execution now uses the existing raw workshop states more truthfully, so jobs can move between queued, awaiting approval, ready for bench, in repair, waiting for parts, paused, and collection handoff without inventing a separate technician subsystem or breaking customer-facing status wording
+- workshop management now also has a first practical analytics layer at `/management/workshop` and `/workshop/analytics`, surfacing turnaround, quote conversion, technician throughput, and stalled-job reporting from the live workshop model without inventing speculative tracking data
 - bike lifecycle groundwork now sits directly on `CustomerBike` through additive service schedules, which makes bikes future-aware operational assets and prepares CorePOS for later reminder automation without pretending automated reminder sending is already complete
 
 Remaining to practical Bikebook parity:
+
+Note:
+- workshop analytics and management reporting are now materially delivered and should be treated as differentiation work rather than a remaining Bikebook-parity gap
 
 ### 1. Rota / workshop availability admin polish
 
