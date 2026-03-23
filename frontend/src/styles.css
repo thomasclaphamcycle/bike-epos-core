@@ -4547,6 +4547,45 @@ th {
   margin-bottom: 12px;
 }
 
+.job-workflow-panel {
+  margin-bottom: 12px;
+}
+
+.job-workflow-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.job-workflow-highlight {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.job-workflow-highlight p {
+  margin: 0;
+}
+
+.job-action-groups {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.job-action-group {
+  border: 1px solid #d7e0ea;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.job-action-group p {
+  margin: 4px 0 0;
+}
+
 .document-link-grid {
   display: flex;
   gap: 8px;

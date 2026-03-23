@@ -223,6 +223,7 @@ Workshop improvements:
 - workshop job tickets
 - queue view
 - job status tracking
+- technician bench workflow
 - technician assignment
 - workshop notes
 - workshop service templates
@@ -292,6 +293,7 @@ Implementation status:
 - customer profiles now include simple operational communication permissions for email, SMS, and WhatsApp, and smart workshop delivery respects those channel settings with truthful skip history when a customer has updates disabled
 - workshop jobs now also have a real customer conversation thread, with staff-side portal messages, secure portal replies, and message-alert notifications flowing through the existing communication preference and notification history model; v1 remains portal-thread based rather than full email/SMS/WhatsApp reply ingestion
 - workshop jobs now support internal-only and customer-visible attachments/photos, with secure staff upload/list/delete flows plus portal-safe sharing of customer-visible images and PDFs; v1 stays intentionally narrow with local storage, image/PDF support, and no annotation or bulk asset-management layer
+- workshop bench execution now uses the existing raw workshop states more truthfully, so jobs can move between queued, awaiting approval, ready for bench, in repair, waiting for parts, paused, and collection handoff without inventing a separate technician subsystem or breaking customer-facing status wording
 
 Remaining to practical Bikebook parity:
 

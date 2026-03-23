@@ -1896,12 +1896,46 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
-      assert.equal(toInProgress.status, 200, JSON.stringify(toInProgress.json));
+      assert.equal(toInProgress.status, 201, JSON.stringify(toInProgress.json));
 
       const inProgressPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
       assert.equal(inProgressPortal.status, 200, JSON.stringify(inProgressPortal.json));
       assert.equal(inProgressPortal.json.customerProgress.stage, "IN_PROGRESS");
       assert.equal(inProgressPortal.json.customerProgress.needsCustomerAction, false);
+
+      const toWaitingForParts = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_PARTS" }),
+      });
+      assert.equal(toWaitingForParts.status, 201, JSON.stringify(toWaitingForParts.json));
+
+      const waitingForPartsPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(waitingForPartsPortal.status, 200, JSON.stringify(waitingForPartsPortal.json));
+      assert.equal(waitingForPartsPortal.json.customerProgress.stage, "WAITING");
+      assert.match(
+        waitingForPartsPortal.json.customerProgress.label,
+        /waiting on parts/i,
+      );
+
+      const toOnHold = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "ON_HOLD" }),
+      });
+      assert.equal(toOnHold.status, 201, JSON.stringify(toOnHold.json));
+
+      const onHoldPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(onHoldPortal.status, 200, JSON.stringify(onHoldPortal.json));
+      assert.equal(onHoldPortal.json.customerProgress.stage, "WAITING");
+      assert.match(onHoldPortal.json.customerProgress.label, /waiting on an update/i);
+
+      const resumeBenchWork = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      });
+      assert.equal(resumeBenchWork.status, 201, JSON.stringify(resumeBenchWork.json));
 
       const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",

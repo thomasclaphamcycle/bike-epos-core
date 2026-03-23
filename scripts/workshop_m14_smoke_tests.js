@@ -363,6 +363,38 @@ const run = async () => {
       assert.equal(toInProgressReplay.status, 200, JSON.stringify(toInProgressReplay.json));
       assert.equal(toInProgressReplay.json.idempotent, true);
 
+      const toWaitingForParts = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_PARTS" }),
+      });
+      assert.equal(toWaitingForParts.status, 201, JSON.stringify(toWaitingForParts.json));
+      assert.equal(toWaitingForParts.json.job.status, "WAITING_FOR_PARTS");
+
+      const toWaitingForPartsReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_PARTS" }),
+      });
+      assert.equal(toWaitingForPartsReplay.status, 200, JSON.stringify(toWaitingForPartsReplay.json));
+      assert.equal(toWaitingForPartsReplay.json.idempotent, true);
+
+      const toOnHold = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "ON_HOLD" }),
+      });
+      assert.equal(toOnHold.status, 201, JSON.stringify(toOnHold.json));
+      assert.equal(toOnHold.json.job.status, "ON_HOLD");
+
+      const resumeBenchWork = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      });
+      assert.equal(resumeBenchWork.status, 201, JSON.stringify(resumeBenchWork.json));
+      assert.equal(resumeBenchWork.json.job.status, "BIKE_ARRIVED");
+
       const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
@@ -392,7 +424,7 @@ const run = async () => {
         { headers: MANAGER_HEADERS },
       );
       assert.equal(audit.status, 200, JSON.stringify(audit.json));
-      assert.ok(audit.json.events.length >= 3, JSON.stringify(audit.json));
+      assert.ok(audit.json.events.length >= 6, JSON.stringify(audit.json));
     }, results);
 
     await runTest("dashboard includes assignment + note stats and new filters", async () => {
