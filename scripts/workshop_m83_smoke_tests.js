@@ -407,7 +407,7 @@ const updateBike = async (bikeId, overrides = {}) => {
 };
 
 const extractQuoteToken = (publicPath) => {
-  const match = publicPath.match(/\/quote\/([^/?#]+)/);
+  const match = publicPath.match(/\/(?:quote|public\/workshop)\/([^/?#]+)/);
   assert.ok(match, `Expected quote token in public path: ${publicPath}`);
   return decodeURIComponent(match[1]);
 };
@@ -1574,7 +1574,7 @@ const run = async () => {
       assert.equal(overlapAttempt.json.error.code, "WORKSHOP_SCHEDULE_OVERLAP");
     }, results);
 
-    await runTest("customer quote links allow safe approval and stale links cannot approve superseded estimates", async () => {
+    await runTest("customer workshop portal allows safe approval and stale links cannot approve superseded estimates", async () => {
       const { job } = await createJob(state);
 
       const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
@@ -1602,6 +1602,26 @@ const run = async () => {
       assert.equal(pendingDetail.status, 200, JSON.stringify(pendingDetail.json));
       assert.equal(pendingDetail.json.currentEstimate.customerQuote.status, "ACTIVE");
 
+      const customerVisibleNote = await fetchJson(`/api/workshop/jobs/${job.id}/notes`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          visibility: "CUSTOMER",
+          note: "We will confirm as soon as the quoted work is ready to continue.",
+        }),
+      });
+      assert.equal(customerVisibleNote.status, 201, JSON.stringify(customerVisibleNote.json));
+
+      const internalNote = await fetchJson(`/api/workshop/jobs/${job.id}/notes`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          visibility: "INTERNAL",
+          note: "Internal margin note only for staff.",
+        }),
+      });
+      assert.equal(internalNote.status, 201, JSON.stringify(internalNote.json));
+
       const link = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
         method: "POST",
         headers: STAFF_HEADERS,
@@ -1612,13 +1632,32 @@ const run = async () => {
       assert.equal(link.json.customerQuote.status, "ACTIVE");
       const quoteToken = extractQuoteToken(link.json.customerQuote.publicPath);
 
-      const publicQuote = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`);
-      assert.equal(publicQuote.status, 200, JSON.stringify(publicQuote.json));
-      assert.equal(publicQuote.json.quote.accessStatus, "ACTIVE");
-      assert.equal(publicQuote.json.estimate.status, "PENDING_APPROVAL");
-      assert.equal(publicQuote.json.estimate.lines.length, 1);
+      const publicPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(publicPortal.status, 200, JSON.stringify(publicPortal.json));
+      assert.equal(publicPortal.json.portal.accessStatus, "ACTIVE");
+      assert.equal(publicPortal.json.quote.accessStatus, "ACTIVE");
+      assert.equal(publicPortal.json.estimate.status, "PENDING_APPROVAL");
+      assert.equal(publicPortal.json.estimate.lines.length, 1);
+      assert.equal(publicPortal.json.workSummary.lineCount, 1);
+      assert.equal(publicPortal.json.job.customerName.startsWith("M83 Customer"), true);
+      assert.equal("id" in publicPortal.json.job, false);
+      assert.equal(publicPortal.json.customerNotes.length, 1);
+      assert.equal(publicPortal.json.customerNotes[0].note, "We will confirm as soon as the quoted work is ready to continue.");
+      assert.equal("authorName" in publicPortal.json.customerNotes[0], false);
+      assert.equal(
+        publicPortal.json.customerNotes.some((note) => note.note === "Internal margin note only for staff."),
+        false,
+      );
+      assert.ok(
+        publicPortal.json.timeline.some((event) => event.type === "JOB_CREATED"),
+        JSON.stringify(publicPortal.json.timeline),
+      );
 
-      const approved = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+      const legacyQuote = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`);
+      assert.equal(legacyQuote.status, 200, JSON.stringify(legacyQuote.json));
+      assert.equal(legacyQuote.json.portal.accessStatus, "ACTIVE");
+
+      const approved = await fetchJson(`/api/public/workshop/${quoteToken}/decision`, {
         method: "POST",
         body: JSON.stringify({ status: "APPROVED" }),
       });
@@ -1626,12 +1665,12 @@ const run = async () => {
       assert.equal(approved.json.estimate.status, "APPROVED");
       assert.equal(approved.json.estimate.decisionSource, "CUSTOMER");
 
-      const approvedReplay = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+      const approvedReplay = await fetchJson(`/api/public/workshop/${quoteToken}/decision`, {
         method: "POST",
         body: JSON.stringify({ status: "APPROVED" }),
       });
       assert.equal(approvedReplay.status, 200, JSON.stringify(approvedReplay.json));
-      assert.equal(approvedReplay.json.quote.idempotent, true);
+      assert.equal(approvedReplay.json.portal.idempotent, true);
 
       const approvedDetail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
         headers: STAFF_HEADERS,
@@ -1655,17 +1694,24 @@ const run = async () => {
       );
       assert.equal(updateLine.status, 200, JSON.stringify(updateLine.json));
 
-      const staleQuote = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`);
-      assert.equal(staleQuote.status, 200, JSON.stringify(staleQuote.json));
-      assert.equal(staleQuote.json.quote.accessStatus, "SUPERSEDED");
-      assert.equal(staleQuote.json.quote.canApprove, false);
+      const stalePortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(stalePortal.status, 200, JSON.stringify(stalePortal.json));
+      assert.equal(stalePortal.json.portal.accessStatus, "SUPERSEDED");
+      assert.equal(stalePortal.json.portal.canApprove, false);
+      assert.equal(stalePortal.json.estimate.status, "APPROVED");
 
-      const staleApprove = await fetchJson(`/api/public/workshop-quotes/${quoteToken}`, {
+      const staleApprove = await fetchJson(`/api/public/workshop/${quoteToken}/decision`, {
         method: "POST",
         body: JSON.stringify({ status: "APPROVED" }),
       });
       assert.equal(staleApprove.status, 409, JSON.stringify(staleApprove.json));
       assert.equal(staleApprove.json.error.code, "WORKSHOP_QUOTE_SUPERSEDED");
+    }, results);
+
+    await runTest("customer workshop portal rejects invalid secure tokens safely", async () => {
+      const missingPortal = await fetchJson(`/api/public/workshop/not-a-real-token`);
+      assert.equal(missingPortal.status, 404, JSON.stringify(missingPortal.json));
+      assert.equal(missingPortal.json.error.code, "WORKSHOP_QUOTE_NOT_FOUND");
     }, results);
 
     await runTest("quote-ready notifications are logged, deduplicated, and skipped safely by channel", async () => {

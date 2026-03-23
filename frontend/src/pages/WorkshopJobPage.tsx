@@ -723,19 +723,19 @@ export const WorkshopJobPage = () => {
 
       const publicPath = response.customerQuote?.publicPath;
       if (!publicPath) {
-        throw new Error("Customer quote link was not returned.");
+        throw new Error("Customer portal link was not returned.");
       }
 
       const publicUrl = toPublicAppUrl(publicPath);
       await navigator.clipboard.writeText(publicUrl);
       success(
         response.idempotent
-          ? "Customer quote link copied"
-          : "Customer quote link prepared and copied",
+          ? "Customer portal link copied"
+          : "Customer portal link prepared and copied",
       );
       await Promise.all([loadJob(), loadNotifications()]);
     } catch (quoteError) {
-      const message = quoteError instanceof Error ? quoteError.message : "Failed to prepare customer quote link";
+      const message = quoteError instanceof Error ? quoteError.message : "Failed to prepare customer portal link";
       error(message);
     } finally {
       setPreparingCustomerQuote(false);
@@ -1589,7 +1589,7 @@ export const WorkshopJobPage = () => {
               <div><strong>Created by:</strong> {currentEstimate.createdByStaff?.name || currentEstimate.createdByStaff?.username || "-"}</div>
               <div><strong>Decided by:</strong> {currentEstimate.decisionByStaff?.name || currentEstimate.decisionByStaff?.username || "-"}</div>
               <div>
-                <strong>Customer quote link:</strong>{" "}
+                <strong>Customer portal link:</strong>{" "}
                 {currentEstimate.customerQuote ? (
                   <span className={currentEstimate.customerQuote.status === "ACTIVE" ? "status-badge status-complete" : "status-badge status-warning"}>
                     {workshopCustomerQuoteLinkStatusLabel(currentEstimate.customerQuote.status)}
@@ -1603,7 +1603,7 @@ export const WorkshopJobPage = () => {
             {currentEstimateQuoteUrl ? (
               <div className="actions-inline" style={{ marginTop: "12px" }}>
                 <a href={currentEstimateQuoteUrl} target="_blank" rel="noreferrer" className="button-link button-link-compact">
-                  Open Customer Quote Page
+                  Open Customer Portal
                 </a>
                 <code>{currentEstimateQuoteUrl}</code>
               </div>
