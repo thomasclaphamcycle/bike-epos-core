@@ -4206,6 +4206,39 @@ th {
   gap: 8px;
 }
 
+.conversation-thread {
+  display: grid;
+  gap: 10px;
+}
+
+.conversation-thread--portal {
+  margin-top: 4px;
+}
+
+.conversation-message-card {
+  border: 1px solid #dfe7f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.conversation-message-card--outbound {
+  background: #f8fbff;
+  border-color: #d7e6f6;
+}
+
+.conversation-message-card--inbound {
+  background: #f4fbf5;
+  border-color: #cfe6d3;
+}
+
+.conversation-message-card p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .note-card-header {
   display: flex;
   justify-content: space-between;

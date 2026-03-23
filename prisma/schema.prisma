@@ -117,7 +117,7 @@ model Variant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  product            Product                @relation(fields: [productId], references: [id])
+  product            Product                       @relation(fields: [productId], references: [id])
   barcodes           Barcode[]
   balances           StockBalance[]
   movements          StockMovement[]
@@ -986,6 +986,7 @@ model Customer {
   creditAccounts          CreditAccount[]
   reminderCandidates      ReminderCandidate[]
   workshopNotifications   WorkshopNotification[]
+  workshopConversations   WorkshopConversation[]
   hireBookings            HireBooking[]
 
   @@index([name])
@@ -1099,6 +1100,7 @@ model WorkshopJob {
   estimates          WorkshopEstimate[]
   notifications      WorkshopNotification[]
   reminderCandidates ReminderCandidate[]
+  conversation       WorkshopConversation?
 
   @@index([scheduledDate])
   @@index([scheduledStartAt])
@@ -1168,6 +1170,7 @@ enum WorkshopNotificationChannel {
 enum WorkshopNotificationEventType {
   QUOTE_READY
   JOB_READY_FOR_COLLECTION
+  PORTAL_MESSAGE
 }
 
 enum WorkshopNotificationDeliveryStatus {
@@ -1207,6 +1210,63 @@ model WorkshopNotification {
   @@index([workshopEstimateId, createdAt])
   @@index([customerId, createdAt])
   @@index([eventType, deliveryStatus, createdAt])
+}
+
+model WorkshopConversation {
+  id            String   @id @default(uuid()) @db.Uuid
+  workshopJobId String   @unique @db.Uuid
+  customerId    String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workshopJob WorkshopJob       @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  customer    Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages    WorkshopMessage[]
+
+  @@index([customerId, updatedAt])
+}
+
+enum WorkshopMessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum WorkshopMessageChannel {
+  PORTAL
+  EMAIL
+  SMS
+  WHATSAPP
+  INTERNAL_SYSTEM
+}
+
+enum WorkshopMessageDeliveryStatus {
+  PENDING
+  SENT
+  RECEIVED
+  FAILED
+}
+
+model WorkshopMessage {
+  id                String                         @id @default(uuid()) @db.Uuid
+  conversationId    String                         @db.Uuid
+  direction         WorkshopMessageDirection
+  channel           WorkshopMessageChannel
+  authorStaffId     String?
+  customerVisible   Boolean                        @default(true)
+  body              String
+  deliveryStatus    WorkshopMessageDeliveryStatus?
+  sentAt            DateTime?
+  receivedAt        DateTime?
+  externalMessageId String?
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+
+  conversation WorkshopConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorStaff  User?                @relation("WorkshopMessageAuthor", fields: [authorStaffId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([authorStaffId])
+  @@index([direction, createdAt])
 }
 
 model WorkshopEstimateLine {
@@ -1338,8 +1398,8 @@ model WorkshopServiceTemplateLine {
   updatedAt      DateTime            @updatedAt
 
   template WorkshopServiceTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  product  Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
-  variant  Variant?               @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  product  Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant  Variant?                @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([templateId, sortOrder])
   @@index([productId])
@@ -1476,6 +1536,7 @@ model User {
   workshopWorkingHours     WorkshopWorkingHours[] @relation("WorkshopWorkingHoursStaff")
   workshopTimeOff          WorkshopTimeOff[]      @relation("WorkshopTimeOffStaff")
   workshopJobNotes         WorkshopJobNote[]      @relation("WorkshopJobNoteAuthor")
+  workshopMessages         WorkshopMessage[]      @relation("WorkshopMessageAuthor")
   createdWorkshopEstimates WorkshopEstimate[]     @relation("WorkshopEstimateCreatedBy")
   decidedWorkshopEstimates WorkshopEstimate[]     @relation("WorkshopEstimateDecisionBy")
   stockLedgerEntries       StockLedgerEntry[]     @relation("StockLedgerEntryCreatedByStaff")

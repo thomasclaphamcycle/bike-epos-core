@@ -240,6 +240,21 @@ GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notes
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
+### List workshop customer conversation thread
+GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/conversation
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+### Post a customer-visible workshop conversation message
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/conversation/messages
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "body": "We have your bike on the bench now. Please reply here if you want us to confirm anything before we continue."
+}
+
 ### List workshop notification attempts
 GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/notifications
 X-Staff-Role: {{staffRole}}
@@ -455,6 +470,17 @@ X-Staff-Id: demo-staff
 
 ### Public customer workshop portal by secure token
 GET {{baseUrl}}/api/public/workshop/{{quoteToken}}
+
+### Public customer workshop conversation thread by secure token
+GET {{baseUrl}}/api/public/workshop/{{quoteToken}}/conversation
+
+### Public customer reply via secure workshop portal token
+POST {{baseUrl}}/api/public/workshop/{{quoteToken}}/conversation/messages
+Content-Type: application/json
+
+{
+  "body": "Please continue with the quoted work and let me know if anything else changes."
+}
 
 ### Public customer quote approval via workshop portal token
 POST {{baseUrl}}/api/public/workshop/{{quoteToken}}/decision

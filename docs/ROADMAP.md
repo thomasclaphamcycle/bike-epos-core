@@ -288,27 +288,11 @@ Implementation status:
 - the workshop notification layer now uses deterministic smart delivery for quote-ready and ready-for-collection events, choosing one primary channel with truthful fallback, skip, and failure history across email, SMS, and WhatsApp
 - workshop job detail now exposes notification history plus safe resend controls, so staff can review delivery outcomes and retry customer emails without leaving the live job
 - customer profiles now include simple operational communication permissions for email, SMS, and WhatsApp, and smart workshop delivery respects those channel settings with truthful skip history when a customer has updates disabled
+- workshop jobs now also have a real customer conversation thread, with staff-side portal messages, secure portal replies, and message-alert notifications flowing through the existing communication preference and notification history model; v1 remains portal-thread based rather than full email/SMS/WhatsApp reply ingestion
 
 Remaining to practical Bikebook parity:
 
-### 1. Two-way customer messaging
-
-Why it matters:
-- reduces inbound phone chasing and gives the workshop a single place to handle customer questions, approvals, and update replies
-
-Current repo status / gap:
-- one-way outbound notifications are delivered across email, SMS, and WhatsApp
-- customer quote approval and portal access exist, but there is no reply capture, threaded conversation view, or staff-send messaging workflow
-
-Rough implementation scope:
-- add inbound/outbound conversation records tied to `WorkshopJob`
-- introduce a narrow staff messaging surface on the workshop job and portal side
-- wire reply-capable delivery handling into the existing notification/event foundation without replacing it
-
-Classification:
-- parity work
-
-### 2. Attachments / photos
+### 1. Attachments / photos
 
 Why it matters:
 - photos of damage, parts, and completed work are a practical day-to-day workshop need and are a frequent reason staff still fall back to ad-hoc tools
@@ -324,7 +308,7 @@ Rough implementation scope:
 Classification:
 - parity work
 
-### 3. Working-hours / time-off admin UI
+### 2. Working-hours / time-off admin UI
 
 Why it matters:
 - the calendar foundation is already operationally useful, but managers still need a practical way to maintain technician availability without direct database or request-level intervention
@@ -341,7 +325,7 @@ Rough implementation scope:
 Classification:
 - parity work
 
-### 4. Customer portal polish
+### 3. Customer portal polish
 
 Why it matters:
 - the first portal already reduces basic status and quote-query friction, but a tighter customer experience would reduce support load further and make the portal feel production-complete
@@ -358,7 +342,7 @@ Rough implementation scope:
 Classification:
 - parity work
 
-### 5. Public booking polish
+### 4. Public booking polish
 
 Why it matters:
 - public intake remains a practical parity expectation for modern workshop systems and is the clearest remaining bridge from internal scheduling to customer self-service acquisition
@@ -371,6 +355,23 @@ Rough implementation scope:
 - add a narrow public booking/request flow that feeds the existing workshop intake model
 - reuse bike/customer/workshop foundations where possible
 - keep first pass focused on request capture and staff triage rather than full automated slot marketplace behaviour
+
+Classification:
+- parity work
+
+### 5. External-channel messaging ingestion / inbox polish
+
+Why it matters:
+- two-way messaging now exists in the customer portal, but parity-grade communication usually also needs cleaner handling of replies that begin in email/SMS/WhatsApp rather than only through the portal thread
+
+Current repo status / gap:
+- CorePOS now has a job-scoped conversation model plus outbound message alerts over the existing notification channels
+- inbound reply capture still depends on the secure portal thread and does not yet ingest external channel replies or provide a broader communication operations inbox
+
+Rough implementation scope:
+- add narrow inbound reply handling for supported delivery providers where the repo already has stable channel adapters
+- keep messages mapped back into the single `WorkshopConversation` thread rather than branching into a second inbox model
+- add only the operational visibility needed to review delivery/reply state, not a full CRM communications suite
 
 Classification:
 - parity work

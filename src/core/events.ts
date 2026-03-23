@@ -44,6 +44,13 @@ export type CoreEventMap = {
     workshopJobId: string;
     status: string;
   };
+  "workshop.portal_message.ready": {
+    id: string;
+    type: "workshop.portal_message.ready";
+    timestamp: string;
+    workshopJobId: string;
+    workshopMessageId: string;
+  };
   "stock.adjusted": {
     id: string;
     type: "stock.adjusted";

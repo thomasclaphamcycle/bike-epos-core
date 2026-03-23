@@ -51,4 +51,26 @@ export const registerNotificationSubscribers = () => {
       throw error;
     }
   });
+
+  on("workshop.portal_message.ready", async (payload) => {
+    try {
+      await deliverWorkshopNotificationEvent({
+        type: "PORTAL_MESSAGE",
+        workshopJobId: payload.workshopJobId,
+        workshopMessageId: payload.workshopMessageId,
+      });
+    } catch (error) {
+      if (process.env.EVENT_BUS_DEBUG === "1") {
+        console.warn(
+          `[eventbus:notifications] portal-message failed ${JSON.stringify({
+            workshopJobId: payload.workshopJobId,
+            workshopMessageId: payload.workshopMessageId,
+            message: error instanceof Error ? error.message : String(error),
+          })}`,
+        );
+      }
+
+      throw error;
+    }
+  });
 };

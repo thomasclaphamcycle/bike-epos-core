@@ -221,12 +221,53 @@ type WorkshopNotesResponse = {
   notes: WorkshopNote[];
 };
 
+type WorkshopConversationMessage = {
+  id: string;
+  direction: "OUTBOUND" | "INBOUND";
+  channel: "PORTAL" | "EMAIL" | "SMS" | "WHATSAPP" | "INTERNAL_SYSTEM";
+  customerVisible: boolean;
+  body: string;
+  deliveryStatus: "PENDING" | "SENT" | "RECEIVED" | "FAILED" | null;
+  sentAt: string | null;
+  receivedAt: string | null;
+  externalMessageId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  authorStaff: {
+    id: string;
+    username: string;
+    name: string | null;
+  } | null;
+};
+
+type WorkshopConversationResponse = {
+  conversation: {
+    id: string;
+    workshopJobId: string;
+    customerId: string | null;
+    createdAt: string;
+    updatedAt: string;
+    messageCount: number;
+    lastMessageAt: string | null;
+    portalAccess: {
+      accessStatus: "ACTIVE" | "EXPIRED" | "SUPERSEDED" | "UNAVAILABLE";
+      publicPath: string | null;
+      expiresAt: string | null;
+      linkedEstimateVersion: number | null;
+      currentEstimateVersion: number | null;
+      hasUpdatedEstimate: boolean;
+      canCustomerReply: boolean;
+    };
+  };
+  messages: WorkshopConversationMessage[];
+};
+
 type WorkshopNotificationRecord = {
   id: string;
   workshopJobId: string;
   workshopEstimateId: string | null;
   channel: "EMAIL" | "SMS" | "WHATSAPP";
-  eventType: "QUOTE_READY" | "JOB_READY_FOR_COLLECTION";
+  eventType: "QUOTE_READY" | "JOB_READY_FOR_COLLECTION" | "PORTAL_MESSAGE";
   deliveryStatus: "PENDING" | "SENT" | "SKIPPED" | "FAILED";
   recipientEmail: string | null;
   recipientPhone: string | null;
@@ -312,7 +353,11 @@ const formatOptionalDateTime = (value: string | null | undefined) =>
 const notificationActionLabel = (
   eventType: WorkshopNotificationRecord["eventType"],
 ) =>
-  eventType === "QUOTE_READY" ? "quote email" : "ready-for-collection email";
+  eventType === "QUOTE_READY"
+    ? "quote email"
+    : eventType === "JOB_READY_FOR_COLLECTION"
+      ? "ready-for-collection email"
+      : "portal message alert";
 
 const notificationRecipientLabel = (notification: WorkshopNotificationRecord) =>
   notification.channel === "EMAIL"
@@ -423,10 +468,12 @@ export const WorkshopJobPage = () => {
 
   const [payload, setPayload] = useState<WorkshopJobResponse | null>(null);
   const [notes, setNotes] = useState<WorkshopNote[]>([]);
+  const [conversationPayload, setConversationPayload] = useState<WorkshopConversationResponse | null>(null);
   const [notifications, setNotifications] = useState<WorkshopNotificationRecord[]>([]);
   const [partsPayload, setPartsPayload] = useState<WorkshopPartsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [conversationLoading, setConversationLoading] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [partsLoading, setPartsLoading] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
@@ -447,6 +494,8 @@ export const WorkshopJobPage = () => {
   const [noteDraft, setNoteDraft] = useState("");
   const [noteVisibility, setNoteVisibility] = useState<"INTERNAL" | "CUSTOMER">("INTERNAL");
   const [savingNote, setSavingNote] = useState(false);
+  const [conversationDraft, setConversationDraft] = useState("");
+  const [sendingConversation, setSendingConversation] = useState(false);
   const [selectedBikeId, setSelectedBikeId] = useState("");
   const [bikeDescriptionDraft, setBikeDescriptionDraft] = useState("");
   const [createBikeInline, setCreateBikeInline] = useState(false);
@@ -535,6 +584,28 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const loadConversation = async () => {
+    if (!id) {
+      return;
+    }
+
+    setConversationLoading(true);
+    try {
+      const response = await apiGet<WorkshopConversationResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(id)}/conversation`,
+      );
+      setConversationPayload(response);
+    } catch (loadError) {
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load workshop conversation";
+      error(message);
+    } finally {
+      setConversationLoading(false);
+    }
+  };
+
   const loadNotifications = async () => {
     if (!id) {
       return;
@@ -588,7 +659,14 @@ export const WorkshopJobPage = () => {
   };
 
   useEffect(() => {
-    void Promise.all([loadJob(), loadNotes(), loadNotifications(), loadParts(), loadTemplates()]);
+    void Promise.all([
+      loadJob(),
+      loadNotes(),
+      loadConversation(),
+      loadNotifications(),
+      loadParts(),
+      loadTemplates(),
+    ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -789,6 +867,43 @@ export const WorkshopJobPage = () => {
       error(message);
     } finally {
       setResendingNotificationType(null);
+    }
+  };
+
+  const sendConversationMessage = async () => {
+    if (!id) {
+      return;
+    }
+
+    setSendingConversation(true);
+    try {
+      const response = await apiPost<WorkshopConversationResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(id)}/conversation/messages`,
+        {
+          body: conversationDraft,
+        },
+      );
+      setConversationPayload(response);
+      setConversationDraft("");
+
+      const portalReady = Boolean(response.conversation.portalAccess.publicPath);
+      success(
+        portalReady
+          ? "Customer message added to the portal thread"
+          : "Customer message saved. Prepare a customer portal link before expecting a reply.",
+      );
+
+      setTimeout(() => {
+        void loadNotifications();
+      }, 300);
+    } catch (sendError) {
+      const message =
+        sendError instanceof Error
+          ? sendError.message
+          : "Failed to send workshop customer message";
+      error(message);
+    } finally {
+      setSendingConversation(false);
     }
   };
 
@@ -1134,9 +1249,13 @@ export const WorkshopJobPage = () => {
   const estimateHistory = payload?.estimateHistory ?? [];
   const canResendQuoteNotification = currentEstimate?.status === "PENDING_APPROVAL";
   const canResendReadyNotification = rawStatus === "BIKE_READY";
+  const portalConversationAccess = conversationPayload?.conversation.portalAccess ?? null;
   const currentEstimateQuoteUrl = currentEstimate?.customerQuote?.publicPath
     ? toPublicAppUrl(currentEstimate.customerQuote.publicPath)
     : null;
+  const conversationPortalUrl = portalConversationAccess?.publicPath
+    ? toPublicAppUrl(portalConversationAccess.publicPath)
+    : currentEstimateQuoteUrl;
   const partsOverview = useMemo<PartsOverview | null>(
     () => partsPayload ?? payload?.partsOverview ?? null,
     [partsPayload, payload?.partsOverview],
@@ -1156,6 +1275,7 @@ export const WorkshopJobPage = () => {
     () => notes.filter((note) => note.visibility === "CUSTOMER"),
     [notes],
   );
+  const conversationMessages = conversationPayload?.messages ?? [];
   const internalNotes = useMemo(
     () => notes.filter((note) => note.visibility === "INTERNAL"),
     [notes],
@@ -1810,6 +1930,139 @@ export const WorkshopJobPage = () => {
       <section className="card">
         <div className="card-header-row">
           <div>
+            <h2>Customer Conversation</h2>
+            <p className="muted-text">
+              Use the portal thread for real customer messaging. Notes remain a separate operational record.
+            </p>
+          </div>
+          {conversationPortalUrl ? (
+            <a
+              href={conversationPortalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="button-link"
+            >
+              Open Customer Portal
+            </a>
+          ) : null}
+        </div>
+
+        <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
+          <div className="job-meta-grid">
+            <div>
+              <strong>Portal access:</strong>{" "}
+              {portalConversationAccess ? (
+                <span
+                  className={
+                    portalConversationAccess.accessStatus === "ACTIVE"
+                      ? "status-badge status-complete"
+                      : portalConversationAccess.accessStatus === "SUPERSEDED"
+                        ? "status-badge status-info"
+                        : "status-badge status-warning"
+                  }
+                >
+                  {portalConversationAccess.accessStatus}
+                </span>
+              ) : (
+                "Checking..."
+              )}
+            </div>
+            <div>
+              <strong>Customer can reply:</strong>{" "}
+              {portalConversationAccess?.canCustomerReply ? "Yes" : "No"}
+            </div>
+            <div>
+              <strong>Thread messages:</strong> {conversationPayload?.conversation.messageCount ?? 0}
+            </div>
+            <div>
+              <strong>Last message:</strong>{" "}
+              {formatOptionalDateTime(conversationPayload?.conversation.lastMessageAt ?? null)}
+            </div>
+          </div>
+          {!portalConversationAccess || portalConversationAccess.accessStatus === "UNAVAILABLE" ? (
+            <p className="muted-text" style={{ marginTop: "10px" }}>
+              This job does not currently have an active customer portal link. Staff messages will still be recorded,
+              but customer alerts will be skipped until a portal link exists.
+            </p>
+          ) : null}
+          {portalConversationAccess?.accessStatus === "EXPIRED" ? (
+            <p className="muted-text" style={{ marginTop: "10px" }}>
+              The most recent portal link has expired. The conversation is still recorded, but customers cannot reply
+              until the shop prepares a fresh portal link.
+            </p>
+          ) : null}
+        </div>
+
+        <form
+          className="note-form-grid"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendConversationMessage();
+          }}
+        >
+          <label className="note-form-wide">
+            New customer message
+            <textarea
+              value={conversationDraft}
+              onChange={(event) => setConversationDraft(event.target.value)}
+              placeholder="Write a customer-safe update that will appear in the workshop portal."
+            />
+          </label>
+          <div className="actions-inline">
+            <button
+              type="submit"
+              className="primary"
+              disabled={sendingConversation || !conversationDraft.trim()}
+            >
+              {sendingConversation ? "Sending..." : "Send Portal Message"}
+            </button>
+          </div>
+        </form>
+
+        <div className="notes-panel" style={{ marginTop: "12px" }}>
+          <h3>Thread history</h3>
+          {conversationLoading ? <p>Loading conversation...</p> : null}
+          {!conversationLoading && conversationMessages.length === 0 ? (
+            <p className="muted-text">No customer conversation messages yet.</p>
+          ) : (
+            <div className="conversation-thread">
+              {conversationMessages.map((message) => (
+                <article
+                  key={message.id}
+                  className={`conversation-message-card conversation-message-card--${
+                    message.direction === "OUTBOUND" ? "outbound" : "inbound"
+                  }`}
+                >
+                  <div className="note-card-header">
+                    <span
+                      className={
+                        message.direction === "OUTBOUND"
+                          ? "status-badge status-info"
+                          : "status-badge status-complete"
+                      }
+                    >
+                      {message.direction === "OUTBOUND" ? "Sent by workshop" : "Customer reply"}
+                    </span>
+                    <span className="table-secondary">
+                      {formatOptionalDateTime(message.sentAt ?? message.receivedAt ?? message.createdAt)}
+                    </span>
+                  </div>
+                  <p>{message.body}</p>
+                  <div className="table-secondary">
+                    {message.direction === "OUTBOUND"
+                      ? message.authorStaff?.name || message.authorStaff?.username || "Workshop team"
+                      : "Customer portal"}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
             <h2>Notifications</h2>
             <p className="muted-text">
               Review workshop notification attempts here and resend the current quote or collection email when the job state still supports it.
@@ -1838,7 +2091,7 @@ export const WorkshopJobPage = () => {
         </div>
 
         <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
-          Smart delivery now chooses one primary channel with fallback only when needed, so this history shows the final delivery path plus any skipped or failed fallback attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
+          Smart delivery now chooses one primary channel with fallback only when needed, so this history shows quote alerts, collection alerts, and portal-message alerts with their final delivery path plus any skipped or failed fallback attempts. Staff resend controls remain email-first: quote email resend stays available while a current quote is awaiting approval, and collection email resend stays available while the bike is ready for collection.
         </div>
 
         <div className="table-wrap">
@@ -2120,7 +2373,7 @@ export const WorkshopJobPage = () => {
           <div>
             <h2>Progress & Notes</h2>
             <p className="muted-text">
-              Use internal notes for staff context. Use customer-visible notes for quote or approval messaging.
+              Use notes for internal workflow context and quote-specific customer notes. Use the conversation panel above for direct customer messaging.
             </p>
           </div>
         </div>
