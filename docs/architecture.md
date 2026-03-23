@@ -193,10 +193,11 @@ Current internal subscribers are:
   - support compact staff usage during check-in and on the workshop job page, while manager maintenance lives at `/management/workshop/templates`
 - customer workshop portal in `src/services/workshopEstimateService.ts` and `frontend/src/pages/WorkshopQuotePage.tsx`
   - reuses the existing secure customer quote token on `WorkshopEstimate.customerQuoteToken` rather than creating a parallel public-access model
-  - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing friendly job status, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline
+  - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing a derived customer-progress summary, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline
   - now also exposes token-scoped conversation retrieval and reply posting so the portal carries a real job thread instead of staying quote-only
   - now also exposes customer-visible workshop attachments so staff-shared photos and PDFs appear inside the same secure job portal without leaking internal-only files
   - keeps approval and rejection on the same estimate-decision workflow, so `POST /api/public/workshop/:token/decision` stays idempotent and still blocks stale or superseded quote approval
+  - the frontend portal now treats that payload as a mobile-first customer summary surface with clearer next-step guidance, progress wording, and tighter hierarchy for status, quote, messages, attachments, notes, and timeline data
   - preserves existing `/quote/:token` frontend links and `/api/public/workshop-quotes/:token` API aliases for compatibility while new generated links point to `/public/workshop/:token`
 
 Manager-facing internal visibility now exists through:

@@ -64,10 +64,66 @@
   margin-bottom: 20px;
 }
 
+.workshop-portal-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #18553b;
+}
+
+.workshop-portal-headline {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f2e22;
+}
+
 .workshop-portal-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.workshop-portal-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.workshop-portal-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 248, 245, 0.95) 100%);
+}
+
+.workshop-portal-summary-card--highlight {
+  background: linear-gradient(180deg, rgba(236, 247, 239, 0.98) 0%, rgba(250, 252, 246, 0.98) 100%);
+  border-color: rgba(24, 85, 59, 0.18);
+}
+
+.workshop-portal-summary-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #536171;
+}
+
+.workshop-portal-summary-value {
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.workshop-portal-summary-detail {
+  margin: 0;
+  color: #536171;
 }
 
 .workshop-portal-grid {
@@ -125,6 +181,59 @@
   margin-top: 16px;
 }
 
+.workshop-portal-progress {
+  margin-top: 16px;
+}
+
+.workshop-portal-progress-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+.workshop-portal-progress-step {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f8fafc;
+}
+
+.workshop-portal-progress-step--current {
+  border-color: rgba(24, 85, 59, 0.22);
+  background: #eef6ef;
+}
+
+.workshop-portal-progress-step--complete {
+  background: #f1f6fb;
+}
+
+.workshop-portal-progress-step-number {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #dbe6f1;
+  color: #153248;
+  font-weight: 700;
+}
+
+.workshop-portal-progress-step--current .workshop-portal-progress-step-number {
+  background: #18553b;
+  color: #fff;
+}
+
+.workshop-portal-progress-step--complete .workshop-portal-progress-step-number {
+  background: #2E7CF6;
+  color: #fff;
+}
+
 .workshop-portal-cta {
   display: flex;
   flex-wrap: wrap;
@@ -176,8 +285,13 @@
     border-radius: 20px;
   }
 
+  .workshop-portal-summary-grid,
   .workshop-portal-grid,
   .workshop-portal-detail-list {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-portal-progress-steps {
     grid-template-columns: 1fr;
   }
 
