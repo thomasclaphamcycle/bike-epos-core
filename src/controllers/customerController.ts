@@ -15,6 +15,12 @@ import {
   listCustomerBikes,
   updateCustomerBike,
 } from "../services/customerBikeService";
+import {
+  createBikeServiceSchedule,
+  listBikeServiceSchedules,
+  markBikeServiceScheduleServiced,
+  updateBikeServiceSchedule,
+} from "../services/bikeServiceScheduleService";
 import { HttpError } from "../utils/http";
 
 const assertOptionalBikeString = (
@@ -30,6 +36,36 @@ const assertOptionalBikeString = (
 const assertOptionalBikeYear = (value: unknown, code: string) => {
   if (value !== undefined && value !== null && (!Number.isInteger(value) || typeof value !== "number")) {
     throw new HttpError(400, "year must be an integer", code);
+  }
+};
+
+const assertOptionalBikeScheduleInteger = (
+  value: unknown,
+  field: string,
+  code: string,
+) => {
+  if (value !== undefined && value !== null && (!Number.isInteger(value) || typeof value !== "number")) {
+    throw new HttpError(400, `${field} must be an integer`, code);
+  }
+};
+
+const assertOptionalBikeScheduleBoolean = (
+  value: unknown,
+  field: string,
+  code: string,
+) => {
+  if (value !== undefined && value !== null && typeof value !== "boolean") {
+    throw new HttpError(400, `${field} must be a boolean`, code);
+  }
+};
+
+const assertOptionalBikeScheduleDateString = (
+  value: unknown,
+  field: string,
+  code: string,
+) => {
+  if (value !== undefined && value !== null && typeof value !== "string") {
+    throw new HttpError(400, `${field} must be a date string`, code);
   }
 };
 
@@ -338,6 +374,212 @@ export const updateCustomerBikeHandler = async (req: Request, res: Response) => 
     serialNumber: body.serialNumber as string | null | undefined,
     registrationNumber: body.registrationNumber as string | null | undefined,
     notes: body.notes as string | null | undefined,
+  });
+
+  res.json(result);
+};
+
+const parseIncludeInactiveQuery = (value: unknown) => {
+  if (value === undefined) {
+    return true;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(
+      400,
+      "includeInactive must be true or false",
+      "INVALID_BIKE_SERVICE_SCHEDULE_QUERY",
+    );
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  throw new HttpError(
+    400,
+    "includeInactive must be true or false",
+    "INVALID_BIKE_SERVICE_SCHEDULE_QUERY",
+  );
+};
+
+export const listBikeServiceSchedulesHandler = async (req: Request, res: Response) => {
+  const includeInactive = parseIncludeInactiveQuery(req.query.includeInactive);
+  const result = await listBikeServiceSchedules(req.params.bikeId, {
+    includeInactive,
+  });
+  res.json(result);
+};
+
+export const createBikeServiceScheduleHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    type?: unknown;
+    title?: unknown;
+    description?: unknown;
+    intervalMonths?: unknown;
+    intervalMileage?: unknown;
+    lastServiceAt?: unknown;
+    lastServiceMileage?: unknown;
+    nextDueAt?: unknown;
+    nextDueMileage?: unknown;
+    isActive?: unknown;
+  };
+
+  assertOptionalBikeString(body.type, "type", "INVALID_BIKE_SERVICE_SCHEDULE");
+  assertOptionalBikeString(body.title, "title", "INVALID_BIKE_SERVICE_SCHEDULE");
+  assertOptionalBikeString(body.description, "description", "INVALID_BIKE_SERVICE_SCHEDULE");
+  assertOptionalBikeScheduleInteger(
+    body.intervalMonths,
+    "intervalMonths",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.intervalMileage,
+    "intervalMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+  assertOptionalBikeScheduleDateString(
+    body.lastServiceAt,
+    "lastServiceAt",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.lastServiceMileage,
+    "lastServiceMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+  assertOptionalBikeScheduleDateString(
+    body.nextDueAt,
+    "nextDueAt",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.nextDueMileage,
+    "nextDueMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+  assertOptionalBikeScheduleBoolean(
+    body.isActive,
+    "isActive",
+    "INVALID_BIKE_SERVICE_SCHEDULE",
+  );
+
+  const result = await createBikeServiceSchedule(req.params.bikeId, {
+    type: body.type as string | null | undefined,
+    title: body.title as string | null | undefined,
+    description: body.description as string | null | undefined,
+    intervalMonths: body.intervalMonths as number | null | undefined,
+    intervalMileage: body.intervalMileage as number | null | undefined,
+    lastServiceAt: body.lastServiceAt as string | null | undefined,
+    lastServiceMileage: body.lastServiceMileage as number | null | undefined,
+    nextDueAt: body.nextDueAt as string | null | undefined,
+    nextDueMileage: body.nextDueMileage as number | null | undefined,
+    isActive: body.isActive as boolean | undefined,
+  });
+
+  res.status(201).json(result);
+};
+
+export const updateBikeServiceScheduleHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    type?: unknown;
+    title?: unknown;
+    description?: unknown;
+    intervalMonths?: unknown;
+    intervalMileage?: unknown;
+    lastServiceAt?: unknown;
+    lastServiceMileage?: unknown;
+    nextDueAt?: unknown;
+    nextDueMileage?: unknown;
+    isActive?: unknown;
+  };
+
+  assertOptionalBikeString(body.type, "type", "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE");
+  assertOptionalBikeString(body.title, "title", "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE");
+  assertOptionalBikeString(
+    body.description,
+    "description",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.intervalMonths,
+    "intervalMonths",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.intervalMileage,
+    "intervalMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleDateString(
+    body.lastServiceAt,
+    "lastServiceAt",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.lastServiceMileage,
+    "lastServiceMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleDateString(
+    body.nextDueAt,
+    "nextDueAt",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.nextDueMileage,
+    "nextDueMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+  assertOptionalBikeScheduleBoolean(
+    body.isActive,
+    "isActive",
+    "INVALID_BIKE_SERVICE_SCHEDULE_UPDATE",
+  );
+
+  const result = await updateBikeServiceSchedule(req.params.bikeId, req.params.scheduleId, {
+    type: body.type as string | null | undefined,
+    title: body.title as string | null | undefined,
+    description: body.description as string | null | undefined,
+    intervalMonths: body.intervalMonths as number | null | undefined,
+    intervalMileage: body.intervalMileage as number | null | undefined,
+    lastServiceAt: body.lastServiceAt as string | null | undefined,
+    lastServiceMileage: body.lastServiceMileage as number | null | undefined,
+    nextDueAt: body.nextDueAt as string | null | undefined,
+    nextDueMileage: body.nextDueMileage as number | null | undefined,
+    isActive: body.isActive as boolean | undefined,
+  });
+
+  res.json(result);
+};
+
+export const markBikeServiceScheduleServicedHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    servicedAt?: unknown;
+    servicedMileage?: unknown;
+  };
+
+  assertOptionalBikeScheduleDateString(
+    body.servicedAt,
+    "servicedAt",
+    "INVALID_BIKE_SERVICE_SCHEDULE_SERVICE_MARK",
+  );
+  assertOptionalBikeScheduleInteger(
+    body.servicedMileage,
+    "servicedMileage",
+    "INVALID_BIKE_SERVICE_SCHEDULE_SERVICE_MARK",
+  );
+
+  const result = await markBikeServiceScheduleServiced(req.params.bikeId, req.params.scheduleId, {
+    servicedAt: body.servicedAt as string | null | undefined,
+    servicedMileage: body.servicedMileage as number | null | undefined,
   });
 
   res.json(result);

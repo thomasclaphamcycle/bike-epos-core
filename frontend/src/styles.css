@@ -859,6 +859,38 @@ textarea {
   gap: 4px;
 }
 
+.bike-service-schedule-list {
+  display: grid;
+  gap: 10px;
+}
+
+.bike-service-schedule-card,
+.bike-service-schedule-editor,
+.bike-service-schedule-refresh {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #dbe5ef;
+  background: #fbfdff;
+}
+
+.bike-service-schedule-card__meta {
+  display: grid;
+  gap: 8px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.bike-service-schedule-inline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bike-service-schedule-inline-item {
+  display: grid;
+  gap: 4px;
+}
+
 .workshop-template-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);

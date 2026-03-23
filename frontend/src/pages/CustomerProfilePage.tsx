@@ -3,6 +3,14 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import {
+  BIKE_SERVICE_SCHEDULE_TYPE_OPTIONS,
+  bikeServiceScheduleDueStatusClass,
+  bikeServiceScheduleDueStatusLabel,
+  defaultBikeServiceScheduleTitle,
+  type BikeServiceScheduleDueStatus,
+  type BikeServiceScheduleType,
+} from "../features/bikes/serviceSchedules";
+import {
   workshopExecutionStatusClass,
   workshopExecutionStatusLabel,
   workshopRawStatusLabel,
@@ -87,6 +95,39 @@ type CustomerBikeRecord = {
     latestJobAt: string | null;
     latestCompletedAt: string | null;
   };
+  serviceSchedules: BikeServiceScheduleRecord[];
+  serviceScheduleSummary: BikeServiceScheduleSummary;
+};
+
+type BikeServiceScheduleRecord = {
+  id: string;
+  bikeId: string;
+  type: BikeServiceScheduleType;
+  typeLabel: string;
+  title: string;
+  description: string | null;
+  intervalMonths: number | null;
+  intervalMileage: number | null;
+  lastServiceAt: string | null;
+  lastServiceMileage: number | null;
+  nextDueAt: string | null;
+  nextDueMileage: number | null;
+  isActive: boolean;
+  dueStatus: BikeServiceScheduleDueStatus;
+  dueSummaryText: string;
+  cadenceSummaryText: string;
+  lastServiceSummaryText: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type BikeServiceScheduleSummary = {
+  activeCount: number;
+  inactiveCount: number;
+  dueCount: number;
+  overdueCount: number;
+  upcomingCount: number;
+  primarySchedule: BikeServiceScheduleRecord | null;
 };
 
 type CustomerBikesResponse = {
@@ -112,6 +153,24 @@ type BikeProfileFormState = {
   notes: string;
 };
 
+type BikeServiceScheduleFormState = {
+  type: BikeServiceScheduleType;
+  title: string;
+  description: string;
+  intervalMonths: string;
+  intervalMileage: string;
+  lastServiceAt: string;
+  lastServiceMileage: string;
+  nextDueAt: string;
+  nextDueMileage: string;
+  isActive: boolean;
+};
+
+type BikeServiceRefreshFormState = {
+  servicedAt: string;
+  servicedMileage: string;
+};
+
 const CUSTOMER_BIKE_YEAR_MIN = 1900;
 const CUSTOMER_BIKE_YEAR_MAX = new Date().getUTCFullYear() + 1;
 const BIKE_TYPE_OPTIONS = [
@@ -133,6 +192,9 @@ const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 const formatOptionalDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
 
+const formatOptionalDate = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleDateString() : "-";
+
 const createEmptyBikeForm = (): BikeProfileFormState => ({
   label: "",
   make: "",
@@ -150,6 +212,56 @@ const createEmptyBikeForm = (): BikeProfileFormState => ({
   serialNumber: "",
   registrationNumber: "",
   notes: "",
+});
+
+const toDateInputValue = (value: string | Date | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const year = parsed.getUTCFullYear();
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const createEmptyScheduleForm = (): BikeServiceScheduleFormState => ({
+  type: "GENERAL_SERVICE",
+  title: defaultBikeServiceScheduleTitle("GENERAL_SERVICE"),
+  description: "",
+  intervalMonths: "",
+  intervalMileage: "",
+  lastServiceAt: "",
+  lastServiceMileage: "",
+  nextDueAt: "",
+  nextDueMileage: "",
+  isActive: true,
+});
+
+const toScheduleFormState = (
+  schedule: BikeServiceScheduleRecord,
+): BikeServiceScheduleFormState => ({
+  type: schedule.type,
+  title: schedule.title,
+  description: schedule.description ?? "",
+  intervalMonths: schedule.intervalMonths ? String(schedule.intervalMonths) : "",
+  intervalMileage: schedule.intervalMileage ? String(schedule.intervalMileage) : "",
+  lastServiceAt: toDateInputValue(schedule.lastServiceAt),
+  lastServiceMileage:
+    schedule.lastServiceMileage !== null ? String(schedule.lastServiceMileage) : "",
+  nextDueAt: toDateInputValue(schedule.nextDueAt),
+  nextDueMileage: schedule.nextDueMileage !== null ? String(schedule.nextDueMileage) : "",
+  isActive: schedule.isActive,
+});
+
+const createDefaultServiceRefreshForm = (): BikeServiceRefreshFormState => ({
+  servicedAt: toDateInputValue(new Date()),
+  servicedMileage: "",
 });
 
 const toBikeFormState = (bike: CustomerBikeRecord): BikeProfileFormState => ({
@@ -211,6 +323,9 @@ const buildEBikeSummary = (bike: CustomerBikeRecord) => {
   return parts.length > 0 ? parts.join(" · ") : "No e-bike details recorded";
 };
 
+const requiresMileageRefresh = (schedule: BikeServiceScheduleRecord) =>
+  schedule.intervalMileage !== null || schedule.nextDueMileage !== null;
+
 export const CustomerProfilePage = () => {
   const { id } = useParams<{ id: string }>();
   const { success, error } = useToasts();
@@ -228,11 +343,30 @@ export const CustomerProfilePage = () => {
   const [bikeForm, setBikeForm] = useState<BikeProfileFormState>(() => createEmptyBikeForm());
   const [bikeFormError, setBikeFormError] = useState<string | null>(null);
   const [savingBikeProfile, setSavingBikeProfile] = useState(false);
+  const [scheduleEditorMode, setScheduleEditorMode] = useState<"create" | "edit" | null>(null);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [scheduleForm, setScheduleForm] = useState<BikeServiceScheduleFormState>(
+    () => createEmptyScheduleForm(),
+  );
+  const [scheduleFormError, setScheduleFormError] = useState<string | null>(null);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [refreshingScheduleId, setRefreshingScheduleId] = useState<string | null>(null);
+  const [refreshScheduleForm, setRefreshScheduleForm] = useState<BikeServiceRefreshFormState>(
+    () => createDefaultServiceRefreshForm(),
+  );
+  const [refreshScheduleError, setRefreshScheduleError] = useState<string | null>(null);
+  const [savingScheduleRefresh, setSavingScheduleRefresh] = useState(false);
 
   const activeSaleId = useMemo(() => localStorage.getItem(ACTIVE_SALE_KEY), []);
   const editingBike = useMemo(
     () => bikes.find((bike) => bike.id === editingBikeId) ?? null,
     [bikes, editingBikeId],
+  );
+  const refreshingSchedule = useMemo(
+    () =>
+      editingBike?.serviceSchedules.find((schedule) => schedule.id === refreshingScheduleId)
+      ?? null,
+    [editingBike, refreshingScheduleId],
   );
   const showEBikeFields = shouldShowEBikeFields(bikeForm, editingBike);
 
@@ -352,6 +486,13 @@ export const CustomerProfilePage = () => {
     setEditingBikeId(null);
     setBikeForm(createEmptyBikeForm());
     setBikeFormError(null);
+    setScheduleEditorMode(null);
+    setEditingScheduleId(null);
+    setScheduleForm(createEmptyScheduleForm());
+    setScheduleFormError(null);
+    setRefreshingScheduleId(null);
+    setRefreshScheduleForm(createDefaultServiceRefreshForm());
+    setRefreshScheduleError(null);
   };
 
   const openEditBikeEditor = (bike: CustomerBikeRecord) => {
@@ -359,6 +500,13 @@ export const CustomerProfilePage = () => {
     setEditingBikeId(bike.id);
     setBikeForm(toBikeFormState(bike));
     setBikeFormError(null);
+    setScheduleEditorMode(null);
+    setEditingScheduleId(null);
+    setScheduleForm(createEmptyScheduleForm());
+    setScheduleFormError(null);
+    setRefreshingScheduleId(null);
+    setRefreshScheduleForm(createDefaultServiceRefreshForm());
+    setRefreshScheduleError(null);
   };
 
   const closeBikeEditor = () => {
@@ -366,6 +514,78 @@ export const CustomerProfilePage = () => {
     setEditingBikeId(null);
     setBikeForm(createEmptyBikeForm());
     setBikeFormError(null);
+    setScheduleEditorMode(null);
+    setEditingScheduleId(null);
+    setScheduleForm(createEmptyScheduleForm());
+    setScheduleFormError(null);
+    setRefreshingScheduleId(null);
+    setRefreshScheduleForm(createDefaultServiceRefreshForm());
+    setRefreshScheduleError(null);
+  };
+
+  const updateScheduleForm = (
+    field: keyof BikeServiceScheduleFormState,
+    value: string | boolean,
+  ) => {
+    setScheduleForm((current) => {
+      if (field !== "type" || typeof value !== "string") {
+        return {
+          ...current,
+          [field]: value,
+        } as BikeServiceScheduleFormState;
+      }
+
+      const nextType = value as BikeServiceScheduleType;
+      const currentDefaultTitle = defaultBikeServiceScheduleTitle(current.type);
+      const nextDefaultTitle = defaultBikeServiceScheduleTitle(nextType);
+
+      return {
+        ...current,
+        type: nextType,
+        title:
+          current.title.trim().length === 0 || current.title === currentDefaultTitle
+            ? nextDefaultTitle
+            : current.title,
+      };
+    });
+    setScheduleFormError(null);
+  };
+
+  const openCreateScheduleEditor = () => {
+    setScheduleEditorMode("create");
+    setEditingScheduleId(null);
+    setScheduleForm(createEmptyScheduleForm());
+    setScheduleFormError(null);
+  };
+
+  const openEditScheduleEditor = (schedule: BikeServiceScheduleRecord) => {
+    setScheduleEditorMode("edit");
+    setEditingScheduleId(schedule.id);
+    setScheduleForm(toScheduleFormState(schedule));
+    setScheduleFormError(null);
+  };
+
+  const closeScheduleEditor = () => {
+    setScheduleEditorMode(null);
+    setEditingScheduleId(null);
+    setScheduleForm(createEmptyScheduleForm());
+    setScheduleFormError(null);
+  };
+
+  const openRefreshScheduleForm = (schedule: BikeServiceScheduleRecord) => {
+    setRefreshingScheduleId(schedule.id);
+    setRefreshScheduleForm({
+      servicedAt: toDateInputValue(new Date()),
+      servicedMileage:
+        schedule.lastServiceMileage !== null ? String(schedule.lastServiceMileage) : "",
+    });
+    setRefreshScheduleError(null);
+  };
+
+  const closeRefreshScheduleForm = () => {
+    setRefreshingScheduleId(null);
+    setRefreshScheduleForm(createDefaultServiceRefreshForm());
+    setRefreshScheduleError(null);
   };
 
   const saveBikeProfile = async () => {
@@ -440,6 +660,157 @@ export const CustomerProfilePage = () => {
       error(message);
     } finally {
       setSavingBikeProfile(false);
+    }
+  };
+
+  const saveBikeServiceSchedule = async () => {
+    if (!editingBike) {
+      return;
+    }
+
+    if (!scheduleForm.title.trim()) {
+      setScheduleFormError("Schedule title is required.");
+      return;
+    }
+
+    const parseOptionalPositiveInteger = (value: string, fieldLabel: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+
+      const parsed = Number(trimmed);
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        throw new Error(`${fieldLabel} must be a positive whole number.`);
+      }
+
+      return parsed;
+    };
+
+    const parseOptionalMileageInteger = (value: string, fieldLabel: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+
+      const parsed = Number(trimmed);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        throw new Error(`${fieldLabel} must be zero or a positive whole number.`);
+      }
+
+      return parsed;
+    };
+
+    let intervalMonths: number | undefined;
+    let intervalMileage: number | undefined;
+    let lastServiceMileage: number | undefined;
+    let nextDueMileage: number | undefined;
+
+    try {
+      intervalMonths = parseOptionalPositiveInteger(scheduleForm.intervalMonths, "Interval months");
+      intervalMileage = parseOptionalPositiveInteger(scheduleForm.intervalMileage, "Interval mileage");
+      lastServiceMileage = parseOptionalMileageInteger(
+        scheduleForm.lastServiceMileage,
+        "Last service mileage",
+      );
+      nextDueMileage = parseOptionalMileageInteger(
+        scheduleForm.nextDueMileage,
+        "Next due mileage",
+      );
+    } catch (validationError) {
+      const message =
+        validationError instanceof Error
+          ? validationError.message
+          : "Check the service schedule values and try again.";
+      setScheduleFormError(message);
+      return;
+    }
+
+    const payload = {
+      type: scheduleForm.type,
+      title: scheduleForm.title.trim(),
+      description: scheduleForm.description.trim() || undefined,
+      intervalMonths,
+      intervalMileage,
+      lastServiceAt: scheduleForm.lastServiceAt || undefined,
+      lastServiceMileage,
+      nextDueAt: scheduleForm.nextDueAt || undefined,
+      nextDueMileage,
+      isActive: scheduleForm.isActive,
+    };
+
+    setSavingSchedule(true);
+    setScheduleFormError(null);
+    try {
+      if (scheduleEditorMode === "edit" && editingScheduleId) {
+        await apiPatch(
+          `/api/customers/bikes/${encodeURIComponent(editingBike.id)}/service-schedules/${encodeURIComponent(editingScheduleId)}`,
+          payload,
+        );
+        success("Bike service schedule updated.");
+      } else {
+        await apiPost(
+          `/api/customers/bikes/${encodeURIComponent(editingBike.id)}/service-schedules`,
+          payload,
+        );
+        success("Bike service schedule created.");
+      }
+
+      await loadProfile();
+      closeScheduleEditor();
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Failed to save bike service schedule";
+      setScheduleFormError(message);
+      error(message);
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const refreshBikeServiceSchedule = async () => {
+    if (!editingBike || !refreshingScheduleId || !refreshingSchedule) {
+      return;
+    }
+
+    const trimmedMileage = refreshScheduleForm.servicedMileage.trim();
+    if (requiresMileageRefresh(refreshingSchedule) && !trimmedMileage) {
+      setRefreshScheduleError("Mileage is required to refresh a mileage-based service schedule.");
+      return;
+    }
+
+    let servicedMileage: number | undefined;
+    if (trimmedMileage) {
+      const parsed = Number(trimmedMileage);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        setRefreshScheduleError("Mileage must be zero or a positive whole number.");
+        return;
+      }
+      servicedMileage = parsed;
+    }
+
+    setSavingScheduleRefresh(true);
+    setRefreshScheduleError(null);
+    try {
+      await apiPost(
+        `/api/customers/bikes/${encodeURIComponent(editingBike.id)}/service-schedules/${encodeURIComponent(refreshingScheduleId)}/mark-serviced`,
+        {
+          servicedAt: refreshScheduleForm.servicedAt || undefined,
+          servicedMileage,
+        },
+      );
+      success("Bike service schedule refreshed from the latest service.");
+      await loadProfile();
+      closeRefreshScheduleForm();
+    } catch (refreshError) {
+      const message =
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Failed to refresh bike service schedule";
+      setRefreshScheduleError(message);
+      error(message);
+    } finally {
+      setSavingScheduleRefresh(false);
     }
   };
 
@@ -565,6 +936,7 @@ export const CustomerProfilePage = () => {
               <tr>
                 <th>Bike</th>
                 <th>Identity</th>
+                <th>Service Lifecycle</th>
                 <th>Linked Jobs</th>
                 <th>Latest Linked Service</th>
                 <th>Actions</th>
@@ -573,7 +945,7 @@ export const CustomerProfilePage = () => {
             <tbody>
               {bikes.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>No bike records linked to this customer yet.</td>
+                  <td colSpan={6}>No bike records linked to this customer yet.</td>
                 </tr>
               ) : (
                 bikes.map((bike) => (
@@ -595,6 +967,31 @@ export const CustomerProfilePage = () => {
                       {hasEBikeDetails(bike) ? (
                         <div className="table-secondary">{buildEBikeSummary(bike)}</div>
                       ) : null}
+                    </td>
+                    <td>
+                      {bike.serviceScheduleSummary.activeCount === 0 ? (
+                        <span className="table-secondary">No active service schedules</span>
+                      ) : (
+                        <div className="bike-service-schedule-inline-list">
+                          {bike.serviceSchedules
+                            .filter((schedule) => schedule.isActive)
+                            .slice(0, 2)
+                            .map((schedule) => (
+                              <div key={schedule.id} className="bike-service-schedule-inline-item">
+                                <div className="actions-inline">
+                                  <strong>{schedule.title}</strong>
+                                  <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
+                                    {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
+                                  </span>
+                                </div>
+                                <div className="table-secondary">{schedule.dueSummaryText}</div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                      <div className="table-secondary">
+                        {bike.serviceScheduleSummary.activeCount} active · {bike.serviceScheduleSummary.dueCount} due · {bike.serviceScheduleSummary.overdueCount} overdue
+                      </div>
                     </td>
                     <td>
                       {bike.serviceSummary.linkedJobCount}
@@ -820,6 +1217,290 @@ export const CustomerProfilePage = () => {
                 />
               </label>
             </div>
+
+            {bikeEditorMode === "edit" && editingBike ? (
+              <div className="bike-profile-section">
+                <div className="card-header-row">
+                  <div>
+                    <h4>Service Lifecycle</h4>
+                    <p className="muted-text" style={{ margin: "6px 0 0" }}>
+                      Track what is due next for this bike without guessing from old workshop lines.
+                    </p>
+                  </div>
+                  <div className="actions-inline">
+                    <button type="button" onClick={openCreateScheduleEditor} disabled={savingSchedule}>
+                      Add Service Schedule
+                    </button>
+                  </div>
+                </div>
+
+                {editingBike.serviceSchedules.length === 0 ? (
+                  <div className="restricted-panel">
+                    No service schedules yet. Add one to start tracking what this bike is due for next.
+                  </div>
+                ) : (
+                  <div className="bike-service-schedule-list">
+                    {editingBike.serviceSchedules.map((schedule) => (
+                      <article key={schedule.id} className="bike-service-schedule-card">
+                        <div className="card-header-row">
+                          <div>
+                            <div className="actions-inline">
+                              <strong>{schedule.title}</strong>
+                              <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
+                                {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
+                              </span>
+                            </div>
+                            <div className="table-secondary">
+                              {schedule.typeLabel} · {schedule.cadenceSummaryText}
+                            </div>
+                          </div>
+                          <div className="actions-inline">
+                            <button
+                              type="button"
+                              onClick={() => openEditScheduleEditor(schedule)}
+                              disabled={savingSchedule || savingScheduleRefresh}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openRefreshScheduleForm(schedule)}
+                              disabled={savingSchedule || savingScheduleRefresh}
+                            >
+                              Mark Serviced
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="bike-service-schedule-card__meta">
+                          <div><strong>Next due:</strong> {schedule.dueSummaryText}</div>
+                          <div><strong>Last service:</strong> {schedule.lastServiceSummaryText}</div>
+                          <div><strong>Status:</strong> {schedule.isActive ? "Active" : "Inactive"}</div>
+                          <div><strong>Updated:</strong> {formatOptionalDateTime(schedule.updatedAt)}</div>
+                        </div>
+
+                        {schedule.description ? (
+                          <div className="table-secondary">{schedule.description}</div>
+                        ) : null}
+
+                        {refreshingScheduleId === schedule.id ? (
+                          <div className="bike-service-schedule-refresh">
+                            <div className="bike-profile-grid">
+                              <label>
+                                <span>Service date</span>
+                                <input
+                                  type="date"
+                                  value={refreshScheduleForm.servicedAt}
+                                  onChange={(event) =>
+                                    setRefreshScheduleForm((current) => ({
+                                      ...current,
+                                      servicedAt: event.target.value,
+                                    }))
+                                  }
+                                  disabled={savingScheduleRefresh}
+                                />
+                              </label>
+                              <label>
+                                <span>Service mileage</span>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={0}
+                                  value={refreshScheduleForm.servicedMileage}
+                                  onChange={(event) =>
+                                    setRefreshScheduleForm((current) => ({
+                                      ...current,
+                                      servicedMileage: event.target.value,
+                                    }))
+                                  }
+                                  placeholder={
+                                    requiresMileageRefresh(schedule)
+                                      ? "Required for mileage cadence"
+                                      : "Optional"
+                                  }
+                                  disabled={savingScheduleRefresh}
+                                />
+                              </label>
+                            </div>
+                            {refreshScheduleError ? (
+                              <p className="inventory-adjustment-validation">{refreshScheduleError}</p>
+                            ) : null}
+                            <div className="actions-inline">
+                              <button
+                                type="button"
+                                onClick={refreshBikeServiceSchedule}
+                                disabled={savingScheduleRefresh}
+                              >
+                                {savingScheduleRefresh ? "Refreshing..." : "Refresh Next Due"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={closeRefreshScheduleForm}
+                                disabled={savingScheduleRefresh}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {scheduleEditorMode ? (
+                  <div className="bike-service-schedule-editor">
+                    <div className="card-header-row">
+                      <div>
+                        <h4 style={{ margin: 0 }}>
+                          {scheduleEditorMode === "edit" ? "Edit Service Schedule" : "Add Service Schedule"}
+                        </h4>
+                        <p className="muted-text" style={{ margin: "6px 0 0" }}>
+                          Keep schedules explicit so workshop staff can see what this bike is due for next.
+                        </p>
+                      </div>
+                      <button type="button" onClick={closeScheduleEditor} disabled={savingSchedule}>
+                        Cancel
+                      </button>
+                    </div>
+
+                    <div className="bike-profile-grid">
+                      <label>
+                        <span>Schedule type</span>
+                        <select
+                          value={scheduleForm.type}
+                          onChange={(event) =>
+                            updateScheduleForm("type", event.target.value as BikeServiceScheduleType)
+                          }
+                          disabled={savingSchedule}
+                        >
+                          {BIKE_SERVICE_SCHEDULE_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Title</span>
+                        <input
+                          type="text"
+                          value={scheduleForm.title}
+                          onChange={(event) => updateScheduleForm("title", event.target.value)}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span>Interval months</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={scheduleForm.intervalMonths}
+                          onChange={(event) => updateScheduleForm("intervalMonths", event.target.value)}
+                          placeholder="12"
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span>Interval mileage</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={scheduleForm.intervalMileage}
+                          onChange={(event) => updateScheduleForm("intervalMileage", event.target.value)}
+                          placeholder="3000"
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span>Last service date</span>
+                        <input
+                          type="date"
+                          value={scheduleForm.lastServiceAt}
+                          onChange={(event) => updateScheduleForm("lastServiceAt", event.target.value)}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span>Last service mileage</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={scheduleForm.lastServiceMileage}
+                          onChange={(event) => updateScheduleForm("lastServiceMileage", event.target.value)}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span>Next due date</span>
+                        <input
+                          type="date"
+                          value={scheduleForm.nextDueAt}
+                          onChange={(event) => updateScheduleForm("nextDueAt", event.target.value)}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span>Next due mileage</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={scheduleForm.nextDueMileage}
+                          onChange={(event) => updateScheduleForm("nextDueMileage", event.target.value)}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label className="staff-toggle">
+                        <input
+                          type="checkbox"
+                          checked={scheduleForm.isActive}
+                          onChange={(event) => updateScheduleForm("isActive", event.target.checked)}
+                          disabled={savingSchedule}
+                        />
+                        <span>Active schedule</span>
+                      </label>
+                    </div>
+
+                    <label className="bike-profile-notes">
+                      <span>Description</span>
+                      <textarea
+                        value={scheduleForm.description}
+                        onChange={(event) => updateScheduleForm("description", event.target.value)}
+                        rows={2}
+                        disabled={savingSchedule}
+                      />
+                    </label>
+
+                    {scheduleFormError ? (
+                      <p className="inventory-adjustment-validation">{scheduleFormError}</p>
+                    ) : null}
+
+                    <div className="actions-inline">
+                      <button type="button" onClick={saveBikeServiceSchedule} disabled={savingSchedule}>
+                        {savingSchedule
+                          ? scheduleEditorMode === "edit"
+                            ? "Saving..."
+                            : "Creating..."
+                          : scheduleEditorMode === "edit"
+                            ? "Save Service Schedule"
+                            : "Create Service Schedule"}
+                      </button>
+                      <button type="button" onClick={closeScheduleEditor} disabled={savingSchedule}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : bikeEditorMode === "create" ? (
+              <div className="restricted-panel">
+                Save the bike record first, then add service schedules for what this bike should be due next.
+              </div>
+            ) : null}
 
             {bikeFormError ? <p className="inventory-adjustment-validation">{bikeFormError}</p> : null}
 

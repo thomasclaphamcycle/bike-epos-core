@@ -1,6 +1,11 @@
 import { Prisma, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import {
+  bikeServiceScheduleSelect,
+  serializeBikeServiceSchedule,
+  summarizeBikeServiceSchedules,
+} from "./bikeServiceScheduleService";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type CreateCustomerBikeInput = {
@@ -94,6 +99,10 @@ type CustomerBikeRecord = Prisma.CustomerBikeGetPayload<{
 
 const customerBikeListSelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
   ...customerBikeSelect,
+  serviceSchedules: {
+    orderBy: [{ isActive: "desc" }, { nextDueAt: "asc" }, { updatedAt: "desc" }],
+    select: bikeServiceScheduleSelect,
+  },
   workshopJobs: {
     select: {
       id: true,
@@ -107,6 +116,10 @@ const customerBikeListSelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
 
 const customerBikeHistorySelect = Prisma.validator<Prisma.CustomerBikeSelect>()({
   ...customerBikeSelect,
+  serviceSchedules: {
+    orderBy: [{ isActive: "desc" }, { nextDueAt: "asc" }, { updatedAt: "desc" }],
+    select: bikeServiceScheduleSelect,
+  },
   customer: {
     select: {
       id: true,
@@ -506,6 +519,8 @@ export const listCustomerBikes = async (customerId: string) => {
     bikes: bikes.map((bike) => ({
       ...toCustomerBikeResponse(bike),
       serviceSummary: buildBikeServiceSummary(bike.workshopJobs),
+      serviceSchedules: bike.serviceSchedules.map((schedule) => serializeBikeServiceSchedule(schedule)),
+      serviceScheduleSummary: summarizeBikeServiceSchedules(bike.serviceSchedules),
     })),
   };
 };
@@ -788,6 +803,8 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
       customer: bike.customer,
     }),
     serviceSummary: buildBikeServiceSummary(workshopJobs),
+    serviceSchedules: bike.serviceSchedules.map((schedule) => serializeBikeServiceSchedule(schedule)),
+    serviceScheduleSummary: summarizeBikeServiceSchedules(bike.serviceSchedules),
     historyScope: "LINKED_BIKE_JOBS_ONLY",
     limitations: [
       "Only workshop jobs linked directly to this bike record are included. Legacy free-text workshop jobs without a bike link remain outside formal bike history.",

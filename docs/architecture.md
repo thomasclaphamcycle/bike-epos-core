@@ -97,6 +97,22 @@ Workshop collection is now treated as a sale-linked handoff rather than a manual
 - ready jobs cannot be manually marked collected or closed unless a linked sale already exists
 - `workshop.job.completed` should only represent actual completion, which keeps reminder-candidate generation aligned with real completed jobs
 
+## Bike Lifecycle Scheduling Foundation
+
+Customer bikes are no longer only historical workshop anchors. CorePOS now includes additive bike-owned lifecycle scheduling through `BikeServiceSchedule` and `src/services/bikeServiceScheduleService.ts`:
+
+- each `CustomerBike` can carry multiple service schedules such as general service, brakes, drivetrain, suspension, or e-bike system checks
+- schedules can track date cadence, mileage cadence, or both, while remaining explicitly staff-editable rather than inferred from brittle workshop-line parsing
+- lifecycle state is derived centrally as `UPCOMING`, `DUE`, `OVERDUE`, or `INACTIVE`
+- current v1 workflow is staff-managed from the customer/bike surfaces, including explicit create, edit, deactivate, and mark-serviced refresh actions
+- bike history and customer bike responses now include lifecycle schedule data so the same bike record can answer both “what happened before?” and “what is due next?”
+
+This is intentionally different from the existing internal reminder-candidate groundwork:
+
+- `ReminderCandidate` remains an internal post-completion follow-up queue derived from completed workshop jobs
+- `BikeServiceSchedule` is the bike-owned future service plan and the data foundation for later reminder automation
+- automated reminder sending is still future work, so the system does not yet claim that service schedules automatically contact customers
+
 ## Product Import Flow
 
 The first product CSV import flow is intentionally narrow and internal:

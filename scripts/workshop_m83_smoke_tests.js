@@ -128,6 +128,32 @@ const addDays = (date, days) => {
   return out;
 };
 
+const addMonthsUtc = (date, months) => {
+  const year = date.getUTCFullYear();
+  const monthIndex = date.getUTCMonth();
+  const day = date.getUTCDate();
+  const targetMonthIndex = monthIndex + months;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const normalizedTargetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, normalizedTargetMonth + 1, 0),
+  ).getUTCDate();
+
+  return new Date(
+    Date.UTC(
+      targetYear,
+      normalizedTargetMonth,
+      Math.min(day, lastDayOfTargetMonth),
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      date.getUTCSeconds(),
+      date.getUTCMilliseconds(),
+    ),
+  );
+};
+
+const toIsoDate = (value) => value.toISOString().slice(0, 10);
+
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -412,6 +438,45 @@ const updateBike = async (bikeId, overrides = {}) => {
   assert.equal(response.status, 200, JSON.stringify(response.json));
   return response.json.bike;
 };
+
+const createBikeServiceSchedule = async (bikeId, overrides = {}) => {
+  const response = await fetchJson(`/api/customers/bikes/${bikeId}/service-schedules`, {
+    method: "POST",
+    headers: STAFF_HEADERS,
+    body: JSON.stringify(overrides),
+  });
+
+  assert.equal(response.status, 201, JSON.stringify(response.json));
+  return response.json.schedule;
+};
+
+const updateBikeServiceSchedule = async (bikeId, scheduleId, overrides = {}) => {
+  const response = await fetchJson(
+    `/api/customers/bikes/${bikeId}/service-schedules/${scheduleId}`,
+    {
+      method: "PATCH",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify(overrides),
+    },
+  );
+
+  assert.equal(response.status, 200, JSON.stringify(response.json));
+  return response.json.schedule;
+};
+
+const markBikeServiceScheduleServiced = async (
+  bikeId,
+  scheduleId,
+  overrides = {},
+) =>
+  fetchJson(
+    `/api/customers/bikes/${bikeId}/service-schedules/${scheduleId}/mark-serviced`,
+    {
+      method: "POST",
+      headers: STAFF_HEADERS,
+      body: JSON.stringify(overrides),
+    },
+  );
 
 const extractQuoteToken = (publicPath) => {
   const match = publicPath.match(/\/(?:quote|public\/workshop)\/([^/?#]+)/);
@@ -964,6 +1029,125 @@ const run = async () => {
       });
       assert.equal(updateInvalidBikeType.status, 400, JSON.stringify(updateInvalidBikeType.json));
       assert.equal(updateInvalidBikeType.json.error.code, "INVALID_CUSTOMER_BIKE_TYPE");
+    }, results);
+
+    await runTest("bike service schedules support due tracking, refresh, and bike-level lifecycle listing", async () => {
+      const customer = await createCustomer(state, {
+        name: `Bike Schedule Customer ${uniqueRef()}`,
+      });
+      const bike = await createBike(state, customer.id, {
+        label: "Reminder bike",
+        make: "Trek",
+        model: "Checkpoint",
+      });
+
+      const today = todayUtc();
+      const generalService = await createBikeServiceSchedule(bike.id, {
+        type: "GENERAL_SERVICE",
+        title: "General service",
+        intervalMonths: 6,
+        lastServiceAt: toIsoDate(addDays(today, -40)),
+      });
+      const expectedGeneralDueAt = toIsoDate(addMonthsUtc(addDays(today, -40), 6));
+
+      assert.equal(generalService.type, "GENERAL_SERVICE");
+      assert.equal(generalService.nextDueAt.slice(0, 10), expectedGeneralDueAt);
+      assert.equal(generalService.dueStatus, "UPCOMING");
+
+      const brakeCheck = await createBikeServiceSchedule(bike.id, {
+        type: "BRAKES",
+        title: "Brake check",
+        intervalMonths: 3,
+        nextDueAt: toIsoDate(addDays(today, -2)),
+      });
+
+      assert.equal(brakeCheck.dueStatus, "OVERDUE");
+
+      const drivetrain = await createBikeServiceSchedule(bike.id, {
+        type: "DRIVETRAIN",
+        title: "Chain and drivetrain refresh",
+        intervalMileage: 1500,
+        nextDueMileage: 3000,
+      });
+
+      assert.equal(drivetrain.dueStatus, "UPCOMING");
+      assert.equal(drivetrain.nextDueMileage, 3000);
+
+      const scheduleList = await fetchJson(
+        `/api/customers/bikes/${bike.id}/service-schedules?includeInactive=true`,
+        {
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(scheduleList.status, 200, JSON.stringify(scheduleList.json));
+      assert.equal(scheduleList.json.summary.activeCount, 3);
+      assert.equal(scheduleList.json.summary.overdueCount, 1);
+      assert.equal(scheduleList.json.schedules.length, 3);
+
+      const mileageRefreshBlocked = await markBikeServiceScheduleServiced(bike.id, drivetrain.id, {
+        servicedAt: toIsoDate(today),
+      });
+      assert.equal(mileageRefreshBlocked.status, 400, JSON.stringify(mileageRefreshBlocked.json));
+      assert.equal(
+        mileageRefreshBlocked.json.error.code,
+        "INVALID_BIKE_SERVICE_SCHEDULE_MILEAGE",
+      );
+
+      const refreshedBrakeCheck = await markBikeServiceScheduleServiced(
+        bike.id,
+        brakeCheck.id,
+        {
+          servicedAt: toIsoDate(today),
+        },
+      );
+      assert.equal(refreshedBrakeCheck.status, 200, JSON.stringify(refreshedBrakeCheck.json));
+      assert.equal(refreshedBrakeCheck.json.schedule.lastServiceAt.slice(0, 10), toIsoDate(today));
+      assert.equal(
+        refreshedBrakeCheck.json.schedule.nextDueAt.slice(0, 10),
+        toIsoDate(addMonthsUtc(today, 3)),
+      );
+      assert.equal(refreshedBrakeCheck.json.schedule.dueStatus, "UPCOMING");
+
+      const refreshedDrivetrain = await markBikeServiceScheduleServiced(
+        bike.id,
+        drivetrain.id,
+        {
+          servicedAt: toIsoDate(today),
+          servicedMileage: 3000,
+        },
+      );
+      assert.equal(refreshedDrivetrain.status, 200, JSON.stringify(refreshedDrivetrain.json));
+      assert.equal(refreshedDrivetrain.json.schedule.lastServiceMileage, 3000);
+      assert.equal(refreshedDrivetrain.json.schedule.nextDueMileage, 4500);
+      assert.equal(refreshedDrivetrain.json.schedule.dueStatus, "UPCOMING");
+
+      const inactiveGeneralService = await updateBikeServiceSchedule(bike.id, generalService.id, {
+        isActive: false,
+      });
+      assert.equal(inactiveGeneralService.isActive, false);
+      assert.equal(inactiveGeneralService.dueStatus, "INACTIVE");
+
+      const listedBikes = await fetchJson(`/api/customers/${customer.id}/bikes`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(listedBikes.status, 200, JSON.stringify(listedBikes.json));
+      const listedBike = listedBikes.json.bikes.find((candidate) => candidate.id === bike.id);
+      assert.ok(listedBike, JSON.stringify(listedBikes.json));
+      assert.equal(listedBike.serviceScheduleSummary.activeCount, 2);
+      assert.equal(listedBike.serviceScheduleSummary.inactiveCount, 1);
+      assert.equal(listedBike.serviceScheduleSummary.overdueCount, 0);
+      assert.equal(listedBike.serviceSchedules.length, 3);
+
+      const bikeHistory = await fetchJson(`/api/customers/bikes/${bike.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(bikeHistory.status, 200, JSON.stringify(bikeHistory.json));
+      assert.equal(bikeHistory.json.serviceSchedules.length, 3);
+      assert.equal(bikeHistory.json.serviceScheduleSummary.activeCount, 2);
+      assert.equal(
+        bikeHistory.json.serviceSchedules.find((schedule) => schedule.id === drivetrain.id).nextDueMileage,
+        4500,
+      );
     }, results);
 
     await runTest("bike history only includes truly linked jobs and exposes workshop history details", async () => {
