@@ -350,7 +350,7 @@ X-Staff-Id: demo-staff
   "durationMinutes": 60
 }
 
-### Read workshop calendar rows, time off, scheduled jobs, and daily capacity for a date range
+### Read workshop calendar rows, rota-backed availability, time off, scheduled jobs, and daily capacity for a date range
 GET {{baseUrl}}/api/workshop/calendar?from=2026-03-12&to=2026-03-16
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff

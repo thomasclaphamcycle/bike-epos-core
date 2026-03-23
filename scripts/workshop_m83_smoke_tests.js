@@ -169,6 +169,11 @@ const getWorkshopDayOfWeek = (value) => {
   return WORKSHOP_DAY_OF_WEEK_BY_NAME[weekday];
 };
 
+const toWorkshopDateKey = (value) => {
+  const parts = getWorkshopTimeParts(value);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
 const getWorkshopTimeParts = (value) =>
   Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
@@ -442,6 +447,69 @@ const createWorkshopWorkingHours = async (state, input) => {
   return record;
 };
 
+const getOrCreateRotaPeriodForDate = async (state, dateKey) => {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  const day = date.getUTCDay();
+  const offsetToMonday = (day + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - offsetToMonday);
+  const startsOn = date.toISOString().slice(0, 10);
+  const endsOnDate = new Date(date);
+  endsOnDate.setUTCDate(endsOnDate.getUTCDate() + 41);
+  const endsOn = endsOnDate.toISOString().slice(0, 10);
+
+  const existing = await prisma.rotaPeriod.findUnique({
+    where: {
+      startsOn_endsOn: {
+        startsOn,
+        endsOn,
+      },
+    },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = await prisma.rotaPeriod.create({
+    data: {
+      label: `M83 ${startsOn}`,
+      startsOn,
+      endsOn,
+      status: "ACTIVE",
+    },
+  });
+  state.rotaPeriodIds.add(created.id);
+  return created;
+};
+
+const createWorkshopRotaAssignment = async (state, input) => {
+  const period = await getOrCreateRotaPeriodForDate(state, input.date);
+  const record = await prisma.rotaAssignment.upsert({
+    where: {
+      staffId_date: {
+        staffId: input.staffId,
+        date: input.date,
+      },
+    },
+    create: {
+      rotaPeriodId: period.id,
+      staffId: input.staffId,
+      date: input.date,
+      shiftType: input.shiftType,
+      source: input.source ?? "MANUAL",
+      note: input.note ?? null,
+    },
+    update: {
+      rotaPeriodId: period.id,
+      shiftType: input.shiftType,
+      source: input.source ?? "MANUAL",
+      note: input.note ?? null,
+    },
+  });
+  state.rotaAssignmentIds.add(record.id);
+  return record;
+};
+
 const createWorkshopTimeOff = async (state, input) => {
   const record = await prisma.workshopTimeOff.create({
     data: input,
@@ -463,6 +531,8 @@ const cleanup = async (state) => {
   const customerIds = Array.from(state.customerIds);
   const userIds = Array.from(state.userIds);
   const workingHoursIds = Array.from(state.workingHoursIds);
+  const rotaAssignmentIds = Array.from(state.rotaAssignmentIds);
+  const rotaPeriodIds = Array.from(state.rotaPeriodIds);
   const timeOffIds = Array.from(state.timeOffIds);
   const templateIds = Array.from(state.templateIds);
   const productIds = Array.from(state.productIds);
@@ -509,6 +579,18 @@ const cleanup = async (state) => {
     });
   }
 
+  if (rotaAssignmentIds.length > 0) {
+    await prisma.rotaAssignment.deleteMany({
+      where: { id: { in: rotaAssignmentIds } },
+    });
+  }
+
+  if (rotaPeriodIds.length > 0) {
+    await prisma.rotaPeriod.deleteMany({
+      where: { id: { in: rotaPeriodIds } },
+    });
+  }
+
   if (workingHoursIds.length > 0) {
     await prisma.workshopWorkingHours.deleteMany({
       where: { id: { in: workingHoursIds } },
@@ -549,6 +631,8 @@ const run = async () => {
     customerIds: new Set(),
     userIds: new Set(),
     workingHoursIds: new Set(),
+    rotaAssignmentIds: new Set(),
+    rotaPeriodIds: new Set(),
     timeOffIds: new Set(),
     templateIds: new Set(),
     productIds: new Set(),
@@ -1287,15 +1371,7 @@ const run = async () => {
 
     await runTest("staff assignment to timed workshop jobs respects working hours, time off, and overlap rules", async () => {
       const scheduledDate = addDays(todayUtc(), 17);
-      const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
-      assert.notEqual(dayOfWeek, undefined);
-
-      await createWorkshopWorkingHours(state, {
-        staffId: managerUser.id,
-        dayOfWeek,
-        startTime: "00:00",
-        endTime: "23:59",
-      });
+      const dateKey = toWorkshopDateKey(scheduledDate);
 
       const firstStart = toScheduledSlot(scheduledDate, 11, 0);
       const { job: firstJob } = await createJob(state, {
@@ -1310,7 +1386,21 @@ const run = async () => {
         headers: MANAGER_HEADERS,
         body: JSON.stringify({ staffId: managerUser.id }),
       });
-      assert.equal(assignFirst.status, 201, JSON.stringify(assignFirst.json));
+      assert.equal(assignFirst.status, 409, JSON.stringify(assignFirst.json));
+      assert.equal(assignFirst.json.error.code, "WORKSHOP_SCHEDULE_NO_WORKING_HOURS");
+
+      await createWorkshopRotaAssignment(state, {
+        staffId: managerUser.id,
+        date: dateKey,
+        shiftType: "FULL_DAY",
+      });
+
+      const assignFirstAfterRota = await fetchJson(`/api/workshop/jobs/${firstJob.id}/assign`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({ staffId: managerUser.id }),
+      });
+      assert.equal(assignFirstAfterRota.status, 201, JSON.stringify(assignFirstAfterRota.json));
 
       const overlappingStart = toScheduledSlot(scheduledDate, 11, 30);
       const { job: overlappingJob } = await createJob(state, {
@@ -1356,14 +1446,10 @@ const run = async () => {
     await runTest("calendar api returns staff rows, scheduled jobs, and capacity clipped to working hours", async () => {
       const scheduledDate = addDays(todayUtc(), 18);
       const dateKey = scheduledDate.toISOString().slice(0, 10);
-      const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
-      assert.notEqual(dayOfWeek, undefined);
-
-      await createWorkshopWorkingHours(state, {
+      await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
-        dayOfWeek,
-        startTime: "09:00",
-        endTime: "17:00",
+        date: dateKey,
+        shiftType: "FULL_DAY",
       });
 
       await createWorkshopTimeOff(state, {
@@ -1439,15 +1525,19 @@ const run = async () => {
       assert.ok(staffRow, JSON.stringify(calendar.json));
       assert.equal(staffRow.workingHours.length, 1);
       assert.equal(staffRow.workingHours[0].date, dateKey);
-      assert.equal(staffRow.workingHours[0].startTime, "09:00");
-      assert.equal(staffRow.workingHours[0].endTime, "17:00");
+      assert.equal(staffRow.workingHours[0].source, "ROTA");
+      assert.equal(staffRow.workingHours[0].shiftType, "FULL_DAY");
+      assert.equal(staffRow.workingHours[0].startTime, calendar.json.days[0].opensAt);
+      assert.equal(staffRow.workingHours[0].endTime, calendar.json.days[0].closesAt);
+      assert.equal(staffRow.availability[0].source, "ROTA");
+      assert.equal(staffRow.availability[0].label, "Rota full-day shift");
 
       const capacity = staffRow.dailyCapacity.find((entry) => entry.date === dateKey);
       assert.ok(capacity, JSON.stringify(staffRow));
-      assert.equal(capacity.totalMinutes, 480);
+      assert.equal(capacity.totalMinutes, 510);
       assert.equal(capacity.bookedMinutes, 60);
       assert.equal(capacity.timeOffMinutes, 180);
-      assert.equal(capacity.availableMinutes, 240);
+      assert.equal(capacity.availableMinutes, 270);
 
       assert.ok(
         calendar.json.workshopTimeOff.some((entry) => entry.reason === "Workshop briefing"),
@@ -1459,8 +1549,9 @@ const run = async () => {
       );
     }, results);
 
-    await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
-      const scheduledDate = addDays(todayUtc(), 19);
+    await runTest("legacy workshop working hours stay as an explicit fallback when rota is missing", async () => {
+      const scheduledDate = addDays(todayUtc(), 21);
+      const dateKey = toWorkshopDateKey(scheduledDate);
       const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
       assert.notEqual(dayOfWeek, undefined);
 
@@ -1469,6 +1560,44 @@ const run = async () => {
         dayOfWeek,
         startTime: "09:00",
         endTime: "17:00",
+      });
+
+      const { job } = await createJob(state, {
+        customerName: `Fallback Hours ${uniqueRef()}`,
+        bikeDescription: "Fallback availability job",
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        durationMinutes: null,
+      });
+
+      const scheduled = await patchWorkshopJobSchedule(job.id, {
+        staffId: managerUser.id,
+        scheduledStartAt: toScheduledSlot(scheduledDate, 10, 0).toISOString(),
+        durationMinutes: 60,
+      });
+      assert.equal(scheduled.status, 201, JSON.stringify(scheduled.json));
+
+      const calendar = await fetchJson(
+        `/api/workshop/calendar?from=${dateKey}&to=${dateKey}`,
+        { headers: STAFF_HEADERS },
+      );
+      assert.equal(calendar.status, 200, JSON.stringify(calendar.json));
+
+      const staffRow = calendar.json.staff.find((entry) => entry.id === managerUser.id);
+      assert.ok(staffRow, JSON.stringify(calendar.json.staff));
+      assert.equal(staffRow.availability[0].source, "WORKSHOP_FALLBACK");
+      assert.equal(staffRow.availability[0].label, "Legacy workshop hours fallback");
+      assert.equal(staffRow.workingHours[0].source, "WORKSHOP_FALLBACK");
+      assert.equal(staffRow.workingHours[0].startTime, "09:00");
+      assert.equal(staffRow.workingHours[0].endTime, "17:00");
+    }, results);
+
+    await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
+      const scheduledDate = addDays(todayUtc(), 19);
+      await createWorkshopRotaAssignment(state, {
+        staffId: managerUser.id,
+        date: toWorkshopDateKey(scheduledDate),
+        shiftType: "FULL_DAY",
       });
 
       const { job: jobToSchedule } = await createJob(state, {
