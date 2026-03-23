@@ -134,7 +134,31 @@ type PublicWorkshopConversationResponse = {
   }>;
 };
 
+type PublicWorkshopAttachmentsResponse = {
+  workshopJobId: string;
+  attachments: Array<{
+    id: string;
+    filename: string;
+    mimeType: string;
+    fileSizeBytes: number;
+    createdAt: string;
+    updatedAt: string;
+    isImage: boolean;
+    filePath: string;
+  }>;
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const formatOptionalDateTime = (value: string | null | undefined) => {
   if (!value) {
@@ -193,13 +217,17 @@ export const WorkshopQuotePage = () => {
   const [payload, setPayload] = useState<PublicWorkshopPortalPayload | null>(null);
   const [conversationPayload, setConversationPayload] =
     useState<PublicWorkshopConversationResponse | null>(null);
+  const [attachmentsPayload, setAttachmentsPayload] =
+    useState<PublicWorkshopAttachmentsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [conversationLoading, setConversationLoading] = useState(true);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(true);
   const [submitting, setSubmitting] = useState<"APPROVED" | "REJECTED" | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
   const [replying, setReplying] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null);
 
   const loadPortal = async () => {
     if (!token) {
@@ -249,8 +277,33 @@ export const WorkshopQuotePage = () => {
     }
   };
 
+  const loadAttachments = async () => {
+    if (!token) {
+      setAttachmentsPayload(null);
+      setAttachmentsLoading(false);
+      setAttachmentsError(null);
+      return;
+    }
+
+    setAttachmentsLoading(true);
+    setAttachmentsError(null);
+
+    try {
+      const nextPayload = await apiGet<PublicWorkshopAttachmentsResponse>(
+        `/api/public/workshop/${encodeURIComponent(token)}/attachments`,
+      );
+      setAttachmentsPayload(nextPayload);
+    } catch (error) {
+      setAttachmentsError(
+        error instanceof Error ? error.message : "Failed to load workshop attachments.",
+      );
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void Promise.all([loadPortal(), loadConversation()]);
+    void Promise.all([loadPortal(), loadConversation(), loadAttachments()]);
   }, [token]);
 
   const handleDecision = async (status: "APPROVED" | "REJECTED") => {
@@ -316,6 +369,7 @@ export const WorkshopQuotePage = () => {
   const estimateLines = payload?.estimate?.lines ?? [];
   const workLines = payload?.workSummary.lines ?? [];
   const conversationMessages = conversationPayload?.messages ?? [];
+  const attachments = attachmentsPayload?.attachments ?? [];
 
   return (
     <div className="workshop-portal-shell">
@@ -674,6 +728,57 @@ export const WorkshopQuotePage = () => {
                 <p className="muted-text">
                   Replies are only available while this secure workshop link is still active.
                 </p>
+              ) : null}
+            </section>
+
+            <section className="workshop-portal-panel" style={{ marginTop: "16px" }}>
+              <div className="card-header-row">
+                <div>
+                  <h2>Shared photos &amp; files</h2>
+                  <p className="table-secondary">
+                    The workshop can share customer-visible photos or PDFs here when they help explain the job.
+                  </p>
+                </div>
+                <span className="table-secondary">
+                  {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {attachmentsLoading ? <p>Loading attachments...</p> : null}
+              {!attachmentsLoading && attachmentsError ? (
+                <p className="muted-text">{attachmentsError}</p>
+              ) : null}
+              {!attachmentsLoading && !attachmentsError && attachments.length === 0 ? (
+                <p className="muted-text">The workshop has not shared any customer-visible attachments yet.</p>
+              ) : null}
+
+              {!attachmentsLoading && !attachmentsError && attachments.length > 0 ? (
+                <div className="attachment-grid attachment-grid--portal">
+                  {attachments.map((attachment) => (
+                    <article key={attachment.id} className="attachment-card">
+                      {attachment.isImage ? (
+                        <a href={attachment.filePath} target="_blank" rel="noreferrer" className="attachment-preview-link">
+                          <img
+                            src={attachment.filePath}
+                            alt={attachment.filename}
+                            className="attachment-preview-image"
+                          />
+                        </a>
+                      ) : (
+                        <div className="attachment-preview-file">PDF</div>
+                      )}
+                      <div className="table-primary">{attachment.filename}</div>
+                      <div className="table-secondary">
+                        {formatFileSize(attachment.fileSizeBytes)} · {formatOptionalDateTime(attachment.createdAt)}
+                      </div>
+                      <div className="actions-inline">
+                        <a href={attachment.filePath} target="_blank" rel="noreferrer">
+                          Open
+                        </a>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               ) : null}
             </section>
 

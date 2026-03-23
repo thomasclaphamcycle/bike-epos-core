@@ -15,7 +15,9 @@ import {
   getWorkshopAvailabilityHandler,
   getWorkshopCalendarHandler,
   getWorkshopDashboardHandler,
+  getWorkshopJobAttachmentFileHandler,
   getWorkshopJobHandler,
+  listWorkshopJobAttachmentsHandler,
   getWorkshopJobConversationHandler,
   getWorkshopJobNotesHandler,
   listWorkshopJobNotificationsHandler,
@@ -23,10 +25,12 @@ import {
   patchWorkshopJobScheduleHandler,
   patchWorkshopJobLineHandler,
   patchWorkshopJobHandler,
+  postWorkshopJobAttachmentHandler,
   postWorkshopJobConversationMessageHandler,
   resendWorkshopJobNotificationHandler,
   saveWorkshopEstimateHandler,
   setWorkshopJobApprovalStatusHandler,
+  deleteWorkshopJobAttachmentHandler,
 } from "../controllers/workshopController";
 import {
   applyWorkshopServiceTemplateHandler,
@@ -51,6 +55,10 @@ workshopRouter.delete("/service-templates/:id", requireRoleAtLeast("MANAGER"), d
 workshopRouter.post("/jobs", requireRoleAtLeast("STAFF"), createWorkshopJobHandler);
 workshopRouter.get("/jobs", requireRoleAtLeast("STAFF"), listWorkshopJobsHandler);
 workshopRouter.get("/jobs/:id", requireRoleAtLeast("STAFF"), getWorkshopJobHandler);
+workshopRouter.get("/jobs/:id/attachments", requireRoleAtLeast("STAFF"), listWorkshopJobAttachmentsHandler);
+workshopRouter.post("/jobs/:id/attachments", requireRoleAtLeast("STAFF"), postWorkshopJobAttachmentHandler);
+workshopRouter.delete("/jobs/:id/attachments/:attachmentId", requireRoleAtLeast("STAFF"), deleteWorkshopJobAttachmentHandler);
+workshopRouter.get("/jobs/:id/attachments/:attachmentId/file", requireRoleAtLeast("STAFF"), getWorkshopJobAttachmentFileHandler);
 workshopRouter.get("/jobs/:id/conversation", requireRoleAtLeast("STAFF"), getWorkshopJobConversationHandler);
 workshopRouter.post("/jobs/:id/conversation/messages", requireRoleAtLeast("STAFF"), postWorkshopJobConversationMessageHandler);
 workshopRouter.post("/jobs/:id/templates/apply", requireRoleAtLeast("STAFF"), applyWorkshopServiceTemplateHandler);

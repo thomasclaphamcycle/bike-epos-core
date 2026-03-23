@@ -1,8 +1,10 @@
 import { Router } from "express";
 import {
+  getPublicWorkshopAttachmentFileHandler,
   getPublicWorkshopConversationHandler,
   getPublicWorkshopEstimateQuoteHandler,
   getPublicWorkshopPortalHandler,
+  listPublicWorkshopAttachmentsHandler,
   postPublicWorkshopConversationReplyHandler,
   submitPublicWorkshopPortalDecisionHandler,
   submitPublicWorkshopEstimateQuoteDecisionHandler,
@@ -11,6 +13,8 @@ import {
 export const publicWorkshopQuoteRouter = Router();
 
 publicWorkshopQuoteRouter.get("/workshop/:token", getPublicWorkshopPortalHandler);
+publicWorkshopQuoteRouter.get("/workshop/:token/attachments", listPublicWorkshopAttachmentsHandler);
+publicWorkshopQuoteRouter.get("/workshop/:token/attachments/:attachmentId/file", getPublicWorkshopAttachmentFileHandler);
 publicWorkshopQuoteRouter.get("/workshop/:token/conversation", getPublicWorkshopConversationHandler);
 publicWorkshopQuoteRouter.post("/workshop/:token/conversation/messages", postPublicWorkshopConversationReplyHandler);
 publicWorkshopQuoteRouter.post("/workshop/:token/decision", submitPublicWorkshopPortalDecisionHandler);

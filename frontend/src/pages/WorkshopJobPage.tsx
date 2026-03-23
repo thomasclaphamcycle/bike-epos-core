@@ -262,6 +262,29 @@ type WorkshopConversationResponse = {
   messages: WorkshopConversationMessage[];
 };
 
+type WorkshopAttachmentRecord = {
+  id: string;
+  workshopJobId: string;
+  filename: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  visibility: "INTERNAL" | "CUSTOMER";
+  createdAt: string;
+  updatedAt: string;
+  isImage: boolean;
+  filePath: string;
+  uploadedByStaff: {
+    id: string;
+    username: string;
+    name: string | null;
+  } | null;
+};
+
+type WorkshopAttachmentsResponse = {
+  workshopJobId: string;
+  attachments: WorkshopAttachmentRecord[];
+};
+
 type WorkshopNotificationRecord = {
   id: string;
   workshopJobId: string;
@@ -307,6 +330,30 @@ type EditableLine = {
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Failed to read attachment file"));
+    };
+    reader.onerror = () => reject(new Error("Failed to read attachment file"));
+    reader.readAsDataURL(file);
+  });
 
 const getPublicAppOrigin = () => {
   if (typeof window !== "undefined") {
@@ -469,11 +516,13 @@ export const WorkshopJobPage = () => {
   const [payload, setPayload] = useState<WorkshopJobResponse | null>(null);
   const [notes, setNotes] = useState<WorkshopNote[]>([]);
   const [conversationPayload, setConversationPayload] = useState<WorkshopConversationResponse | null>(null);
+  const [attachmentsPayload, setAttachmentsPayload] = useState<WorkshopAttachmentsResponse | null>(null);
   const [notifications, setNotifications] = useState<WorkshopNotificationRecord[]>([]);
   const [partsPayload, setPartsPayload] = useState<WorkshopPartsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [partsLoading, setPartsLoading] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
@@ -496,6 +545,11 @@ export const WorkshopJobPage = () => {
   const [savingNote, setSavingNote] = useState(false);
   const [conversationDraft, setConversationDraft] = useState("");
   const [sendingConversation, setSendingConversation] = useState(false);
+  const [selectedAttachmentFile, setSelectedAttachmentFile] = useState<File | null>(null);
+  const [attachmentVisibility, setAttachmentVisibility] =
+    useState<WorkshopAttachmentRecord["visibility"]>("INTERNAL");
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
   const [selectedBikeId, setSelectedBikeId] = useState("");
   const [bikeDescriptionDraft, setBikeDescriptionDraft] = useState("");
   const [createBikeInline, setCreateBikeInline] = useState(false);
@@ -606,6 +660,26 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const loadAttachments = async () => {
+    if (!id) {
+      return;
+    }
+
+    setAttachmentsLoading(true);
+    try {
+      const response = await apiGet<WorkshopAttachmentsResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(id)}/attachments`,
+      );
+      setAttachmentsPayload(response);
+    } catch (loadError) {
+      const message =
+        loadError instanceof Error ? loadError.message : "Failed to load workshop attachments";
+      error(message);
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  };
+
   const loadNotifications = async () => {
     if (!id) {
       return;
@@ -663,6 +737,7 @@ export const WorkshopJobPage = () => {
       loadJob(),
       loadNotes(),
       loadConversation(),
+      loadAttachments(),
       loadNotifications(),
       loadParts(),
       loadTemplates(),
@@ -726,6 +801,55 @@ export const WorkshopJobPage = () => {
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update status";
       error(message);
+    }
+  };
+
+  const uploadAttachment = async () => {
+    if (!id || !selectedAttachmentFile || uploadingAttachment) {
+      return;
+    }
+
+    setUploadingAttachment(true);
+    try {
+      const fileDataUrl = await readFileAsDataUrl(selectedAttachmentFile);
+      await apiPost<{ attachment: WorkshopAttachmentRecord }>(
+        `/api/workshop/jobs/${encodeURIComponent(id)}/attachments`,
+        {
+          filename: selectedAttachmentFile.name,
+          fileDataUrl,
+          visibility: attachmentVisibility,
+        },
+      );
+      success(
+        attachmentVisibility === "CUSTOMER"
+          ? "Attachment uploaded and shared with the customer portal"
+          : "Internal attachment uploaded",
+      );
+      setSelectedAttachmentFile(null);
+      await loadAttachments();
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Failed to upload attachment";
+      error(message);
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const deleteAttachment = async (attachmentId: string) => {
+    if (!id) {
+      return;
+    }
+
+    setDeletingAttachmentId(attachmentId);
+    try {
+      await apiDelete(`/api/workshop/jobs/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`);
+      success("Attachment deleted");
+      await loadAttachments();
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete attachment";
+      error(message);
+    } finally {
+      setDeletingAttachmentId(null);
     }
   };
 
@@ -1276,6 +1400,7 @@ export const WorkshopJobPage = () => {
     [notes],
   );
   const conversationMessages = conversationPayload?.messages ?? [];
+  const attachments = attachmentsPayload?.attachments ?? [];
   const internalNotes = useMemo(
     () => notes.filter((note) => note.visibility === "INTERNAL"),
     [notes],
@@ -2156,6 +2281,120 @@ export const WorkshopJobPage = () => {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Attachments &amp; Photos</h2>
+            <p className="muted-text">
+              Upload job photos or PDFs here. Mark customer-safe files as customer visible so they appear in the secure portal.
+            </p>
+          </div>
+          <div className="table-secondary">
+            {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
+          </div>
+        </div>
+
+        <form
+          className="note-form-grid"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void uploadAttachment();
+          }}
+        >
+          <label className="note-form-wide">
+            File
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,application/pdf"
+              onChange={(event) => setSelectedAttachmentFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          <label>
+            Visibility
+            <select
+              value={attachmentVisibility}
+              onChange={(event) =>
+                setAttachmentVisibility(event.target.value as WorkshopAttachmentRecord["visibility"])
+              }
+            >
+              <option value="INTERNAL">Internal only</option>
+              <option value="CUSTOMER">Customer visible</option>
+            </select>
+          </label>
+          <div className="actions-inline">
+            <button
+              type="submit"
+              className="primary"
+              disabled={!selectedAttachmentFile || uploadingAttachment}
+            >
+              {uploadingAttachment ? "Uploading..." : "Upload Attachment"}
+            </button>
+          </div>
+        </form>
+
+        <p className="muted-text" style={{ marginTop: "8px" }}>
+          Supported files: PNG, JPEG, WEBP, or PDF up to 10MB.
+        </p>
+
+        {attachmentsLoading ? <p>Loading attachments...</p> : null}
+        {!attachmentsLoading && attachments.length === 0 ? (
+          <p className="muted-text">No workshop attachments have been added yet.</p>
+        ) : null}
+
+        {!attachmentsLoading && attachments.length > 0 ? (
+          <div className="attachment-grid">
+            {attachments.map((attachment) => (
+              <article key={attachment.id} className="attachment-card">
+                <div className="note-card-header">
+                  <span
+                    className={
+                      attachment.visibility === "CUSTOMER"
+                        ? "status-badge status-complete"
+                        : "status-badge"
+                    }
+                  >
+                    {attachment.visibility === "CUSTOMER" ? "Customer visible" : "Internal only"}
+                  </span>
+                  <span className="table-secondary">
+                    {formatOptionalDateTime(attachment.createdAt)}
+                  </span>
+                </div>
+
+                {attachment.isImage ? (
+                  <a href={attachment.filePath} target="_blank" rel="noreferrer" className="attachment-preview-link">
+                    <img
+                      src={attachment.filePath}
+                      alt={attachment.filename}
+                      className="attachment-preview-image"
+                    />
+                  </a>
+                ) : (
+                  <div className="attachment-preview-file">PDF</div>
+                )}
+
+                <div className="table-primary">{attachment.filename}</div>
+                <div className="table-secondary">
+                  {formatFileSize(attachment.fileSizeBytes)} ·{" "}
+                  {attachment.uploadedByStaff?.name || attachment.uploadedByStaff?.username || "Workshop team"}
+                </div>
+                <div className="actions-inline">
+                  <a href={attachment.filePath} target="_blank" rel="noreferrer">
+                    Open
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => void deleteAttachment(attachment.id)}
+                    disabled={deletingAttachmentId === attachment.id}
+                  >
+                    {deletingAttachmentId === attachment.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="card">
