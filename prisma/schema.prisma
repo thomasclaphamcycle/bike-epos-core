@@ -1015,13 +1015,48 @@ model CustomerBike {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  workshopJobs WorkshopJob[]
+  customer         Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workshopJobs     WorkshopJob[]
+  serviceSchedules BikeServiceSchedule[]
 
   @@index([customerId, createdAt])
   @@index([frameNumber])
   @@index([serialNumber])
   @@index([registrationNumber])
+}
+
+enum BikeServiceScheduleType {
+  GENERAL_SERVICE
+  SAFETY_CHECK
+  BRAKES
+  DRIVETRAIN
+  SUSPENSION
+  E_BIKE_SYSTEM
+  TYRES
+  OTHER
+}
+
+model BikeServiceSchedule {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  bikeId             String                  @db.Uuid
+  type               BikeServiceScheduleType
+  title              String
+  description        String?
+  intervalMonths     Int?
+  intervalMileage    Int?
+  lastServiceAt      DateTime?
+  lastServiceMileage Int?
+  nextDueAt          DateTime?
+  nextDueMileage     Int?
+  isActive           Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  bike CustomerBike @relation(fields: [bikeId], references: [id], onDelete: Cascade)
+
+  @@index([bikeId, isActive])
+  @@index([bikeId, nextDueAt])
+  @@index([bikeId, nextDueMileage])
 }
 
 enum ReminderCandidateStatus {

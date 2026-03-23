@@ -251,6 +251,8 @@ Bike service history:
 - labour performed
 - technician
 - service notes
+- bike service schedules and reminder groundwork
+- upcoming, due, and overdue bike lifecycle tracking
 
 Bike build queue:
 - bike build queue
@@ -278,6 +280,7 @@ Implementation status:
 - substantially implemented, with the remaining gap now concentrated in parity-polish features rather than missing workshop foundations
 - reusable customer bike records now expose linked bike service history for workshop and customer staff flows, while still excluding truthful-but-unlinked legacy free-text jobs
 - customer bike records now also support richer structured profile data plus compact staff editing for year, bike type, technical details, and e-bike metadata without breaking existing display naming
+- customer bike records now also support bike-owned service schedules with upcoming, due, overdue, and inactive lifecycle status, plus compact staff controls to create, edit, deactivate, and refresh the next due service without relying on brittle workshop-line inference
 - known-bike workshop intake can now start directly from a customer bike profile or bike history view, preloading the linked customer and bike context into workshop check-in
 - workshop estimates can now generate secure customer quote-review links, with customer approvals or rejections flowing back into the existing estimate history and audit trail without weakening stale-quote handling
 - secure customer workshop portal access now extends those quote links into a broader read-only job view with customer-safe bike details, current work summary, customer-visible notes, and timeline context while preserving stale-quote approval protection
@@ -294,6 +297,7 @@ Implementation status:
 - workshop jobs now also have a real customer conversation thread, with staff-side portal messages, secure portal replies, and message-alert notifications flowing through the existing communication preference and notification history model; v1 remains portal-thread based rather than full email/SMS/WhatsApp reply ingestion
 - workshop jobs now support internal-only and customer-visible attachments/photos, with secure staff upload/list/delete flows plus portal-safe sharing of customer-visible images and PDFs; v1 stays intentionally narrow with local storage, image/PDF support, and no annotation or bulk asset-management layer
 - workshop bench execution now uses the existing raw workshop states more truthfully, so jobs can move between queued, awaiting approval, ready for bench, in repair, waiting for parts, paused, and collection handoff without inventing a separate technician subsystem or breaking customer-facing status wording
+- bike lifecycle groundwork now sits directly on `CustomerBike` through additive service schedules, which makes bikes future-aware operational assets and prepares CorePOS for later reminder automation without pretending automated reminder sending is already complete
 
 Remaining to practical Bikebook parity:
 

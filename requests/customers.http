@@ -72,6 +72,40 @@ Content-Type: application/json
 ### Get reusable bike profile and linked service history timeline
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
 
+### List bike service schedules
+GET {{baseUrl}}/api/customers/bikes/{{bikeId}}/service-schedules?includeInactive=true
+
+### Create bike service schedule
+POST {{baseUrl}}/api/customers/bikes/{{bikeId}}/service-schedules
+Content-Type: application/json
+
+{
+  "type": "GENERAL_SERVICE",
+  "title": "General service",
+  "description": "Main annual service cadence for this bike",
+  "intervalMonths": 12,
+  "lastServiceAt": "2026-03-01"
+}
+
+### Update bike service schedule
+PATCH {{baseUrl}}/api/customers/bikes/{{bikeId}}/service-schedules/{{scheduleId}}
+Content-Type: application/json
+
+{
+  "intervalMonths": 6,
+  "nextDueAt": "2026-09-01",
+  "isActive": true
+}
+
+### Mark bike service schedule serviced
+POST {{baseUrl}}/api/customers/bikes/{{bikeId}}/service-schedules/{{scheduleId}}/mark-serviced
+Content-Type: application/json
+
+{
+  "servicedAt": "2026-03-23",
+  "servicedMileage": 3200
+}
+
 ### Get workshop start defaults for a bike-led check-in
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}/workshop-start
 

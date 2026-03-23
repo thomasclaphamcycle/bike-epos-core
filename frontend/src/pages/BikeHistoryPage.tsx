@@ -3,6 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import {
+  bikeServiceScheduleDueStatusClass,
+  bikeServiceScheduleDueStatusLabel,
+  type BikeServiceScheduleDueStatus,
+  type BikeServiceScheduleType,
+} from "../features/bikes/serviceSchedules";
+import {
   workshopEstimateStatusClass,
   workshopEstimateStatusLabel,
 } from "../features/workshop/estimateStatus";
@@ -61,6 +67,55 @@ type BikeHistoryPayload = {
     firstJobAt: string | null;
     latestJobAt: string | null;
     latestCompletedAt: string | null;
+  };
+  serviceSchedules: Array<{
+    id: string;
+    bikeId: string;
+    type: BikeServiceScheduleType;
+    typeLabel: string;
+    title: string;
+    description: string | null;
+    intervalMonths: number | null;
+    intervalMileage: number | null;
+    lastServiceAt: string | null;
+    lastServiceMileage: number | null;
+    nextDueAt: string | null;
+    nextDueMileage: number | null;
+    isActive: boolean;
+    dueStatus: BikeServiceScheduleDueStatus;
+    dueSummaryText: string;
+    cadenceSummaryText: string;
+    lastServiceSummaryText: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  serviceScheduleSummary: {
+    activeCount: number;
+    inactiveCount: number;
+    dueCount: number;
+    overdueCount: number;
+    upcomingCount: number;
+    primarySchedule: {
+      id: string;
+      bikeId: string;
+      type: BikeServiceScheduleType;
+      typeLabel: string;
+      title: string;
+      description: string | null;
+      intervalMonths: number | null;
+      intervalMileage: number | null;
+      lastServiceAt: string | null;
+      lastServiceMileage: number | null;
+      nextDueAt: string | null;
+      nextDueMileage: number | null;
+      isActive: boolean;
+      dueStatus: BikeServiceScheduleDueStatus;
+      dueSummaryText: string;
+      cadenceSummaryText: string;
+      lastServiceSummaryText: string;
+      createdAt: string;
+      updatedAt: string;
+    } | null;
   };
   limitations: string[];
   history: Array<{
@@ -356,6 +411,67 @@ export const BikeHistoryPage = () => {
             ) : null}
           </>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Service Lifecycle</h2>
+            <p className="muted-text">
+              Keep the next planned service visible on the bike itself, not just in past workshop history.
+            </p>
+          </div>
+          {payload ? (
+            <div className="actions-inline">
+              <Link to={`/customers/${payload.customer.id}`}>Manage on customer profile</Link>
+              <span className="table-secondary">
+                {payload.serviceScheduleSummary.activeCount} active · {payload.serviceScheduleSummary.dueCount} due · {payload.serviceScheduleSummary.overdueCount} overdue
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        {!payload ? null : payload.serviceSchedules.length === 0 ? (
+          <div className="restricted-panel">
+            No bike service schedules yet. Add one from the customer profile to start tracking what this bike is due for next.
+          </div>
+        ) : (
+          <div className="bike-service-schedule-list">
+            {payload.serviceSchedules.map((schedule) => (
+              <article key={schedule.id} className="bike-service-schedule-card">
+                <div className="card-header-row">
+                  <div>
+                    <div className="actions-inline">
+                      <strong>{schedule.title}</strong>
+                      <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
+                        {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
+                      </span>
+                    </div>
+                    <div className="table-secondary">
+                      {schedule.typeLabel} · {schedule.cadenceSummaryText}
+                    </div>
+                  </div>
+                  <div className="table-secondary">
+                    Updated {formatOptionalDateTime(schedule.updatedAt)}
+                  </div>
+                </div>
+
+                <div className="bike-service-schedule-card__meta">
+                  <div><strong>Next due:</strong> {schedule.dueSummaryText}</div>
+                  <div><strong>Last service:</strong> {schedule.lastServiceSummaryText}</div>
+                  <div><strong>State:</strong> {schedule.isActive ? "Active" : "Inactive"}</div>
+                  <div>
+                    <strong>Next due date:</strong> {schedule.nextDueAt ? formatOptionalDate(schedule.nextDueAt) : "-"}
+                  </div>
+                </div>
+
+                {schedule.description ? (
+                  <div className="table-secondary">{schedule.description}</div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="card">
