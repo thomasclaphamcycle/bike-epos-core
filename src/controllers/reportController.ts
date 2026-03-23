@@ -28,6 +28,7 @@ import {
   getSupplierPerformanceReport,
   getSupplierCostHistoryReport,
   getWorkshopCapacityReport,
+  getWorkshopAnalyticsReport,
   getWorkshopWarrantyReport,
   getWorkshopDailyReport,
   runDailyCloseReport,
@@ -110,6 +111,13 @@ export const getWorkshopDailyReportHandler = async (req: Request, res: Response)
 
 export const getWorkshopCapacityReportHandler = async (_req: Request, res: Response) => {
   const report = await getWorkshopCapacityReport();
+  res.json(report);
+};
+
+export const getWorkshopAnalyticsReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const location = await resolveRequestLocation(req);
+  const report = await getWorkshopAnalyticsReport(from, to, location.locationId ?? location.id);
   res.json(report);
 };
 

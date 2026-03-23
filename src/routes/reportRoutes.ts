@@ -31,6 +31,7 @@ import {
   getSupplierCostHistoryReportHandler,
   getSupplierPerformanceReportHandler,
   getWorkshopCapacityReportHandler,
+  getWorkshopAnalyticsReportHandler,
   getWorkshopDailyReportHandler,
   getWorkshopDailyReportCsvHandler,
   getWorkshopWarrantyReportHandler,
@@ -109,4 +110,5 @@ reportRouter.post(
   dismissReminderCandidateHandler,
 );
 reportRouter.get("/workshop/capacity", requireRoleAtLeast("MANAGER"), getWorkshopCapacityReportHandler);
+reportRouter.get("/workshop/analytics", requireRoleAtLeast("MANAGER"), getWorkshopAnalyticsReportHandler);
 reportRouter.get("/workshop/warranty", requireRoleAtLeast("MANAGER"), getWorkshopWarrantyReportHandler);

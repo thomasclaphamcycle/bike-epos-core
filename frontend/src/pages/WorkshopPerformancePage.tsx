@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { SavedViewControls } from "../components/SavedViewControls";
 import { useToasts } from "../components/ToastProvider";
+import { workshopRawStatusClass, workshopRawStatusLabel } from "../features/workshop/status";
+import { type ReportSeverity, reportSeverityBadgeClass } from "../utils/reportSeverity";
 
 type WorkshopDailyRow = {
   date: string;
@@ -12,53 +14,100 @@ type WorkshopDailyRow = {
 
 type RangePreset = "30" | "90" | "365";
 
-type DashboardJob = {
-  id: string;
-  status: string;
-  scheduledDate: string | null;
-  assignedStaffId: string | null;
-  assignedStaffName: string | null;
-  partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
+type DurationMetric = {
+  count: number;
+  averageDays: number | null;
+  medianDays: number | null;
 };
 
-type DashboardResponse = {
-  summary: {
-    totalJobs: number;
-    dueToday: number;
-    overdue: number;
+type HoursMetric = {
+  count: number;
+  averageHours: number | null;
+  medianHours: number | null;
+};
+
+type TechnicianThroughputRow = {
+  technicianKey: string;
+  staffId: string | null;
+  staffName: string;
+  completedJobs: number;
+  activeJobs: number;
+  waitingForApprovalJobs: number;
+  waitingForPartsJobs: number;
+  readyForCollectionJobs: number;
+  averageCompletionDays: number | null;
+};
+
+type StalledJobRow = {
+  jobId: string;
+  customerName: string;
+  bikeDescription: string | null;
+  rawStatus: string;
+  assignedStaffName: string | null;
+  scheduledDate: string | null;
+  scheduledStartAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  ageDays: number;
+  stageAgeDays: number | null;
+  stageAgeBasis: "QUOTE_REQUESTED_AT" | "JOB_UPDATED_AT" | "JOB_CREATED_AT" | null;
+  stallReason: string;
+  severity: ReportSeverity;
+};
+
+type WorkshopAnalyticsResponse = {
+  generatedAt: string;
+  range: {
+    from: string;
+    to: string;
+    dayCount: number;
+  };
+  limitations: string[];
+  turnaround: {
+    createdToCompleted: DurationMetric;
+    createdToClosed: DurationMetric;
+    approvalDecision: HoursMetric;
+  };
+  quoteConversion: {
+    requestedCount: number;
+    approvedCount: number;
+    rejectedCount: number;
+    pendingCount: number;
+    supersededCount: number;
+    conversionRate: number | null;
+    decisionRate: number | null;
+    pendingAverageAgeDays: number | null;
+    oldestPendingAgeDays: number | null;
+  };
+  currentQueue: {
+    openJobCount: number;
+    dueTodayCount: number;
+    overdueCount: number;
+    unassignedCount: number;
+    waitingForApprovalCount: number;
+    waitingForPartsCount: number;
+    pausedCount: number;
+    readyForCollectionCount: number;
     byStatus: Record<string, number>;
   };
-  jobs: DashboardJob[];
-};
-
-type WorkloadRow = {
-  key: string;
-  label: string;
-  openJobs: number;
-  awaitingApproval: number;
-  waitingForParts: number;
-  ready: number;
-};
-
-type WorkshopCapacityResponse = {
-  generatedAt: string;
-  lookbackDays: number;
-  openJobCount: number;
-  waitingForApprovalCount: number;
-  waitingForPartsCount: number;
-  readyForCollectionCount: number;
-  completedJobsLast7Days: number;
-  completedJobsLast30Days: number;
-  averageCompletedPerDay: number;
-  estimatedBacklogDays: number | null;
-  averageCompletionDays: number | null;
-  averageOpenJobAgeDays: number | null;
-  longestOpenJobDays: number | null;
-  ageingBuckets: {
-    zeroToTwoDays: number;
-    threeToSevenDays: number;
-    eightToFourteenDays: number;
-    fifteenPlusDays: number;
+  technicianThroughput: {
+    completedJobCount: number;
+    activeAssignedJobCount: number;
+    unassignedOpenJobCount: number;
+    rows: TechnicianThroughputRow[];
+  };
+  stalledJobs: {
+    openJobCount: number;
+    stalledCount: number;
+    olderThan14DaysCount: number;
+    ageingBuckets: {
+      zeroToTwoDays: number;
+      threeToSevenDays: number;
+      eightToFourteenDays: number;
+      fifteenToThirtyDays: number;
+      thirtyOnePlusDays: number;
+    };
+    rows: StalledJobRow[];
   };
 };
 
@@ -77,26 +126,50 @@ const shiftDays = (date: Date, days: number) => {
   return next;
 };
 
-const OPEN_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
-  "WAITING_FOR_APPROVAL",
-  "APPROVED",
-  "WAITING_FOR_PARTS",
-  "ON_HOLD",
-  "BIKE_READY",
-]);
+const formatDays = (value: number | null | undefined) =>
+  value === null || value === undefined ? "-" : `${value.toFixed(1)}d`;
 
-const isWaitingForParts = (job: DashboardJob) =>
-  job.status === "WAITING_FOR_PARTS" || job.partsStatus === "SHORT";
+const formatHours = (value: number | null | undefined) =>
+  value === null || value === undefined ? "-" : `${value.toFixed(1)}h`;
+
+const formatPercent = (value: number | null | undefined) =>
+  value === null || value === undefined ? "-" : `${value.toFixed(1)}%`;
+
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+
+  return parsed.toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: value.includes("T") ? "short" : undefined,
+  });
+};
+
+const stageAgeBasisLabel = (basis: StalledJobRow["stageAgeBasis"]) => {
+  switch (basis) {
+    case "QUOTE_REQUESTED_AT":
+      return "quote age";
+    case "JOB_UPDATED_AT":
+      return "last update proxy";
+    case "JOB_CREATED_AT":
+      return "job age";
+    default:
+      return "age";
+  }
+};
 
 export const WorkshopPerformancePage = () => {
   const { error } = useToasts();
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("90");
   const [dailyRows, setDailyRows] = useState<WorkshopDailyRow[]>([]);
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [capacityReport, setCapacityReport] = useState<WorkshopCapacityResponse | null>(null);
+  const [analytics, setAnalytics] = useState<WorkshopAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const applySavedFilters = (filters: Record<string, string>) => {
@@ -111,10 +184,9 @@ export const WorkshopPerformancePage = () => {
     const to = formatDateKey(today);
     const from = formatDateKey(shiftDays(today, -(Number(rangePreset) - 1)));
 
-    const [dailyResult, dashboardResult, capacityResult] = await Promise.allSettled([
+    const [dailyResult, analyticsResult] = await Promise.allSettled([
       apiGet<WorkshopDailyRow[]>(`/api/reports/workshop/daily?from=${from}&to=${to}`),
-      apiGet<DashboardResponse>("/api/workshop/dashboard?limit=100"),
-      apiGet<WorkshopCapacityResponse>("/api/reports/workshop/capacity"),
+      apiGet<WorkshopAnalyticsResponse>(`/api/reports/workshop/analytics?from=${from}&to=${to}`),
     ]);
 
     if (dailyResult.status === "fulfilled") {
@@ -124,18 +196,11 @@ export const WorkshopPerformancePage = () => {
       error(dailyResult.reason instanceof Error ? dailyResult.reason.message : "Failed to load workshop daily report");
     }
 
-    if (dashboardResult.status === "fulfilled") {
-      setDashboard(dashboardResult.value);
+    if (analyticsResult.status === "fulfilled") {
+      setAnalytics(analyticsResult.value);
     } else {
-      setDashboard(null);
-      error(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : "Failed to load workshop dashboard");
-    }
-
-    if (capacityResult.status === "fulfilled") {
-      setCapacityReport(capacityResult.value);
-    } else {
-      setCapacityReport(null);
-      error(capacityResult.reason instanceof Error ? capacityResult.reason.message : "Failed to load workshop capacity");
+      setAnalytics(null);
+      error(analyticsResult.reason instanceof Error ? analyticsResult.reason.message : "Failed to load workshop analytics");
     }
 
     setLoading(false);
@@ -146,7 +211,7 @@ export const WorkshopPerformancePage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangePreset]);
 
-  const totals = useMemo(() => {
+  const dailyTotals = useMemo(() => {
     const completedJobs = dailyRows.reduce((sum, row) => sum + row.jobCount, 0);
     const revenuePence = dailyRows.reduce((sum, row) => sum + row.revenuePence, 0);
     const averageJobsPerDay = dailyRows.length > 0 ? Number((completedJobs / dailyRows.length).toFixed(1)) : 0;
@@ -157,75 +222,29 @@ export const WorkshopPerformancePage = () => {
     };
   }, [dailyRows]);
 
-  const dashboardSummary = dashboard?.summary ?? null;
-  const dashboardJobs = dashboard?.jobs ?? [];
-
-  const awaitingApprovalCount = useMemo(
-    () => dashboardJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length,
-    [dashboardJobs],
+  const currentQueueRows = useMemo(
+    () => Object.entries(analytics?.currentQueue.byStatus ?? {})
+      .filter(([, count]) => count > 0)
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])),
+    [analytics?.currentQueue.byStatus],
   );
 
-  const waitingForPartsCount = useMemo(
-    () => dashboardJobs.filter((job) => isWaitingForParts(job)).length,
-    [dashboardJobs],
-  );
-
-  const openWorkloadCount = useMemo(() => {
-    if (dashboardSummary?.byStatus) {
-      return Object.entries(dashboardSummary.byStatus).reduce((sum, [status, count]) => (
-        OPEN_STATUSES.has(status) ? sum + count : sum
-      ), 0);
-    }
-
-    return dashboardJobs.filter((job) => OPEN_STATUSES.has(job.status)).length;
-  }, [dashboardJobs, dashboardSummary]);
-
-  const workloadRows = useMemo<WorkloadRow[]>(() => {
-    const grouped = new Map<string, WorkloadRow>();
-
-    for (const job of dashboardJobs) {
-      if (job.status === "COMPLETED" || job.status === "CANCELLED") {
-        continue;
-      }
-
-      const key = job.assignedStaffId ?? "unassigned";
-      const label = job.assignedStaffName?.trim() || "Unassigned";
-      const existing = grouped.get(key) ?? {
-        key,
-        label,
-        openJobs: 0,
-        awaitingApproval: 0,
-        waitingForParts: 0,
-        ready: 0,
-      };
-
-      existing.openJobs += 1;
-      if (job.status === "WAITING_FOR_APPROVAL") {
-        existing.awaitingApproval += 1;
-      }
-      if (isWaitingForParts(job)) {
-        existing.waitingForParts += 1;
-      }
-      if (job.status === "BIKE_READY") {
-        existing.ready += 1;
-      }
-
-      grouped.set(key, existing);
-    }
-
-    return Array.from(grouped.values()).sort((left, right) => (
-      right.openJobs - left.openJobs || left.label.localeCompare(right.label)
-    ));
-  }, [dashboardJobs]);
+  const ageingBuckets = analytics?.stalledJobs.ageingBuckets ?? {
+    zeroToTwoDays: 0,
+    threeToSevenDays: 0,
+    eightToFourteenDays: 0,
+    fifteenToThirtyDays: 0,
+    thirtyOnePlusDays: 0,
+  };
 
   return (
     <div className="page-shell">
       <section className="card">
         <div className="card-header-row">
           <div>
-            <h1>Workshop Performance</h1>
+            <h1>Workshop Analytics</h1>
             <p className="muted-text">
-              Manager-facing workshop throughput and backlog view built from the existing daily report and workshop dashboard.
+              Manager-facing reporting for turnaround, quote conversion, technician load, and jobs that are slowing the workshop down.
             </p>
           </div>
           <div className="actions-inline">
@@ -246,53 +265,49 @@ export const WorkshopPerformancePage = () => {
         <div className="dashboard-summary-grid">
           <div className="metric-card">
             <span className="metric-label">Completed Jobs</span>
-            <strong className="metric-value">{totals.completedJobs}</strong>
+            <strong className="metric-value">{analytics?.turnaround.createdToCompleted.count ?? 0}</strong>
             <span className="dashboard-metric-detail">Within selected range</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Average Jobs / Day</span>
-            <strong className="metric-value">{totals.averageJobsPerDay.toFixed(1)}</strong>
-            <span className="dashboard-metric-detail">Based on daily completion rows</span>
+            <span className="metric-label">Avg Turnaround</span>
+            <strong className="metric-value">{formatDays(analytics?.turnaround.createdToCompleted.averageDays)}</strong>
+            <span className="dashboard-metric-detail">Created to completed</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Awaiting Approval</span>
-            <strong className="metric-value">{awaitingApprovalCount}</strong>
-            <span className="dashboard-metric-detail">Current open queue</span>
+            <span className="metric-label">Avg To Collection</span>
+            <strong className="metric-value">{formatDays(analytics?.turnaround.createdToClosed.averageDays)}</strong>
+            <span className="dashboard-metric-detail">Created to closed / collected</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Quote Approval Rate</span>
+            <strong className="metric-value">{formatPercent(analytics?.quoteConversion.conversionRate)}</strong>
+            <span className="dashboard-metric-detail">
+              Decision rate {formatPercent(analytics?.quoteConversion.decisionRate)}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Pending Quotes</span>
+            <strong className="metric-value">{analytics?.quoteConversion.pendingCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">
+              Oldest {formatDays(analytics?.quoteConversion.oldestPendingAgeDays)}
+            </span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Open Jobs</span>
+            <strong className="metric-value">{analytics?.currentQueue.openJobCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">
+              Due today {analytics?.currentQueue.dueTodayCount ?? 0} | Overdue {analytics?.currentQueue.overdueCount ?? 0}
+            </span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Waiting for Parts</span>
-            <strong className="metric-value">{waitingForPartsCount}</strong>
-            <span className="dashboard-metric-detail">Includes short-part jobs</span>
+            <strong className="metric-value">{analytics?.currentQueue.waitingForPartsCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Current blocked bench work</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Open Workload</span>
-            <strong className="metric-value">{openWorkloadCount}</strong>
-            <span className="dashboard-metric-detail">
-              Due today {dashboardSummary?.dueToday ?? 0} | Overdue {dashboardSummary?.overdue ?? 0}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Workshop Revenue</span>
-            <strong className="metric-value">{formatMoney(totals.revenuePence)}</strong>
-            <span className="dashboard-metric-detail">Secondary metric from completed jobs</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Completed Last 7 Days</span>
-            <strong className="metric-value">{capacityReport?.completedJobsLast7Days ?? 0}</strong>
-            <span className="dashboard-metric-detail">Recent workshop throughput</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Avg Completion Time</span>
-            <strong className="metric-value">
-              {capacityReport?.averageCompletionDays === null || capacityReport?.averageCompletionDays === undefined
-                ? "-"
-                : `${capacityReport.averageCompletionDays.toFixed(1)}d`}
-            </strong>
-            <span className="dashboard-metric-detail">
-              Backlog {capacityReport?.estimatedBacklogDays === null || capacityReport?.estimatedBacklogDays === undefined
-                ? "-"
-                : `${capacityReport.estimatedBacklogDays.toFixed(1)}d`}
-            </span>
+            <span className="metric-label">Stalled Jobs</span>
+            <strong className="metric-value">{analytics?.stalledJobs.stalledCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Top follow-up list on this page</span>
           </div>
         </div>
       </section>
@@ -307,44 +322,345 @@ export const WorkshopPerformancePage = () => {
       <div className="dashboard-grid analytics-grid">
         <section className="card">
           <div className="card-header-row">
-            <h2>Throughput Snapshot</h2>
+            <div>
+              <h2>Turnaround & Quote Decisions</h2>
+              <p className="muted-text">
+                Turnaround is grounded in actual job timestamps. Quote conversion is based on estimate versions requested during the selected range.
+              </p>
+            </div>
+            <div className="actions-inline">
+              <Link to="/management/workshop-ageing">Ageing detail</Link>
+              <Link to="/workshop">Open workshop</Link>
+            </div>
           </div>
+
           <div className="management-stat-grid">
             <div className="management-stat-card">
-              <span className="metric-label">Ready For Collection</span>
-              <strong className="metric-value">{capacityReport?.readyForCollectionCount ?? 0}</strong>
+              <span className="metric-label">Created → Completed</span>
+              <strong className="metric-value">{formatDays(analytics?.turnaround.createdToCompleted.averageDays)}</strong>
+              <span className="dashboard-metric-detail">
+                Median {formatDays(analytics?.turnaround.createdToCompleted.medianDays)}
+              </span>
             </div>
             <div className="management-stat-card">
-              <span className="metric-label">Average Open Age</span>
-              <strong className="metric-value">
-                {capacityReport?.averageOpenJobAgeDays === null || capacityReport?.averageOpenJobAgeDays === undefined
-                  ? "-"
-                  : `${capacityReport.averageOpenJobAgeDays.toFixed(1)}d`}
-              </strong>
+              <span className="metric-label">Created → Closed</span>
+              <strong className="metric-value">{formatDays(analytics?.turnaround.createdToClosed.averageDays)}</strong>
+              <span className="dashboard-metric-detail">
+                Median {formatDays(analytics?.turnaround.createdToClosed.medianDays)}
+              </span>
             </div>
             <div className="management-stat-card">
-              <span className="metric-label">Longest Open Job</span>
-              <strong className="metric-value">
-                {capacityReport?.longestOpenJobDays === null || capacityReport?.longestOpenJobDays === undefined
-                  ? "-"
-                  : `${capacityReport.longestOpenJobDays}d`}
-              </strong>
+              <span className="metric-label">Approval Delay</span>
+              <strong className="metric-value">{formatHours(analytics?.turnaround.approvalDecision.averageHours)}</strong>
+              <span className="dashboard-metric-detail">
+                Median {formatHours(analytics?.turnaround.approvalDecision.medianHours)}
+              </span>
             </div>
             <div className="management-stat-card">
-              <span className="metric-label">Completions / Day</span>
-              <strong className="metric-value">{capacityReport?.averageCompletedPerDay?.toFixed(1) ?? "0.0"}</strong>
+              <span className="metric-label">Quotes Requested</span>
+              <strong className="metric-value">{analytics?.quoteConversion.requestedCount ?? 0}</strong>
+              <span className="dashboard-metric-detail">
+                Approved {analytics?.quoteConversion.approvedCount ?? 0} | Rejected {analytics?.quoteConversion.rejectedCount ?? 0}
+              </span>
             </div>
           </div>
-          <p className="muted-text">
-            This snapshot uses the same workshop job data as the live board and adds a simple throughput view for managers planning bench load and customer promises.
-          </p>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Value</th>
+                  <th>Meaning</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Quotes requested</td>
+                  <td>{analytics?.quoteConversion.requestedCount ?? 0}</td>
+                  <td>Estimate versions sent to customers in the selected range.</td>
+                </tr>
+                <tr>
+                  <td>Approved</td>
+                  <td>{analytics?.quoteConversion.approvedCount ?? 0}</td>
+                  <td>Quotes from that range that have been approved.</td>
+                </tr>
+                <tr>
+                  <td>Rejected</td>
+                  <td>{analytics?.quoteConversion.rejectedCount ?? 0}</td>
+                  <td>Quotes from that range that were rejected.</td>
+                </tr>
+                <tr>
+                  <td>Pending</td>
+                  <td>{analytics?.quoteConversion.pendingCount ?? 0}</td>
+                  <td>Still awaiting a decision.</td>
+                </tr>
+                <tr>
+                  <td>Superseded</td>
+                  <td>{analytics?.quoteConversion.supersededCount ?? 0}</td>
+                  <td>Replaced quote versions kept for truthful history.</td>
+                </tr>
+                <tr>
+                  <td>Approval rate</td>
+                  <td>{formatPercent(analytics?.quoteConversion.conversionRate)}</td>
+                  <td>Approved quotes as a share of quotes requested.</td>
+                </tr>
+                <tr>
+                  <td>Pending quote age</td>
+                  <td>{formatDays(analytics?.quoteConversion.pendingAverageAgeDays)}</td>
+                  <td>Average age of quotes still waiting on a customer answer.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className="card">
           <div className="card-header-row">
-            <h2>Daily Completions</h2>
+            <div>
+              <h2>Technician Throughput</h2>
+              <p className="muted-text">
+                Uses the current assignment on each job. This is honest workload reporting, not per-line labour attribution.
+              </p>
+            </div>
+            <Link to="/workshop/calendar">Calendar</Link>
+          </div>
+
+          <div className="management-stat-grid">
+            <div className="management-stat-card">
+              <span className="metric-label">Completed Jobs</span>
+              <strong className="metric-value">{analytics?.technicianThroughput.completedJobCount ?? 0}</strong>
+              <span className="dashboard-metric-detail">Attributed by current job assignee</span>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Assigned Active Load</span>
+              <strong className="metric-value">{analytics?.technicianThroughput.activeAssignedJobCount ?? 0}</strong>
+              <span className="dashboard-metric-detail">Open jobs with a named technician</span>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Unassigned Open Jobs</span>
+              <strong className="metric-value">{analytics?.technicianThroughput.unassignedOpenJobCount ?? 0}</strong>
+              <span className="dashboard-metric-detail">Still waiting for ownership</span>
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Technician</th>
+                  <th>Completed</th>
+                  <th>Active Load</th>
+                  <th>Waiting Approval</th>
+                  <th>Waiting Parts</th>
+                  <th>Ready</th>
+                  <th>Avg Turnaround</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(analytics?.technicianThroughput.rows ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>No technician throughput data available for this range.</td>
+                  </tr>
+                ) : (
+                  analytics?.technicianThroughput.rows.map((row) => (
+                    <tr key={row.technicianKey}>
+                      <td>{row.staffName}</td>
+                      <td>{row.completedJobs}</td>
+                      <td>{row.activeJobs}</td>
+                      <td>{row.waitingForApprovalJobs}</td>
+                      <td>{row.waitingForPartsJobs}</td>
+                      <td>{row.readyForCollectionJobs}</td>
+                      <td>{formatDays(row.averageCompletionDays)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Open Queue & Bottlenecks</h2>
+              <p className="muted-text">
+                Current queue pressure uses the live workshop board, while ageing buckets use job created date because stage-entry timestamps are still limited.
+              </p>
+            </div>
+            <div className="actions-inline">
+              <Link to="/management/capacity">Capacity</Link>
+              <Link to="/management/workshop-ageing">Ageing detail</Link>
+            </div>
+          </div>
+
+          <div className="management-stat-grid">
+            <div className="management-stat-card">
+              <span className="metric-label">Open Jobs</span>
+              <strong className="metric-value">{analytics?.currentQueue.openJobCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Due Today</span>
+              <strong className="metric-value">{analytics?.currentQueue.dueTodayCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Overdue</span>
+              <strong className="metric-value">{analytics?.currentQueue.overdueCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Waiting Approval</span>
+              <strong className="metric-value">{analytics?.currentQueue.waitingForApprovalCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Waiting Parts</span>
+              <strong className="metric-value">{analytics?.currentQueue.waitingForPartsCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Ready For Collection</span>
+              <strong className="metric-value">{analytics?.currentQueue.readyForCollectionCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Paused</span>
+              <strong className="metric-value">{analytics?.currentQueue.pausedCount ?? 0}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Older Than 14 Days</span>
+              <strong className="metric-value">{analytics?.stalledJobs.olderThan14DaysCount ?? 0}</strong>
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Jobs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentQueueRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={2}>No current workshop queue data available.</td>
+                  </tr>
+                ) : currentQueueRows.map(([status, count]) => (
+                  <tr key={status}>
+                    <td>
+                      <span className={workshopRawStatusClass(status)}>{workshopRawStatusLabel(status)}</span>
+                    </td>
+                    <td>{count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="age-bucket-grid">
+            <div className="age-bucket-card">
+              <span className="metric-label">0-2 days</span>
+              <strong className="metric-value">{ageingBuckets.zeroToTwoDays}</strong>
+            </div>
+            <div className="age-bucket-card">
+              <span className="metric-label">3-7 days</span>
+              <strong className="metric-value">{ageingBuckets.threeToSevenDays}</strong>
+            </div>
+            <div className="age-bucket-card">
+              <span className="metric-label">8-14 days</span>
+              <strong className="metric-value">{ageingBuckets.eightToFourteenDays}</strong>
+            </div>
+            <div className="age-bucket-card">
+              <span className="metric-label">15-30 days</span>
+              <strong className="metric-value">{ageingBuckets.fifteenToThirtyDays}</strong>
+            </div>
+            <div className="age-bucket-card">
+              <span className="metric-label">31+ days</span>
+              <strong className="metric-value">{ageingBuckets.thirtyOnePlusDays}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Jobs Needing Management Follow-up</h2>
+              <p className="muted-text">
+                This list prioritises blocked, overdue, or ageing jobs that are most likely to create customer friction or throughput drag.
+              </p>
+            </div>
+            <Link to="/management/workshop-ageing">Full ageing view</Link>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Status</th>
+                  <th>Customer / Bike</th>
+                  <th>Assignee</th>
+                  <th>Age</th>
+                  <th>Stall Age</th>
+                  <th>Reason</th>
+                  <th>Severity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(analytics?.stalledJobs.rows ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>No stalled workshop jobs in the current live queue.</td>
+                  </tr>
+                ) : (
+                  analytics?.stalledJobs.rows.map((row) => (
+                    <tr key={row.jobId}>
+                      <td><Link to={`/workshop/${row.jobId}`}>{row.jobId.slice(0, 8)}</Link></td>
+                      <td><span className={workshopRawStatusClass(row.rawStatus)}>{workshopRawStatusLabel(row.rawStatus)}</span></td>
+                      <td>
+                        <strong>{row.customerName}</strong>
+                        <div className="muted-text">{row.bikeDescription || "-"}</div>
+                      </td>
+                      <td>
+                        {row.assignedStaffName || "Unassigned"}
+                        <div className="muted-text">
+                          {row.scheduledStartAt ? formatDateTime(row.scheduledStartAt) : formatDateTime(row.scheduledDate)}
+                        </div>
+                      </td>
+                      <td>{row.ageDays}d</td>
+                      <td>{row.stageAgeDays === null ? "-" : `${row.stageAgeDays}d · ${stageAgeBasisLabel(row.stageAgeBasis)}`}</td>
+                      <td>{row.stallReason}</td>
+                      <td><span className={reportSeverityBadgeClass[row.severity]}>{row.severity}</span></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header-row">
+            <div>
+              <h2>Daily Completions</h2>
+              <p className="muted-text">
+                {dailyTotals.completedJobs} completed jobs and {formatMoney(dailyTotals.revenuePence)} workshop revenue in the selected range.
+              </p>
+            </div>
             <Link to="/management">Back to management</Link>
           </div>
+
+          <div className="management-stat-grid">
+            <div className="management-stat-card">
+              <span className="metric-label">Completed Jobs</span>
+              <strong className="metric-value">{dailyTotals.completedJobs}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Average / Day</span>
+              <strong className="metric-value">{dailyTotals.averageJobsPerDay.toFixed(1)}</strong>
+            </div>
+            <div className="management-stat-card">
+              <span className="metric-label">Revenue</span>
+              <strong className="metric-value">{formatMoney(dailyTotals.revenuePence)}</strong>
+            </div>
+          </div>
+
           <div className="table-wrap">
             <table>
               <thead>
@@ -375,90 +691,13 @@ export const WorkshopPerformancePage = () => {
 
         <section className="card">
           <div className="card-header-row">
-            <h2>Open Workload Summary</h2>
+            <h2>Metric Notes</h2>
           </div>
-          <div className="management-stat-grid">
-            <div className="management-stat-card">
-              <span className="metric-label">Awaiting Approval</span>
-              <strong className="metric-value">{awaitingApprovalCount}</strong>
-            </div>
-            <div className="management-stat-card">
-              <span className="metric-label">Waiting for Parts</span>
-              <strong className="metric-value">{waitingForPartsCount}</strong>
-            </div>
-            <div className="management-stat-card">
-              <span className="metric-label">Due Today</span>
-              <strong className="metric-value">{dashboardSummary?.dueToday ?? 0}</strong>
-            </div>
-            <div className="management-stat-card">
-              <span className="metric-label">Overdue</span>
-              <strong className="metric-value">{dashboardSummary?.overdue ?? 0}</strong>
-            </div>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Jobs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboardSummary?.byStatus ? (
-                  Object.entries(dashboardSummary.byStatus)
-                    .filter(([, count]) => count > 0)
-                    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-                    .map(([status, count]) => (
-                      <tr key={status}>
-                        <td>{status}</td>
-                        <td>{count}</td>
-                      </tr>
-                    ))
-                ) : (
-                  <tr>
-                    <td colSpan={2}>No workload summary available.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header-row">
-            <h2>Staff Workload Snapshot</h2>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Assignee</th>
-                  <th>Open Jobs</th>
-                  <th>Awaiting Approval</th>
-                  <th>Waiting for Parts</th>
-                  <th>Ready</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workloadRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>No active workload snapshot available.</td>
-                  </tr>
-                ) : (
-                  workloadRows.map((row) => (
-                    <tr key={row.key}>
-                      <td>{row.label}</td>
-                      <td>{row.openJobs}</td>
-                      <td>{row.awaitingApproval}</td>
-                      <td>{row.waitingForParts}</td>
-                      <td>{row.ready}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <p className="muted-text">Uses current assignment data only. Jobs without an assignee are grouped under Unassigned.</p>
+          <ul>
+            {(analytics?.limitations ?? []).map((item) => (
+              <li key={item} className="muted-text">{item}</li>
+            ))}
+          </ul>
         </section>
       </div>
     </div>
