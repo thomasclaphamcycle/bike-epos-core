@@ -290,6 +290,142 @@ const getCustomerQuoteStatus = (estimate: {
   };
 };
 
+type WorkshopPortalAccessStatus =
+  | "ACTIVE"
+  | "EXPIRED"
+  | "SUPERSEDED"
+  | "UNAVAILABLE";
+
+const getCurrentWorkshopEstimateMetaTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+) =>
+  tx.workshopEstimate.findFirst({
+    where: {
+      workshopJobId,
+      supersededAt: null,
+    },
+    select: {
+      id: true,
+      version: true,
+    },
+    orderBy: [{ version: "desc" }],
+  });
+
+export const getWorkshopPortalAccessForJobTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+) => {
+  const [currentEstimate, estimates] = await Promise.all([
+    getCurrentWorkshopEstimateMetaTx(tx, workshopJobId),
+    tx.workshopEstimate.findMany({
+      where: {
+        workshopJobId,
+        customerQuoteToken: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        version: true,
+        customerQuoteToken: true,
+        customerQuoteTokenExpiresAt: true,
+      },
+      orderBy: [{ version: "desc" }],
+    }),
+  ]);
+
+  if (estimates.length === 0) {
+    return {
+      accessStatus: "UNAVAILABLE" as WorkshopPortalAccessStatus,
+      publicPath: null,
+      expiresAt: null,
+      linkedEstimateId: null,
+      linkedEstimateVersion: null,
+      currentEstimateVersion: currentEstimate?.version ?? null,
+      hasUpdatedEstimate: false,
+      canCustomerReply: false,
+    };
+  }
+
+  const activeCurrent =
+    estimates.find(
+      (estimate) =>
+        estimate.id === currentEstimate?.id &&
+        getCustomerQuoteStatus(estimate)?.status === "ACTIVE",
+    ) ?? null;
+  const activeAny =
+    estimates.find((estimate) => getCustomerQuoteStatus(estimate)?.status === "ACTIVE") ?? null;
+  const selectedEstimate = activeCurrent ?? activeAny ?? estimates[0];
+  const customerQuote = getCustomerQuoteStatus(selectedEstimate);
+  const accessStatus: WorkshopPortalAccessStatus =
+    customerQuote?.status === "EXPIRED"
+      ? "EXPIRED"
+      : currentEstimate && currentEstimate.id !== selectedEstimate.id
+        ? "SUPERSEDED"
+        : "ACTIVE";
+
+  return {
+    accessStatus,
+    publicPath: customerQuote?.publicPath ?? null,
+    expiresAt: customerQuote?.expiresAt ?? null,
+    linkedEstimateId: selectedEstimate.id,
+    linkedEstimateVersion: selectedEstimate.version,
+    currentEstimateVersion: currentEstimate?.version ?? null,
+    hasUpdatedEstimate:
+      currentEstimate !== null && currentEstimate.id !== selectedEstimate.id,
+    canCustomerReply: customerQuote?.status === "ACTIVE",
+  };
+};
+
+export const getWorkshopPortalAccessForJob = async (workshopJobId: string) => {
+  if (!isUuid(workshopJobId)) {
+    throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
+  }
+
+  return getWorkshopPortalAccessForJobTx(prisma, workshopJobId);
+};
+
+export const getPublicWorkshopPortalContextTx = async (
+  tx: Prisma.TransactionClient,
+  token: string,
+) => {
+  const estimate = await getWorkshopEstimateByCustomerQuoteTokenTx(tx, token);
+  if (!estimate) {
+    throw new HttpError(404, "Quote link not found", "WORKSHOP_QUOTE_NOT_FOUND");
+  }
+
+  const currentEstimate = await getCurrentWorkshopEstimatePublicTx(tx, estimate.workshopJobId);
+  const customerQuote = getCustomerQuoteStatus(estimate);
+  const isCurrent = currentEstimate?.id === estimate.id && estimate.supersededAt === null;
+  const accessStatus =
+    !isCurrent
+      ? ("SUPERSEDED" as const)
+      : customerQuote?.status === "EXPIRED"
+        ? ("EXPIRED" as const)
+        : ("ACTIVE" as const);
+
+  return {
+    token,
+    estimate,
+    currentEstimate,
+    customerQuote,
+    accessStatus,
+    canApprove: accessStatus === "ACTIVE" && estimate.status === "PENDING_APPROVAL",
+    canReject: accessStatus === "ACTIVE" && estimate.status === "PENDING_APPROVAL",
+    canReply: customerQuote?.status === "ACTIVE",
+  };
+};
+
+export const getPublicWorkshopPortalContext = async (tokenValue: string) => {
+  const token = normalizeOptionalText(tokenValue);
+  if (!token) {
+    throw new HttpError(400, "Quote token is required", "INVALID_QUOTE_TOKEN");
+  }
+
+  return getPublicWorkshopPortalContextTx(prisma, token);
+};
+
 const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
   id: estimate.id,
   workshopJobId: estimate.workshopJobId,
@@ -1348,33 +1484,13 @@ export const createWorkshopEstimateCustomerQuoteLink = async (
 };
 
 export const getPublicWorkshopEstimateQuote = async (tokenValue: string) => {
-  const token = normalizeOptionalText(tokenValue);
-  if (!token) {
-    throw new HttpError(400, "Quote token is required", "INVALID_QUOTE_TOKEN");
-  }
+  const context = await getPublicWorkshopPortalContext(tokenValue);
 
-  const estimate = await getWorkshopEstimateByCustomerQuoteTokenTx(prisma, token);
-  if (!estimate) {
-    throw new HttpError(404, "Quote link not found", "WORKSHOP_QUOTE_NOT_FOUND");
-  }
-
-  const currentEstimate = await getCurrentWorkshopEstimatePublicTx(prisma, estimate.workshopJobId);
-  const customerQuote = getCustomerQuoteStatus(estimate);
-  const isCurrent = currentEstimate?.id === estimate.id && estimate.supersededAt === null;
-  const accessStatus =
-    !isCurrent
-      ? ("SUPERSEDED" as const)
-      : customerQuote?.status === "EXPIRED"
-        ? ("EXPIRED" as const)
-        : ("ACTIVE" as const);
-  const canRespond =
-    accessStatus === "ACTIVE" && estimate.status === "PENDING_APPROVAL";
-
-  return toPublicQuoteResponse(estimate, {
-    accessStatus,
-    canApprove: canRespond,
-    canReject: canRespond,
-    currentEstimate,
+  return toPublicQuoteResponse(context.estimate, {
+    accessStatus: context.accessStatus,
+    canApprove: context.canApprove,
+    canReject: context.canReject,
+    currentEstimate: context.currentEstimate,
   });
 };
 
@@ -1390,13 +1506,10 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
   const targetStatus = parsePublicEstimateDecisionStatus(input.status);
 
   return prisma.$transaction(async (tx) => {
-    const estimate = await getWorkshopEstimateByCustomerQuoteTokenTx(tx, token);
-    if (!estimate) {
-      throw new HttpError(404, "Quote link not found", "WORKSHOP_QUOTE_NOT_FOUND");
-    }
+    const context = await getPublicWorkshopPortalContextTx(tx, token);
+    const estimate = context.estimate;
 
-    const customerQuote = getCustomerQuoteStatus(estimate);
-    if (!customerQuote || customerQuote.status === "EXPIRED") {
+    if (!context.customerQuote || context.customerQuote.status === "EXPIRED") {
       throw new HttpError(410, "This quote link has expired", "WORKSHOP_QUOTE_EXPIRED");
     }
 

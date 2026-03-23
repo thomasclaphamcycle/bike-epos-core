@@ -112,6 +112,28 @@ type PublicWorkshopPortalPayload = {
   }>;
 };
 
+type PublicWorkshopConversationResponse = {
+  conversation: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    accessStatus: "ACTIVE" | "EXPIRED" | "SUPERSEDED";
+    canReply: boolean;
+    messageCount: number;
+    lastMessageAt: string | null;
+  };
+  messages: Array<{
+    id: string;
+    direction: "OUTBOUND" | "INBOUND";
+    channel: "PORTAL" | "EMAIL" | "SMS" | "WHATSAPP" | "INTERNAL_SYSTEM";
+    body: string;
+    sentAt: string | null;
+    receivedAt: string | null;
+    createdAt: string;
+    senderLabel: string;
+  }>;
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const formatOptionalDateTime = (value: string | null | undefined) => {
@@ -169,9 +191,15 @@ export const WorkshopQuotePage = () => {
   const [searchParams] = useSearchParams();
   const token = routeToken?.trim() || searchParams.get("token")?.trim() || null;
   const [payload, setPayload] = useState<PublicWorkshopPortalPayload | null>(null);
+  const [conversationPayload, setConversationPayload] =
+    useState<PublicWorkshopConversationResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [conversationLoading, setConversationLoading] = useState(true);
   const [submitting, setSubmitting] = useState<"APPROVED" | "REJECTED" | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replying, setReplying] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [conversationError, setConversationError] = useState<string | null>(null);
 
   const loadPortal = async () => {
     if (!token) {
@@ -196,8 +224,33 @@ export const WorkshopQuotePage = () => {
     }
   };
 
+  const loadConversation = async () => {
+    if (!token) {
+      setConversationPayload(null);
+      setConversationLoading(false);
+      setConversationError(null);
+      return;
+    }
+
+    setConversationLoading(true);
+    setConversationError(null);
+
+    try {
+      const nextPayload = await apiGet<PublicWorkshopConversationResponse>(
+        `/api/public/workshop/${encodeURIComponent(token)}/conversation`,
+      );
+      setConversationPayload(nextPayload);
+    } catch (error) {
+      setConversationError(
+        error instanceof Error ? error.message : "Failed to load workshop conversation.",
+      );
+    } finally {
+      setConversationLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void loadPortal();
+    void Promise.all([loadPortal(), loadConversation()]);
   }, [token]);
 
   const handleDecision = async (status: "APPROVED" | "REJECTED") => {
@@ -226,6 +279,31 @@ export const WorkshopQuotePage = () => {
     }
   };
 
+  const handleReply = async () => {
+    if (!token) {
+      return;
+    }
+
+    setReplying(true);
+    setConversationError(null);
+
+    try {
+      const nextPayload = await apiPost<PublicWorkshopConversationResponse>(
+        `/api/public/workshop/${encodeURIComponent(token)}/conversation/messages`,
+        { body: replyDraft },
+      );
+      setConversationPayload(nextPayload);
+      setReplyDraft("");
+    } catch (error) {
+      setConversationError(
+        error instanceof Error ? error.message : "Could not send your workshop reply.",
+      );
+      await loadConversation();
+    } finally {
+      setReplying(false);
+    }
+  };
+
   const pageTitle = useMemo(() => {
     if (!payload) {
       return "Workshop job update";
@@ -237,6 +315,7 @@ export const WorkshopQuotePage = () => {
   const bikeDetails = payload ? buildBikeDetails(payload.bike) : [];
   const estimateLines = payload?.estimate?.lines ?? [];
   const workLines = payload?.workSummary.lines ?? [];
+  const conversationMessages = conversationPayload?.messages ?? [];
 
   return (
     <div className="workshop-portal-shell">
@@ -510,6 +589,92 @@ export const WorkshopQuotePage = () => {
                   The workshop has not added any labour or parts lines yet.
                 </p>
               )}
+            </section>
+
+            <section className="workshop-portal-panel" style={{ marginTop: "16px" }}>
+              <div className="card-header-row">
+                <div>
+                  <h2>Message thread</h2>
+                  <p className="table-secondary">
+                    Read updates from the workshop and reply here while this secure link remains active.
+                  </p>
+                </div>
+                <span className="table-secondary">
+                  {conversationPayload?.conversation.messageCount ?? 0} message
+                  {(conversationPayload?.conversation.messageCount ?? 0) === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {conversationLoading ? <p>Loading conversation...</p> : null}
+              {!conversationLoading && conversationError ? (
+                <p className="muted-text">{conversationError}</p>
+              ) : null}
+
+              {!conversationLoading && !conversationError && conversationMessages.length === 0 ? (
+                <p className="muted-text">The workshop has not added any direct messages yet.</p>
+              ) : (
+                <div className="conversation-thread conversation-thread--portal">
+                  {conversationMessages.map((message) => (
+                    <article
+                      key={message.id}
+                      className={`conversation-message-card conversation-message-card--${
+                        message.direction === "OUTBOUND" ? "outbound" : "inbound"
+                      }`}
+                    >
+                      <div className="note-card-header">
+                        <span
+                          className={
+                            message.direction === "OUTBOUND"
+                              ? "status-badge status-info"
+                              : "status-badge status-complete"
+                          }
+                        >
+                          {message.direction === "OUTBOUND" ? "Workshop update" : "Your reply"}
+                        </span>
+                        <span className="table-secondary">
+                          {formatOptionalDateTime(
+                            message.sentAt ?? message.receivedAt ?? message.createdAt,
+                          )}
+                        </span>
+                      </div>
+                      <p>{message.body}</p>
+                      <div className="table-secondary">{message.senderLabel}</div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              <div className="note-form-grid" style={{ marginTop: "8px" }}>
+                <label className="note-form-wide">
+                  Reply to the workshop
+                  <textarea
+                    value={replyDraft}
+                    onChange={(event) => setReplyDraft(event.target.value)}
+                    placeholder="Send a reply to the workshop team"
+                    disabled={!conversationPayload?.conversation.canReply}
+                  />
+                </label>
+                <div className="actions-inline">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => void handleReply()}
+                    disabled={
+                      replying ||
+                      !replyDraft.trim() ||
+                      !conversationPayload?.conversation.canReply
+                    }
+                  >
+                    {replying ? "Sending..." : "Send Reply"}
+                  </button>
+                </div>
+              </div>
+
+              {!conversationPayload?.conversation.canReply ? (
+                <p className="muted-text">
+                  Replies are only available while this secure workshop link is still active.
+                </p>
+              ) : null}
             </section>
 
             <div className="workshop-portal-grid">

@@ -1714,6 +1714,171 @@ const run = async () => {
       assert.equal(missingPortal.json.error.code, "WORKSHOP_QUOTE_NOT_FOUND");
     }, results);
 
+    await runTest("workshop conversation threads are scoped to the job portal and support customer replies", async () => {
+      const customer = await createCustomer(state, {
+        name: `Conversation Customer ${uniqueRef()}`,
+      });
+      const { job } = await createJob(state, {
+        customerId: customer.id,
+        bikeDescription: "Conversation commuter",
+      });
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Conversation labour",
+          qty: 1,
+          unitPricePence: 3900,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const waitingApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
+
+      const link = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(link.status, 200, JSON.stringify(link.json));
+      const quoteToken = extractQuoteToken(link.json.customerQuote.publicPath);
+
+      const internalNote = await fetchJson(`/api/workshop/jobs/${job.id}/notes`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          visibility: "INTERNAL",
+          note: "Internal diagnostics note that must not appear in the conversation thread.",
+        }),
+      });
+      assert.equal(internalNote.status, 201, JSON.stringify(internalNote.json));
+
+      const sendMessage = await fetchJson(`/api/workshop/jobs/${job.id}/conversation/messages`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          body: "We have your bike on the bench now. Please reply here if you want us to confirm anything before we continue.",
+        }),
+      });
+      assert.equal(sendMessage.status, 201, JSON.stringify(sendMessage.json));
+      assert.equal(sendMessage.json.messages.length, 1);
+      assert.equal(sendMessage.json.messages[0].direction, "OUTBOUND");
+      assert.equal(sendMessage.json.messages[0].channel, "PORTAL");
+
+      const staffConversation = await fetchJson(`/api/workshop/jobs/${job.id}/conversation`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(staffConversation.status, 200, JSON.stringify(staffConversation.json));
+      assert.equal(staffConversation.json.conversation.workshopJobId, job.id);
+      assert.equal(staffConversation.json.conversation.messageCount, 1);
+      assert.equal(staffConversation.json.messages[0].authorStaff.id, STAFF_USER_ID);
+
+      const publicConversation = await fetchJson(`/api/public/workshop/${quoteToken}/conversation`);
+      assert.equal(publicConversation.status, 200, JSON.stringify(publicConversation.json));
+      assert.equal(publicConversation.json.conversation.canReply, true);
+      assert.equal(publicConversation.json.messages.length, 1);
+      assert.equal(publicConversation.json.messages[0].direction, "OUTBOUND");
+      assert.equal(
+        "authorStaff" in publicConversation.json.messages[0],
+        false,
+        JSON.stringify(publicConversation.json.messages[0]),
+      );
+      assert.equal(
+        publicConversation.json.messages.some((message) =>
+          message.body.includes("Internal diagnostics note"),
+        ),
+        false,
+      );
+
+      const reply = await fetchJson(`/api/public/workshop/${quoteToken}/conversation/messages`, {
+        method: "POST",
+        body: JSON.stringify({
+          body: "Please continue with the quoted work and give me a ring if anything else changes.",
+        }),
+      });
+      assert.equal(reply.status, 201, JSON.stringify(reply.json));
+      assert.equal(reply.json.conversation.messageCount, 2);
+      assert.equal(reply.json.messages[1].direction, "INBOUND");
+      assert.equal(reply.json.messages[1].senderLabel, "You");
+
+      const refreshedStaffConversation = await fetchJson(
+        `/api/workshop/jobs/${job.id}/conversation`,
+        {
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(refreshedStaffConversation.status, 200, JSON.stringify(refreshedStaffConversation.json));
+      assert.equal(refreshedStaffConversation.json.messages.length, 2);
+      assert.equal(refreshedStaffConversation.json.messages[1].direction, "INBOUND");
+      assert.equal(refreshedStaffConversation.json.messages[1].authorStaff, null);
+
+      const portalMessageNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "PORTAL_MESSAGE",
+          channel: "WHATSAPP",
+        },
+        "SENT",
+      );
+      assert.ok(portalMessageNotification, "Expected portal message notification row");
+      assert.equal(portalMessageNotification.deliveryStatus, "SENT");
+
+      const notificationHistory = await fetchJson(
+        `/api/workshop/jobs/${job.id}/notifications`,
+        {
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(notificationHistory.status, 200, JSON.stringify(notificationHistory.json));
+      assert.equal(
+        notificationHistory.json.notifications.some(
+          (notification) =>
+            notification.eventType === "PORTAL_MESSAGE" &&
+            notification.channel === "WHATSAPP" &&
+            notification.deliveryStatus === "SENT",
+        ),
+        true,
+        JSON.stringify(notificationHistory.json),
+      );
+    }, results);
+
+    await runTest("portal-message alerts skip truthfully when no active customer portal link exists", async () => {
+      const customer = await createCustomer(state, {
+        name: `Conversation No Link ${uniqueRef()}`,
+      });
+      const { job } = await createJob(state, {
+        customerId: customer.id,
+        bikeDescription: "No-link conversation bike",
+      });
+
+      const sendMessage = await fetchJson(`/api/workshop/jobs/${job.id}/conversation/messages`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          body: "We have an update for you, but the portal has not been shared yet.",
+        }),
+      });
+      assert.equal(sendMessage.status, 201, JSON.stringify(sendMessage.json));
+
+      const skippedNotification = await waitForNotification(
+        {
+          workshopJobId: job.id,
+          eventType: "PORTAL_MESSAGE",
+          channel: "WHATSAPP",
+        },
+        "SKIPPED",
+      );
+      assert.ok(skippedNotification, "Expected skipped portal message notification row");
+      assert.equal(skippedNotification.reasonCode, "PORTAL_ACCESS_UNAVAILABLE");
+    }, results);
+
     await runTest("quote-ready notifications are logged, deduplicated, and skipped safely by channel", async () => {
       const customer = await createCustomer(state, {
         name: "Quote Email Customer",

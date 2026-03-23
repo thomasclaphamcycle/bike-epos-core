@@ -1,6 +1,7 @@
 export type WorkshopNotificationEventType =
   | "QUOTE_READY"
-  | "JOB_READY_FOR_COLLECTION";
+  | "JOB_READY_FOR_COLLECTION"
+  | "PORTAL_MESSAGE";
 
 export type WorkshopNotificationDeliveryStatus =
   | "PENDING"
@@ -25,6 +26,8 @@ export const workshopNotificationEventLabel = (
       return "Quote Ready";
     case "JOB_READY_FOR_COLLECTION":
       return "Ready for Collection";
+    case "PORTAL_MESSAGE":
+      return "Portal Message";
     default:
       return eventType || "-";
   }

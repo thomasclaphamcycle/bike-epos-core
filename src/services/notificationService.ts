@@ -17,6 +17,7 @@ import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { sendEmailMessage } from "./emailService";
 import { sendSmsMessage } from "./smsService";
 import { sendWhatsAppMessage } from "./whatsappService";
+import { getWorkshopPortalAccessForJobTx } from "./workshopEstimateService";
 import { HttpError, isUuid } from "../utils/http";
 
 type WorkshopNotificationEventInput =
@@ -28,6 +29,11 @@ type WorkshopNotificationEventInput =
   | {
       type: "JOB_READY_FOR_COLLECTION";
       workshopJobId: string;
+    }
+  | {
+      type: "PORTAL_MESSAGE";
+      workshopJobId: string;
+      workshopMessageId: string;
     };
 
 type ResendWorkshopNotificationInput = {
@@ -78,6 +84,7 @@ const automaticChannelOrderByEvent: Record<
 > = {
   QUOTE_READY: ["WHATSAPP", "SMS", "EMAIL"],
   JOB_READY_FOR_COLLECTION: ["SMS", "WHATSAPP", "EMAIL"],
+  PORTAL_MESSAGE: ["WHATSAPP", "SMS", "EMAIL"],
 };
 
 const quoteEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
@@ -226,6 +233,9 @@ const summarizeNotificationText = (value: string | null | undefined) => {
 
   return lines.find((line) => !/^hi\b/i.test(line)) ?? lines[0] ?? null;
 };
+
+const truncateText = (value: string, limit = 120) =>
+  value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
 
 const notificationChannelLabel = (channel: WorkshopNotificationChannel) => {
   switch (channel) {
@@ -981,6 +991,308 @@ const buildReadyForCollectionDecisions = async (
   ];
 };
 
+const buildPortalMessageDecisions = async (
+  workshopJobId: string,
+  workshopMessageId: string,
+): Promise<NotificationChannelDecision[]> => {
+  const message = await prisma.workshopMessage.findUnique({
+    where: { id: workshopMessageId },
+    include: {
+      authorStaff: {
+        select: {
+          id: true,
+          username: true,
+          name: true,
+        },
+      },
+      conversation: {
+        select: {
+          id: true,
+          workshopJobId: true,
+        },
+      },
+    },
+  });
+
+  const baseDedupeKey = `workshop:portal-message:${workshopMessageId}`;
+  const missingMessagePayload: Prisma.JsonObject = {
+    workshopJobId,
+    workshopMessageId,
+  };
+  if (!message || message.conversation.workshopJobId !== workshopJobId) {
+    return notificationChannels.map((channel) =>
+      buildSkipDecision({
+        channel,
+        strategyRank: getStrategyRank("PORTAL_MESSAGE", channel),
+        payload: missingMessagePayload,
+        customerId: null,
+        workshopEstimateId: null,
+        baseDedupeKey,
+        reasonCode: "MESSAGE_NOT_FOUND",
+        reasonMessage:
+          "Workshop conversation message could not be loaded for notification.",
+      }),
+    );
+  }
+
+  const job = await prisma.workshopJob.findUnique({
+    where: { id: workshopJobId },
+    include: readyJobInclude,
+  });
+
+  if (!job) {
+    return notificationChannels.map((channel) =>
+      buildSkipDecision({
+        channel,
+        strategyRank: getStrategyRank("PORTAL_MESSAGE", channel),
+        payload: missingMessagePayload,
+        customerId: null,
+        workshopEstimateId: null,
+        baseDedupeKey,
+        reasonCode: "WORKSHOP_JOB_NOT_FOUND",
+        reasonMessage:
+          "Workshop job could not be loaded for the portal message notification.",
+      }),
+    );
+  }
+
+  const customerName = job.customer
+    ? buildCustomerDisplayName(job.customer)
+    : normalizeOptionalText(job.customerName) ?? "Workshop customer";
+  const customer = job.customer;
+  const bikeDisplayName = buildBikeDisplayName({
+    bike: job.bike,
+    bikeDescription: job.bikeDescription,
+  });
+  const recipientEmail = normalizeOptionalEmail(customer?.email);
+  const recipientPhone = normalizeOptionalPhone(customer?.phone);
+  const customerId = customer?.id ?? job.customerId ?? null;
+  const authorLabel =
+    normalizeOptionalText(message.authorStaff?.name) ??
+    normalizeOptionalText(message.authorStaff?.username) ??
+    "Workshop team";
+  const messageExcerpt = truncateText(message.body, 140);
+  const portalAccess = await getWorkshopPortalAccessForJobTx(prisma, workshopJobId);
+  const basePayload: Prisma.JsonObject = {
+    workshopJobId,
+    workshopMessageId,
+    conversationId: message.conversation.id,
+    bikeDescription: bikeDisplayName,
+    customerName,
+    authorLabel,
+    messageExcerpt,
+    portalPublicPath: portalAccess.publicPath,
+  };
+
+  if (
+    message.direction !== "OUTBOUND" ||
+    message.channel !== "PORTAL" ||
+    !message.customerVisible
+  ) {
+    return notificationChannels.map((channel) =>
+      buildSkipDecision({
+        channel,
+        strategyRank: getStrategyRank("PORTAL_MESSAGE", channel),
+        recipientEmail,
+        recipientPhone,
+        payload: basePayload,
+        customerId,
+        workshopEstimateId: null,
+        baseDedupeKey,
+        reasonCode: "MESSAGE_NOT_ACTIONABLE",
+        reasonMessage:
+          "Only outbound customer-visible portal messages can trigger customer alerts.",
+      }),
+    );
+  }
+
+  if (!portalAccess.publicPath || !portalAccess.canCustomerReply) {
+    return notificationChannels.map((channel) =>
+      buildSkipDecision({
+        channel,
+        strategyRank: getStrategyRank("PORTAL_MESSAGE", channel),
+        recipientEmail,
+        recipientPhone,
+        payload: {
+          ...basePayload,
+          portalAccessStatus: portalAccess.accessStatus,
+        },
+        customerId,
+        workshopEstimateId: portalAccess.linkedEstimateId,
+        baseDedupeKey,
+        reasonCode: "PORTAL_ACCESS_UNAVAILABLE",
+        reasonMessage:
+          "Customer portal access is not currently active for this job, so the new message alert was skipped.",
+      }),
+    );
+  }
+
+  const { store } = await resolveStoreContext();
+  const portalUrl = resolvePublicAppUrl(portalAccess.publicPath);
+  const emailSubject = `${store.name}: new update on your workshop job`;
+  const emailText = [
+    `Hi ${customerName},`,
+    "",
+    `${authorLabel} has sent a new update about ${bikeDisplayName}.`,
+    "",
+    `"${messageExcerpt}"`,
+    "",
+    "Open your workshop portal to read the full message and reply:",
+    portalUrl,
+    "",
+    `Thanks,`,
+    store.name,
+    store.phone ? store.phone : null,
+    store.email ? store.email : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+  const emailHtml = [
+    `<p>Hi ${escapeHtml(customerName)},</p>`,
+    `<p>${escapeHtml(authorLabel)} has sent a new update about <strong>${escapeHtml(bikeDisplayName)}</strong>.</p>`,
+    `<blockquote>${escapeHtml(messageExcerpt)}</blockquote>`,
+    `<p><a href="${escapeHtml(portalUrl)}">Open your workshop portal to read the full message and reply</a></p>`,
+    `<p>Thanks,<br />${escapeHtml(store.name)}${
+      store.phone ? `<br />${escapeHtml(store.phone)}` : ""
+    }${store.email ? `<br />${escapeHtml(store.email)}` : ""}</p>`,
+  ].join("");
+  const smsText = `${store.name}: new update about ${bikeDisplayName}: "${messageExcerpt}" Reply in your workshop portal: ${portalUrl}`;
+  const whatsAppText = `Hi ${customerName}, ${authorLabel} sent a new update about ${bikeDisplayName}: "${messageExcerpt}" Reply here: ${portalUrl}`;
+
+  return [
+    !recipientEmail
+      ? buildSkipDecision({
+          channel: "EMAIL",
+          strategyRank: getStrategyRank("PORTAL_MESSAGE", "EMAIL"),
+          recipientPhone,
+          payload: basePayload,
+          customerId,
+          workshopEstimateId: portalAccess.linkedEstimateId,
+          baseDedupeKey,
+          reasonCode: "CUSTOMER_EMAIL_MISSING",
+          reasonMessage:
+            "Customer email is missing, so the portal message alert email was not sent.",
+        })
+      : !isCustomerChannelAllowed(customer, "EMAIL")
+        ? buildSkipDecision({
+            channel: "EMAIL",
+            strategyRank: getStrategyRank("PORTAL_MESSAGE", "EMAIL"),
+            recipientEmail,
+            recipientPhone: null,
+            subject: emailSubject,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: portalAccess.linkedEstimateId,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("EMAIL"),
+          })
+        : {
+            channel: "EMAIL",
+            action: "send",
+            strategyRank: getStrategyRank("PORTAL_MESSAGE", "EMAIL"),
+            recipientEmail,
+            recipientPhone: null,
+            subject: emailSubject,
+            text: emailText,
+            html: emailHtml,
+            payload: {
+              ...basePayload,
+              portalUrl,
+            },
+            customerId,
+            workshopEstimateId: portalAccess.linkedEstimateId,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "EMAIL"),
+          },
+    !recipientPhone
+      ? buildSkipDecision({
+          channel: "SMS",
+          strategyRank: getStrategyRank("PORTAL_MESSAGE", "SMS"),
+          recipientEmail,
+          payload: basePayload,
+          customerId,
+          workshopEstimateId: portalAccess.linkedEstimateId,
+          baseDedupeKey,
+          reasonCode: "CUSTOMER_PHONE_MISSING",
+          reasonMessage:
+            "Customer phone number is missing, so the portal message SMS alert was not sent.",
+        })
+      : !isCustomerChannelAllowed(customer, "SMS")
+        ? buildSkipDecision({
+            channel: "SMS",
+            strategyRank: getStrategyRank("PORTAL_MESSAGE", "SMS"),
+            recipientEmail: null,
+            recipientPhone,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: portalAccess.linkedEstimateId,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("SMS"),
+          })
+        : {
+            channel: "SMS",
+            action: "send",
+            strategyRank: getStrategyRank("PORTAL_MESSAGE", "SMS"),
+            recipientEmail: null,
+            recipientPhone,
+            subject: null,
+            text: smsText,
+            html: null,
+            payload: {
+              ...basePayload,
+              portalUrl,
+            },
+            customerId,
+            workshopEstimateId: portalAccess.linkedEstimateId,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "SMS"),
+          },
+    !recipientPhone
+      ? buildSkipDecision({
+          channel: "WHATSAPP",
+          strategyRank: getStrategyRank("PORTAL_MESSAGE", "WHATSAPP"),
+          recipientEmail,
+          payload: basePayload,
+          customerId,
+          workshopEstimateId: portalAccess.linkedEstimateId,
+          baseDedupeKey,
+          reasonCode: "CUSTOMER_PHONE_MISSING",
+          reasonMessage:
+            "Customer phone number is missing, so the portal message WhatsApp alert was not sent.",
+        })
+      : !isCustomerChannelAllowed(customer, "WHATSAPP")
+        ? buildSkipDecision({
+            channel: "WHATSAPP",
+            strategyRank: getStrategyRank("PORTAL_MESSAGE", "WHATSAPP"),
+            recipientEmail: null,
+            recipientPhone,
+            payload: basePayload,
+            customerId,
+            workshopEstimateId: portalAccess.linkedEstimateId,
+            baseDedupeKey,
+            reasonCode: "CUSTOMER_CHANNEL_DISABLED",
+            reasonMessage: buildCustomerChannelDisabledReasonMessage("WHATSAPP"),
+          })
+        : {
+            channel: "WHATSAPP",
+            action: "send",
+            strategyRank: getStrategyRank("PORTAL_MESSAGE", "WHATSAPP"),
+            recipientEmail: null,
+            recipientPhone,
+            subject: null,
+            text: whatsAppText,
+            html: null,
+            payload: {
+              ...basePayload,
+              portalUrl,
+            },
+            customerId,
+            workshopEstimateId: portalAccess.linkedEstimateId,
+            dedupeKey: buildChannelDedupeKey(baseDedupeKey, "WHATSAPP"),
+          },
+  ];
+};
+
 const claimWorkshopNotification = async (
   workshopJobId: string,
   eventType: WorkshopNotificationEventType,
@@ -1241,10 +1553,16 @@ export const deliverWorkshopNotificationEvent = async (
   const decisions =
     input.type === "QUOTE_READY"
       ? await buildQuoteReadyDecisions(input.workshopJobId, input.workshopEstimateId)
+      : input.type === "PORTAL_MESSAGE"
+        ? await buildPortalMessageDecisions(input.workshopJobId, input.workshopMessageId)
       : await buildReadyForCollectionDecisions(input.workshopJobId);
 
   const eventType: WorkshopNotificationEventType =
-    input.type === "QUOTE_READY" ? "QUOTE_READY" : "JOB_READY_FOR_COLLECTION";
+    input.type === "QUOTE_READY"
+      ? "QUOTE_READY"
+      : input.type === "PORTAL_MESSAGE"
+        ? "PORTAL_MESSAGE"
+        : "JOB_READY_FOR_COLLECTION";
 
   const results = [] as Array<{
     notificationId: string;

@@ -157,13 +157,19 @@ Current internal subscribers are:
   - derive a default `dueAt` at 90 days after completion and store `PENDING`, `READY`, or `DISMISSED`
   - preserve idempotency by keeping at most one reminder candidate per workshop job
 - notification subscribers in `src/core/notificationSubscribers.ts`
-  - currently listen to `workshop.quote.ready` and `workshop.job.ready_for_collection`
+  - currently listen to `workshop.quote.ready`, `workshop.job.ready_for_collection`, and `workshop.portal_message.ready`
   - create persistent `WorkshopNotification` rows for sent, skipped, failed, and duplicate-safe notification outcomes
   - send simple workshop customer messages through `src/services/notificationService.ts`, `src/services/emailService.ts`, `src/services/smsService.ts`, and `src/services/whatsappService.ts`
-  - apply deterministic primary-channel selection plus fallback inside `notificationService.ts`, so quote-ready prefers WhatsApp then SMS then email, while ready-for-collection prefers SMS then WhatsApp then email
+  - apply deterministic primary-channel selection plus fallback inside `notificationService.ts`, so quote-ready and portal-message alerts prefer WhatsApp then SMS then email, while ready-for-collection prefers SMS then WhatsApp then email
   - respect explicit per-customer operational channel permissions on `Customer.emailAllowed`, `Customer.smsAllowed`, and `Customer.whatsappAllowed` before attempting a delivery or fallback
   - default to log-mode delivery locally, while allowing SMTP email delivery plus Twilio-backed SMS and WhatsApp delivery from environment configuration
   - support simple channel gating via environment flags alongside staff-managed customer communication settings on the customer profile
+- workshop customer conversation in `src/services/workshopConversationService.ts`
+  - stores one additive `WorkshopConversation` per `WorkshopJob`, with timestamped `WorkshopMessage` rows for outbound staff portal messages and inbound customer portal replies
+  - keeps customer conversation distinct from `WorkshopJobNote`, so internal notes and quote-only notes remain separate from the auditable customer thread
+  - exposes staff-side thread retrieval and message posting under `/api/workshop/jobs/:id/conversation` plus `/messages`
+  - exposes token-scoped public thread retrieval and reply posting under `/api/public/workshop/:token/conversation` plus `/messages`
+  - currently uses the existing secure workshop portal token as the public access boundary, so v1 reply capture is portal-thread based rather than full email/SMS/WhatsApp webhook ingestion
 - workshop calendar foundation in `src/services/workshopCalendarService.ts`
   - keeps the existing day-level `scheduledDate` contract intact while adding optional `scheduledStartAt`, `scheduledEndAt`, and `durationMinutes` on `WorkshopJob`
   - validates timed jobs against shared store opening hours first, then staff-specific `WorkshopWorkingHours` and `WorkshopTimeOff` when a technician is assigned
@@ -180,6 +186,7 @@ Current internal subscribers are:
 - customer workshop portal in `src/services/workshopEstimateService.ts` and `frontend/src/pages/WorkshopQuotePage.tsx`
   - reuses the existing secure customer quote token on `WorkshopEstimate.customerQuoteToken` rather than creating a parallel public-access model
   - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing friendly job status, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline
+  - now also exposes token-scoped conversation retrieval and reply posting so the portal carries a real job thread instead of staying quote-only
   - keeps approval and rejection on the same estimate-decision workflow, so `POST /api/public/workshop/:token/decision` stays idempotent and still blocks stale or superseded quote approval
   - preserves existing `/quote/:token` frontend links and `/api/public/workshop-quotes/:token` API aliases for compatibility while new generated links point to `/public/workshop/:token`
 
@@ -192,4 +199,4 @@ Manager-facing internal visibility now exists through:
 
 These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now includes quote/share notifications plus the secure workshop portal above, but push notifications, broader customer self-service account management, and webhook-style external integrations remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus an initial staff day-view calendar UI rather than a full scheduling-management suite.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now includes quote/share notifications, secure portal access, and a portal-thread conversation model, but push notifications, broader customer self-service account management, and full external-channel reply ingestion remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus an initial staff day-view calendar UI rather than a full scheduling-management suite.

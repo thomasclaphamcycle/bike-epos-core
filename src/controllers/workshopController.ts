@@ -36,6 +36,12 @@ import {
   updateWorkshopJobSchedule,
 } from "../services/workshopWorkflowService";
 import {
+  getPublicWorkshopConversation,
+  getWorkshopConversationForJob,
+  postPublicWorkshopConversationReply,
+  postWorkshopConversationMessageForJob,
+} from "../services/workshopConversationService";
+import {
   addWorkshopJobLine,
   attachCustomerToWorkshopJob,
   closeWorkshopJob,
@@ -807,6 +813,43 @@ export const getWorkshopJobNotesHandler = async (req: Request, res: Response) =>
   res.json(result);
 };
 
+export const getWorkshopJobConversationHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getWorkshopConversationForJob(req.params.id);
+  res.json(result);
+};
+
+export const postWorkshopJobConversationMessageHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    body?: unknown;
+    channel?: unknown;
+  };
+
+  if (body.body !== undefined && typeof body.body !== "string") {
+    throw new HttpError(400, "body must be a string", "INVALID_WORKSHOP_MESSAGE");
+  }
+  if (body.channel !== undefined && typeof body.channel !== "string") {
+    throw new HttpError(400, "channel must be a string", "INVALID_WORKSHOP_MESSAGE");
+  }
+
+  const result = await postWorkshopConversationMessageForJob(
+    req.params.id,
+    {
+      body: typeof body.body === "string" ? body.body : "",
+      channel: typeof body.channel === "string" ? body.channel : undefined,
+      authorStaffId: getRequestStaffActorId(req),
+    },
+    getRequestAuditActor(req),
+  );
+
+  res.status(201).json(result);
+};
+
 export const changeWorkshopJobStatusHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     status?: string;
@@ -874,6 +917,32 @@ export const getPublicWorkshopEstimateQuoteHandler = async (req: Request, res: R
 export const getPublicWorkshopPortalHandler = async (req: Request, res: Response) => {
   const result = await getPublicWorkshopEstimateQuote(req.params.token);
   res.json(result);
+};
+
+export const getPublicWorkshopConversationHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getPublicWorkshopConversation(req.params.token);
+  res.json(result);
+};
+
+export const postPublicWorkshopConversationReplyHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    body?: unknown;
+  };
+
+  if (body.body !== undefined && typeof body.body !== "string") {
+    throw new HttpError(400, "body must be a string", "INVALID_WORKSHOP_MESSAGE");
+  }
+
+  const result = await postPublicWorkshopConversationReply(req.params.token, {
+    body: typeof body.body === "string" ? body.body : "",
+  });
+  res.status(201).json(result);
 };
 
 export const submitPublicWorkshopEstimateQuoteDecisionHandler = async (

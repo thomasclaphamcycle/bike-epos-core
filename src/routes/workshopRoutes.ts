@@ -16,12 +16,14 @@ import {
   getWorkshopCalendarHandler,
   getWorkshopDashboardHandler,
   getWorkshopJobHandler,
+  getWorkshopJobConversationHandler,
   getWorkshopJobNotesHandler,
   listWorkshopJobNotificationsHandler,
   listWorkshopJobsHandler,
   patchWorkshopJobScheduleHandler,
   patchWorkshopJobLineHandler,
   patchWorkshopJobHandler,
+  postWorkshopJobConversationMessageHandler,
   resendWorkshopJobNotificationHandler,
   saveWorkshopEstimateHandler,
   setWorkshopJobApprovalStatusHandler,
@@ -49,6 +51,8 @@ workshopRouter.delete("/service-templates/:id", requireRoleAtLeast("MANAGER"), d
 workshopRouter.post("/jobs", requireRoleAtLeast("STAFF"), createWorkshopJobHandler);
 workshopRouter.get("/jobs", requireRoleAtLeast("STAFF"), listWorkshopJobsHandler);
 workshopRouter.get("/jobs/:id", requireRoleAtLeast("STAFF"), getWorkshopJobHandler);
+workshopRouter.get("/jobs/:id/conversation", requireRoleAtLeast("STAFF"), getWorkshopJobConversationHandler);
+workshopRouter.post("/jobs/:id/conversation/messages", requireRoleAtLeast("STAFF"), postWorkshopJobConversationMessageHandler);
 workshopRouter.post("/jobs/:id/templates/apply", requireRoleAtLeast("STAFF"), applyWorkshopServiceTemplateHandler);
 workshopRouter.get("/jobs/:id/notifications", requireRoleAtLeast("STAFF"), listWorkshopJobNotificationsHandler);
 workshopRouter.post("/jobs/:id/notifications/resend", requireRoleAtLeast("STAFF"), resendWorkshopJobNotificationHandler);
