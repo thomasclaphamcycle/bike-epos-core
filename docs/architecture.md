@@ -175,6 +175,7 @@ Current internal subscribers are:
   - store reusable workshop job starters in `WorkshopServiceTemplate` and `WorkshopServiceTemplateLine`, including labour lines plus optional part suggestions
   - expose manager CRUD under `/api/workshop/service-templates` and application to live jobs under `POST /api/workshop/jobs/:id/templates/apply`
   - apply templates by creating ordinary `WorkshopJobLine` records, then invalidating the current estimate through the existing estimate service so downstream quoting and approval workflows stay truthful
+  - propagate `defaultDurationMinutes` into `WorkshopJob.durationMinutes` only when the job does not already have an intentional duration, which keeps calendar planning defaults additive instead of silently overwriting live schedule decisions
   - support compact staff usage during check-in and on the workshop job page, while manager maintenance lives at `/management/workshop/templates`
 
 Manager-facing internal visibility now exists through:

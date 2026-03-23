@@ -374,6 +374,7 @@ X-Staff-Id: demo-manager
 }
 
 ### Apply a workshop service template to a job
+### If the job does not already have a planning duration, the template default duration is applied too.
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/templates/apply
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}

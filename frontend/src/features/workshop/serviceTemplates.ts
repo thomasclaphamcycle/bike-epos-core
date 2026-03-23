@@ -36,6 +36,22 @@ export type WorkshopServiceTemplatesResponse = {
   templates: WorkshopServiceTemplate[];
 };
 
+export type WorkshopServiceTemplateApplyResponse = {
+  jobId: string;
+  appliedLineCount: number;
+  durationEffect: {
+    templateDefaultDurationMinutes: number | null;
+    appliedDurationMinutes: number | null;
+    durationUpdated: boolean;
+    timedScheduleUpdated: boolean;
+    reason:
+      | "template_has_no_default_duration"
+      | "job_duration_already_set"
+      | "unscheduled_duration_set"
+      | "scheduled_duration_backfilled";
+  };
+};
+
 export const getOptionalTemplateLineIds = (template: WorkshopServiceTemplate | null | undefined) =>
   (template?.lines ?? [])
     .filter((line) => line.isOptional)

@@ -6,6 +6,10 @@ import {
   createWorkshopJobLineRecordTx,
 } from "./workshopService";
 import { invalidateCurrentWorkshopEstimateTx } from "./workshopEstimateService";
+import {
+  assertWorkshopScheduleAllowed,
+  resolveWorkshopSchedulePatch,
+} from "./workshopCalendarService";
 
 type WorkshopServiceTemplateClient = Prisma.TransactionClient | typeof prisma;
 
@@ -34,6 +38,18 @@ type ApplyWorkshopServiceTemplateInput = {
   templateId?: string;
   selectedOptionalLineIds?: string[];
   actor?: AuditActor;
+};
+
+type TemplateDurationEffect = {
+  templateDefaultDurationMinutes: number | null;
+  appliedDurationMinutes: number | null;
+  durationUpdated: boolean;
+  timedScheduleUpdated: boolean;
+  reason:
+    | "template_has_no_default_duration"
+    | "job_duration_already_set"
+    | "unscheduled_duration_set"
+    | "scheduled_duration_backfilled";
 };
 
 const templateLineInclude = Prisma.validator<Prisma.WorkshopServiceTemplateLineInclude>()({
@@ -365,6 +381,107 @@ const getTemplateByIdTx = async (
   return template;
 };
 
+const applyTemplateDefaultDurationTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+  defaultDurationMinutes: number | null,
+): Promise<TemplateDurationEffect> => {
+  if (!defaultDurationMinutes) {
+    return {
+      templateDefaultDurationMinutes: null,
+      appliedDurationMinutes: null,
+      durationUpdated: false,
+      timedScheduleUpdated: false,
+      reason: "template_has_no_default_duration",
+    };
+  }
+
+  const job = await tx.workshopJob.findUnique({
+    where: { id: workshopJobId },
+    select: {
+      id: true,
+      assignedStaffId: true,
+      scheduledDate: true,
+      scheduledStartAt: true,
+      scheduledEndAt: true,
+      durationMinutes: true,
+    },
+  });
+
+  if (!job) {
+    throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+  }
+
+  if (job.durationMinutes) {
+    return {
+      templateDefaultDurationMinutes: defaultDurationMinutes,
+      appliedDurationMinutes: job.durationMinutes,
+      durationUpdated: false,
+      timedScheduleUpdated: false,
+      reason: "job_duration_already_set",
+    };
+  }
+
+  if (!job.scheduledStartAt && !job.scheduledEndAt) {
+    await tx.workshopJob.update({
+      where: { id: workshopJobId },
+      data: {
+        durationMinutes: defaultDurationMinutes,
+      },
+    });
+
+    return {
+      templateDefaultDurationMinutes: defaultDurationMinutes,
+      appliedDurationMinutes: defaultDurationMinutes,
+      durationUpdated: true,
+      timedScheduleUpdated: false,
+      reason: "unscheduled_duration_set",
+    };
+  }
+
+  const scheduleResolution = await resolveWorkshopSchedulePatch(
+    {
+      durationMinutes: defaultDurationMinutes,
+    },
+    {
+      scheduledDate: job.scheduledDate,
+      scheduledStartAt: job.scheduledStartAt,
+      scheduledEndAt: job.scheduledEndAt,
+      durationMinutes: job.durationMinutes,
+    },
+    tx,
+  );
+
+  await assertWorkshopScheduleAllowed(
+    {
+      workshopJobId,
+      staffId: job.assignedStaffId,
+      scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+      scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+      durationMinutes: scheduleResolution.schedule.durationMinutes,
+    },
+    tx,
+  );
+
+  await tx.workshopJob.update({
+    where: { id: workshopJobId },
+    data: {
+      scheduledDate: scheduleResolution.schedule.scheduledDate,
+      scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
+      scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
+      durationMinutes: scheduleResolution.schedule.durationMinutes,
+    },
+  });
+
+  return {
+    templateDefaultDurationMinutes: defaultDurationMinutes,
+    appliedDurationMinutes: scheduleResolution.schedule.durationMinutes,
+    durationUpdated: true,
+    timedScheduleUpdated: true,
+    reason: "scheduled_duration_backfilled",
+  };
+};
+
 export const listWorkshopServiceTemplates = async (input?: {
   includeInactive?: boolean;
 }) => {
@@ -636,6 +753,12 @@ export const applyWorkshopServiceTemplateToJob = async (
       createdLines.push(createdLine);
     }
 
+    const durationEffect = await applyTemplateDefaultDurationTx(
+      tx,
+      workshopJobId,
+      template.defaultDurationMinutes ?? null,
+    );
+
     await invalidateCurrentWorkshopEstimateTx(
       tx,
       workshopJobId,
@@ -653,6 +776,11 @@ export const applyWorkshopServiceTemplateToJob = async (
           templateName: template.name,
           lineCountApplied: createdLines.length,
           selectedOptionalLineIds: Array.from(selectedOptionalLineSet),
+          templateDefaultDurationMinutes: durationEffect.templateDefaultDurationMinutes,
+          appliedDurationMinutes: durationEffect.appliedDurationMinutes,
+          durationUpdated: durationEffect.durationUpdated,
+          timedScheduleUpdated: durationEffect.timedScheduleUpdated,
+          durationUpdateReason: durationEffect.reason,
         },
       },
       input.actor,
@@ -662,6 +790,7 @@ export const applyWorkshopServiceTemplateToJob = async (
       jobId: workshopJobId,
       template: toTemplateResponse(template),
       appliedLineCount: createdLines.length,
+      durationEffect,
       lines: createdLines.map((line) => ({
         id: line.id,
         type: line.type,

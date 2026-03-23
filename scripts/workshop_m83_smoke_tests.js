@@ -167,9 +167,55 @@ const getWorkshopDayOfWeek = (value) => {
   return WORKSHOP_DAY_OF_WEEK_BY_NAME[weekday];
 };
 
+const getWorkshopTimeParts = (value) =>
+  Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: WORKSHOP_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(value)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+
 const toScheduledSlot = (date, hours, minutes = 0) => {
-  const slot = new Date(date);
-  slot.setUTCHours(hours, minutes, 0, 0);
+  const baseParts = getWorkshopTimeParts(date);
+  const targetLocalTimestamp = Date.UTC(
+    Number(baseParts.year),
+    Number(baseParts.month) - 1,
+    Number(baseParts.day),
+    hours,
+    minutes,
+    0,
+    0,
+  );
+
+  let slot = new Date(targetLocalTimestamp);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const actualParts = getWorkshopTimeParts(slot);
+    const actualLocalTimestamp = Date.UTC(
+      Number(actualParts.year),
+      Number(actualParts.month) - 1,
+      Number(actualParts.day),
+      Number(actualParts.hour),
+      Number(actualParts.minute),
+      Number(actualParts.second),
+      0,
+    );
+    const adjustmentMs = targetLocalTimestamp - actualLocalTimestamp;
+    if (adjustmentMs === 0) {
+      return slot;
+    }
+
+    slot = new Date(slot.getTime() + adjustmentMs);
+  }
+
   return slot;
 };
 
@@ -1113,12 +1159,16 @@ const run = async () => {
       });
       assert.equal(applyTemplate.status, 201, JSON.stringify(applyTemplate.json));
       assert.equal(applyTemplate.json.appliedLineCount, 2);
+      assert.equal(applyTemplate.json.durationEffect.durationUpdated, true);
+      assert.equal(applyTemplate.json.durationEffect.appliedDurationMinutes, 45);
+      assert.equal(applyTemplate.json.durationEffect.reason, "unscheduled_duration_set");
 
       const detail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
         headers: STAFF_HEADERS,
       });
       assert.equal(detail.status, 200, JSON.stringify(detail.json));
       assert.equal(detail.json.lines.length, 2);
+      assert.equal(detail.json.job.durationMinutes, 45);
       assert.deepEqual(
         detail.json.lines.map((line) => line.description),
         ["Puncture repair labour", "Tube replacement"],
@@ -1138,6 +1188,38 @@ const run = async () => {
       assert.equal(estimatedDetail.status, 200, JSON.stringify(estimatedDetail.json));
       assert.equal(estimatedDetail.json.currentEstimate.subtotalPence, 2299);
       assert.equal(estimatedDetail.json.currentEstimate.lineCount, 2);
+
+      const scheduledJobDate = addDays(todayUtc(), 17);
+      const scheduledJobStart = toScheduledSlot(scheduledJobDate, 12, 0);
+      const scheduledJobEnd = toScheduledSlot(scheduledJobDate, 13, 30);
+      const { job: scheduledJob } = await createJob(state, {
+        bikeDescription: "Scheduled workshop template job",
+        scheduledStartAt: scheduledJobStart.toISOString(),
+        scheduledEndAt: scheduledJobEnd.toISOString(),
+        durationMinutes: 90,
+      });
+
+      const applyToScheduled = await fetchJson(`/api/workshop/jobs/${scheduledJob.id}/templates/apply`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          templateId: template.id,
+        }),
+      });
+      assert.equal(applyToScheduled.status, 201, JSON.stringify(applyToScheduled.json));
+      assert.equal(applyToScheduled.json.durationEffect.durationUpdated, false);
+      assert.equal(applyToScheduled.json.durationEffect.appliedDurationMinutes, 90);
+      assert.equal(applyToScheduled.json.durationEffect.reason, "job_duration_already_set");
+
+      const scheduledDetail = await fetchJson(`/api/workshop/jobs/${scheduledJob.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(scheduledDetail.status, 200, JSON.stringify(scheduledDetail.json));
+      assert.equal(scheduledDetail.json.job.durationMinutes, 90);
+      assert.equal(
+        new Date(scheduledDetail.json.job.scheduledEndAt).toISOString(),
+        scheduledJobEnd.toISOString(),
+      );
     }, results);
 
     await runTest("timed workshop jobs derive schedule fields, reject store-closed slots, and validate end-time consistency", async () => {
