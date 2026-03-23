@@ -38,6 +38,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const currentPath = location.pathname;
   const isWorkspacePage = workspacePagePrefixes.some((prefix) => currentPath.startsWith(prefix));
+  const isWorkshopOperatingScreen = currentPath === "/workshop";
   const visibleSections = useMemo(() => (
     navigationSections
       .filter((section) => canAccessNavigationRole(user?.role, section.minimumRole))
@@ -209,9 +210,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <div className="app-shell">
         <main className={currentPath.startsWith("/pos")
           ? "app-main app-main--workspace app-main--pos"
-          : isWorkspacePage
-            ? "app-main app-main--workspace"
-            : "app-main"}
+          : isWorkshopOperatingScreen
+            ? "app-main app-main--workspace app-main--workspace-wide"
+            : isWorkspacePage
+              ? "app-main app-main--workspace"
+              : "app-main"}
         >
           {children}
         </main>

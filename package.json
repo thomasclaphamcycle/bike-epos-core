@@ -1,6 +1,10 @@
 {
   "name": "bike-epos-core",
+<<<<<<< HEAD
   "version": "1.1.29",
+=======
+  "version": "1.1.33",
+>>>>>>> 9357c33 (fix: remove workshop route width constraint)
   "description": "",
   "main": "index.js",
   "scripts": {
