@@ -134,6 +134,8 @@ const CURRENT_YEAR = new Date().getUTCFullYear();
 const MAX_VALID_BIKE_YEAR = CURRENT_YEAR + 1;
 const TOO_LOW_BIKE_YEAR = 1899;
 const TOO_HIGH_BIKE_YEAR = MAX_VALID_BIKE_YEAR + 1;
+const TINY_PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sX9jKkAAAAASUVORK5CYII=";
 
 const RUN_REF = uniqueRef();
 const STAFF_USER_ID = `m83-staff-${RUN_REF}`;
@@ -1712,6 +1714,116 @@ const run = async () => {
       const missingPortal = await fetchJson(`/api/public/workshop/not-a-real-token`);
       assert.equal(missingPortal.status, 404, JSON.stringify(missingPortal.json));
       assert.equal(missingPortal.json.error.code, "WORKSHOP_QUOTE_NOT_FOUND");
+    }, results);
+
+    await runTest("workshop attachments respect internal vs customer visibility and portal access", async () => {
+      const customer = await createCustomer(state, {
+        name: `Attachment Customer ${uniqueRef()}`,
+      });
+      const { job } = await createJob(state, {
+        customerId: customer.id,
+        bikeDescription: "Attachment commuter",
+      });
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Attachment labour",
+          qty: 1,
+          unitPricePence: 4200,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const waitingApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
+
+      const link = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(link.status, 200, JSON.stringify(link.json));
+      const quoteToken = extractQuoteToken(link.json.customerQuote.publicPath);
+
+      const internalAttachment = await fetchJson(`/api/workshop/jobs/${job.id}/attachments`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          filename: "internal-damage-photo.png",
+          fileDataUrl: TINY_PNG_DATA_URL,
+          visibility: "INTERNAL",
+        }),
+      });
+      assert.equal(internalAttachment.status, 201, JSON.stringify(internalAttachment.json));
+      assert.equal(internalAttachment.json.attachment.visibility, "INTERNAL");
+
+      const customerAttachment = await fetchJson(`/api/workshop/jobs/${job.id}/attachments`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          filename: "customer-repair-photo.png",
+          fileDataUrl: TINY_PNG_DATA_URL,
+          visibility: "CUSTOMER",
+        }),
+      });
+      assert.equal(customerAttachment.status, 201, JSON.stringify(customerAttachment.json));
+      assert.equal(customerAttachment.json.attachment.visibility, "CUSTOMER");
+
+      const staffAttachments = await fetchJson(`/api/workshop/jobs/${job.id}/attachments`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(staffAttachments.status, 200, JSON.stringify(staffAttachments.json));
+      assert.equal(staffAttachments.json.attachments.length, 2);
+      assert.equal(
+        staffAttachments.json.attachments.some((attachment) => attachment.visibility === "INTERNAL"),
+        true,
+      );
+      assert.equal(
+        staffAttachments.json.attachments.some((attachment) => attachment.visibility === "CUSTOMER"),
+        true,
+      );
+
+      const publicAttachments = await fetchJson(`/api/public/workshop/${quoteToken}/attachments`);
+      assert.equal(publicAttachments.status, 200, JSON.stringify(publicAttachments.json));
+      assert.equal(publicAttachments.json.attachments.length, 1);
+      assert.equal(publicAttachments.json.attachments[0].filename, "customer-repair-photo.png");
+
+      const publicAttachmentFile = await fetchFromApp(
+        publicAttachments.json.attachments[0].filePath,
+      );
+      assert.equal(publicAttachmentFile.status, 200);
+      assert.equal(publicAttachmentFile.headers.get("content-type"), "image/png");
+
+      const internalAttachmentFile = await fetchJson(
+        `/api/public/workshop/${quoteToken}/attachments/${internalAttachment.json.attachment.id}/file`,
+      );
+      assert.equal(internalAttachmentFile.status, 404, JSON.stringify(internalAttachmentFile.json));
+      assert.equal(
+        internalAttachmentFile.json.error.code,
+        "WORKSHOP_ATTACHMENT_NOT_FOUND",
+      );
+
+      const deleteAttachment = await fetchJson(
+        `/api/workshop/jobs/${job.id}/attachments/${customerAttachment.json.attachment.id}`,
+        {
+          method: "DELETE",
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(deleteAttachment.status, 200, JSON.stringify(deleteAttachment.json));
+
+      const refreshedPublicAttachments = await fetchJson(
+        `/api/public/workshop/${quoteToken}/attachments`,
+      );
+      assert.equal(refreshedPublicAttachments.status, 200, JSON.stringify(refreshedPublicAttachments.json));
+      assert.equal(refreshedPublicAttachments.json.attachments.length, 0);
     }, results);
 
     await runTest("workshop conversation threads are scoped to the job portal and support customer replies", async () => {

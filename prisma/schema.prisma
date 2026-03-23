@@ -1101,6 +1101,7 @@ model WorkshopJob {
   notifications      WorkshopNotification[]
   reminderCandidates ReminderCandidate[]
   conversation       WorkshopConversation?
+  attachments        WorkshopAttachment[]
 
   @@index([scheduledDate])
   @@index([scheduledStartAt])
@@ -1224,6 +1225,31 @@ model WorkshopConversation {
   messages    WorkshopMessage[]
 
   @@index([customerId, updatedAt])
+}
+
+enum WorkshopAttachmentVisibility {
+  INTERNAL
+  CUSTOMER
+}
+
+model WorkshopAttachment {
+  id                String                     @id @default(uuid()) @db.Uuid
+  workshopJobId     String                     @db.Uuid
+  uploadedByStaffId String?
+  filename          String
+  mimeType          String
+  storagePath       String
+  fileSizeBytes     Int
+  visibility        WorkshopAttachmentVisibility @default(INTERNAL)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  workshopJob     WorkshopJob @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  uploadedByStaff User?       @relation("WorkshopAttachmentUploadedByStaff", fields: [uploadedByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([workshopJobId, createdAt])
+  @@index([workshopJobId, visibility, createdAt])
+  @@index([uploadedByStaffId])
 }
 
 enum WorkshopMessageDirection {
@@ -1537,6 +1563,7 @@ model User {
   workshopTimeOff          WorkshopTimeOff[]      @relation("WorkshopTimeOffStaff")
   workshopJobNotes         WorkshopJobNote[]      @relation("WorkshopJobNoteAuthor")
   workshopMessages         WorkshopMessage[]      @relation("WorkshopMessageAuthor")
+  workshopAttachments      WorkshopAttachment[]   @relation("WorkshopAttachmentUploadedByStaff")
   createdWorkshopEstimates WorkshopEstimate[]     @relation("WorkshopEstimateCreatedBy")
   decidedWorkshopEstimates WorkshopEstimate[]     @relation("WorkshopEstimateDecisionBy")
   stockLedgerEntries       StockLedgerEntry[]     @relation("StockLedgerEntryCreatedByStaff")

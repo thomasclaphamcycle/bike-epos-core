@@ -468,8 +468,28 @@ X-Staff-Id: demo-staff
 
 {}
 
+### Upload a workshop attachment or customer-visible photo
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/attachments
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "filename": "repair-photo.png",
+  "fileDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sX9jKkAAAAASUVORK5CYII=",
+  "visibility": "CUSTOMER"
+}
+
+### List workshop attachments for a job
+GET {{baseUrl}}/api/workshop/jobs/{{bookingId}}/attachments
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
 ### Public customer workshop portal by secure token
 GET {{baseUrl}}/api/public/workshop/{{quoteToken}}
+
+### Public customer-visible workshop attachments by secure token
+GET {{baseUrl}}/api/public/workshop/{{quoteToken}}/attachments
 
 ### Public customer workshop conversation thread by secure token
 GET {{baseUrl}}/api/public/workshop/{{quoteToken}}/conversation

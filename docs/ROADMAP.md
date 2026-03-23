@@ -289,26 +289,11 @@ Implementation status:
 - workshop job detail now exposes notification history plus safe resend controls, so staff can review delivery outcomes and retry customer emails without leaving the live job
 - customer profiles now include simple operational communication permissions for email, SMS, and WhatsApp, and smart workshop delivery respects those channel settings with truthful skip history when a customer has updates disabled
 - workshop jobs now also have a real customer conversation thread, with staff-side portal messages, secure portal replies, and message-alert notifications flowing through the existing communication preference and notification history model; v1 remains portal-thread based rather than full email/SMS/WhatsApp reply ingestion
+- workshop jobs now support internal-only and customer-visible attachments/photos, with secure staff upload/list/delete flows plus portal-safe sharing of customer-visible images and PDFs; v1 stays intentionally narrow with local storage, image/PDF support, and no annotation or bulk asset-management layer
 
 Remaining to practical Bikebook parity:
 
-### 1. Attachments / photos
-
-Why it matters:
-- photos of damage, parts, and completed work are a practical day-to-day workshop need and are a frequent reason staff still fall back to ad-hoc tools
-
-Current repo status / gap:
-- customer-visible notes and bike profile data exist, but there is no upload/storage model for job photos, inspection images, or customer-safe attachments
-
-Rough implementation scope:
-- add additive attachment metadata plus file storage handling for workshop jobs
-- support staff upload, internal visibility, and selective customer-visible sharing in the portal
-- keep the first pass narrow to photos/documents rather than a full asset-management system
-
-Classification:
-- parity work
-
-### 2. Working-hours / time-off admin UI
+### 1. Working-hours / time-off admin UI
 
 Why it matters:
 - the calendar foundation is already operationally useful, but managers still need a practical way to maintain technician availability without direct database or request-level intervention
@@ -325,7 +310,7 @@ Rough implementation scope:
 Classification:
 - parity work
 
-### 3. Customer portal polish
+### 2. Customer portal polish
 
 Why it matters:
 - the first portal already reduces basic status and quote-query friction, but a tighter customer experience would reduce support load further and make the portal feel production-complete
@@ -337,12 +322,12 @@ Current repo status / gap:
 Rough implementation scope:
 - refine customer-safe status/timeline presentation
 - add clearer collection and next-step guidance
-- improve note/work-summary presentation and small-screen usability without turning the portal into a full customer account system
+- improve note/work-summary presentation, attachment presentation, and small-screen usability without turning the portal into a full customer account system
 
 Classification:
 - parity work
 
-### 4. Public booking polish
+### 3. Public booking polish
 
 Why it matters:
 - public intake remains a practical parity expectation for modern workshop systems and is the clearest remaining bridge from internal scheduling to customer self-service acquisition
@@ -358,6 +343,22 @@ Rough implementation scope:
 
 Classification:
 - parity work
+
+### 4. Attachments / photo workflow polish
+
+Why it matters:
+- v1 attachments close the core parity gap, but production workshop use quickly needs smoother handling for before/after photo sets, clearer customer storytelling, and better staff organisation
+
+Current repo status / gap:
+- internal and customer-visible attachments now exist with secure portal sharing, but there is no annotation, no grouping, no richer photo workflow, and storage is still local-server based
+
+Rough implementation scope:
+- improve attachment presentation on jobs and in the portal
+- add operational polish such as grouping, captions, or clearer before/after sequencing
+- evaluate a more durable storage abstraction only when real deployment needs justify it
+
+Classification:
+- differentiation work
 
 ### 5. External-channel messaging ingestion / inbox polish
 

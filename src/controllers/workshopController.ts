@@ -42,6 +42,14 @@ import {
   postWorkshopConversationMessageForJob,
 } from "../services/workshopConversationService";
 import {
+  createWorkshopAttachmentForJob,
+  deleteWorkshopAttachmentForJob,
+  getPublicWorkshopAttachmentFile,
+  getWorkshopAttachmentFileForJob,
+  listPublicWorkshopAttachments,
+  listWorkshopAttachmentsForJob,
+} from "../services/workshopAttachmentService";
+import {
   addWorkshopJobLine,
   attachCustomerToWorkshopJob,
   closeWorkshopJob,
@@ -821,6 +829,73 @@ export const getWorkshopJobConversationHandler = async (
   res.json(result);
 };
 
+export const listWorkshopJobAttachmentsHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await listWorkshopAttachmentsForJob(req.params.id);
+  res.json(result);
+};
+
+export const postWorkshopJobAttachmentHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    filename?: unknown;
+    fileDataUrl?: unknown;
+    visibility?: unknown;
+  };
+
+  if (body.filename !== undefined && typeof body.filename !== "string") {
+    throw new HttpError(400, "filename must be a string", "INVALID_WORKSHOP_ATTACHMENT");
+  }
+  if (body.fileDataUrl !== undefined && typeof body.fileDataUrl !== "string") {
+    throw new HttpError(400, "fileDataUrl must be a string", "INVALID_WORKSHOP_ATTACHMENT");
+  }
+  if (body.visibility !== undefined && typeof body.visibility !== "string") {
+    throw new HttpError(400, "visibility must be a string", "INVALID_WORKSHOP_ATTACHMENT");
+  }
+
+  const result = await createWorkshopAttachmentForJob(
+    req.params.id,
+    {
+      filename: body.filename,
+      fileDataUrl: body.fileDataUrl,
+      visibility: body.visibility,
+      uploadedByStaffId: getRequestStaffActorId(req) ?? null,
+    },
+    getRequestAuditActor(req),
+  );
+
+  res.status(201).json(result);
+};
+
+export const deleteWorkshopJobAttachmentHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await deleteWorkshopAttachmentForJob(
+    req.params.id,
+    req.params.attachmentId,
+    getRequestAuditActor(req),
+  );
+  res.json(result);
+};
+
+export const getWorkshopJobAttachmentFileHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getWorkshopAttachmentFileForJob(req.params.id, req.params.attachmentId);
+  res.type(result.attachment.mimeType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${result.attachment.filename.replace(/"/g, "")}"`,
+  );
+  res.sendFile(result.absolutePath);
+};
+
 export const postWorkshopJobConversationMessageHandler = async (
   req: Request,
   res: Response,
@@ -925,6 +1000,27 @@ export const getPublicWorkshopConversationHandler = async (
 ) => {
   const result = await getPublicWorkshopConversation(req.params.token);
   res.json(result);
+};
+
+export const listPublicWorkshopAttachmentsHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await listPublicWorkshopAttachments(req.params.token);
+  res.json(result);
+};
+
+export const getPublicWorkshopAttachmentFileHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getPublicWorkshopAttachmentFile(req.params.token, req.params.attachmentId);
+  res.type(result.attachment.mimeType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${result.attachment.filename.replace(/"/g, "")}"`,
+  );
+  res.sendFile(result.absolutePath);
 };
 
 export const postPublicWorkshopConversationReplyHandler = async (

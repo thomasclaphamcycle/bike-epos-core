@@ -170,6 +170,12 @@ Current internal subscribers are:
   - exposes staff-side thread retrieval and message posting under `/api/workshop/jobs/:id/conversation` plus `/messages`
   - exposes token-scoped public thread retrieval and reply posting under `/api/public/workshop/:token/conversation` plus `/messages`
   - currently uses the existing secure workshop portal token as the public access boundary, so v1 reply capture is portal-thread based rather than full email/SMS/WhatsApp webhook ingestion
+- workshop attachments in `src/services/workshopAttachmentService.ts`
+  - stores additive `WorkshopAttachment` rows against `WorkshopJob` with explicit `INTERNAL` vs `CUSTOMER` visibility, preserving the separation between internal operational context and customer-safe sharing
+  - uses pragmatic local server-side storage under `uploads/workshop-attachments` in v1, with metadata persisted in Prisma and file serving kept behind staff auth or the existing secure portal token
+  - exposes staff list/upload/delete plus authenticated file access under `/api/workshop/jobs/:id/attachments`
+  - exposes token-scoped customer-visible attachment list/file access under `/api/public/workshop/:token/attachments`
+  - intentionally keeps v1 narrow to image/PDF uploads without annotation, bulk asset management, or cloud-storage abstraction
 - workshop calendar foundation in `src/services/workshopCalendarService.ts`
   - keeps the existing day-level `scheduledDate` contract intact while adding optional `scheduledStartAt`, `scheduledEndAt`, and `durationMinutes` on `WorkshopJob`
   - validates timed jobs against shared store opening hours first, then staff-specific `WorkshopWorkingHours` and `WorkshopTimeOff` when a technician is assigned
@@ -187,6 +193,7 @@ Current internal subscribers are:
   - reuses the existing secure customer quote token on `WorkshopEstimate.customerQuoteToken` rather than creating a parallel public-access model
   - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing friendly job status, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline
   - now also exposes token-scoped conversation retrieval and reply posting so the portal carries a real job thread instead of staying quote-only
+  - now also exposes customer-visible workshop attachments so staff-shared photos and PDFs appear inside the same secure job portal without leaking internal-only files
   - keeps approval and rejection on the same estimate-decision workflow, so `POST /api/public/workshop/:token/decision` stays idempotent and still blocks stale or superseded quote approval
   - preserves existing `/quote/:token` frontend links and `/api/public/workshop-quotes/:token` API aliases for compatibility while new generated links point to `/public/workshop/:token`
 
