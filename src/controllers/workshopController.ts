@@ -18,6 +18,7 @@ import { resolveRequestLocation } from "../services/locationService";
 import { getWorkshopCalendar } from "../services/workshopCalendarService";
 import {
   createOnlineWorkshopBooking,
+  getPublicWorkshopBookingFormOptions,
   getWorkshopBookingByManageToken,
   payWorkshopBookingDepositByManageToken,
   updateWorkshopBookingByManageToken,
@@ -521,11 +522,54 @@ export const createOnlineWorkshopBookingHandler = async (
     email?: string;
     phone?: string;
     scheduledDate?: string;
+    bikeDescription?: string;
+    serviceTemplateId?: string;
+    preferredTime?: string;
+    serviceRequest?: string;
     notes?: string;
   };
 
+  if (body.firstName !== undefined && typeof body.firstName !== "string") {
+    throw new HttpError(400, "firstName must be a string", "INVALID_BOOKING");
+  }
+  if (body.lastName !== undefined && typeof body.lastName !== "string") {
+    throw new HttpError(400, "lastName must be a string", "INVALID_BOOKING");
+  }
+  if (body.email !== undefined && typeof body.email !== "string") {
+    throw new HttpError(400, "email must be a string", "INVALID_BOOKING");
+  }
+  if (body.phone !== undefined && typeof body.phone !== "string") {
+    throw new HttpError(400, "phone must be a string", "INVALID_BOOKING");
+  }
+  if (body.scheduledDate !== undefined && typeof body.scheduledDate !== "string") {
+    throw new HttpError(400, "scheduledDate must be a string", "INVALID_BOOKING");
+  }
+  if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
+    throw new HttpError(400, "bikeDescription must be a string", "INVALID_BOOKING");
+  }
+  if (body.serviceTemplateId !== undefined && typeof body.serviceTemplateId !== "string") {
+    throw new HttpError(400, "serviceTemplateId must be a string", "INVALID_BOOKING");
+  }
+  if (body.preferredTime !== undefined && typeof body.preferredTime !== "string") {
+    throw new HttpError(400, "preferredTime must be a string", "INVALID_BOOKING");
+  }
+  if (body.serviceRequest !== undefined && typeof body.serviceRequest !== "string") {
+    throw new HttpError(400, "serviceRequest must be a string", "INVALID_BOOKING");
+  }
+  if (body.notes !== undefined && typeof body.notes !== "string") {
+    throw new HttpError(400, "notes must be a string", "INVALID_BOOKING");
+  }
+
   const booking = await createOnlineWorkshopBooking(body);
   res.status(201).json(booking);
+};
+
+export const getPublicWorkshopBookingFormOptionsHandler = async (
+  _req: Request,
+  res: Response,
+) => {
+  const payload = await getPublicWorkshopBookingFormOptions();
+  res.json(payload);
 };
 
 export const getWorkshopBookingByManageTokenHandler = async (

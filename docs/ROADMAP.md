@@ -334,13 +334,13 @@ Why it matters:
 - public intake remains a practical parity expectation for modern workshop systems and is the clearest remaining bridge from internal scheduling to customer self-service acquisition
 
 Current repo status / gap:
-- workshop check-in, bike-led intake, templates, and calendar foundations exist internally
-- there is still no polished public booking flow layered on top of those foundations
+- CorePOS now has a real public booking request flow layered on top of the existing workshop booking model, including customer-safe service choice, bike/issue capture, requested-date guidance, and token-scoped follow-up
+- the remaining gap is polish beyond the first complete request journey: richer availability storytelling, deeper manage-booking actions, and tighter linkage between booking confirmation and the broader customer portal
 
 Rough implementation scope:
-- add a narrow public booking/request flow that feeds the existing workshop intake model
-- reuse bike/customer/workshop foundations where possible
-- keep first pass focused on request capture and staff triage rather than full automated slot marketplace behaviour
+- keep the request-first model honest about preferred timing vs confirmed slots while extending the customer follow-up surface carefully
+- add deeper manage-booking actions only where they stay compatible with the existing workshop lifecycle and secure token model
+- avoid turning the public booking layer into a fake live-slot marketplace until the backend genuinely supports that behaviour
 
 Classification:
 - parity work
