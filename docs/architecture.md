@@ -178,11 +178,13 @@ Current internal subscribers are:
   - intentionally keeps v1 narrow to image/PDF uploads without annotation, bulk asset management, or cloud-storage abstraction
 - workshop calendar foundation in `src/services/workshopCalendarService.ts`
   - keeps the existing day-level `scheduledDate` contract intact while adding optional `scheduledStartAt`, `scheduledEndAt`, and `durationMinutes` on `WorkshopJob`
-  - validates timed jobs against shared store opening hours first, then staff-specific `WorkshopWorkingHours` and `WorkshopTimeOff` when a technician is assigned
+  - validates timed jobs against shared store opening hours first, then rota-derived staff availability when a technician is assigned
+  - now treats live `RotaAssignment` rows as the primary workshop staff availability truth, with `WorkshopWorkingHours` retained only as a documented transition fallback on days that do not yet have rota coverage
+  - keeps `WorkshopTimeOff` as a workshop-specific overlay on top of rota/fallback availability rather than a second base-hours system
   - blocks overlapping timed jobs for the same assigned staff member without forcing legacy unscheduled jobs through a new scheduling flow
-  - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, working hours, time off, scheduled jobs, and clipped daily capacity summaries
+  - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, rota-backed availability windows, time off, scheduled jobs, and clipped daily capacity summaries
   - now also exposes `PATCH /api/workshop/jobs/:id/schedule` for atomic assignment plus schedule/reschedule/clear operations through the shared validation layer rather than duplicating rules in controllers
-  - the first staff-facing React surface now lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a dense day view rather than introducing a separate scheduling subsystem
+  - the first staff-facing React surface now lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a dense day view rather than introducing a separate scheduling subsystem, and it now shows rota-driven availability with explicit fallback labeling
 - workshop service templates in `src/services/workshopServiceTemplateService.ts`
   - store reusable workshop job starters in `WorkshopServiceTemplate` and `WorkshopServiceTemplateLine`, including labour lines plus optional part suggestions
   - expose manager CRUD under `/api/workshop/service-templates` and application to live jobs under `POST /api/workshop/jobs/:id/templates/apply`

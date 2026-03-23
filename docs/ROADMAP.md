@@ -282,7 +282,8 @@ Implementation status:
 - secure customer workshop portal access now extends those quote links into a broader read-only job view with customer-safe bike details, current work summary, customer-visible notes, and timeline context while preserving stale-quote approval protection
 - workshop jobs now also have an additive backend scheduling foundation with optional timed slots, staff working hours, and workshop/staff time-off blocks, while keeping legacy `scheduledDate` flows operationally compatible
 - workshop calendar now also has a production-ready backend API for date-range reads plus safe schedule/reschedule updates, so an MVP calendar UI can build on shared scheduling rules without breaking legacy workshop flows
-- workshop now also has a staff-facing calendar MVP at `/workshop/calendar`, giving the team a day view of mechanic rows, timed jobs, working hours, time off, and a live unscheduled queue without replacing the existing job board
+- workshop now also has a staff-facing calendar MVP at `/workshop/calendar`, giving the team a day view of mechanic rows, timed jobs, rota-backed availability windows, time off, and a live unscheduled queue without replacing the existing job board
+- workshop calendar availability now derives from live rota shifts first, with `WorkshopWorkingHours` retained only as a transition fallback on days that do not yet have rota coverage, so scheduling validation, capacity, and day-view visibility all share one primary staff-availability truth
 - workshop service templates now let staff define reusable labour-plus-parts job starters, apply them during check-in or on a live job, and fill an unset planning duration for calendar use without overwriting an already intentional timed schedule
 - the `v1.1.0` workshop shaping pass now aligns execution, quote, and collection wording across workshop jobs, bike history, customer profiles, check-in, and customer quote review so the full workflow reads as one coherent milestone
 - the workshop notification layer now uses deterministic smart delivery for quote-ready and ready-for-collection events, choosing one primary channel with truthful fallback, skip, and failure history across email, SMS, and WhatsApp
@@ -293,19 +294,19 @@ Implementation status:
 
 Remaining to practical Bikebook parity:
 
-### 1. Working-hours / time-off admin UI
+### 1. Rota / workshop availability admin polish
 
 Why it matters:
-- the calendar foundation is already operationally useful, but managers still need a practical way to maintain technician availability without direct database or request-level intervention
+- rota is now the primary workshop availability truth, but managers still need a practical operational way to maintain technician cover and workshop-specific blocks without dropping back to raw requests or DB edits
 
 Current repo status / gap:
-- `WorkshopWorkingHours`, `WorkshopTimeOff`, scheduling validation, calendar API, and calendar MVP UI are implemented
-- there is no manager-facing UI yet to maintain recurring hours or planned time off
+- workshop calendar now reads rota assignments first, with `WorkshopWorkingHours` retained only as a transition fallback and `WorkshopTimeOff` as an overlay
+- there is still no compact manager-facing workshop availability surface to maintain recurring rota cover, workshop blocks, and the transition away from fallback hours cleanly
 
 Rough implementation scope:
-- add a compact manager/admin maintenance surface for technician hours and workshop/staff time off
-- reuse the existing calendar validation layer and avoid introducing a second scheduling model
-- include enough controls for daily operational maintenance, not full rota replacement
+- add a compact manager/admin surface that keeps rota as the base truth for workshop scheduling
+- add practical controls for workshop/staff time off and visibility into where legacy fallback hours are still being relied on
+- avoid building or preserving a second standalone workshop-hours admin model
 
 Classification:
 - parity work
@@ -425,7 +426,7 @@ Implementation status:
 - workshop operations now also surface a simple capacity signal that combines rota-backed workshop cover with due, overdue, and active workshop workload for better daily triage
 - workshop jobs now also have an additive backend scheduling foundation with optional timed slots, staff working hours, and workshop/staff time-off blocks, while keeping legacy `scheduledDate` flows operationally compatible
 - workshop calendar now also has a production-ready backend API for date-range reads plus safe schedule/reschedule updates, so an MVP calendar UI can build on shared scheduling rules without breaking legacy workshop flows
-- workshop now also has a staff-facing calendar MVP at `/workshop/calendar`, giving the team a day view of mechanic rows, timed jobs, working hours, time off, and a live unscheduled queue without replacing the existing job board
+- workshop now also has a staff-facing calendar MVP at `/workshop/calendar`, giving the team a day view of mechanic rows, timed jobs, rota-backed availability windows, time off, and a live unscheduled queue without replacing the existing job board
 
 Planned item:
 

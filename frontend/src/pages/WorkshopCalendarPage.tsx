@@ -39,6 +39,20 @@ type CalendarWorkingHours = {
   startTime: string;
   endTime: string;
   totalMinutes: number;
+  source: "ROTA" | "WORKSHOP_FALLBACK";
+  shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY" | null;
+  label: string;
+};
+
+type CalendarAvailability = {
+  date: string;
+  dayOfWeek: number;
+  source: "ROTA" | "WORKSHOP_FALLBACK" | "UNAVAILABLE";
+  shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY" | null;
+  startTime: string | null;
+  endTime: string | null;
+  totalMinutes: number;
+  label: string;
 };
 
 type CalendarTimeOff = {
@@ -68,6 +82,7 @@ type CalendarStaffRow = {
   role: "STAFF" | "MANAGER" | "ADMIN";
   operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
   workingHours: CalendarWorkingHours[];
+  availability: CalendarAvailability[];
   timeOff: CalendarTimeOff[];
   dailyCapacity: CalendarCapacity[];
   scheduledJobs: CalendarJob[];
@@ -269,6 +284,12 @@ const formatRoleLabel = (row: CalendarStaffRow) => {
   return row.role;
 };
 
+const getAvailabilityForDate = (row: CalendarStaffRow, dateKey: string) =>
+  row.availability.find((entry) => entry.date === dateKey) ?? null;
+
+const getWorkingHoursForDate = (row: CalendarStaffRow, dateKey: string) =>
+  row.workingHours.find((entry) => entry.date === dateKey) ?? null;
+
 export const WorkshopCalendarPage = () => {
   const { success, error } = useToasts();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -416,6 +437,13 @@ export const WorkshopCalendarPage = () => {
   const scheduledJobsCount = calendar?.scheduledJobs.length ?? 0;
   const unscheduledJobs = calendar?.unscheduledJobs ?? [];
   const unassignedTimedJobs = calendar?.unassignedJobs ?? [];
+  const selectableStaff = (calendar?.staff ?? []).filter((staff) => {
+    const availability = getAvailabilityForDate(staff, dateKey);
+    if (!availability) {
+      return false;
+    }
+    return availability.source !== "UNAVAILABLE" || staff.id === selectedJob?.assignedStaffId;
+  });
 
   return (
     <div className="page-shell page-shell-workspace workshop-calendar-page">
@@ -538,7 +566,8 @@ export const WorkshopCalendarPage = () => {
                 </div>
 
                 {calendar?.staff.length ? calendar.staff.map((staff) => {
-                  const workingHours = staff.workingHours[0] ?? null;
+                  const availability = getAvailabilityForDate(staff, dateKey);
+                  const workingHours = getWorkingHoursForDate(staff, dateKey);
                   const capacity = staff.dailyCapacity[0] ?? null;
                   const workingStart = parseClockMinutes(workingHours?.startTime) ?? timeline.openMinutes;
                   const workingEnd = parseClockMinutes(workingHours?.endTime) ?? timeline.openMinutes;
@@ -555,7 +584,10 @@ export const WorkshopCalendarPage = () => {
                         <div className="workshop-calendar-staff-name">{staff.name}</div>
                         <div className="table-secondary">{formatRoleLabel(staff)}</div>
                         <div className="table-secondary">
-                          {workingHours ? `${workingHours.startTime}-${workingHours.endTime}` : "No workshop hours"}
+                          {workingHours ? `${workingHours.startTime}-${workingHours.endTime}` : "Unavailable"}
+                        </div>
+                        <div className="table-secondary">
+                          {availability?.label || "No rota availability"}
                         </div>
                         {capacity ? (
                           <div className="table-secondary">
@@ -686,11 +718,14 @@ export const WorkshopCalendarPage = () => {
                     disabled={saving}
                   >
                     <option value="">Leave unassigned</option>
-                    {(calendar?.staff ?? []).map((staff) => (
+                    {selectableStaff.map((staff) => {
+                      const availability = getAvailabilityForDate(staff, dateKey);
+                      return (
                       <option key={staff.id} value={staff.id}>
-                        {staff.name}
+                        {staff.name}{availability ? ` · ${availability.label}` : ""}
                       </option>
-                    ))}
+                      );
+                    })}
                   </select>
                 </label>
 
