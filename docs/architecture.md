@@ -191,6 +191,10 @@ Current internal subscribers are:
   - apply templates by creating ordinary `WorkshopJobLine` records, then invalidating the current estimate through the existing estimate service so downstream quoting and approval workflows stay truthful
   - propagate `defaultDurationMinutes` into `WorkshopJob.durationMinutes` only when the job does not already have an intentional duration, which keeps calendar planning defaults additive instead of silently overwriting live schedule decisions
   - support compact staff usage during check-in and on the workshop job page, while manager maintenance lives at `/management/workshop/templates`
+- workshop technician workflow in `src/services/workshopWorkflowService.ts`, `src/services/workshopStatusService.ts`, `frontend/src/features/workshop/status.ts`, `frontend/src/pages/WorkshopJobPage.tsx`, and `frontend/src/pages/WorkshopPage.tsx`
+  - keeps the existing customer-facing execution status model intact, but now preserves the richer raw workshop states that already existed for bench work instead of collapsing them all into one generic in-progress state
+  - keeps quote-controlled states such as `WAITING_FOR_APPROVAL` and `APPROVED` owned by the estimate approval flow, while the staff status endpoint now safely handles operational states like `WAITING_FOR_PARTS`, `ON_HOLD`, bench resume, and collection handoff
+  - surfaces a compact technician workflow summary, blocker context, and assignment coverage on the live workshop job and board views without creating a separate technician-only subsystem
 - customer workshop portal in `src/services/workshopEstimateService.ts` and `frontend/src/pages/WorkshopQuotePage.tsx`
   - reuses the existing secure customer quote token on `WorkshopEstimate.customerQuoteToken` rather than creating a parallel public-access model
   - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing a derived customer-progress summary, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline

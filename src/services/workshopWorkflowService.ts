@@ -65,39 +65,74 @@ const stageByStatus: Record<WorkshopJobStatus, WorkflowStage> = {
   CANCELLED: "CANCELLED",
 };
 
-const canonicalStatusByStage: Record<WorkflowStage, WorkshopJobStatus> = {
-  BOOKED: "BOOKING_MADE",
-  IN_PROGRESS: "BIKE_ARRIVED",
-  READY: "BIKE_READY",
-  COMPLETED: "COMPLETED",
-  CANCELLED: "CANCELLED",
+const ALLOWED_RAW_STATUS_TRANSITIONS: Record<WorkshopJobStatus, WorkshopJobStatus[]> = {
+  BOOKING_MADE: ["BIKE_ARRIVED", "ON_HOLD", "CANCELLED"],
+  BIKE_ARRIVED: ["WAITING_FOR_PARTS", "ON_HOLD", "BIKE_READY", "CANCELLED"],
+  WAITING_FOR_APPROVAL: ["ON_HOLD", "CANCELLED"],
+  APPROVED: ["BIKE_ARRIVED", "WAITING_FOR_PARTS", "ON_HOLD", "BIKE_READY", "CANCELLED"],
+  WAITING_FOR_PARTS: ["BIKE_ARRIVED", "ON_HOLD", "CANCELLED"],
+  ON_HOLD: ["BIKE_ARRIVED", "WAITING_FOR_PARTS", "CANCELLED"],
+  BIKE_READY: ["COMPLETED", "CANCELLED"],
+  COMPLETED: [],
+  CANCELLED: [],
 };
 
-const parseTargetStageOrThrow = (inputStatus: string): WorkflowStage => {
+const parseTargetStatusOrThrow = (inputStatus: string): {
+  targetStatus: WorkshopJobStatus;
+  requestedStatus: string;
+} => {
   const normalized = inputStatus.trim().toUpperCase();
 
   switch (normalized) {
     case "BOOKED":
     case "BOOKING_MADE":
-      return "BOOKED";
+      return {
+        targetStatus: "BOOKING_MADE",
+        requestedStatus: normalized,
+      };
     case "IN_PROGRESS":
     case "BIKE_ARRIVED":
+      return {
+        targetStatus: "BIKE_ARRIVED",
+        requestedStatus: normalized,
+      };
+    case "WAITING_FOR_PARTS":
+      return {
+        targetStatus: "WAITING_FOR_PARTS",
+        requestedStatus: normalized,
+      };
+    case "ON_HOLD":
+      return {
+        targetStatus: "ON_HOLD",
+        requestedStatus: normalized,
+      };
     case "WAITING_FOR_APPROVAL":
     case "APPROVED":
-    case "WAITING_FOR_PARTS":
-    case "ON_HOLD":
-      return "IN_PROGRESS";
+      throw new HttpError(
+        409,
+        "Quote-controlled workflow states must be changed through the approval workflow",
+        "WORKSHOP_STATUS_REQUIRES_APPROVAL_FLOW",
+      );
     case "READY":
     case "BIKE_READY":
-      return "READY";
+      return {
+        targetStatus: "BIKE_READY",
+        requestedStatus: normalized,
+      };
     case "COMPLETED":
-      return "COMPLETED";
+      return {
+        targetStatus: "COMPLETED",
+        requestedStatus: normalized,
+      };
     case "CANCELLED":
-      return "CANCELLED";
+      return {
+        targetStatus: "CANCELLED",
+        requestedStatus: normalized,
+      };
     default:
       throw new HttpError(
         400,
-        "status must be one of BOOKED, IN_PROGRESS, READY, COMPLETED, CANCELLED",
+        "status must be one of BOOKED, BOOKING_MADE, IN_PROGRESS, BIKE_ARRIVED, WAITING_FOR_PARTS, ON_HOLD, READY, BIKE_READY, COMPLETED, or CANCELLED",
         "INVALID_STATUS",
       );
   }
@@ -564,8 +599,11 @@ export const changeWorkshopJobStatus = async (
     throw new HttpError(400, "status is required", "INVALID_STATUS");
   }
 
-  const targetStage = parseTargetStageOrThrow(rawStatus);
-  const targetStatus = canonicalStatusByStage[targetStage];
+  const {
+    targetStatus,
+    requestedStatus,
+  } = parseTargetStatusOrThrow(rawStatus);
+  const targetStage = stageByStatus[targetStatus];
 
   const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
@@ -584,7 +622,7 @@ export const changeWorkshopJobStatus = async (
     }
 
     const fromStage = stageByStatus[job.status];
-    if (fromStage === targetStage) {
+    if (job.status === targetStatus) {
       return {
         job: {
           id: job.id,
@@ -597,14 +635,11 @@ export const changeWorkshopJobStatus = async (
         toStatus: job.status,
         idempotent: true,
         emittedStage: targetStage,
+        stageChanged: false,
       };
     }
 
-    const isAllowed =
-      targetStage === "CANCELLED" ||
-      (fromStage === "BOOKED" && targetStage === "IN_PROGRESS") ||
-      (fromStage === "IN_PROGRESS" && targetStage === "READY") ||
-      (fromStage === "READY" && targetStage === "COMPLETED");
+    const isAllowed = ALLOWED_RAW_STATUS_TRANSITIONS[job.status].includes(targetStatus);
 
     if (!isAllowed) {
       throw new HttpError(
@@ -650,7 +685,7 @@ export const changeWorkshopJobStatus = async (
           toStatus: updated.status,
           fromStage,
           toStage: targetStage,
-          requestedStatus: rawStatus,
+          requestedStatus,
         },
       },
       auditActor,
@@ -668,6 +703,7 @@ export const changeWorkshopJobStatus = async (
       toStatus: updated.status,
       idempotent: false,
       emittedStage: targetStage,
+      stageChanged: fromStage !== targetStage,
     };
   });
 
@@ -682,7 +718,7 @@ export const changeWorkshopJobStatus = async (
     completedAt: result.job.completedAt?.toISOString(),
   });
 
-  if (!result.idempotent && result.emittedStage === "COMPLETED") {
+  if (!result.idempotent && result.stageChanged && result.emittedStage === "COMPLETED") {
     emit("workshop.job.completed", {
       id: result.job.id,
       type: "workshop.job.completed",
@@ -693,7 +729,7 @@ export const changeWorkshopJobStatus = async (
     });
   }
 
-  if (!result.idempotent && result.emittedStage === "READY") {
+  if (!result.idempotent && result.stageChanged && result.emittedStage === "READY") {
     emit("workshop.job.ready_for_collection", {
       id: result.job.id,
       type: "workshop.job.ready_for_collection",

@@ -6,10 +6,13 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
 import {
+  getWorkshopTechnicianWorkflowSummary,
   workshopExecutionStatusClass,
   workshopExecutionStatusLabel,
   workshopRawStatusClass,
   workshopRawStatusLabel,
+  workshopTechnicianWorkflowClass,
+  workshopTechnicianWorkflowLabel,
 } from "../features/workshop/status";
 import {
   workshopCustomerQuoteLinkStatusLabel,
@@ -183,6 +186,9 @@ type WorkshopJobResponse = {
     assignedStaffId: string | null;
     assignedStaffName: string | null;
     scheduledDate: string | null;
+    scheduledStartAt: string | null;
+    scheduledEndAt: string | null;
+    durationMinutes: number | null;
     depositRequiredPence: number;
     depositStatus: string;
     finalizedBasketId: string | null;
@@ -416,49 +422,6 @@ const notificationChannelSummaryLabel = (notification: WorkshopNotificationRecor
     .filter(Boolean)
     .join(" • ");
 
-const getWorkflowGuidance = (input: {
-  rawStatus: string;
-  partsStatus: WorkshopPartsStatus | undefined;
-  hasSale: boolean;
-  hasBasket: boolean;
-}) => {
-  if (input.rawStatus === "WAITING_FOR_APPROVAL") {
-    return "Quote approval is still pending. Pause bench work until the customer approves or the quote is revised.";
-  }
-
-  if (input.rawStatus === "WAITING_FOR_PARTS" || input.partsStatus === "SHORT") {
-    return "This job is blocked on parts. Reserve stock or receive missing parts before pushing it forward.";
-  }
-
-  if (input.rawStatus === "BOOKING_MADE") {
-    return "The bike is checked in and ready to move onto the bench or into quote approval.";
-  }
-
-  if (input.rawStatus === "BIKE_ARRIVED" || input.rawStatus === "APPROVED" || input.rawStatus === "ON_HOLD") {
-    return "Continue work, update notes as progress changes, and mark the bike ready when the bench work is complete.";
-  }
-
-  if (input.rawStatus === "BIKE_READY") {
-    if (input.hasSale) {
-      return "A sale is already linked. Open the sale to collect payment and finish the handover.";
-    }
-    if (input.hasBasket) {
-      return "A POS handoff basket is ready. Open it to complete collection at the counter.";
-    }
-    return "Workshop work is finished. Send the job to POS to create the collection handoff.";
-  }
-
-  if (input.rawStatus === "COMPLETED") {
-    return "This job has already been collected through POS checkout.";
-  }
-
-  if (input.rawStatus === "CANCELLED") {
-    return "This job is cancelled and is no longer part of the active workshop queue.";
-  }
-
-  return "Use the status actions below to keep the workshop board aligned with bench progress.";
-};
-
 const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
   if (!job) {
     return "";
@@ -490,18 +453,42 @@ const getStageActions = (status: string): Array<{ label: string; value: string }
   switch (status) {
     case "BOOKING_MADE":
       return [
-        { label: "Start Work", value: "IN_PROGRESS" },
-        { label: "Cancel", value: "CANCELLED" },
+        { label: "Move to Bench", value: "IN_PROGRESS" },
+        { label: "Pause Job", value: "ON_HOLD" },
+        { label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "APPROVED":
+      return [
+        { label: "Start Bench Work", value: "IN_PROGRESS" },
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Pause Job", value: "ON_HOLD" },
+        { label: "Ready for Collection", value: "READY" },
+        { label: "Cancel Job", value: "CANCELLED" },
       ];
     case "BIKE_ARRIVED":
-    case "APPROVED":
+      return [
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Pause Job", value: "ON_HOLD" },
+        { label: "Ready for Collection", value: "READY" },
+        { label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "WAITING_FOR_PARTS":
+      return [
+        { label: "Resume Bench Work", value: "IN_PROGRESS" },
+        { label: "Pause Job", value: "ON_HOLD" },
+        { label: "Cancel Job", value: "CANCELLED" },
+      ];
     case "ON_HOLD":
       return [
-        { label: "Ready for Collection", value: "READY" },
-        { label: "Cancel", value: "CANCELLED" },
+        { label: "Resume Bench Work", value: "IN_PROGRESS" },
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Cancel Job", value: "CANCELLED" },
       ];
     case "WAITING_FOR_APPROVAL":
-      return [{ label: "Cancel", value: "CANCELLED" }];
+      return [
+        { label: "Pause Job", value: "ON_HOLD" },
+        { label: "Cancel Job", value: "CANCELLED" },
+      ];
     default:
       return [];
   }
@@ -1407,15 +1394,26 @@ export const WorkshopJobPage = () => {
   );
   const latestCustomerNote = customerNotes[0] ?? null;
   const latestInternalNote = internalNotes[0] ?? null;
-  const workflowGuidance = useMemo(
+  const workflowSummary = useMemo(
     () =>
-      getWorkflowGuidance({
+      getWorkshopTechnicianWorkflowSummary({
         rawStatus,
         partsStatus: partsOverview?.summary.partsStatus,
+        assignedStaffName: payload?.job.assignedStaffName,
+        scheduledDate: payload?.job.scheduledDate,
+        scheduledStartAt: payload?.job.scheduledStartAt,
         hasSale: Boolean(payload?.job.sale),
         hasBasket: Boolean(payload?.job.finalizedBasketId),
       }),
-    [partsOverview?.summary.partsStatus, payload?.job.finalizedBasketId, payload?.job.sale, rawStatus],
+    [
+      partsOverview?.summary.partsStatus,
+      payload?.job.assignedStaffName,
+      payload?.job.finalizedBasketId,
+      payload?.job.sale,
+      payload?.job.scheduledDate,
+      payload?.job.scheduledStartAt,
+      rawStatus,
+    ],
   );
   const collectionSummary = useMemo(() => {
     if (!payload) {
@@ -1489,6 +1487,39 @@ export const WorkshopJobPage = () => {
 
         {payload ? (
           <>
+            <div className="restricted-panel info-panel job-workflow-panel">
+              <div className="job-workflow-highlight-grid">
+                <div className="job-workflow-highlight">
+                  <span className="table-secondary">Bench workflow</span>
+                  <strong>
+                    <span className={workshopTechnicianWorkflowClass(workflowSummary.stage)}>
+                      {workshopTechnicianWorkflowLabel(workflowSummary.stage)}
+                    </span>
+                  </strong>
+                  <p className="muted-text">{workflowSummary.detail}</p>
+                </div>
+                <div className="job-workflow-highlight">
+                  <span className="table-secondary">Technician coverage</span>
+                  <strong>{workflowSummary.assignmentSummary}</strong>
+                  <p className="muted-text">
+                    Keep assignment and timing aligned with the calendar so the bench queue stays trustworthy.
+                  </p>
+                </div>
+                <div className="job-workflow-highlight">
+                  <span className="table-secondary">Current blocker</span>
+                  <strong>
+                    <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
+                  </strong>
+                  <p className="muted-text">Customer-facing status stays broad, but the bench queue should use this internal state.</p>
+                </div>
+                <div className="job-workflow-highlight">
+                  <span className="table-secondary">Next bench step</span>
+                  <strong>{workflowSummary.nextStep}</strong>
+                  <p className="muted-text">Use the bench actions below to keep the workshop board, calendar, and handoff flow aligned.</p>
+                </div>
+              </div>
+            </div>
+
             <div className="job-meta-grid">
               <div>
                 <strong>Execution Status:</strong>{" "}
@@ -1497,10 +1528,20 @@ export const WorkshopJobPage = () => {
                 </span>
               </div>
               <div>
+                <strong>Bench Workflow:</strong>{" "}
+                <span className={workshopTechnicianWorkflowClass(workflowSummary.stage)}>
+                  {workshopTechnicianWorkflowLabel(workflowSummary.stage)}
+                </span>
+              </div>
+              <div>
                 <strong>Workflow Detail:</strong>{" "}
                 <span className={workshopRawStatusClass(rawStatus)}>{workshopRawStatusLabel(rawStatus)}</span>
               </div>
-              <div><strong>Next Step:</strong> {workflowGuidance}</div>
+              <div>
+                <strong>Bench Blocker:</strong>{" "}
+                <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
+              </div>
+              <div><strong>Next Bench Step:</strong> {workflowSummary.nextStep}</div>
               <div>
                 <strong>Quote Status:</strong>{" "}
                 <span className={workshopEstimateStatusClass(currentEstimate?.status)}>
@@ -1534,6 +1575,7 @@ export const WorkshopJobPage = () => {
                   "No linked bike record"
                 )}
               </div>
+              <div><strong>Technician Coverage:</strong> {workflowSummary.assignmentSummary}</div>
               <div><strong>Assigned Technician:</strong> {payload.job.assignedStaffName || "Unassigned"}</div>
               <div><strong>Scheduled:</strong> {formatOptionalDateTime(payload.job.scheduledDate)}</div>
               <div><strong>Check-in Notes:</strong> {payload.job.notes || "-"}</div>
@@ -1544,59 +1586,79 @@ export const WorkshopJobPage = () => {
               </div>
             </div>
 
-            <div className="action-wrap" style={{ marginBottom: "10px" }}>
-              {stageActions.map((action) => (
-                <button key={action.value} type="button" onClick={() => void updateStageStatus(action.value)}>
-                  {action.label}
-                </button>
-              ))}
-              {canPersistApprovalStatus(rawStatus) ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void saveEstimateSnapshot()}
-                    disabled={savingEstimate || payload.lines.length === 0}
-                  >
-                    {savingEstimate ? "Saving Snapshot..." : "Save Quote Snapshot"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void updateApprovalStatus("WAITING_FOR_APPROVAL")}
-                    disabled={currentEstimate?.status === "PENDING_APPROVAL" || payload.lines.length === 0}
-                  >
-                    Send Quote
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void updateApprovalStatus("APPROVED")}
-                    disabled={currentEstimate?.status === "APPROVED" || payload.lines.length === 0}
-                  >
-                    Mark Quote Approved
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void updateApprovalStatus("REJECTED")}
-                    disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
-                  >
-                    Mark Quote Rejected
-                  </button>
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => void prepareCustomerQuoteLink()}
-                    disabled={preparingCustomerQuote || payload.lines.length === 0}
-                  >
-                    {preparingCustomerQuote
-                      ? "Preparing Quote Link..."
-                      : currentEstimate?.customerQuote?.status === "ACTIVE"
-                        ? "Copy Customer Quote Link"
-                        : "Prepare Customer Quote Link"}
-                  </button>
-                </>
-              ) : null}
-              {stageActions.length === 0 && !canPersistApprovalStatus(rawStatus) ? (
-                <span className="muted-text">No manual workflow status changes are available for this job right now.</span>
-              ) : null}
+            <div className="job-action-groups">
+              <div className="job-action-group">
+                <div>
+                  <strong>Bench Actions</strong>
+                  <p className="muted-text">Keep the bench queue aligned with real progress, blockers, and handoff state.</p>
+                </div>
+                <div className="action-wrap">
+                  {stageActions.length > 0 ? (
+                    stageActions.map((action) => (
+                      <button key={action.value} type="button" onClick={() => void updateStageStatus(action.value)}>
+                        {action.label}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="muted-text">No manual bench workflow changes are available for this job right now.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="job-action-group">
+                <div>
+                  <strong>Quote Actions</strong>
+                  <p className="muted-text">Use estimate actions for customer approval states instead of forcing quote stages through the bench workflow.</p>
+                </div>
+                <div className="action-wrap">
+                  {canPersistApprovalStatus(rawStatus) ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void saveEstimateSnapshot()}
+                        disabled={savingEstimate || payload.lines.length === 0}
+                      >
+                        {savingEstimate ? "Saving Snapshot..." : "Save Quote Snapshot"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateApprovalStatus("WAITING_FOR_APPROVAL")}
+                        disabled={currentEstimate?.status === "PENDING_APPROVAL" || payload.lines.length === 0}
+                      >
+                        Send Quote
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateApprovalStatus("APPROVED")}
+                        disabled={currentEstimate?.status === "APPROVED" || payload.lines.length === 0}
+                      >
+                        Mark Quote Approved
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateApprovalStatus("REJECTED")}
+                        disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
+                      >
+                        Mark Quote Rejected
+                      </button>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => void prepareCustomerQuoteLink()}
+                        disabled={preparingCustomerQuote || payload.lines.length === 0}
+                      >
+                        {preparingCustomerQuote
+                          ? "Preparing Quote Link..."
+                          : currentEstimate?.customerQuote?.status === "ACTIVE"
+                            ? "Copy Customer Quote Link"
+                            : "Prepare Customer Quote Link"}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="muted-text">Quote state is locked to the current lifecycle stage for this job.</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {latestInternalNote || latestCustomerNote ? (

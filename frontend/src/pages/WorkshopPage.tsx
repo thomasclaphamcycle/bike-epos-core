@@ -4,7 +4,11 @@ import { apiGet, apiPost } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
-import { workshopRawStatusClass, workshopRawStatusLabel } from "../features/workshop/status";
+import {
+  getWorkshopTechnicianWorkflowSummary,
+  workshopRawStatusClass,
+  workshopRawStatusLabel,
+} from "../features/workshop/status";
 
 const statusOptions = [
   "",
@@ -47,6 +51,8 @@ type DashboardJob = {
     totalPence: number;
   } | null;
   finalizedBasketId?: string | null;
+  assignedStaffId?: string | null;
+  assignedStaffName?: string | null;
   partsStatus?: "OK" | "UNALLOCATED" | "SHORT";
   partsSummary?: {
     requiredQty: number;
@@ -214,26 +220,14 @@ const toPartsStatus = (job: DashboardJob) => {
 };
 
 const getNextStepHint = (job: DashboardJob) => {
-  switch (job.status) {
-    case "BOOKING_MADE":
-      return "Check-in is complete. Start work or send the quote for approval when needed.";
-    case "WAITING_FOR_APPROVAL":
-      return "Quote is pending. Pause bench work until the customer approves or the quote is revised.";
-    case "BIKE_ARRIVED":
-      return "Bike is on site and ready for bench work.";
-    case "APPROVED":
-      return "Quote is approved. Keep the job moving toward ready for collection.";
-    case "WAITING_FOR_PARTS":
-      return "Check the parts gap before promising collection.";
-    case "ON_HOLD":
-      return "Job is paused. Resolve the hold reason before resuming work.";
-    case "BIKE_READY":
-      return job.finalizedBasketId ? "Handoff is ready in the collection queue." : "Open the collection handoff when the customer arrives.";
-    case "COMPLETED":
-      return "Bike has been collected. Review only for any follow-up.";
-    default:
-      return "Open the job for full details and actions.";
-  }
+  return getWorkshopTechnicianWorkflowSummary({
+    rawStatus: job.status,
+    partsStatus: job.partsStatus,
+    assignedStaffName: job.assignedStaffName,
+    scheduledDate: job.scheduledDate,
+    hasSale: Boolean(job.sale),
+    hasBasket: Boolean(job.finalizedBasketId),
+  }).nextStep;
 };
 
 const getUrgency = (job: DashboardJob) => {
@@ -309,36 +303,47 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
     case "BOOKING_MADE":
       return [
         { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
-        { label: "Start Work", kind: "status", value: "IN_PROGRESS" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
+        { label: "Move to Bench", kind: "status", value: "IN_PROGRESS" },
+        { label: "Pause Job", kind: "status", value: "ON_HOLD" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
       ];
     case "WAITING_FOR_APPROVAL":
       return [
         { label: "Mark Quote Approved", kind: "approval", value: "APPROVED" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
-      ];
-    case "BIKE_ARRIVED":
-    case "ON_HOLD":
-      return [
-        { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
-        { label: "Ready for Collection", kind: "status", value: "READY" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
+        { label: "Pause Job", kind: "status", value: "ON_HOLD" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
       ];
     case "APPROVED":
       return [
+        { label: "Start Bench Work", kind: "status", value: "IN_PROGRESS" },
+        { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
+        { label: "Pause Job", kind: "status", value: "ON_HOLD" },
         { label: "Ready for Collection", kind: "status", value: "READY" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
+      ];
+    case "BIKE_ARRIVED":
+      return [
+        { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
+        { label: "Pause Job", kind: "status", value: "ON_HOLD" },
+        { label: "Ready for Collection", kind: "status", value: "READY" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
       ];
     case "WAITING_FOR_PARTS":
       return [
-        { label: "Resume", kind: "status", value: "IN_PROGRESS" },
-        { label: "Ready for Collection", kind: "status", value: "READY" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
+        { label: "Resume Bench Work", kind: "status", value: "IN_PROGRESS" },
+        { label: "Pause Job", kind: "status", value: "ON_HOLD" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
+      ];
+    case "ON_HOLD":
+      return [
+        { label: "Resume Bench Work", kind: "status", value: "IN_PROGRESS" },
+        { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
       ];
     case "BIKE_READY":
       return [
         { label: "Collection Queue", kind: "navigate", value: "/workshop/collection" },
-        { label: "Cancel", kind: "status", value: "CANCELLED" },
+        { label: "Cancel Job", kind: "status", value: "CANCELLED" },
       ];
     default:
       return [];
@@ -756,6 +761,7 @@ export const WorkshopPage = () => {
 
                             <div className="workshop-job-meta">
                               <span>Customer: {getCustomerName(job)}</span>
+                              <span>Technician: {job.assignedStaffName || "Unassigned"}</span>
                               <span>
                                 Promised: {formatDate(job.scheduledDate)}
                               </span>
@@ -820,6 +826,7 @@ export const WorkshopPage = () => {
                   <th>Board Bucket</th>
                   <th>Workflow Detail</th>
                   <th>Promised</th>
+                  <th>Technician</th>
                   <th>Customer</th>
                   <th>Totals</th>
                   <th>Parts</th>
@@ -829,7 +836,7 @@ export const WorkshopPage = () => {
               <tbody>
                 {jobs.length === 0 ? (
                   <tr>
-                    <td colSpan={9}>No jobs match the current filters.</td>
+                    <td colSpan={10}>No jobs match the current filters.</td>
                   </tr>
                 ) : (
                   jobs.map((job) => (
@@ -846,6 +853,7 @@ export const WorkshopPage = () => {
                         </div>
                       </td>
                       <td>{formatDate(job.scheduledDate)}</td>
+                      <td>{job.assignedStaffName || "Unassigned"}</td>
                       <td>{getCustomerName(job)}</td>
                       <td>{formatMoney(job.sale?.totalPence ?? null)}</td>
                       <td>

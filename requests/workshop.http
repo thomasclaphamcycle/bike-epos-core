@@ -292,7 +292,8 @@ X-Staff-Id: demo-staff
 }
 
 ### Change workshop status (M14)
-### Allowed progression: BOOKED -> IN_PROGRESS -> READY -> COMPLETED, and any -> CANCELLED
+### Bench workflow states keep quote-controlled statuses on /approval.
+### Common operational moves include IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY, COMPLETED, and CANCELLED.
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
@@ -300,6 +301,26 @@ X-Staff-Id: demo-staff
 
 {
   "status": "IN_PROGRESS"
+}
+
+### Mark job as waiting for parts
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "WAITING_FOR_PARTS"
+}
+
+### Pause job internally
+POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
+{
+  "status": "ON_HOLD"
 }
 
 ### Invalid status transition example (expect 409 INVALID_STATUS_TRANSITION)
