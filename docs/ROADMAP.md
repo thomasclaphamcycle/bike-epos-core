@@ -27,7 +27,7 @@ The current codebase already contains substantial implementation across the earl
 - product, inventory, stock movement, and purchasing foundations are largely implemented
 - workshop operations are substantially implemented
 - staff/admin/reporting surfaces are substantially implemented
-- customer and communication features are only partially complete
+- customer and communication features are now substantially implemented for workshop operations, with broader portal/self-service depth still future work
 - rental and online-store phases remain future work
 
 The roadmap below remains the canonical planning structure even where current implementation is ahead in some areas and behind in others.
@@ -269,6 +269,7 @@ Implementation status:
 - reusable customer bike records now expose linked bike service history for workshop and customer staff flows, while still excluding truthful-but-unlinked legacy free-text jobs
 - known-bike workshop intake can now start directly from a customer bike profile or bike history view, preloading the linked customer and bike context into workshop check-in
 - workshop estimates can now generate secure customer quote-review links, with customer approvals or rejections flowing back into the existing estimate history and audit trail without weakening stale-quote handling
+- secure customer workshop portal access now extends those quote links into a broader read-only job view with customer-safe bike details, current work summary, customer-visible notes, and timeline context while preserving stale-quote approval protection
 - workshop service templates now let staff define reusable labour-plus-parts job starters, apply them during check-in or on a live job, and fill an unset planning duration for calendar use without overwriting an already intentional timed schedule
 - the `v1.1.0` workshop shaping pass now aligns execution, quote, and collection wording across workshop jobs, bike history, customer profiles, check-in, and customer quote review so the full workflow reads as one coherent milestone
 - the workshop notification layer now uses deterministic smart delivery for quote-ready and ready-for-collection events, choosing one primary channel with truthful fallback, skip, and failure history across email, SMS, and WhatsApp

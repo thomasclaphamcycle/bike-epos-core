@@ -552,7 +552,7 @@ const buildQuoteReadyDecisions = async (
   const recipientPhone = normalizeOptionalPhone(customer?.phone);
   const customerId = customer?.id ?? estimate.workshopJob.customerId ?? null;
   const quotePath = estimate.customerQuoteToken
-    ? `/quote/${encodeURIComponent(estimate.customerQuoteToken)}`
+    ? `/public/workshop/${encodeURIComponent(estimate.customerQuoteToken)}`
     : null;
   const isCurrent = currentEstimate?.id === estimate.id && estimate.supersededAt === null;
   const isExpired =

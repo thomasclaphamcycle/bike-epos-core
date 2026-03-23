@@ -40,6 +40,152 @@
   --cp-page-warm: rgba(255, 122, 24, 0.09);
 }
 
+.workshop-portal-shell {
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+  background:
+    radial-gradient(circle at top right, rgba(24, 85, 59, 0.14), transparent 34%),
+    linear-gradient(180deg, #f6f8f5 0%, #eef2ec 100%);
+}
+
+.workshop-portal-card {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+}
+
+.workshop-portal-hero {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.workshop-portal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-portal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.workshop-portal-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.workshop-portal-panel h2 {
+  margin: 0;
+}
+
+.workshop-portal-bike-name {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.workshop-portal-detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.workshop-portal-detail-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-portal-detail-list dt {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #536171;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.workshop-portal-detail-list dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.workshop-portal-alert {
+  margin-top: 16px;
+}
+
+.workshop-portal-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #eef6ef;
+  border: 1px solid rgba(24, 85, 59, 0.16);
+}
+
+.workshop-portal-cta p {
+  margin: 4px 0 0;
+}
+
+.workshop-portal-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.workshop-portal-timeline li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-portal-timeline li p {
+  margin: 4px 0 0;
+}
+
+.workshop-portal-timeline-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 6px;
+  background: #18553b;
+  box-shadow: 0 0 0 4px rgba(24, 85, 59, 0.14);
+}
+
+@media (max-width: 800px) {
+  .workshop-portal-card {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .workshop-portal-grid,
+  .workshop-portal-detail-list {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-portal-cta {
+    align-items: stretch;
+  }
+}
+
 @font-face {
   font-family: "Digital-7";
   font-style: normal;

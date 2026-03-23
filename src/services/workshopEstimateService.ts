@@ -3,14 +3,17 @@ import {
   Prisma,
   WorkshopEstimateDecisionSource,
   WorkshopEstimateStatus,
+  WorkshopJobLineType,
   WorkshopJobNoteVisibility,
   WorkshopJobStatus,
+  WorkshopNotificationEventType,
 } from "@prisma/client";
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
+import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type SaveWorkshopEstimateInput = {
   actor?: AuditActor;
@@ -74,34 +77,59 @@ const publicEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()
     select: {
       id: true,
       status: true,
+      closedAt: true,
+      completedAt: true,
+      createdAt: true,
+      updatedAt: true,
       scheduledDate: true,
+      scheduledStartAt: true,
+      scheduledEndAt: true,
+      durationMinutes: true,
       bikeDescription: true,
       customerName: true,
       customer: {
         select: {
-          id: true,
           name: true,
           firstName: true,
           lastName: true,
-          email: true,
-          phone: true,
         },
       },
       bike: {
         select: {
-          id: true,
-          customerId: true,
           label: true,
           make: true,
           model: true,
+          year: true,
+          bikeType: true,
           colour: true,
-          frameNumber: true,
-          serialNumber: true,
-          registrationNumber: true,
-          notes: true,
-          createdAt: true,
-          updatedAt: true,
+          wheelSize: true,
+          frameSize: true,
+          groupset: true,
+          motorBrand: true,
+          motorModel: true,
         },
+      },
+      sale: {
+        select: {
+          totalPence: true,
+          createdAt: true,
+        },
+      },
+      lines: {
+        include: {
+          product: {
+            select: {
+              name: true,
+            },
+          },
+          variant: {
+            select: {
+              sku: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: "asc" }],
       },
       jobNotes: {
         where: {
@@ -109,19 +137,47 @@ const publicEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()
         },
         orderBy: [{ createdAt: "desc" }],
         select: {
-          id: true,
           note: true,
           createdAt: true,
-          authorStaff: {
-            select: {
-              id: true,
-              username: true,
-              name: true,
-            },
+        },
+      },
+      notifications: {
+        where: {
+          deliveryStatus: "SENT",
+          eventType: {
+            in: [
+              "QUOTE_READY" satisfies WorkshopNotificationEventType,
+              "JOB_READY_FOR_COLLECTION" satisfies WorkshopNotificationEventType,
+            ],
           },
+        },
+        orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
+        select: {
+          eventType: true,
+          sentAt: true,
+          createdAt: true,
         },
       },
     },
+  },
+});
+
+const publicEstimateSummaryInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()({
+  lines: {
+    include: {
+      product: {
+        select: {
+          name: true,
+        },
+      },
+      variant: {
+        select: {
+          sku: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   },
 });
 
@@ -131,6 +187,10 @@ type WorkshopEstimateRecord = Prisma.WorkshopEstimateGetPayload<{
 
 type PublicWorkshopEstimateRecord = Prisma.WorkshopEstimateGetPayload<{
   include: typeof publicEstimateInclude;
+}>;
+
+type PublicWorkshopEstimateSummaryRecord = Prisma.WorkshopEstimateGetPayload<{
+  include: typeof publicEstimateSummaryInclude;
 }>;
 
 type WorkshopJobWithLinesRecord = {
@@ -221,7 +281,7 @@ const getCustomerQuoteStatus = (estimate: {
   }
 
   return {
-    publicPath: `/quote/${encodeURIComponent(estimate.customerQuoteToken)}`,
+    publicPath: `/public/workshop/${encodeURIComponent(estimate.customerQuoteToken)}`,
     expiresAt: estimate.customerQuoteTokenExpiresAt,
     status:
       estimate.customerQuoteTokenExpiresAt.getTime() < Date.now()
@@ -277,6 +337,204 @@ const buildCustomerDisplayName = (customer: {
   return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
 };
 
+const toCustomerWorkshopStatusLabel = (
+  status: ReturnType<typeof toWorkshopExecutionStatus>,
+) => {
+  switch (status) {
+    case "BOOKED":
+      return "Booked In";
+    case "IN_PROGRESS":
+      return "In Progress";
+    case "READY":
+      return "Ready for Collection";
+    case "COLLECTED":
+      return "Collected";
+    case "CLOSED":
+      return "Closed";
+  }
+};
+
+const toBikeTypeLabel = (value: string | null | undefined) => {
+  const normalized = normalizeOptionalText(value)?.toUpperCase();
+  switch (normalized) {
+    case "ROAD":
+      return "Road";
+    case "MTB":
+      return "Mountain Bike";
+    case "E_BIKE":
+      return "E-bike";
+    case "HYBRID":
+      return "Hybrid";
+    case "GRAVEL":
+      return "Gravel";
+    case "COMMUTER":
+      return "Commuter";
+    case "BMX":
+      return "BMX";
+    case "KIDS":
+      return "Kids";
+    case "CARGO":
+      return "Cargo";
+    case "FOLDING":
+      return "Folding";
+    case "OTHER":
+      return "Other";
+    default:
+      return value ?? null;
+  }
+};
+
+const toPublicLineSummary = (line: {
+  type: WorkshopJobLineType;
+  description: string;
+  qty: number;
+  unitPricePence: number;
+  product?: {
+    name: string;
+  } | null;
+  variant?: {
+    sku: string;
+    name: string | null;
+  } | null;
+}) => ({
+  type: line.type,
+  description: line.description,
+  qty: line.qty,
+  unitPricePence: line.unitPricePence,
+  lineTotalPence: line.qty * line.unitPricePence,
+  productName: line.product?.name ?? null,
+  variantName: line.variant?.name ?? null,
+  variantSku: line.variant?.sku ?? null,
+});
+
+const buildLineSummaryTotals = (
+  lines: Array<ReturnType<typeof toPublicLineSummary>>,
+) => ({
+  labourTotalPence: lines
+    .filter((line) => line.type === "LABOUR")
+    .reduce((sum, line) => sum + line.lineTotalPence, 0),
+  partsTotalPence: lines
+    .filter((line) => line.type === "PART")
+    .reduce((sum, line) => sum + line.lineTotalPence, 0),
+  subtotalPence: lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
+  lineCount: lines.length,
+});
+
+const toPublicEstimateSummary = (
+  estimate: PublicWorkshopEstimateRecord | PublicWorkshopEstimateSummaryRecord,
+) => {
+  const lines = estimate.lines.map((line) => toPublicLineSummary(line));
+
+  return {
+    version: estimate.version,
+    status: estimate.status,
+    labourTotalPence: estimate.labourTotalPence,
+    partsTotalPence: estimate.partsTotalPence,
+    subtotalPence: estimate.subtotalPence,
+    lineCount: estimate.lineCount,
+    requestedAt: estimate.requestedAt,
+    approvedAt: estimate.approvedAt,
+    rejectedAt: estimate.rejectedAt,
+    supersededAt: estimate.supersededAt,
+    decisionSource: estimate.decisionSource,
+    createdAt: estimate.createdAt,
+    updatedAt: estimate.updatedAt,
+    isCurrent: estimate.supersededAt === null,
+    lines,
+  };
+};
+
+const getLatestPortalNotificationAt = (
+  notifications: PublicWorkshopEstimateRecord["workshopJob"]["notifications"],
+  eventType: WorkshopNotificationEventType,
+) => {
+  const match = notifications.find((notification) => notification.eventType === eventType);
+  return match?.sentAt ?? match?.createdAt ?? null;
+};
+
+const buildPortalTimeline = (input: {
+  createdAt: Date;
+  scheduledStartAt: Date | null;
+  scheduledDate: Date | null;
+  estimate: ReturnType<typeof toPublicEstimateSummary> | null;
+  notifications: PublicWorkshopEstimateRecord["workshopJob"]["notifications"];
+  completedAt: Date | null;
+}) => {
+  const events: Array<{
+    type: string;
+    label: string;
+    occurredAt: Date;
+    detail: string | null;
+  }> = [
+    {
+      type: "JOB_CREATED",
+      label: "Job received",
+      occurredAt: input.createdAt,
+      detail: null,
+    },
+  ];
+
+  if (input.scheduledStartAt || input.scheduledDate) {
+    events.push({
+      type: "SCHEDULED",
+      label: "Scheduled into the workshop",
+      occurredAt: input.scheduledStartAt ?? input.scheduledDate ?? input.createdAt,
+      detail: null,
+    });
+  }
+
+  if (input.estimate?.requestedAt) {
+    events.push({
+      type: "QUOTE_READY",
+      label: "Quote ready to review",
+      occurredAt: input.estimate.requestedAt,
+      detail: null,
+    });
+  }
+
+  if (input.estimate?.approvedAt) {
+    events.push({
+      type: "QUOTE_APPROVED",
+      label: "Quote approved",
+      occurredAt: input.estimate.approvedAt,
+      detail: null,
+    });
+  }
+
+  if (input.estimate?.rejectedAt) {
+    events.push({
+      type: "QUOTE_REJECTED",
+      label: "Quote rejected",
+      occurredAt: input.estimate.rejectedAt,
+      detail: null,
+    });
+  }
+
+  const readyForCollectionAt = getLatestPortalNotificationAt(
+    input.notifications,
+    "JOB_READY_FOR_COLLECTION",
+  );
+  if (readyForCollectionAt) {
+    events.push({
+      type: "READY_FOR_COLLECTION",
+      label: "Ready for collection",
+      occurredAt: readyForCollectionAt,
+      detail: null,
+    });
+  }
+
+  if (input.completedAt) {
+    events.push({
+      type: "COLLECTED",
+      label: "Collected",
+      occurredAt: input.completedAt,
+      detail: null,
+    });
+  }
+
+  return events.sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
+};
+
 const toPublicQuoteResponse = (
   estimate: PublicWorkshopEstimateRecord,
   input: {
@@ -284,6 +542,7 @@ const toPublicQuoteResponse = (
     canApprove: boolean;
     canReject: boolean;
     idempotent?: boolean;
+    currentEstimate?: PublicWorkshopEstimateSummaryRecord | null;
   },
 ) => {
   const customerName = estimate.workshopJob.customer
@@ -292,61 +551,81 @@ const toPublicQuoteResponse = (
   const bikeDisplayName = estimate.workshopJob.bike
     ? buildCustomerBikeDisplayName(estimate.workshopJob.bike)
     : normalizeOptionalText(estimate.workshopJob.bikeDescription) ?? "Bike";
+  const executionStatus = toWorkshopExecutionStatus({
+    status: estimate.workshopJob.status,
+    closedAt: estimate.workshopJob.closedAt,
+  });
+  const currentEstimate = input.currentEstimate ?? null;
+  const displayEstimate = currentEstimate ?? estimate;
+  const displayEstimateSummary = toPublicEstimateSummary(displayEstimate);
+  const workLines = estimate.workshopJob.lines.map((line) => toPublicLineSummary(line));
+  const workSummary = {
+    ...buildLineSummaryTotals(workLines),
+    lines: workLines,
+  };
+  const access = {
+    accessStatus: input.accessStatus,
+    canApprove: input.canApprove,
+    canReject: input.canReject,
+    idempotent: input.idempotent ?? false,
+    customerQuote: getCustomerQuoteStatus(estimate),
+    linkedEstimateVersion: estimate.version,
+    currentEstimateVersion: currentEstimate?.version ?? estimate.version,
+    hasUpdatedEstimate:
+      estimate.supersededAt !== null ||
+      (currentEstimate !== null && currentEstimate.id !== estimate.id),
+  };
 
   return {
-    quote: {
-      accessStatus: input.accessStatus,
-      canApprove: input.canApprove,
-      canReject: input.canReject,
-      idempotent: input.idempotent ?? false,
-      customerQuote: getCustomerQuoteStatus(estimate),
-    },
+    portal: access,
+    quote: access,
     job: {
-      id: estimate.workshopJob.id,
-      status: estimate.workshopJob.status,
+      status: executionStatus,
+      statusLabel: toCustomerWorkshopStatusLabel(executionStatus),
+      createdAt: estimate.workshopJob.createdAt,
       scheduledDate: estimate.workshopJob.scheduledDate,
+      scheduledStartAt: estimate.workshopJob.scheduledStartAt,
+      scheduledEndAt: estimate.workshopJob.scheduledEndAt,
+      durationMinutes: estimate.workshopJob.durationMinutes,
       customerName,
       bikeDescription: estimate.workshopJob.bikeDescription,
       bikeDisplayName,
-      bike: estimate.workshopJob.bike
+      finalSummary: estimate.workshopJob.sale
         ? {
-            id: estimate.workshopJob.bike.id,
-            displayName: bikeDisplayName,
-            label: estimate.workshopJob.bike.label,
-            make: estimate.workshopJob.bike.make,
-            model: estimate.workshopJob.bike.model,
-            colour: estimate.workshopJob.bike.colour,
+            totalPence: estimate.workshopJob.sale.totalPence,
+            collectedAt: estimate.workshopJob.completedAt ?? estimate.workshopJob.sale.createdAt,
           }
         : null,
     },
-    customer: estimate.workshopJob.customer
-      ? {
-          id: estimate.workshopJob.customer.id,
-          name: customerName,
-          email: estimate.workshopJob.customer.email,
-          phone: estimate.workshopJob.customer.phone,
-        }
-      : null,
-    estimate: {
-      ...toEstimateResponse(estimate),
-      lines: estimate.lines.map((line) => ({
-        id: line.id,
-        type: line.type,
-        description: line.description,
-        qty: line.qty,
-        unitPricePence: line.unitPricePence,
-        lineTotalPence: line.lineTotalPence,
-        productName: line.product?.name ?? null,
-        variantName: line.variant?.name ?? null,
-        variantSku: line.variant?.sku ?? null,
-      })),
+    bike: {
+      displayName: bikeDisplayName,
+      label: estimate.workshopJob.bike?.label ?? null,
+      make: estimate.workshopJob.bike?.make ?? null,
+      model: estimate.workshopJob.bike?.model ?? null,
+      year: estimate.workshopJob.bike?.year ?? null,
+      bikeType: estimate.workshopJob.bike?.bikeType ?? null,
+      bikeTypeLabel: toBikeTypeLabel(estimate.workshopJob.bike?.bikeType),
+      colour: estimate.workshopJob.bike?.colour ?? null,
+      wheelSize: estimate.workshopJob.bike?.wheelSize ?? null,
+      frameSize: estimate.workshopJob.bike?.frameSize ?? null,
+      groupset: estimate.workshopJob.bike?.groupset ?? null,
+      motorBrand: estimate.workshopJob.bike?.motorBrand ?? null,
+      motorModel: estimate.workshopJob.bike?.motorModel ?? null,
     },
+    estimate: displayEstimateSummary,
+    workSummary,
     customerNotes: estimate.workshopJob.jobNotes.map((note) => ({
-      id: note.id,
       note: note.note,
       createdAt: note.createdAt,
-      authorName: note.authorStaff?.name ?? note.authorStaff?.username ?? null,
     })),
+    timeline: buildPortalTimeline({
+      createdAt: estimate.workshopJob.createdAt,
+      scheduledStartAt: estimate.workshopJob.scheduledStartAt,
+      scheduledDate: estimate.workshopJob.scheduledDate,
+      estimate: displayEstimateSummary,
+      notifications: estimate.workshopJob.notifications,
+      completedAt: estimate.workshopJob.completedAt,
+    }),
   };
 };
 
@@ -459,6 +738,19 @@ const getCurrentWorkshopEstimateTx = async (
       supersededAt: null,
     },
     include: estimateInclude,
+    orderBy: [{ version: "desc" }],
+  });
+
+const getCurrentWorkshopEstimatePublicTx = async (
+  tx: Prisma.TransactionClient | typeof prisma,
+  workshopJobId: string,
+) =>
+  tx.workshopEstimate.findFirst({
+    where: {
+      workshopJobId,
+      supersededAt: null,
+    },
+    include: publicEstimateSummaryInclude,
     orderBy: [{ version: "desc" }],
   });
 
@@ -1040,7 +1332,7 @@ export const createWorkshopEstimateCustomerQuoteLink = async (
     if (!currentEstimate) {
       throw new HttpError(
         409,
-        "Save or request an estimate before sharing a customer quote link",
+        "Save or request an estimate before sharing a customer portal link",
         "WORKSHOP_ESTIMATE_NOT_READY",
       );
     }
@@ -1066,7 +1358,7 @@ export const getPublicWorkshopEstimateQuote = async (tokenValue: string) => {
     throw new HttpError(404, "Quote link not found", "WORKSHOP_QUOTE_NOT_FOUND");
   }
 
-  const currentEstimate = await getCurrentWorkshopEstimateTx(prisma, estimate.workshopJobId);
+  const currentEstimate = await getCurrentWorkshopEstimatePublicTx(prisma, estimate.workshopJobId);
   const customerQuote = getCustomerQuoteStatus(estimate);
   const isCurrent = currentEstimate?.id === estimate.id && estimate.supersededAt === null;
   const accessStatus =
@@ -1082,6 +1374,7 @@ export const getPublicWorkshopEstimateQuote = async (tokenValue: string) => {
     accessStatus,
     canApprove: canRespond,
     canReject: canRespond,
+    currentEstimate,
   });
 };
 
@@ -1117,11 +1410,14 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
     }
 
     if (estimate.status === targetStatus) {
+      const currentPortalEstimate = await getCurrentWorkshopEstimatePublicTx(tx, estimate.workshopJobId);
+
       return toPublicQuoteResponse(estimate, {
         accessStatus: "ACTIVE",
         canApprove: false,
         canReject: false,
         idempotent: true,
+        currentEstimate: currentPortalEstimate,
       });
     }
 
@@ -1177,11 +1473,14 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
       throw new HttpError(500, "Quote decision could not be reloaded", "WORKSHOP_QUOTE_RELOAD_FAILED");
     }
 
+    const currentPortalEstimate = await getCurrentWorkshopEstimatePublicTx(tx, refreshed.workshopJobId);
+
     return toPublicQuoteResponse(refreshed, {
       accessStatus: "ACTIVE",
       canApprove: false,
       canReject: false,
       idempotent: false,
+      currentEstimate: currentPortalEstimate,
     });
   });
 };

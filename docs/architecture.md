@@ -177,6 +177,11 @@ Current internal subscribers are:
   - apply templates by creating ordinary `WorkshopJobLine` records, then invalidating the current estimate through the existing estimate service so downstream quoting and approval workflows stay truthful
   - propagate `defaultDurationMinutes` into `WorkshopJob.durationMinutes` only when the job does not already have an intentional duration, which keeps calendar planning defaults additive instead of silently overwriting live schedule decisions
   - support compact staff usage during check-in and on the workshop job page, while manager maintenance lives at `/management/workshop/templates`
+- customer workshop portal in `src/services/workshopEstimateService.ts` and `frontend/src/pages/WorkshopQuotePage.tsx`
+  - reuses the existing secure customer quote token on `WorkshopEstimate.customerQuoteToken` rather than creating a parallel public-access model
+  - exposes `GET /api/public/workshop/:token` for a customer-safe portal payload containing friendly job status, bike summary, current estimate/work summaries, customer-visible notes, and a minimal timeline
+  - keeps approval and rejection on the same estimate-decision workflow, so `POST /api/public/workshop/:token/decision` stays idempotent and still blocks stale or superseded quote approval
+  - preserves existing `/quote/:token` frontend links and `/api/public/workshop-quotes/:token` API aliases for compatibility while new generated links point to `/public/workshop/:token`
 
 Manager-facing internal visibility now exists through:
 
@@ -187,4 +192,4 @@ Manager-facing internal visibility now exists through:
 
 These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now exists only for the narrow quote-ready and ready-for-collection notification events above; push notifications, webhooks, and customer self-service preference management remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus an initial staff day-view calendar UI rather than a full scheduling-management suite.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now includes quote/share notifications plus the secure workshop portal above, but push notifications, broader customer self-service account management, and webhook-style external integrations remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus an initial staff day-view calendar UI rather than a full scheduling-management suite.

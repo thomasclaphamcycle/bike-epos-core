@@ -871,6 +871,11 @@ export const getPublicWorkshopEstimateQuoteHandler = async (req: Request, res: R
   res.json(result);
 };
 
+export const getPublicWorkshopPortalHandler = async (req: Request, res: Response) => {
+  const result = await getPublicWorkshopEstimateQuote(req.params.token);
+  res.json(result);
+};
+
 export const submitPublicWorkshopEstimateQuoteDecisionHandler = async (
   req: Request,
   res: Response,
@@ -886,5 +891,23 @@ export const submitPublicWorkshopEstimateQuoteDecisionHandler = async (
   const result = await submitPublicWorkshopEstimateQuoteDecision(req.params.token, {
     status: typeof body.status === "string" ? body.status : "",
   });
-  res.status(result.quote.idempotent ? 200 : 201).json(result);
+  res.status(result.portal.idempotent ? 200 : 201).json(result);
+};
+
+export const submitPublicWorkshopPortalDecisionHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    status?: unknown;
+  };
+
+  if (body.status !== undefined && typeof body.status !== "string") {
+    throw new HttpError(400, "status must be a string", "INVALID_QUOTE_DECISION_STATUS");
+  }
+
+  const result = await submitPublicWorkshopEstimateQuoteDecision(req.params.token, {
+    status: typeof body.status === "string" ? body.status : "",
+  });
+  res.status(result.portal.idempotent ? 200 : 201).json(result);
 };
