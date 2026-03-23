@@ -1767,10 +1767,13 @@ const run = async () => {
       assert.equal(publicPortal.status, 200, JSON.stringify(publicPortal.json));
       assert.equal(publicPortal.json.portal.accessStatus, "ACTIVE");
       assert.equal(publicPortal.json.quote.accessStatus, "ACTIVE");
+      assert.equal(publicPortal.json.customerProgress.stage, "AWAITING_APPROVAL");
+      assert.equal(publicPortal.json.customerProgress.needsCustomerAction, true);
       assert.equal(publicPortal.json.estimate.status, "PENDING_APPROVAL");
       assert.equal(publicPortal.json.estimate.lines.length, 1);
       assert.equal(publicPortal.json.workSummary.lineCount, 1);
       assert.equal(publicPortal.json.job.customerName.startsWith("M83 Customer"), true);
+      assert.ok(publicPortal.json.job.updatedAt, JSON.stringify(publicPortal.json.job));
       assert.equal("id" in publicPortal.json.job, false);
       assert.equal(publicPortal.json.customerNotes.length, 1);
       assert.equal(publicPortal.json.customerNotes[0].note, "We will confirm as soon as the quoted work is ready to continue.");
@@ -1781,6 +1784,14 @@ const run = async () => {
       );
       assert.ok(
         publicPortal.json.timeline.some((event) => event.type === "JOB_CREATED"),
+        JSON.stringify(publicPortal.json.timeline),
+      );
+      assert.ok(
+        publicPortal.json.timeline.some(
+          (event) =>
+            event.type === "QUOTE_READY" &&
+            event.detail === "Quote total £65.00",
+        ),
         JSON.stringify(publicPortal.json.timeline),
       );
 
@@ -1837,6 +1848,75 @@ const run = async () => {
       });
       assert.equal(staleApprove.status, 409, JSON.stringify(staleApprove.json));
       assert.equal(staleApprove.json.error.code, "WORKSHOP_QUOTE_SUPERSEDED");
+    }, results);
+
+    await runTest("customer workshop portal progress shows approval, in-progress, and collection stages clearly", async () => {
+      const { job } = await createJob(state);
+
+      const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Portal progress labour",
+          qty: 1,
+          unitPricePence: 5900,
+        }),
+      });
+      assert.equal(addLine.status, 201, JSON.stringify(addLine.json));
+
+      const waitingApproval = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "WAITING_FOR_APPROVAL" }),
+      });
+      assert.equal(waitingApproval.status, 201, JSON.stringify(waitingApproval.json));
+
+      const link = await fetchJson(`/api/workshop/jobs/${job.id}/customer-quote-link`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({}),
+      });
+      assert.equal(link.status, 200, JSON.stringify(link.json));
+      const quoteToken = extractQuoteToken(link.json.customerQuote.publicPath);
+
+      const awaitingApproval = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(awaitingApproval.status, 200, JSON.stringify(awaitingApproval.json));
+      assert.equal(awaitingApproval.json.customerProgress.stage, "AWAITING_APPROVAL");
+      assert.equal(awaitingApproval.json.customerProgress.needsCustomerAction, true);
+
+      const approve = await fetchJson(`/api/public/workshop/${quoteToken}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ status: "APPROVED" }),
+      });
+      assert.equal(approve.status, 201, JSON.stringify(approve.json));
+
+      const toInProgress = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      });
+      assert.equal(toInProgress.status, 200, JSON.stringify(toInProgress.json));
+
+      const inProgressPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(inProgressPortal.status, 200, JSON.stringify(inProgressPortal.json));
+      assert.equal(inProgressPortal.json.customerProgress.stage, "IN_PROGRESS");
+      assert.equal(inProgressPortal.json.customerProgress.needsCustomerAction, false);
+
+      const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "READY" }),
+      });
+      assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
+
+      const readyPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
+      assert.equal(readyPortal.status, 200, JSON.stringify(readyPortal.json));
+      assert.equal(readyPortal.json.customerProgress.stage, "READY_FOR_COLLECTION");
+      assert.ok(
+        readyPortal.json.customerProgress.headline.includes("ready to collect"),
+        readyPortal.json.customerProgress.headline,
+      );
     }, results);
 
     await runTest("customer workshop portal rejects invalid secure tokens safely", async () => {

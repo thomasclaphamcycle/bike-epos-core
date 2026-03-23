@@ -490,6 +490,135 @@ const toCustomerWorkshopStatusLabel = (
   }
 };
 
+const formatPortalMoneyLabel = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const buildCustomerPortalProgress = (input: {
+  rawStatus: WorkshopJobStatus;
+  closedAt: Date | null;
+  scheduledStartAt: Date | null;
+  scheduledDate: Date | null;
+  estimate: ReturnType<typeof toPublicEstimateSummary> | null;
+  accessStatus: "ACTIVE" | "EXPIRED" | "SUPERSEDED";
+  canApprove: boolean;
+  finalSummary: {
+    totalPence: number;
+    collectedAt: Date | null;
+  } | null;
+}) => {
+  const hasSchedule = Boolean(input.scheduledStartAt || input.scheduledDate);
+
+  if (input.closedAt || input.rawStatus === "CANCELLED") {
+    return {
+      stage: "CLOSED",
+      label: "Closed",
+      headline: "This workshop job is now closed",
+      detail: "If you still need help with this bike, please contact the shop directly.",
+      nextStep: "The workshop can help if anything needs to be revisited.",
+      needsCustomerAction: false,
+    };
+  }
+
+  if (input.rawStatus === "COMPLETED") {
+    return {
+      stage: "COLLECTED",
+      label: "Collected",
+      headline: "Your bike has been collected",
+      detail: input.finalSummary
+        ? `Final total: ${formatPortalMoneyLabel(input.finalSummary.totalPence)}`
+        : "The workshop has marked this job as collected.",
+      nextStep: "You can keep this secure link to review the final work summary, shared notes, and attachments.",
+      needsCustomerAction: false,
+    };
+  }
+
+  if (input.rawStatus === "BIKE_READY") {
+    return {
+      stage: "READY_FOR_COLLECTION",
+      label: "Ready for collection",
+      headline: "Your bike is ready to collect",
+      detail: input.finalSummary
+        ? `Collection total: ${formatPortalMoneyLabel(input.finalSummary.totalPence)}`
+        : "The workshop has finished the current work and says your bike is ready.",
+      nextStep:
+        "Please contact the shop if you need to confirm collection timing or have any final questions.",
+      needsCustomerAction: false,
+    };
+  }
+
+  if (input.rawStatus === "WAITING_FOR_APPROVAL" || input.estimate?.status === "PENDING_APPROVAL") {
+    return {
+      stage: "AWAITING_APPROVAL",
+      label: "Awaiting approval",
+      headline: "The workshop is waiting for your go-ahead",
+      detail: input.estimate
+        ? `Please review the current quote total of ${formatPortalMoneyLabel(
+            input.estimate.subtotalPence,
+          )} before work continues.`
+        : "The workshop is waiting for approval before continuing with the next stage of work.",
+      nextStep:
+        input.accessStatus === "ACTIVE" && input.canApprove
+          ? "Use the quote section below to approve or reject the work."
+          : "Contact the shop if you need a fresh approval link.",
+      needsCustomerAction: input.accessStatus === "ACTIVE" && input.canApprove,
+    };
+  }
+
+  if (input.rawStatus === "WAITING_FOR_PARTS") {
+    return {
+      stage: "WAITING",
+      label: "Waiting on parts",
+      headline: "The workshop is waiting on parts",
+      detail: "Your bike stays on the job while the shop waits for the required parts to arrive.",
+      nextStep: "The workshop will update you here as soon as the parts arrive or the plan changes.",
+      needsCustomerAction: false,
+    };
+  }
+
+  if (input.rawStatus === "ON_HOLD") {
+    return {
+      stage: "WAITING",
+      label: "Waiting on an update",
+      headline: "This job is temporarily paused",
+      detail: "The workshop is waiting on something before work can continue.",
+      nextStep: "Use the message thread below if you need to check in with the workshop.",
+      needsCustomerAction: false,
+    };
+  }
+
+  if (input.rawStatus === "BIKE_ARRIVED" || input.rawStatus === "APPROVED") {
+    return {
+      stage: "IN_PROGRESS",
+      label: "In progress",
+      headline: "Your bike is with the workshop",
+      detail: hasSchedule
+        ? "The bike is in an active workshop slot and work is underway."
+        : "The workshop has your bike and is progressing the job.",
+      nextStep: "The workshop will update you here if anything changes or if they need your approval.",
+      needsCustomerAction: false,
+    };
+  }
+
+  if (hasSchedule) {
+    return {
+      stage: "SCHEDULED",
+      label: "Scheduled",
+      headline: "Your bike is booked into the workshop",
+      detail: "The workshop has reserved time for your bike.",
+      nextStep: "Check the scheduled time below and contact the shop if you need to discuss timing.",
+      needsCustomerAction: false,
+    };
+  }
+
+  return {
+    stage: "BOOKED",
+    label: "Booked in",
+    headline: "Your bike is booked in with the workshop",
+    detail: "The job is open and the workshop will update you when work starts or timing is confirmed.",
+    nextStep: "You can use this secure page to follow updates from the shop.",
+    needsCustomerAction: false,
+  };
+};
+
 const toBikeTypeLabel = (value: string | null | undefined) => {
   const normalized = normalizeOptionalText(value)?.toUpperCase();
   switch (normalized) {
@@ -592,9 +721,14 @@ const buildPortalTimeline = (input: {
   createdAt: Date;
   scheduledStartAt: Date | null;
   scheduledDate: Date | null;
+  durationMinutes: number | null;
   estimate: ReturnType<typeof toPublicEstimateSummary> | null;
   notifications: PublicWorkshopEstimateRecord["workshopJob"]["notifications"];
   completedAt: Date | null;
+  finalSummary: {
+    totalPence: number;
+    collectedAt: Date | null;
+  } | null;
 }) => {
   const events: Array<{
     type: string;
@@ -615,7 +749,7 @@ const buildPortalTimeline = (input: {
       type: "SCHEDULED",
       label: "Scheduled into the workshop",
       occurredAt: input.scheduledStartAt ?? input.scheduledDate ?? input.createdAt,
-      detail: null,
+      detail: input.durationMinutes ? `${input.durationMinutes} minute workshop slot` : null,
     });
   }
 
@@ -624,7 +758,7 @@ const buildPortalTimeline = (input: {
       type: "QUOTE_READY",
       label: "Quote ready to review",
       occurredAt: input.estimate.requestedAt,
-      detail: null,
+      detail: `Quote total ${formatPortalMoneyLabel(input.estimate.subtotalPence)}`,
     });
   }
 
@@ -633,7 +767,10 @@ const buildPortalTimeline = (input: {
       type: "QUOTE_APPROVED",
       label: "Quote approved",
       occurredAt: input.estimate.approvedAt,
-      detail: null,
+      detail:
+        input.estimate.decisionSource === "CUSTOMER"
+          ? "Approved through this secure link"
+          : "Approved with the workshop",
     });
   }
 
@@ -642,7 +779,10 @@ const buildPortalTimeline = (input: {
       type: "QUOTE_REJECTED",
       label: "Quote rejected",
       occurredAt: input.estimate.rejectedAt,
-      detail: null,
+      detail:
+        input.estimate.decisionSource === "CUSTOMER"
+          ? "Rejected through this secure link"
+          : "Rejected with the workshop",
     });
   }
 
@@ -655,7 +795,9 @@ const buildPortalTimeline = (input: {
       type: "READY_FOR_COLLECTION",
       label: "Ready for collection",
       occurredAt: readyForCollectionAt,
-      detail: null,
+      detail: input.finalSummary
+        ? `Collection total ${formatPortalMoneyLabel(input.finalSummary.totalPence)}`
+        : "The workshop says the bike is ready to collect",
     });
   }
 
@@ -711,14 +853,32 @@ const toPublicQuoteResponse = (
       estimate.supersededAt !== null ||
       (currentEstimate !== null && currentEstimate.id !== estimate.id),
   };
+  const finalSummary = estimate.workshopJob.sale
+    ? {
+        totalPence: estimate.workshopJob.sale.totalPence,
+        collectedAt: estimate.workshopJob.completedAt ?? estimate.workshopJob.sale.createdAt,
+      }
+    : null;
+  const customerProgress = buildCustomerPortalProgress({
+    rawStatus: estimate.workshopJob.status,
+    closedAt: estimate.workshopJob.closedAt,
+    scheduledStartAt: estimate.workshopJob.scheduledStartAt,
+    scheduledDate: estimate.workshopJob.scheduledDate,
+    estimate: displayEstimateSummary,
+    accessStatus: access.accessStatus,
+    canApprove: access.canApprove,
+    finalSummary,
+  });
 
   return {
     portal: access,
     quote: access,
+    customerProgress,
     job: {
       status: executionStatus,
       statusLabel: toCustomerWorkshopStatusLabel(executionStatus),
       createdAt: estimate.workshopJob.createdAt,
+      updatedAt: estimate.workshopJob.updatedAt,
       scheduledDate: estimate.workshopJob.scheduledDate,
       scheduledStartAt: estimate.workshopJob.scheduledStartAt,
       scheduledEndAt: estimate.workshopJob.scheduledEndAt,
@@ -726,12 +886,7 @@ const toPublicQuoteResponse = (
       customerName,
       bikeDescription: estimate.workshopJob.bikeDescription,
       bikeDisplayName,
-      finalSummary: estimate.workshopJob.sale
-        ? {
-            totalPence: estimate.workshopJob.sale.totalPence,
-            collectedAt: estimate.workshopJob.completedAt ?? estimate.workshopJob.sale.createdAt,
-          }
-        : null,
+      finalSummary,
     },
     bike: {
       displayName: bikeDisplayName,
@@ -758,9 +913,11 @@ const toPublicQuoteResponse = (
       createdAt: estimate.workshopJob.createdAt,
       scheduledStartAt: estimate.workshopJob.scheduledStartAt,
       scheduledDate: estimate.workshopJob.scheduledDate,
+      durationMinutes: estimate.workshopJob.durationMinutes,
       estimate: displayEstimateSummary,
       notifications: estimate.workshopJob.notifications,
       completedAt: estimate.workshopJob.completedAt,
+      finalSummary,
     }),
   };
 };

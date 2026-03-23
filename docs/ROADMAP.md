@@ -280,6 +280,7 @@ Implementation status:
 - known-bike workshop intake can now start directly from a customer bike profile or bike history view, preloading the linked customer and bike context into workshop check-in
 - workshop estimates can now generate secure customer quote-review links, with customer approvals or rejections flowing back into the existing estimate history and audit trail without weakening stale-quote handling
 - secure customer workshop portal access now extends those quote links into a broader read-only job view with customer-safe bike details, current work summary, customer-visible notes, and timeline context while preserving stale-quote approval protection
+- the customer workshop portal now also exposes a clearer progress summary, customer-safe next-step guidance, stronger quote/work/bike hierarchy, and more complete messaging and attachment presentation so the secure portal reads as a practical customer experience rather than a quote-only utility
 - workshop jobs now also have an additive backend scheduling foundation with optional timed slots, staff working hours, and workshop/staff time-off blocks, while keeping legacy `scheduledDate` flows operationally compatible
 - workshop calendar now also has a production-ready backend API for date-range reads plus safe schedule/reschedule updates, so an MVP calendar UI can build on shared scheduling rules without breaking legacy workshop flows
 - workshop now also has a staff-facing calendar MVP at `/workshop/calendar`, giving the team a day view of mechanic rows, timed jobs, rota-backed availability windows, time off, and a live unscheduled queue without replacing the existing job board
@@ -311,19 +312,18 @@ Rough implementation scope:
 Classification:
 - parity work
 
-### 2. Customer portal polish
+### 2. Customer portal self-service depth
 
 Why it matters:
-- the first portal already reduces basic status and quote-query friction, but a tighter customer experience would reduce support load further and make the portal feel production-complete
+- the portal is now clear enough for everyday quote and job tracking, so the next parity gap is less about basic clarity and more about what customers can do for themselves without phoning the shop
 
 Current repo status / gap:
-- secure portal access, customer-safe notes, timeline context, and quote approval are implemented
-- the portal still lacks richer status storytelling, stronger timeline detail, clearer collection guidance, and broader communication/context depth
+- secure portal access, customer-safe progress/status storytelling, quote approval, messaging, attachments, and timeline context are implemented
+- the portal still does not support broader self-service actions such as booking changes, collection coordination workflows, or deeper post-completion/account-style follow-up
 
 Rough implementation scope:
-- refine customer-safe status/timeline presentation
-- add clearer collection and next-step guidance
-- improve note/work-summary presentation, attachment presentation, and small-screen usability without turning the portal into a full customer account system
+- extend the secure portal with tightly scoped self-service actions that build on the existing token model
+- focus on practical actions such as booking/collection coordination and limited post-job follow-up without turning the portal into a general customer account system
 
 Classification:
 - parity work

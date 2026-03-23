@@ -487,6 +487,7 @@ X-Staff-Id: demo-staff
 
 ### Public customer workshop portal by secure token
 GET {{baseUrl}}/api/public/workshop/{{quoteToken}}
+# Returns customer-safe job progress, quote/work summaries, notes, messaging context, and attachments
 
 ### Public customer-visible workshop attachments by secure token
 GET {{baseUrl}}/api/public/workshop/{{quoteToken}}/attachments
