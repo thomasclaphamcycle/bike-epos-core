@@ -167,9 +167,55 @@ const getWorkshopDayOfWeek = (value) => {
   return WORKSHOP_DAY_OF_WEEK_BY_NAME[weekday];
 };
 
+const getWorkshopTimeParts = (value) =>
+  Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: WORKSHOP_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(value)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+
 const toScheduledSlot = (date, hours, minutes = 0) => {
-  const slot = new Date(date);
-  slot.setUTCHours(hours, minutes, 0, 0);
+  const baseParts = getWorkshopTimeParts(date);
+  const targetLocalTimestamp = Date.UTC(
+    Number(baseParts.year),
+    Number(baseParts.month) - 1,
+    Number(baseParts.day),
+    hours,
+    minutes,
+    0,
+    0,
+  );
+
+  let slot = new Date(targetLocalTimestamp);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const actualParts = getWorkshopTimeParts(slot);
+    const actualLocalTimestamp = Date.UTC(
+      Number(actualParts.year),
+      Number(actualParts.month) - 1,
+      Number(actualParts.day),
+      Number(actualParts.hour),
+      Number(actualParts.minute),
+      Number(actualParts.second),
+      0,
+    );
+    const adjustmentMs = targetLocalTimestamp - actualLocalTimestamp;
+    if (adjustmentMs === 0) {
+      return slot;
+    }
+
+    slot = new Date(slot.getTime() + adjustmentMs);
+  }
+
   return slot;
 };
 
