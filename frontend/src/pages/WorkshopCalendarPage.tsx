@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import {
-  workshopExecutionStatusLabel,
   workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
@@ -269,6 +268,30 @@ const getJobHeading = (job: CalendarJob) =>
 const getJobSubline = (job: CalendarJob) =>
   [job.customerName, job.assignedStaffName].filter(Boolean).join(" · ") || workshopRawStatusLabel(job.rawStatus);
 
+const getBookingCustomerName = (job: CalendarJob) =>
+  job.customerName || "Customer pending";
+
+const getBookingBikeLine = (job: CalendarJob) =>
+  job.bikeDescription || job.summaryText || `Workshop job ${job.id.slice(0, 8)}`;
+
+const getBookingServiceLabel = (job: CalendarJob) => {
+  const trimmed = job.summaryText?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const bikeLine = getBookingBikeLine(job);
+  const customerName = getBookingCustomerName(job);
+  if (trimmed === bikeLine || trimmed === customerName) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const getBookingTechnicianLabel = (job: CalendarJob) =>
+  job.assignedStaffName ? `Tech: ${job.assignedStaffName}` : "Tech: Unassigned";
+
 const getJobDateKey = (job: CalendarJob) => {
   if (job.scheduledDate) {
     return job.scheduledDate.slice(0, 10);
@@ -291,6 +314,15 @@ const getJobSummaryLine = (job: CalendarJob) => {
   }
 
   return trimmed;
+};
+
+const isOverdueJob = (job: CalendarJob, todayKey: string) => {
+  const jobDateKey = getJobDateKey(job);
+  return Boolean(
+    jobDateKey
+      && jobDateKey < todayKey
+      && !["COMPLETED", "CANCELLED", "BIKE_READY"].includes(job.rawStatus),
+  );
 };
 
 const buildVisibleRange = (anchorDateKey: string, view: CalendarViewMode) => {
@@ -527,21 +559,31 @@ const buildInitialDraft = (
 });
 
 const buildJobToneClass = (job: CalendarJob, todayKey: string) => {
-  const jobDateKey = getJobDateKey(job);
+  const classes = ["workshop-scheduler-block"];
 
-  if (job.rawStatus === "BIKE_READY") {
-    return "workshop-scheduler-block--ready";
+  switch (job.rawStatus) {
+    case "BOOKING_MADE":
+      classes.push("workshop-scheduler-block--booked");
+      break;
+    case "WAITING_FOR_APPROVAL":
+      classes.push("workshop-scheduler-block--approval");
+      break;
+    case "WAITING_FOR_PARTS":
+      classes.push("workshop-scheduler-block--parts");
+      break;
+    case "BIKE_READY":
+      classes.push("workshop-scheduler-block--ready");
+      break;
+    default:
+      classes.push("workshop-scheduler-block--default");
+      break;
   }
 
-  if (
-    jobDateKey
-    && jobDateKey < todayKey
-    && !["COMPLETED", "CANCELLED", "BIKE_READY"].includes(job.rawStatus)
-  ) {
-    return "workshop-scheduler-block--overdue";
+  if (isOverdueJob(job, todayKey)) {
+    classes.push("workshop-scheduler-block--overdue");
   }
 
-  return "";
+  return classes.join(" ");
 };
 
 export const WorkshopSchedulerScreen = ({
@@ -1047,13 +1089,13 @@ export const WorkshopSchedulerScreen = ({
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
                       const toneClass = buildJobToneClass(job, todayKey);
-                      const summaryLine = getJobSummaryLine(job);
+                      const serviceLabel = getBookingServiceLabel(job);
 
                       return (
                         <button
                           key={job.id}
                           type="button"
-                          className={`workshop-scheduler-block ${toneClass}`}
+                          className={toneClass}
                           style={{
                             top: `${top}px`,
                             left: `${left}px`,
@@ -1065,13 +1107,23 @@ export const WorkshopSchedulerScreen = ({
                           <div className="workshop-scheduler-block__time">
                             {formatOptionalTime(job.scheduledStartAt)} - {formatOptionalTime(job.scheduledEndAt)}
                           </div>
-                          <strong>{getJobHeading(job)}</strong>
-                          <span>{job.customerName || "Customer pending"}</span>
-                          {summaryLine ? <span>{summaryLine}</span> : null}
-                          <div className="workshop-scheduler-block__footer">
-                            <span>{job.assignedStaffName || "Unassigned"}</span>
-                            <span className={workshopRawStatusClass(job.rawStatus)}>
-                              {workshopExecutionStatusLabel(job.status)}
+                          <strong className="workshop-scheduler-block__customer">
+                            {getBookingCustomerName(job)}
+                          </strong>
+                          <div className="workshop-scheduler-block__bike">
+                            {getBookingBikeLine(job)}
+                          </div>
+                          {serviceLabel ? (
+                            <div className="workshop-scheduler-block__service">
+                              {serviceLabel}
+                            </div>
+                          ) : null}
+                          <div className="workshop-scheduler-block__meta">
+                            <span className="workshop-scheduler-block__technician">
+                              {getBookingTechnicianLabel(job)}
+                            </span>
+                            <span className={`workshop-scheduler-block__status ${workshopRawStatusClass(job.rawStatus)}`}>
+                              {workshopRawStatusLabel(job.rawStatus)}
                             </span>
                           </div>
                         </button>
