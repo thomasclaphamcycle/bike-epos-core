@@ -76,6 +76,8 @@ const parseTemplateSaveBody = (body: Record<string, unknown>) => {
     description?: string | null;
     category?: string | null;
     defaultDurationMinutes?: number | null;
+    pricingMode?: string;
+    targetTotalPricePence?: number | null;
     isActive?: boolean;
     lines?: ReturnType<typeof parseTemplateLines>;
   } = {};
@@ -102,6 +104,17 @@ const parseTemplateSaveBody = (body: Record<string, unknown>) => {
     parsed.defaultDurationMinutes =
       body.defaultDurationMinutes === null || typeof body.defaultDurationMinutes === "number"
         ? (body.defaultDurationMinutes as number | null | undefined)
+        : undefined;
+  }
+
+  if (hasOwn(body, "pricingMode")) {
+    parsed.pricingMode = typeof body.pricingMode === "string" ? body.pricingMode : undefined;
+  }
+
+  if (hasOwn(body, "targetTotalPricePence")) {
+    parsed.targetTotalPricePence =
+      body.targetTotalPricePence === null || typeof body.targetTotalPricePence === "number"
+        ? (body.targetTotalPricePence as number | null | undefined)
         : undefined;
   }
 

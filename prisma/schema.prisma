@@ -1082,6 +1082,11 @@ enum WorkshopJobSource {
   IN_STORE
 }
 
+enum WorkshopServicePricingMode {
+  STANDARD_SERVICE
+  FIXED_PRICE_SERVICE
+}
+
 enum WorkshopDepositStatus {
   NOT_REQUIRED
   REQUIRED
@@ -1109,6 +1114,9 @@ model WorkshopJob {
   scheduledStartAt     DateTime?
   scheduledEndAt       DateTime?
   durationMinutes      Int?
+  servicePricingMode   WorkshopServicePricingMode?
+  serviceTargetTotalPence Int?
+  servicePricingAdjustmentLineId String?
   source               WorkshopJobSource     @default(IN_STORE)
   depositRequiredPence Int                   @default(0)
   depositStatus        WorkshopDepositStatus @default(NOT_REQUIRED)
@@ -1434,6 +1442,8 @@ model WorkshopServiceTemplate {
   description            String?
   category               String?
   defaultDurationMinutes Int?
+  pricingMode            WorkshopServicePricingMode @default(STANDARD_SERVICE)
+  targetTotalPricePence  Int?
   isActive               Boolean  @default(true)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt

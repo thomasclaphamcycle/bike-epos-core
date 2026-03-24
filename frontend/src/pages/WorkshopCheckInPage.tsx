@@ -5,6 +5,7 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
 import {
+  formatWorkshopTemplateMoney,
   getDefaultSelectedOptionalLineIds,
   type WorkshopServiceTemplateApplyResponse,
   type WorkshopServiceTemplate,
@@ -419,9 +420,11 @@ export const WorkshopCheckInPage = () => {
             },
           );
           success(
-            applyResponse.durationEffect.durationUpdated
-              ? `Workshop check-in created, template applied, and planning duration set to ${applyResponse.durationEffect.appliedDurationMinutes} min`
-              : "Workshop check-in created and template applied",
+            applyResponse.pricingEffect.fixedPriceActivated
+              ? `Workshop check-in created, fixed-price template applied, and labour will rebalance to ${formatWorkshopTemplateMoney(applyResponse.pricingEffect.targetTotalPricePence ?? 0)}`
+              : applyResponse.durationEffect.durationUpdated
+                ? `Workshop check-in created, template applied, and planning duration set to ${applyResponse.durationEffect.appliedDurationMinutes} min`
+                : "Workshop check-in created and template applied",
           );
         } catch (templateError) {
           error(
