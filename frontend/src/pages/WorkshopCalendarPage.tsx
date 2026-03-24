@@ -130,9 +130,20 @@ type SchedulePatchResponse = {
 type WorkshopSchedulerScreenProps = {
   embedded?: boolean;
   refreshToken?: number;
+  showToolbar?: boolean;
+  title?: string;
+  description?: string;
+  backLinkTo?: string | null;
+  view?: CalendarViewMode;
+  anchorDateKey?: string;
+  onChangeView?: (view: CalendarViewMode) => void;
+  onChangeAnchorDateKey?: (dateKey: string) => void;
+  technicianId?: string;
+  onTechnicianIdChange?: (technicianId: string) => void;
+  visibleJobIds?: ReadonlySet<string> | null;
 };
 
-type CalendarViewMode = "week" | "day";
+export type CalendarViewMode = "week" | "day";
 
 type ScheduleDraft = {
   staffId: string;
@@ -177,7 +188,7 @@ const parseDateKey = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
-const todayDateKey = () => formatDateKey(new Date());
+export const workshopTodayDateKey = () => formatDateKey(new Date());
 
 const startOfWeek = (value: Date) => {
   const next = new Date(value);
@@ -299,7 +310,7 @@ const buildVisibleRange = (anchorDateKey: string, view: CalendarViewMode) => {
   };
 };
 
-const shiftAnchorDateKey = (anchorDateKey: string, view: CalendarViewMode, direction: -1 | 1) => {
+export const shiftWorkshopAnchorDateKey = (anchorDateKey: string, view: CalendarViewMode, direction: -1 | 1) => {
   const anchor = parseDateKey(anchorDateKey);
   anchor.setDate(anchor.getDate() + (view === "week" ? direction * 7 : direction));
   return formatDateKey(anchor);
@@ -536,6 +547,17 @@ const buildJobToneClass = (job: CalendarJob, todayKey: string) => {
 export const WorkshopSchedulerScreen = ({
   embedded = false,
   refreshToken = 0,
+  showToolbar = !embedded,
+  title,
+  description,
+  backLinkTo = embedded ? null : "/workshop",
+  view: controlledView,
+  anchorDateKey: controlledAnchorDateKey,
+  onChangeView,
+  onChangeAnchorDateKey,
+  technicianId,
+  onTechnicianIdChange,
+  visibleJobIds,
 }: WorkshopSchedulerScreenProps) => {
   const { success, error } = useToasts();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -543,7 +565,7 @@ export const WorkshopSchedulerScreen = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
+  const [internalTechnicianId, setInternalTechnicianId] = useState("");
   const [draft, setDraft] = useState<ScheduleDraft>({
     staffId: "",
     dateKey: "",
@@ -553,10 +575,13 @@ export const WorkshopSchedulerScreen = ({
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const view = searchParams.get("view") === "day" ? "day" : "week";
-  const anchorDateKey = searchParams.get("date") || todayDateKey();
+  const standaloneView = searchParams.get("view") === "day" ? "day" : "week";
+  const standaloneAnchorDateKey = searchParams.get("date") || workshopTodayDateKey();
+  const view = controlledView ?? standaloneView;
+  const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
+  const selectedTechnicianId = technicianId ?? internalTechnicianId;
   const requestedRange = useMemo(() => buildVisibleRange(anchorDateKey, view), [anchorDateKey, view]);
-  const todayKey = todayDateKey();
+  const todayKey = workshopTodayDateKey();
 
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -568,6 +593,33 @@ export const WorkshopSchedulerScreen = ({
       }
     });
     setSearchParams(nextParams);
+  };
+
+  const changeView = (nextView: CalendarViewMode) => {
+    if (onChangeView) {
+      onChangeView(nextView);
+      return;
+    }
+
+    updateSearchParams({ view: nextView });
+  };
+
+  const changeAnchorDateKey = (nextDateKey: string) => {
+    if (onChangeAnchorDateKey) {
+      onChangeAnchorDateKey(nextDateKey);
+      return;
+    }
+
+    updateSearchParams({ date: nextDateKey });
+  };
+
+  const changeTechnicianId = (nextTechnicianId: string) => {
+    if (onTechnicianIdChange) {
+      onTechnicianIdChange(nextTechnicianId);
+      return;
+    }
+
+    setInternalTechnicianId(nextTechnicianId);
   };
 
   const loadCalendar = async () => {
@@ -608,10 +660,22 @@ export const WorkshopSchedulerScreen = ({
   const scheduledJobs = calendar?.scheduledJobs ?? [];
   const unassignedJobs = calendar?.unassignedJobs ?? [];
   const unscheduledJobs = calendar?.unscheduledJobs ?? [];
+  const filteredScheduledJobs = useMemo(
+    () => (!visibleJobIds ? scheduledJobs : scheduledJobs.filter((job) => visibleJobIds.has(job.id))),
+    [scheduledJobs, visibleJobIds],
+  );
+  const filteredUnassignedJobs = useMemo(
+    () => (!visibleJobIds ? unassignedJobs : unassignedJobs.filter((job) => visibleJobIds.has(job.id))),
+    [unassignedJobs, visibleJobIds],
+  );
+  const filteredUnscheduledJobs = useMemo(
+    () => (!visibleJobIds ? unscheduledJobs : unscheduledJobs.filter((job) => visibleJobIds.has(job.id))),
+    [unscheduledJobs, visibleJobIds],
+  );
   const allJobsById = useMemo(() => {
-    const entries = [...scheduledJobs, ...unassignedJobs, ...unscheduledJobs];
+    const entries = [...filteredScheduledJobs, ...filteredUnassignedJobs, ...filteredUnscheduledJobs];
     return new Map(entries.map((job) => [job.id, job]));
-  }, [scheduledJobs, unassignedJobs, unscheduledJobs]);
+  }, [filteredScheduledJobs, filteredUnassignedJobs, filteredUnscheduledJobs]);
   const selectedJob = selectedJobId ? allJobsById.get(selectedJobId) ?? null : null;
 
   useEffect(() => {
@@ -627,17 +691,17 @@ export const WorkshopSchedulerScreen = ({
 
   useEffect(() => {
     if (selectedTechnicianId && !(calendar?.staff ?? []).some((staff) => staff.id === selectedTechnicianId)) {
-      setSelectedTechnicianId("");
+      changeTechnicianId("");
     }
   }, [calendar?.staff, selectedTechnicianId]);
 
   const visibleScheduledJobs = useMemo(
     () => (
       selectedTechnicianId
-        ? scheduledJobs.filter((job) => job.assignedStaffId === selectedTechnicianId)
-        : scheduledJobs
+        ? filteredScheduledJobs.filter((job) => job.assignedStaffId === selectedTechnicianId)
+        : filteredScheduledJobs
     ),
-    [scheduledJobs, selectedTechnicianId],
+    [filteredScheduledJobs, selectedTechnicianId],
   );
 
   const jobsByDay = useMemo(() => {
@@ -776,116 +840,120 @@ export const WorkshopSchedulerScreen = ({
     }
   };
 
-  const toolbarLeadingAction: ReactNode = embedded ? null : (
-    <Link to="/workshop" className="button-link">Back to Operating System</Link>
-  );
+  const toolbarLeadingAction: ReactNode = backLinkTo ? (
+    <Link to={backLinkTo} className="button-link">Back to Operating System</Link>
+  ) : null;
 
   return (
     <div className={embedded ? "workshop-scheduler-screen workshop-scheduler-screen--embedded" : "page-shell page-shell-workspace workshop-scheduler-page"}>
-      <section className={embedded ? "workshop-scheduler-toolbar workshop-scheduler-toolbar--embedded" : "card workshop-scheduler-toolbar"}>
-        <div className="card-header-row">
-          <div>
-            <h1>{embedded ? "Scheduler" : "Workshop Calendar"}</h1>
-            <p className="muted-text">
-              {embedded
-                ? "Week-first timed scheduling is now the main workshop surface, with day detail on demand and booking blocks rendered directly in the grid."
-                : "Timed workshop scheduler with week view first, day detail on demand, and bookings rendered as real calendar blocks instead of staffing rows."}
-            </p>
-          </div>
-          <div className="actions-inline">
-            {toolbarLeadingAction}
-            <button type="button" onClick={() => void loadCalendar()} disabled={loading}>
-              {loading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-        </div>
-
-        <div className="workshop-scheduler-toolbar__controls">
-          <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Calendar view mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "week"}
-              className={view === "week" ? "primary" : ""}
-              onClick={() => updateSearchParams({ view: "week" })}
-            >
-              Week
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "day"}
-              className={view === "day" ? "primary" : ""}
-              onClick={() => updateSearchParams({ view: "day" })}
-            >
-              Day
-            </button>
+      {showToolbar ? (
+        <section className={embedded ? "workshop-scheduler-toolbar workshop-scheduler-toolbar--embedded" : "card workshop-scheduler-toolbar"}>
+          <div className="card-header-row">
+            <div>
+              <h1>{title || (embedded ? "Scheduler" : "Workshop Calendar")}</h1>
+              <p className="muted-text">
+                {description || (
+                  embedded
+                    ? "Week-first timed scheduling is now the main workshop surface, with day detail on demand and booking blocks rendered directly in the grid."
+                    : "Timed workshop scheduler with week view first, day detail on demand, and bookings rendered as real calendar blocks instead of staffing rows."
+                )}
+              </p>
+            </div>
+            <div className="actions-inline">
+              {toolbarLeadingAction}
+              <button type="button" onClick={() => void loadCalendar()} disabled={loading}>
+                {loading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
           </div>
 
-          <div className="actions-inline">
-            <button
-              type="button"
-              onClick={() => updateSearchParams({ date: shiftAnchorDateKey(anchorDateKey, view, -1) })}
-            >
-              {view === "week" ? "Previous Week" : "Previous Day"}
-            </button>
-            <button
-              type="button"
-              onClick={() => updateSearchParams({ date: todayDateKey() })}
-              disabled={anchorDateKey === todayKey}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => updateSearchParams({ date: shiftAnchorDateKey(anchorDateKey, view, 1) })}
-            >
-              {view === "week" ? "Next Week" : "Next Day"}
-            </button>
+          <div className="workshop-scheduler-toolbar__controls">
+            <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Calendar view mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "week"}
+                className={view === "week" ? "primary" : ""}
+                onClick={() => changeView("week")}
+              >
+                Week
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "day"}
+                className={view === "day" ? "primary" : ""}
+                onClick={() => changeView("day")}
+              >
+                Day
+              </button>
+            </div>
+
+            <div className="actions-inline">
+              <button
+                type="button"
+                onClick={() => changeAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, view, -1))}
+              >
+                {view === "week" ? "Previous Week" : "Previous Day"}
+              </button>
+              <button
+                type="button"
+                onClick={() => changeAnchorDateKey(workshopTodayDateKey())}
+                disabled={anchorDateKey === todayKey}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => changeAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, view, 1))}
+              >
+                {view === "week" ? "Next Week" : "Next Day"}
+              </button>
+            </div>
+
+            <label className="workshop-scheduler-toolbar__filter">
+              Technician
+              <select
+                value={selectedTechnicianId}
+                onChange={(event) => changeTechnicianId(event.target.value)}
+              >
+                <option value="">All technicians</option>
+                {staffFilterOptions.map((staff) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <label className="workshop-scheduler-toolbar__filter">
-            Technician
-            <select
-              value={selectedTechnicianId}
-              onChange={(event) => setSelectedTechnicianId(event.target.value)}
-            >
-              <option value="">All technicians</option>
-              {staffFilterOptions.map((staff) => (
-                <option key={staff.id} value={staff.id}>
-                  {staff.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="workshop-scheduler-toolbar__summary">
-          <article className="metric-card">
-            <span className="metric-label">Visible range</span>
-            <strong className="metric-value">{formatRangeHeading(days, view)}</strong>
-            <span className="dashboard-metric-detail">
-              {days.length ? `${days[0].date} - ${days[days.length - 1].date}` : anchorDateKey}
-            </span>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">Timed bookings</span>
-            <strong className="metric-value">{visibleScheduledJobs.length}</strong>
-            <span className="dashboard-metric-detail">
-              {unassignedJobs.length} unassigned · {unscheduledJobs.length} still need a slot
-            </span>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">Technician context</span>
-            <strong className="metric-value">{selectedTechnician?.name || `${staffCount} staff`}</strong>
-            <span className="dashboard-metric-detail">
-              {selectedTechnician
-                ? "Showing this technician's timed bookings"
-                : "Showing all scheduled workshop work"}
-            </span>
-          </article>
-        </div>
-      </section>
+          <div className="workshop-scheduler-toolbar__summary">
+            <article className="metric-card">
+              <span className="metric-label">Visible range</span>
+              <strong className="metric-value">{formatRangeHeading(days, view)}</strong>
+              <span className="dashboard-metric-detail">
+                {days.length ? `${days[0].date} - ${days[days.length - 1].date}` : anchorDateKey}
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Timed bookings</span>
+              <strong className="metric-value">{visibleScheduledJobs.length}</strong>
+              <span className="dashboard-metric-detail">
+                {filteredUnassignedJobs.length} unassigned · {filteredUnscheduledJobs.length} still need a slot
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Technician context</span>
+              <strong className="metric-value">{selectedTechnician?.name || `${staffCount} staff`}</strong>
+              <span className="dashboard-metric-detail">
+                {selectedTechnician
+                  ? "Showing this technician's timed bookings"
+                  : "Showing all scheduled workshop work"}
+              </span>
+            </article>
+          </div>
+        </section>
+      ) : null}
 
       {loadError ? (
         <section className="restricted-panel warning-panel">
@@ -893,8 +961,8 @@ export const WorkshopSchedulerScreen = ({
         </section>
       ) : null}
 
-      <div className="workshop-scheduler-layout">
-        <section className="card workshop-scheduler-board">
+      <div className={embedded ? "workshop-scheduler-layout workshop-scheduler-layout--embedded" : "workshop-scheduler-layout"}>
+        <section className={embedded ? "workshop-scheduler-board workshop-scheduler-board--embedded" : "card workshop-scheduler-board"}>
           <div className="workshop-scheduler-board__header">
             <div>
               <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
@@ -1016,8 +1084,8 @@ export const WorkshopSchedulerScreen = ({
           </div>
         </section>
 
-        <aside className="workshop-scheduler-rail">
-          <section className="card workshop-scheduler-panel">
+        <aside className={embedded ? "workshop-scheduler-rail workshop-scheduler-rail--embedded" : "workshop-scheduler-rail"}>
+          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
                 <h2>{selectedJob ? "Booking editor" : "Booking details"}</h2>
@@ -1129,19 +1197,19 @@ export const WorkshopSchedulerScreen = ({
             )}
           </section>
 
-          <section className="card workshop-scheduler-panel">
+          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
                 <h2>Needs scheduling</h2>
                 <p className="muted-text">Jobs created through intake that still need a timed slot.</p>
               </div>
-              <span className="stock-badge stock-muted">{unscheduledJobs.length}</span>
+              <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
             </div>
 
             <div className="workshop-scheduler-queue">
-              {unscheduledJobs.length === 0 ? (
+              {filteredUnscheduledJobs.length === 0 ? (
                 <div className="workshop-scheduler-empty">No jobs are waiting for a first timed slot.</div>
-              ) : unscheduledJobs.map((job) => (
+              ) : filteredUnscheduledJobs.map((job) => (
                 <article key={job.id} className="workshop-scheduler-queue-card">
                   <div>
                     <strong>{getJobHeading(job)}</strong>
@@ -1159,19 +1227,19 @@ export const WorkshopSchedulerScreen = ({
             </div>
           </section>
 
-          <section className="card workshop-scheduler-panel">
+          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
                 <h2>Timed but unassigned</h2>
                 <p className="muted-text">Timed jobs that still need a named technician.</p>
               </div>
-              <span className="stock-badge stock-muted">{unassignedJobs.length}</span>
+              <span className="stock-badge stock-muted">{filteredUnassignedJobs.length}</span>
             </div>
 
             <div className="workshop-scheduler-queue">
-              {unassignedJobs.length === 0 ? (
+              {filteredUnassignedJobs.length === 0 ? (
                 <div className="workshop-scheduler-empty">Every timed booking is assigned to a technician.</div>
-              ) : unassignedJobs.map((job) => (
+              ) : filteredUnassignedJobs.map((job) => (
                 <article key={job.id} className="workshop-scheduler-queue-card">
                   <div>
                     <strong>{getJobHeading(job)}</strong>
@@ -1190,7 +1258,7 @@ export const WorkshopSchedulerScreen = ({
           </section>
 
           {(calendar?.workshopTimeOff.length ?? 0) > 0 ? (
-            <section className="card workshop-scheduler-panel">
+            <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
               <div className="card-header-row">
                 <div>
                   <h2>Time-off blocks</h2>

@@ -2430,7 +2430,7 @@ th {
 
 .workshop-scheduler-screen--embedded {
   display: grid;
-  gap: 16px;
+  gap: 0;
 }
 
 .workshop-scheduler-toolbar {
@@ -2487,10 +2487,26 @@ th {
   align-items: start;
 }
 
+.workshop-scheduler-layout--embedded {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+}
+
 .workshop-scheduler-board,
 .workshop-scheduler-panel {
   display: grid;
   gap: 12px;
+}
+
+.workshop-scheduler-board--embedded {
+  gap: 10px;
+}
+
+.workshop-scheduler-panel--embedded {
+  padding: 10px 12px;
+  border: 1px solid #dde5ed;
+  border-radius: 14px;
+  background: rgba(251, 253, 255, 0.94);
 }
 
 .workshop-scheduler-board__header {
@@ -2710,6 +2726,10 @@ th {
   align-content: start;
 }
 
+.workshop-scheduler-rail--embedded {
+  gap: 10px;
+}
+
 .workshop-scheduler-editor,
 .workshop-scheduler-editor__summary {
   display: grid;
@@ -2766,6 +2786,10 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .workshop-scheduler-layout--embedded {
+    grid-template-columns: 1fr;
+  }
+
   .workshop-scheduler-rail {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   }
@@ -2808,6 +2832,266 @@ th {
   }
 
   .workshop-scheduler-queue-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+.workshop-primary-page {
+  width: 100%;
+  max-width: none;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 12px 18px 0;
+}
+
+.workshop-primary-topbar {
+  display: grid;
+  grid-template-columns: minmax(220px, auto) minmax(280px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.workshop-primary-title {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-primary-title .ui-page-eyebrow {
+  font-size: 0.68rem;
+}
+
+.workshop-primary-title .ui-page-title {
+  font-size: clamp(1.55rem, 1.9vw, 2rem);
+}
+
+.workshop-primary-title .ui-page-description {
+  max-width: 42ch;
+  font-size: 0.8rem;
+}
+
+.workshop-primary-search {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workshop-primary-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.workshop-primary-view-toggle {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workshop-primary-layout {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-primary-filter-rail {
+  position: sticky;
+  top: 8px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.workshop-primary-filter-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(224, 231, 239, 0.8);
+  border-radius: 14px;
+  background: rgba(248, 251, 254, 0.78);
+}
+
+.workshop-primary-filter-card__header {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-primary-filter-card__header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.workshop-primary-filter-list,
+.workshop-primary-filter-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-primary-filter-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-primary-filter-button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #d6e0eb;
+  background: #fff;
+  color: var(--cp-navy);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.workshop-primary-filter-button--active {
+  border-color: #8fb8d8;
+  background: linear-gradient(180deg, #ffffff 0%, #e9f3fb 100%);
+  box-shadow: 0 0 0 1px rgba(116, 172, 214, 0.22);
+}
+
+.workshop-primary-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-primary-surface {
+  min-width: 0;
+}
+
+.workshop-primary-list-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-primary-list-surface,
+.workshop-primary-context-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dde5ed;
+  border-radius: 14px;
+  background: rgba(251, 253, 255, 0.94);
+}
+
+.workshop-primary-surface-header,
+.workshop-primary-context-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.workshop-primary-surface-header h2,
+.workshop-primary-context-card__header h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.workshop-primary-context-rail {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.workshop-primary-selection {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-primary-selection__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.workshop-primary-selection__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workshop-primary-selection__meta > div {
+  display: grid;
+  gap: 3px;
+}
+
+.workshop-primary-context-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-primary-context-item {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.workshop-primary-context-item strong {
+  color: var(--cp-navy);
+}
+
+.workshop-primary-alert-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-primary-alert-chip {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1ec;
+  background: #fbfdff;
+}
+
+.workshop-primary-alert-chip strong {
+  color: var(--cp-navy);
+}
+
+@media (max-width: 1180px) {
+  .workshop-primary-topbar,
+  .workshop-primary-layout,
+  .workshop-primary-list-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-primary-filter-rail {
+    position: static;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+
+  .workshop-primary-actions {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .workshop-primary-page {
+    padding-inline: 12px;
+  }
+
+  .workshop-primary-view-toggle,
+  .workshop-primary-actions,
+  .workshop-primary-surface-header,
+  .workshop-primary-context-card__header,
+  .workshop-primary-selection__badges {
+    justify-content: flex-start;
+  }
+
+  .workshop-primary-selection__meta {
     grid-template-columns: 1fr;
   }
 }

@@ -200,7 +200,8 @@ Current internal subscribers are:
   - blocks overlapping timed jobs for the same assigned staff member without forcing legacy unscheduled jobs through a new scheduling flow
   - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, rota-backed availability windows, time off, scheduled jobs, and clipped daily capacity summaries
   - now also exposes `PATCH /api/workshop/jobs/:id/schedule` for atomic assignment plus schedule/reschedule/clear operations through the shared validation layer rather than duplicating rules in controllers
-  - the current staff-facing React surface lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a real timed scheduling grid with week view first, day view second, timed booking blocks, and quick schedule editing rather than introducing a separate scheduling subsystem
+  - the current staff-facing React scheduler now acts as the primary Workshop Operating Screen at `/workshop`, using the shared calendar read model plus schedule patch API for a real timed scheduling grid with week view first, day view second, list fallback, timed booking blocks, and quick schedule editing rather than introducing a separate scheduling subsystem
+  - `/workshop/calendar` remains as a secondary standalone scheduler route that reuses the same shared timed scheduling surface rather than maintaining a separate calendar implementation
 - workshop service templates in `src/services/workshopServiceTemplateService.ts`
   - store reusable workshop job starters in `WorkshopServiceTemplate` and `WorkshopServiceTemplateLine`, including labour lines plus optional part suggestions
   - expose manager CRUD under `/api/workshop/service-templates` and application to live jobs under `POST /api/workshop/jobs/:id/templates/apply`
