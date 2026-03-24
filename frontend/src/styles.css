@@ -948,6 +948,10 @@ textarea {
   gap: 12px;
 }
 
+.workshop-template-builder-hint {
+  margin: 8px 0 0;
+}
+
 .workshop-template-preview {
   display: grid;
   gap: 12px;
@@ -985,6 +989,20 @@ textarea {
 
 .workshop-template-line-main input[type="checkbox"] {
   margin-top: 3px;
+}
+
+.workshop-template-line-error {
+  margin-top: 6px;
+}
+
+.workshop-template-validation-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-template-validation-summary ul {
+  margin: 0;
+  padding-left: 18px;
 }
 
 @media (max-width: 980px) {

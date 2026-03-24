@@ -308,6 +308,8 @@ const normalizeTemplateLinesInput = async (
   return Promise.all(
     lines.map(async (line, index) => {
       const type = parseTemplateLineType(line.type);
+      const normalizedProductId = normalizeOptionalText(line.productId ?? undefined);
+      const normalizedVariantId = normalizeOptionalText(line.variantId ?? undefined);
       if (!Number.isInteger(line.qty) || (line.qty ?? 0) <= 0) {
         throw new HttpError(
           400,
@@ -327,12 +329,12 @@ const normalizeTemplateLinesInput = async (
 
       const linkedPart = type === "PART"
         ? await ensureTemplatePartLinkTx(tx, {
-            productId: line.productId,
-            variantId: line.variantId,
+            productId: normalizedProductId,
+            variantId: normalizedVariantId,
           })
         : null;
 
-      if (type === "LABOUR" && (line.productId !== undefined || line.variantId !== undefined)) {
+      if (type === "LABOUR" && (normalizedProductId || normalizedVariantId)) {
         throw new HttpError(
           400,
           "LABOUR template lines cannot link inventory items",

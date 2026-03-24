@@ -1386,6 +1386,64 @@ const run = async () => {
       assert.equal(inactiveForManager.json.template.description, "Updated workshop service quote");
     }, results);
 
+    await runTest("labour template lines tolerate null and empty inventory-link fields from clients", async () => {
+      const response = await fetchJson("/api/workshop/service-templates", {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          name: `Null Link Labour ${uniqueRef()}`,
+          pricingMode: "STANDARD_SERVICE",
+          lines: [
+            {
+              type: "LABOUR",
+              productId: null,
+              variantId: null,
+              description: "Wheel true labour",
+              qty: 1,
+              unitPricePence: 3000,
+              isOptional: false,
+              sortOrder: 0,
+            },
+          ],
+        }),
+      });
+
+      assert.equal(response.status, 201, JSON.stringify(response.json));
+      state.templateIds.add(response.json.template.id);
+      assert.equal(response.json.template.lines.length, 1);
+      assert.equal(response.json.template.lines[0].type, "LABOUR");
+      assert.equal(response.json.template.lines[0].productId, null);
+      assert.equal(response.json.template.lines[0].variantId, null);
+
+      const emptyStringResponse = await fetchJson("/api/workshop/service-templates", {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          name: `Empty Link Labour ${uniqueRef()}`,
+          pricingMode: "STANDARD_SERVICE",
+          lines: [
+            {
+              type: "LABOUR",
+              productId: "",
+              variantId: "   ",
+              description: "Brake check labour",
+              qty: 1,
+              unitPricePence: 2200,
+              isOptional: false,
+              sortOrder: 0,
+            },
+          ],
+        }),
+      });
+
+      assert.equal(emptyStringResponse.status, 201, JSON.stringify(emptyStringResponse.json));
+      state.templateIds.add(emptyStringResponse.json.template.id);
+      assert.equal(emptyStringResponse.json.template.lines.length, 1);
+      assert.equal(emptyStringResponse.json.template.lines[0].type, "LABOUR");
+      assert.equal(emptyStringResponse.json.template.lines[0].productId, null);
+      assert.equal(emptyStringResponse.json.template.lines[0].variantId, null);
+    }, results);
+
     await runTest("applying a workshop service template creates normal job lines and keeps estimate compatibility", async () => {
       const linkedPartA = await createLinkedPartVariant(state, {
         retailPrice: "4.99",
