@@ -271,7 +271,22 @@ const getBookingCustomerName = (job: CalendarJob) =>
   job.customerName || "Customer pending";
 
 const getBookingBikeLine = (job: CalendarJob) =>
-  job.bikeDescription || job.summaryText || `Workshop job ${job.id.slice(0, 8)}`;
+  job.bikeDescription?.trim() || "Bike details pending";
+
+const getBookingMetaLine = (job: CalendarJob, todayKey: string) => {
+  if (isOverdueJob(job, todayKey)) {
+    return "Overdue";
+  }
+
+  switch (job.rawStatus) {
+    case "WAITING_FOR_APPROVAL":
+    case "WAITING_FOR_PARTS":
+    case "BIKE_READY":
+      return workshopRawStatusLabel(job.rawStatus);
+    default:
+      return job.assignedStaffName?.trim() || "Scheduled";
+  }
+};
 
 const getBookingServiceLabel = (job: CalendarJob) => {
   const trimmed = job.summaryText?.trim();
@@ -1112,6 +1127,9 @@ export const WorkshopSchedulerScreen = ({
                           </strong>
                           <div className="workshop-scheduler-block__bike">
                             {getBookingBikeLine(job)}
+                          </div>
+                          <div className="workshop-scheduler-block__meta">
+                            {getBookingMetaLine(job, todayKey)}
                           </div>
                         </button>
                       );

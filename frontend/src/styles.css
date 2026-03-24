@@ -2658,7 +2658,7 @@ th {
   z-index: 2;
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 3px;
   min-height: 56px;
   padding: 9px 10px 9px 14px;
   border: 1px solid var(--scheduler-block-border);
@@ -2734,11 +2734,13 @@ th {
   letter-spacing: 0.01em;
   text-transform: uppercase;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .workshop-scheduler-block__customer {
   font-size: 1rem;
   line-height: 1.15;
+  white-space: nowrap;
 }
 
 .workshop-scheduler-block__bike {
@@ -2746,6 +2748,15 @@ th {
   line-height: 1.2;
   color: #222;
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.workshop-scheduler-block__meta {
+  font-size: 0.74rem;
+  line-height: 1.15;
+  color: #4f5a67;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .workshop-scheduler-block--default {
