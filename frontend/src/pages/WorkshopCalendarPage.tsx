@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import {
-  workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
 
@@ -289,8 +288,23 @@ const getBookingServiceLabel = (job: CalendarJob) => {
   return trimmed;
 };
 
-const getBookingTechnicianLabel = (job: CalendarJob) =>
-  job.assignedStaffName ? `Tech: ${job.assignedStaffName}` : "Tech: Unassigned";
+const getBookingTooltip = (job: CalendarJob) => {
+  const details = [
+    `${formatOptionalTime(job.scheduledStartAt)} - ${formatOptionalTime(job.scheduledEndAt)}`,
+    getBookingCustomerName(job),
+    getBookingBikeLine(job),
+  ];
+
+  const serviceLabel = getBookingServiceLabel(job);
+  if (serviceLabel) {
+    details.push(serviceLabel);
+  }
+
+  details.push(job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Technician: Unassigned");
+  details.push(`Status: ${workshopRawStatusLabel(job.rawStatus)}`);
+
+  return details.join("\n");
+};
 
 const getJobDateKey = (job: CalendarJob) => {
   if (job.scheduledDate) {
@@ -1075,13 +1089,13 @@ export const WorkshopSchedulerScreen = ({
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
                       const toneClass = `${buildJobToneClass(job, todayKey)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}`;
-                      const serviceLabel = getBookingServiceLabel(job);
 
                       return (
                         <button
                           key={job.id}
                           type="button"
                           className={toneClass}
+                          title={getBookingTooltip(job)}
                           style={{
                             top: `${top}px`,
                             left: `${left}px`,
@@ -1098,19 +1112,6 @@ export const WorkshopSchedulerScreen = ({
                           </strong>
                           <div className="workshop-scheduler-block__bike">
                             {getBookingBikeLine(job)}
-                          </div>
-                          {serviceLabel ? (
-                            <div className="workshop-scheduler-block__service">
-                              {serviceLabel}
-                            </div>
-                          ) : null}
-                          <div className="workshop-scheduler-block__meta">
-                            <span className="workshop-scheduler-block__technician">
-                              {getBookingTechnicianLabel(job)}
-                            </span>
-                            <span className={`workshop-scheduler-block__status ${workshopRawStatusClass(job.rawStatus)}`}>
-                              {workshopRawStatusLabel(job.rawStatus)}
-                            </span>
                           </div>
                         </button>
                       );
