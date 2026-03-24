@@ -172,7 +172,8 @@ const PX_PER_MINUTE = 1.05;
 const WEEK_DAY_WIDTH = 244;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
-const MIN_BOOKING_BLOCK_HEIGHT = 90;
+const MIN_BOOKING_BLOCK_HEIGHT = 48;
+const COMPACT_BOOKING_BLOCK_HEIGHT = 72;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 
 const formatDateKey = (value: Date) => {
@@ -1104,7 +1105,8 @@ export const WorkshopSchedulerScreen = ({
                     ))}
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
-                      const toneClass = `${buildJobToneClass(job, todayKey)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}`;
+                      const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
+                      const toneClass = `${buildJobToneClass(job, todayKey)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}`;
 
                       return (
                         <button
@@ -1129,9 +1131,11 @@ export const WorkshopSchedulerScreen = ({
                           <div className="workshop-scheduler-block__bike">
                             {getBookingBikeLine(job)}
                           </div>
-                          <div className="workshop-scheduler-block__meta">
-                            {getBookingMetaLine(job, todayKey)}
-                          </div>
+                          {!isCompactBlock ? (
+                            <div className="workshop-scheduler-block__meta">
+                              {getBookingMetaLine(job, todayKey)}
+                            </div>
+                          ) : null}
                         </button>
                       );
                     })}
