@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
 import {
   workshopRawStatusLabel,
 } from "../features/workshop/status";
@@ -142,6 +143,11 @@ type WorkshopSchedulerScreenProps = {
 };
 
 export type CalendarViewMode = "week" | "day";
+
+type WorkshopOverlayTechnicianOption = {
+  id: string;
+  name: string;
+};
 
 type ScheduleDraft = {
   staffId: string;
@@ -624,6 +630,7 @@ export const WorkshopSchedulerScreen = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [overlayJobId, setOverlayJobId] = useState<string | null>(null);
   const [internalTechnicianId, setInternalTechnicianId] = useState("");
   const [draft, setDraft] = useState<ScheduleDraft>({
     staffId: "",
@@ -749,6 +756,16 @@ export const WorkshopSchedulerScreen = ({
   }, [allJobsById, selectedJobId]);
 
   useEffect(() => {
+    if (!overlayJobId) {
+      return;
+    }
+
+    if (!allJobsById.has(overlayJobId)) {
+      setOverlayJobId(null);
+    }
+  }, [allJobsById, overlayJobId]);
+
+  useEffect(() => {
     if (selectedTechnicianId && !(calendar?.staff ?? []).some((staff) => staff.id === selectedTechnicianId)) {
       changeTechnicianId("");
     }
@@ -812,6 +829,10 @@ export const WorkshopSchedulerScreen = ({
   const staffCount = calendar?.staff.length ?? 0;
   const staffFilterOptions = calendar?.staff ?? [];
   const selectedTechnician = staffFilterOptions.find((staff) => staff.id === selectedTechnicianId) ?? null;
+  const overlayTechnicianOptions = useMemo<WorkshopOverlayTechnicianOption[]>(
+    () => staffFilterOptions.map((staff) => ({ id: staff.id, name: staff.name })),
+    [staffFilterOptions],
+  );
 
   const openEditor = (job: CalendarJob, preferredDateKey?: string) => {
     const editorDateKey = preferredDateKey || getJobDateKey(job) || anchorDateKey;
@@ -824,6 +845,37 @@ export const WorkshopSchedulerScreen = ({
     setSelectedJobId(null);
     setScheduleError(null);
   };
+
+  const openJobOverlay = (job: CalendarJob) => {
+    setSelectedJobId(null);
+    setScheduleError(null);
+    setOverlayJobId(job.id);
+  };
+
+  const closeJobOverlay = () => {
+    setOverlayJobId(null);
+  };
+
+  const selectedOverlayJob = overlayJobId ? allJobsById.get(overlayJobId) ?? null : null;
+  const selectedOverlaySummary: WorkshopJobOverlaySummary | null = selectedOverlayJob
+    ? {
+        id: selectedOverlayJob.id,
+        rawStatus: selectedOverlayJob.rawStatus,
+        status: selectedOverlayJob.status,
+        customerId: selectedOverlayJob.customerId,
+        customerName: selectedOverlayJob.customerName,
+        assignedStaffId: selectedOverlayJob.assignedStaffId,
+        bikeDescription: selectedOverlayJob.bikeDescription,
+        assignedStaffName: selectedOverlayJob.assignedStaffName,
+        scheduledDate: selectedOverlayJob.scheduledDate,
+        scheduledStartAt: selectedOverlayJob.scheduledStartAt,
+        scheduledEndAt: selectedOverlayJob.scheduledEndAt,
+        durationMinutes: selectedOverlayJob.durationMinutes,
+        notes: selectedOverlayJob.notes,
+        createdAt: selectedOverlayJob.createdAt,
+        updatedAt: selectedOverlayJob.updatedAt,
+      }
+    : null;
 
   const saveSchedule = async () => {
     if (!selectedJob) {
@@ -1120,7 +1172,7 @@ export const WorkshopSchedulerScreen = ({
                             width: `${width}px`,
                             height: `${height}px`,
                           }}
-                          onClick={() => openEditor(job, day.date)}
+                          onClick={() => openJobOverlay(job)}
                         >
                           <div className="workshop-scheduler-block__time">
                             {formatOptionalTime(job.scheduledStartAt)} - {formatOptionalTime(job.scheduledEndAt)}
@@ -1244,9 +1296,9 @@ export const WorkshopSchedulerScreen = ({
                       Clear slot
                     </button>
                   ) : null}
-                  <Link to={selectedJob.jobPath} className="button-link">
-                    Open job
-                  </Link>
+                  <button type="button" onClick={() => openJobOverlay(selectedJob)} disabled={saving}>
+                    Open job card
+                  </button>
                 </div>
               </div>
             ) : (
@@ -1282,7 +1334,7 @@ export const WorkshopSchedulerScreen = ({
                   </div>
                   <div className="actions-inline">
                     <button type="button" onClick={() => openEditor(job, anchorDateKey)}>Schedule</button>
-                    <Link to={job.jobPath}>Open</Link>
+                    <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                   </div>
                 </article>
               ))}
@@ -1312,7 +1364,7 @@ export const WorkshopSchedulerScreen = ({
                   </div>
                   <div className="actions-inline">
                     <button type="button" onClick={() => openEditor(job, getJobDateKey(job) || anchorDateKey)}>Assign</button>
-                    <Link to={job.jobPath}>Open</Link>
+                    <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                   </div>
                 </article>
               ))}
@@ -1348,6 +1400,17 @@ export const WorkshopSchedulerScreen = ({
           ) : null}
         </aside>
       </div>
+
+      {overlayJobId ? (
+        <WorkshopJobOverlay
+          jobId={overlayJobId}
+          summary={selectedOverlaySummary}
+          fullJobPath={selectedOverlayJob?.jobPath || `/workshop/${overlayJobId}`}
+          technicianOptions={overlayTechnicianOptions}
+          onJobChanged={loadCalendar}
+          onClose={closeJobOverlay}
+        />
+      ) : null}
     </div>
   );
 };
