@@ -2428,9 +2428,21 @@ th {
   gap: 16px;
 }
 
+.workshop-scheduler-screen--embedded {
+  display: grid;
+  gap: 16px;
+}
+
 .workshop-scheduler-toolbar {
   display: grid;
   gap: 14px;
+}
+
+.workshop-scheduler-toolbar--embedded {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .workshop-scheduler-toolbar__controls {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
@@ -125,6 +125,11 @@ type SchedulePatchResponse = {
     updatedAt: string;
   };
   idempotent: boolean;
+};
+
+type WorkshopSchedulerScreenProps = {
+  embedded?: boolean;
+  refreshToken?: number;
 };
 
 type CalendarViewMode = "week" | "day";
@@ -528,7 +533,10 @@ const buildJobToneClass = (job: CalendarJob, todayKey: string) => {
   return "";
 };
 
-export const WorkshopCalendarPage = () => {
+export const WorkshopSchedulerScreen = ({
+  embedded = false,
+  refreshToken = 0,
+}: WorkshopSchedulerScreenProps) => {
   const { success, error } = useToasts();
   const [searchParams, setSearchParams] = useSearchParams();
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
@@ -586,7 +594,7 @@ export const WorkshopCalendarPage = () => {
   useEffect(() => {
     void loadCalendar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedRange.from, requestedRange.to]);
+  }, [requestedRange.from, requestedRange.to, refreshToken]);
 
   const days = calendar?.days ?? [];
   const daysByDateKey = useMemo(
@@ -768,18 +776,24 @@ export const WorkshopCalendarPage = () => {
     }
   };
 
+  const toolbarLeadingAction: ReactNode = embedded ? null : (
+    <Link to="/workshop" className="button-link">Back to Operating System</Link>
+  );
+
   return (
-    <div className="page-shell page-shell-workspace workshop-scheduler-page">
-      <section className="card workshop-scheduler-toolbar">
+    <div className={embedded ? "workshop-scheduler-screen workshop-scheduler-screen--embedded" : "page-shell page-shell-workspace workshop-scheduler-page"}>
+      <section className={embedded ? "workshop-scheduler-toolbar workshop-scheduler-toolbar--embedded" : "card workshop-scheduler-toolbar"}>
         <div className="card-header-row">
           <div>
-            <h1>Workshop Calendar</h1>
+            <h1>{embedded ? "Scheduler" : "Workshop Calendar"}</h1>
             <p className="muted-text">
-              Timed workshop scheduler with week view first, day detail on demand, and bookings rendered as real calendar blocks instead of staffing rows.
+              {embedded
+                ? "Week-first timed scheduling is now the main workshop surface, with day detail on demand and booking blocks rendered directly in the grid."
+                : "Timed workshop scheduler with week view first, day detail on demand, and bookings rendered as real calendar blocks instead of staffing rows."}
             </p>
           </div>
           <div className="actions-inline">
-            <Link to="/workshop" className="button-link">Back to Workshop</Link>
+            {toolbarLeadingAction}
             <button type="button" onClick={() => void loadCalendar()} disabled={loading}>
               {loading ? "Refreshing..." : "Refresh"}
             </button>
@@ -1207,3 +1221,5 @@ export const WorkshopCalendarPage = () => {
     </div>
   );
 };
+
+export const WorkshopCalendarPage = () => <WorkshopSchedulerScreen />;

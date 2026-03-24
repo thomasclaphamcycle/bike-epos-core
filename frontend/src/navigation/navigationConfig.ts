@@ -113,7 +113,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       {
         kind: "link",
-        label: "Job Board",
+        label: "Operating System",
         to: "/workshop",
         minimumRole: "STAFF",
       },
