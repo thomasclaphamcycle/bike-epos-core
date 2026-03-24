@@ -25,6 +25,8 @@ export type WorkshopServiceTemplate = {
   description: string | null;
   category: string | null;
   defaultDurationMinutes: number | null;
+  pricingMode: "STANDARD_SERVICE" | "FIXED_PRICE_SERVICE";
+  targetTotalPricePence: number | null;
   isActive: boolean;
   lineCount: number;
   lines: WorkshopServiceTemplateLine[];
@@ -39,6 +41,12 @@ export type WorkshopServiceTemplatesResponse = {
 export type WorkshopServiceTemplateApplyResponse = {
   jobId: string;
   appliedLineCount: number;
+  pricingEffect: {
+    pricingMode: "STANDARD_SERVICE" | "FIXED_PRICE_SERVICE";
+    targetTotalPricePence: number | null;
+    fixedPriceActivated: boolean;
+    adjustmentLineId: string | null;
+  };
   durationEffect: {
     templateDefaultDurationMinutes: number | null;
     appliedDurationMinutes: number | null;

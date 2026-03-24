@@ -1,4 +1,4 @@
-import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus } from "@prisma/client";
+import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus, WorkshopServicePricingMode } from "@prisma/client";
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
@@ -598,6 +598,126 @@ const toLineResponse = (line: {
   updatedAt: line.updatedAt,
 });
 
+type WorkshopJobServicePricingConfig = {
+  pricingMode: WorkshopServicePricingMode | null;
+  targetTotalPence: number | null;
+  adjustmentLineId: string | null;
+};
+
+export const configureWorkshopJobServicePricingTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+  config: WorkshopJobServicePricingConfig,
+) => {
+  await tx.workshopJob.update({
+    where: { id: workshopJobId },
+    data: {
+      servicePricingMode: config.pricingMode,
+      serviceTargetTotalPence: config.targetTotalPence,
+      servicePricingAdjustmentLineId: config.adjustmentLineId,
+    },
+  });
+};
+
+export const rebalanceWorkshopJobServicePricingTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+) => {
+  const job = await tx.workshopJob.findUnique({
+    where: { id: workshopJobId },
+    select: {
+      id: true,
+      servicePricingMode: true,
+      serviceTargetTotalPence: true,
+      servicePricingAdjustmentLineId: true,
+    },
+  });
+
+  if (!job || job.servicePricingMode !== "FIXED_PRICE_SERVICE") {
+    return {
+      active: false,
+      rebalanced: false,
+      targetTotalPence: null,
+      adjustedLineId: null,
+      adjustedLineUnitPricePence: null,
+    };
+  }
+
+  if (!job.serviceTargetTotalPence || !job.servicePricingAdjustmentLineId) {
+    throw new HttpError(
+      409,
+      "Fixed-price workshop job is missing pricing configuration",
+      "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID",
+    );
+  }
+
+  const lines = await tx.workshopJobLine.findMany({
+    where: { jobId: workshopJobId },
+    select: {
+      id: true,
+      type: true,
+      qty: true,
+      unitPricePence: true,
+    },
+  });
+
+  const adjustmentLine = lines.find((line) => line.id === job.servicePricingAdjustmentLineId);
+  if (!adjustmentLine) {
+    throw new HttpError(
+      409,
+      "Fixed-price workshop job is missing its pricing labour line",
+      "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID",
+    );
+  }
+
+  if (adjustmentLine.type !== "LABOUR") {
+    throw new HttpError(
+      409,
+      "Fixed-price workshop jobs require a labour adjustment line",
+      "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID",
+    );
+  }
+
+  if (adjustmentLine.qty !== 1) {
+    throw new HttpError(
+      409,
+      "Fixed-price labour lines must keep qty 1",
+      "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID",
+    );
+  }
+
+  const nonAdjustmentTotalPence = lines
+    .filter((line) => line.id !== adjustmentLine.id)
+    .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
+
+  if (nonAdjustmentTotalPence > job.serviceTargetTotalPence) {
+    throw new HttpError(
+      409,
+      "This change would take the job over its fixed service price target",
+      "WORKSHOP_FIXED_PRICE_TARGET_EXCEEDED",
+    );
+  }
+
+  const adjustmentUnitPricePence = job.serviceTargetTotalPence - nonAdjustmentTotalPence;
+
+  if (adjustmentLine.unitPricePence !== adjustmentUnitPricePence) {
+    await tx.workshopJobLine.update({
+      where: { id: adjustmentLine.id },
+      data: {
+        unitPricePence: adjustmentUnitPricePence,
+      },
+    });
+  }
+
+  return {
+    active: true,
+    rebalanced: adjustmentLine.unitPricePence !== adjustmentUnitPricePence,
+    targetTotalPence: job.serviceTargetTotalPence,
+    adjustedLineId: adjustmentLine.id,
+    adjustedLineUnitPricePence: adjustmentUnitPricePence,
+  };
+};
+
 const toJobResponse = (job: {
   id: string;
   customerId: string | null;
@@ -613,6 +733,9 @@ const toJobResponse = (job: {
   scheduledStartAt: Date | null;
   scheduledEndAt: Date | null;
   durationMinutes: number | null;
+  servicePricingMode: WorkshopServicePricingMode | null;
+  serviceTargetTotalPence: number | null;
+  servicePricingAdjustmentLineId: string | null;
   depositRequiredPence: number;
   depositStatus: string;
   finalizedBasketId: string | null;
@@ -643,6 +766,9 @@ const toJobResponse = (job: {
   scheduledStartAt: job.scheduledStartAt,
   scheduledEndAt: job.scheduledEndAt,
   durationMinutes: job.durationMinutes,
+  servicePricingMode: job.servicePricingMode,
+  serviceTargetTotalPence: job.serviceTargetTotalPence,
+  servicePricingAdjustmentLineId: job.servicePricingAdjustmentLineId,
   depositRequiredPence: job.depositRequiredPence,
   depositStatus: job.depositStatus,
   finalizedBasketId: job.finalizedBasketId,
@@ -1208,6 +1334,8 @@ export const addWorkshopJobLine = async (
       unitPricePence: input.unitPricePence,
     });
 
+    await rebalanceWorkshopJobServicePricingTx(tx, workshopJobId);
+
     await invalidateCurrentWorkshopEstimateTx(
       tx,
       workshopJobId,
@@ -1250,6 +1378,18 @@ export const updateWorkshopJobLine = async (
     }
 
     const existingLine = await ensureWorkshopJobLineExistsTx(tx, workshopJobId, lineId);
+    if (
+      job.servicePricingMode === "FIXED_PRICE_SERVICE"
+      && job.servicePricingAdjustmentLineId === lineId
+      && Object.prototype.hasOwnProperty.call(input, "qty")
+      && input.qty !== 1
+    ) {
+      throw new HttpError(
+        409,
+        "The fixed-price labour line must keep qty 1",
+        "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID",
+      );
+    }
     const data: Prisma.WorkshopJobLineUpdateInput = {};
 
     if (Object.prototype.hasOwnProperty.call(input, "description")) {
@@ -1337,6 +1477,8 @@ export const updateWorkshopJobLine = async (
       },
     });
 
+    await rebalanceWorkshopJobServicePricingTx(tx, workshopJobId);
+
     await invalidateCurrentWorkshopEstimateTx(
       tx,
       workshopJobId,
@@ -1364,9 +1506,21 @@ export const deleteWorkshopJobLine = async (workshopJobId: string, lineId: strin
     }
 
     await ensureWorkshopJobLineExistsTx(tx, workshopJobId, lineId);
+    if (
+      job.servicePricingMode === "FIXED_PRICE_SERVICE"
+      && job.servicePricingAdjustmentLineId === lineId
+    ) {
+      throw new HttpError(
+        409,
+        "The fixed-price labour line cannot be removed while fixed pricing is active",
+        "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID",
+      );
+    }
     await tx.workshopJobLine.delete({
       where: { id: lineId },
     });
+
+    await rebalanceWorkshopJobServicePricingTx(tx, workshopJobId);
 
     await invalidateCurrentWorkshopEstimateTx(
       tx,

@@ -37,8 +37,31 @@ type TemplateDraft = {
   description: string;
   category: string;
   defaultDurationMinutes: string;
+  pricingMode: "STANDARD_SERVICE" | "FIXED_PRICE_SERVICE";
+  targetTotalPrice: string;
   isActive: boolean;
   lines: TemplateDraftLine[];
+};
+
+const penceToPoundsInput = (value: number | null | undefined) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return (value / 100).toFixed(2);
+};
+
+const poundsInputToPence = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 100);
 };
 
 const emptyDraft = (): TemplateDraft => ({
@@ -47,6 +70,8 @@ const emptyDraft = (): TemplateDraft => ({
   description: "",
   category: "",
   defaultDurationMinutes: "",
+  pricingMode: "STANDARD_SERVICE",
+  targetTotalPrice: "",
   isActive: true,
   lines: [],
 });
@@ -59,6 +84,8 @@ const toDraft = (template: WorkshopServiceTemplate): TemplateDraft => ({
   description: template.description ?? "",
   category: template.category ?? "",
   defaultDurationMinutes: template.defaultDurationMinutes ? `${template.defaultDurationMinutes}` : "",
+  pricingMode: template.pricingMode,
+  targetTotalPrice: penceToPoundsInput(template.targetTotalPricePence),
   isActive: template.isActive,
   lines: template.lines.map((line) => ({
     id: line.id,
@@ -69,7 +96,7 @@ const toDraft = (template: WorkshopServiceTemplate): TemplateDraft => ({
     variantSku: line.variantSku,
     description: line.description,
     qty: line.qty,
-    unitPricePence: line.unitPricePence === null ? "" : `${line.unitPricePence}`,
+    unitPricePence: penceToPoundsInput(line.unitPricePence),
     isOptional: line.isOptional,
   })),
 });
@@ -83,13 +110,13 @@ export const WorkshopServiceTemplatesPage = () => {
   const [draft, setDraft] = useState<TemplateDraft>(emptyDraft);
   const [partSearch, setPartSearch] = useState("");
   const [partQty, setPartQty] = useState(1);
-  const [partPrice, setPartPrice] = useState(0);
+  const [partPrice, setPartPrice] = useState("");
   const [partOptional, setPartOptional] = useState(true);
   const debouncedPartSearch = useDebouncedValue(partSearch, 250);
   const [partResults, setPartResults] = useState<ProductSearchRow[]>([]);
   const [labourDescription, setLabourDescription] = useState("General labour");
   const [labourQty, setLabourQty] = useState(1);
-  const [labourPrice, setLabourPrice] = useState(2500);
+  const [labourPrice, setLabourPrice] = useState("25.00");
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -142,7 +169,7 @@ export const WorkshopServiceTemplatesPage = () => {
   const totalPence = useMemo(
     () =>
       draft.lines.reduce((sum, line) => {
-        const unitPrice = Number(line.unitPricePence) || 0;
+        const unitPrice = poundsInputToPence(line.unitPricePence) ?? 0;
         return sum + (line.qty * unitPrice);
       }, 0),
     [draft.lines],
@@ -157,6 +184,10 @@ export const WorkshopServiceTemplatesPage = () => {
       error("Template name is required.");
       return;
     }
+    if (draft.pricingMode === "FIXED_PRICE_SERVICE" && !draft.targetTotalPrice.trim()) {
+      error("Target total price is required for fixed price services.");
+      return;
+    }
     if (draft.lines.length === 0) {
       error("Add at least one labour or part line.");
       return;
@@ -169,6 +200,11 @@ export const WorkshopServiceTemplatesPage = () => {
       defaultDurationMinutes: draft.defaultDurationMinutes.trim()
         ? Number(draft.defaultDurationMinutes)
         : null,
+      pricingMode: draft.pricingMode,
+      targetTotalPricePence:
+        draft.pricingMode === "FIXED_PRICE_SERVICE"
+          ? poundsInputToPence(draft.targetTotalPrice)
+          : null,
       isActive: draft.isActive,
       lines: draft.lines.map((line, index) => ({
         type: line.type,
@@ -176,7 +212,7 @@ export const WorkshopServiceTemplatesPage = () => {
         variantId: line.variantId,
         description: line.description.trim(),
         qty: line.qty,
-        unitPricePence: line.unitPricePence.trim() ? Number(line.unitPricePence) : null,
+        unitPricePence: poundsInputToPence(line.unitPricePence),
         isOptional: line.type === "PART" ? line.isOptional : false,
         sortOrder: index,
       })),
@@ -236,7 +272,7 @@ export const WorkshopServiceTemplatesPage = () => {
           variantSku: null,
           description: labourDescription.trim(),
           qty: labourQty,
-          unitPricePence: `${labourPrice}`,
+          unitPricePence: labourPrice,
           isOptional: false,
         },
       ],
@@ -257,7 +293,7 @@ export const WorkshopServiceTemplatesPage = () => {
           variantSku: result.sku,
           description: `${result.name} - ${result.sku}`,
           qty: partQty,
-          unitPricePence: `${partPrice || result.pricePence}`,
+          unitPricePence: partPrice.trim() ? partPrice : penceToPoundsInput(result.pricePence),
           isOptional: partOptional,
         },
       ],
@@ -328,13 +364,19 @@ export const WorkshopServiceTemplatesPage = () => {
                   </span>
                 </div>
                 <div className="table-secondary">
-                  {[template.category, template.defaultDurationMinutes ? `${template.defaultDurationMinutes} min` : null]
+                  {[
+                    template.category,
+                    template.pricingMode === "FIXED_PRICE_SERVICE" ? "Fixed price" : "Standard service",
+                    template.defaultDurationMinutes ? `${template.defaultDurationMinutes} min` : null,
+                  ]
                     .filter(Boolean)
                     .join(" · ") || "General workshop template"}
                 </div>
                 <div className="table-secondary">
                   {template.lineCount} line{template.lineCount === 1 ? "" : "s"} · {formatWorkshopTemplateMoney(
-                    template.lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
+                    template.pricingMode === "FIXED_PRICE_SERVICE" && template.targetTotalPricePence
+                      ? template.targetTotalPricePence
+                      : template.lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
                   )}
                 </div>
               </button>
@@ -385,6 +427,37 @@ export const WorkshopServiceTemplatesPage = () => {
                 placeholder="60"
               />
             </label>
+            <label>
+              Pricing mode
+              <select
+                value={draft.pricingMode}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    pricingMode: event.target.value as TemplateDraft["pricingMode"],
+                    targetTotalPrice:
+                      event.target.value === "FIXED_PRICE_SERVICE"
+                        ? current.targetTotalPrice
+                        : "",
+                  }))}
+              >
+                <option value="STANDARD_SERVICE">Standard service (labour + parts)</option>
+                <option value="FIXED_PRICE_SERVICE">Fixed price service (target total)</option>
+              </select>
+            </label>
+            {draft.pricingMode === "FIXED_PRICE_SERVICE" ? (
+              <label>
+                Target total price (£)
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={draft.targetTotalPrice}
+                  onChange={(event) => setDraft((current) => ({ ...current, targetTotalPrice: event.target.value }))}
+                  placeholder="25.00"
+                />
+              </label>
+            ) : null}
             <label className="staff-toggle">
               <input
                 type="checkbox"
@@ -417,15 +490,26 @@ export const WorkshopServiceTemplatesPage = () => {
                   <input type="number" min={1} value={labourQty} onChange={(event) => setLabourQty(Number(event.target.value) || 1)} />
                 </label>
                 <label>
-                  Unit (p)
-                  <input type="number" min={0} value={labourPrice} onChange={(event) => setLabourPrice(Number(event.target.value) || 0)} />
+                  Unit price (£)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={labourPrice}
+                    onChange={(event) => setLabourPrice(event.target.value)}
+                  />
                 </label>
                 <button type="button" onClick={addLabourLine}>Add Labour</button>
               </div>
+              {draft.pricingMode === "FIXED_PRICE_SERVICE" ? (
+                <p className="table-secondary" style={{ marginTop: "10px" }}>
+                  Fixed-price templates use this labour line as the balancing line. When the template is applied, labour automatically adjusts so the job total stays on target as parts are added.
+                </p>
+              ) : null}
             </section>
 
             <section className="restricted-panel">
-              <strong>Add part suggestion</strong>
+              <strong>Add optional part suggestion</strong>
               <div className="filter-row" style={{ marginTop: "10px" }}>
                 <label className="grow">
                   Search product
@@ -440,8 +524,15 @@ export const WorkshopServiceTemplatesPage = () => {
                   <input type="number" min={1} value={partQty} onChange={(event) => setPartQty(Number(event.target.value) || 1)} />
                 </label>
                 <label>
-                  Unit (p)
-                  <input type="number" min={0} value={partPrice} onChange={(event) => setPartPrice(Number(event.target.value) || 0)} />
+                  Unit price (£)
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={partPrice}
+                    onChange={(event) => setPartPrice(event.target.value)}
+                    placeholder="Use product price"
+                  />
                 </label>
                 <label className="staff-toggle">
                   <input
@@ -487,7 +578,9 @@ export const WorkshopServiceTemplatesPage = () => {
           <div className="card-header-row">
             <div>
               <h3>Template Lines</h3>
-              <p className="muted-text">Optional part lines can be unticked during check-in or on the live job page before they are applied.</p>
+              <p className="muted-text">
+                Labour defines the service behaviour. Part suggestions stay optional and can be unticked before apply.
+              </p>
             </div>
             <div className="table-secondary">{draft.lines.length} lines · {formatWorkshopTemplateMoney(totalPence)}</div>
           </div>
@@ -499,7 +592,7 @@ export const WorkshopServiceTemplatesPage = () => {
                   <th>Type</th>
                   <th>Description</th>
                   <th>Qty</th>
-                  <th>Unit (p)</th>
+                  <th>Unit price (£)</th>
                   <th>Linked Part</th>
                   <th>Optional</th>
                   <th />
@@ -541,6 +634,7 @@ export const WorkshopServiceTemplatesPage = () => {
                       <input
                         type="number"
                         min={0}
+                        step="0.01"
                         value={line.unitPricePence}
                         onChange={(event) => setDraft((current) => ({
                           ...current,

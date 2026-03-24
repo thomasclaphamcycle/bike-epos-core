@@ -403,6 +403,7 @@ X-Staff-Id: demo-manager
   "description": "Common service quote with labour plus optional cable refresh.",
   "category": "Service",
   "defaultDurationMinutes": 60,
+  "pricingMode": "STANDARD_SERVICE",
   "lines": [
     {
       "type": "LABOUR",
@@ -420,8 +421,32 @@ X-Staff-Id: demo-manager
   ]
 }
 
+### Create a fixed-price workshop service template (manager)
+POST {{baseUrl}}/api/workshop/service-templates
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "name": "Puncture Repair",
+  "description": "Fixed-price puncture repair where labour rebalances as parts are added.",
+  "category": "Repair",
+  "defaultDurationMinutes": 45,
+  "pricingMode": "FIXED_PRICE_SERVICE",
+  "targetTotalPricePence": 2500,
+  "lines": [
+    {
+      "type": "LABOUR",
+      "description": "Puncture repair labour",
+      "qty": 1,
+      "unitPricePence": 2500
+    }
+  ]
+}
+
 ### Apply a workshop service template to a job
 ### If the job does not already have a planning duration, the template default duration is applied too.
+### Fixed-price templates also activate balancing labour so later part scans keep the total on target.
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/templates/apply
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}

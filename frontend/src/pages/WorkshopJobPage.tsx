@@ -27,6 +27,7 @@ import {
   workshopNotificationStrategyLabel,
 } from "../features/workshop/notificationStatus";
 import {
+  formatWorkshopTemplateMoney,
   getDefaultSelectedOptionalLineIds,
   type WorkshopServiceTemplateApplyResponse,
   type WorkshopServiceTemplate,
@@ -1033,9 +1034,11 @@ export const WorkshopJobPage = () => {
         },
       );
       success(
-        response.durationEffect.durationUpdated
-          ? `Workshop service template applied and planning duration set to ${response.durationEffect.appliedDurationMinutes} min`
-          : "Workshop service template applied",
+        response.pricingEffect.fixedPriceActivated
+          ? `Fixed-price service template applied and labour will rebalance to ${formatWorkshopTemplateMoney(response.pricingEffect.targetTotalPricePence ?? 0)}`
+          : response.durationEffect.durationUpdated
+            ? `Workshop service template applied and planning duration set to ${response.durationEffect.appliedDurationMinutes} min`
+            : "Workshop service template applied",
       );
       setSelectedTemplateId("");
       await Promise.all([loadJob(), loadParts()]);

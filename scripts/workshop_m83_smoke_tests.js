@@ -195,6 +195,17 @@ const getWorkshopDayOfWeek = (value) => {
   return WORKSHOP_DAY_OF_WEEK_BY_NAME[weekday];
 };
 
+const nextWorkshopWeekday = (minimumOffsetDays = 0) => {
+  let candidate = addDays(todayUtc(), minimumOffsetDays);
+  while (true) {
+    const dayOfWeek = getWorkshopDayOfWeek(candidate);
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      return candidate;
+    }
+    candidate = addDays(candidate, 1);
+  }
+};
+
 const toWorkshopDateKey = (value) => {
   const parts = getWorkshopTimeParts(value);
   return `${parts.year}-${parts.month}-${parts.day}`;
@@ -1318,6 +1329,8 @@ const run = async () => {
       });
 
       assert.equal(template.defaultDurationMinutes, 60);
+      assert.equal(template.pricingMode, "STANDARD_SERVICE");
+      assert.equal(template.targetTotalPricePence, null);
       assert.equal(template.lines.length, 2);
       assert.equal(template.lines[1].isOptional, true);
 
@@ -1355,6 +1368,7 @@ const run = async () => {
       });
       assert.equal(updated.status, 200, JSON.stringify(updated.json));
       assert.equal(updated.json.template.isActive, false);
+      assert.equal(updated.json.template.pricingMode, "STANDARD_SERVICE");
       assert.equal(updated.json.template.lines[1].qty, 2);
 
       const inactiveForStaff = await fetchJson(`/api/workshop/service-templates/${template.id}`, {
@@ -1492,8 +1506,148 @@ const run = async () => {
       );
     }, results);
 
+    await runTest("fixed-price service templates rebalance labour as parts change on the job", async () => {
+      const punctureTube = await createLinkedPartVariant(state, {
+        retailPrice: "7.00",
+        retailPricePence: 700,
+      });
+      const puncturePatch = await createLinkedPartVariant(state, {
+        retailPrice: "2.00",
+        retailPricePence: 200,
+      });
+
+      const fixedTemplate = await createWorkshopServiceTemplate(state, {
+        name: `Fixed Price Repair ${uniqueRef()}`,
+        description: "Fixed-price workshop repair",
+        category: "Repair",
+        defaultDurationMinutes: 30,
+        pricingMode: "FIXED_PRICE_SERVICE",
+        targetTotalPricePence: 2500,
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Fixed-price repair labour",
+            qty: 1,
+            unitPricePence: 2500,
+          },
+          {
+            type: "PART",
+            productId: punctureTube.productId,
+            variantId: punctureTube.variantId,
+            description: "Tube",
+            qty: 1,
+            unitPricePence: punctureTube.pricePence,
+            isOptional: true,
+          },
+        ],
+      });
+
+      assert.equal(fixedTemplate.pricingMode, "FIXED_PRICE_SERVICE");
+      assert.equal(fixedTemplate.targetTotalPricePence, 2500);
+
+      const { job } = await createJob(state, {
+        bikeDescription: "Fixed-price service job",
+      });
+
+      const applyTemplate = await fetchJson(`/api/workshop/jobs/${job.id}/templates/apply`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          templateId: fixedTemplate.id,
+          selectedOptionalLineIds: [],
+        }),
+      });
+      assert.equal(applyTemplate.status, 201, JSON.stringify(applyTemplate.json));
+      assert.equal(applyTemplate.json.pricingEffect.fixedPriceActivated, true);
+      assert.equal(applyTemplate.json.pricingEffect.targetTotalPricePence, 2500);
+
+      let detail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(detail.status, 200, JSON.stringify(detail.json));
+      assert.equal(detail.json.job.servicePricingMode, "FIXED_PRICE_SERVICE");
+      assert.equal(detail.json.job.serviceTargetTotalPence, 2500);
+      assert.equal(detail.json.lines.length, 1);
+      assert.equal(detail.json.lines[0].type, "LABOUR");
+      assert.equal(detail.json.lines[0].unitPricePence, 2500);
+
+      const addPart = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "PART",
+          productId: punctureTube.productId,
+          variantId: punctureTube.variantId,
+          description: "Tube replacement",
+          qty: 1,
+          unitPricePence: punctureTube.pricePence,
+        }),
+      });
+      assert.equal(addPart.status, 201, JSON.stringify(addPart.json));
+
+      detail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(detail.status, 200, JSON.stringify(detail.json));
+      const labourLineAfterTube = detail.json.lines.find((line) => line.type === "LABOUR");
+      const tubeLine = detail.json.lines.find((line) => line.type === "PART" && line.variantId === punctureTube.variantId);
+      assert.ok(labourLineAfterTube);
+      assert.ok(tubeLine);
+      assert.equal(labourLineAfterTube.unitPricePence, 1800);
+      assert.equal(
+        detail.json.lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
+        2500,
+      );
+
+      const updatePart = await fetchJson(`/api/workshop/jobs/${job.id}/lines/${tubeLine.id}`, {
+        method: "PATCH",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          unitPricePence: 900,
+        }),
+      });
+      assert.equal(updatePart.status, 200, JSON.stringify(updatePart.json));
+
+      detail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(detail.status, 200, JSON.stringify(detail.json));
+      const labourLineAfterUpdate = detail.json.lines.find((line) => line.type === "LABOUR");
+      assert.ok(labourLineAfterUpdate);
+      assert.equal(labourLineAfterUpdate.unitPricePence, 1600);
+      assert.equal(
+        detail.json.lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
+        2500,
+      );
+
+      const addExcessPart = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "PART",
+          productId: puncturePatch.productId,
+          variantId: puncturePatch.variantId,
+          description: "Extra puncture consumables",
+          qty: 10,
+          unitPricePence: 200,
+        }),
+      });
+      assert.equal(addExcessPart.status, 409, JSON.stringify(addExcessPart.json));
+      assert.equal(addExcessPart.json.error.code, "WORKSHOP_FIXED_PRICE_TARGET_EXCEEDED");
+
+      const deleteBalancingLine = await fetchJson(
+        `/api/workshop/jobs/${job.id}/lines/${labourLineAfterUpdate.id}`,
+        {
+          method: "DELETE",
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(deleteBalancingLine.status, 409, JSON.stringify(deleteBalancingLine.json));
+      assert.equal(deleteBalancingLine.json.error.code, "WORKSHOP_FIXED_PRICE_CONFIGURATION_INVALID");
+    }, results);
+
     await runTest("timed workshop jobs derive schedule fields, reject store-closed slots, and validate end-time consistency", async () => {
-      const scheduledDate = addDays(todayUtc(), 16);
+      const scheduledDate = nextWorkshopWeekday(16);
       const validStart = toScheduledSlot(scheduledDate, 11, 0);
 
       const scheduledJob = await fetchJson("/api/workshop/jobs", {
@@ -1554,7 +1708,7 @@ const run = async () => {
     }, results);
 
     await runTest("staff assignment to timed workshop jobs respects working hours, time off, and overlap rules", async () => {
-      const scheduledDate = addDays(todayUtc(), 17);
+      const scheduledDate = nextWorkshopWeekday(18);
       const dateKey = toWorkshopDateKey(scheduledDate);
 
       const firstStart = toScheduledSlot(scheduledDate, 11, 0);
@@ -1628,7 +1782,7 @@ const run = async () => {
     }, results);
 
     await runTest("calendar api returns staff rows, scheduled jobs, and capacity clipped to working hours", async () => {
-      const scheduledDate = addDays(todayUtc(), 18);
+      const scheduledDate = nextWorkshopWeekday(23);
       const dateKey = scheduledDate.toISOString().slice(0, 10);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
@@ -1734,7 +1888,7 @@ const run = async () => {
     }, results);
 
     await runTest("legacy workshop working hours stay as an explicit fallback when rota is missing", async () => {
-      const scheduledDate = addDays(todayUtc(), 21);
+      const scheduledDate = nextWorkshopWeekday(22);
       const dateKey = toWorkshopDateKey(scheduledDate);
       const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
       assert.notEqual(dayOfWeek, undefined);
@@ -1777,7 +1931,7 @@ const run = async () => {
     }, results);
 
     await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
-      const scheduledDate = addDays(todayUtc(), 19);
+      const scheduledDate = nextWorkshopWeekday(24);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
         date: toWorkshopDateKey(scheduledDate),
