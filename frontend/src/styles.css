@@ -2423,12 +2423,338 @@ th {
   background: #f8fbfd;
 }
 
+.workshop-scheduler-page {
+  display: grid;
+  gap: 16px;
+}
+
+.workshop-scheduler-toolbar {
+  display: grid;
+  gap: 14px;
+}
+
+.workshop-scheduler-toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workshop-scheduler-toolbar__view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #d8e1eb;
+  border-radius: 999px;
+  background: #f7fafc;
+}
+
+.workshop-scheduler-toolbar__view-toggle button {
+  min-width: 84px;
+  border-radius: 999px;
+}
+
+.workshop-scheduler-toolbar__filter {
+  display: grid;
+  gap: 6px;
+  min-width: 200px;
+}
+
+.workshop-scheduler-toolbar__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.workshop-scheduler-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+  align-items: start;
+}
+
+.workshop-scheduler-board,
+.workshop-scheduler-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-scheduler-board__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workshop-scheduler-board__header h2,
+.workshop-scheduler-panel h2 {
+  margin: 0 0 4px;
+}
+
+.workshop-scheduler-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.workshop-scheduler-grid {
+  display: grid;
+  align-items: start;
+  gap: 0;
+  min-width: max-content;
+  border: 1px solid #dbe5ef;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f8fbfd;
+}
+
+.workshop-scheduler-grid__corner,
+.workshop-scheduler-grid__day-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 94px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #dbe5ef;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+}
+
+.workshop-scheduler-grid__corner {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #526071;
+  border-right: 1px solid #dbe5ef;
+}
+
+.workshop-scheduler-grid__day-header {
+  display: grid;
+  gap: 3px;
+  border-right: 1px solid #dbe5ef;
+}
+
+.workshop-scheduler-grid__day-header strong {
+  font-size: 0.95rem;
+  color: var(--cp-navy);
+}
+
+.workshop-scheduler-grid__day-header span {
+  font-size: 0.77rem;
+  color: #526071;
+}
+
+.workshop-scheduler-grid__time-axis,
+.workshop-scheduler-grid__day-track {
+  position: relative;
+}
+
+.workshop-scheduler-grid__time-axis {
+  border-right: 1px solid #dbe5ef;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 253, 0.96) 100%);
+}
+
+.workshop-scheduler-grid__time-label {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.76rem;
+  color: #526071;
+  white-space: nowrap;
+}
+
+.workshop-scheduler-grid__day-track {
+  border-right: 1px solid #dbe5ef;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 253, 0.98) 100%);
+}
+
+.workshop-scheduler-grid__day-track--closed {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(217, 225, 234, 0.55) 0,
+      rgba(217, 225, 234, 0.55) 14px,
+      rgba(247, 250, 252, 0.98) 14px,
+      rgba(247, 250, 252, 0.98) 28px
+    );
+}
+
+.workshop-scheduler-grid__hour-line {
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background: rgba(188, 201, 214, 0.72);
+}
+
+.workshop-scheduler-timeoff {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.workshop-scheduler-timeoff span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workshop-scheduler-timeoff--workshop {
+  background: rgba(251, 222, 222, 0.96);
+  color: #8d1d1d;
+}
+
+.workshop-scheduler-timeoff--staff {
+  background: rgba(255, 241, 199, 0.96);
+  color: #875f00;
+}
+
+.workshop-scheduler-block {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 10px 9px;
+  border: 1px solid #afc4d8;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #eaf3fa 100%);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.09);
+  color: inherit;
+  text-align: left;
+  overflow: hidden;
+}
+
+.workshop-scheduler-block:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #e2eef8 100%);
+}
+
+.workshop-scheduler-block strong,
+.workshop-scheduler-block span,
+.workshop-scheduler-block div {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workshop-scheduler-block strong {
+  font-size: 0.86rem;
+  color: var(--cp-navy);
+  white-space: nowrap;
+}
+
+.workshop-scheduler-block span {
+  font-size: 0.75rem;
+  color: #526071;
+  white-space: nowrap;
+}
+
+.workshop-scheduler-block__time {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #315372;
+  letter-spacing: 0.01em;
+}
+
+.workshop-scheduler-block__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.workshop-scheduler-block__footer > span:first-child {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #3b4f63;
+}
+
+.workshop-scheduler-block--ready {
+  border-color: #8ad3a2;
+  background: linear-gradient(180deg, #ffffff 0%, #e7f8ee 100%);
+}
+
+.workshop-scheduler-block--overdue {
+  border-color: #e2b0b0;
+  background: linear-gradient(180deg, #ffffff 0%, #fdecec 100%);
+}
+
+.workshop-scheduler-rail {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.workshop-scheduler-editor,
+.workshop-scheduler-editor__summary {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-scheduler-editor__summary strong {
+  color: var(--cp-navy);
+}
+
+.workshop-scheduler-editor label {
+  display: grid;
+  gap: 5px;
+}
+
+.workshop-scheduler-queue {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-scheduler-queue-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #dbe5ef;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.workshop-scheduler-queue-card strong {
+  color: var(--cp-navy);
+}
+
+.workshop-scheduler-empty {
+  border: 1px dashed #c6d3df;
+  border-radius: 12px;
+  padding: 12px;
+  color: #526071;
+  background: #f8fbfd;
+}
+
 @media (max-width: 1180px) {
   .workshop-calendar-layout {
     grid-template-columns: 1fr;
   }
 
   .workshop-calendar-sidebar {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .workshop-scheduler-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-scheduler-rail {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   }
 }
@@ -2450,6 +2776,26 @@ th {
   }
 
   .workshop-calendar-queue-card {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-scheduler-toolbar__controls,
+  .workshop-scheduler-board__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workshop-scheduler-toolbar__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-scheduler-grid__corner,
+  .workshop-scheduler-grid__day-header {
+    min-height: 88px;
+    padding: 10px 12px;
+  }
+
+  .workshop-scheduler-queue-card {
     grid-template-columns: 1fr;
   }
 }

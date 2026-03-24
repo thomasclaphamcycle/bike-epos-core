@@ -200,7 +200,7 @@ Current internal subscribers are:
   - blocks overlapping timed jobs for the same assigned staff member without forcing legacy unscheduled jobs through a new scheduling flow
   - now also exposes `GET /api/workshop/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for staff rows, rota-backed availability windows, time off, scheduled jobs, and clipped daily capacity summaries
   - now also exposes `PATCH /api/workshop/jobs/:id/schedule` for atomic assignment plus schedule/reschedule/clear operations through the shared validation layer rather than duplicating rules in controllers
-  - the first staff-facing React surface now lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a dense day view rather than introducing a separate scheduling subsystem, and it now shows rota-driven availability with explicit fallback labeling
+  - the current staff-facing React surface lives at `/workshop/calendar`, using the shared calendar read model plus schedule patch API for a real timed scheduling grid with week view first, day view second, timed booking blocks, and quick schedule editing rather than introducing a separate scheduling subsystem
 - workshop service templates in `src/services/workshopServiceTemplateService.ts`
   - store reusable workshop job starters in `WorkshopServiceTemplate` and `WorkshopServiceTemplateLine`, including labour lines plus optional part suggestions
   - expose manager CRUD under `/api/workshop/service-templates` and application to live jobs under `POST /api/workshop/jobs/:id/templates/apply`
@@ -240,4 +240,4 @@ Manager-facing internal visibility now exists through:
 
 These surfaces are internal visibility and control only. They expose reminder-candidate rows for review, dismissal, and linking back into customer/workshop flows, but they still do not perform reminder delivery.
 
-Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now includes quote/share notifications, secure portal access, and a portal-thread conversation model, but push notifications, broader customer self-service account management, and full external-channel reply ingestion remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus an initial staff day-view calendar UI rather than a full scheduling-management suite.
+Reminder groundwork remains intentionally internal only. Customer-facing workshop delivery now includes quote/share notifications, secure portal access, and a portal-thread conversation model, but push notifications, broader customer self-service account management, and full external-channel reply ingestion remain intentionally out of scope, while workshop time-slot scheduling now has an additive backend foundation plus a week-first staff scheduling grid and lightweight in-calendar editing rather than a separate scheduling subsystem.
