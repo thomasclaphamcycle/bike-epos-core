@@ -4,17 +4,13 @@ import { apiGet, apiPost } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { useToasts } from "../../components/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { WorkshopSchedulerScreen } from "../../pages/WorkshopCalendarPage";
 import {
   getWorkshopTechnicianWorkflowSummary,
   workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "./status";
 import { WorkshopIntakeOverlay } from "./WorkshopIntakeOverlay";
-import {
-  WorkshopOperatingCalendar,
-  type WorkshopCalendarJobPresentation,
-  type WorkshopOperatingCalendarData,
-} from "./WorkshopOperatingCalendar";
 
 const statusOptions = [
   "",
@@ -562,14 +558,6 @@ const getPartsClassName = (job: DashboardJob) => {
 const getAgendaTitle = (job: DashboardJob) =>
   job.bikeDescription || getCustomerName(job);
 
-const todayDateKey = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
 const buildDashboardQuery = (input: {
   status?: string;
   search?: string;
@@ -611,13 +599,10 @@ export const WorkshopDashboardPage = () => {
   const debouncedSearch = useDebouncedValue(search, 250);
 
   const [jobs, setJobs] = useState<DashboardJob[]>([]);
-  const [calendar, setCalendar] = useState<WorkshopOperatingCalendarData | null>(null);
   const [staffingToday, setStaffingToday] = useState<DashboardResponse["staffingToday"] | null>(null);
   const [capacityToday, setCapacityToday] = useState<DashboardResponse["capacityToday"] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [calendarLoading, setCalendarLoading] = useState(false);
-
-  const calendarDateKey = useMemo(() => todayDateKey(), []);
+  const [schedulerRefreshToken, setSchedulerRefreshToken] = useState(0);
 
   const listQuery = useMemo(
     () => buildDashboardQuery({ status, search: debouncedSearch }),
@@ -639,32 +624,10 @@ export const WorkshopDashboardPage = () => {
     }
   };
 
-  const loadCalendar = async () => {
-    setCalendarLoading(true);
-    try {
-      const payload = await apiGet<WorkshopOperatingCalendarData>(
-        `/api/workshop/calendar?from=${encodeURIComponent(calendarDateKey)}&to=${encodeURIComponent(calendarDateKey)}`,
-      );
-      setCalendar(payload);
-    } catch (loadCalendarError) {
-      const message = loadCalendarError instanceof Error
-        ? loadCalendarError.message
-        : "Failed to load workshop calendar";
-      error(message);
-    } finally {
-      setCalendarLoading(false);
-    }
-  };
-
   useEffect(() => {
     void loadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listQuery]);
-
-  useEffect(() => {
-    void loadCalendar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarDateKey]);
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -757,7 +720,7 @@ export const WorkshopDashboardPage = () => {
       });
       success("Job status updated");
       await loadJobs();
-      await loadCalendar();
+      setSchedulerRefreshToken((current) => current + 1);
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update status";
       error(message);
@@ -774,7 +737,7 @@ export const WorkshopDashboardPage = () => {
       });
       success(nextStatus === "APPROVED" ? "Quote marked approved" : "Quote marked pending approval");
       await loadJobs();
-      await loadCalendar();
+      setSchedulerRefreshToken((current) => current + 1);
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update approval";
       error(message);
@@ -964,66 +927,15 @@ export const WorkshopDashboardPage = () => {
     }));
   };
 
-  const calendarVisibleJobIds = useMemo(
-    () => new Set(visibleJobs.map((job) => job.id)),
-    [visibleJobs],
-  );
-
-  const calendarPresentationByJobId = useMemo(() => {
-    const presentations = new Map<string, WorkshopCalendarJobPresentation>();
-
-    visibleJobs.forEach((job) => {
-      const workflowSummary = getWorkshopTechnicianWorkflowSummary({
-        rawStatus: job.status,
-        partsStatus: job.partsStatus,
-        assignedStaffName: job.assignedStaffName,
-        scheduledDate: job.scheduledDate,
-        hasSale: Boolean(job.sale),
-        hasBasket: Boolean(job.finalizedBasketId),
-      });
-      const urgency = getUrgency(job);
-      const bucket = toDisplayBucket(job);
-      const partsStatus = toPartsStatus(job);
-
-      let signalLabel = workflowSummary.label;
-      let signalClassName = workflowSummary.className;
-
-      if (bucket === "ready") {
-        signalLabel = "Ready";
-        signalClassName = "status-badge status-complete";
-      } else if (job.status === "WAITING_FOR_APPROVAL") {
-        signalLabel = "Approval";
-        signalClassName = "status-badge status-warning";
-      } else if (partsStatus === "SHORT") {
-        signalLabel = "Parts";
-        signalClassName = "status-badge status-warning";
-      } else if (partsStatus === "UNALLOCATED") {
-        signalLabel = "Allocate parts";
-        signalClassName = "status-badge status-info";
-      }
-
-      presentations.set(job.id, {
-        bikeLabel: job.bikeDescription || "Workshop job",
-        customerLabel: getCustomerName(job),
-        technicianLabel: job.assignedStaffName || "Unassigned",
-        signalLabel,
-        signalClassName,
-        urgencyLabel: urgency?.label ?? null,
-        urgencyClassName: urgency?.className ?? null,
-      });
-    });
-
-    return presentations;
-  }, [visibleJobs]);
-
-  const handleIntakeCreated = async (jobId: string) => {
+  const handleIntakeCreated = async (_jobId: string) => {
     setQuickFilter("ALL");
     setStatus("");
     setSearch("");
     setSelectedTechnician("");
     await loadJobs(buildDashboardQuery({}));
-    await loadCalendar();
-    setSelectedJobId(jobId);
+    setSchedulerRefreshToken((current) => current + 1);
+    setSurfaceMode("calendar");
+    setSelectedJobId(null);
   };
 
   const renderJobWorkspaceSection = (
@@ -1068,7 +980,7 @@ export const WorkshopDashboardPage = () => {
             <p className="ui-page-eyebrow">Workshop Operating Screen</p>
             <h1 className="ui-page-title">Workshop</h1>
             <p className="ui-page-description">
-              Run today&apos;s workshop from one place, with a live calendar first, the board one tap away, and quick job access without hopping between separate pages.
+              Run the workshop from one place, with the timed scheduler as the default operating surface and the board still available as a secondary view when needed.
             </p>
           </div>
           <div className="workshop-os-header__actions">
@@ -1083,52 +995,19 @@ export const WorkshopDashboardPage = () => {
               New Job
             </button>
             <Link to="/workshop/calendar" className="button-link">
-              Scheduler
+              Open Standalone Calendar
             </Link>
-            <button type="button" onClick={() => { void loadJobs(); void loadCalendar(); }} disabled={loading || calendarLoading}>
-              {loading || calendarLoading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-        </div>
-
-        <div className="workshop-os-topbar">
-          <label className="workshop-os-search">
-            <span className="table-secondary">Search jobs, customers, or notes</span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search customer, bike, notes"
-            />
-          </label>
-
-          <div className="workshop-os-topbar__meta">
-            <span className="stock-badge stock-muted">{visibleJobs.length} visible jobs</span>
-            {capacityToday ? (
-              <span className={toCapacityBadgeClass(capacityToday.status)}>{capacityToday.label}</span>
-            ) : null}
-            {staffingToday?.summary.isClosed ? (
-              <span className="status-badge status-info">Store closed</span>
-            ) : staffingWindow ? (
-              <span className="stock-badge stock-muted">Trading {staffingWindow}</span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="workshop-os-quick-filters" role="tablist" aria-label="Workshop quick filters">
-          {quickFilters.map((filter) => (
             <button
-              key={filter.key}
               type="button"
-              role="tab"
-              aria-selected={quickFilter === filter.key}
-              className={quickFilter === filter.key
-                ? "workshop-os-filter-chip workshop-os-filter-chip--active"
-                : "workshop-os-filter-chip"}
-              onClick={() => setQuickFilter(filter.key)}
+              onClick={() => {
+                void loadJobs();
+                setSchedulerRefreshToken((current) => current + 1);
+              }}
+              disabled={loading}
             >
-              {filter.label}
+              {loading ? "Refreshing..." : "Refresh"}
             </button>
-          ))}
+          </div>
         </div>
 
         <div className="workshop-os-surface-toggle" role="tablist" aria-label="Workshop view">
@@ -1139,9 +1018,12 @@ export const WorkshopDashboardPage = () => {
             className={surfaceMode === "calendar"
               ? "workshop-os-filter-chip workshop-os-filter-chip--active"
               : "workshop-os-filter-chip"}
-            onClick={() => setSurfaceMode("calendar")}
+            onClick={() => {
+              setSelectedJobId(null);
+              setSurfaceMode("calendar");
+            }}
           >
-            Calendar
+            Operating Screen
           </button>
           <button
             type="button"
@@ -1155,8 +1037,55 @@ export const WorkshopDashboardPage = () => {
             Board
           </button>
         </div>
+
+        {surfaceMode === "board" ? (
+          <>
+            <div className="workshop-os-topbar">
+              <label className="workshop-os-search">
+                <span className="table-secondary">Search jobs, customers, or notes</span>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search customer, bike, notes"
+                />
+              </label>
+
+              <div className="workshop-os-topbar__meta">
+                <span className="stock-badge stock-muted">{visibleJobs.length} visible jobs</span>
+                {capacityToday ? (
+                  <span className={toCapacityBadgeClass(capacityToday.status)}>{capacityToday.label}</span>
+                ) : null}
+                {staffingToday?.summary.isClosed ? (
+                  <span className="status-badge status-info">Store closed</span>
+                ) : staffingWindow ? (
+                  <span className="stock-badge stock-muted">Trading {staffingWindow}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="workshop-os-quick-filters" role="tablist" aria-label="Workshop quick filters">
+              {quickFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={quickFilter === filter.key}
+                  className={quickFilter === filter.key
+                    ? "workshop-os-filter-chip workshop-os-filter-chip--active"
+                    : "workshop-os-filter-chip"}
+                  onClick={() => setQuickFilter(filter.key)}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
+      {surfaceMode === "calendar" ? (
+        <WorkshopSchedulerScreen embedded refreshToken={schedulerRefreshToken} />
+      ) : (
       <div className="workshop-os-layout">
         <aside className="workshop-os-sidebar">
           <section className="workshop-os-sidebar-card">
@@ -1240,128 +1169,118 @@ export const WorkshopDashboardPage = () => {
         </aside>
 
         <section className="workshop-os-main">
-          {surfaceMode === "calendar" ? (
-            <WorkshopOperatingCalendar
-              calendar={calendar}
-              loading={calendarLoading}
-              selectedTechnicianId={selectedTechnician}
-              visibleJobIds={calendarVisibleJobIds}
-              presentationByJobId={calendarPresentationByJobId}
-              onSelectJob={(jobId) => setSelectedJobId(jobId)}
-            />
-          ) : (
-            <section className="workshop-os-board-shell">
-              <div className="workshop-os-board-header">
-                <div>
-                  <h2>Live board</h2>
-                  <p className="muted-text">
-                    {activeFilter.description}
-                  </p>
-                </div>
-                <div className="workshop-os-board-header__meta">
-                  <span className="stock-badge stock-muted">{visibleJobs.length} in view</span>
-                  {jobs.length !== visibleJobs.length ? (
-                    <span className="table-secondary">{jobs.length - visibleJobs.length} hidden by controls</span>
-                  ) : null}
-                </div>
+          <section className="workshop-os-board-shell">
+            <div className="workshop-os-board-header">
+              <div>
+                <h2>Live board</h2>
+                <p className="muted-text">
+                  {activeFilter.description}
+                </p>
               </div>
+              <div className="workshop-os-board-header__meta">
+                <span className="stock-badge stock-muted">{visibleJobs.length} in view</span>
+                {jobs.length !== visibleJobs.length ? (
+                  <span className="table-secondary">{jobs.length - visibleJobs.length} hidden by controls</span>
+                ) : null}
+              </div>
+            </div>
 
             {boardMode === "board" ? (
               <div className="workshop-os-board-scroll">
                 <div className="workshop-os-board">
                   {bucketedJobs.map((column) => (
-                  <section key={column.key} className={getColumnToneClass(column.tone)}>
-                    <header className="workshop-os-column__header">
-                      <div>
-                        <h3>{column.label}</h3>
-                        <p>{column.description}</p>
-                      </div>
-                      <span className="stock-badge stock-muted">{column.jobs.length}</span>
-                    </header>
-
-                    <div className="workshop-os-column__body">
-                      {column.jobs.length === 0 ? (
-                        <div className="workshop-os-empty-card">
-                          {column.label} is clear right now.
+                    <section key={column.key} className={getColumnToneClass(column.tone)}>
+                      <header className="workshop-os-column__header">
+                        <div>
+                          <h3>{column.label}</h3>
+                          <p>{column.description}</p>
                         </div>
-                      ) : (
-                        column.jobs.map((job) => {
-                          const urgency = getUrgency(job);
-                          const workflowSummary = getWorkshopTechnicianWorkflowSummary({
-                            rawStatus: job.status,
-                            partsStatus: job.partsStatus,
-                            assignedStaffName: job.assignedStaffName,
-                            scheduledDate: job.scheduledDate,
-                            hasSale: Boolean(job.sale),
-                            hasBasket: Boolean(job.finalizedBasketId),
-                          });
-                          const [primaryAction] = getQuickActions(job);
+                        <span className="stock-badge stock-muted">{column.jobs.length}</span>
+                      </header>
 
-                          return (
-                            <article
-                              key={job.id}
-                              className="workshop-os-job-card"
-                              onClick={() => setSelectedJobId(job.id)}
-                            >
-                              <div className="workshop-os-job-card__header">
-                                <div className="workshop-os-job-card__identity">
-                                  <strong>{job.bikeDescription || "Workshop job"}</strong>
-                                  <div className="table-secondary">
-                                    {getCustomerName(job)}
+                      <div className="workshop-os-column__body">
+                        {column.jobs.length === 0 ? (
+                          <div className="workshop-os-empty-card">
+                            {column.label} is clear right now.
+                          </div>
+                        ) : (
+                          column.jobs.map((job) => {
+                            const urgency = getUrgency(job);
+                            const workflowSummary = getWorkshopTechnicianWorkflowSummary({
+                              rawStatus: job.status,
+                              partsStatus: job.partsStatus,
+                              assignedStaffName: job.assignedStaffName,
+                              scheduledDate: job.scheduledDate,
+                              hasSale: Boolean(job.sale),
+                              hasBasket: Boolean(job.finalizedBasketId),
+                            });
+                            const [primaryAction] = getQuickActions(job);
+
+                            return (
+                              <article
+                                key={job.id}
+                                className="workshop-os-job-card"
+                                onClick={() => setSelectedJobId(job.id)}
+                              >
+                                <div className="workshop-os-job-card__header">
+                                  <div className="workshop-os-job-card__identity">
+                                    <strong>{job.bikeDescription || "Workshop job"}</strong>
+                                    <div className="table-secondary">
+                                      {getCustomerName(job)}
+                                    </div>
+                                  </div>
+                                  <div className="workshop-os-job-card__signals">
+                                    {urgency ? (
+                                      <span className={`${urgency.className} workshop-os-job-card__signal--urgency`}>{urgency.label}</span>
+                                    ) : null}
+                                    <span className={getPartsClassName(job)}>{toPartsStatus(job)}</span>
                                   </div>
                                 </div>
-                                <div className="workshop-os-job-card__signals">
-                                  {urgency ? (
-                                    <span className={`${urgency.className} workshop-os-job-card__signal--urgency`}>{urgency.label}</span>
+
+                                <div className="workshop-os-job-card__meta-strip">
+                                  <span className="workshop-os-job-card__meta-pill">
+                                    Due {formatDate(job.scheduledDate)}
+                                  </span>
+                                  <span className={workflowSummary.className}>{workflowSummary.label}</span>
+                                  {job.status === "WAITING_FOR_APPROVAL" ? (
+                                    <span className="status-badge status-warning">Approval needed</span>
                                   ) : null}
-                                  <span className={getPartsClassName(job)}>{toPartsStatus(job)}</span>
                                 </div>
-                              </div>
 
-                              <div className="workshop-os-job-card__meta-strip">
-                                <span className="workshop-os-job-card__meta-pill">
-                                  Due {formatDate(job.scheduledDate)}
-                                </span>
-                                <span className={workflowSummary.className}>{workflowSummary.label}</span>
-                                {job.status === "WAITING_FOR_APPROVAL" ? (
-                                  <span className="status-badge status-warning">Approval needed</span>
+                                {workflowSummary.blockerLabel ? (
+                                  <div className="workshop-os-job-card__blocker">
+                                    <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
+                                    <span className="table-secondary">{workflowSummary.detail}</span>
+                                  </div>
                                 ) : null}
-                              </div>
 
-                              {workflowSummary.blockerLabel ? (
-                                <div className="workshop-os-job-card__blocker">
-                                  <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
-                                  <span className="table-secondary">{workflowSummary.detail}</span>
+                                <div
+                                  className="workshop-os-job-card__actions"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  {primaryAction ? (
+                                    <button
+                                      type="button"
+                                      className="primary"
+                                      onClick={() => {
+                                        void runQuickAction(job.id, primaryAction);
+                                      }}
+                                    >
+                                      {primaryAction.label}
+                                    </button>
+                                  ) : (
+                                    <Link to={`/workshop/${job.id}`} className="button-link button-link--inline">
+                                      Open Job
+                                    </Link>
+                                  )}
+                                  <span className="table-secondary workshop-os-job-card__hint">Tap card for quick view</span>
                                 </div>
-                              ) : null}
-
-                              <div
-                                className="workshop-os-job-card__actions"
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                {primaryAction ? (
-                                  <button
-                                    type="button"
-                                    className="primary"
-                                    onClick={() => {
-                                      void runQuickAction(job.id, primaryAction);
-                                    }}
-                                  >
-                                    {primaryAction.label}
-                                  </button>
-                                ) : (
-                                  <Link to={`/workshop/${job.id}`} className="button-link button-link--inline">
-                                    Open Job
-                                  </Link>
-                                )}
-                                <span className="table-secondary workshop-os-job-card__hint">Tap card for quick view</span>
-                              </div>
-                            </article>
-                          );
-                        })
-                      )}
-                    </div>
-                  </section>
+                              </article>
+                            );
+                          })
+                        )}
+                      </div>
+                    </section>
                   ))}
                 </div>
               </div>
@@ -1442,8 +1361,7 @@ export const WorkshopDashboardPage = () => {
                 </table>
               </div>
             )}
-            </section>
-          )}
+          </section>
 
           <div className="workshop-os-summary-grid">
             <article className="metric-card workshop-os-metric-card">
@@ -1636,8 +1554,9 @@ export const WorkshopDashboardPage = () => {
           </section>
         </aside>
       </div>
+      )}
 
-      {selectedJob ? (
+      {surfaceMode === "board" && selectedJob ? (
         <div
           className="workshop-os-drawer-backdrop"
           onClick={() => setSelectedJobId(null)}

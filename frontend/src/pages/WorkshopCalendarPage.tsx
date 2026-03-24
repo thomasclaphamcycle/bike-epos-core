@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import {
-  workshopExecutionStatusClass,
-  workshopExecutionStatusLabel,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
 
@@ -127,15 +125,55 @@ type SchedulePatchResponse = {
   idempotent: boolean;
 };
 
+type WorkshopSchedulerScreenProps = {
+  embedded?: boolean;
+  refreshToken?: number;
+  showToolbar?: boolean;
+  title?: string;
+  description?: string;
+  backLinkTo?: string | null;
+  view?: CalendarViewMode;
+  anchorDateKey?: string;
+  onChangeView?: (view: CalendarViewMode) => void;
+  onChangeAnchorDateKey?: (dateKey: string) => void;
+  technicianId?: string;
+  onTechnicianIdChange?: (technicianId: string) => void;
+  visibleJobIds?: ReadonlySet<string> | null;
+};
+
+export type CalendarViewMode = "week" | "day";
+
 type ScheduleDraft = {
   staffId: string;
+  dateKey: string;
   startTime: string;
   durationMinutes: string;
 };
 
-const PX_PER_MINUTE = 1.8;
+type PositionedJob = {
+  job: CalendarJob;
+  top: number;
+  height: number;
+  left: number;
+  width: number;
+};
+
+type TimeOffBlock = {
+  id: string;
+  top: number;
+  height: number;
+  scope: "WORKSHOP" | "STAFF";
+  label: string;
+};
+
 const DEFAULT_OPEN_MINUTES = 9 * 60;
 const DEFAULT_CLOSE_MINUTES = 18 * 60;
+const PX_PER_MINUTE = 1.05;
+const WEEK_DAY_WIDTH = 244;
+const DAY_VIEW_WIDTH = 460;
+const JOB_BLOCK_GAP = 6;
+const MIN_BOOKING_BLOCK_HEIGHT = 48;
+const COMPACT_BOOKING_BLOCK_HEIGHT = 72;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 
 const formatDateKey = (value: Date) => {
@@ -150,13 +188,21 @@ const parseDateKey = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
-const shiftDateKey = (value: string, days: number) => {
-  const next = parseDateKey(value);
-  next.setDate(next.getDate() + days);
-  return formatDateKey(next);
+export const workshopTodayDateKey = () => formatDateKey(new Date());
+
+const startOfWeek = (value: Date) => {
+  const next = new Date(value);
+  const day = next.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  next.setDate(next.getDate() + mondayOffset);
+  return next;
 };
 
-const todayDateKey = () => formatDateKey(new Date());
+const addDays = (value: Date, days: number) => {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+};
 
 const parseClockMinutes = (value: string | null | undefined) => {
   if (!value || !value.includes(":")) {
@@ -181,6 +227,16 @@ const formatClockLabel = (minutes: number) => {
   return `${`${hours}`.padStart(2, "0")}:${`${mins}`.padStart(2, "0")}`;
 };
 
+const formatOptionalTime = (value: string | null | undefined) =>
+  value
+    ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "-";
+
+const formatOptionalDate = (value: string | null | undefined) =>
+  value
+    ? new Date(value).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })
+    : "-";
+
 const toLocalTimeInput = (isoValue: string | null | undefined) => {
   if (!isoValue) {
     return "";
@@ -194,25 +250,8 @@ const toLocalTimeInput = (isoValue: string | null | undefined) => {
   return `${`${date.getHours()}`.padStart(2, "0")}:${`${date.getMinutes()}`.padStart(2, "0")}`;
 };
 
-const formatOptionalDateTime = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleString() : "-";
-
-const formatOptionalTime = (value: string | null | undefined) =>
-  value
-    ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "-";
-
-const formatDuration = (minutes: number | null | undefined) =>
-  minutes ? `${minutes} min` : "-";
-
-const getJobHeading = (job: CalendarJob) =>
-  job.bikeDescription || job.customerName || job.summaryText || `Workshop job ${job.id.slice(0, 8)}`;
-
-const getJobSubline = (job: CalendarJob) =>
-  [job.customerName, job.assignedStaffName].filter(Boolean).join(" · ") || "Workshop job";
-
 const buildScheduleIso = (dateKey: string, timeValue: string) => {
-  if (!timeValue) {
+  if (!dateKey || !timeValue) {
     return null;
   }
 
@@ -224,88 +263,423 @@ const buildScheduleIso = (dateKey: string, timeValue: string) => {
   return date.toISOString();
 };
 
-const toJobSortValue = (job: CalendarJob) =>
-  job.scheduledDate || job.createdAt || "";
+const getJobHeading = (job: CalendarJob) =>
+  job.bikeDescription || job.customerName || job.summaryText || `Workshop job ${job.id.slice(0, 8)}`;
+
+const getJobSubline = (job: CalendarJob) =>
+  [job.customerName, job.assignedStaffName].filter(Boolean).join(" · ") || workshopRawStatusLabel(job.rawStatus);
+
+const getBookingCustomerName = (job: CalendarJob) =>
+  job.customerName || "Customer pending";
+
+const getBookingBikeLine = (job: CalendarJob) =>
+  job.bikeDescription?.trim() || "Bike details pending";
+
+const getBookingMetaLine = (job: CalendarJob, todayKey: string) => {
+  if (isOverdueJob(job, todayKey)) {
+    return "Overdue";
+  }
+
+  switch (job.rawStatus) {
+    case "WAITING_FOR_APPROVAL":
+    case "WAITING_FOR_PARTS":
+    case "BIKE_READY":
+      return workshopRawStatusLabel(job.rawStatus);
+    default:
+      return job.assignedStaffName?.trim() || "Scheduled";
+  }
+};
+
+const getBookingServiceLabel = (job: CalendarJob) => {
+  const trimmed = job.summaryText?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const bikeLine = getBookingBikeLine(job);
+  const customerName = getBookingCustomerName(job);
+  if (trimmed === bikeLine || trimmed === customerName) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const getBookingTooltip = (job: CalendarJob) => {
+  const details = [
+    `${formatOptionalTime(job.scheduledStartAt)} - ${formatOptionalTime(job.scheduledEndAt)}`,
+    getBookingCustomerName(job),
+    getBookingBikeLine(job),
+  ];
+
+  const serviceLabel = getBookingServiceLabel(job);
+  if (serviceLabel) {
+    details.push(serviceLabel);
+  }
+
+  details.push(job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Technician: Unassigned");
+  details.push(`Status: ${workshopRawStatusLabel(job.rawStatus)}`);
+
+  return details.join("\n");
+};
+
+const getJobDateKey = (job: CalendarJob) => {
+  if (job.scheduledDate) {
+    return job.scheduledDate.slice(0, 10);
+  }
+  if (job.scheduledStartAt) {
+    return formatDateKey(new Date(job.scheduledStartAt));
+  }
+  return null;
+};
+
+const isOverdueJob = (job: CalendarJob, todayKey: string) => {
+  const jobDateKey = getJobDateKey(job);
+  return Boolean(
+    jobDateKey
+      && jobDateKey < todayKey
+      && !["COMPLETED", "CANCELLED", "BIKE_READY"].includes(job.rawStatus),
+  );
+};
+
+const buildVisibleRange = (anchorDateKey: string, view: CalendarViewMode) => {
+  const anchor = parseDateKey(anchorDateKey);
+  const start = view === "week" ? startOfWeek(anchor) : anchor;
+  const end = view === "week" ? addDays(start, 6) : start;
+  const dates: string[] = [];
+
+  for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
+    dates.push(formatDateKey(cursor));
+  }
+
+  return {
+    from: formatDateKey(start),
+    to: formatDateKey(end),
+    dates,
+  };
+};
+
+export const shiftWorkshopAnchorDateKey = (anchorDateKey: string, view: CalendarViewMode, direction: -1 | 1) => {
+  const anchor = parseDateKey(anchorDateKey);
+  anchor.setDate(anchor.getDate() + (view === "week" ? direction * 7 : direction));
+  return formatDateKey(anchor);
+};
+
+const buildTimelineRange = (days: CalendarResponse["days"]) => {
+  const openCandidates = days
+    .map((day) => parseClockMinutes(day.opensAt))
+    .filter((value): value is number => value !== null);
+  const closeCandidates = days
+    .map((day) => parseClockMinutes(day.closesAt))
+    .filter((value): value is number => value !== null);
+
+  const openMinutes = openCandidates.length ? Math.min(...openCandidates) : DEFAULT_OPEN_MINUTES;
+  const closeMinutes = closeCandidates.length ? Math.max(...closeCandidates) : DEFAULT_CLOSE_MINUTES;
+  const normalizedClose = closeMinutes > openMinutes ? closeMinutes : openMinutes + 60;
+
+  return {
+    openMinutes,
+    closeMinutes: normalizedClose,
+    totalMinutes: normalizedClose - openMinutes,
+  };
+};
+
+const toTimeLabels = (timeline: { openMinutes: number; closeMinutes: number }) => {
+  const labels: number[] = [];
+  const startHour = Math.floor(timeline.openMinutes / 60) * 60;
+  const endHour = Math.ceil(timeline.closeMinutes / 60) * 60;
+
+  for (let minutes = startHour; minutes <= endHour; minutes += 60) {
+    labels.push(minutes);
+  }
+
+  return labels;
+};
+
+const formatRangeHeading = (days: CalendarResponse["days"], view: CalendarViewMode) => {
+  if (days.length === 0) {
+    return "Workshop schedule";
+  }
+
+  const first = parseDateKey(days[0].date);
+  const last = parseDateKey(days[days.length - 1].date);
+
+  if (view === "day" || days.length === 1) {
+    return first.toLocaleDateString([], {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  }
+
+  return `${first.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  })} - ${last.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+  })}`;
+};
+
+const toDayCapacitySummary = (
+  staffRows: CalendarStaffRow[],
+  dateKey: string,
+  technicianId: string,
+) => {
+  const rows = technicianId
+    ? staffRows.filter((staff) => staff.id === technicianId)
+    : staffRows;
+
+  return rows.reduce(
+    (summary, staff) => {
+      const capacity = staff.dailyCapacity.find((entry) => entry.date === dateKey);
+      if (!capacity) {
+        return summary;
+      }
+
+      return {
+        totalMinutes: summary.totalMinutes + capacity.totalMinutes,
+        bookedMinutes: summary.bookedMinutes + capacity.bookedMinutes,
+        availableMinutes: summary.availableMinutes + capacity.availableMinutes,
+      };
+    },
+    {
+      totalMinutes: 0,
+      bookedMinutes: 0,
+      availableMinutes: 0,
+    },
+  );
+};
+
+const getWorkshopTimeOffBlocksForDay = (
+  entries: CalendarTimeOff[],
+  dateKey: string,
+  openMinutes: number,
+  closeMinutes: number,
+) => {
+  const dayStart = new Date(`${dateKey}T00:00:00`);
+  const dayEnd = new Date(`${dateKey}T23:59:59.999`);
+
+  return entries.flatMap<TimeOffBlock>((entry) => {
+    const start = new Date(entry.startAt);
+    const end = new Date(entry.endAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return [];
+    }
+    if (end <= dayStart || start >= dayEnd) {
+      return [];
+    }
+
+    const visibleStart = start < dayStart ? dayStart : start;
+    const visibleEnd = end > dayEnd ? dayEnd : end;
+    const startMinutes = (visibleStart.getHours() * 60) + visibleStart.getMinutes();
+    const endMinutes = (visibleEnd.getHours() * 60) + visibleEnd.getMinutes();
+    const clippedStart = clamp(startMinutes, openMinutes, closeMinutes);
+    const clippedEnd = clamp(endMinutes, openMinutes, closeMinutes);
+
+    if (clippedEnd <= clippedStart) {
+      return [];
+    }
+
+    return [{
+      id: `${entry.id}-${dateKey}`,
+      top: (clippedStart - openMinutes) * PX_PER_MINUTE,
+      height: Math.max(18, (clippedEnd - clippedStart) * PX_PER_MINUTE),
+      scope: entry.scope,
+      label: entry.reason || (entry.scope === "WORKSHOP" ? "Workshop block" : "Time off"),
+    }];
+  });
+};
+
+const toPositionedJobs = (
+  jobs: CalendarJob[],
+  openMinutes: number,
+  closeMinutes: number,
+  columnWidth: number,
+) => {
+  const sortableJobs = jobs
+    .map((job) => {
+      if (!job.scheduledStartAt || !job.scheduledEndAt) {
+        return null;
+      }
+
+      const start = new Date(job.scheduledStartAt);
+      const end = new Date(job.scheduledEndAt);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return null;
+      }
+
+      const startMinutes = (start.getHours() * 60) + start.getMinutes();
+      const endMinutes = (end.getHours() * 60) + end.getMinutes();
+      const clippedStart = clamp(startMinutes, openMinutes, closeMinutes);
+      const clippedEnd = clamp(endMinutes, openMinutes, closeMinutes);
+
+      if (clippedEnd <= clippedStart) {
+        return null;
+      }
+
+      return {
+        job,
+        startMinutes,
+        endMinutes,
+        clippedStart,
+        clippedEnd,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .sort((left, right) =>
+      left.startMinutes - right.startMinutes
+      || left.endMinutes - right.endMinutes
+      || left.job.createdAt.localeCompare(right.job.createdAt));
+
+  const laneEndMinutes: number[] = [];
+  let laneCount = 0;
+
+  const laneAssignments = sortableJobs.map((entry) => {
+    let laneIndex = laneEndMinutes.findIndex((laneEnd) => laneEnd <= entry.startMinutes);
+    if (laneIndex === -1) {
+      laneIndex = laneEndMinutes.length;
+      laneEndMinutes.push(entry.endMinutes);
+    } else {
+      laneEndMinutes[laneIndex] = entry.endMinutes;
+    }
+
+    laneCount = Math.max(laneCount, laneEndMinutes.length);
+    return {
+      ...entry,
+      laneIndex,
+    };
+  });
+
+  const effectiveLaneCount = Math.max(1, laneCount);
+  const totalGap = JOB_BLOCK_GAP * (effectiveLaneCount - 1);
+  const laneWidth = Math.max(72, (columnWidth - totalGap) / effectiveLaneCount);
+
+  return laneAssignments.map<PositionedJob>((entry) => ({
+    job: entry.job,
+    top: (entry.clippedStart - openMinutes) * PX_PER_MINUTE,
+    height: Math.max(MIN_BOOKING_BLOCK_HEIGHT, (entry.clippedEnd - entry.clippedStart) * PX_PER_MINUTE),
+    left: entry.laneIndex * (laneWidth + JOB_BLOCK_GAP),
+    width: laneWidth,
+  }));
+};
 
 const buildInitialDraft = (
   job: CalendarJob,
+  preferredDateKey: string,
   calendarDay: CalendarResponse["days"][number] | undefined,
 ): ScheduleDraft => ({
   staffId: job.assignedStaffId || "",
+  dateKey: getJobDateKey(job) || preferredDateKey,
   startTime: toLocalTimeInput(job.scheduledStartAt) || calendarDay?.opensAt || "10:00",
   durationMinutes: `${job.durationMinutes || 60}`,
 });
 
-const buildTimelineRange = (calendarDay: CalendarResponse["days"][number] | undefined) => {
-  const openMinutes = parseClockMinutes(calendarDay?.opensAt) ?? DEFAULT_OPEN_MINUTES;
-  const closeMinutes = parseClockMinutes(calendarDay?.closesAt) ?? DEFAULT_CLOSE_MINUTES;
-  const endMinutes = closeMinutes > openMinutes ? closeMinutes : openMinutes + 60;
-  return {
-    openMinutes,
-    closeMinutes: endMinutes,
-    totalMinutes: endMinutes - openMinutes,
-  };
+const buildJobToneClass = (job: CalendarJob, todayKey: string) => {
+  const classes = ["workshop-scheduler-block"];
+
+  switch (job.rawStatus) {
+    case "BOOKING_MADE":
+      classes.push("workshop-scheduler-block--booked");
+      break;
+    case "WAITING_FOR_APPROVAL":
+      classes.push("workshop-scheduler-block--approval");
+      break;
+    case "WAITING_FOR_PARTS":
+      classes.push("workshop-scheduler-block--parts");
+      break;
+    case "BIKE_READY":
+      classes.push("workshop-scheduler-block--ready");
+      break;
+    default:
+      classes.push("workshop-scheduler-block--default");
+      break;
+  }
+
+  if (isOverdueJob(job, todayKey)) {
+    classes.push("workshop-scheduler-block--overdue");
+  }
+
+  return classes.join(" ");
 };
 
-const getVisibleBlock = (
-  startIso: string | null | undefined,
-  endIso: string | null | undefined,
-  openMinutes: number,
-  closeMinutes: number,
-) => {
-  if (!startIso || !endIso) {
-    return null;
-  }
-
-  const start = new Date(startIso);
-  const end = new Date(endIso);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return null;
-  }
-
-  const startMinutes = (start.getHours() * 60) + start.getMinutes();
-  const endMinutes = (end.getHours() * 60) + end.getMinutes();
-  const clippedStart = clamp(startMinutes, openMinutes, closeMinutes);
-  const clippedEnd = clamp(endMinutes, openMinutes, closeMinutes);
-  if (clippedEnd <= clippedStart) {
-    return null;
-  }
-
-  return {
-    left: (clippedStart - openMinutes) * PX_PER_MINUTE,
-    width: Math.max(16, (clippedEnd - clippedStart) * PX_PER_MINUTE),
-  };
-};
-
-const formatRoleLabel = (row: CalendarStaffRow) => {
-  if (row.operationalRole && row.operationalRole !== "WORKSHOP") {
-    return `${row.role} · ${row.operationalRole}`;
-  }
-  return row.role;
-};
-
-const getAvailabilityForDate = (row: CalendarStaffRow, dateKey: string) =>
-  row.availability.find((entry) => entry.date === dateKey) ?? null;
-
-const getWorkingHoursForDate = (row: CalendarStaffRow, dateKey: string) =>
-  row.workingHours.find((entry) => entry.date === dateKey) ?? null;
-
-export const WorkshopCalendarPage = () => {
+export const WorkshopSchedulerScreen = ({
+  embedded = false,
+  refreshToken = 0,
+  showToolbar = !embedded,
+  title,
+  description,
+  backLinkTo = embedded ? null : "/workshop",
+  view: controlledView,
+  anchorDateKey: controlledAnchorDateKey,
+  onChangeView,
+  onChangeAnchorDateKey,
+  technicianId,
+  onTechnicianIdChange,
+  visibleJobIds,
+}: WorkshopSchedulerScreenProps) => {
   const { success, error } = useToasts();
   const [searchParams, setSearchParams] = useSearchParams();
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedJob, setSelectedJob] = useState<CalendarJob | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [internalTechnicianId, setInternalTechnicianId] = useState("");
   const [draft, setDraft] = useState<ScheduleDraft>({
     staffId: "",
+    dateKey: "",
     startTime: "",
     durationMinutes: "60",
   });
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const dateKey = searchParams.get("date") || todayDateKey();
+  const standaloneView = searchParams.get("view") === "day" ? "day" : "week";
+  const standaloneAnchorDateKey = searchParams.get("date") || workshopTodayDateKey();
+  const view = controlledView ?? standaloneView;
+  const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
+  const selectedTechnicianId = technicianId ?? internalTechnicianId;
+  const requestedRange = useMemo(() => buildVisibleRange(anchorDateKey, view), [anchorDateKey, view]);
+  const todayKey = workshopTodayDateKey();
+
+  const updateSearchParams = (updates: Record<string, string | null>) => {
+    const nextParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!value) {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, value);
+      }
+    });
+    setSearchParams(nextParams);
+  };
+
+  const changeView = (nextView: CalendarViewMode) => {
+    if (onChangeView) {
+      onChangeView(nextView);
+      return;
+    }
+
+    updateSearchParams({ view: nextView });
+  };
+
+  const changeAnchorDateKey = (nextDateKey: string) => {
+    if (onChangeAnchorDateKey) {
+      onChangeAnchorDateKey(nextDateKey);
+      return;
+    }
+
+    updateSearchParams({ date: nextDateKey });
+  };
+
+  const changeTechnicianId = (nextTechnicianId: string) => {
+    if (onTechnicianIdChange) {
+      onTechnicianIdChange(nextTechnicianId);
+      return;
+    }
+
+    setInternalTechnicianId(nextTechnicianId);
+  };
 
   const loadCalendar = async () => {
     setLoading(true);
@@ -313,7 +687,7 @@ export const WorkshopCalendarPage = () => {
 
     try {
       const payload = await apiGet<CalendarResponse>(
-        `/api/workshop/calendar?from=${encodeURIComponent(dateKey)}&to=${encodeURIComponent(dateKey)}`,
+        `/api/workshop/calendar?from=${encodeURIComponent(requestedRange.from)}&to=${encodeURIComponent(requestedRange.to)}`,
       );
       setCalendar(payload);
     } catch (loadCalendarError) {
@@ -331,36 +705,123 @@ export const WorkshopCalendarPage = () => {
   useEffect(() => {
     void loadCalendar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateKey]);
+  }, [requestedRange.from, requestedRange.to, refreshToken]);
 
-  const calendarDay = calendar?.days[0];
-  const timeline = useMemo(() => buildTimelineRange(calendarDay), [calendarDay]);
-  const timelineWidth = Math.max(780, timeline.totalMinutes * PX_PER_MINUTE);
+  const days = calendar?.days ?? [];
+  const daysByDateKey = useMemo(
+    () => new Map(days.map((day) => [day.date, day])),
+    [days],
+  );
+  const timeline = useMemo(() => buildTimelineRange(days), [days]);
+  const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
+  const trackHeight = Math.max(660, timeline.totalMinutes * PX_PER_MINUTE);
+  const dayColumnWidth = view === "week" ? WEEK_DAY_WIDTH : DAY_VIEW_WIDTH;
+  const scheduledJobs = calendar?.scheduledJobs ?? [];
+  const unassignedJobs = calendar?.unassignedJobs ?? [];
+  const unscheduledJobs = calendar?.unscheduledJobs ?? [];
+  const filteredScheduledJobs = useMemo(
+    () => (!visibleJobIds ? scheduledJobs : scheduledJobs.filter((job) => visibleJobIds.has(job.id))),
+    [scheduledJobs, visibleJobIds],
+  );
+  const filteredUnassignedJobs = useMemo(
+    () => (!visibleJobIds ? unassignedJobs : unassignedJobs.filter((job) => visibleJobIds.has(job.id))),
+    [unassignedJobs, visibleJobIds],
+  );
+  const filteredUnscheduledJobs = useMemo(
+    () => (!visibleJobIds ? unscheduledJobs : unscheduledJobs.filter((job) => visibleJobIds.has(job.id))),
+    [unscheduledJobs, visibleJobIds],
+  );
+  const allJobsById = useMemo(() => {
+    const entries = [...filteredScheduledJobs, ...filteredUnassignedJobs, ...filteredUnscheduledJobs];
+    return new Map(entries.map((job) => [job.id, job]));
+  }, [filteredScheduledJobs, filteredUnassignedJobs, filteredUnscheduledJobs]);
+  const selectedJob = selectedJobId ? allJobsById.get(selectedJobId) ?? null : null;
 
-  const timeLabels = useMemo(() => {
-    const labels: Array<{ label: string; left: number }> = [];
-    const startHour = Math.floor(timeline.openMinutes / 60) * 60;
-    const endHour = Math.ceil(timeline.closeMinutes / 60) * 60;
-
-    for (let minutes = startHour; minutes <= endHour; minutes += 60) {
-      const left = (minutes - timeline.openMinutes) * PX_PER_MINUTE;
-      labels.push({
-        label: formatClockLabel(minutes),
-        left,
-      });
+  useEffect(() => {
+    if (!selectedJobId) {
+      return;
     }
 
-    return labels;
-  }, [timeline.closeMinutes, timeline.openMinutes]);
+    if (!allJobsById.has(selectedJobId)) {
+      setSelectedJobId(null);
+      setScheduleError(null);
+    }
+  }, [allJobsById, selectedJobId]);
 
-  const openEditor = (job: CalendarJob) => {
-    setSelectedJob(job);
-    setDraft(buildInitialDraft(job, calendarDay));
+  useEffect(() => {
+    if (selectedTechnicianId && !(calendar?.staff ?? []).some((staff) => staff.id === selectedTechnicianId)) {
+      changeTechnicianId("");
+    }
+  }, [calendar?.staff, selectedTechnicianId]);
+
+  const visibleScheduledJobs = useMemo(
+    () => (
+      selectedTechnicianId
+        ? filteredScheduledJobs.filter((job) => job.assignedStaffId === selectedTechnicianId)
+        : filteredScheduledJobs
+    ),
+    [filteredScheduledJobs, selectedTechnicianId],
+  );
+
+  const jobsByDay = useMemo(() => {
+    const next = new Map<string, CalendarJob[]>();
+    days.forEach((day) => {
+      next.set(day.date, []);
+    });
+
+    visibleScheduledJobs.forEach((job) => {
+      const dateKey = getJobDateKey(job);
+      if (!dateKey || !next.has(dateKey)) {
+        return;
+      }
+      next.get(dateKey)?.push(job);
+    });
+
+    return next;
+  }, [days, visibleScheduledJobs]);
+
+  const positionedJobsByDay = useMemo(() => {
+    const next = new Map<string, PositionedJob[]>();
+    days.forEach((day) => {
+      next.set(
+        day.date,
+        toPositionedJobs(jobsByDay.get(day.date) ?? [], timeline.openMinutes, timeline.closeMinutes, dayColumnWidth),
+      );
+    });
+    return next;
+  }, [dayColumnWidth, days, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
+
+  const workshopTimeOffByDay = useMemo(() => {
+    const next = new Map<string, TimeOffBlock[]>();
+    days.forEach((day) => {
+      const applicableEntries = (calendar?.workshopTimeOff ?? []).filter((entry) => {
+        if (entry.scope === "WORKSHOP") {
+          return true;
+        }
+        return selectedTechnicianId ? entry.staffId === selectedTechnicianId : false;
+      });
+
+      next.set(
+        day.date,
+        getWorkshopTimeOffBlocksForDay(applicableEntries, day.date, timeline.openMinutes, timeline.closeMinutes),
+      );
+    });
+    return next;
+  }, [calendar?.workshopTimeOff, days, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
+
+  const staffCount = calendar?.staff.length ?? 0;
+  const staffFilterOptions = calendar?.staff ?? [];
+  const selectedTechnician = staffFilterOptions.find((staff) => staff.id === selectedTechnicianId) ?? null;
+
+  const openEditor = (job: CalendarJob, preferredDateKey?: string) => {
+    const editorDateKey = preferredDateKey || getJobDateKey(job) || anchorDateKey;
+    setSelectedJobId(job.id);
+    setDraft(buildInitialDraft(job, editorDateKey, daysByDateKey.get(editorDateKey)));
     setScheduleError(null);
   };
 
   const closeEditor = () => {
-    setSelectedJob(null);
+    setSelectedJobId(null);
     setScheduleError(null);
   };
 
@@ -369,9 +830,13 @@ export const WorkshopCalendarPage = () => {
       return;
     }
 
-    const scheduledStartAt = buildScheduleIso(dateKey, draft.startTime);
+    const scheduledStartAt = buildScheduleIso(draft.dateKey, draft.startTime);
     const durationMinutes = Number(draft.durationMinutes);
 
+    if (!draft.dateKey) {
+      setScheduleError("Choose a valid calendar date.");
+      return;
+    }
     if (!scheduledStartAt) {
       setScheduleError("Choose a valid start time.");
       return;
@@ -395,8 +860,8 @@ export const WorkshopCalendarPage = () => {
       );
 
       success(response.idempotent ? "Schedule already matches." : "Workshop schedule updated.");
-      closeEditor();
       await loadCalendar();
+      closeEditor();
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Failed to update workshop schedule";
       setScheduleError(message);
@@ -423,8 +888,8 @@ export const WorkshopCalendarPage = () => {
       );
 
       success(response.idempotent ? "Timed schedule already cleared." : "Timed schedule cleared.");
-      closeEditor();
       await loadCalendar();
+      closeEditor();
     } catch (clearError) {
       const message = clearError instanceof Error ? clearError.message : "Failed to clear timed schedule";
       setScheduleError(message);
@@ -434,93 +899,120 @@ export const WorkshopCalendarPage = () => {
     }
   };
 
-  const scheduledJobsCount = calendar?.scheduledJobs.length ?? 0;
-  const unscheduledJobs = calendar?.unscheduledJobs ?? [];
-  const unassignedTimedJobs = calendar?.unassignedJobs ?? [];
-  const selectableStaff = (calendar?.staff ?? []).filter((staff) => {
-    const availability = getAvailabilityForDate(staff, dateKey);
-    if (!availability) {
-      return false;
-    }
-    return availability.source !== "UNAVAILABLE" || staff.id === selectedJob?.assignedStaffId;
-  });
+  const toolbarLeadingAction: ReactNode = backLinkTo ? (
+    <Link to={backLinkTo} className="button-link">Back to Operating System</Link>
+  ) : null;
 
   return (
-    <div className="page-shell page-shell-workspace workshop-calendar-page">
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h1>Workshop Calendar</h1>
-            <p className="muted-text">
-              Day view for technician cover, timed workshop jobs, time off, and quick scheduling from the live queue.
-            </p>
+    <div className={embedded ? "workshop-scheduler-screen workshop-scheduler-screen--embedded" : "page-shell page-shell-workspace workshop-scheduler-page"}>
+      {showToolbar ? (
+        <section className={embedded ? "workshop-scheduler-toolbar workshop-scheduler-toolbar--embedded" : "card workshop-scheduler-toolbar"}>
+          <div className="card-header-row">
+            <div>
+              <h1>{title || (embedded ? "Scheduler" : "Workshop Calendar")}</h1>
+              <p className="muted-text">
+                {description || (
+                  embedded
+                    ? "Week-first timed scheduling is now the main workshop surface, with day detail on demand and booking blocks rendered directly in the grid."
+                    : "Timed workshop scheduler with week view first, day detail on demand, and bookings rendered as real calendar blocks instead of staffing rows."
+                )}
+              </p>
+            </div>
+            <div className="actions-inline">
+              {toolbarLeadingAction}
+              <button type="button" onClick={() => void loadCalendar()} disabled={loading}>
+                {loading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
           </div>
-          <div className="actions-inline">
-            <button
-              type="button"
-              onClick={() => setSearchParams({ date: shiftDateKey(dateKey, -1) })}
-            >
-              Previous Day
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchParams({ date: todayDateKey() })}
-              disabled={dateKey === todayDateKey()}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchParams({ date: shiftDateKey(dateKey, 1) })}
-            >
-              Next Day
-            </button>
-            <Link to="/workshop" className="button-link">Back to Workshop</Link>
-            <button type="button" onClick={() => void loadCalendar()} disabled={loading}>
-              {loading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-        </div>
 
-        <div className="dashboard-summary-grid workshop-calendar-summary-grid">
-          <article className="metric-card">
-            <span className="metric-label">Day</span>
-            <strong className="metric-value">
-              {parseDateKey(dateKey).toLocaleDateString(undefined, {
-                weekday: "long",
-                day: "numeric",
-                month: "short",
-              })}
-            </strong>
-            <span className="dashboard-metric-detail">{dateKey}</span>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">Trading Hours</span>
-            <strong className="metric-value">
-              {calendarDay?.isClosed ? "Closed" : `${calendarDay?.opensAt || "--:--"}-${calendarDay?.closesAt || "--:--"}`}
-            </strong>
-            <span className="dashboard-metric-detail">
-              {calendarDay?.closedReason || `${calendar?.range.timeZone || "Local"} time`}
-            </span>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">Timed Jobs</span>
-            <strong className="metric-value">{scheduledJobsCount}</strong>
-            <span className="dashboard-metric-detail">
-              {unassignedTimedJobs.length} unassigned timed / {unscheduledJobs.length} without a timed slot
-            </span>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">Workshop Time Off</span>
-            <strong className="metric-value">{calendar?.workshopTimeOff.length ?? 0}</strong>
-            <span className="dashboard-metric-detail">
-              {calendar?.usesOperationalRoleTags
-                ? "Using workshop role tags"
-                : "Using broad active-staff fallback"}
-            </span>
-          </article>
-        </div>
-      </section>
+          <div className="workshop-scheduler-toolbar__controls">
+            <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Calendar view mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "week"}
+                className={view === "week" ? "primary" : ""}
+                onClick={() => changeView("week")}
+              >
+                Week
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "day"}
+                className={view === "day" ? "primary" : ""}
+                onClick={() => changeView("day")}
+              >
+                Day
+              </button>
+            </div>
+
+            <div className="actions-inline">
+              <button
+                type="button"
+                onClick={() => changeAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, view, -1))}
+              >
+                {view === "week" ? "Previous Week" : "Previous Day"}
+              </button>
+              <button
+                type="button"
+                onClick={() => changeAnchorDateKey(workshopTodayDateKey())}
+                disabled={anchorDateKey === todayKey}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => changeAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, view, 1))}
+              >
+                {view === "week" ? "Next Week" : "Next Day"}
+              </button>
+            </div>
+
+            <label className="workshop-scheduler-toolbar__filter">
+              Technician
+              <select
+                value={selectedTechnicianId}
+                onChange={(event) => changeTechnicianId(event.target.value)}
+              >
+                <option value="">All technicians</option>
+                {staffFilterOptions.map((staff) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="workshop-scheduler-toolbar__summary">
+            <article className="metric-card">
+              <span className="metric-label">Visible range</span>
+              <strong className="metric-value">{formatRangeHeading(days, view)}</strong>
+              <span className="dashboard-metric-detail">
+                {days.length ? `${days[0].date} - ${days[days.length - 1].date}` : anchorDateKey}
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Timed bookings</span>
+              <strong className="metric-value">{visibleScheduledJobs.length}</strong>
+              <span className="dashboard-metric-detail">
+                {filteredUnassignedJobs.length} unassigned · {filteredUnscheduledJobs.length} still need a slot
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Technician context</span>
+              <strong className="metric-value">{selectedTechnician?.name || `${staffCount} staff`}</strong>
+              <span className="dashboard-metric-detail">
+                {selectedTechnician
+                  ? "Showing this technician's timed bookings"
+                  : "Showing all scheduled workshop work"}
+              </span>
+            </article>
+          </div>
+        </section>
+      ) : null}
 
       {loadError ? (
         <section className="restricted-panel warning-panel">
@@ -528,164 +1020,141 @@ export const WorkshopCalendarPage = () => {
         </section>
       ) : null}
 
-      <div className="workshop-calendar-layout">
-        <section className="card workshop-calendar-board">
-          <div className="card-header-row">
+      <div className={embedded ? "workshop-scheduler-layout workshop-scheduler-layout--embedded" : "workshop-scheduler-layout"}>
+        <section className={embedded ? "workshop-scheduler-board workshop-scheduler-board--embedded" : "card workshop-scheduler-board"}>
+          <div className="workshop-scheduler-board__header">
             <div>
-              <h2>Day Grid</h2>
+              <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
               <p className="muted-text">
-                Scheduled jobs open their workshop record directly. Use the edit action on a job card or the queue to plan time and assignment.
+                Scheduled jobs render as timed blocks in the grid. Pick a booking to adjust timing and assignment without leaving the scheduler.
               </p>
+            </div>
+            <div className="table-secondary">
+              {calendar?.range.timeZone || "Local"} time
             </div>
           </div>
 
-          {calendarDay?.isClosed ? (
-            <div className="restricted-panel info-panel">
-              {calendarDay.closedReason || "Store is closed on this day. Timed scheduling is unavailable until the next open day."}
-            </div>
-          ) : null}
+          <div className="workshop-scheduler-scroll">
+            <div
+              className="workshop-scheduler-grid"
+              style={{ gridTemplateColumns: `88px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)` }}
+            >
+              <div className="workshop-scheduler-grid__corner">Time</div>
 
-          {!calendarDay?.isClosed ? (
-            <div className="workshop-calendar-scroll">
-              <div className="workshop-calendar-grid" style={{ minWidth: `${timelineWidth + 210}px` }}>
-                <div className="workshop-calendar-header-row">
-                  <div className="workshop-calendar-staff-col">
-                    <strong>Staff</strong>
+              {days.map((day) => {
+                const dayCapacity = toDayCapacitySummary(calendar?.staff ?? [], day.date, selectedTechnicianId);
+                const visibleDayJobs = jobsByDay.get(day.date)?.length ?? 0;
+
+                return (
+                  <div key={day.date} className="workshop-scheduler-grid__day-header">
+                    <strong>{day.weekday}</strong>
+                    <span>{formatOptionalDate(`${day.date}T12:00:00.000Z`)}</span>
+                    <span>
+                      {day.isClosed
+                        ? "Closed"
+                        : `${day.opensAt || "--:--"} - ${day.closesAt || "--:--"}`}
+                    </span>
+                    <span>{visibleDayJobs} jobs</span>
+                    <span>
+                      {dayCapacity.totalMinutes
+                        ? `${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
+                        : "Capacity unavailable"}
+                    </span>
                   </div>
-                  <div className="workshop-calendar-time-col" style={{ width: `${timelineWidth}px` }}>
-                    {timeLabels.map((label) => (
-                      <span
-                        key={`${label.label}-${label.left}`}
-                        className="workshop-calendar-time-label mono-text"
-                        style={{ left: `${label.left}px` }}
-                      >
-                        {label.label}
-                      </span>
-                    ))}
+                );
+              })}
+
+              <div className="workshop-scheduler-grid__time-axis" style={{ height: `${trackHeight}px` }}>
+                {timeLabels.map((minutes) => (
+                  <div
+                    key={minutes}
+                    className="workshop-scheduler-grid__time-label mono-text"
+                    style={{ top: `${(minutes - timeline.openMinutes) * PX_PER_MINUTE}px` }}
+                  >
+                    {formatClockLabel(minutes)}
                   </div>
-                </div>
-
-                {calendar?.staff.length ? calendar.staff.map((staff) => {
-                  const availability = getAvailabilityForDate(staff, dateKey);
-                  const workingHours = getWorkingHoursForDate(staff, dateKey);
-                  const capacity = staff.dailyCapacity[0] ?? null;
-                  const workingStart = parseClockMinutes(workingHours?.startTime) ?? timeline.openMinutes;
-                  const workingEnd = parseClockMinutes(workingHours?.endTime) ?? timeline.openMinutes;
-                  const workingHoursBlock = workingHours
-                    ? {
-                        left: (workingStart - timeline.openMinutes) * PX_PER_MINUTE,
-                        width: Math.max(12, (workingEnd - workingStart) * PX_PER_MINUTE),
-                      }
-                    : null;
-
-                  return (
-                    <div key={staff.id} className="workshop-calendar-row">
-                      <div className="workshop-calendar-staff-col">
-                        <div className="workshop-calendar-staff-name">{staff.name}</div>
-                        <div className="table-secondary">{formatRoleLabel(staff)}</div>
-                        <div className="table-secondary">
-                          {workingHours ? `${workingHours.startTime}-${workingHours.endTime}` : "Unavailable"}
-                        </div>
-                        <div className="table-secondary">
-                          {availability?.label || "No rota availability"}
-                        </div>
-                        {capacity ? (
-                          <div className="table-secondary">
-                            {capacity.bookedMinutes} booked / {capacity.availableMinutes} free
-                          </div>
-                        ) : null}
-                      </div>
-                      <div
-                        className={`workshop-calendar-track${workingHours ? "" : " workshop-calendar-track--unavailable"}`}
-                        style={{ width: `${timelineWidth}px` }}
-                      >
-                        {workingHoursBlock ? (
-                          <div
-                            className="workshop-calendar-working-band"
-                            style={{
-                              left: `${workingHoursBlock.left}px`,
-                              width: `${workingHoursBlock.width}px`,
-                            }}
-                          />
-                        ) : null}
-
-                        {staff.timeOff.map((entry) => {
-                          const block = getVisibleBlock(
-                            entry.startAt,
-                            entry.endAt,
-                            timeline.openMinutes,
-                            timeline.closeMinutes,
-                          );
-                          if (!block) {
-                            return null;
-                          }
-
-                          return (
-                            <div
-                              key={entry.id}
-                              className={`workshop-calendar-timeoff workshop-calendar-timeoff--${entry.scope.toLowerCase()}`}
-                              style={{ left: `${block.left}px`, width: `${block.width}px` }}
-                              title={entry.reason || (entry.scope === "WORKSHOP" ? "Workshop time off" : "Staff time off")}
-                            >
-                              <span>{entry.reason || (entry.scope === "WORKSHOP" ? "Workshop block" : "Time off")}</span>
-                            </div>
-                          );
-                        })}
-
-                        {staff.scheduledJobs.map((job) => {
-                          const block = getVisibleBlock(
-                            job.scheduledStartAt,
-                            job.scheduledEndAt,
-                            timeline.openMinutes,
-                            timeline.closeMinutes,
-                          );
-                          if (!block) {
-                            return null;
-                          }
-
-                          return (
-                            <div
-                              key={job.id}
-                              className="workshop-calendar-job"
-                              style={{ left: `${block.left}px`, width: `${block.width}px` }}
-                            >
-                              <Link to={job.jobPath} className="workshop-calendar-job-link">
-                                <strong>{getJobHeading(job)}</strong>
-                                <span>{formatOptionalTime(job.scheduledStartAt)}-{formatOptionalTime(job.scheduledEndAt)}</span>
-                                <span>{job.customerName || workshopRawStatusLabel(job.rawStatus)}</span>
-                              </Link>
-                              <button
-                                type="button"
-                                className="workshop-calendar-job-edit"
-                                onClick={() => openEditor(job)}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                }) : (
-                  <div className="restricted-panel info-panel">
-                    No active workshop staff rows are available for this day yet.
-                  </div>
-                )}
+                ))}
               </div>
+
+              {days.map((day) => {
+                const dayBlocks = positionedJobsByDay.get(day.date) ?? [];
+                const timeOffBlocks = workshopTimeOffByDay.get(day.date) ?? [];
+
+                return (
+                  <div
+                    key={`${day.date}-track`}
+                    className={`workshop-scheduler-grid__day-track${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}`}
+                    style={{ height: `${trackHeight}px` }}
+                  >
+                    {timeLabels.map((minutes) => (
+                      <span
+                        key={`${day.date}-${minutes}`}
+                        className="workshop-scheduler-grid__hour-line"
+                        style={{ top: `${(minutes - timeline.openMinutes) * PX_PER_MINUTE}px` }}
+                      />
+                    ))}
+
+                    {timeOffBlocks.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`workshop-scheduler-timeoff workshop-scheduler-timeoff--${entry.scope.toLowerCase()}`}
+                        style={{ top: `${entry.top}px`, height: `${entry.height}px` }}
+                      >
+                        <span>{entry.label}</span>
+                      </div>
+                    ))}
+
+                    {dayBlocks.map(({ job, top, height, left, width }) => {
+                      const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
+                      const toneClass = `${buildJobToneClass(job, todayKey)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}`;
+
+                      return (
+                        <button
+                          key={job.id}
+                          type="button"
+                          className={toneClass}
+                          title={getBookingTooltip(job)}
+                          style={{
+                            top: `${top}px`,
+                            left: `${left}px`,
+                            width: `${width}px`,
+                            height: `${height}px`,
+                          }}
+                          onClick={() => openEditor(job, day.date)}
+                        >
+                          <div className="workshop-scheduler-block__time">
+                            {formatOptionalTime(job.scheduledStartAt)} - {formatOptionalTime(job.scheduledEndAt)}
+                          </div>
+                          <strong className="workshop-scheduler-block__customer">
+                            {getBookingCustomerName(job)}
+                          </strong>
+                          <div className="workshop-scheduler-block__bike">
+                            {getBookingBikeLine(job)}
+                          </div>
+                          {!isCompactBlock ? (
+                            <div className="workshop-scheduler-block__meta">
+                              {getBookingMetaLine(job, todayKey)}
+                            </div>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-          ) : null}
+          </div>
         </section>
 
-        <aside className="workshop-calendar-sidebar">
-          <section className="card workshop-calendar-panel">
+        <aside className={embedded ? "workshop-scheduler-rail workshop-scheduler-rail--embedded" : "workshop-scheduler-rail"}>
+          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
-                <h2>{selectedJob ? "Schedule Editor" : "Scheduling Queue"}</h2>
+                <h2>{selectedJob ? "Booking editor" : "Booking details"}</h2>
                 <p className="muted-text">
                   {selectedJob
-                    ? "Set the timed slot and assigned mechanic for the selected job."
-                    : "Pick an unscheduled or unassigned job to plan it for this day."}
+                    ? "Adjust the selected workshop booking without leaving the schedule."
+                    : "Pick a booking block or queue item to schedule it."}
                 </p>
               </div>
               {selectedJob ? (
@@ -696,36 +1165,38 @@ export const WorkshopCalendarPage = () => {
             </div>
 
             {selectedJob ? (
-              <div className="workshop-calendar-editor">
-                <div className="workshop-calendar-editor-summary">
+              <div className="workshop-scheduler-editor">
+                <div className="workshop-scheduler-editor__summary">
                   <strong>{getJobHeading(selectedJob)}</strong>
-                  <span className={workshopExecutionStatusClass(selectedJob.status, selectedJob.rawStatus)}>
-                    {workshopExecutionStatusLabel(selectedJob.status)}
+                  <span className={workshopRawStatusClass(selectedJob.rawStatus)}>
+                    {workshopRawStatusLabel(selectedJob.rawStatus)}
                   </span>
                   <div className="table-secondary">{getJobSubline(selectedJob)}</div>
-                  <div className="table-secondary">
-                    Current slot: {selectedJob.scheduledStartAt
-                      ? `${formatOptionalTime(selectedJob.scheduledStartAt)}-${formatOptionalTime(selectedJob.scheduledEndAt)}`
-                      : "No timed slot yet"}
-                  </div>
                 </div>
 
                 <label>
-                  Assign staff
+                  Date
+                  <input
+                    type="date"
+                    value={draft.dateKey}
+                    onChange={(event) => setDraft((current) => ({ ...current, dateKey: event.target.value }))}
+                    disabled={saving}
+                  />
+                </label>
+
+                <label>
+                  Technician
                   <select
                     value={draft.staffId}
                     onChange={(event) => setDraft((current) => ({ ...current, staffId: event.target.value }))}
                     disabled={saving}
                   >
                     <option value="">Leave unassigned</option>
-                    {selectableStaff.map((staff) => {
-                      const availability = getAvailabilityForDate(staff, dateKey);
-                      return (
+                    {staffFilterOptions.map((staff) => (
                       <option key={staff.id} value={staff.id}>
-                        {staff.name}{availability ? ` · ${availability.label}` : ""}
+                        {staff.name}
                       </option>
-                      );
-                    })}
+                    ))}
                   </select>
                 </label>
 
@@ -736,7 +1207,7 @@ export const WorkshopCalendarPage = () => {
                       type="time"
                       value={draft.startTime}
                       onChange={(event) => setDraft((current) => ({ ...current, startTime: event.target.value }))}
-                      disabled={saving || Boolean(calendarDay?.isClosed)}
+                      disabled={saving}
                     />
                   </label>
                   <label>
@@ -746,11 +1217,11 @@ export const WorkshopCalendarPage = () => {
                       min={15}
                       step={15}
                       value={draft.durationMinutes}
+                      list="workshop-scheduler-duration-presets"
                       onChange={(event) => setDraft((current) => ({ ...current, durationMinutes: event.target.value }))}
-                      list="workshop-calendar-duration-presets"
-                      disabled={saving || Boolean(calendarDay?.isClosed)}
+                      disabled={saving}
                     />
-                    <datalist id="workshop-calendar-duration-presets">
+                    <datalist id="workshop-scheduler-duration-presets">
                       {DURATION_PRESETS.map((value) => (
                         <option key={value} value={value} />
                       ))}
@@ -765,55 +1236,52 @@ export const WorkshopCalendarPage = () => {
                 ) : null}
 
                 <div className="actions-inline">
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => void saveSchedule()}
-                    disabled={saving || Boolean(calendarDay?.isClosed)}
-                  >
-                    {saving ? "Saving..." : selectedJob.scheduledStartAt ? "Save Schedule" : "Schedule Job"}
+                  <button type="button" className="primary" onClick={() => void saveSchedule()} disabled={saving}>
+                    {saving ? "Saving..." : selectedJob.scheduledStartAt ? "Save booking" : "Schedule job"}
                   </button>
                   {selectedJob.scheduledStartAt ? (
                     <button type="button" onClick={() => void clearSchedule()} disabled={saving}>
-                      Clear Timed Slot
+                      Clear slot
                     </button>
                   ) : null}
                   <Link to={selectedJob.jobPath} className="button-link">
-                    Open Job
+                    Open job
                   </Link>
                 </div>
               </div>
             ) : (
-              <div className="muted-text">
-                Select a job from the queue below or use a timed job&apos;s edit action in the grid.
+              <div className="ui-empty-state">
+                <strong className="ui-empty-state__title">No booking selected</strong>
+                <span className="ui-empty-state__description">
+                  Use the week grid as the main scheduler, then fine-tune a job here.
+                </span>
               </div>
             )}
           </section>
 
-          <section className="card workshop-calendar-panel">
+          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
-                <h2>Needs Timed Slot</h2>
-                <p className="muted-text">
-                  Jobs created through check-in or intake that still need a mechanic and time on the calendar.
-                </p>
+                <h2>Needs scheduling</h2>
+                <p className="muted-text">Jobs created through intake that still need a timed slot.</p>
               </div>
-              <span className="stock-badge stock-muted">{unscheduledJobs.length}</span>
+              <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
             </div>
-            <div className="workshop-calendar-queue">
-              {unscheduledJobs.length === 0 ? (
-                <div className="workshop-calendar-empty">No jobs are waiting for an initial timed slot.</div>
-              ) : unscheduledJobs.map((job) => (
-                <article key={job.id} className="workshop-calendar-queue-card">
+
+            <div className="workshop-scheduler-queue">
+              {filteredUnscheduledJobs.length === 0 ? (
+                <div className="workshop-scheduler-empty">No jobs are waiting for a first timed slot.</div>
+              ) : filteredUnscheduledJobs.map((job) => (
+                <article key={job.id} className="workshop-scheduler-queue-card">
                   <div>
                     <strong>{getJobHeading(job)}</strong>
-                    <div className="table-secondary">{workshopRawStatusLabel(job.rawStatus)}</div>
+                    <div className="table-secondary">{job.customerName || "Customer pending"}</div>
                     <div className="table-secondary">
-                      Due date: {job.scheduledDate ? job.scheduledDate.slice(0, 10) : "Not promised yet"}
+                      Due: {job.scheduledDate ? formatOptionalDate(job.scheduledDate) : "No promised date"}
                     </div>
                   </div>
                   <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job)}>Schedule</button>
+                    <button type="button" onClick={() => openEditor(job, anchorDateKey)}>Schedule</button>
                     <Link to={job.jobPath}>Open</Link>
                   </div>
                 </article>
@@ -821,30 +1289,29 @@ export const WorkshopCalendarPage = () => {
             </div>
           </section>
 
-          <section className="card workshop-calendar-panel">
+          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
-                <h2>Timed But Unassigned</h2>
-                <p className="muted-text">
-                  Jobs that already have a time slot on this day but still need a named mechanic.
-                </p>
+                <h2>Timed but unassigned</h2>
+                <p className="muted-text">Timed jobs that still need a named technician.</p>
               </div>
-              <span className="stock-badge stock-muted">{unassignedTimedJobs.length}</span>
+              <span className="stock-badge stock-muted">{filteredUnassignedJobs.length}</span>
             </div>
-            <div className="workshop-calendar-queue">
-              {unassignedTimedJobs.length === 0 ? (
-                <div className="workshop-calendar-empty">Every timed slot on this day is already assigned.</div>
-              ) : unassignedTimedJobs.map((job) => (
-                <article key={job.id} className="workshop-calendar-queue-card">
+
+            <div className="workshop-scheduler-queue">
+              {filteredUnassignedJobs.length === 0 ? (
+                <div className="workshop-scheduler-empty">Every timed booking is assigned to a technician.</div>
+              ) : filteredUnassignedJobs.map((job) => (
+                <article key={job.id} className="workshop-scheduler-queue-card">
                   <div>
                     <strong>{getJobHeading(job)}</strong>
                     <div className="table-secondary">
-                      {formatOptionalTime(job.scheduledStartAt)}-{formatOptionalTime(job.scheduledEndAt)}
+                      {formatOptionalDate(job.scheduledDate)} · {formatOptionalTime(job.scheduledStartAt)}
                     </div>
                     <div className="table-secondary">{job.customerName || workshopRawStatusLabel(job.rawStatus)}</div>
                   </div>
                   <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job)}>Assign</button>
+                    <button type="button" onClick={() => openEditor(job, getJobDateKey(job) || anchorDateKey)}>Assign</button>
                     <Link to={job.jobPath}>Open</Link>
                   </div>
                 </article>
@@ -852,25 +1319,30 @@ export const WorkshopCalendarPage = () => {
             </div>
           </section>
 
-          {calendar?.workshopTimeOff.length ? (
-            <section className="card workshop-calendar-panel">
+          {(calendar?.workshopTimeOff.length ?? 0) > 0 ? (
+            <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
               <div className="card-header-row">
                 <div>
-                  <h2>Workshop Blocks</h2>
-                  <p className="muted-text">Workshop-wide time off and closures for this day.</p>
+                  <h2>Time-off blocks</h2>
+                  <p className="muted-text">
+                    Workshop-wide closures and{selectedTechnician ? ` ${selectedTechnician.name}'s` : " selected technician"} blocked time.
+                  </p>
                 </div>
               </div>
-              <div className="workshop-calendar-queue">
-                {calendar.workshopTimeOff.map((entry) => (
-                  <article key={entry.id} className="workshop-calendar-queue-card">
-                    <div>
-                      <strong>{entry.reason || "Workshop time off"}</strong>
-                      <div className="table-secondary">
-                        {formatOptionalTime(entry.startAt)}-{formatOptionalTime(entry.endAt)}
+
+              <div className="workshop-scheduler-queue">
+                {calendar?.workshopTimeOff
+                  .filter((entry) => entry.scope === "WORKSHOP" || (selectedTechnicianId && entry.staffId === selectedTechnicianId))
+                  .map((entry) => (
+                    <article key={entry.id} className="workshop-scheduler-queue-card">
+                      <div>
+                        <strong>{entry.reason || (entry.scope === "WORKSHOP" ? "Workshop block" : "Staff time off")}</strong>
+                        <div className="table-secondary">
+                          {formatOptionalDate(entry.startAt)} · {formatOptionalTime(entry.startAt)} - {formatOptionalTime(entry.endAt)}
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  ))}
               </div>
             </section>
           ) : null}
@@ -879,3 +1351,5 @@ export const WorkshopCalendarPage = () => {
     </div>
   );
 };
+
+export const WorkshopCalendarPage = () => <WorkshopSchedulerScreen />;
