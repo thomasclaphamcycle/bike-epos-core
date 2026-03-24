@@ -172,7 +172,7 @@ const PX_PER_MINUTE = 1.05;
 const WEEK_DAY_WIDTH = 244;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
-const MIN_BOOKING_BLOCK_HEIGHT = 76;
+const MIN_BOOKING_BLOCK_HEIGHT = 90;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 
 const formatDateKey = (value: Date) => {
