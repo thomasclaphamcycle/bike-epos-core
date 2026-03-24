@@ -302,20 +302,6 @@ const getJobDateKey = (job: CalendarJob) => {
   return null;
 };
 
-const getJobSummaryLine = (job: CalendarJob) => {
-  const trimmed = job.summaryText?.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const heading = getJobHeading(job);
-  if (trimmed === heading) {
-    return null;
-  }
-
-  return trimmed;
-};
-
 const isOverdueJob = (job: CalendarJob, todayKey: string) => {
   const jobDateKey = getJobDateKey(job);
   return Boolean(
@@ -1088,7 +1074,7 @@ export const WorkshopSchedulerScreen = ({
                     ))}
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
-                      const toneClass = buildJobToneClass(job, todayKey);
+                      const toneClass = `${buildJobToneClass(job, todayKey)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}`;
                       const serviceLabel = getBookingServiceLabel(job);
 
                       return (

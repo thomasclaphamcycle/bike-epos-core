@@ -2615,7 +2615,7 @@ th {
   position: absolute;
   inset-inline: 0;
   height: 1px;
-  background: rgba(188, 201, 214, 0.42);
+  background: rgba(188, 201, 214, 0.3);
 }
 
 .workshop-scheduler-timeoff {
@@ -2651,39 +2651,61 @@ th {
 
 .workshop-scheduler-block {
   --scheduler-block-bg-start: #ffffff;
-  --scheduler-block-bg-end: #e9f3fb;
-  --scheduler-block-border: #b8ccdd;
-  --scheduler-block-shadow: rgba(15, 23, 42, 0.12);
+  --scheduler-block-bg-end: #dbeaf6;
+  --scheduler-block-border: #8eaac2;
+  --scheduler-block-shadow: rgba(15, 23, 42, 0.16);
+  --scheduler-block-accent: #327ac3;
   position: absolute;
   z-index: 2;
   display: grid;
   align-content: start;
-  gap: 2px;
-  min-height: 48px;
-  padding: 9px 10px;
+  gap: 3px;
+  min-height: 56px;
+  padding: 9px 10px 9px 14px;
   border: 1px solid var(--scheduler-block-border);
   border-radius: 14px;
   background: linear-gradient(180deg, var(--scheduler-block-bg-start) 0%, var(--scheduler-block-bg-end) 100%);
   box-shadow:
-    0 8px 18px var(--scheduler-block-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    0 10px 20px var(--scheduler-block-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
   color: inherit;
   text-align: left;
   overflow: hidden;
   cursor: pointer;
+  isolation: isolate;
   transition:
     transform 140ms ease,
     box-shadow 140ms ease,
     background 140ms ease,
-    border-color 140ms ease;
+    border-color 140ms ease,
+    filter 140ms ease;
+}
+
+.workshop-scheduler-block::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--scheduler-block-accent) 85%, white) 0%, var(--scheduler-block-accent) 100%);
+  border-radius: 14px 0 0 14px;
+  z-index: 0;
+}
+
+.workshop-scheduler-block > * {
+  position: relative;
+  z-index: 1;
 }
 
 .workshop-scheduler-block:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow:
-    0 12px 22px rgba(15, 23, 42, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  filter: saturate(1.02);
+    0 14px 26px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  filter: contrast(1.02) saturate(1.05);
+}
+
+.workshop-scheduler-block:active {
+  transform: translateY(-1px);
 }
 
 .workshop-scheduler-block:focus-visible {
@@ -2700,7 +2722,8 @@ th {
 }
 
 .workshop-scheduler-block strong {
-  font-size: 0.88rem;
+  font-size: 0.95rem;
+  font-weight: 800;
   color: var(--cp-navy);
   white-space: nowrap;
 }
@@ -2712,26 +2735,28 @@ th {
 .workshop-scheduler-block__time {
   font-size: 0.68rem;
   font-weight: 700;
-  color: #6a7b8b;
+  color: #617487;
   letter-spacing: 0.01em;
   text-transform: uppercase;
+  line-height: 1.05;
 }
 
 .workshop-scheduler-block__customer {
-  font-size: 0.9rem;
-  line-height: 1.2;
+  font-size: 0.95rem;
+  line-height: 1.1;
 }
 
 .workshop-scheduler-block__bike {
-  font-size: 0.78rem;
-  line-height: 1.2;
-  color: #2d4254;
+  font-size: 0.79rem;
+  line-height: 1.15;
+  color: #23394d;
+  font-weight: 600;
 }
 
 .workshop-scheduler-block__service {
   font-size: 0.71rem;
-  line-height: 1.2;
-  color: #627487;
+  line-height: 1.1;
+  color: #4f6477;
 }
 
 .workshop-scheduler-block__meta {
@@ -2740,53 +2765,103 @@ th {
   justify-content: space-between;
   gap: 6px;
   align-items: center;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .workshop-scheduler-block__technician {
-  font-size: 0.68rem;
+  font-size: 0.69rem;
   font-weight: 700;
-  color: #516474;
+  color: #43586d;
 }
 
 .workshop-scheduler-block__status {
   max-width: 100%;
-  font-size: 0.65rem;
+  font-size: 0.67rem;
   font-weight: 800;
-  padding: 2px 7px;
+  line-height: 1;
+  padding: 3px 7px;
 }
 
 .workshop-scheduler-block--default {
-  --scheduler-block-bg-end: #edf5fb;
-  --scheduler-block-border: #b9cbdb;
+  --scheduler-block-bg-end: #dce9f4;
+  --scheduler-block-border: #94aec4;
+  --scheduler-block-accent: #327ac3;
 }
 
 .workshop-scheduler-block--booked {
-  --scheduler-block-bg-end: #e2f0ff;
-  --scheduler-block-border: #8ebbe5;
+  --scheduler-block-bg-end: #d7e9ff;
+  --scheduler-block-border: #74a8dd;
+  --scheduler-block-accent: #2574c5;
 }
 
 .workshop-scheduler-block--approval {
-  --scheduler-block-bg-end: #fff4d9;
-  --scheduler-block-border: #ebcf79;
+  --scheduler-block-bg-end: #ffefbf;
+  --scheduler-block-border: #d9b343;
+  --scheduler-block-accent: #d3a514;
 }
 
 .workshop-scheduler-block--parts {
-  --scheduler-block-bg-end: #ffe8cf;
-  --scheduler-block-border: #ebb06a;
+  --scheduler-block-bg-end: #ffd9b2;
+  --scheduler-block-border: #df9650;
+  --scheduler-block-accent: #d9771c;
 }
 
 .workshop-scheduler-block--ready {
-  --scheduler-block-bg-end: #e0f5e7;
-  --scheduler-block-border: #7ecf99;
+  --scheduler-block-bg-end: #d5f0db;
+  --scheduler-block-border: #6ab785;
+  --scheduler-block-accent: #23985b;
 }
 
 .workshop-scheduler-block--overdue {
-  border-color: #d97a7a;
+  --scheduler-block-border: #d87a7a;
+  --scheduler-block-accent: #d43a3a;
   box-shadow:
-    inset 4px 0 0 #d43a3a,
-    0 8px 18px rgba(120, 23, 23, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    0 10px 20px rgba(120, 23, 23, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.workshop-scheduler-block--selected {
+  border-color: #275f95;
+  box-shadow:
+    0 0 0 2px rgba(39, 95, 149, 0.24),
+    0 16px 28px rgba(15, 23, 42, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  filter: saturate(1.05);
+}
+
+.workshop-scheduler-block__status.status-badge {
+  border-width: 1px;
+  box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.06);
+}
+
+.workshop-scheduler-block__status.status-info {
+  background: #d8ebff;
+  border-color: #9fc7ec;
+  color: #12496f;
+}
+
+.workshop-scheduler-block__status.status-warning {
+  background: #fff0c5;
+  border-color: #e2be59;
+  color: #7b5500;
+}
+
+.workshop-scheduler-block__status.status-ready {
+  background: #dbf2e4;
+  border-color: #94d1ab;
+  color: #17663d;
+}
+
+.workshop-scheduler-block__status.status-complete {
+  background: #def1e6;
+  border-color: #9fcfb1;
+  color: #145c35;
+}
+
+.workshop-scheduler-block__status.status-cancelled {
+  background: #ffe2e2;
+  border-color: #e39a9a;
+  color: #8a2323;
 }
 
 .workshop-scheduler-rail {
