@@ -2658,8 +2658,8 @@ th {
   z-index: 2;
   display: grid;
   align-content: start;
-  gap: 3px;
-  min-height: 56px;
+  gap: 4px;
+  min-height: 76px;
   padding: 9px 10px 9px 14px;
   border: 1px solid var(--scheduler-block-border);
   border-radius: 14px;
