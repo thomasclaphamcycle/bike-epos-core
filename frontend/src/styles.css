@@ -770,6 +770,12 @@ textarea {
   padding-inline: 16px;
 }
 
+.app-main--workspace-wide {
+  width: 100%;
+  max-width: none;
+  padding: 8px 2px 16px;
+}
+
 .app-main--pos {
   width: 100%;
   max-width: none;
@@ -909,6 +915,19 @@ textarea {
   gap: 10px;
 }
 
+.workshop-template-card-shell {
+  display: grid;
+}
+
+.workshop-template-card-shell-dragging {
+  opacity: 0.7;
+}
+
+.workshop-template-card-shell-drop-target .workshop-template-card {
+  border-color: #5ea9d6;
+  box-shadow: 0 0 0 1px rgba(94, 169, 214, 0.28);
+}
+
 .workshop-template-card {
   width: 100%;
   text-align: left;
@@ -918,6 +937,10 @@ textarea {
   border-radius: 12px;
   border: 1px solid var(--cp-border);
   background: #fbfdff;
+}
+
+.workshop-template-card:hover {
+  border-color: #bfd3e5;
 }
 
 .workshop-template-card-active {
@@ -933,6 +956,21 @@ textarea {
   gap: 10px;
   align-items: start;
   flex-wrap: wrap;
+}
+
+.workshop-template-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.workshop-template-card-handle {
+  cursor: grab;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #688198;
 }
 
 .workshop-template-empty {
@@ -1012,6 +1050,28 @@ textarea {
 
   .workshop-template-line {
     flex-direction: column;
+  }
+
+  .workshop-os-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-os-sidebar,
+  .workshop-os-rail {
+    position: static;
+  }
+
+  .workshop-os-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workshop-os-column {
+    flex: 0 0 340px;
+    min-width: 340px;
+  }
+
+  .workshop-os-drawer {
+    width: min(520px, 100vw);
   }
 }
 
@@ -2711,6 +2771,1110 @@ th {
   grid-template-columns: repeat(5, minmax(220px, 1fr));
   gap: 12px;
   align-items: start;
+}
+
+.workshop-os-page {
+  width: 100%;
+  max-width: none;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 12px 18px 0;
+}
+
+.workshop-os-header {
+  display: grid;
+  gap: 4px;
+  padding: 2px 2px 0;
+  background: transparent;
+}
+
+.workshop-os-header__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.workshop-os-header__copy,
+.workshop-os-header__actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-header__copy {
+  flex-direction: column;
+  min-width: 0;
+}
+
+.workshop-os-header__copy .ui-page-eyebrow {
+  font-size: 0.68rem;
+}
+
+.workshop-os-header__copy .ui-page-title {
+  font-size: clamp(1.55rem, 1.85vw, 2rem);
+}
+
+.workshop-os-header__copy .ui-page-description {
+  max-width: 48ch;
+  font-size: 0.82rem;
+}
+
+.workshop-os-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.workshop-os-search {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.workshop-os-topbar__meta {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-quick-filters {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-surface-toggle {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.workshop-os-filter-chip {
+  border-radius: 999px;
+  border: 1px solid #d5dee8;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--cp-navy);
+  padding: 5px 11px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.workshop-os-filter-chip--active {
+  border-color: #8fb8d8;
+  background: linear-gradient(180deg, #ffffff 0%, #e9f3fb 100%);
+  box-shadow: 0 0 0 1px rgba(116, 172, 214, 0.26);
+}
+
+.workshop-os-layout {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 188px minmax(0, 1fr) 304px;
+  gap: 6px;
+  align-items: start;
+}
+
+.workshop-os-sidebar,
+.workshop-os-rail {
+  display: grid;
+  gap: 6px;
+  position: sticky;
+  top: 8px;
+  align-content: start;
+}
+
+.workshop-os-main {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workshop-os-calendar-shell {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.workshop-os-calendar-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 0 2px;
+}
+
+.workshop-os-calendar-header h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.workshop-os-calendar-header__meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-calendar-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 8px;
+}
+
+.workshop-os-calendar-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-os-calendar-grid__header,
+.workshop-os-calendar-grid__row {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.workshop-os-calendar-grid__staff-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 220px;
+  padding: 12px;
+  border: 1px solid #d8e1ec;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f8fb 100%);
+}
+
+.workshop-os-calendar-grid__staff-name {
+  font-weight: 700;
+  color: var(--cp-navy);
+}
+
+.workshop-os-calendar-grid__time-col,
+.workshop-os-calendar-grid__track {
+  position: relative;
+  border: 1px solid #d8e1ec;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(208, 219, 230, 0.54) 0,
+      rgba(208, 219, 230, 0.54) 1px,
+      transparent 1px,
+      transparent calc(60px * 1.8)
+    ),
+    linear-gradient(180deg, #f9fbfe 0%, #eef4f8 100%);
+  overflow: hidden;
+}
+
+.workshop-os-calendar-grid__time-col {
+  min-height: 44px;
+}
+
+.workshop-os-calendar-grid__time-label {
+  position: absolute;
+  top: 10px;
+  transform: translateX(-50%);
+  font-size: 0.74rem;
+  color: #526071;
+}
+
+.workshop-os-calendar-grid__track {
+  min-height: 132px;
+}
+
+.workshop-os-calendar-grid__track--unavailable {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(214, 222, 232, 0.36) 0,
+      rgba(214, 222, 232, 0.36) 10px,
+      rgba(245, 248, 251, 0.95) 10px,
+      rgba(245, 248, 251, 0.95) 20px
+    );
+}
+
+.workshop-os-calendar-grid__working-band {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  border-radius: 10px;
+  background: rgba(188, 228, 202, 0.38);
+  border: 1px solid rgba(125, 182, 145, 0.38);
+}
+
+.workshop-os-calendar-grid__timeoff {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.workshop-os-calendar-grid__timeoff span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workshop-os-calendar-grid__timeoff--staff {
+  background: rgba(255, 233, 187, 0.92);
+  border-color: rgba(224, 181, 95, 0.55);
+  color: #7a5200;
+}
+
+.workshop-os-calendar-grid__timeoff--workshop {
+  background: rgba(248, 205, 205, 0.92);
+  border-color: rgba(205, 120, 120, 0.55);
+  color: #7f1d1d;
+}
+
+.workshop-os-calendar-job {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  z-index: 3;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #9cb4cb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #ebf4fb 100%);
+  box-shadow: 0 6px 14px rgba(8, 15, 31, 0.08);
+  text-align: left;
+  color: inherit;
+}
+
+.workshop-os-calendar-job--unassigned {
+  border-style: dashed;
+}
+
+.workshop-os-calendar-job strong,
+.workshop-os-calendar-job span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workshop-os-calendar-job strong {
+  color: var(--cp-navy);
+  font-size: 0.84rem;
+}
+
+.workshop-os-calendar-job__time {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #4f6274;
+}
+
+.workshop-os-calendar-job__meta {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-calendar-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 10px;
+}
+
+.workshop-os-calendar-queue-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dde5ed;
+  border-radius: 14px;
+  background: rgba(251, 253, 255, 0.92);
+}
+
+.workshop-os-calendar-queue-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.workshop-os-calendar-queue-panel__header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.workshop-os-calendar-queue {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-calendar-queue-card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1ec;
+  background: #fbfdff;
+}
+
+.workshop-os-calendar-queue-card strong {
+  color: var(--cp-navy);
+}
+
+.workshop-os-calendar-legend {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-sidebar-card,
+.workshop-os-rail-card,
+.workshop-os-board-shell {
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-os-sidebar-card {
+  padding: 6px 8px;
+  border: 1px solid rgba(224, 231, 239, 0.56);
+  border-radius: 10px;
+  background: rgba(248, 251, 254, 0.4);
+  box-shadow: none;
+}
+
+.workshop-os-rail-card {
+  padding: 10px 12px;
+  border: 1px solid #dde5ed;
+  border-radius: 14px;
+  background: rgba(251, 253, 255, 0.94);
+  box-shadow: none;
+}
+
+.workshop-os-board-shell {
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workshop-os-sidebar-card__header,
+.workshop-os-board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-board-header {
+  padding: 0 2px 0;
+}
+
+.workshop-os-controls,
+.workshop-os-alert-list,
+.workshop-os-agenda-list,
+.workshop-os-team {
+  display: grid;
+  gap: 5px;
+}
+
+.workshop-os-saved-views {
+  display: grid;
+  gap: 5px;
+}
+
+.workshop-os-view-button {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 9px;
+  border: 1px solid #d6e0eb;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.workshop-os-view-button strong {
+  color: var(--cp-navy);
+}
+
+.workshop-os-view-button span {
+  display: none;
+}
+
+.workshop-os-view-button--active {
+  border-color: #91bfdf;
+  background: linear-gradient(180deg, #ffffff 0%, #edf6ff 100%);
+  box-shadow: 0 0 0 1px rgba(116, 172, 214, 0.22);
+}
+
+.workshop-os-field-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-field-grid label {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-inline-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  opacity: 0.82;
+}
+
+.workshop-os-metric-card {
+  min-height: 60px;
+  padding: 7px 9px;
+  box-shadow: none;
+  border-color: #e2e8f0;
+}
+
+.workshop-os-metric-card .metric-value {
+  font-size: 0.98rem;
+}
+
+.workshop-os-board {
+  display: flex;
+  gap: 14px;
+  align-items: start;
+  width: max-content;
+  min-width: 100%;
+}
+
+.workshop-os-board-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 6px;
+}
+
+.workshop-os-column {
+  flex: 1 0 390px;
+  min-width: 390px;
+  border: 1px solid #d7e0ea;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+  min-height: 380px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.workshop-os-column--attention {
+  border-color: #ecd7a0;
+  background: linear-gradient(180deg, #fffdf6 0%, #fbf5e8 100%);
+}
+
+.workshop-os-column--ready {
+  border-color: #cce8d8;
+  background: linear-gradient(180deg, #fbfffc 0%, #f0faf3 100%);
+}
+
+.workshop-os-column--complete {
+  opacity: 0.82;
+}
+
+.workshop-os-column__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #dfe7f0;
+  align-items: flex-start;
+}
+
+.workshop-os-column__header h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.workshop-os-column__header p {
+  margin: 0;
+  color: #607182;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.workshop-os-column__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.workshop-os-job-card,
+.workshop-os-empty-card {
+  border: 1px solid #d8e1ec;
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+}
+
+.workshop-os-empty-card {
+  color: #607182;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.workshop-os-empty-card--action {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.workshop-os-empty-card--action strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #1f2f3d;
+}
+
+.workshop-os-job-card {
+  cursor: pointer;
+  display: grid;
+  gap: 7px;
+  box-shadow: 0 6px 12px rgba(13, 31, 47, 0.04);
+}
+
+.workshop-os-job-card:hover {
+  border-color: #c9d9e7;
+  background: #f9fbfe;
+}
+
+.workshop-os-job-card__header,
+.workshop-os-drawer__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.workshop-os-job-card__identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workshop-os-job-card__identity strong {
+  line-height: 1.35;
+  font-size: 0.98rem;
+}
+
+.workshop-os-job-card__signals,
+.workshop-os-job-card__meta-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-job-card__signals {
+  justify-content: flex-end;
+}
+
+.workshop-os-job-card__signal--urgency {
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(201, 68, 55, 0.12);
+}
+
+.workshop-os-job-card__meta-pill,
+.button-link--inline {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #d6e0eb;
+  background: #f8fbfe;
+  color: #506274;
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.workshop-os-drawer__grid > div {
+  display: grid;
+  gap: 2px;
+}
+
+.workshop-os-drawer__grid strong {
+  font-size: 0.8rem;
+  color: #556678;
+}
+
+.workshop-os-job-card__blocker {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-os-job-card__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workshop-os-job-card__actions .button-link,
+.workshop-os-job-card__actions button {
+  padding: 6px 10px;
+}
+
+.workshop-os-job-card__hint {
+  margin-left: auto;
+  font-size: 0.76rem;
+}
+
+.workshop-os-board-header__meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-agenda-item,
+.workshop-os-alert__job {
+  width: 100%;
+  text-align: left;
+}
+
+.workshop-os-agenda-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid #d7e0ea;
+  background: #fbfdff;
+}
+
+.workshop-os-agenda-item__meta {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.workshop-os-capacity,
+.workshop-os-team {
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-os-capacity__topline,
+.workshop-os-team__header {
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-os-capacity-grid,
+.workshop-os-drawer__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workshop-os-capacity-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.workshop-os-capacity-grid strong {
+  font-size: 1.25rem;
+}
+
+.workshop-os-capacity-grid span {
+  color: #607182;
+  font-size: 0.82rem;
+}
+
+.workshop-os-team-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-os-team-chip {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.workshop-os-alert {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #d8e1ec;
+  background: #fbfdff;
+}
+
+.workshop-os-alert p {
+  margin: 0;
+  color: #607182;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.workshop-os-alert--warning {
+  border-color: #ecd7a0;
+  background: #fffaf0;
+}
+
+.workshop-os-alert--ready {
+  border-color: #c8e3d4;
+  background: #f3fbf6;
+}
+
+.workshop-os-alert--attention {
+  border-color: #c8d9e8;
+  background: #f4f9fd;
+}
+
+.workshop-os-alert__jobs {
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-os-alert__job {
+  border: 1px solid #d6e0eb;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 10px;
+}
+
+.workshop-os-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 15, 31, 0.38);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1200;
+}
+
+.workshop-os-drawer {
+  width: min(640px, 100vw);
+  overflow-y: auto;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+  border-left: 1px solid #cfdae5;
+  box-shadow: -18px 0 36px rgba(8, 15, 31, 0.14);
+  padding: 14px 16px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-os-intake-drawer {
+  width: min(760px, 100vw);
+  gap: 12px;
+}
+
+.workshop-os-drawer__badges,
+.workshop-os-drawer__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-drawer__section {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-job-workspace-section {
+  border: 1px solid #d6e0eb;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 10px 12px;
+}
+
+.workshop-os-job-workspace-section__toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.workshop-os-job-workspace-section__toggle-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-job-workspace-section__toggle-copy strong {
+  color: #1f2f3d;
+  font-size: 0.95rem;
+}
+
+.workshop-os-job-workspace-section__body,
+.workshop-os-job-workspace-section__stack {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-os-job-workspace-section__body {
+  margin-top: 10px;
+}
+
+.workshop-os-job-workspace-section__detail-card,
+.workshop-os-job-workspace-section__list-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1ec;
+  background: #fbfdff;
+}
+
+.workshop-os-job-workspace-section__detail-card p,
+.workshop-os-job-workspace-section__list-item p {
+  margin: 0;
+}
+
+.workshop-os-job-workspace-section__meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-os-job-workspace-section__meta-list span {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #d8e1ec;
+  background: #f8fbfe;
+  color: #556678;
+  font-size: 0.78rem;
+}
+
+.workshop-os-job-workspace-section__list {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-job-workspace-section__list-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  color: #607182;
+  font-size: 0.78rem;
+}
+
+.workshop-os-job-workspace-section__footer {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-drawer__section h3 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.workshop-os-intake-form {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-os-intake-mode-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0 2px;
+}
+
+.workshop-os-intake-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.workshop-os-intake-section {
+  border: 1px solid #d6e0eb;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+}
+
+.workshop-os-intake-section-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.workshop-os-intake-section-toggle-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-intake-section-toggle-copy strong {
+  color: #1f2f3d;
+  font-size: 0.95rem;
+}
+
+.workshop-os-intake-section-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.workshop-os-intake-section-header {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-intake-section-header h3 {
+  margin: 0;
+}
+
+.workshop-os-drawer__header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-drawer__header h2,
+.workshop-os-drawer__header p {
+  margin: 0;
+}
+
+.workshop-os-intake-field {
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-os-intake-field span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #405163;
+}
+
+.workshop-os-intake-field small {
+  margin-top: -2px;
+}
+
+.workshop-os-intake-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workshop-os-intake-grid--compact {
+  margin-top: 10px;
+}
+
+.workshop-os-intake-search-results {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-intake-search-result,
+.workshop-os-intake-customer-pill {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d6e0eb;
+  background: #fbfdff;
+}
+
+.workshop-os-intake-search-result {
+  text-align: left;
+}
+
+.workshop-os-intake-search-result--create {
+  border-style: dashed;
+  background: #f7fbff;
+}
+
+.workshop-os-intake-search-result strong,
+.workshop-os-intake-customer-pill strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.workshop-os-intake-advanced {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #d6e0eb;
+  border-radius: 14px;
+  background: rgba(251, 253, 255, 0.92);
+}
+
+.workshop-os-intake-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #334155;
+}
+
+.workshop-os-intake-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.workshop-os-intake-note-card {
+  text-align: left;
+}
+
+.workshop-os-intake-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .workshop-summary-grid {
@@ -6518,6 +7682,61 @@ th {
 
   .workshop-board {
     grid-template-columns: 1fr;
+  }
+
+  .workshop-os-summary-grid,
+  .workshop-os-capacity-grid,
+  .workshop-os-drawer__grid,
+  .workshop-os-intake-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-os-calendar-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-os-calendar-grid__header,
+  .workshop-os-calendar-grid__row {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+
+  .workshop-os-calendar-grid__staff-col {
+    min-width: 160px;
+  }
+
+  .workshop-os-topbar,
+  .workshop-os-header__row,
+  .workshop-os-calendar-header,
+  .workshop-os-job-card__header,
+  .workshop-os-drawer__header,
+  .workshop-os-job-workspace-section__list-meta,
+  .workshop-os-intake-mode-row,
+  .workshop-os-agenda-item,
+  .workshop-os-intake-search-result,
+  .workshop-os-intake-customer-pill,
+  .workshop-os-intake-footer {
+    flex-direction: column;
+  }
+
+  .workshop-os-job-workspace-section__footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .workshop-os-agenda-item__meta {
+    justify-items: start;
+  }
+
+  .workshop-os-job-card__actions {
+    align-items: flex-start;
+  }
+
+  .workshop-os-job-card__hint {
+    margin-left: 0;
+  }
+
+  .workshop-os-intake-drawer {
+    width: min(100vw, 640px);
   }
 
   .workshop-staffing-header {
