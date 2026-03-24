@@ -415,17 +415,36 @@ const assertTemplatePricingConfiguration = (input: {
 const resolveTemplateLineUnitPrice = (line: WorkshopServiceTemplateLineRecord) =>
   line.unitPricePence ?? line.variant?.retailPricePence ?? 0;
 
+const getTemplateLineInventoryLink = (
+  line: Pick<WorkshopServiceTemplateLineRecord, "type" | "productId" | "variantId">,
+) => {
+  if (line.type !== "PART") {
+    return {
+      productId: null,
+      variantId: null,
+      hasInventoryLink: false,
+    };
+  }
+
+  return {
+    productId: line.productId,
+    variantId: line.variantId,
+    hasInventoryLink: Boolean(line.productId && line.variantId),
+  };
+};
+
 const toTemplateLineResponse = (line: WorkshopServiceTemplateLineRecord) => {
   const resolvedUnitPricePence = resolveTemplateLineUnitPrice(line);
+  const inventoryLink = getTemplateLineInventoryLink(line);
   return {
     id: line.id,
     templateId: line.templateId,
     type: line.type,
-    productId: line.productId,
-    productName: line.product?.name ?? null,
-    variantId: line.variantId,
-    variantSku: line.variant?.sku ?? null,
-    variantName: line.variant?.name ?? null,
+    productId: inventoryLink.productId,
+    productName: inventoryLink.productId ? line.product?.name ?? null : null,
+    variantId: inventoryLink.variantId,
+    variantSku: inventoryLink.variantId ? line.variant?.sku ?? null : null,
+    variantName: inventoryLink.variantId ? line.variant?.name ?? null : null,
     description: line.description,
     qty: line.qty,
     unitPricePence: line.unitPricePence,
@@ -433,7 +452,7 @@ const toTemplateLineResponse = (line: WorkshopServiceTemplateLineRecord) => {
     lineTotalPence: resolvedUnitPricePence * line.qty,
     isOptional: line.isOptional,
     sortOrder: line.sortOrder,
-    hasInventoryLink: Boolean(line.productId && line.variantId),
+    hasInventoryLink: inventoryLink.hasInventoryLink,
     createdAt: line.createdAt,
     updatedAt: line.updatedAt,
   };
@@ -901,8 +920,8 @@ export const applyWorkshopServiceTemplateToJob = async (
     for (const line of linesToApply) {
       const createdLine = await createWorkshopJobLineRecordTx(tx, workshopJobId, {
         type: line.type,
-        productId: line.productId,
-        variantId: line.variantId,
+        productId: line.type === "PART" ? line.productId : null,
+        variantId: line.type === "PART" ? line.variantId : null,
         description: line.description,
         qty: line.qty,
         unitPricePence: resolveTemplateLineUnitPrice(line),

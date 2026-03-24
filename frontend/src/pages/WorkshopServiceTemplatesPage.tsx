@@ -128,6 +128,27 @@ const getDraftLineValidationMessage = (line: TemplateDraftLine) => {
   return null;
 };
 
+const sanitizeDraftLine = (line: TemplateDraftLine): TemplateDraftLine => {
+  if (line.type === "LABOUR") {
+    return {
+      ...line,
+      productId: null,
+      productName: null,
+      variantId: null,
+      variantSku: null,
+      isOptional: false,
+    };
+  }
+
+  return {
+    ...line,
+    productId: normalizeDraftLinkValue(line.productId),
+    variantId: normalizeDraftLinkValue(line.variantId),
+    productName: line.productName?.trim() ? line.productName.trim() : null,
+    variantSku: line.variantSku?.trim() ? line.variantSku.trim() : null,
+  };
+};
+
 const toDraft = (template: WorkshopServiceTemplate): TemplateDraft => ({
   id: template.id,
   name: template.name,
@@ -137,7 +158,7 @@ const toDraft = (template: WorkshopServiceTemplate): TemplateDraft => ({
   pricingMode: template.pricingMode,
   targetTotalPrice: penceToPoundsInput(template.targetTotalPricePence),
   isActive: template.isActive,
-  lines: template.lines.map((line) => ({
+  lines: template.lines.map((line) => sanitizeDraftLine({
     id: line.id,
     type: line.type,
     productId: line.productId,

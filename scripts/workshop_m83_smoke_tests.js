@@ -1444,6 +1444,68 @@ const run = async () => {
       assert.equal(emptyStringResponse.json.template.lines[0].variantId, null);
     }, results);
 
+    await runTest("legacy labour template links are sanitized on read and re-save safely", async () => {
+      const linkedPart = await createLinkedPartVariant(state, {
+        retailPrice: "9.99",
+        retailPricePence: 999,
+      });
+
+      const template = await createWorkshopServiceTemplate(state, {
+        name: `Legacy Labour Template ${uniqueRef()}`,
+        category: "Service",
+        pricingMode: "STANDARD_SERVICE",
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Legacy labour",
+            qty: 1,
+            unitPricePence: 2500,
+          },
+        ],
+      });
+
+      const labourLineId = template.lines.find((line) => line.type === "LABOUR")?.id;
+      assert.ok(labourLineId);
+
+      await prisma.workshopServiceTemplateLine.update({
+        where: { id: labourLineId },
+        data: {
+          productId: linkedPart.productId,
+          variantId: linkedPart.variantId,
+        },
+      });
+
+      const fetched = await fetchJson(`/api/workshop/service-templates/${template.id}?includeInactive=true`, {
+        headers: MANAGER_HEADERS,
+      });
+      assert.equal(fetched.status, 200, JSON.stringify(fetched.json));
+      assert.equal(fetched.json.template.lines[0].type, "LABOUR");
+      assert.equal(fetched.json.template.lines[0].productId, null);
+      assert.equal(fetched.json.template.lines[0].variantId, null);
+      assert.equal(fetched.json.template.lines[0].hasInventoryLink, false);
+
+      const resaved = await fetchJson(`/api/workshop/service-templates/${template.id}`, {
+        method: "PATCH",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          name: `${template.name} Updated`,
+          lines: fetched.json.template.lines.map((line, index) => ({
+            type: line.type,
+            productId: line.productId,
+            variantId: line.variantId,
+            description: line.description,
+            qty: line.qty,
+            unitPricePence: line.unitPricePence,
+            isOptional: line.isOptional,
+            sortOrder: index,
+          })),
+        }),
+      });
+      assert.equal(resaved.status, 200, JSON.stringify(resaved.json));
+      assert.equal(resaved.json.template.lines[0].productId, null);
+      assert.equal(resaved.json.template.lines[0].variantId, null);
+    }, results);
+
     await runTest("applying a workshop service template creates normal job lines and keeps estimate compatibility", async () => {
       const linkedPartA = await createLinkedPartVariant(state, {
         retailPrice: "4.99",
