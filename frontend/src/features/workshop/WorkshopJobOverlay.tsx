@@ -643,17 +643,45 @@ export const WorkshopJobOverlay = ({
     }
   };
 
+  const refreshOverlayInBackground = () => {
+    void refreshOverlay().catch((refreshError) => {
+      const message = refreshError instanceof Error
+        ? refreshError.message
+        : "Assigned technician saved, but the workshop view did not refresh cleanly";
+      setActionError(message);
+      error(message);
+    });
+  };
+
   const saveAssignment = async () => {
+    const currentAssignedStaffId = overlayJob?.assignedStaffId || summary?.assignedStaffId || "";
+    const nextAssignedStaffId = assignedStaffIdDraft || "";
+
+    if (savingAction) {
+      return;
+    }
+
+    if (!jobId) {
+      const message = "Workshop job is unavailable for assignment.";
+      setActionError(message);
+      error(message);
+      return;
+    }
+
+    if (currentAssignedStaffId === nextAssignedStaffId) {
+      return;
+    }
+
     setSavingAction(true);
     setPendingAction("assign");
     setActionError(null);
 
     try {
       await apiPost(`/api/workshop/jobs/${encodeURIComponent(jobId)}/assign`, {
-        staffId: assignedStaffIdDraft || null,
+        staffId: nextAssignedStaffId || null,
       });
-      success(assignedStaffIdDraft ? "Technician assigned" : "Technician cleared");
-      await refreshOverlay();
+      success(nextAssignedStaffId ? "Technician assigned" : "Technician cleared");
+      refreshOverlayInBackground();
     } catch (assignmentError) {
       const message = assignmentError instanceof Error ? assignmentError.message : "Failed to update technician";
       setActionError(message);
