@@ -1213,7 +1213,6 @@ export const WorkshopCheckInPage = ({
               </label>
               <label>
                 Problem / Work
-                <div className="table-secondary">Customer-facing. This is the main description of the problem or requested work.</div>
                 <textarea
                   value={problemWork}
                   onChange={(event) => setProblemWork(event.target.value)}
@@ -1223,7 +1222,6 @@ export const WorkshopCheckInPage = ({
               </label>
               <label>
                 Additional notes
-                <div className="table-secondary">Internal only. Use for staff notes, accessories left with the bike, or visible damage.</div>
                 <textarea
                   value={additionalNotes}
                   onChange={(event) => setAdditionalNotes(event.target.value)}
