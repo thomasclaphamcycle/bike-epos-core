@@ -134,6 +134,7 @@ export const WorkshopCheckInPage = ({
 }: WorkshopCheckInPageProps = {}) => {
   const { success, error } = useToasts();
   const customerOptionRefs = useRef<Array<HTMLElement | null>>([]);
+  const primaryStepActionRef = useRef<HTMLButtonElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialBikeId = searchParams.get("bikeId");
@@ -685,6 +686,20 @@ export const WorkshopCheckInPage = ({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [bikeCreateModalOpen, bikeSearchModalOpen]);
+
+  useEffect(() => {
+    if (step !== 0 || !selectedCustomer || bikeSearchModalOpen || bikeCreateModalOpen) {
+      return;
+    }
+
+    const focusHandle = window.requestAnimationFrame(() => {
+      primaryStepActionRef.current?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(focusHandle);
+    };
+  }, [bikeCreateModalOpen, bikeSearchModalOpen, selectedCustomer, step]);
 
   const persistBikeRecord = async (options: { useInIntake: boolean }) => {
     if (!selectedCustomer?.id) {
@@ -1298,11 +1313,11 @@ export const WorkshopCheckInPage = ({
               Back
             </button>
             {step < stepTitles.length - 1 ? (
-              <button type="button" className="primary" onClick={goNext}>
+              <button type="button" className="primary" onClick={goNext} ref={primaryStepActionRef}>
                 Next
               </button>
             ) : (
-              <button type="submit" className="primary" disabled={submitting || Boolean(createdJobId)}>
+              <button type="submit" className="primary" disabled={submitting || Boolean(createdJobId)} ref={primaryStepActionRef}>
                 {submitting ? "Creating..." : createdJobId ? "Created" : "Create check-in"}
               </button>
             )}
