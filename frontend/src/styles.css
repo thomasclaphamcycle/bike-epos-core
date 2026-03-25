@@ -4449,6 +4449,36 @@ th {
   gap: 14px;
 }
 
+.workshop-checkin-bike-picker__availability {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #d5dfeb;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.workshop-checkin-bike-picker__availability--found {
+  border-color: rgba(46, 124, 246, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(46, 124, 246, 0.08);
+  background: linear-gradient(180deg, rgba(244, 249, 255, 0.94), rgba(255, 255, 255, 0.96));
+}
+
+.workshop-checkin-bike-picker__saved-preview {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(46, 124, 246, 0.14);
+}
+
+.workshop-checkin-bike-picker__saved-preview strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
 .workshop-checkin-bike-picker__header {
   display: flex;
   align-items: flex-start;
@@ -4541,7 +4571,8 @@ th {
   }
 
   .workshop-checkin-bike-picker__header,
-  .workshop-checkin-bike-picker__selected {
+  .workshop-checkin-bike-picker__selected,
+  .workshop-checkin-bike-picker__availability {
     grid-template-columns: 1fr;
     display: grid;
   }

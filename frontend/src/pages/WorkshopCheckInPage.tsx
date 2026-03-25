@@ -247,6 +247,7 @@ export const WorkshopCheckInPage = ({
         .some((value) => value?.toLocaleLowerCase().includes(query)),
     );
   }, [bikeSearchText, customerBikes]);
+  const firstSavedBike = customerBikes[0] ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1018,6 +1019,73 @@ export const WorkshopCheckInPage = ({
             {canCreateBikeRecord ? (
               <>
                 <div className="restricted-panel info-panel workshop-checkin-bike-picker">
+                  {selectedCustomer && !loadingCustomerBikes ? (
+                    customerBikes.length === 0 ? (
+                      <div className="workshop-checkin-bike-picker__availability">
+                        <div>
+                          <strong>No saved bikes found yet</strong>
+                          <div className="table-secondary">
+                            No bike records are currently saved for {selectedCustomer.name}. You can still create a new bike record below.
+                          </div>
+                        </div>
+                      </div>
+                    ) : customerBikes.length === 1 && firstSavedBike ? (
+                      <div className="workshop-checkin-bike-picker__availability workshop-checkin-bike-picker__availability--found">
+                        <div className="grow">
+                          <strong>Saved bike found for {selectedCustomer.name}</strong>
+                          <div className="table-secondary">
+                            Reuse the saved bike below to avoid creating a duplicate record.
+                          </div>
+                          <div className="workshop-checkin-bike-picker__saved-preview">
+                            <strong>{firstSavedBike.displayName}</strong>
+                            <div className="table-secondary">
+                              {firstSavedBike.notes || firstSavedBike.registrationNumber || firstSavedBike.serialNumber || "Saved bike record ready to use"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="actions-inline">
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => selectBikeRecord(firstSavedBike)}
+                          >
+                            Use saved bike
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBikeSearchText("");
+                              setBikeSearchModalOpen(true);
+                            }}
+                          >
+                            Search/select bike
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="workshop-checkin-bike-picker__availability workshop-checkin-bike-picker__availability--found">
+                        <div className="grow">
+                          <strong>{customerBikes.length} saved bikes found for {selectedCustomer.name}</strong>
+                          <div className="table-secondary">
+                            Search and select an existing bike first to help avoid duplicate bike records.
+                          </div>
+                        </div>
+                        <div className="actions-inline">
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => {
+                              setBikeSearchText("");
+                              setBikeSearchModalOpen(true);
+                            }}
+                          >
+                            Search/select bike
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  ) : null}
+
                   <div className="workshop-checkin-bike-picker__header">
                     <div>
                       <strong>Bike record</strong>
@@ -1032,6 +1100,7 @@ export const WorkshopCheckInPage = ({
                     <div className="actions-inline">
                       <button
                         type="button"
+                        className={selectedCustomer && customerBikes.length > 0 ? undefined : "primary"}
                         onClick={() => {
                           setBikeSearchText("");
                           setBikeSearchModalOpen(true);
@@ -1042,7 +1111,7 @@ export const WorkshopCheckInPage = ({
                       </button>
                       <button
                         type="button"
-                        className="primary"
+                        className={selectedCustomer && customerBikes.length > 0 ? undefined : "primary"}
                         onClick={() => setBikeCreateModalOpen(true)}
                       >
                         Add new bike
