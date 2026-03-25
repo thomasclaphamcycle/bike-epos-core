@@ -327,13 +327,17 @@ export const getWorkshopTechnicianWorkflowSummary = (
         label: workshopTechnicianWorkflowLabel(stage),
         className: workshopTechnicianWorkflowClass(stage),
         assignmentSummary,
-        blockerLabel: input.assignedStaffName ? "Queued for technician" : "Needs technician assignment",
+        blockerLabel: input.assignedStaffName ? "Queued for bench start" : "Queued for technician",
         blockerClassName: input.assignedStaffName ? "status-badge status-info" : "status-badge",
         detail: "The job is booked in and still needs a clear bench start or quote decision before it becomes active work.",
         nextStep:
           input.rawStatus === "BOOKING_MADE"
-            ? "Check the bike in fully, then either start bench work or move into quote approval if the customer still needs a decision."
-            : "Use the workflow actions to move the job onto the bench.",
+            ? input.assignedStaffName
+              ? "Check the bike in fully, then move it onto the bench when the assigned technician is ready."
+              : "Assign a technician, then either start bench work or move into quote approval if the customer still needs a decision."
+            : input.assignedStaffName
+              ? "Use the workflow actions to move the assigned job onto the bench."
+              : "Assign a technician first, then use the workflow actions to move the job onto the bench.",
       };
   }
 };
