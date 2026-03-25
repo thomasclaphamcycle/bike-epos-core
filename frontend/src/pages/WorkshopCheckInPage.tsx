@@ -622,6 +622,19 @@ export const WorkshopCheckInPage = ({
     setHighlightedCustomerOptionIndex(-1);
   };
 
+  const clearCustomerSelection = () => {
+    setSelectedCustomer(null);
+    setCreateCustomerInline(false);
+    setNewCustomerName("");
+    setNewCustomerEmail("");
+    setNewCustomerPhone("");
+    setManualCustomerName("");
+    setSelectedBikeId("");
+    setCustomerBikes([]);
+    resetBikeDraft();
+    setHighlightedCustomerOptionIndex(-1);
+  };
+
   const selectBikeRecord = (bike: CustomerBikeRecord) => {
     setSelectedBikeId(bike.id);
     resetBikeDraft();
@@ -806,15 +819,19 @@ export const WorkshopCheckInPage = ({
                   </div>
                 </div>
 
+                {selectedCustomer ? (
+                  <div className="actions-inline" style={{ marginTop: "12px" }}>
+                    <button type="button" onClick={clearCustomerSelection}>
+                      Change customer
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="actions-inline" style={{ marginTop: "12px" }}>
                   <button
                     type="button"
                     onClick={() => {
-                      setCreateCustomerInline(false);
-                      setSelectedCustomer(null);
-                      setSelectedBikeId("");
-                      resetBikeDraft();
-                      setHighlightedCustomerOptionIndex(-1);
+                      clearCustomerSelection();
                     }}
                   >
                     Use walk-in/manual name
