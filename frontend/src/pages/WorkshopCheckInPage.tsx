@@ -1132,21 +1132,6 @@ export const WorkshopCheckInPage = ({
                     )
                   ) : null}
 
-                  <div className="workshop-checkin-bike-picker__header">
-                    <div>
-                      <strong>Bike record</strong>
-                      <div className="table-secondary">
-                        {loadingCustomerBikes
-                          ? "Loading existing bike records..."
-                          : selectedCustomer
-                            ? customerBikes.length > 0
-                              ? "Choose an existing bike or create a new one if none of the saved records fit this check-in."
-                              : "Create a new bike record now, or continue using the workshop bike summary only."
-                            : "New customer details will be saved with the job; bike summary still drives workshop intake."}
-                      </div>
-                    </div>
-                  </div>
-
                   {selectedBikeRecord ? (
                     <div className="workshop-checkin-bike-picker__selected">
                       <div>
@@ -1190,11 +1175,6 @@ export const WorkshopCheckInPage = ({
                     </div>
                   ) : null}
 
-                  {!selectedBikeRecord && !createBikeInline ? (
-                    <div className="table-secondary">
-                      No bike record linked yet. Bike summary below will still be used operationally.
-                    </div>
-                  ) : null}
                 </div>
               </>
             ) : (
