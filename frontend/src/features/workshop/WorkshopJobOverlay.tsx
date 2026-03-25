@@ -1,7 +1,8 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPatch, apiPost } from "../../api/client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client";
 import { useToasts } from "../../components/ToastProvider";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
   getWorkshopTechnicianWorkflowSummary,
   workshopRawStatusClass,
@@ -11,12 +12,32 @@ import {
 type WorkshopJobOverlayLine = {
   id: string;
   type: "LABOUR" | "PART";
+  productId: string | null;
+  variantId: string | null;
+  variantSku: string | null;
   description: string;
   qty: number;
   unitPricePence: number;
   lineTotalPence: number;
   productName: string | null;
   variantName: string | null;
+};
+
+type WorkshopJobOverlayLineMutationResponse = {
+  line: WorkshopJobOverlayLine;
+};
+
+type WorkshopJobOverlayProductSearchRow = {
+  id: string;
+  productId: string;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  pricePence: number;
+};
+
+type WorkshopJobOverlayProductSearchResponse = {
+  rows: WorkshopJobOverlayProductSearchRow[];
 };
 
 type WorkshopJobOverlayBike = {
@@ -237,6 +258,20 @@ const formatMoney = (pence: number | null) => {
     return "-";
   }
   return `£${(pence / 100).toFixed(2)}`;
+};
+
+const parseMoneyToPence = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 100);
 };
 
 const formatPromiseDate = (value: string | null | undefined) => {
@@ -742,11 +777,23 @@ export const WorkshopJobOverlay = ({
   const [savingQuickAction, setSavingQuickAction] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [addingPart, setAddingPart] = useState(false);
+  const [addingLabour, setAddingLabour] = useState(false);
+  const [savingLineId, setSavingLineId] = useState<string | null>(null);
+  const [removingLineId, setRemovingLineId] = useState<string | null>(null);
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [workError, setWorkError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("");
   const [statusActionDraft, setStatusActionDraft] = useState("");
+  const [partSearch, setPartSearch] = useState("");
+  const [partResults, setPartResults] = useState<WorkshopJobOverlayProductSearchRow[]>([]);
+  const [showPartComposer, setShowPartComposer] = useState(false);
+  const [showLabourComposer, setShowLabourComposer] = useState(false);
+  const [labourDescriptionDraft, setLabourDescriptionDraft] = useState("");
+  const [labourPriceDraft, setLabourPriceDraft] = useState("");
+  const [lineQtyDrafts, setLineQtyDrafts] = useState<Record<string, string>>({});
   const [scheduleDraft, setScheduleDraft] = useState<WorkshopJobOverlayScheduleDraft>(() =>
     createScheduleDraft({
       scheduledDate: summary?.scheduledDate || null,
@@ -758,6 +805,7 @@ export const WorkshopJobOverlay = ({
   const [collapsedSections, setCollapsedSections] = useState<Record<JobWorkspaceSectionKey, boolean>>(
     DEFAULT_JOB_WORKSPACE_COLLAPSED,
   );
+  const debouncedPartSearch = useDebouncedValue(partSearch, 250);
   const savingAnyAction = savingAssignment || savingQuickAction || savingStatus || savingSchedule;
 
   useEffect(() => {
@@ -769,6 +817,18 @@ export const WorkshopJobOverlay = ({
     setSavingStatus(false);
     setSavingSchedule(false);
     setIsEditingSchedule(false);
+    setAddingPart(false);
+    setAddingLabour(false);
+    setSavingLineId(null);
+    setRemovingLineId(null);
+    setWorkError(null);
+    setPartSearch("");
+    setPartResults([]);
+    setShowPartComposer(false);
+    setShowLabourComposer(false);
+    setLabourDescriptionDraft("");
+    setLabourPriceDraft("");
+    setLineQtyDrafts({});
   }, [jobId]);
 
   useEffect(() => {
@@ -809,6 +869,45 @@ export const WorkshopJobOverlay = ({
     timeZone,
     isEditingSchedule,
   ]);
+
+  useEffect(() => {
+    setLineQtyDrafts(
+      Object.fromEntries((details?.lines ?? []).map((line) => [line.id, `${line.qty}`])),
+    );
+  }, [details?.lines]);
+
+  useEffect(() => {
+    if (!showPartComposer || !debouncedPartSearch.trim()) {
+      setPartResults([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const runSearch = async () => {
+      try {
+        const results = await apiGet<WorkshopJobOverlayProductSearchResponse>(
+          `/api/products/search?q=${encodeURIComponent(debouncedPartSearch.trim())}`,
+        );
+        if (!cancelled) {
+          setPartResults(Array.isArray(results.rows) ? results.rows : []);
+        }
+      } catch (searchError) {
+        if (cancelled) {
+          return;
+        }
+        const message = searchError instanceof Error ? searchError.message : "Product search failed";
+        setWorkError(message);
+        error(message);
+      }
+    };
+
+    void runSearch();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedPartSearch, error, showPartComposer]);
 
   useEffect(() => {
     let cancelled = false;
@@ -866,6 +965,9 @@ export const WorkshopJobOverlay = ({
   const lines = details?.lines ?? [];
   const labourLines = lines.filter((line) => line.type === "LABOUR");
   const partLines = lines.filter((line) => line.type === "PART");
+  const labourTotalPence = labourLines.reduce((sum, line) => sum + line.lineTotalPence, 0);
+  const partsTotalPence = partLines.reduce((sum, line) => sum + line.lineTotalPence, 0);
+  const workTotalPence = lines.reduce((sum, line) => sum + line.lineTotalPence, 0);
   const openPath = fullJobPath || `/workshop/${jobId}`;
   const issueSummary = overlayJob?.notes || summary?.notes || null;
   const quickAction = getQuickOverlayAction({
@@ -916,13 +1018,58 @@ export const WorkshopJobOverlay = ({
     }
   };
 
-  const refreshOverlayInBackground = () => {
+  const refreshOverlayInBackground = (setErrorState?: (message: string | null) => void) => {
     void refreshOverlay().catch((refreshError) => {
       const message = refreshError instanceof Error
         ? refreshError.message
-        : "Assigned technician saved, but the workshop view did not refresh cleanly";
-      setActionError(message);
+        : "Workshop view refresh did not complete cleanly";
+      if (setErrorState) {
+        setErrorState(message);
+      } else {
+        setActionError(message);
+      }
       error(message);
+    });
+  };
+
+  const applyLineUpsert = (line: WorkshopJobOverlayLine) => {
+    setDetails((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const existingIndex = current.lines.findIndex((item) => item.id === line.id);
+      const nextLines = existingIndex >= 0
+        ? current.lines.map((item) => (item.id === line.id ? line : item))
+        : [...current.lines, line];
+
+      return {
+        ...current,
+        lines: nextLines,
+        currentEstimate: null,
+        hasApprovedEstimate: false,
+      };
+    });
+    setLineQtyDrafts((current) => ({ ...current, [line.id]: `${line.qty}` }));
+  };
+
+  const applyLineRemoval = (lineId: string) => {
+    setDetails((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        lines: current.lines.filter((line) => line.id !== lineId),
+        currentEstimate: null,
+        hasApprovedEstimate: false,
+      };
+    });
+    setLineQtyDrafts((current) => {
+      const next = { ...current };
+      delete next[lineId];
+      return next;
     });
   };
 
@@ -1188,6 +1335,381 @@ export const WorkshopJobOverlay = ({
     }
   };
 
+  const addPartLine = async (product: WorkshopJobOverlayProductSearchRow) => {
+    if (!jobId || addingPart) {
+      return;
+    }
+
+    setAddingPart(true);
+    setWorkError(null);
+
+    try {
+      const response = await apiPost<WorkshopJobOverlayLineMutationResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(jobId)}/lines`,
+        {
+          type: "PART",
+          productId: product.productId,
+          variantId: product.id,
+          description: product.name,
+          qty: 1,
+          unitPricePence: product.pricePence,
+        },
+      );
+
+      applyLineUpsert(response.line);
+      setPartSearch("");
+      setPartResults([]);
+      setShowPartComposer(false);
+      success("Part line added");
+      refreshOverlayInBackground(setWorkError);
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : "Unable to add part line";
+      setWorkError(message);
+      error(message);
+    } finally {
+      setAddingPart(false);
+    }
+  };
+
+  const addLabourLine = async () => {
+    if (!jobId || addingLabour) {
+      return;
+    }
+
+    const description = labourDescriptionDraft.trim();
+    const unitPricePence = parseMoneyToPence(labourPriceDraft);
+
+    if (!description) {
+      setWorkError("Labour description is required.");
+      return;
+    }
+
+    if (unitPricePence === null) {
+      setWorkError("Enter a valid labour price in pounds.");
+      return;
+    }
+
+    setAddingLabour(true);
+    setWorkError(null);
+
+    try {
+      const response = await apiPost<WorkshopJobOverlayLineMutationResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(jobId)}/lines`,
+        {
+          type: "LABOUR",
+          description,
+          qty: 1,
+          unitPricePence,
+        },
+      );
+
+      applyLineUpsert(response.line);
+      setLabourDescriptionDraft("");
+      setLabourPriceDraft("");
+      setShowLabourComposer(false);
+      success("Labour line added");
+      refreshOverlayInBackground(setWorkError);
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : "Unable to add labour line";
+      setWorkError(message);
+      error(message);
+    } finally {
+      setAddingLabour(false);
+    }
+  };
+
+  const saveLineQty = async (line: WorkshopJobOverlayLine) => {
+    if (!jobId || savingLineId) {
+      return;
+    }
+
+    const qtyDraft = Number(lineQtyDrafts[line.id] ?? `${line.qty}`);
+    if (!Number.isInteger(qtyDraft) || qtyDraft <= 0) {
+      setWorkError("Quantity must be a positive whole number.");
+      return;
+    }
+
+    if (qtyDraft === line.qty) {
+      return;
+    }
+
+    setSavingLineId(line.id);
+    setWorkError(null);
+
+    try {
+      const response = await apiPatch<WorkshopJobOverlayLineMutationResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(jobId)}/lines/${encodeURIComponent(line.id)}`,
+        { qty: qtyDraft },
+      );
+      applyLineUpsert(response.line);
+      success("Line quantity updated");
+      refreshOverlayInBackground(setWorkError);
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Unable to update line quantity";
+      setWorkError(message);
+      error(message);
+    } finally {
+      setSavingLineId(null);
+    }
+  };
+
+  const removeLine = async (line: WorkshopJobOverlayLine) => {
+    if (!jobId || removingLineId) {
+      return;
+    }
+
+    setRemovingLineId(line.id);
+    setWorkError(null);
+
+    try {
+      await apiDelete(`/api/workshop/jobs/${encodeURIComponent(jobId)}/lines/${encodeURIComponent(line.id)}`);
+      applyLineRemoval(line.id);
+      success("Line removed");
+      refreshOverlayInBackground(setWorkError);
+    } catch (removeError) {
+      const message = removeError instanceof Error ? removeError.message : "Unable to remove line";
+      setWorkError(message);
+      error(message);
+    } finally {
+      setRemovingLineId(null);
+    }
+  };
+
+  const renderWorkSectionContent = () => (
+    <div className="workshop-os-job-workspace-section__stack">
+      <div className="workshop-os-job-workspace-work-summary">
+        <div>
+          <span className="metric-label">Labour</span>
+          <strong>{formatMoney(labourTotalPence)}</strong>
+        </div>
+        <div>
+          <span className="metric-label">Parts</span>
+          <strong>{formatMoney(partsTotalPence)}</strong>
+        </div>
+        <div>
+          <span className="metric-label">Total</span>
+          <strong>{formatMoney(workTotalPence)}</strong>
+        </div>
+      </div>
+
+      <div className="workshop-os-job-workspace-work-actions">
+        <button
+          type="button"
+          onClick={() => {
+            setShowPartComposer((current) => !current);
+            setShowLabourComposer(false);
+            setWorkError(null);
+          }}
+          disabled={addingPart || addingLabour}
+        >
+          + Add part
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowLabourComposer((current) => !current);
+            setShowPartComposer(false);
+            setWorkError(null);
+          }}
+          disabled={addingPart || addingLabour}
+        >
+          + Add labour
+        </button>
+      </div>
+
+      {showPartComposer ? (
+        <div className="workshop-os-job-workspace-composer">
+          <label className="workshop-os-overlay-next-action__field">
+            <span className="metric-label">Search part</span>
+            <input
+              type="search"
+              value={partSearch}
+              onChange={(event) => setPartSearch(event.target.value)}
+              placeholder="Search product or SKU"
+              disabled={addingPart}
+            />
+          </label>
+          {partSearch.trim() ? (
+            partResults.length ? (
+              <div className="workshop-os-job-workspace-search-results">
+                {partResults.slice(0, 6).map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className="workshop-os-job-workspace-search-result"
+                    onClick={() => void addPartLine(product)}
+                    disabled={addingPart}
+                  >
+                    <strong>{product.name}</strong>
+                    <span className="table-secondary">
+                      {product.sku} · {formatMoney(product.pricePence)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="workshop-os-empty-card">No parts matched that search yet.</div>
+            )
+          ) : (
+            <div className="workshop-os-empty-card">Start typing to search workshop parts.</div>
+          )}
+        </div>
+      ) : null}
+
+      {showLabourComposer ? (
+        <div className="workshop-os-job-workspace-composer">
+          <div className="workshop-os-job-workspace-composer__inputs">
+            <label className="workshop-os-overlay-next-action__field">
+              <span className="metric-label">Labour description</span>
+              <input
+                type="text"
+                value={labourDescriptionDraft}
+                onChange={(event) => setLabourDescriptionDraft(event.target.value)}
+                placeholder="Workshop labour"
+                disabled={addingLabour}
+              />
+            </label>
+            <label className="workshop-os-overlay-next-action__field">
+              <span className="metric-label">Unit price (£)</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={labourPriceDraft}
+                onChange={(event) => setLabourPriceDraft(event.target.value)}
+                placeholder="25.00"
+                disabled={addingLabour}
+              />
+            </label>
+          </div>
+          <div className="workshop-os-job-workspace-work-actions">
+            <button type="button" className="primary" onClick={() => void addLabourLine()} disabled={addingLabour}>
+              {addingLabour ? "Saving..." : "+ Add labour"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {workError ? (
+        <div className="restricted-panel warning-panel">
+          <strong>Unable to update work lines</strong>
+          <div className="table-secondary">{workError}</div>
+        </div>
+      ) : null}
+
+      {lines.length ? (
+        <div className="workshop-os-job-workspace-lines">
+          {labourLines.length ? (
+            <div className="workshop-os-job-workspace-lines-group">
+              <div className="workshop-os-job-workspace-lines-group__heading">
+                <strong>Labour</strong>
+                <span className="table-secondary">{labourLines.length} line{labourLines.length === 1 ? "" : "s"}</span>
+              </div>
+              {labourLines.map((line) => (
+                <article key={line.id} className="workshop-os-job-workspace-line">
+                  <div className="workshop-os-job-workspace-line__summary">
+                    <strong>{line.description}</strong>
+                    <span className="table-secondary">{formatMoney(line.unitPricePence)} each</span>
+                  </div>
+                  <div className="workshop-os-job-workspace-line__controls">
+                    <label className="workshop-os-overlay-next-action__field workshop-os-job-workspace-line__qty-field">
+                      <span className="metric-label">Qty</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={lineQtyDrafts[line.id] ?? `${line.qty}`}
+                        onChange={(event) =>
+                          setLineQtyDrafts((current) => ({ ...current, [line.id]: event.target.value }))
+                        }
+                        disabled={savingLineId === line.id || removingLineId === line.id}
+                      />
+                    </label>
+                    <strong className="workshop-os-job-workspace-line__total">{formatMoney(line.lineTotalPence)}</strong>
+                    <button
+                      type="button"
+                      onClick={() => void saveLineQty(line)}
+                      disabled={
+                        savingLineId === line.id
+                        || removingLineId === line.id
+                        || Number(lineQtyDrafts[line.id] ?? `${line.qty}`) === line.qty
+                      }
+                    >
+                      {savingLineId === line.id ? "Saving..." : "Update qty"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeLine(line)}
+                      disabled={savingLineId === line.id || removingLineId === line.id}
+                    >
+                      {removingLineId === line.id ? "Removing..." : "Remove"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          {partLines.length ? (
+            <div className="workshop-os-job-workspace-lines-group">
+              <div className="workshop-os-job-workspace-lines-group__heading">
+                <strong>Parts</strong>
+                <span className="table-secondary">{partLines.length} line{partLines.length === 1 ? "" : "s"}</span>
+              </div>
+              {partLines.map((line) => (
+                <article key={line.id} className="workshop-os-job-workspace-line">
+                  <div className="workshop-os-job-workspace-line__summary">
+                    <strong>{line.productName || line.description}</strong>
+                    <span className="table-secondary">
+                      {[line.variantName, line.variantSku].filter(Boolean).join(" · ") || formatMoney(line.unitPricePence)}
+                    </span>
+                  </div>
+                  <div className="workshop-os-job-workspace-line__controls">
+                    <label className="workshop-os-overlay-next-action__field workshop-os-job-workspace-line__qty-field">
+                      <span className="metric-label">Qty</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={lineQtyDrafts[line.id] ?? `${line.qty}`}
+                        onChange={(event) =>
+                          setLineQtyDrafts((current) => ({ ...current, [line.id]: event.target.value }))
+                        }
+                        disabled={savingLineId === line.id || removingLineId === line.id}
+                      />
+                    </label>
+                    <strong className="workshop-os-job-workspace-line__total">{formatMoney(line.lineTotalPence)}</strong>
+                    <button
+                      type="button"
+                      onClick={() => void saveLineQty(line)}
+                      disabled={
+                        savingLineId === line.id
+                        || removingLineId === line.id
+                        || Number(lineQtyDrafts[line.id] ?? `${line.qty}`) === line.qty
+                      }
+                    >
+                      {savingLineId === line.id ? "Saving..." : "Update qty"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeLine(line)}
+                      disabled={savingLineId === line.id || removingLineId === line.id}
+                    >
+                      {removingLineId === line.id ? "Removing..." : "Remove"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="workshop-os-empty-card">No labour or part lines have been added yet.</div>
+      )}
+    </div>
+  );
+
   const toggleSection = (section: JobWorkspaceSectionKey) => {
     setCollapsedSections((current) => {
       const nextCollapsed = !current[section];
@@ -1357,6 +1879,16 @@ export const WorkshopJobOverlay = ({
                 <p>{issueSummary}</p>
               </div>
             ) : null}
+          </section>
+
+          <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
+            <div className="workshop-os-job-workspace-section__toggle-copy">
+              <strong>Work</strong>
+              <span className="table-secondary">Parts and labour lines for the job, with quick add and quantity updates.</span>
+            </div>
+            <div className="workshop-os-job-workspace-section__body">
+              {renderWorkSectionContent()}
+            </div>
           </section>
 
           <section className="workshop-os-overlay-next-action">
