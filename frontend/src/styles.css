@@ -4389,6 +4389,51 @@ th {
   color: #1a2432;
 }
 
+.workshop-os-overlay-schedule-slot__display {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1a2432;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workshop-os-overlay-schedule-slot__display:hover {
+  color: #0f4f94;
+}
+
+.workshop-os-overlay-schedule-slot__editor {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-overlay-schedule-slot__inputs {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-overlay-schedule-slot__inputs label {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-overlay-schedule-slot__inputs input {
+  width: 100%;
+  min-width: 0;
+}
+
+.workshop-os-overlay-schedule-slot__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .workshop-os-overlay-hero__issue {
   display: grid;
   gap: 4px;
@@ -4454,6 +4499,17 @@ th {
 
 .workshop-os-overlay-next-action__buttons .primary {
   box-shadow: 0 10px 18px rgba(23, 58, 94, 0.16);
+}
+
+.workshop-os-overlay-next-action__status-row {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.workshop-os-overlay-next-action__status-row .workshop-os-overlay-next-action__field {
+  flex: 1 1 240px;
 }
 
 .workshop-os-overlay-next-action__copy h3 {

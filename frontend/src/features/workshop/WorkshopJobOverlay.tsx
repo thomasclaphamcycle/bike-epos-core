@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPost } from "../../api/client";
+import { apiGet, apiPatch, apiPost } from "../../api/client";
 import { useToasts } from "../../components/ToastProvider";
 import {
   getWorkshopTechnicianWorkflowSummary,
@@ -123,6 +123,41 @@ type WorkshopJobOverlayAttachment = {
   } | null;
 };
 
+type WorkshopJobOverlaySchedulePatchResponse = {
+  job: {
+    id: string;
+    status: string;
+    assignedStaffId: string | null;
+    assignedStaffName: string | null;
+    scheduledDate: string | null;
+    scheduledStartAt: string | null;
+    scheduledEndAt: string | null;
+    durationMinutes: number | null;
+    updatedAt: string;
+  };
+  idempotent: boolean;
+};
+
+type WorkshopJobOverlayStatusResponse = {
+  job: {
+    id: string;
+    status: string;
+    updatedAt: string;
+    completedAt: string | null;
+    cancelledAt?: string | null;
+  };
+  idempotent: boolean;
+};
+
+type WorkshopJobOverlayApprovalResponse = {
+  estimate: WorkshopJobOverlayEstimate;
+  job: {
+    id: string;
+    status: string;
+  };
+  idempotent: boolean;
+};
+
 type WorkshopJobOverlayAttachmentsResponse = {
   workshopJobId: string;
   attachments: WorkshopJobOverlayAttachment[];
@@ -227,6 +262,90 @@ const formatDateTime = (value: string | null | undefined, timeZone?: string) => 
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+const getTimeZoneParts = (value: Date, timeZone?: string) => {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    ...(timeZone ? { timeZone } : {}),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = formatter.formatToParts(value);
+  const lookup = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    year: lookup("year"),
+    month: lookup("month"),
+    day: lookup("day"),
+    hour: Number(lookup("hour") || "0"),
+    minute: Number(lookup("minute") || "0"),
+  };
+};
+
+const toDateInputValue = (isoValue: string | null | undefined, timeZone?: string) => {
+  if (!isoValue) {
+    return "";
+  }
+
+  const date = new Date(isoValue);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const parts = getTimeZoneParts(date, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const toTimeInputValue = (isoValue: string | null | undefined, timeZone?: string) => {
+  if (!isoValue) {
+    return "";
+  }
+
+  const date = new Date(isoValue);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const parts = getTimeZoneParts(date, timeZone);
+  return `${`${parts.hour}`.padStart(2, "0")}:${`${parts.minute}`.padStart(2, "0")}`;
+};
+
+const buildScheduleIso = (dateKey: string, timeValue: string) => {
+  if (!dateKey || !timeValue) {
+    return null;
+  }
+
+  const date = new Date(`${dateKey}T${timeValue}:00`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const minutesBetweenTimes = (startTime: string, endTime: string) => {
+  if (!startTime || !endTime || !startTime.includes(":") || !endTime.includes(":")) {
+    return null;
+  }
+
+  const [startHour, startMinute] = startTime.split(":").map((value) => Number(value));
+  const [endHour, endMinute] = endTime.split(":").map((value) => Number(value));
+  if (
+    !Number.isInteger(startHour) ||
+    !Number.isInteger(startMinute) ||
+    !Number.isInteger(endHour) ||
+    !Number.isInteger(endMinute)
+  ) {
+    return null;
+  }
+
+  return ((endHour * 60) + endMinute) - ((startHour * 60) + startMinute);
 };
 
 const formatScheduleWindow = (
@@ -340,6 +459,18 @@ type WorkshopOverlayQuickAction =
       value: "APPROVED";
     };
 
+type WorkshopOverlayStatusAction =
+  | {
+      kind: "status";
+      label: string;
+      value: string;
+    }
+  | {
+      kind: "approval";
+      label: string;
+      value: "APPROVED";
+    };
+
 const getNextActionCard = ({
   status,
   workflowSummary,
@@ -349,6 +480,7 @@ const getNextActionCard = ({
   durationMinutes,
   partsSummary,
   estimate,
+  timeZone,
 }: {
   status: string;
   workflowSummary: ReturnType<typeof getWorkshopTechnicianWorkflowSummary>;
@@ -478,12 +610,39 @@ const getNextActionCard = ({
   }
 };
 
+type WorkshopJobOverlayScheduleDraft = {
+  dateKey: string;
+  startTime: string;
+  endTime: string;
+};
+
+const createScheduleDraft = ({
+  scheduledDate,
+  scheduledStartAt,
+  scheduledEndAt,
+  timeZone,
+}: {
+  scheduledDate: string | null | undefined;
+  scheduledStartAt: string | null | undefined;
+  scheduledEndAt: string | null | undefined;
+  timeZone?: string;
+}): WorkshopJobOverlayScheduleDraft => ({
+  dateKey:
+    toDateInputValue(scheduledStartAt, timeZone)
+    || scheduledDate?.slice(0, 10)
+    || new Date().toISOString().slice(0, 10),
+  startTime: toTimeInputValue(scheduledStartAt, timeZone) || "10:00",
+  endTime: toTimeInputValue(scheduledEndAt, timeZone) || "11:00",
+});
+
 const getQuickOverlayAction = ({
   status,
   assignedStaffName,
+  hasSale,
 }: {
   status: string;
   assignedStaffName: string | null;
+  hasSale: boolean;
 }): WorkshopOverlayQuickAction | null => {
   switch (status) {
     case "BOOKING_MADE":
@@ -516,8 +675,75 @@ const getQuickOverlayAction = ({
         label: "Resume on bench",
         value: "BIKE_ARRIVED",
       };
+    case "BIKE_READY":
+      return hasSale
+        ? {
+            kind: "status",
+            label: "Complete collection",
+            value: "COMPLETED",
+          }
+        : null;
     default:
       return null;
+  }
+};
+
+const getStatusProgressionActions = ({
+  status,
+  hasSale,
+}: {
+  status: string;
+  hasSale: boolean;
+}): WorkshopOverlayStatusAction[] => {
+  switch (status) {
+    case "BOOKING_MADE":
+      return [
+        { kind: "status", label: "Move to Bench", value: "IN_PROGRESS" },
+        { kind: "status", label: "Pause Job", value: "ON_HOLD" },
+        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "BIKE_ARRIVED":
+      return [
+        { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { kind: "status", label: "Pause Job", value: "ON_HOLD" },
+        { kind: "status", label: "Ready for Collection", value: "READY" },
+        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "WAITING_FOR_APPROVAL":
+      return [
+        { kind: "approval", label: "Mark Approved", value: "APPROVED" },
+        { kind: "status", label: "Pause Job", value: "ON_HOLD" },
+        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "APPROVED":
+      return [
+        { kind: "status", label: "Start Bench Work", value: "IN_PROGRESS" },
+        { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { kind: "status", label: "Pause Job", value: "ON_HOLD" },
+        { kind: "status", label: "Ready for Collection", value: "READY" },
+        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "WAITING_FOR_PARTS":
+      return [
+        { kind: "status", label: "Resume Bench Work", value: "IN_PROGRESS" },
+        { kind: "status", label: "Pause Job", value: "ON_HOLD" },
+        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "ON_HOLD":
+      return [
+        { kind: "status", label: "Resume Bench Work", value: "IN_PROGRESS" },
+        { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+      ];
+    case "BIKE_READY":
+      return hasSale
+        ? [
+            { kind: "status", label: "Complete Collection", value: "COMPLETED" },
+            { kind: "status", label: "Cancel Job", value: "CANCELLED" },
+          ]
+        : [];
+    default:
+      return [];
   }
 };
 
@@ -539,18 +765,35 @@ export const WorkshopJobOverlay = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [savingQuickAction, setSavingQuickAction] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("");
+  const [statusActionDraft, setStatusActionDraft] = useState("");
+  const [scheduleDraft, setScheduleDraft] = useState<WorkshopJobOverlayScheduleDraft>(() =>
+    createScheduleDraft({
+      scheduledDate: summary?.scheduledDate || null,
+      scheduledStartAt: summary?.scheduledStartAt || null,
+      scheduledEndAt: summary?.scheduledEndAt || null,
+      timeZone,
+    }),
+  );
   const [collapsedSections, setCollapsedSections] = useState<Record<JobWorkspaceSectionKey, boolean>>(
     DEFAULT_JOB_WORKSPACE_COLLAPSED,
   );
-  const savingAnyAction = savingAssignment || savingQuickAction;
+  const savingAnyAction = savingAssignment || savingQuickAction || savingStatus || savingSchedule;
 
   useEffect(() => {
     setCollapsedSections(DEFAULT_JOB_WORKSPACE_COLLAPSED);
     setActionError(null);
+    setScheduleError(null);
     setSavingAssignment(false);
     setSavingQuickAction(false);
+    setSavingStatus(false);
+    setSavingSchedule(false);
+    setIsEditingSchedule(false);
   }, [jobId]);
 
   useEffect(() => {
@@ -567,6 +810,30 @@ export const WorkshopJobOverlay = ({
   useEffect(() => {
     setAssignedStaffIdDraft(details?.job.assignedStaffId || summary?.assignedStaffId || "");
   }, [details?.job.assignedStaffId, summary?.assignedStaffId, jobId]);
+
+  useEffect(() => {
+    if (isEditingSchedule) {
+      return;
+    }
+
+    setScheduleDraft(
+      createScheduleDraft({
+        scheduledDate: details?.job.scheduledDate || summary?.scheduledDate || null,
+        scheduledStartAt: details?.job.scheduledStartAt || summary?.scheduledStartAt || null,
+        scheduledEndAt: details?.job.scheduledEndAt || summary?.scheduledEndAt || null,
+        timeZone,
+      }),
+    );
+  }, [
+    details?.job.scheduledDate,
+    details?.job.scheduledStartAt,
+    details?.job.scheduledEndAt,
+    summary?.scheduledDate,
+    summary?.scheduledStartAt,
+    summary?.scheduledEndAt,
+    timeZone,
+    isEditingSchedule,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -629,7 +896,17 @@ export const WorkshopJobOverlay = ({
   const quickAction = getQuickOverlayAction({
     status: displayStatus,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
+    hasSale: Boolean(overlayJob?.sale || summary?.sale),
   });
+  const statusActions = getStatusProgressionActions({
+    status: displayStatus,
+    hasSale: Boolean(overlayJob?.sale || summary?.sale),
+  }).filter((action) =>
+    !quickAction
+    || action.kind !== quickAction.kind
+    || action.value !== quickAction.value,
+  );
+  const selectedStatusAction = statusActions.find((action) => `${action.kind}:${action.value}` === statusActionDraft) ?? null;
   const canAssignTechnician = technicianOptions.length > 0 && !["COMPLETED", "CANCELLED"].includes(displayStatus);
   const hasAssignmentChange =
     (overlayJob?.assignedStaffId || summary?.assignedStaffId || "") !== assignedStaffIdDraft;
@@ -651,6 +928,12 @@ export const WorkshopJobOverlay = ({
     timeZone,
   });
 
+  useEffect(() => {
+    setStatusActionDraft(
+      statusActions[0] ? `${statusActions[0].kind}:${statusActions[0].value}` : "",
+    );
+  }, [displayStatus, statusActions.length]);
+
   const refreshOverlay = async () => {
     setRefreshKey((current) => current + 1);
     if (onJobChanged) {
@@ -666,6 +949,147 @@ export const WorkshopJobOverlay = ({
       setActionError(message);
       error(message);
     });
+  };
+
+  const applyInlineStatusUpdate = ({
+    status,
+    completedAt,
+    cancelledAt,
+    estimate,
+  }: {
+    status: string;
+    completedAt?: string | null;
+    cancelledAt?: string | null;
+    estimate?: WorkshopJobOverlayEstimate | null;
+  }) => {
+    setDetails((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        job: {
+          ...current.job,
+          status,
+          ...(completedAt !== undefined ? { completedAt } : {}),
+          ...(cancelledAt !== undefined ? { cancelledAt } : {}),
+        },
+        ...(estimate !== undefined ? { currentEstimate: estimate } : {}),
+      };
+    });
+  };
+
+  const startScheduleEdit = () => {
+    setScheduleDraft(
+      createScheduleDraft({
+        scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
+        scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+        scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+        timeZone,
+      }),
+    );
+    setScheduleError(null);
+    setIsEditingSchedule(true);
+  };
+
+  const cancelScheduleEdit = () => {
+    setScheduleDraft(
+      createScheduleDraft({
+        scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
+        scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+        scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+        timeZone,
+      }),
+    );
+    setScheduleError(null);
+    setIsEditingSchedule(false);
+  };
+
+  const saveSchedule = async () => {
+    const scheduledStartAt = buildScheduleIso(scheduleDraft.dateKey, scheduleDraft.startTime);
+    const scheduledEndAt = buildScheduleIso(scheduleDraft.dateKey, scheduleDraft.endTime);
+    const durationMinutes = minutesBetweenTimes(scheduleDraft.startTime, scheduleDraft.endTime);
+
+    if (savingAnyAction) {
+      return;
+    }
+
+    if (!jobId) {
+      const message = "Workshop job is unavailable for scheduling.";
+      setScheduleError(message);
+      error(message);
+      return;
+    }
+
+    if (!scheduleDraft.dateKey) {
+      setScheduleError("Choose a valid date.");
+      return;
+    }
+
+    if (!scheduledStartAt || !scheduledEndAt) {
+      setScheduleError("Choose a valid start and end time.");
+      return;
+    }
+
+    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+      setScheduleError("End time must be later than the start time.");
+      return;
+    }
+
+    setSavingSchedule(true);
+    setScheduleError(null);
+    setActionError(null);
+
+    try {
+      const response = await apiPatch<WorkshopJobOverlaySchedulePatchResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(jobId)}/schedule`,
+        {
+          scheduledStartAt,
+          scheduledEndAt,
+          durationMinutes,
+        },
+      );
+
+      setDetails((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          job: {
+            ...current.job,
+            status: response.job.status,
+            assignedStaffId: response.job.assignedStaffId,
+            assignedStaffName: response.job.assignedStaffName,
+            scheduledDate: response.job.scheduledDate,
+            scheduledStartAt: response.job.scheduledStartAt,
+            scheduledEndAt: response.job.scheduledEndAt,
+            durationMinutes: response.job.durationMinutes,
+            updatedAt: response.job.updatedAt,
+          },
+        };
+      });
+
+      setScheduleDraft(
+        createScheduleDraft({
+          scheduledDate: response.job.scheduledDate,
+          scheduledStartAt: response.job.scheduledStartAt,
+          scheduledEndAt: response.job.scheduledEndAt,
+          timeZone,
+        }),
+      );
+      setIsEditingSchedule(false);
+      success(response.idempotent ? "Scheduled slot already matches." : "Scheduled slot updated.");
+      refreshOverlayInBackground();
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Failed to update workshop schedule";
+      setScheduleError(message);
+      error(message);
+    } finally {
+      setSavingSchedule(false);
+    }
   };
 
   const saveAssignment = async () => {
@@ -719,24 +1143,73 @@ export const WorkshopJobOverlay = ({
 
     try {
       if (quickAction.kind === "approval") {
-        await apiPost(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
+        const response = await apiPost<WorkshopJobOverlayApprovalResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
           status: quickAction.value,
+        });
+        applyInlineStatusUpdate({
+          status: response.job.status,
+          estimate: response.estimate,
         });
         success("Quote marked approved");
       } else {
-        await apiPost(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
+        const response = await apiPost<WorkshopJobOverlayStatusResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
           status: quickAction.value,
+        });
+        applyInlineStatusUpdate({
+          status: response.job.status,
+          completedAt: response.job.completedAt,
+          cancelledAt: response.job.cancelledAt,
         });
         success("Job status updated");
       }
 
-      await refreshOverlay();
+      refreshOverlayInBackground();
     } catch (nextActionError) {
       const message = nextActionError instanceof Error ? nextActionError.message : "Failed to update workshop job";
       setActionError(message);
       error(message);
     } finally {
       setSavingQuickAction(false);
+    }
+  };
+
+  const saveStatusDraft = async () => {
+    if (!selectedStatusAction || !jobId || savingAnyAction) {
+      return;
+    }
+
+    setSavingStatus(true);
+    setActionError(null);
+
+    try {
+      if (selectedStatusAction.kind === "approval") {
+        const response = await apiPost<WorkshopJobOverlayApprovalResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
+          status: selectedStatusAction.value,
+        });
+        applyInlineStatusUpdate({
+          status: response.job.status,
+          estimate: response.estimate,
+        });
+        success("Quote marked approved");
+      } else {
+        const response = await apiPost<WorkshopJobOverlayStatusResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
+          status: selectedStatusAction.value,
+        });
+        applyInlineStatusUpdate({
+          status: response.job.status,
+          completedAt: response.job.completedAt,
+          cancelledAt: response.job.cancelledAt,
+        });
+        success("Job status updated");
+      }
+
+      refreshOverlayInBackground();
+    } catch (statusError) {
+      const message = statusError instanceof Error ? statusError.message : "Failed to update workflow status";
+      setActionError(message);
+      error(message);
+    } finally {
+      setSavingStatus(false);
     }
   };
 
@@ -845,13 +1318,61 @@ export const WorkshopJobOverlay = ({
               </div>
               <div>
                 <span className="metric-label">Scheduled slot</span>
-                <strong>
-                  {formatScheduleWindow(
-                    overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
-                    overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
-                    timeZone,
-                  )}
-                </strong>
+                {!isEditingSchedule ? (
+                  <button
+                    type="button"
+                    className="workshop-os-overlay-schedule-slot__display"
+                    onClick={startScheduleEdit}
+                    disabled={savingAnyAction}
+                  >
+                    {formatScheduleWindow(
+                      overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+                      overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+                      timeZone,
+                    )}
+                  </button>
+                ) : (
+                  <div className="workshop-os-overlay-schedule-slot__editor">
+                    <div className="workshop-os-overlay-schedule-slot__inputs">
+                      <label>
+                        <span className="metric-label">Date</span>
+                        <input
+                          type="date"
+                          value={scheduleDraft.dateKey}
+                          onChange={(event) => setScheduleDraft((current) => ({ ...current, dateKey: event.target.value }))}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span className="metric-label">Start</span>
+                        <input
+                          type="time"
+                          value={scheduleDraft.startTime}
+                          onChange={(event) => setScheduleDraft((current) => ({ ...current, startTime: event.target.value }))}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                      <label>
+                        <span className="metric-label">End</span>
+                        <input
+                          type="time"
+                          value={scheduleDraft.endTime}
+                          onChange={(event) => setScheduleDraft((current) => ({ ...current, endTime: event.target.value }))}
+                          disabled={savingSchedule}
+                        />
+                      </label>
+                    </div>
+                    <div className="workshop-os-overlay-schedule-slot__actions">
+                      <button type="button" className="primary" onClick={() => void saveSchedule()} disabled={savingSchedule}>
+                        {savingSchedule ? "Saving..." : "Save"}
+                      </button>
+                      <button type="button" onClick={cancelScheduleEdit} disabled={savingSchedule}>
+                        Cancel
+                      </button>
+                    </div>
+                    {scheduleError ? <span className="table-secondary">{scheduleError}</span> : null}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -909,6 +1430,31 @@ export const WorkshopJobOverlay = ({
                     </button>
                   ) : null}
                 </div>
+                {statusActions.length ? (
+                  <div className="workshop-os-overlay-next-action__status-row">
+                    <label className="workshop-os-overlay-next-action__field">
+                      <span className="metric-label">Change status</span>
+                      <select
+                        value={statusActionDraft}
+                        onChange={(event) => setStatusActionDraft(event.target.value)}
+                        disabled={savingAnyAction}
+                      >
+                        {statusActions.map((action) => (
+                          <option key={`${action.kind}:${action.value}`} value={`${action.kind}:${action.value}`}>
+                            {action.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void saveStatusDraft()}
+                      disabled={savingAnyAction || !selectedStatusAction}
+                    >
+                      {savingStatus ? "Saving..." : "Apply"}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : quickAction ? (
               <div className="workshop-os-overlay-next-action__buttons">
@@ -921,11 +1467,35 @@ export const WorkshopJobOverlay = ({
                   {savingQuickAction ? "Saving..." : quickAction.label}
                 </button>
               </div>
+            ) : statusActions.length ? (
+              <div className="workshop-os-overlay-next-action__status-row">
+                <label className="workshop-os-overlay-next-action__field">
+                  <span className="metric-label">Change status</span>
+                  <select
+                    value={statusActionDraft}
+                    onChange={(event) => setStatusActionDraft(event.target.value)}
+                    disabled={savingAnyAction}
+                  >
+                    {statusActions.map((action) => (
+                      <option key={`${action.kind}:${action.value}`} value={`${action.kind}:${action.value}`}>
+                        {action.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void saveStatusDraft()}
+                  disabled={savingAnyAction || !selectedStatusAction}
+                >
+                  {savingStatus ? "Saving..." : "Apply"}
+                </button>
+              </div>
             ) : null}
             <div className="workshop-os-overlay-next-action__highlights">
               {displayWorkflowSummary.blockerLabel ? (
                 <div className="workshop-os-overlay-next-action__highlight workshop-os-overlay-next-action__highlight--blocker">
-                  <span className="metric-label">Current blocker</span>
+                  <span className="metric-label">Next step</span>
                   <strong>{displayWorkflowSummary.blockerLabel}</strong>
                   <span className="table-secondary">{displayWorkflowSummary.detail}</span>
                 </div>
