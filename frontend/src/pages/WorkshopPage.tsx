@@ -15,7 +15,7 @@ import {
   workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
-import { WorkshopIntakeOverlay } from "../features/workshop/WorkshopIntakeOverlay";
+import { WorkshopCheckInModal } from "../features/workshop/WorkshopCheckInModal";
 
 const statusOptions = [
   "",
@@ -354,18 +354,6 @@ export const WorkshopPage = () => {
 
     return options;
   }, [jobs, user?.id, user?.name, user?.role, user?.username]);
-
-  const defaultIntakeTechnicianId = useMemo(() => {
-    if (selectedTechnicianId) {
-      return selectedTechnicianId;
-    }
-
-    if (quickFilter === "MY_JOBS" && user?.id) {
-      return user.id;
-    }
-
-    return "";
-  }, [quickFilter, selectedTechnicianId, user?.id]);
 
   const visibleJobs = useMemo(
     () => jobs.filter((job) => {
@@ -842,10 +830,8 @@ export const WorkshopPage = () => {
         </section>
       </div>
 
-      <WorkshopIntakeOverlay
+      <WorkshopCheckInModal
         open={isIntakeOpen}
-        technicianOptions={technicianOptions}
-        defaultTechnicianId={defaultIntakeTechnicianId}
         onClose={() => setIsIntakeOpen(false)}
         onCreated={handleIntakeCreated}
       />

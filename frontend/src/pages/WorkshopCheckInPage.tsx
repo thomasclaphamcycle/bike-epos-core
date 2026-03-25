@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -86,7 +86,31 @@ const buildCheckInNotes = (input: {
   return rows.join("\n");
 };
 
-export const WorkshopCheckInPage = () => {
+type WorkshopCheckInPageProps = {
+  embedded?: boolean;
+  onClose?: () => void;
+  onCreated?: (jobId: string) => Promise<void> | void;
+};
+
+const renderStepIndicators = (step: number): ReactNode => (
+  <div className="step-indicator-row">
+    {stepTitles.map((title, index) => (
+      <div
+        key={title}
+        className={`step-indicator ${index === step ? "step-indicator-active" : index < step ? "step-indicator-complete" : ""}`}
+      >
+        <span className="step-number">{index + 1}</span>
+        <span>{title}</span>
+      </div>
+    ))}
+  </div>
+);
+
+export const WorkshopCheckInPage = ({
+  embedded = false,
+  onClose,
+  onCreated,
+}: WorkshopCheckInPageProps = {}) => {
   const { success, error } = useToasts();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
@@ -437,6 +461,23 @@ export const WorkshopCheckInPage = () => {
       } else {
         success("Workshop check-in created");
       }
+
+      if (onCreated) {
+        try {
+          await Promise.resolve(onCreated(created.id));
+        } catch (refreshError) {
+          error(
+            refreshError instanceof Error
+              ? `Workshop check-in created, but the Workshop Operating Screen could not refresh: ${refreshError.message}`
+              : "Workshop check-in created, but the Workshop Operating Screen could not refresh.",
+          );
+          return;
+        }
+      }
+
+      if (embedded) {
+        onClose?.();
+      }
     } catch (submitError) {
       error(submitError instanceof Error ? submitError.message : "Failed to create workshop check-in");
     } finally {
@@ -459,36 +500,8 @@ export const WorkshopCheckInPage = () => {
     setSearchParams(nextParams);
   };
 
-  return (
-    <div className="page-shell">
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h1>Workshop Check-In</h1>
-            <p className="muted-text">
-              Capture customer, bike, and intake details before the job moves onto the workshop board.
-            </p>
-          </div>
-          <div className="actions-inline">
-            <Link to="/workshop">Back to workshop</Link>
-            {createdJobId ? <Link to={`/workshop/${createdJobId}`}>Open created job</Link> : null}
-          </div>
-        </div>
-
-        <div className="step-indicator-row">
-          {stepTitles.map((title, index) => (
-            <div
-              key={title}
-              className={`step-indicator ${index === step ? "step-indicator-active" : index < step ? "step-indicator-complete" : ""}`}
-            >
-              <span className="step-number">{index + 1}</span>
-              <span>{title}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <form className="page-shell" onSubmit={submitCheckIn}>
+  const formContent = (
+    <form className={embedded ? "workshop-checkin-flow workshop-checkin-flow--embedded" : "page-shell"} onSubmit={submitCheckIn}>
         {step === 0 ? (
           <section className="card">
             <h2>Customer</h2>
@@ -865,6 +878,48 @@ export const WorkshopCheckInPage = () => {
           </div>
         </section>
       </form>
+  );
+
+  if (embedded) {
+    return (
+      <div className="workshop-checkin-modal-body">
+        <section className="card workshop-checkin-modal-intro">
+          <div className="card-header-row">
+            <div>
+              <h3>New Job</h3>
+              <p className="muted-text">
+                Capture customer, bike, and intake details without leaving the Workshop Operating Screen.
+              </p>
+            </div>
+            {createdJobId ? <Link to={`/workshop/${createdJobId}`}>Open created job</Link> : null}
+          </div>
+          {renderStepIndicators(step)}
+        </section>
+        {formContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-shell">
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h1>Workshop Check-In</h1>
+            <p className="muted-text">
+              Capture customer, bike, and intake details before the job moves onto the workshop board.
+            </p>
+          </div>
+          <div className="actions-inline">
+            <Link to="/workshop">Back to workshop</Link>
+            {createdJobId ? <Link to={`/workshop/${createdJobId}`}>Open created job</Link> : null}
+          </div>
+        </div>
+
+        {renderStepIndicators(step)}
+      </section>
+
+      {formContent}
     </div>
   );
 };

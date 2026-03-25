@@ -4405,6 +4405,27 @@ th {
   gap: 12px;
 }
 
+.workshop-checkin-modal {
+  width: min(92vw, 1320px);
+  height: min(88dvh, 980px);
+  max-height: min(88dvh, 980px);
+}
+
+.workshop-checkin-modal__content {
+  padding-top: 16px;
+}
+
+.workshop-checkin-modal-body,
+.workshop-checkin-flow--embedded {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.workshop-checkin-modal-intro h3 {
+  margin: 0;
+}
+
 .workshop-os-modal__footer {
   display: flex;
   align-items: center;
@@ -8939,6 +8960,12 @@ th {
     max-height: 100dvh;
     border-radius: 18px;
     padding: 14px 14px 16px;
+  }
+
+  .workshop-checkin-modal {
+    width: min(100vw, 100%);
+    height: min(100dvh, 100%);
+    max-height: 100dvh;
   }
 
   .workshop-os-intake-drawer {
