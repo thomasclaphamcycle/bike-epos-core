@@ -73,14 +73,12 @@ const stepTitles = [
 ] as const;
 
 const buildCheckInNotes = (input: {
-  issueSummary: string;
-  requestedWork: string;
-  intakeNotes: string;
+  problemWork: string;
+  additionalNotes: string;
 }) => {
   const rows = [
-    input.issueSummary.trim() ? `Issue: ${input.issueSummary.trim()}` : "",
-    input.requestedWork.trim() ? `Requested Work: ${input.requestedWork.trim()}` : "",
-    input.intakeNotes.trim() ? `Check-in Notes: ${input.intakeNotes.trim()}` : "",
+    input.problemWork.trim() ? `Problem / Work: ${input.problemWork.trim()}` : "",
+    input.additionalNotes.trim() ? `Additional notes: ${input.additionalNotes.trim()}` : "",
   ].filter(Boolean);
 
   return rows.join("\n");
@@ -170,9 +168,8 @@ export const WorkshopCheckInPage = ({
   const [bikeSearchModalOpen, setBikeSearchModalOpen] = useState(false);
   const [bikeCreateModalOpen, setBikeCreateModalOpen] = useState(false);
   const [bikeSearchText, setBikeSearchText] = useState("");
-  const [issueSummary, setIssueSummary] = useState("");
-  const [requestedWork, setRequestedWork] = useState("");
-  const [intakeNotes, setIntakeNotes] = useState("");
+  const [problemWork, setProblemWork] = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [createdJobId, setCreatedJobId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<WorkshopServiceTemplate[]>([]);
@@ -191,8 +188,8 @@ export const WorkshopCheckInPage = ({
   }, [createCustomerInline, manualCustomerName, newCustomerName, selectedCustomer]);
 
   const checkInNotes = useMemo(
-    () => buildCheckInNotes({ issueSummary, requestedWork, intakeNotes }),
-    [issueSummary, requestedWork, intakeNotes],
+    () => buildCheckInNotes({ problemWork, additionalNotes }),
+    [additionalNotes, problemWork],
   );
   const selectedBikeRecord = useMemo(
     () => customerBikes.find((bike) => bike.id === selectedBikeId) ?? workshopStartContext?.bike ?? null,
@@ -443,8 +440,8 @@ export const WorkshopCheckInPage = ({
         error("Bike description is required.");
         return;
       }
-      if (!issueSummary.trim() && !requestedWork.trim() && !intakeNotes.trim()) {
-        error("Capture at least one issue, requested-work, or intake note detail.");
+      if (!problemWork.trim()) {
+        error("Problem / Work is required.");
         return;
       }
     }
@@ -888,28 +885,19 @@ export const WorkshopCheckInPage = ({
                 />
               </label>
               <label>
-                Issue / symptoms
+                Problem / Work
                 <textarea
-                  value={issueSummary}
-                  onChange={(event) => setIssueSummary(event.target.value)}
+                  value={problemWork}
+                  onChange={(event) => setProblemWork(event.target.value)}
                   rows={4}
-                  placeholder="What the customer reports is wrong"
+                  placeholder="What is wrong, what work is needed, or what the customer is asking for"
                 />
               </label>
               <label>
-                Requested work
+                Additional notes
                 <textarea
-                  value={requestedWork}
-                  onChange={(event) => setRequestedWork(event.target.value)}
-                  rows={4}
-                  placeholder="Requested repair / service scope"
-                />
-              </label>
-              <label>
-                Intake notes
-                <textarea
-                  value={intakeNotes}
-                  onChange={(event) => setIntakeNotes(event.target.value)}
+                  value={additionalNotes}
+                  onChange={(event) => setAdditionalNotes(event.target.value)}
                   rows={4}
                   placeholder="Accessories left with bike, visible damage, extra notes"
                 />
