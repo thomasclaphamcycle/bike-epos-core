@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -649,6 +649,31 @@ export const WorkshopCheckInPage = ({
     setBikeCreateModalOpen(false);
   };
 
+  useEffect(() => {
+    if (!bikeSearchModalOpen && !bikeCreateModalOpen) {
+      return undefined;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      if (bikeCreateModalOpen) {
+        setBikeCreateModalOpen(false);
+        return;
+      }
+
+      if (bikeSearchModalOpen) {
+        setBikeSearchModalOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [bikeCreateModalOpen, bikeSearchModalOpen]);
+
   const persistBikeRecord = async (options: { useInIntake: boolean }) => {
     if (!selectedCustomer?.id) {
       if (options.useInIntake) {
@@ -687,8 +712,47 @@ export const WorkshopCheckInPage = ({
     }
   };
 
+  const handleFlowKeyDown = (event: ReactKeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter" || event.defaultPrevented) {
+      return;
+    }
+
+    if (bikeSearchModalOpen || bikeCreateModalOpen) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    if (target instanceof HTMLTextAreaElement || target.isContentEditable) {
+      return;
+    }
+
+    if (target.closest("[data-customer-search-input='true']")) {
+      return;
+    }
+
+    if (target instanceof HTMLButtonElement) {
+      return;
+    }
+
+    event.preventDefault();
+    if (step < stepTitles.length - 1) {
+      goNext();
+      return;
+    }
+
+    event.currentTarget.requestSubmit();
+  };
+
   const formContent = (
-    <form className={embedded ? "workshop-checkin-flow workshop-checkin-flow--embedded" : "page-shell"} onSubmit={submitCheckIn}>
+    <form
+      className={embedded ? "workshop-checkin-flow workshop-checkin-flow--embedded" : "page-shell"}
+      onSubmit={submitCheckIn}
+      onKeyDown={handleFlowKeyDown}
+    >
         {step === 0 ? (
           <section className="card">
             <h2>Customer</h2>
@@ -734,6 +798,7 @@ export const WorkshopCheckInPage = ({
                         <input
                           value={customerSearch}
                           onChange={(event) => setCustomerSearch(event.target.value)}
+                          data-customer-search-input="true"
                           onKeyDown={(event) => {
                             if (event.key === "Escape") {
                               setHighlightedCustomerOptionIndex(-1);
