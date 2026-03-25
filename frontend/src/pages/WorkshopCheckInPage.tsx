@@ -671,180 +671,193 @@ export const WorkshopCheckInPage = ({
               </div>
             ) : (
               <>
-                <div className="filter-row">
-                  <label className="grow">
-                    Search existing customer
-                    <input
-                      value={customerSearch}
-                      onChange={(event) => setCustomerSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          setHighlightedCustomerOptionIndex(-1);
-                          return;
-                        }
-
-                        if (customerSearchOptionCount === 0) {
-                          return;
-                        }
-
-                        if (event.key === "ArrowDown") {
-                          event.preventDefault();
-                          setHighlightedCustomerOptionIndex((current) => (
-                            current < 0 ? 0 : Math.min(current + 1, customerSearchOptionCount - 1)
-                          ));
-                          return;
-                        }
-
-                        if (event.key === "ArrowUp") {
-                          event.preventDefault();
-                          setHighlightedCustomerOptionIndex((current) => (
-                            current < 0 ? 0 : Math.max(current - 1, 0)
-                          ));
-                          return;
-                        }
-
-                        if (event.key !== "Enter" || highlightedCustomerOptionIndex < 0) {
-                          return;
-                        }
-
-                        event.preventDefault();
-                        if (highlightedCustomerOptionIndex < customerResults.length) {
-                          selectExistingCustomer(customerResults[highlightedCustomerOptionIndex]);
-                          return;
-                        }
-
-                        if (showInlineCreateCustomerOption) {
-                          beginInlineCustomerCreateFromSearch();
-                        }
-                      }}
-                      placeholder="name, phone, email"
-                      aria-activedescendant={
-                        highlightedCustomerOptionIndex >= 0
-                          ? `workshop-checkin-customer-option-${highlightedCustomerOptionIndex}`
-                          : undefined
-                      }
-                    />
-                  </label>
-                </div>
-
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Contact</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody role="listbox" aria-label="Customer search results">
-                      {customerResults.length === 0 ? (
-                        <tr>
-                          <td colSpan={3}>
-                            {loadingCustomers
-                              ? "Searching..."
-                              : customerSearch.trim()
-                                ? "No existing customers matched that search."
-                                : "Search for an existing customer, create one inline, or use a manual intake name."}
-                          </td>
-                        </tr>
-                      ) : customerResults.map((customer, index) => (
-                        <tr
-                          key={customer.id}
-                          id={`workshop-checkin-customer-option-${index}`}
-                          ref={(element) => {
-                            customerOptionRefs.current[index] = element;
-                          }}
-                          className={index === highlightedCustomerOptionIndex ? "workshop-checkin-search-result workshop-checkin-search-result--active" : undefined}
-                          role="option"
-                          aria-selected={index === highlightedCustomerOptionIndex}
-                          onMouseEnter={() => setHighlightedCustomerOptionIndex(index)}
-                        >
-                          <td>{customer.name}</td>
-                          <td>
-                            <div>{customer.email || "-"}</div>
-                            <div className="table-secondary">{customer.phone || "-"}</div>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                selectExistingCustomer(customer);
-                              }}
-                            >
-                              Select
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {showInlineCreateCustomerOption ? (
-                  <div
-                    className={`restricted-panel info-panel workshop-checkin-create-customer-option${highlightedCustomerOptionIndex === customerResults.length ? " workshop-checkin-create-customer-option--active" : ""}`}
-                    style={{ marginTop: "12px" }}
-                    role="option"
-                    aria-selected={highlightedCustomerOptionIndex === customerResults.length}
-                  >
-                    <div className="actions-inline" style={{ justifyContent: "space-between", gap: "12px" }}>
-                      <div>
-                        <strong>No exact customer match found.</strong>
-                        <div className="table-secondary">Create a new customer directly from the name you just typed.</div>
+                {selectedCustomer ? (
+                  <div className="selected-customer-panel" style={{ marginTop: "12px" }}>
+                    <div className="grow">
+                      <div className="eyebrow-label">Selected customer</div>
+                      <strong>{selectedCustomer.name}</strong>
+                      <div className="table-secondary">
+                        {[selectedCustomer.email, selectedCustomer.phone].filter(Boolean).join(" • ") || "No email or phone on file"}
                       </div>
-                      <button
-                        type="button"
-                        className="primary"
-                        id={`workshop-checkin-customer-option-${customerResults.length}`}
-                        ref={(element) => {
-                          customerOptionRefs.current[customerResults.length] = element;
-                        }}
-                        aria-selected={highlightedCustomerOptionIndex === customerResults.length}
-                        onMouseEnter={() => setHighlightedCustomerOptionIndex(customerResults.length)}
-                        onFocus={() => setHighlightedCustomerOptionIndex(customerResults.length)}
-                        onClick={beginInlineCustomerCreateFromSearch}
-                      >
-                        Create new customer "{trimmedCustomerSearch}"
+                    </div>
+                    <div className="actions-inline">
+                      <button type="button" onClick={clearCustomerSelection}>
+                        Change customer
                       </button>
                     </div>
                   </div>
                 ) : null}
 
-                <div className="job-meta-grid" style={{ marginTop: "12px" }}>
-                  <div>
-                    <strong>Selected customer:</strong> {selectedCustomer?.name || "-"}
-                  </div>
-                  <div>
-                    <strong>Manual intake name:</strong> {manualCustomerName || "-"}
-                  </div>
-                </div>
+                {!selectedCustomer ? (
+                  <>
+                    <div className="filter-row">
+                      <label className="grow">
+                        Search existing customer
+                        <input
+                          value={customerSearch}
+                          onChange={(event) => setCustomerSearch(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              setHighlightedCustomerOptionIndex(-1);
+                              return;
+                            }
 
-                {selectedCustomer ? (
-                  <div className="actions-inline" style={{ marginTop: "12px" }}>
-                    <button type="button" onClick={clearCustomerSelection}>
-                      Change customer
-                    </button>
-                  </div>
+                            if (customerSearchOptionCount === 0) {
+                              return;
+                            }
+
+                            if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              setHighlightedCustomerOptionIndex((current) => (
+                                current < 0 ? 0 : Math.min(current + 1, customerSearchOptionCount - 1)
+                              ));
+                              return;
+                            }
+
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              setHighlightedCustomerOptionIndex((current) => (
+                                current < 0 ? 0 : Math.max(current - 1, 0)
+                              ));
+                              return;
+                            }
+
+                            if (event.key !== "Enter" || highlightedCustomerOptionIndex < 0) {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            if (highlightedCustomerOptionIndex < customerResults.length) {
+                              selectExistingCustomer(customerResults[highlightedCustomerOptionIndex]);
+                              return;
+                            }
+
+                            if (showInlineCreateCustomerOption) {
+                              beginInlineCustomerCreateFromSearch();
+                            }
+                          }}
+                          placeholder="name, phone, email"
+                          aria-activedescendant={
+                            highlightedCustomerOptionIndex >= 0
+                              ? `workshop-checkin-customer-option-${highlightedCustomerOptionIndex}`
+                              : undefined
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Contact</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody role="listbox" aria-label="Customer search results">
+                          {customerResults.length === 0 ? (
+                            <tr>
+                              <td colSpan={3}>
+                                {loadingCustomers
+                                  ? "Searching..."
+                                  : customerSearch.trim()
+                                    ? "No existing customers matched that search."
+                                    : "Search for an existing customer, create one inline, or use a manual intake name."}
+                              </td>
+                            </tr>
+                          ) : customerResults.map((customer, index) => (
+                            <tr
+                              key={customer.id}
+                              id={`workshop-checkin-customer-option-${index}`}
+                              ref={(element) => {
+                                customerOptionRefs.current[index] = element;
+                              }}
+                              className={index === highlightedCustomerOptionIndex ? "workshop-checkin-search-result workshop-checkin-search-result--active" : undefined}
+                              role="option"
+                              aria-selected={index === highlightedCustomerOptionIndex}
+                              onMouseEnter={() => setHighlightedCustomerOptionIndex(index)}
+                            >
+                              <td>{customer.name}</td>
+                              <td>
+                                <div>{customer.email || "-"}</div>
+                                <div className="table-secondary">{customer.phone || "-"}</div>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    selectExistingCustomer(customer);
+                                  }}
+                                >
+                                  Select
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {showInlineCreateCustomerOption ? (
+                      <div
+                        className={`restricted-panel info-panel workshop-checkin-create-customer-option${highlightedCustomerOptionIndex === customerResults.length ? " workshop-checkin-create-customer-option--active" : ""}`}
+                        style={{ marginTop: "12px" }}
+                        role="option"
+                        aria-selected={highlightedCustomerOptionIndex === customerResults.length}
+                      >
+                        <div className="actions-inline" style={{ justifyContent: "space-between", gap: "12px" }}>
+                          <div>
+                            <strong>No exact customer match found.</strong>
+                            <div className="table-secondary">Create a new customer directly from the name you just typed.</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="primary"
+                            id={`workshop-checkin-customer-option-${customerResults.length}`}
+                            ref={(element) => {
+                              customerOptionRefs.current[customerResults.length] = element;
+                            }}
+                            aria-selected={highlightedCustomerOptionIndex === customerResults.length}
+                            onMouseEnter={() => setHighlightedCustomerOptionIndex(customerResults.length)}
+                            onFocus={() => setHighlightedCustomerOptionIndex(customerResults.length)}
+                            onClick={beginInlineCustomerCreateFromSearch}
+                          >
+                            Create new customer "{trimmedCustomerSearch}"
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="job-meta-grid" style={{ marginTop: "12px" }}>
+                      <div>
+                        <strong>Selected customer:</strong> -
+                      </div>
+                      <div>
+                        <strong>Manual intake name:</strong> {manualCustomerName || "-"}
+                      </div>
+                    </div>
+
+                    <div className="actions-inline" style={{ marginTop: "12px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearCustomerSelection();
+                        }}
+                      >
+                        Use walk-in/manual name
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          beginInlineCustomerCreateFromSearch();
+                        }}
+                      >
+                        Create new customer
+                      </button>
+                    </div>
+                  </>
                 ) : null}
-
-                <div className="actions-inline" style={{ marginTop: "12px" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearCustomerSelection();
-                    }}
-                  >
-                    Use walk-in/manual name
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      beginInlineCustomerCreateFromSearch();
-                    }}
-                  >
-                    Create new customer
-                  </button>
-                </div>
 
                 {!selectedCustomer && !createCustomerInline ? (
                   <div className="filter-row" style={{ marginTop: "12px" }}>
