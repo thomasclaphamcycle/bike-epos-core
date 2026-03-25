@@ -526,18 +526,20 @@ export const WorkshopJobOverlay = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [savingAction, setSavingAction] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"assign" | "quick" | null>(null);
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [savingQuickAction, setSavingQuickAction] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("");
   const [collapsedSections, setCollapsedSections] = useState<Record<JobWorkspaceSectionKey, boolean>>(
     DEFAULT_JOB_WORKSPACE_COLLAPSED,
   );
+  const savingAnyAction = savingAssignment || savingQuickAction;
 
   useEffect(() => {
     setCollapsedSections(DEFAULT_JOB_WORKSPACE_COLLAPSED);
     setActionError(null);
-    setPendingAction(null);
+    setSavingAssignment(false);
+    setSavingQuickAction(false);
   }, [jobId]);
 
   useEffect(() => {
@@ -657,7 +659,7 @@ export const WorkshopJobOverlay = ({
     const currentAssignedStaffId = overlayJob?.assignedStaffId || summary?.assignedStaffId || "";
     const nextAssignedStaffId = assignedStaffIdDraft || "";
 
-    if (savingAction) {
+    if (savingAnyAction) {
       return;
     }
 
@@ -672,8 +674,7 @@ export const WorkshopJobOverlay = ({
       return;
     }
 
-    setSavingAction(true);
-    setPendingAction("assign");
+    setSavingAssignment(true);
     setActionError(null);
 
     try {
@@ -687,8 +688,7 @@ export const WorkshopJobOverlay = ({
       setActionError(message);
       error(message);
     } finally {
-      setSavingAction(false);
-      setPendingAction(null);
+      setSavingAssignment(false);
     }
   };
 
@@ -697,8 +697,11 @@ export const WorkshopJobOverlay = ({
       return;
     }
 
-    setSavingAction(true);
-    setPendingAction("quick");
+    if (savingAnyAction) {
+      return;
+    }
+
+    setSavingQuickAction(true);
     setActionError(null);
 
     try {
@@ -720,8 +723,7 @@ export const WorkshopJobOverlay = ({
       setActionError(message);
       error(message);
     } finally {
-      setSavingAction(false);
-      setPendingAction(null);
+      setSavingQuickAction(false);
     }
   };
 
@@ -860,7 +862,7 @@ export const WorkshopJobOverlay = ({
                   <select
                     value={assignedStaffIdDraft}
                     onChange={(event) => setAssignedStaffIdDraft(event.target.value)}
-                    disabled={savingAction}
+                    disabled={savingAnyAction}
                   >
                     <option value="">Leave unassigned</option>
                     {technicianOptions.map((option) => (
@@ -874,9 +876,9 @@ export const WorkshopJobOverlay = ({
                   <button
                     type="button"
                     onClick={() => void saveAssignment()}
-                    disabled={savingAction || !hasAssignmentChange}
+                    disabled={savingAnyAction || !hasAssignmentChange}
                   >
-                    {pendingAction === "assign"
+                    {savingAssignment
                       ? "Saving..."
                       : assignedStaffIdDraft
                         ? "Assign technician"
@@ -887,9 +889,9 @@ export const WorkshopJobOverlay = ({
                       type="button"
                       className="primary"
                       onClick={() => void runQuickAction()}
-                      disabled={savingAction}
+                      disabled={savingAnyAction}
                     >
-                      {pendingAction === "quick" ? "Saving..." : quickAction.label}
+                      {savingQuickAction ? "Saving..." : quickAction.label}
                     </button>
                   ) : null}
                 </div>
@@ -900,9 +902,9 @@ export const WorkshopJobOverlay = ({
                   type="button"
                   className="primary"
                   onClick={() => void runQuickAction()}
-                  disabled={savingAction}
+                  disabled={savingAnyAction}
                 >
-                  {pendingAction === "quick" ? "Saving..." : quickAction.label}
+                  {savingQuickAction ? "Saving..." : quickAction.label}
                 </button>
               </div>
             ) : null}
