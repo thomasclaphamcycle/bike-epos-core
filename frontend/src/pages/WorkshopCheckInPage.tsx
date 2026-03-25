@@ -113,16 +113,23 @@ type WorkshopCheckInPageProps = {
   onCreated?: (jobId: string) => Promise<void> | void;
 };
 
-const renderStepIndicators = (step: number): ReactNode => (
+const renderStepIndicators = (step: number, onStepSelect?: (index: number) => void): ReactNode => (
   <div className="step-indicator-row">
     {stepTitles.map((title, index) => (
-      <div
+      <button
+        type="button"
         key={title}
-        className={`step-indicator ${index === step ? "step-indicator-active" : index < step ? "step-indicator-complete" : ""}`}
+        className={`step-indicator ${index === step ? "step-indicator-active" : index < step ? "step-indicator-complete step-indicator-clickable" : ""}`}
+        onClick={() => {
+          if (index < step) {
+            onStepSelect?.(index);
+          }
+        }}
+        disabled={index >= step}
       >
         <span className="step-number">{index + 1}</span>
         <span>{title}</span>
-      </div>
+      </button>
     ))}
   </div>
 );
@@ -477,6 +484,10 @@ export const WorkshopCheckInPage = ({
 
   const goBack = () => {
     setStep((current) => Math.max(current - 1, 0));
+  };
+
+  const goToPreviousStep = (targetStep: number) => {
+    setStep((current) => (targetStep < current ? targetStep : current));
   };
 
   const submitCheckIn = async (event: FormEvent) => {
@@ -1314,7 +1325,7 @@ export const WorkshopCheckInPage = ({
               <Link to={`/workshop/${createdJobId}`}>Open created job</Link>
             </div>
           ) : null}
-          {renderStepIndicators(step)}
+          {renderStepIndicators(step, goToPreviousStep)}
         </section>
         {formContent}
         {bikeSearchModalOpen ? (
@@ -1504,7 +1515,7 @@ export const WorkshopCheckInPage = ({
           </div>
         </div>
 
-        {renderStepIndicators(step)}
+        {renderStepIndicators(step, goToPreviousStep)}
       </section>
 
       {formContent}

@@ -2148,6 +2148,9 @@ th {
   border-radius: 999px;
   background: #f7fafc;
   color: #4b5563;
+  appearance: none;
+  font: inherit;
+  line-height: inherit;
 }
 
 .step-indicator-active {
@@ -2160,6 +2163,18 @@ th {
   background: #e8f7ef;
   border-color: #b2e4c8;
   color: #1d7948;
+}
+
+.step-indicator-clickable {
+  cursor: pointer;
+}
+
+.step-indicator-clickable:hover {
+  filter: brightness(0.98);
+}
+
+.step-indicator:disabled {
+  cursor: default;
 }
 
 .step-number {
