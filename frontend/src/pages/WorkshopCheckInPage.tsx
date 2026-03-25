@@ -1212,7 +1212,7 @@ export const WorkshopCheckInPage = ({
                 />
               </label>
               <label>
-                Problem / Work
+                Problem / Work (Customer Facing)
                 <textarea
                   value={problemWork}
                   onChange={(event) => setProblemWork(event.target.value)}
@@ -1221,7 +1221,7 @@ export const WorkshopCheckInPage = ({
                 />
               </label>
               <label>
-                Additional notes
+                Additional notes (Internal)
                 <textarea
                   value={additionalNotes}
                   onChange={(event) => setAdditionalNotes(event.target.value)}
