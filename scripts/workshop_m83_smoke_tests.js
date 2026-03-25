@@ -1901,6 +1901,50 @@ const run = async () => {
       assert.equal(blockedAssign.json.error.code, "WORKSHOP_SCHEDULE_TIME_OFF");
     }, results);
 
+    await runTest("technician assignment honors operational scheduledDate for rota validation", async () => {
+      let scheduledDate = nextWorkshopWeekday(19);
+      while (getWorkshopDayOfWeek(scheduledDate) !== 1) {
+        scheduledDate = addDays(scheduledDate, 1);
+      }
+
+      const dateKey = toWorkshopDateKey(scheduledDate);
+      await createWorkshopRotaAssignment(state, {
+        staffId: managerUser.id,
+        date: dateKey,
+        shiftType: "FULL_DAY",
+      });
+
+      const { job } = await createJob(state, {
+        customerName: `Scheduled Date Anchor ${uniqueRef()}`,
+        bikeDescription: "Stored operational day should win",
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        durationMinutes: null,
+      });
+
+      const rawTimestampDate = addDays(scheduledDate, -1);
+      const rawStartAt = toScheduledSlot(rawTimestampDate, 11, 0);
+      const rawEndAt = toScheduledSlot(rawTimestampDate, 12, 0);
+
+      await prisma.workshopJob.update({
+        where: { id: job.id },
+        data: {
+          scheduledDate: new Date(`${dateKey}T00:00:00.000Z`),
+          scheduledStartAt: rawStartAt,
+          scheduledEndAt: rawEndAt,
+          durationMinutes: 60,
+        },
+      });
+
+      const assignment = await fetchJson(`/api/workshop/jobs/${job.id}/assign`, {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({ staffId: managerUser.id }),
+      });
+      assert.equal(assignment.status, 201, JSON.stringify(assignment.json));
+      assert.equal(assignment.json.job.assignedStaffId, managerUser.id);
+    }, results);
+
     await runTest("calendar api returns staff rows, scheduled jobs, and capacity clipped to working hours", async () => {
       const scheduledDate = nextWorkshopWeekday(23);
       const dateKey = scheduledDate.toISOString().slice(0, 10);

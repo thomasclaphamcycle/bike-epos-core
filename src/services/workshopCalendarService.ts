@@ -725,6 +725,7 @@ export const assertWorkshopScheduleAllowed = async (
   input: {
     workshopJobId?: string;
     staffId?: string | null;
+    scheduledDate?: Date | null;
     scheduledStartAt: Date | null;
     scheduledEndAt: Date | null;
     durationMinutes: number | null;
@@ -735,7 +736,8 @@ export const assertWorkshopScheduleAllowed = async (
     return null;
   }
 
-  const storeDay = await resolveStoreDaySchedule(input.scheduledStartAt, db);
+  const operationalDate = input.scheduledDate ?? input.scheduledStartAt;
+  const storeDay = await resolveStoreDaySchedule(operationalDate, db);
   if (storeDay.isClosed) {
     throw new HttpError(
       409,
@@ -789,7 +791,7 @@ export const assertWorkshopScheduleAllowed = async (
 
   const availabilityResolution = await resolveWorkshopAvailabilityForDate(
     input.staffId,
-    input.scheduledStartAt,
+    operationalDate,
     db,
   );
   const workingHours = availabilityResolution.workingHours;

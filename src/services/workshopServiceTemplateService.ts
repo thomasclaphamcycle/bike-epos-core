@@ -576,6 +576,7 @@ const applyTemplateDefaultDurationTx = async (
     {
       workshopJobId,
       staffId: job.assignedStaffId,
+      scheduledDate: scheduleResolution.schedule.scheduledDate,
       scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
       scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
       durationMinutes: scheduleResolution.schedule.durationMinutes,
