@@ -151,6 +151,7 @@ export const WorkshopCheckInPage = ({
   const [loadingWorkshopStartContext, setLoadingWorkshopStartContext] = useState(false);
 
   const [manualCustomerName, setManualCustomerName] = useState("");
+  const [manualCustomerMode, setManualCustomerMode] = useState(false);
   const [createCustomerInline, setCreateCustomerInline] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
@@ -605,6 +606,7 @@ export const WorkshopCheckInPage = ({
 
   const beginInlineCustomerCreateFromSearch = () => {
     const draftName = trimmedCustomerSearch || newCustomerName.trim();
+    setManualCustomerMode(false);
     setCreateCustomerInline(true);
     setNewCustomerName(draftName);
     setSelectedCustomer(null);
@@ -616,6 +618,7 @@ export const WorkshopCheckInPage = ({
 
   const selectExistingCustomer = (customer: CustomerRow) => {
     setSelectedCustomer(customer);
+    setManualCustomerMode(false);
     setCreateCustomerInline(false);
     setManualCustomerName("");
     setSelectedBikeId("");
@@ -625,6 +628,7 @@ export const WorkshopCheckInPage = ({
 
   const clearCustomerSelection = () => {
     setSelectedCustomer(null);
+    setManualCustomerMode(false);
     setCreateCustomerInline(false);
     setNewCustomerName("");
     setNewCustomerEmail("");
@@ -633,6 +637,13 @@ export const WorkshopCheckInPage = ({
     setSelectedBikeId("");
     setCustomerBikes([]);
     resetBikeDraft();
+    setHighlightedCustomerOptionIndex(-1);
+  };
+
+  const beginManualCustomerEntry = () => {
+    clearCustomerSelection();
+    setManualCustomerMode(true);
+    setCustomerSearch("");
     setHighlightedCustomerOptionIndex(-1);
   };
 
@@ -867,7 +878,7 @@ export const WorkshopCheckInPage = ({
                                   ? "Searching..."
                                   : customerSearch.trim()
                                     ? "No existing customers matched that search."
-                                    : "Search for an existing customer, create one inline, or use a manual intake name."}
+                                    : "Search for an existing customer to start the intake."}
                               </td>
                             </tr>
                           ) : customerResults.map((customer, index) => (
@@ -933,24 +944,7 @@ export const WorkshopCheckInPage = ({
                       </div>
                     ) : null}
 
-                    <div className="job-meta-grid" style={{ marginTop: "12px" }}>
-                      <div>
-                        <strong>Selected customer:</strong> -
-                      </div>
-                      <div>
-                        <strong>Manual intake name:</strong> {manualCustomerName || "-"}
-                      </div>
-                    </div>
-
                     <div className="actions-inline" style={{ marginTop: "12px" }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          clearCustomerSelection();
-                        }}
-                      >
-                        Use walk-in/manual name
-                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -959,20 +953,42 @@ export const WorkshopCheckInPage = ({
                       >
                         Create new customer
                       </button>
+                      {!manualCustomerMode ? (
+                        <button
+                          type="button"
+                          onClick={beginManualCustomerEntry}
+                        >
+                          Use walk-in name
+                        </button>
+                      ) : null}
                     </div>
                   </>
                 ) : null}
 
-                {!selectedCustomer && !createCustomerInline ? (
-                  <div className="filter-row" style={{ marginTop: "12px" }}>
-                    <label className="grow">
-                      Customer name for intake
-                      <input
-                        value={manualCustomerName}
-                        onChange={(event) => setManualCustomerName(event.target.value)}
-                        placeholder="Walk-in customer or quick manual entry"
-                      />
-                    </label>
+                {!selectedCustomer && !createCustomerInline && manualCustomerMode ? (
+                  <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+                    <div className="actions-inline" style={{ justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
+                      <div className="grow">
+                        <strong>Walk-in / manual customer</strong>
+                        <div className="table-secondary">Use this only when you do not want to link the intake to an existing or newly created customer record.</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearCustomerSelection}
+                      >
+                        Search instead
+                      </button>
+                    </div>
+                    <div className="filter-row" style={{ marginTop: "12px" }}>
+                      <label className="grow">
+                        Customer name for intake
+                        <input
+                          value={manualCustomerName}
+                          onChange={(event) => setManualCustomerName(event.target.value)}
+                          placeholder="Walk-in customer or quick manual entry"
+                        />
+                      </label>
+                    </div>
                   </div>
                 ) : null}
 
