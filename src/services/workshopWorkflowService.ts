@@ -245,6 +245,7 @@ export const assignWorkshopJob = async (
       {
         workshopJobId,
         staffId: assignedStaffId,
+        scheduledDate: job.scheduledDate,
         scheduledStartAt: job.scheduledStartAt,
         scheduledEndAt: job.scheduledEndAt,
         durationMinutes: job.durationMinutes,
@@ -385,6 +386,7 @@ export const updateWorkshopJobSchedule = async (
       {
         workshopJobId,
         staffId: nextAssignment.assignedStaffId,
+        scheduledDate: scheduleResolution.schedule.scheduledDate,
         scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
         scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
         durationMinutes: scheduleResolution.schedule.durationMinutes,

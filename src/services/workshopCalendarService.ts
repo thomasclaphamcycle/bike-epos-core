@@ -188,6 +188,33 @@ const getDayOfWeekForDateKey = (value: string, timeZone: string) =>
 const minutesToClockTime = (value: number) =>
   `${`${Math.floor(value / 60)}`.padStart(2, "0")}:${`${value % 60}`.padStart(2, "0")}`;
 
+const isDateKeyWithinRange = (dateKey: string, fromDateKey: string, toDateKey: string) =>
+  dateKey >= fromDateKey && dateKey <= toDateKey;
+
+const getOperationalDateKey = (value: Date | null | undefined, timeZone: string) =>
+  value ? formatDateKeyInTimeZone(value, timeZone) : null;
+
+const buildBufferedOperationalWindow = (fromDate: Date, toDate: Date) => ({
+  gte: addDays(fromDate, -1),
+  lt: addDays(toDate, 2),
+});
+
+const filterJobsToOperationalRange = <T extends { scheduledStartAt: Date | null }>(
+  jobs: T[],
+  input: {
+    fromDateKey: string;
+    toDateKey: string;
+    timeZone: string;
+  },
+) =>
+  jobs.filter((job) => {
+    const dateKey = getOperationalDateKey(job.scheduledStartAt, input.timeZone);
+    return Boolean(
+      dateKey
+        && isDateKeyWithinRange(dateKey, input.fromDateKey, input.toDateKey),
+    );
+  });
+
 const listDateKeysInclusive = (from: Date, to: Date) => {
   const keys: string[] = [];
   let current = new Date(from);
@@ -725,6 +752,7 @@ export const assertWorkshopScheduleAllowed = async (
   input: {
     workshopJobId?: string;
     staffId?: string | null;
+    scheduledDate?: Date | null;
     scheduledStartAt: Date | null;
     scheduledEndAt: Date | null;
     durationMinutes: number | null;
@@ -735,7 +763,8 @@ export const assertWorkshopScheduleAllowed = async (
     return null;
   }
 
-  const storeDay = await resolveStoreDaySchedule(input.scheduledStartAt, db);
+  const operationalDate = input.scheduledStartAt ?? input.scheduledDate;
+  const storeDay = await resolveStoreDaySchedule(operationalDate, db);
   if (storeDay.isClosed) {
     throw new HttpError(
       409,
@@ -789,7 +818,7 @@ export const assertWorkshopScheduleAllowed = async (
 
   const availabilityResolution = await resolveWorkshopAvailabilityForDate(
     input.staffId,
-    input.scheduledStartAt,
+    operationalDate,
     db,
   );
   const workingHours = availabilityResolution.workingHours;
@@ -977,11 +1006,8 @@ const buildCalendarScheduledJobWhere = (
     assignedOnly?: boolean;
   },
 ): Prisma.WorkshopJobWhereInput => ({
-  scheduledDate: {
-    gte: input.fromDate,
-    lt: addDays(input.toDate, 1),
-  },
   scheduledStartAt: {
+    ...buildBufferedOperationalWindow(input.fromDate, input.toDate),
     not: null,
   },
   scheduledEndAt: {
@@ -1024,14 +1050,14 @@ export const getWorkshopStaffCapacityForDate = async (
   const availabilityResolution = await resolveWorkshopAvailabilityForDate(staffId, value, db);
   const workingHours = availabilityResolution.workingHours;
   const dateKey = formatDateKeyInTimeZone(value, settings.store.timeZone);
-
-  const scheduledDate = toUtcDateKey(dateKey);
-  const [timeOff, scheduledJobs] = await Promise.all([
+  const dayAnchor = toUtcDateKey(dateKey);
+  const operationalWindow = buildBufferedOperationalWindow(dayAnchor, dayAnchor);
+  const [timeOff, scheduledJobsRaw] = await Promise.all([
     listWorkshopTimeOffForWindow(
       {
         staffId,
-        startAt: scheduledDate,
-        endAt: addMinutes(scheduledDate, 24 * 60),
+        startAt: operationalWindow.gte,
+        endAt: operationalWindow.lt,
       },
       db,
     ),
@@ -1039,8 +1065,10 @@ export const getWorkshopStaffCapacityForDate = async (
       where: {
         assignedStaffId: staffId,
         cancelledAt: null,
-        scheduledDate,
-        scheduledStartAt: { not: null },
+        scheduledStartAt: {
+          ...operationalWindow,
+          not: null,
+        },
         scheduledEndAt: { not: null },
       },
       select: {
@@ -1050,6 +1078,11 @@ export const getWorkshopStaffCapacityForDate = async (
       },
     }),
   ]);
+  const scheduledJobs = filterJobsToOperationalRange(scheduledJobsRaw, {
+    fromDateKey: dateKey,
+    toDateKey: dateKey,
+    timeZone: settings.store.timeZone,
+  });
 
   const summary = buildWorkshopCapacitySummary({
     dateKey,
@@ -1083,6 +1116,8 @@ export const getWorkshopCalendar = async (
     to: input.to,
   });
   const dateKeys = listDateKeysInclusive(fromDate, toDate);
+  const fromDateKey = input.from;
+  const toDateKey = input.to;
 
   const allStaff = await db.user.findMany({
     where: {
@@ -1107,7 +1142,7 @@ export const getWorkshopCalendar = async (
     : allStaff;
   const staffIds = calendarStaff.map((staff) => staff.id);
 
-  const [legacyWorkingHours, rotaAssignments, timeOff, visibleScheduledJobs, capacityScheduledJobs, unscheduledJobs, days] = await Promise.all([
+  const [legacyWorkingHours, rotaAssignments, timeOff, visibleScheduledJobsRaw, capacityScheduledJobsRaw, unscheduledJobs, days] = await Promise.all([
     staffIds.length > 0
       ? db.workshopWorkingHours.findMany({
           where: {
@@ -1253,6 +1288,18 @@ export const getWorkshopCalendar = async (
     );
   }
 
+  const visibleScheduledJobs = filterJobsToOperationalRange(visibleScheduledJobsRaw, {
+    fromDateKey,
+    toDateKey,
+    timeZone: settings.store.timeZone,
+  });
+
+  const capacityScheduledJobs = filterJobsToOperationalRange(capacityScheduledJobsRaw, {
+    fromDateKey,
+    toDateKey,
+    timeZone: settings.store.timeZone,
+  });
+
   const visibleScheduledJobsByStaff = new Map<string, CalendarScheduledJobRecord[]>();
   for (const job of visibleScheduledJobs) {
     if (!job.assignedStaffId) {
@@ -1268,11 +1315,12 @@ export const getWorkshopCalendar = async (
     Array<{ scheduledStartAt: Date | null; scheduledEndAt: Date | null; durationMinutes: number | null }>
   >();
   for (const job of capacityScheduledJobs) {
-    if (!job.assignedStaffId || !job.scheduledDate) {
+    const operationalDateKey = getOperationalDateKey(job.scheduledStartAt, settings.store.timeZone);
+    if (!job.assignedStaffId || !operationalDateKey) {
       continue;
     }
 
-    const key = `${job.assignedStaffId}:${toDateKey(job.scheduledDate)}`;
+    const key = `${job.assignedStaffId}:${operationalDateKey}`;
     const bucket = capacityJobsByStaffDate.get(key) ?? [];
     bucket.push({
       scheduledStartAt: job.scheduledStartAt,

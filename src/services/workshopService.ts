@@ -869,6 +869,7 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
 
     await assertWorkshopScheduleAllowed(
       {
+        scheduledDate: scheduleResolution.schedule.scheduledDate,
         scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
         scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
         durationMinutes: scheduleResolution.schedule.durationMinutes,
@@ -1206,6 +1207,7 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
         {
           workshopJobId,
           staffId: job.assignedStaffId,
+          scheduledDate: scheduleResolution.schedule.scheduledDate,
           scheduledStartAt: scheduleResolution.schedule.scheduledStartAt,
           scheduledEndAt: scheduleResolution.schedule.scheduledEndAt,
           durationMinutes: scheduleResolution.schedule.durationMinutes,
