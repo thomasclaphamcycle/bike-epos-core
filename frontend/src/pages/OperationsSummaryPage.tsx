@@ -103,10 +103,10 @@ const formatLabel = (value: string) =>
 
 const OPEN_PO_STATUSES = new Set(["DRAFT", "SENT", "PARTIALLY_RECEIVED"]);
 const WORKSHOP_IN_PROGRESS_STATUSES = new Set([
-  "BOOKING_MADE",
+  "BOOKED",
   "BIKE_ARRIVED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
 ]);
@@ -223,7 +223,7 @@ export const OperationsSummaryPage = () => {
     [workshopDashboard],
   );
   const bikesReadyCount = useMemo(
-    () => workshopDashboard?.jobs.filter((job) => job.status === "BIKE_READY").length ?? 0,
+    () => workshopDashboard?.jobs.filter((job) => job.status === "READY_FOR_COLLECTION").length ?? 0,
     [workshopDashboard],
   );
 

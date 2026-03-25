@@ -14,13 +14,13 @@ import { WorkshopIntakeOverlay } from "./WorkshopIntakeOverlay";
 
 const statusOptions = [
   "",
-  "BOOKING_MADE",
+  "BOOKED",
   "BIKE_ARRIVED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
   "COMPLETED",
   "CANCELLED",
 ] as const;
@@ -291,8 +291,8 @@ const boardColumns: Array<{
   description: string;
   tone: "default" | "attention" | "ready" | "complete";
 }> = [
-  { key: "booked", label: "Booked", description: "Checked in, queued, or still waiting for approval.", tone: "default" },
-  { key: "inProgress", label: "In Progress", description: "On the bench, approved, or paused safely.", tone: "default" },
+  { key: "booked", label: "Booked", description: "Queued work that is booked in or waiting on a customer decision.", tone: "default" },
+  { key: "inProgress", label: "In Progress", description: "Active bench work or jobs paused internally by the workshop.", tone: "default" },
   { key: "waitingParts", label: "Waiting for Parts", description: "Blocked on stock or supplier lead time.", tone: "attention" },
   { key: "ready", label: "Ready for Collection", description: "Bench work is done and handover can start.", tone: "ready" },
   { key: "completed", label: "Completed", description: "Collected jobs kept for lightweight context only.", tone: "complete" },
@@ -443,12 +443,13 @@ const compareJobs = (left: DashboardJob, right: DashboardJob) => {
 const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
   const partsStatus = toPartsStatus(job);
   switch (job.status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
+    case "BIKE_ARRIVED":
     case "WAITING_FOR_APPROVAL":
       return "booked";
     case "WAITING_FOR_PARTS":
       return "waitingParts";
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return "ready";
     case "COMPLETED":
       return "completed";
@@ -471,7 +472,8 @@ const getNextStepHint = (job: DashboardJob) =>
 
 const getQuickActions = (job: DashboardJob): QuickAction[] => {
   switch (job.status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
+    case "BIKE_ARRIVED":
       return [
         { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
         { label: "Move to Bench", kind: "status", value: "IN_PROGRESS" },
@@ -480,15 +482,10 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
       return [
         { label: "Mark Approved", kind: "approval", value: "APPROVED" },
       ];
-    case "APPROVED":
+    case "IN_PROGRESS":
       return [
-        { label: "Start Bench Work", kind: "status", value: "IN_PROGRESS" },
         { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
-      ];
-    case "BIKE_ARRIVED":
-      return [
-        { label: "Open Job", kind: "navigate", value: `/workshop/${job.id}` },
-        { label: "Ready for Collection", kind: "status", value: "READY" },
+        { label: "Ready for Collection", kind: "status", value: "READY_FOR_COLLECTION" },
       ];
     case "WAITING_FOR_PARTS":
       return [
@@ -499,7 +496,7 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
         { label: "Resume Bench Work", kind: "status", value: "IN_PROGRESS" },
         { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
       ];
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return [
         { label: "Collection Queue", kind: "navigate", value: "/workshop/collection" },
       ];

@@ -153,7 +153,7 @@ export const LiabilitiesReviewPage = () => {
       }
 
       if (workshopPayload) {
-        const readyJobs = workshopPayload.jobs.filter((job) => job.status === "BIKE_READY");
+        const readyJobs = workshopPayload.jobs.filter((job) => job.status === "READY_FOR_COLLECTION");
         const waitingApprovalJobs = workshopPayload.jobs.filter((job) => job.status === "WAITING_FOR_APPROVAL");
 
         const readySales = await Promise.allSettled(

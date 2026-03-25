@@ -116,10 +116,10 @@ const formatStatusLabel = (value: string) =>
     .join(" ");
 
 const WORKSHOP_ACTIVE_STATUSES = new Set([
-  "BOOKING_MADE",
+  "BOOKED",
   "BIKE_ARRIVED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
 ]);
@@ -265,7 +265,7 @@ export const ManagementDashboardPage = () => {
   );
 
   const bikeReadyCount = useMemo(
-    () => workshopJobs.filter((job) => job.status === "BIKE_READY").length,
+    () => workshopJobs.filter((job) => job.status === "READY_FOR_COLLECTION").length,
     [workshopJobs],
   );
 

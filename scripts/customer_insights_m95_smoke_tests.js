@@ -137,7 +137,7 @@ const main = async () => {
           customerName: workshopCustomer.name,
           locationId,
           bikeDescription: "Commuter bike",
-          status: "APPROVED",
+          status: "IN_PROGRESS",
         },
       }),
     ]);

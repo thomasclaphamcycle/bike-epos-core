@@ -13,7 +13,7 @@ GET {{baseUrl}}/api/workshop-bookings/public-form
 
 ### Workshop dashboard (STAFF+)
 ### includes rota-backed staffingToday summary and capacityToday awareness
-GET {{baseUrl}}/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
+GET {{baseUrl}}/api/workshop/dashboard?status=BOOKED,READY_FOR_COLLECTION&source=ONLINE,IN_STORE&from=2026-03-01&to=2026-03-31&limit=50
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: demo-staff
 
@@ -293,7 +293,7 @@ X-Staff-Id: demo-staff
 
 ### Change workshop status (M14)
 ### Bench workflow states keep quote-controlled statuses on /approval.
-### Common operational moves include IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY, COMPLETED, and CANCELLED.
+### Common operational moves include BIKE_ARRIVED, IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY, COMPLETED, and CANCELLED.
 POST {{baseUrl}}/api/workshop/jobs/{{bookingId}}/status
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}

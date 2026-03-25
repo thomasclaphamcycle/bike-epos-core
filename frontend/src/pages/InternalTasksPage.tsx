@@ -183,7 +183,7 @@ export const InternalTasksPage = () => {
         });
       }
 
-      if (job.status === "BIKE_READY") {
+      if (job.status === "READY_FOR_COLLECTION") {
         items.push({
           key: `ready-${job.id}`,
           reason: "READY_COLLECTION",

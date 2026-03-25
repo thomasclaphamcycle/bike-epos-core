@@ -69,22 +69,26 @@ export const workshopRawStatusLabel = (
   status: string | null | undefined,
 ) => {
   switch (status) {
+    case "BOOKED":
     case "BOOKING_MADE":
       return "Booked";
     case "BIKE_ARRIVED":
-      return "Ready for Work";
+      return "Bike Arrived";
+    case "IN_PROGRESS":
+      return "In Progress";
     case "WAITING_FOR_APPROVAL":
-      return "Quote Pending";
+      return "Waiting for Approval";
     case "APPROVED":
-      return "Quote Approved";
+      return "Bike Arrived";
     case "WAITING_FOR_PARTS":
       return "Waiting for Parts";
     case "ON_HOLD":
-      return "Paused / On Hold";
+      return "On Hold";
+    case "READY_FOR_COLLECTION":
     case "BIKE_READY":
       return "Ready for Collection";
     case "COMPLETED":
-      return "Collected";
+      return "Completed";
     case "CANCELLED":
       return "Cancelled";
     default:
@@ -99,9 +103,12 @@ export const workshopRawStatusClass = (
     case "WAITING_FOR_APPROVAL":
     case "WAITING_FOR_PARTS":
       return "status-badge status-warning";
+    case "BIKE_ARRIVED":
+    case "IN_PROGRESS":
     case "APPROVED":
     case "ON_HOLD":
       return "status-badge status-info";
+    case "READY_FOR_COLLECTION":
     case "BIKE_READY":
       return "status-badge status-ready";
     case "COMPLETED":
@@ -169,13 +176,15 @@ export const toWorkshopTechnicianWorkflowStage = (
     case "WAITING_FOR_APPROVAL":
       return "AWAITING_APPROVAL";
     case "APPROVED":
-      return "READY_FOR_BENCH";
     case "BIKE_ARRIVED":
+      return "READY_FOR_BENCH";
+    case "IN_PROGRESS":
       return "IN_REPAIR";
     case "WAITING_FOR_PARTS":
       return "WAITING_FOR_PARTS";
     case "ON_HOLD":
       return "PAUSED";
+    case "READY_FOR_COLLECTION":
     case "BIKE_READY":
       return "READY_FOR_COLLECTION";
     case "COMPLETED":
@@ -244,8 +253,8 @@ export const getWorkshopTechnicianWorkflowSummary = (
         assignmentSummary,
         blockerLabel: input.assignedStaffName ? "Bench slot is ready" : "Needs technician assignment",
         blockerClassName: input.assignedStaffName ? "status-badge status-info" : "status-badge",
-        detail: "Quote approval is in place and the job is ready to move onto the bench.",
-        nextStep: "Start bench work when the technician is ready, or move it into a blocked state if something stops progress.",
+        detail: "The bike is in the workshop and ready to move onto the bench when the team is ready to start work.",
+        nextStep: "Confirm assignment, then move the job onto the bench when the technician is ready to begin.",
       };
     case "IN_REPAIR":
       return {
@@ -331,7 +340,7 @@ export const getWorkshopTechnicianWorkflowSummary = (
         blockerClassName: input.assignedStaffName ? "status-badge status-info" : "status-badge",
         detail: "The job is booked in and still needs a clear bench start or quote decision before it becomes active work.",
         nextStep:
-          input.rawStatus === "BOOKING_MADE"
+          input.rawStatus === "BOOKING_MADE" || input.rawStatus === "BOOKED"
             ? input.assignedStaffName
               ? "Check the bike in fully, then move it onto the bench when the assigned technician is ready."
               : "Assign a technician, then either start bench work or move into quote approval if the customer still needs a decision."

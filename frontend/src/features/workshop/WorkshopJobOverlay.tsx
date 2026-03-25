@@ -405,7 +405,7 @@ const getOverlayCustomerName = (summary?: WorkshopJobOverlaySummary | null) =>
 
 const getNextStepHint = (summary?: WorkshopJobOverlaySummary | null) =>
   getWorkshopTechnicianWorkflowSummary({
-    rawStatus: summary?.rawStatus || summary?.status || "BOOKING_MADE",
+    rawStatus: summary?.rawStatus || summary?.status || "BOOKED",
     partsStatus: summary?.partsSummary?.partsStatus,
     assignedStaffName: summary?.assignedStaffName || null,
     scheduledDate: summary?.scheduledDate || null,
@@ -529,7 +529,7 @@ const getNextActionCard = ({
           scheduleHighlight,
         ],
       };
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return {
         title: "Prepare collection",
         body: workflowSummary.nextStep,
@@ -539,19 +539,7 @@ const getNextActionCard = ({
           "Confirm payment / handover path before the customer arrives",
         ],
       };
-    case "APPROVED":
-      return {
-        title: assignedStaffName
-          ? "Start bench work"
-          : "Assign technician",
-        body: workflowSummary.nextStep,
-        highlights: [
-          technicianHighlight,
-          durationMinutes ? `${durationMinutes} min currently planned` : "Set an expected bench duration",
-          scheduleHighlight,
-        ],
-      };
-    case "BIKE_ARRIVED":
+    case "IN_PROGRESS":
       return {
         title: partsSummary?.partsStatus === "SHORT"
           ? "Resolve stock blocker"
@@ -645,17 +633,12 @@ const getQuickOverlayAction = ({
   hasSale: boolean;
 }): WorkshopOverlayQuickAction | null => {
   switch (status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
+    case "BIKE_ARRIVED":
       return {
         kind: "status",
         label: assignedStaffName ? "Move to bench" : "Mark in progress",
-        value: "BIKE_ARRIVED",
-      };
-    case "APPROVED":
-      return {
-        kind: "status",
-        label: assignedStaffName ? "Start repair" : "Move onto bench",
-        value: "BIKE_ARRIVED",
+        value: "IN_PROGRESS",
       };
     case "WAITING_FOR_APPROVAL":
       return {
@@ -667,15 +650,15 @@ const getQuickOverlayAction = ({
       return {
         kind: "status",
         label: "Move back to bench",
-        value: "BIKE_ARRIVED",
+        value: "IN_PROGRESS",
       };
     case "ON_HOLD":
       return {
         kind: "status",
         label: "Resume on bench",
-        value: "BIKE_ARRIVED",
+        value: "IN_PROGRESS",
       };
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return hasSale
         ? {
             kind: "status",
@@ -696,31 +679,24 @@ const getStatusProgressionActions = ({
   hasSale: boolean;
 }): WorkshopOverlayStatusAction[] => {
   switch (status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
+    case "BIKE_ARRIVED":
       return [
         { kind: "status", label: "Move to Bench", value: "IN_PROGRESS" },
         { kind: "status", label: "Pause Job", value: "ON_HOLD" },
         { kind: "status", label: "Cancel Job", value: "CANCELLED" },
       ];
-    case "BIKE_ARRIVED":
+    case "IN_PROGRESS":
       return [
         { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
         { kind: "status", label: "Pause Job", value: "ON_HOLD" },
-        { kind: "status", label: "Ready for Collection", value: "READY" },
+        { kind: "status", label: "Ready for Collection", value: "READY_FOR_COLLECTION" },
         { kind: "status", label: "Cancel Job", value: "CANCELLED" },
       ];
     case "WAITING_FOR_APPROVAL":
       return [
         { kind: "approval", label: "Mark Approved", value: "APPROVED" },
         { kind: "status", label: "Pause Job", value: "ON_HOLD" },
-        { kind: "status", label: "Cancel Job", value: "CANCELLED" },
-      ];
-    case "APPROVED":
-      return [
-        { kind: "status", label: "Start Bench Work", value: "IN_PROGRESS" },
-        { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
-        { kind: "status", label: "Pause Job", value: "ON_HOLD" },
-        { kind: "status", label: "Ready for Collection", value: "READY" },
         { kind: "status", label: "Cancel Job", value: "CANCELLED" },
       ];
     case "WAITING_FOR_PARTS":
@@ -735,11 +711,10 @@ const getStatusProgressionActions = ({
         { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
         { kind: "status", label: "Cancel Job", value: "CANCELLED" },
       ];
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return hasSale
         ? [
             { kind: "status", label: "Complete Collection", value: "COMPLETED" },
-            { kind: "status", label: "Cancel Job", value: "CANCELLED" },
           ]
         : [];
     default:
@@ -874,7 +849,7 @@ export const WorkshopJobOverlay = ({
   }, [jobId, refreshKey]);
 
   const overlayJob = details?.job ?? null;
-  const displayStatus = overlayJob?.status || summary?.rawStatus || summary?.status || "BOOKING_MADE";
+  const displayStatus = overlayJob?.status || summary?.rawStatus || summary?.status || "BOOKED";
   const displayCustomerName = overlayJob?.customerName || getOverlayCustomerName(summary);
   const displayBikeDescription = overlayJob?.bikeDescription || summary?.bikeDescription || "Workshop job";
   const displayPartsSummary = details?.partsOverview?.summary ?? summary?.partsSummary ?? null;

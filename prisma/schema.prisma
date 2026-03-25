@@ -1066,13 +1066,13 @@ enum ReminderCandidateStatus {
 }
 
 enum WorkshopJobStatus {
-  BOOKING_MADE
+  BOOKED
   BIKE_ARRIVED
+  IN_PROGRESS
   WAITING_FOR_APPROVAL
-  APPROVED
   WAITING_FOR_PARTS
   ON_HOLD
-  BIKE_READY
+  READY_FOR_COLLECTION
   COMPLETED
   CANCELLED
 }
@@ -1109,7 +1109,7 @@ model WorkshopJob {
   bikeDescription      String?
   assignedStaffId      String?
   assignedStaffName    String?
-  status               WorkshopJobStatus     @default(BOOKING_MADE)
+  status               WorkshopJobStatus     @default(BOOKED)
   scheduledDate        DateTime?
   scheduledStartAt     DateTime?
   scheduledEndAt       DateTime?

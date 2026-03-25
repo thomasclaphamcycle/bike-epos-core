@@ -54,25 +54,25 @@ const normalizeText = (value: string | undefined | null): string | undefined => 
 };
 
 const stageByStatus: Record<WorkshopJobStatus, WorkflowStage> = {
-  BOOKING_MADE: "BOOKED",
-  BIKE_ARRIVED: "IN_PROGRESS",
+  BOOKED: "BOOKED",
+  BIKE_ARRIVED: "BOOKED",
+  IN_PROGRESS: "IN_PROGRESS",
   WAITING_FOR_APPROVAL: "IN_PROGRESS",
-  APPROVED: "IN_PROGRESS",
   WAITING_FOR_PARTS: "IN_PROGRESS",
   ON_HOLD: "IN_PROGRESS",
-  BIKE_READY: "READY",
+  READY_FOR_COLLECTION: "READY",
   COMPLETED: "COMPLETED",
   CANCELLED: "CANCELLED",
 };
 
 const ALLOWED_RAW_STATUS_TRANSITIONS: Record<WorkshopJobStatus, WorkshopJobStatus[]> = {
-  BOOKING_MADE: ["BIKE_ARRIVED", "ON_HOLD", "CANCELLED"],
-  BIKE_ARRIVED: ["WAITING_FOR_PARTS", "ON_HOLD", "BIKE_READY", "CANCELLED"],
-  WAITING_FOR_APPROVAL: ["ON_HOLD", "CANCELLED"],
-  APPROVED: ["BIKE_ARRIVED", "WAITING_FOR_PARTS", "ON_HOLD", "BIKE_READY", "CANCELLED"],
-  WAITING_FOR_PARTS: ["BIKE_ARRIVED", "ON_HOLD", "CANCELLED"],
-  ON_HOLD: ["BIKE_ARRIVED", "WAITING_FOR_PARTS", "CANCELLED"],
-  BIKE_READY: ["COMPLETED", "CANCELLED"],
+  BOOKED: ["BIKE_ARRIVED", "IN_PROGRESS", "ON_HOLD", "CANCELLED"],
+  BIKE_ARRIVED: ["IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD", "CANCELLED"],
+  IN_PROGRESS: ["WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "ON_HOLD", "READY_FOR_COLLECTION", "CANCELLED"],
+  WAITING_FOR_APPROVAL: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
+  WAITING_FOR_PARTS: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
+  ON_HOLD: ["IN_PROGRESS", "WAITING_FOR_PARTS", "WAITING_FOR_APPROVAL", "CANCELLED"],
+  READY_FOR_COLLECTION: ["COMPLETED"],
   COMPLETED: [],
   CANCELLED: [],
 };
@@ -87,13 +87,17 @@ const parseTargetStatusOrThrow = (inputStatus: string): {
     case "BOOKED":
     case "BOOKING_MADE":
       return {
-        targetStatus: "BOOKING_MADE",
+        targetStatus: "BOOKED",
         requestedStatus: normalized,
       };
-    case "IN_PROGRESS":
     case "BIKE_ARRIVED":
       return {
         targetStatus: "BIKE_ARRIVED",
+        requestedStatus: normalized,
+      };
+    case "IN_PROGRESS":
+      return {
+        targetStatus: "IN_PROGRESS",
         requestedStatus: normalized,
       };
     case "WAITING_FOR_PARTS":
@@ -115,8 +119,9 @@ const parseTargetStatusOrThrow = (inputStatus: string): {
       );
     case "READY":
     case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return {
-        targetStatus: "BIKE_READY",
+        targetStatus: "READY_FOR_COLLECTION",
         requestedStatus: normalized,
       };
     case "COMPLETED":
@@ -132,7 +137,7 @@ const parseTargetStatusOrThrow = (inputStatus: string): {
     default:
       throw new HttpError(
         400,
-        "status must be one of BOOKED, BOOKING_MADE, IN_PROGRESS, BIKE_ARRIVED, WAITING_FOR_PARTS, ON_HOLD, READY, BIKE_READY, COMPLETED, or CANCELLED",
+        "status must be one of BOOKED, BIKE_ARRIVED, IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY_FOR_COLLECTION, COMPLETED, or CANCELLED (legacy aliases BOOKING_MADE, READY, and BIKE_READY are still accepted)",
         "INVALID_STATUS",
       );
   }
