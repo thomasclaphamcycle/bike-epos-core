@@ -72,13 +72,14 @@ export const workshopRawStatusLabel = (
     case "BOOKED":
     case "BOOKING_MADE":
       return "Booked";
-    case "IN_PROGRESS":
     case "BIKE_ARRIVED":
+      return "Bike Arrived";
+    case "IN_PROGRESS":
       return "In Progress";
     case "WAITING_FOR_APPROVAL":
       return "Waiting for Approval";
     case "APPROVED":
-      return "In Progress";
+      return "Bike Arrived";
     case "WAITING_FOR_PARTS":
       return "Waiting for Parts";
     case "ON_HOLD":
@@ -102,10 +103,10 @@ export const workshopRawStatusClass = (
     case "WAITING_FOR_APPROVAL":
     case "WAITING_FOR_PARTS":
       return "status-badge status-warning";
+    case "BIKE_ARRIVED":
     case "IN_PROGRESS":
     case "APPROVED":
     case "ON_HOLD":
-    case "BIKE_ARRIVED":
       return "status-badge status-info";
     case "READY_FOR_COLLECTION":
     case "BIKE_READY":
@@ -175,9 +176,9 @@ export const toWorkshopTechnicianWorkflowStage = (
     case "WAITING_FOR_APPROVAL":
       return "AWAITING_APPROVAL";
     case "APPROVED":
-      return "IN_REPAIR";
-    case "IN_PROGRESS":
     case "BIKE_ARRIVED":
+      return "READY_FOR_BENCH";
+    case "IN_PROGRESS":
       return "IN_REPAIR";
     case "WAITING_FOR_PARTS":
       return "WAITING_FOR_PARTS";
@@ -252,8 +253,8 @@ export const getWorkshopTechnicianWorkflowSummary = (
         assignmentSummary,
         blockerLabel: input.assignedStaffName ? "Bench slot is ready" : "Needs technician assignment",
         blockerClassName: input.assignedStaffName ? "status-badge status-info" : "status-badge",
-        detail: "Quote approval is in place and the job is ready to move onto the bench.",
-        nextStep: "Start bench work when the technician is ready, or move it into a blocked state if something stops progress.",
+        detail: "The bike is in the workshop and ready to move onto the bench when the team is ready to start work.",
+        nextStep: "Confirm assignment, then move the job onto the bench when the technician is ready to begin.",
       };
     case "IN_REPAIR":
       return {

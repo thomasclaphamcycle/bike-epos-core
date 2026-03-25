@@ -16,10 +16,12 @@ export const parseWorkshopRawStatusAlias = (
     case "BOOKED":
     case "BOOKING_MADE":
       return "BOOKED";
-    case "IN_PROGRESS":
     case "BIKE_ARRIVED":
-    case "APPROVED":
+      return "BIKE_ARRIVED";
+    case "IN_PROGRESS":
       return "IN_PROGRESS";
+    case "APPROVED":
+      return "BIKE_ARRIVED";
     case "WAITING_FOR_APPROVAL":
       return "WAITING_FOR_APPROVAL";
     case "WAITING_FOR_PARTS":
@@ -92,6 +94,7 @@ export const toWorkshopExecutionStatus = (job: {
 
   switch (job.status) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
       return "BOOKED";
     case "READY_FOR_COLLECTION":
       return "READY";

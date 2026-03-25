@@ -117,6 +117,7 @@ const formatStatusLabel = (value: string) =>
 
 const WORKSHOP_ACTIVE_STATUSES = new Set([
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",

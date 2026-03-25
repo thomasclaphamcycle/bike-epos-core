@@ -33,6 +33,7 @@ const DEFAULT_LIMIT = 50;
 
 const VALID_STATUSES: WorkshopJobStatus[] = [
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",
@@ -45,6 +46,7 @@ const VALID_STATUSES: WorkshopJobStatus[] = [
 const VALID_SOURCES: WorkshopJobSource[] = ["ONLINE", "IN_STORE"];
 const CAPACITY_OPEN_JOB_STATUSES: WorkshopJobStatus[] = [
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",

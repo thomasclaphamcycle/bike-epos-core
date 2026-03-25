@@ -634,6 +634,7 @@ const getQuickOverlayAction = ({
 }): WorkshopOverlayQuickAction | null => {
   switch (status) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
       return {
         kind: "status",
         label: assignedStaffName ? "Move to bench" : "Mark in progress",
@@ -679,6 +680,7 @@ const getStatusProgressionActions = ({
 }): WorkshopOverlayStatusAction[] => {
   switch (status) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
       return [
         { kind: "status", label: "Move to Bench", value: "IN_PROGRESS" },
         { kind: "status", label: "Pause Job", value: "ON_HOLD" },

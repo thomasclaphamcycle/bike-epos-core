@@ -837,7 +837,7 @@ const run = async () => {
         body: JSON.stringify({ status: "APPROVED" }),
       });
       assert.equal(approved.status, 201, JSON.stringify(approved.json));
-      assert.equal(approved.json.job.status, "IN_PROGRESS");
+      assert.equal(approved.json.job.status, "BIKE_ARRIVED");
 
       const updateLine = await fetchJson(
         `/api/workshop/jobs/${job.id}/lines/${addLine.json.line.id}`,
@@ -858,7 +858,7 @@ const run = async () => {
       });
       assert.equal(invalidatedDetail.status, 200, JSON.stringify(invalidatedDetail.json));
       assert.equal(invalidatedDetail.json.currentEstimate, null);
-      assert.equal(invalidatedDetail.json.job.rawStatus, "IN_PROGRESS");
+      assert.equal(invalidatedDetail.json.job.rawStatus, "BIKE_ARRIVED");
       assert.equal(invalidatedDetail.json.estimateHistory.length, 1);
       assert.ok(invalidatedDetail.json.estimateHistory[0].supersededAt, JSON.stringify(invalidatedDetail.json));
 
@@ -2419,8 +2419,8 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
-      assert.equal(toInProgress.status, 200, JSON.stringify(toInProgress.json));
-      assert.equal(toInProgress.json.idempotent, true, JSON.stringify(toInProgress.json));
+      assert.equal(toInProgress.status, 201, JSON.stringify(toInProgress.json));
+      assert.equal(toInProgress.json.job.status, "IN_PROGRESS");
 
       const inProgressPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
       assert.equal(inProgressPortal.status, 200, JSON.stringify(inProgressPortal.json));

@@ -448,11 +448,12 @@ const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
 };
 
 const canPersistApprovalStatus = (status: string) =>
-  ["BOOKED", "IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(status);
+  ["BOOKED", "BIKE_ARRIVED", "IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(status);
 
 const getStageActions = (status: string): Array<{ label: string; value: string }> => {
   switch (status) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
       return [
         { label: "Move to Bench", value: "IN_PROGRESS" },
         { label: "Pause Job", value: "ON_HOLD" },

@@ -163,7 +163,7 @@ const getFirstName = (name: string | null | undefined, username: string | undefi
 
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
-const WORKSHOP_WAITING_STATUSES = ["BOOKED", "WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "AWAITING_PARTS", "ON_HOLD"];
+const WORKSHOP_WAITING_STATUSES = ["BOOKED", "BIKE_ARRIVED", "WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "AWAITING_PARTS", "ON_HOLD"];
 const WORKSHOP_IN_PROGRESS_STATUSES = ["IN_PROGRESS"];
 const WORKSHOP_READY_STATUSES = ["READY_FOR_COLLECTION", "READY"];
 

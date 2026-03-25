@@ -5,6 +5,7 @@ import {
   WorkshopEstimateStatus,
   WorkshopJobLineType,
   WorkshopJobNoteVisibility,
+  WorkshopJobSource,
   WorkshopJobStatus,
   WorkshopNotificationEventType,
 } from "@prisma/client";
@@ -195,7 +196,16 @@ type PublicWorkshopEstimateSummaryRecord = Prisma.WorkshopEstimateGetPayload<{
 
 type WorkshopJobWithLinesRecord = {
   id: string;
+  bikeId: string | null;
+  bikeDescription: string | null;
+  assignedStaffId: string | null;
   status: WorkshopJobStatus;
+  scheduledStartAt: Date | null;
+  scheduledEndAt: Date | null;
+  durationMinutes: number | null;
+  source: WorkshopJobSource;
+  finalizedBasketId: string | null;
+  completedAt: Date | null;
   closedAt: Date | null;
   lines: Array<{
     id: string;
@@ -216,6 +226,34 @@ const normalizeOptionalText = (value: string | undefined | null) => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
+
+const hasBikePresentEvidence = (
+  job: Pick<WorkshopJobWithLinesRecord, "bikeId" | "bikeDescription" | "source">,
+) =>
+  Boolean(
+    job.bikeId
+    || normalizeOptionalText(job.bikeDescription)
+    || job.source === "IN_STORE",
+  );
+
+const hasActiveWorkEvidence = (
+  job: Pick<
+    WorkshopJobWithLinesRecord,
+    "assignedStaffId" | "scheduledStartAt" | "scheduledEndAt" | "durationMinutes" | "finalizedBasketId" | "completedAt"
+  >,
+) =>
+  Boolean(
+    job.assignedStaffId
+    || job.scheduledStartAt
+    || job.scheduledEndAt
+    || job.durationMinutes
+    || job.finalizedBasketId
+    || job.completedAt,
+  );
+
+const resolvePreWorkWorkshopStatus = (
+  job: Pick<WorkshopJobWithLinesRecord, "bikeId" | "bikeDescription" | "source">,
+): WorkshopJobStatus => (hasBikePresentEvidence(job) ? "BIKE_ARRIVED" : "BOOKED");
 
 const canPersistEstimateForJobStatus = (status: WorkshopJobStatus) =>
   !["WAITING_FOR_PARTS", "READY_FOR_COLLECTION", "COMPLETED", "CANCELLED"].includes(status);
@@ -258,17 +296,21 @@ const parsePublicEstimateDecisionStatus = (value: string) => {
 };
 
 const toWorkshopJobStatusForEstimate = (
-  status: WorkshopEstimateStatus,
+  job: WorkshopJobWithLinesRecord,
+  estimateStatus: WorkshopEstimateStatus,
 ): WorkshopJobStatus => {
-  switch (status) {
+  switch (estimateStatus) {
     case "PENDING_APPROVAL":
       return "WAITING_FOR_APPROVAL";
     case "APPROVED":
-      return "IN_PROGRESS";
+      if (job.status === "IN_PROGRESS" || job.status === "WAITING_FOR_PARTS" || job.status === "ON_HOLD") {
+        return job.status;
+      }
+      return hasActiveWorkEvidence(job) ? "IN_PROGRESS" : resolvePreWorkWorkshopStatus(job);
     case "REJECTED":
       return "ON_HOLD";
     default:
-      return "BOOKED";
+      return resolvePreWorkWorkshopStatus(job);
   }
 };
 
@@ -997,7 +1039,16 @@ const ensureWorkshopJobWithLinesTx = async (
     where: { id: workshopJobId },
     select: {
       id: true,
+      bikeId: true,
+      bikeDescription: true,
+      assignedStaffId: true,
       status: true,
+      scheduledStartAt: true,
+      scheduledEndAt: true,
+      durationMinutes: true,
+      source: true,
+      finalizedBasketId: true,
+      completedAt: true,
       closedAt: true,
       lines: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -1190,17 +1241,16 @@ const createEstimateVersionTx = async (
 
 const updateWorkshopJobStatusFromEstimateTx = async (
   tx: Prisma.TransactionClient,
-  jobId: string,
-  currentStatus: WorkshopJobStatus,
+  job: WorkshopJobWithLinesRecord,
   estimateStatus: WorkshopEstimateStatus,
 ) => {
-  const nextStatus = toWorkshopJobStatusForEstimate(estimateStatus);
-  if (currentStatus === nextStatus) {
-    return currentStatus;
+  const nextStatus = toWorkshopJobStatusForEstimate(job, estimateStatus);
+  if (job.status === nextStatus) {
+    return job.status;
   }
 
   const updated = await tx.workshopJob.update({
-    where: { id: jobId },
+    where: { id: job.id },
     data: {
       status: nextStatus,
     },
@@ -1319,7 +1369,7 @@ export const invalidateCurrentWorkshopEstimateTx = async (
     const updated = await tx.workshopJob.update({
       where: { id: workshopJobId },
       data: {
-        status: "BOOKED",
+        status: resolvePreWorkWorkshopStatus(job),
       },
       select: {
         status: true,
@@ -1449,8 +1499,7 @@ export const setWorkshopEstimateStatus = async (
       }
       const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
         tx,
-        workshopJobId,
-        job.status,
+        job,
         targetStatus,
       );
       await writeApprovalAuditEventsTx(
@@ -1561,8 +1610,7 @@ export const setWorkshopEstimateStatus = async (
 
     const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
       tx,
-      workshopJobId,
-      job.status,
+      job,
       nextEstimateStatus,
     );
 
@@ -1706,10 +1754,10 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
       undefined,
       "CUSTOMER",
     );
+    const job = await ensureWorkshopJobWithLinesTx(tx, estimate.workshopJobId);
     const toJobStatus = await updateWorkshopJobStatusFromEstimateTx(
       tx,
-      estimate.workshopJobId,
-      estimate.workshopJob.status,
+      job,
       targetStatus,
     );
 

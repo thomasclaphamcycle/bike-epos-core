@@ -57,6 +57,7 @@ type StaffRow = {
 
 const OPEN_STATUSES = new Set([
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",

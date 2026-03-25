@@ -362,6 +362,7 @@ const getBookingMetaLine = (job: CalendarJob, todayKey: string, timeZone?: strin
   }
 
   switch (job.rawStatus) {
+    case "BIKE_ARRIVED":
     case "WAITING_FOR_APPROVAL":
     case "WAITING_FOR_PARTS":
     case "READY_FOR_COLLECTION":
@@ -670,6 +671,7 @@ const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string
 
   switch (job.rawStatus) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
       classes.push("workshop-scheduler-block--booked");
       break;
     case "WAITING_FOR_APPROVAL":

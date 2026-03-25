@@ -55,6 +55,7 @@ const normalizeText = (value: string | undefined | null): string | undefined => 
 
 const stageByStatus: Record<WorkshopJobStatus, WorkflowStage> = {
   BOOKED: "BOOKED",
+  BIKE_ARRIVED: "BOOKED",
   IN_PROGRESS: "IN_PROGRESS",
   WAITING_FOR_APPROVAL: "IN_PROGRESS",
   WAITING_FOR_PARTS: "IN_PROGRESS",
@@ -65,8 +66,9 @@ const stageByStatus: Record<WorkshopJobStatus, WorkflowStage> = {
 };
 
 const ALLOWED_RAW_STATUS_TRANSITIONS: Record<WorkshopJobStatus, WorkshopJobStatus[]> = {
-  BOOKED: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_PARTS", "ON_HOLD", "READY_FOR_COLLECTION", "CANCELLED"],
+  BOOKED: ["BIKE_ARRIVED", "IN_PROGRESS", "ON_HOLD", "CANCELLED"],
+  BIKE_ARRIVED: ["IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD", "CANCELLED"],
+  IN_PROGRESS: ["WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "ON_HOLD", "READY_FOR_COLLECTION", "CANCELLED"],
   WAITING_FOR_APPROVAL: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
   WAITING_FOR_PARTS: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
   ON_HOLD: ["IN_PROGRESS", "WAITING_FOR_PARTS", "WAITING_FOR_APPROVAL", "CANCELLED"],
@@ -88,8 +90,12 @@ const parseTargetStatusOrThrow = (inputStatus: string): {
         targetStatus: "BOOKED",
         requestedStatus: normalized,
       };
-    case "IN_PROGRESS":
     case "BIKE_ARRIVED":
+      return {
+        targetStatus: "BIKE_ARRIVED",
+        requestedStatus: normalized,
+      };
+    case "IN_PROGRESS":
       return {
         targetStatus: "IN_PROGRESS",
         requestedStatus: normalized,
@@ -131,7 +137,7 @@ const parseTargetStatusOrThrow = (inputStatus: string): {
     default:
       throw new HttpError(
         400,
-        "status must be one of BOOKED, IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY_FOR_COLLECTION, COMPLETED, or CANCELLED (legacy aliases BOOKING_MADE, BIKE_ARRIVED, READY, and BIKE_READY are still accepted)",
+        "status must be one of BOOKED, BIKE_ARRIVED, IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY_FOR_COLLECTION, COMPLETED, or CANCELLED (legacy aliases BOOKING_MADE, READY, and BIKE_READY are still accepted)",
         "INVALID_STATUS",
       );
   }

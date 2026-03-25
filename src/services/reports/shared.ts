@@ -186,6 +186,7 @@ export const toPositiveIntWithinRangeOrThrow = (
 
 export const OPEN_WORKSHOP_STATUSES = new Set<WorkshopJobStatus>([
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",
@@ -195,6 +196,7 @@ export const OPEN_WORKSHOP_STATUSES = new Set<WorkshopJobStatus>([
 
 export const REMINDER_OPEN_STATUSES: WorkshopJobStatus[] = [
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",

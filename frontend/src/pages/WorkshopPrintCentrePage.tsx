@@ -116,6 +116,7 @@ export const WorkshopPrintCentrePage = () => {
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">All visible statuses</option>
               <option value="BOOKED">Booked</option>
+              <option value="BIKE_ARRIVED">Bike Arrived</option>
               <option value="WAITING_FOR_APPROVAL">Waiting For Approval</option>
               <option value="WAITING_FOR_PARTS">Waiting For Parts</option>
               <option value="READY_FOR_COLLECTION">Ready</option>

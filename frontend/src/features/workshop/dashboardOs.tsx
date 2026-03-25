@@ -15,6 +15,7 @@ import { WorkshopIntakeOverlay } from "./WorkshopIntakeOverlay";
 const statusOptions = [
   "",
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",
@@ -443,6 +444,7 @@ const toDisplayBucket = (job: DashboardJob): DisplayBucket | null => {
   const partsStatus = toPartsStatus(job);
   switch (job.status) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
     case "WAITING_FOR_APPROVAL":
       return "booked";
     case "WAITING_FOR_PARTS":
@@ -471,6 +473,7 @@ const getNextStepHint = (job: DashboardJob) =>
 const getQuickActions = (job: DashboardJob): QuickAction[] => {
   switch (job.status) {
     case "BOOKED":
+    case "BIKE_ARRIVED":
       return [
         { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
         { label: "Move to Bench", kind: "status", value: "IN_PROGRESS" },

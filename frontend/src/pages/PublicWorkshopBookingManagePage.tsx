@@ -64,6 +64,11 @@ const getBookingStatusCopy = (status: string) => {
         label: "Booked",
         detail: "Your bike is booked in and the workshop will confirm the next step if timing changes.",
       };
+    case "BIKE_ARRIVED":
+      return {
+        label: "Bike arrived",
+        detail: "The workshop has your bike and will move it onto the next repair step shortly.",
+      };
     case "IN_PROGRESS":
       return {
         label: "In progress",

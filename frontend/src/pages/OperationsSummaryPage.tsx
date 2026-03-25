@@ -104,6 +104,7 @@ const formatLabel = (value: string) =>
 const OPEN_PO_STATUSES = new Set(["DRAFT", "SENT", "PARTIALLY_RECEIVED"]);
 const WORKSHOP_IN_PROGRESS_STATUSES = new Set([
   "BOOKED",
+  "BIKE_ARRIVED",
   "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
   "WAITING_FOR_PARTS",
