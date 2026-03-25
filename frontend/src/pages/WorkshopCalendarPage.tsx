@@ -233,17 +233,91 @@ const formatClockLabel = (minutes: number) => {
   return `${`${hours}`.padStart(2, "0")}:${`${mins}`.padStart(2, "0")}`;
 };
 
-const formatOptionalTime = (value: string | null | undefined) =>
+const getTimeZoneParts = (value: Date, timeZone?: string) => {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    ...(timeZone ? { timeZone } : {}),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = formatter.formatToParts(value);
+  const lookup = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    year: lookup("year"),
+    month: lookup("month"),
+    day: lookup("day"),
+    hour: Number(lookup("hour") || "0"),
+    minute: Number(lookup("minute") || "0"),
+  };
+};
+
+const getDateKeyInTimeZone = (value: string | Date | null | undefined, timeZone?: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const parts = getTimeZoneParts(parsed, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const getMinutesInTimeZone = (value: string | Date | null | undefined, timeZone?: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const parts = getTimeZoneParts(parsed, timeZone);
+  return (parts.hour * 60) + parts.minute;
+};
+
+const formatOptionalTime = (value: string | null | undefined, timeZone?: string) =>
   value
-    ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    ? new Date(value).toLocaleTimeString([], {
+        ...(timeZone ? { timeZone } : {}),
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     : "-";
 
-const formatOptionalDate = (value: string | null | undefined) =>
+const formatOptionalDate = (value: string | null | undefined, timeZone?: string) =>
   value
-    ? new Date(value).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })
+    ? new Date(value).toLocaleDateString([], {
+        ...(timeZone ? { timeZone } : {}),
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      })
     : "-";
 
-const toLocalTimeInput = (isoValue: string | null | undefined) => {
+const formatPromiseDate = (value: string | null | undefined) => {
+  if (!value) {
+    return "-";
+  }
+
+  const dateKey = value.slice(0, 10);
+  return new Date(`${dateKey}T12:00:00.000Z`).toLocaleDateString([], {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+};
+
+const toTimeInputValue = (isoValue: string | null | undefined, timeZone?: string) => {
   if (!isoValue) {
     return "";
   }
@@ -253,7 +327,8 @@ const toLocalTimeInput = (isoValue: string | null | undefined) => {
     return "";
   }
 
-  return `${`${date.getHours()}`.padStart(2, "0")}:${`${date.getMinutes()}`.padStart(2, "0")}`;
+  const parts = getTimeZoneParts(date, timeZone);
+  return `${`${parts.hour}`.padStart(2, "0")}:${`${parts.minute}`.padStart(2, "0")}`;
 };
 
 const buildScheduleIso = (dateKey: string, timeValue: string) => {
@@ -281,8 +356,8 @@ const getBookingCustomerName = (job: CalendarJob) =>
 const getBookingBikeLine = (job: CalendarJob) =>
   job.bikeDescription?.trim() || "Bike details pending";
 
-const getBookingMetaLine = (job: CalendarJob, todayKey: string) => {
-  if (isOverdueJob(job, todayKey)) {
+const getBookingMetaLine = (job: CalendarJob, todayKey: string, timeZone?: string) => {
+  if (isOverdueJob(job, todayKey, timeZone)) {
     return "Overdue";
   }
 
@@ -311,9 +386,9 @@ const getBookingServiceLabel = (job: CalendarJob) => {
   return trimmed;
 };
 
-const getBookingTooltip = (job: CalendarJob) => {
+const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
   const details = [
-    `${formatOptionalTime(job.scheduledStartAt)} - ${formatOptionalTime(job.scheduledEndAt)}`,
+    `${formatOptionalTime(job.scheduledStartAt, timeZone)} - ${formatOptionalTime(job.scheduledEndAt, timeZone)}`,
     getBookingCustomerName(job),
     getBookingBikeLine(job),
   ];
@@ -325,22 +400,24 @@ const getBookingTooltip = (job: CalendarJob) => {
 
   details.push(job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Technician: Unassigned");
   details.push(`Status: ${workshopRawStatusLabel(job.rawStatus)}`);
+  if (job.scheduledDate) {
+    details.push(`Promise date: ${formatPromiseDate(job.scheduledDate)}`);
+  }
 
   return details.join("\n");
 };
 
-const getJobDateKey = (job: CalendarJob) => {
-  if (job.scheduledDate) {
-    return job.scheduledDate.slice(0, 10);
-  }
-  if (job.scheduledStartAt) {
-    return formatDateKey(new Date(job.scheduledStartAt));
-  }
-  return null;
-};
+const getJobOperationalDateKey = (job: CalendarJob, timeZone?: string) =>
+  getDateKeyInTimeZone(job.scheduledStartAt, timeZone);
 
-const isOverdueJob = (job: CalendarJob, todayKey: string) => {
-  const jobDateKey = getJobDateKey(job);
+const getJobPromiseDateKey = (job: CalendarJob) =>
+  job.scheduledDate?.slice(0, 10) ?? null;
+
+const getJobDueDateKey = (job: CalendarJob, timeZone?: string) =>
+  getJobPromiseDateKey(job) || getJobOperationalDateKey(job, timeZone);
+
+const isOverdueJob = (job: CalendarJob, todayKey: string, timeZone?: string) => {
+  const jobDateKey = getJobDueDateKey(job, timeZone);
   return Boolean(
     jobDateKey
       && jobDateKey < todayKey
@@ -462,24 +539,26 @@ const getWorkshopTimeOffBlocksForDay = (
   dateKey: string,
   openMinutes: number,
   closeMinutes: number,
+  timeZone?: string,
 ) => {
-  const dayStart = new Date(`${dateKey}T00:00:00`);
-  const dayEnd = new Date(`${dateKey}T23:59:59.999`);
-
   return entries.flatMap<TimeOffBlock>((entry) => {
     const start = new Date(entry.startAt);
     const end = new Date(entry.endAt);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       return [];
     }
-    if (end <= dayStart || start >= dayEnd) {
+    const startDateKey = getDateKeyInTimeZone(start, timeZone);
+    const endDateKey = getDateKeyInTimeZone(end, timeZone);
+    if (!startDateKey || !endDateKey || endDateKey < dateKey || startDateKey > dateKey) {
       return [];
     }
 
-    const visibleStart = start < dayStart ? dayStart : start;
-    const visibleEnd = end > dayEnd ? dayEnd : end;
-    const startMinutes = (visibleStart.getHours() * 60) + visibleStart.getMinutes();
-    const endMinutes = (visibleEnd.getHours() * 60) + visibleEnd.getMinutes();
+    const startMinutes = startDateKey < dateKey ? 0 : getMinutesInTimeZone(start, timeZone);
+    const endMinutes = endDateKey > dateKey ? 24 * 60 : getMinutesInTimeZone(end, timeZone);
+    if (startMinutes === null || endMinutes === null) {
+      return [];
+    }
+
     const clippedStart = clamp(startMinutes, openMinutes, closeMinutes);
     const clippedEnd = clamp(endMinutes, openMinutes, closeMinutes);
 
@@ -502,6 +581,7 @@ const toPositionedJobs = (
   openMinutes: number,
   closeMinutes: number,
   columnWidth: number,
+  timeZone?: string,
 ) => {
   const sortableJobs = jobs
     .map((job) => {
@@ -515,8 +595,11 @@ const toPositionedJobs = (
         return null;
       }
 
-      const startMinutes = (start.getHours() * 60) + start.getMinutes();
-      const endMinutes = (end.getHours() * 60) + end.getMinutes();
+      const startMinutes = getMinutesInTimeZone(start, timeZone);
+      const endMinutes = getMinutesInTimeZone(end, timeZone);
+      if (startMinutes === null || endMinutes === null) {
+        return null;
+      }
       const clippedStart = clamp(startMinutes, openMinutes, closeMinutes);
       const clippedEnd = clamp(endMinutes, openMinutes, closeMinutes);
 
@@ -574,14 +657,15 @@ const buildInitialDraft = (
   job: CalendarJob,
   preferredDateKey: string,
   calendarDay: CalendarResponse["days"][number] | undefined,
+  timeZone?: string,
 ): ScheduleDraft => ({
   staffId: job.assignedStaffId || "",
-  dateKey: getJobDateKey(job) || preferredDateKey,
-  startTime: toLocalTimeInput(job.scheduledStartAt) || calendarDay?.opensAt || "10:00",
+  dateKey: getJobOperationalDateKey(job, timeZone) || preferredDateKey,
+  startTime: toTimeInputValue(job.scheduledStartAt, timeZone) || calendarDay?.opensAt || "10:00",
   durationMinutes: `${job.durationMinutes || 60}`,
 });
 
-const buildJobToneClass = (job: CalendarJob, todayKey: string) => {
+const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   const classes = ["workshop-scheduler-block"];
 
   switch (job.rawStatus) {
@@ -602,7 +686,7 @@ const buildJobToneClass = (job: CalendarJob, todayKey: string) => {
       break;
   }
 
-  if (isOverdueJob(job, todayKey)) {
+  if (isOverdueJob(job, todayKey, timeZone)) {
     classes.push("workshop-scheduler-block--overdue");
   }
 
@@ -647,7 +731,8 @@ export const WorkshopSchedulerScreen = ({
   const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
   const selectedTechnicianId = technicianId ?? internalTechnicianId;
   const requestedRange = useMemo(() => buildVisibleRange(anchorDateKey, view), [anchorDateKey, view]);
-  const todayKey = workshopTodayDateKey();
+  const calendarTimeZone = calendar?.range.timeZone;
+  const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey();
 
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -787,7 +872,7 @@ export const WorkshopSchedulerScreen = ({
     });
 
     visibleScheduledJobs.forEach((job) => {
-      const dateKey = getJobDateKey(job);
+      const dateKey = getJobOperationalDateKey(job, calendarTimeZone);
       if (!dateKey || !next.has(dateKey)) {
         return;
       }
@@ -802,11 +887,17 @@ export const WorkshopSchedulerScreen = ({
     days.forEach((day) => {
       next.set(
         day.date,
-        toPositionedJobs(jobsByDay.get(day.date) ?? [], timeline.openMinutes, timeline.closeMinutes, dayColumnWidth),
+        toPositionedJobs(
+          jobsByDay.get(day.date) ?? [],
+          timeline.openMinutes,
+          timeline.closeMinutes,
+          dayColumnWidth,
+          calendarTimeZone,
+        ),
       );
     });
     return next;
-  }, [dayColumnWidth, days, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendarTimeZone, dayColumnWidth, days, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
 
   const workshopTimeOffByDay = useMemo(() => {
     const next = new Map<string, TimeOffBlock[]>();
@@ -820,11 +911,17 @@ export const WorkshopSchedulerScreen = ({
 
       next.set(
         day.date,
-        getWorkshopTimeOffBlocksForDay(applicableEntries, day.date, timeline.openMinutes, timeline.closeMinutes),
+        getWorkshopTimeOffBlocksForDay(
+          applicableEntries,
+          day.date,
+          timeline.openMinutes,
+          timeline.closeMinutes,
+          calendarTimeZone,
+        ),
       );
     });
     return next;
-  }, [calendar?.workshopTimeOff, days, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendar?.workshopTimeOff, calendarTimeZone, days, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
 
   const staffCount = calendar?.staff.length ?? 0;
   const staffFilterOptions = calendar?.staff ?? [];
@@ -835,9 +932,9 @@ export const WorkshopSchedulerScreen = ({
   );
 
   const openEditor = (job: CalendarJob, preferredDateKey?: string) => {
-    const editorDateKey = preferredDateKey || getJobDateKey(job) || anchorDateKey;
+    const editorDateKey = preferredDateKey || getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey;
     setSelectedJobId(job.id);
-    setDraft(buildInitialDraft(job, editorDateKey, daysByDateKey.get(editorDateKey)));
+    setDraft(buildInitialDraft(job, editorDateKey, daysByDateKey.get(editorDateKey), calendarTimeZone));
     setScheduleError(null);
   };
 
@@ -1100,7 +1197,7 @@ export const WorkshopSchedulerScreen = ({
                 return (
                   <div key={day.date} className="workshop-scheduler-grid__day-header">
                     <strong>{day.weekday}</strong>
-                    <span>{formatOptionalDate(`${day.date}T12:00:00.000Z`)}</span>
+                    <span>{formatOptionalDate(`${day.date}T12:00:00.000Z`, calendarTimeZone)}</span>
                     <span>
                       {day.isClosed
                         ? "Closed"
@@ -1158,14 +1255,14 @@ export const WorkshopSchedulerScreen = ({
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
                       const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
-                      const toneClass = `${buildJobToneClass(job, todayKey)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}`;
+                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}`;
 
                       return (
                         <button
                           key={job.id}
                           type="button"
                           className={toneClass}
-                          title={getBookingTooltip(job)}
+                          title={getBookingTooltip(job, calendarTimeZone)}
                           style={{
                             top: `${top}px`,
                             left: `${left}px`,
@@ -1175,7 +1272,7 @@ export const WorkshopSchedulerScreen = ({
                           onClick={() => openJobOverlay(job)}
                         >
                           <div className="workshop-scheduler-block__time">
-                            {formatOptionalTime(job.scheduledStartAt)} - {formatOptionalTime(job.scheduledEndAt)}
+                            {formatOptionalTime(job.scheduledStartAt, calendarTimeZone)} - {formatOptionalTime(job.scheduledEndAt, calendarTimeZone)}
                           </div>
                           <strong className="workshop-scheduler-block__customer">
                             {getBookingCustomerName(job)}
@@ -1185,7 +1282,7 @@ export const WorkshopSchedulerScreen = ({
                           </div>
                           {!isCompactBlock ? (
                             <div className="workshop-scheduler-block__meta">
-                              {getBookingMetaLine(job, todayKey)}
+                              {getBookingMetaLine(job, todayKey, calendarTimeZone)}
                             </div>
                           ) : null}
                         </button>
@@ -1329,7 +1426,7 @@ export const WorkshopSchedulerScreen = ({
                     <strong>{getJobHeading(job)}</strong>
                     <div className="table-secondary">{job.customerName || "Customer pending"}</div>
                     <div className="table-secondary">
-                      Due: {job.scheduledDate ? formatOptionalDate(job.scheduledDate) : "No promised date"}
+                      Promise date: {job.scheduledDate ? formatPromiseDate(job.scheduledDate) : "Not set"}
                     </div>
                   </div>
                   <div className="actions-inline">
@@ -1358,12 +1455,12 @@ export const WorkshopSchedulerScreen = ({
                   <div>
                     <strong>{getJobHeading(job)}</strong>
                     <div className="table-secondary">
-                      {formatOptionalDate(job.scheduledDate)} · {formatOptionalTime(job.scheduledStartAt)}
+                      Scheduled {formatOptionalDate(job.scheduledStartAt, calendarTimeZone)} · {formatOptionalTime(job.scheduledStartAt, calendarTimeZone)}
                     </div>
                     <div className="table-secondary">{job.customerName || workshopRawStatusLabel(job.rawStatus)}</div>
                   </div>
                   <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job, getJobDateKey(job) || anchorDateKey)}>Assign</button>
+                    <button type="button" onClick={() => openEditor(job, getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey)}>Assign</button>
                     <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                   </div>
                 </article>
@@ -1390,7 +1487,7 @@ export const WorkshopSchedulerScreen = ({
                       <div>
                         <strong>{entry.reason || (entry.scope === "WORKSHOP" ? "Workshop block" : "Staff time off")}</strong>
                         <div className="table-secondary">
-                          {formatOptionalDate(entry.startAt)} · {formatOptionalTime(entry.startAt)} - {formatOptionalTime(entry.endAt)}
+                          {formatOptionalDate(entry.startAt, calendarTimeZone)} · {formatOptionalTime(entry.startAt, calendarTimeZone)} - {formatOptionalTime(entry.endAt, calendarTimeZone)}
                         </div>
                       </div>
                     </article>
@@ -1407,6 +1504,7 @@ export const WorkshopSchedulerScreen = ({
           summary={selectedOverlaySummary}
           fullJobPath={selectedOverlayJob?.jobPath || `/workshop/${overlayJobId}`}
           technicianOptions={overlayTechnicianOptions}
+          timeZone={calendarTimeZone}
           onJobChanged={loadCalendar}
           onClose={closeJobOverlay}
         />

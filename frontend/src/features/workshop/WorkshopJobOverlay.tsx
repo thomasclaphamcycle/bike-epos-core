@@ -189,6 +189,7 @@ type WorkshopJobOverlayProps = {
   summary?: WorkshopJobOverlaySummary | null;
   onClose: () => void;
   fullJobPath?: string;
+  timeZone?: string;
   technicianOptions?: Array<{
     id: string;
     name: string;
@@ -203,21 +204,24 @@ const formatMoney = (pence: number | null) => {
   return `£${(pence / 100).toFixed(2)}`;
 };
 
-const formatDate = (value: string | null | undefined) => {
+const formatPromiseDate = (value: string | null | undefined) => {
   if (!value) {
-    return "Unscheduled";
+    return "Not set";
   }
-  return new Date(value).toLocaleDateString([], {
+
+  const dateKey = value.slice(0, 10);
+  return new Date(`${dateKey}T12:00:00.000Z`).toLocaleDateString([], {
     day: "numeric",
     month: "short",
   });
 };
 
-const formatDateTime = (value: string | null | undefined) => {
+const formatDateTime = (value: string | null | undefined, timeZone?: string) => {
   if (!value) {
     return "Not set";
   }
   return new Date(value).toLocaleString([], {
+    ...(timeZone ? { timeZone } : {}),
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -228,6 +232,7 @@ const formatDateTime = (value: string | null | undefined) => {
 const formatScheduleWindow = (
   startAt: string | null | undefined,
   endAt: string | null | undefined,
+  timeZone?: string,
 ) => {
   if (!startAt) {
     return "Not timed";
@@ -237,6 +242,7 @@ const formatScheduleWindow = (
   const end = endAt ? new Date(endAt) : null;
 
   const startLabel = start.toLocaleString([], {
+    ...(timeZone ? { timeZone } : {}),
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -250,10 +256,12 @@ const formatScheduleWindow = (
   const sameDay = start.toDateString() === end.toDateString();
   const endLabel = sameDay
     ? end.toLocaleTimeString([], {
+        ...(timeZone ? { timeZone } : {}),
         hour: "2-digit",
         minute: "2-digit",
       })
     : end.toLocaleString([], {
+        ...(timeZone ? { timeZone } : {}),
         day: "numeric",
         month: "short",
         hour: "2-digit",
@@ -282,6 +290,7 @@ const getNextStepHint = (summary?: WorkshopJobOverlaySummary | null) =>
     partsStatus: summary?.partsSummary?.partsStatus,
     assignedStaffName: summary?.assignedStaffName || null,
     scheduledDate: summary?.scheduledDate || null,
+    scheduledStartAt: summary?.scheduledStartAt || null,
     hasSale: Boolean(summary?.sale),
     hasBasket: Boolean(summary?.finalizedBasketId),
   }).nextStep;
@@ -356,12 +365,13 @@ const getNextActionCard = ({
     | null
     | undefined;
   estimate: WorkshopJobOverlayEstimate | null;
+  timeZone?: string;
 }): WorkshopNextActionCard => {
   const scheduleHighlight = scheduledStartAt
-    ? `Timed for ${formatDateTime(scheduledStartAt)}`
+    ? `Scheduled slot ${formatDateTime(scheduledStartAt, timeZone)}`
     : scheduledDate
-      ? `Promised ${formatDate(scheduledDate)}`
-      : "No promised date set";
+      ? `Promise date ${formatPromiseDate(scheduledDate)}`
+      : "No promise date set";
   const technicianHighlight = assignedStaffName
     ? `Assigned to ${assignedStaffName}`
     : "No technician assigned";
@@ -382,7 +392,7 @@ const getNextActionCard = ({
         title: "Review approval",
         body: workflowSummary.nextStep,
         highlights: [
-          estimate?.requestedAt ? `Quote sent ${formatDateTime(estimate.requestedAt)}` : "Review the latest estimate before following up",
+          estimate?.requestedAt ? `Quote sent ${formatDateTime(estimate.requestedAt, timeZone)}` : "Review the latest estimate before following up",
           technicianHighlight,
           scheduleHighlight,
         ],
@@ -516,6 +526,7 @@ export const WorkshopJobOverlay = ({
   summary,
   onClose,
   fullJobPath,
+  timeZone,
   technicianOptions = [],
   onJobChanged,
 }: WorkshopJobOverlayProps) => {
@@ -605,6 +616,7 @@ export const WorkshopJobOverlay = ({
     partsStatus: displayPartsSummary?.partsStatus,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
     scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
+    scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
     hasBasket: Boolean(overlayJob?.finalizedBasketId || summary?.finalizedBasketId),
   });
@@ -636,6 +648,7 @@ export const WorkshopJobOverlay = ({
         }
       : null,
     estimate: details?.currentEstimate || null,
+    timeZone,
   });
 
   const refreshOverlay = async () => {
@@ -823,19 +836,20 @@ export const WorkshopJobOverlay = ({
                 <strong>{displayCustomerName}</strong>
               </div>
               <div>
-                <span className="metric-label">Promised</span>
-                <strong>{formatDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
+                <span className="metric-label">Promise date</span>
+                <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
               </div>
               <div>
                 <span className="metric-label">Technician</span>
                 <strong>{overlayJob?.assignedStaffName || summary?.assignedStaffName || "Unassigned"}</strong>
               </div>
               <div>
-                <span className="metric-label">Timed slot</span>
+                <span className="metric-label">Scheduled slot</span>
                 <strong>
                   {formatScheduleWindow(
                     overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
                     overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+                    timeZone,
                   )}
                 </strong>
               </div>
@@ -951,23 +965,24 @@ export const WorkshopJobOverlay = ({
           {renderSection(
           "planning",
           "Planning",
-          "Timing, slot, and technician ownership.",
+          "Promise date, slot timing, and technician ownership.",
           <div className="workshop-os-job-workspace-section__stack">
             <div className="workshop-os-drawer__grid">
               <div>
-                <span className="metric-label">Date</span>
-                <strong>{formatDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
+                <span className="metric-label">Promise date</span>
+                <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
               </div>
               <div>
                 <span className="metric-label">Technician</span>
                 <strong>{overlayJob?.assignedStaffName || summary?.assignedStaffName || "Unassigned"}</strong>
               </div>
               <div>
-                <span className="metric-label">Slot</span>
+                <span className="metric-label">Scheduled slot</span>
                 <strong>
                   {formatScheduleWindow(
                     overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
                     overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+                    timeZone,
                   )}
                 </strong>
               </div>
