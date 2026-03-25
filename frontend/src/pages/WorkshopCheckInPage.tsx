@@ -805,6 +805,11 @@ export const WorkshopCheckInPage = ({
     setBikeSearchModalOpen(true);
   };
 
+  const changeSelectedBike = () => {
+    setSelectedBikeId("");
+    openBikeSelector();
+  };
+
   const clearSelectedBike = () => {
     setSelectedBikeId("");
   };
@@ -1253,7 +1258,7 @@ export const WorkshopCheckInPage = ({
                         </div>
                       </div>
                       <div className="actions-inline">
-                        <button type="button" onClick={openBikeSelector}>
+                        <button type="button" onClick={changeSelectedBike}>
                           Change
                         </button>
                         <button type="button" onClick={clearSelectedBike}>
@@ -1263,7 +1268,7 @@ export const WorkshopCheckInPage = ({
                     </div>
                   ) : null}
 
-                  {selectedCustomer && sortedCustomerBikes.length > 0 ? (
+                  {!selectedBikeRecord && selectedCustomer && sortedCustomerBikes.length > 0 ? (
                     <div
                       className={`workshop-checkin-bike-picker__list${shouldScrollSavedBikeList ? " workshop-checkin-bike-picker__list--scrollable" : ""}`}
                       role="list"
@@ -1275,7 +1280,7 @@ export const WorkshopCheckInPage = ({
                         return (
                           <article
                             key={bike.id}
-                            className={`workshop-checkin-bike-picker__list-item${isSelected ? " workshop-checkin-bike-picker__list-item--selected" : ""}`}
+                            className="workshop-checkin-bike-picker__list-item"
                             role="listitem"
                           >
                             <div className="grow">
@@ -1283,7 +1288,7 @@ export const WorkshopCheckInPage = ({
                               <div className="table-secondary">{buildBikeInlineMeta(bike)}</div>
                             </div>
                             <button type="button" onClick={() => selectBikeRecord(bike)} disabled={isSelected}>
-                              {isSelected ? "Selected" : "Use"}
+                              Use
                             </button>
                           </article>
                         );
