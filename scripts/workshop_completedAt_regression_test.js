@@ -214,7 +214,7 @@ const run = async () => {
         locationId,
         customerId: customer.id,
         locationId,
-        status: "BOOKING_MADE",
+        status: "BOOKED",
         source: "IN_STORE",
         notes: `M19.1 job ${ref}`,
       },

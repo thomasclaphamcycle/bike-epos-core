@@ -822,7 +822,7 @@ const buildReadyForCollectionDecisions = async (
     jobStatus: job.status,
   };
 
-  if (job.status !== "BIKE_READY") {
+  if (job.status !== "READY_FOR_COLLECTION") {
     return notificationChannels.map((channel) =>
       buildSkipDecision({
         channel,
@@ -835,7 +835,7 @@ const buildReadyForCollectionDecisions = async (
         baseDedupeKey,
         reasonCode: "JOB_NOT_READY",
         reasonMessage:
-          "Ready-for-collection notification was skipped because the job is no longer in BIKE_READY.",
+          "Ready-for-collection notification was skipped because the job is no longer in READY_FOR_COLLECTION.",
       }),
     );
   }

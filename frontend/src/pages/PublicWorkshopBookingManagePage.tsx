@@ -58,11 +58,6 @@ const formatDateLabel = (value: string | null | undefined) => {
 
 const getBookingStatusCopy = (status: string) => {
   switch (status) {
-    case "BOOKING_MADE":
-      return {
-        label: "Request received",
-        detail: "Your requested date is with the workshop team for confirmation.",
-      };
     case "OPEN":
     case "BOOKED":
       return {
@@ -74,7 +69,22 @@ const getBookingStatusCopy = (status: string) => {
         label: "In progress",
         detail: "Your bike is currently with the workshop.",
       };
-    case "BIKE_READY":
+    case "WAITING_FOR_APPROVAL":
+      return {
+        label: "Waiting for approval",
+        detail: "The workshop is waiting for a customer decision before bench work can continue.",
+      };
+    case "WAITING_FOR_PARTS":
+      return {
+        label: "Waiting for parts",
+        detail: "The workshop is waiting on stock before the repair can continue.",
+      };
+    case "ON_HOLD":
+      return {
+        label: "On hold",
+        detail: "The workshop has paused this job and will update you when it can move again.",
+      };
+    case "READY_FOR_COLLECTION":
       return {
         label: "Ready for collection",
         detail: "The workshop has marked the bike ready to collect.",
@@ -162,11 +172,11 @@ export const PublicWorkshopBookingManagePage = () => {
   }, [token]);
 
   const statusCopy = useMemo(
-    () => getBookingStatusCopy(payload?.status ?? "BOOKING_MADE"),
+    () => getBookingStatusCopy(payload?.status ?? "BOOKED"),
     [payload?.status],
   );
 
-  const canReschedule = payload?.status === "BOOKING_MADE";
+  const canReschedule = payload?.status === "BOOKED" || payload?.status === "OPEN";
 
   const handleReschedule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

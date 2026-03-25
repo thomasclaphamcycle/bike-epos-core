@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 import { getWorkshopStaffingToday } from "./rotaService";
+import { parseWorkshopRawStatusAlias } from "./workshopStatusService";
 
 type WorkshopDashboardInput = {
   staffDate?: string;
@@ -31,33 +32,30 @@ const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
 
 const VALID_STATUSES: WorkshopJobStatus[] = [
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
+  "BOOKED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
   "COMPLETED",
   "CANCELLED",
 ];
 
 const VALID_SOURCES: WorkshopJobSource[] = ["ONLINE", "IN_STORE"];
 const CAPACITY_OPEN_JOB_STATUSES: WorkshopJobStatus[] = [
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
+  "BOOKED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
 ];
 const CAPACITY_ACTIVE_WORKLOAD_STATUSES: WorkshopJobStatus[] = [
-  "BIKE_ARRIVED",
-  "APPROVED",
+  "IN_PROGRESS",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
 ];
 const WORKSHOP_STAFFING_FOUNDATION_TABLES = [
   "public.appconfig",
@@ -127,13 +125,16 @@ const parseStatusFilterOrThrow = (value: string | undefined): WorkshopJobStatus[
     return [];
   }
 
+  const normalized = new Set<WorkshopJobStatus>();
   for (const status of statuses) {
-    if (!VALID_STATUSES.includes(status as WorkshopJobStatus)) {
+    const resolved = parseWorkshopRawStatusAlias(status);
+    if (!resolved || !VALID_STATUSES.includes(resolved)) {
       throw new HttpError(400, `Invalid status filter: ${status}`, "INVALID_FILTER");
     }
+    normalized.add(resolved);
   }
 
-  return statuses as WorkshopJobStatus[];
+  return Array.from(normalized);
 };
 
 const parseSourceFilterOrThrow = (value: string | undefined): WorkshopJobSource[] => {

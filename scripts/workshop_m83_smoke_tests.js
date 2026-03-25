@@ -816,7 +816,7 @@ const run = async () => {
       assert.ok(audit.json.events.length >= 1, JSON.stringify(audit.json));
     }, results);
 
-    await runTest("approval can move to APPROVED, stale estimates are invalidated by line changes, and history is preserved", async () => {
+    await runTest("approval can move to in-progress bench work, stale estimates are invalidated by line changes, and history is preserved", async () => {
       const { job } = await createJob(state);
 
       const addLine = await fetchJson(`/api/workshop/jobs/${job.id}/lines`, {
@@ -837,7 +837,7 @@ const run = async () => {
         body: JSON.stringify({ status: "APPROVED" }),
       });
       assert.equal(approved.status, 201, JSON.stringify(approved.json));
-      assert.equal(approved.json.job.status, "APPROVED");
+      assert.equal(approved.json.job.status, "IN_PROGRESS");
 
       const updateLine = await fetchJson(
         `/api/workshop/jobs/${job.id}/lines/${addLine.json.line.id}`,
@@ -858,7 +858,7 @@ const run = async () => {
       });
       assert.equal(invalidatedDetail.status, 200, JSON.stringify(invalidatedDetail.json));
       assert.equal(invalidatedDetail.json.currentEstimate, null);
-      assert.equal(invalidatedDetail.json.job.rawStatus, "BIKE_ARRIVED");
+      assert.equal(invalidatedDetail.json.job.rawStatus, "IN_PROGRESS");
       assert.equal(invalidatedDetail.json.estimateHistory.length, 1);
       assert.ok(invalidatedDetail.json.estimateHistory[0].supersededAt, JSON.stringify(invalidatedDetail.json));
 
@@ -879,7 +879,7 @@ const run = async () => {
 
       await prisma.workshopJob.update({
         where: { id: job.id },
-        data: { status: "BIKE_READY" },
+        data: { status: "READY_FOR_COLLECTION" },
       });
 
       const invalid = await fetchJson(`/api/workshop/jobs/${job.id}/approval`, {
@@ -2419,7 +2419,8 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
-      assert.equal(toInProgress.status, 201, JSON.stringify(toInProgress.json));
+      assert.equal(toInProgress.status, 200, JSON.stringify(toInProgress.json));
+      assert.equal(toInProgress.json.idempotent, true, JSON.stringify(toInProgress.json));
 
       const inProgressPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
       assert.equal(inProgressPortal.status, 200, JSON.stringify(inProgressPortal.json));
@@ -2463,7 +2464,7 @@ const run = async () => {
       const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY" }),
+        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
       });
       assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
 
@@ -3201,7 +3202,7 @@ const run = async () => {
       assert.equal(rejectedDetail.json.job.rawStatus, "ON_HOLD");
     }, results);
 
-    await runTest("ready-for-collection notifications are sent once when the job reaches BIKE_READY", async () => {
+    await runTest("ready-for-collection notifications are sent once when the job reaches READY_FOR_COLLECTION", async () => {
       const customer = await createCustomer(state, {
         name: "Ready Collection Customer",
         email: `ready-collection-${uniqueRef()}@example.com`,
@@ -3221,10 +3222,10 @@ const run = async () => {
       const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY" }),
+        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
       });
       assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
-      assert.equal(toReady.json.job.status, "BIKE_READY");
+      assert.equal(toReady.json.job.status, "READY_FOR_COLLECTION");
 
       const sentSmsNotification = await waitForNotification(
         {

@@ -8,6 +8,39 @@ export type WorkshopExecutionStatus =
   | "COLLECTED"
   | "CLOSED";
 
+export const parseWorkshopRawStatusAlias = (
+  value: string,
+): WorkshopJobStatus | null => {
+  const normalized = value.trim().toUpperCase();
+  switch (normalized) {
+    case "BOOKED":
+    case "BOOKING_MADE":
+      return "BOOKED";
+    case "IN_PROGRESS":
+    case "BIKE_ARRIVED":
+    case "APPROVED":
+      return "IN_PROGRESS";
+    case "WAITING_FOR_APPROVAL":
+      return "WAITING_FOR_APPROVAL";
+    case "WAITING_FOR_PARTS":
+      return "WAITING_FOR_PARTS";
+    case "ON_HOLD":
+      return "ON_HOLD";
+    case "READY":
+    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
+      return "READY_FOR_COLLECTION";
+    case "COMPLETED":
+    case "COLLECTED":
+    case "CLOSED":
+      return "COMPLETED";
+    case "CANCELLED":
+      return "CANCELLED";
+    default:
+      return null;
+  }
+};
+
 export const parseWorkshopExecutionStatus = (
   value: string,
 ): WorkshopExecutionStatus => {
@@ -37,11 +70,11 @@ export const toWorkshopJobStatus = (
 ): WorkshopJobStatus => {
   switch (status) {
     case "BOOKED":
-      return "BOOKING_MADE";
+      return "BOOKED";
     case "IN_PROGRESS":
-      return "BIKE_ARRIVED";
+      return "IN_PROGRESS";
     case "READY":
-      return "BIKE_READY";
+      return "READY_FOR_COLLECTION";
     case "COLLECTED":
       return "COMPLETED";
     case "CLOSED":
@@ -58,9 +91,9 @@ export const toWorkshopExecutionStatus = (job: {
   }
 
   switch (job.status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
       return "BOOKED";
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return "READY";
     case "COMPLETED":
       return "COLLECTED";

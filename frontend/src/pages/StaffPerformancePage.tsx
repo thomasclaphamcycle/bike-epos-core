@@ -56,13 +56,12 @@ type StaffRow = {
 };
 
 const OPEN_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
+  "BOOKED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
 ]);
 
 const formatMoney = (pence: number | null | undefined) =>
@@ -217,7 +216,7 @@ export const StaffPerformancePage = () => {
       if (isWaitingForParts(job)) {
         row.waitingForParts += 1;
       }
-      if (job.status === "BIKE_READY") {
+      if (job.status === "READY_FOR_COLLECTION") {
         row.ready += 1;
       }
       grouped.set(key, row);

@@ -228,7 +228,7 @@ export const DailyTradeClosePage = () => {
   }), [sessionSummaries, sessions]);
 
   const workshopReadyCount = useMemo(
-    () => workshop?.jobs.filter((job) => job.status === "BIKE_READY").length ?? 0,
+    () => workshop?.jobs.filter((job) => job.status === "READY_FOR_COLLECTION").length ?? 0,
     [workshop],
   );
 

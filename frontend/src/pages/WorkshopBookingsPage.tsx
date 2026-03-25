@@ -55,7 +55,7 @@ const formatCustomerName = (customer: BookingJob["customer"]) =>
 const toStatusClass = (status: string) => {
   if (status === "CANCELLED") return "status-badge status-cancelled";
   if (status === "COMPLETED") return "status-badge status-complete";
-  if (status === "BIKE_READY") return "status-badge status-ready";
+  if (status === "READY_FOR_COLLECTION") return "status-badge status-ready";
   if (status === "WAITING_FOR_PARTS" || status === "WAITING_FOR_APPROVAL") return "status-badge status-warning";
   return "status-badge";
 };

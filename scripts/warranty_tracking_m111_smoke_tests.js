@@ -80,7 +80,7 @@ const main = async () => {
         customerName: customer.name,
         locationId,
         bikeDescription: `Warranty bike ${RUN_REF}`,
-        status: "BIKE_ARRIVED",
+        status: "IN_PROGRESS",
         notes: `Warranty intake ${RUN_REF}`,
       },
     });

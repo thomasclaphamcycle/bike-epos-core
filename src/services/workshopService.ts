@@ -1662,8 +1662,8 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
       where: { id: workshopJobId },
       data: {
         finalizedBasketId: basket.id,
-        ...(job.status === "BOOKING_MADE" || job.status === "BIKE_ARRIVED"
-          ? { status: "BIKE_READY" }
+        ...(job.status === "BOOKED" || job.status === "IN_PROGRESS"
+          ? { status: "READY_FOR_COLLECTION" }
           : {}),
       },
     });

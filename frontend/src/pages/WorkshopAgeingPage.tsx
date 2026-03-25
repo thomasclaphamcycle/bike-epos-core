@@ -27,13 +27,12 @@ type DashboardResponse = {
 };
 
 const OPEN_STATUSES = new Set([
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
+  "BOOKED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
 ]);
 
 const dayDiff = (value: string) => Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000));

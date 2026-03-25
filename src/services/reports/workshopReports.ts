@@ -309,7 +309,7 @@ export const getWorkshopCapacityReport = async () => {
   const openJobs = jobs.filter((job) => WORKSHOP_CAPACITY_OPEN_STATUSES.has(job.status));
   const waitingForApprovalCount = openJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
   const waitingForPartsCount = openJobs.filter((job) => job.status === "WAITING_FOR_PARTS").length;
-  const readyForCollectionCount = openJobs.filter((job) => job.status === "BIKE_READY").length;
+  const readyForCollectionCount = openJobs.filter((job) => job.status === "READY_FOR_COLLECTION").length;
   const completedJobsInLookback = jobs.filter((job) => (
     job.completedAt !== null
     && job.completedAt >= completedFrom
@@ -502,7 +502,7 @@ export const getWorkshopAnalyticsReport = async (from?: string, to?: string, loc
     if (job.status === "ON_HOLD") {
       pausedCount += 1;
     }
-    if (job.status === "BIKE_READY") {
+    if (job.status === "READY_FOR_COLLECTION") {
       readyForCollectionCount += 1;
     }
 
@@ -568,7 +568,7 @@ export const getWorkshopAnalyticsReport = async (from?: string, to?: string, loc
     if (job.status === "WAITING_FOR_PARTS") {
       row.waitingForPartsJobs += 1;
     }
-    if (job.status === "BIKE_READY") {
+    if (job.status === "READY_FOR_COLLECTION") {
       row.readyForCollectionJobs += 1;
     }
   }
@@ -618,7 +618,7 @@ export const getWorkshopAnalyticsReport = async (from?: string, to?: string, loc
         stallReason = "Paused / on hold";
         stageAgeDays = differenceInWholeDays(job.updatedAt, now);
         stageAgeBasis = "JOB_UPDATED_AT";
-      } else if (job.status === "BIKE_READY") {
+      } else if (job.status === "READY_FOR_COLLECTION") {
         stallReason = "Ready for collection";
         stageAgeDays = differenceInWholeDays(job.updatedAt, now);
         stageAgeBasis = "JOB_UPDATED_AT";

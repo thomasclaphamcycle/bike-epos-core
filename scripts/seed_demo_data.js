@@ -60,7 +60,7 @@ const DEMO_WORKSHOP_JOBS = [
     id: '00000000-0000-0000-0000-000000000301',
     customerIndex: 0,
     bikeDescription: 'CoreCycles City Commuter - Tune up',
-    status: 'BIKE_ARRIVED',
+    status: 'IN_PROGRESS',
     notes: `${seedTag} intake and safety check`,
     scheduledOffsetDays: -1,
     lines: [
@@ -72,7 +72,7 @@ const DEMO_WORKSHOP_JOBS = [
     id: '00000000-0000-0000-0000-000000000302',
     customerIndex: 1,
     bikeDescription: 'Road Sprint - Gear indexing',
-    status: 'APPROVED',
+    status: 'IN_PROGRESS',
     notes: `${seedTag} actively in workshop`,
     scheduledOffsetDays: 0,
     lines: [
@@ -96,7 +96,7 @@ const DEMO_WORKSHOP_JOBS = [
     id: '00000000-0000-0000-0000-000000000304',
     customerIndex: 3,
     bikeDescription: 'Hybrid Metro - Full service',
-    status: 'BIKE_READY',
+    status: 'READY_FOR_COLLECTION',
     notes: `${seedTag} ready for collection`,
     scheduledOffsetDays: -2,
     lines: [
@@ -132,7 +132,7 @@ const DEMO_WORKSHOP_JOBS = [
     id: '00000000-0000-0000-0000-000000000307',
     customerIndex: 6,
     bikeDescription: 'Hybrid Metro - New customer intake',
-    status: 'BOOKING_MADE',
+    status: 'BOOKED',
     notes: `${seedTag} awaiting bike drop-off`,
     scheduledOffsetDays: 3,
     lines: [{ type: 'LABOUR', description: 'Initial diagnostic estimate', qty: 1, unitPricePence: 1500 }],

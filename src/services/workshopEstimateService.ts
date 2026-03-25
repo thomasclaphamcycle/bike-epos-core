@@ -218,7 +218,7 @@ const normalizeOptionalText = (value: string | undefined | null) => {
 };
 
 const canPersistEstimateForJobStatus = (status: WorkshopJobStatus) =>
-  !["WAITING_FOR_PARTS", "BIKE_READY", "COMPLETED", "CANCELLED"].includes(status);
+  !["WAITING_FOR_PARTS", "READY_FOR_COLLECTION", "COMPLETED", "CANCELLED"].includes(status);
 
 const parseEstimateStatus = (value: string) => {
   const normalized = value.trim().toUpperCase();
@@ -264,11 +264,11 @@ const toWorkshopJobStatusForEstimate = (
     case "PENDING_APPROVAL":
       return "WAITING_FOR_APPROVAL";
     case "APPROVED":
-      return "APPROVED";
+      return "IN_PROGRESS";
     case "REJECTED":
       return "ON_HOLD";
     default:
-      return "BIKE_ARRIVED";
+      return "BOOKED";
   }
 };
 
@@ -531,7 +531,7 @@ const buildCustomerPortalProgress = (input: {
     };
   }
 
-  if (input.rawStatus === "BIKE_READY") {
+  if (input.rawStatus === "READY_FOR_COLLECTION") {
     return {
       stage: "READY_FOR_COLLECTION",
       label: "Ready for collection",
@@ -585,7 +585,7 @@ const buildCustomerPortalProgress = (input: {
     };
   }
 
-  if (input.rawStatus === "BIKE_ARRIVED" || input.rawStatus === "APPROVED") {
+  if (input.rawStatus === "IN_PROGRESS") {
     return {
       stage: "IN_PROGRESS",
       label: "In progress",
@@ -1315,11 +1315,11 @@ export const invalidateCurrentWorkshopEstimateTx = async (
 
   const fromJobStatus = job.status;
   let toJobStatus = job.status;
-  if (job.status === "WAITING_FOR_APPROVAL" || job.status === "APPROVED") {
+  if (job.status === "WAITING_FOR_APPROVAL") {
     const updated = await tx.workshopJob.update({
       where: { id: workshopJobId },
       data: {
-        status: "BIKE_ARRIVED",
+        status: "BOOKED",
       },
       select: {
         status: true,

@@ -364,7 +364,7 @@ const getBookingMetaLine = (job: CalendarJob, todayKey: string, timeZone?: strin
   switch (job.rawStatus) {
     case "WAITING_FOR_APPROVAL":
     case "WAITING_FOR_PARTS":
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return workshopRawStatusLabel(job.rawStatus);
     default:
       return job.assignedStaffName?.trim() || "Scheduled";
@@ -421,7 +421,7 @@ const isOverdueJob = (job: CalendarJob, todayKey: string, timeZone?: string) => 
   return Boolean(
     jobDateKey
       && jobDateKey < todayKey
-      && !["COMPLETED", "CANCELLED", "BIKE_READY"].includes(job.rawStatus),
+      && !["COMPLETED", "CANCELLED", "READY_FOR_COLLECTION"].includes(job.rawStatus),
   );
 };
 
@@ -669,7 +669,7 @@ const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string
   const classes = ["workshop-scheduler-block"];
 
   switch (job.rawStatus) {
-    case "BOOKING_MADE":
+    case "BOOKED":
       classes.push("workshop-scheduler-block--booked");
       break;
     case "WAITING_FOR_APPROVAL":
@@ -678,7 +678,7 @@ const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string
     case "WAITING_FOR_PARTS":
       classes.push("workshop-scheduler-block--parts");
       break;
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       classes.push("workshop-scheduler-block--ready");
       break;
     default:

@@ -163,9 +163,9 @@ const getFirstName = (name: string | null | undefined, username: string | undefi
 
 const isManagerPlus = (role: string | undefined) => role === "MANAGER" || role === "ADMIN";
 
-const WORKSHOP_WAITING_STATUSES = ["BOOKING_MADE", "WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "AWAITING_PARTS", "ON_HOLD"];
-const WORKSHOP_IN_PROGRESS_STATUSES = ["BIKE_ARRIVED", "APPROVED", "IN_PROGRESS"];
-const WORKSHOP_READY_STATUSES = ["BIKE_READY", "READY"];
+const WORKSHOP_WAITING_STATUSES = ["BOOKED", "WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "AWAITING_PARTS", "ON_HOLD"];
+const WORKSHOP_IN_PROGRESS_STATUSES = ["IN_PROGRESS"];
+const WORKSHOP_READY_STATUSES = ["READY_FOR_COLLECTION", "READY"];
 
 const countStatuses = (byStatus: Record<string, number> | undefined, statuses: string[]) =>
   statuses.reduce((total, status) => total + (byStatus?.[status] ?? 0), 0);

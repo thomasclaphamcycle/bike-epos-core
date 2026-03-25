@@ -19,13 +19,12 @@ import { WorkshopIntakeOverlay } from "../features/workshop/WorkshopIntakeOverla
 
 const statusOptions = [
   "",
-  "BOOKING_MADE",
-  "BIKE_ARRIVED",
+  "BOOKED",
+  "IN_PROGRESS",
   "WAITING_FOR_APPROVAL",
-  "APPROVED",
   "WAITING_FOR_PARTS",
   "ON_HOLD",
-  "BIKE_READY",
+  "READY_FOR_COLLECTION",
   "COMPLETED",
   "CANCELLED",
 ] as const;
@@ -241,7 +240,7 @@ const matchesQuickFilter = (
     case "WAITING_FOR_PARTS":
       return job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT";
     case "READY_FOR_COLLECTION":
-      return job.status === "BIKE_READY";
+      return job.status === "READY_FOR_COLLECTION";
     default:
       return true;
   }
@@ -249,7 +248,7 @@ const matchesQuickFilter = (
 
 const getQuickActions = (job: DashboardJob): QuickAction[] => {
   switch (job.status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
       return [
         { label: "Send Quote", kind: "approval", value: "WAITING_FOR_APPROVAL" },
         { label: "Move to Bench", kind: "status", value: "IN_PROGRESS" },
@@ -258,15 +257,10 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
       return [
         { label: "Mark Approved", kind: "approval", value: "APPROVED" },
       ];
-    case "APPROVED":
+    case "IN_PROGRESS":
       return [
-        { label: "Start Bench Work", kind: "status", value: "IN_PROGRESS" },
         { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
-      ];
-    case "BIKE_ARRIVED":
-      return [
-        { label: "Open Job", kind: "navigate", value: `/workshop/${job.id}` },
-        { label: "Ready for Collection", kind: "status", value: "READY" },
+        { label: "Ready for Collection", kind: "status", value: "READY_FOR_COLLECTION" },
       ];
     case "WAITING_FOR_PARTS":
       return [
@@ -277,7 +271,7 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
         { label: "Resume Bench Work", kind: "status", value: "IN_PROGRESS" },
         { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
       ];
-    case "BIKE_READY":
+    case "READY_FOR_COLLECTION":
       return [
         { label: "Collection Queue", kind: "navigate", value: "/workshop/collection" },
       ];
@@ -406,7 +400,7 @@ export const WorkshopPage = () => {
   const listAlerts = useMemo(() => {
     const approval = visibleJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
     const parts = visibleJobs.filter((job) => job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT").length;
-    const ready = visibleJobs.filter((job) => job.status === "BIKE_READY").length;
+    const ready = visibleJobs.filter((job) => job.status === "READY_FOR_COLLECTION").length;
 
     return [
       { key: "approval", label: "Waiting for approval", count: approval, tone: approval ? "status-warning" : "status-badge" },

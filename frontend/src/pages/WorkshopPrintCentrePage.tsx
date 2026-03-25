@@ -35,7 +35,7 @@ const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const toStatusBadgeClass = (status: string) => {
   if (status === "COMPLETED") return "status-badge status-complete";
-  if (status === "BIKE_READY") return "status-badge status-ready";
+  if (status === "READY_FOR_COLLECTION") return "status-badge status-ready";
   if (status === "WAITING_FOR_APPROVAL" || status === "WAITING_FOR_PARTS") return "status-badge status-warning";
   if (status === "CANCELLED") return "status-badge status-cancelled";
   return "status-badge status-info";
@@ -80,7 +80,7 @@ export const WorkshopPrintCentrePage = () => {
   const summary = useMemo(() => ({
     jobsVisible: jobs.length,
     withSale: jobs.filter((job) => Boolean(job.sale)).length,
-    readyCollection: jobs.filter((job) => job.status === "BIKE_READY").length,
+    readyCollection: jobs.filter((job) => job.status === "READY_FOR_COLLECTION").length,
     awaitingApproval: jobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length,
   }), [jobs]);
 
@@ -115,10 +115,10 @@ export const WorkshopPrintCentrePage = () => {
             Status
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="">All visible statuses</option>
-              <option value="BOOKING_MADE">Booking Made</option>
+              <option value="BOOKED">Booked</option>
               <option value="WAITING_FOR_APPROVAL">Waiting For Approval</option>
               <option value="WAITING_FOR_PARTS">Waiting For Parts</option>
-              <option value="BIKE_READY">Ready</option>
+              <option value="READY_FOR_COLLECTION">Ready</option>
               <option value="COMPLETED">Completed</option>
             </select>
           </label>
