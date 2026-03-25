@@ -1325,7 +1325,7 @@ Goal:
 
 Implemented scope on the current working line:
 
-- ready-for-collection queue for `BIKE_READY` jobs
+- ready-for-collection queue for `READY_FOR_COLLECTION` jobs
 - linked sale visibility where already present
 - deposit and readiness visibility from existing workshop data
 - basic internal collection confirmation action

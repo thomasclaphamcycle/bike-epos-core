@@ -434,43 +434,36 @@ const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
 
   switch (job.status) {
     case "BOOKED":
-      return "BOOKING_MADE";
+      return "BOOKED";
     case "READY":
-      return "BIKE_READY";
+      return "READY_FOR_COLLECTION";
     case "COLLECTED":
     case "CLOSED":
       return "COMPLETED";
     case "IN_PROGRESS":
-      return "BIKE_ARRIVED";
+      return "IN_PROGRESS";
     default:
       return job.status;
   }
 };
 
 const canPersistApprovalStatus = (status: string) =>
-  ["BOOKING_MADE", "BIKE_ARRIVED", "WAITING_FOR_APPROVAL", "APPROVED", "ON_HOLD"].includes(status);
+  ["BOOKED", "BIKE_ARRIVED", "IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(status);
 
 const getStageActions = (status: string): Array<{ label: string; value: string }> => {
   switch (status) {
-    case "BOOKING_MADE":
+    case "BOOKED":
+    case "BIKE_ARRIVED":
       return [
         { label: "Move to Bench", value: "IN_PROGRESS" },
         { label: "Pause Job", value: "ON_HOLD" },
         { label: "Cancel Job", value: "CANCELLED" },
       ];
-    case "APPROVED":
-      return [
-        { label: "Start Bench Work", value: "IN_PROGRESS" },
-        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
-        { label: "Pause Job", value: "ON_HOLD" },
-        { label: "Ready for Collection", value: "READY" },
-        { label: "Cancel Job", value: "CANCELLED" },
-      ];
-    case "BIKE_ARRIVED":
+    case "IN_PROGRESS":
       return [
         { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
         { label: "Pause Job", value: "ON_HOLD" },
-        { label: "Ready for Collection", value: "READY" },
+        { label: "Ready for Collection", value: "READY_FOR_COLLECTION" },
         { label: "Cancel Job", value: "CANCELLED" },
       ];
     case "WAITING_FOR_PARTS":
@@ -1362,7 +1355,7 @@ export const WorkshopJobPage = () => {
   const currentEstimate = payload?.currentEstimate ?? null;
   const estimateHistory = payload?.estimateHistory ?? [];
   const canResendQuoteNotification = currentEstimate?.status === "PENDING_APPROVAL";
-  const canResendReadyNotification = rawStatus === "BIKE_READY";
+  const canResendReadyNotification = rawStatus === "READY_FOR_COLLECTION";
   const portalConversationAccess = conversationPayload?.conversation.portalAccess ?? null;
   const currentEstimateQuoteUrl = currentEstimate?.customerQuote?.publicPath
     ? toPublicAppUrl(currentEstimate.customerQuote.publicPath)
@@ -1431,7 +1424,7 @@ export const WorkshopJobPage = () => {
       return `POS basket ${payload.job.finalizedBasketId.slice(0, 8)} is ready for collection handoff.`;
     }
 
-    if (rawStatus === "BIKE_READY") {
+    if (rawStatus === "READY_FOR_COLLECTION") {
       return "Ready for collection, but the POS handoff has not been opened yet.";
     }
 
@@ -1509,7 +1502,7 @@ export const WorkshopJobPage = () => {
                   </p>
                 </div>
                 <div className="job-workflow-highlight">
-                  <span className="table-secondary">Current blocker</span>
+                  <span className="table-secondary">Next step</span>
                   <strong>
                     <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
                   </strong>
@@ -1679,7 +1672,7 @@ export const WorkshopJobPage = () => {
               </div>
             ) : null}
 
-            {rawStatus === "BIKE_READY" ? (
+            {rawStatus === "READY_FOR_COLLECTION" ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 Collection is completed through POS checkout. Use the POS handoff button above instead of
                 manually marking the job collected.

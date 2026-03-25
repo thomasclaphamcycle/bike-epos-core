@@ -423,7 +423,7 @@ const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
     customerId: DEMO_CUSTOMERS[1].id,
     customerName: DEMO_CUSTOMERS[1].name,
     bikeDescription: "MetroRide commuter bike - booked for safety check",
-    status: "BOOKING_MADE",
+    status: "BOOKED",
     scheduledDate: toRelativeIso(1, 9, 30),
     notes: "Minimal demo booking ready for intake and approval flow.",
     line: {
@@ -456,7 +456,7 @@ const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
     customerId: DEMO_CUSTOMERS[3].id,
     customerName: DEMO_CUSTOMERS[3].name,
     bikeDescription: "Hybrid bike - ready for collection",
-    status: "BIKE_READY",
+    status: "READY_FOR_COLLECTION",
     scheduledDate: toRelativeIso(-1, 15, 0),
     notes: "Use this for collection, finalize-to-basket, and workshop checkout walkthroughs.",
     line: {

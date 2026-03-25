@@ -122,7 +122,7 @@ const createCustomerAndJob = async (state) => {
     data: {
       customerId: customer.id,
       locationId,
-      status: "BOOKING_MADE",
+      status: "BOOKED",
       source: "IN_STORE",
       depositStatus: "NOT_REQUIRED",
       depositRequiredPence: 0,

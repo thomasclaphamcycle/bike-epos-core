@@ -375,7 +375,7 @@ export const createOnlineWorkshopBooking = async (
         workshopJob = await tx.workshopJob.create({
           data: {
             customerId: customer.id,
-            status: "BOOKING_MADE",
+            status: "BOOKED",
             scheduledDate: availability.date,
             source: "ONLINE",
             depositRequiredPence: settings.defaultDepositPence,
@@ -618,7 +618,7 @@ export const updateWorkshopBookingByManageToken = async (
   return prisma.$transaction(async (tx) => {
     const booking = await getManageableWorkshopJobOrThrow(tx, normalizedToken);
 
-    if (booking.status !== "BOOKING_MADE") {
+    if (booking.status !== "BOOKED") {
       throw new HttpError(409, "Booking can no longer be changed", "BOOKING_NOT_EDITABLE");
     }
 

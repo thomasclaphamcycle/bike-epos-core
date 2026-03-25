@@ -378,7 +378,7 @@ const run = async () => {
         data: {
           locationId,
           customerId: customer.id,
-          status: "BOOKING_MADE",
+          status: "BOOKED",
           source: "IN_STORE",
           scheduledDate: addDays(todayUtc(), 31),
           depositStatus: "NOT_REQUIRED",

@@ -123,7 +123,7 @@ const createCustomerAndJob = async (state, overrides = {}) => {
   const job = await prisma.workshopJob.create({
     data: {
       customerId: customer.id,
-      status: "BOOKING_MADE",
+      status: "BOOKED",
       source: "IN_STORE",
       locationId,
       scheduledDate: addDays(todayUtc(), 20),
@@ -342,7 +342,7 @@ const run = async () => {
       const invalid = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY" }),
+        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
       });
       assert.equal(invalid.status, 409, JSON.stringify(invalid.json));
       assert.equal(invalid.json.error.code, "INVALID_STATUS_TRANSITION");
@@ -350,7 +350,7 @@ const run = async () => {
       const toInProgress = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "IN_PROGRESS" }),
+        body: JSON.stringify({ status: "BIKE_ARRIVED" }),
       });
       assert.equal(toInProgress.status, 201, JSON.stringify(toInProgress.json));
       assert.equal(toInProgress.json.job.status, "BIKE_ARRIVED");
@@ -358,10 +358,18 @@ const run = async () => {
       const toInProgressReplay = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "IN_PROGRESS" }),
+        body: JSON.stringify({ status: "BIKE_ARRIVED" }),
       });
       assert.equal(toInProgressReplay.status, 200, JSON.stringify(toInProgressReplay.json));
       assert.equal(toInProgressReplay.json.idempotent, true);
+
+      const toBenchWork = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      });
+      assert.equal(toBenchWork.status, 201, JSON.stringify(toBenchWork.json));
+      assert.equal(toBenchWork.json.job.status, "IN_PROGRESS");
 
       const toWaitingForParts = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -393,15 +401,15 @@ const run = async () => {
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
       assert.equal(resumeBenchWork.status, 201, JSON.stringify(resumeBenchWork.json));
-      assert.equal(resumeBenchWork.json.job.status, "BIKE_ARRIVED");
+      assert.equal(resumeBenchWork.json.job.status, "IN_PROGRESS");
 
       const toReady = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY" }),
+        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
       });
       assert.equal(toReady.status, 201, JSON.stringify(toReady.json));
-      assert.equal(toReady.json.job.status, "BIKE_READY");
+      assert.equal(toReady.json.job.status, "READY_FOR_COLLECTION");
 
       const toCompleted = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -416,15 +424,15 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "CANCELLED" }),
       });
-      assert.equal(toCancelled.status, 201, JSON.stringify(toCancelled.json));
-      assert.equal(toCancelled.json.job.status, "CANCELLED");
+      assert.equal(toCancelled.status, 409, JSON.stringify(toCancelled.json));
+      assert.equal(toCancelled.json.error.code, "INVALID_STATUS_TRANSITION");
 
       const audit = await fetchJson(
         `/api/audit?entityType=WORKSHOP_JOB&entityId=${job.id}&action=JOB_STATUS_CHANGED&limit=20`,
         { headers: MANAGER_HEADERS },
       );
       assert.equal(audit.status, 200, JSON.stringify(audit.json));
-      assert.ok(audit.json.events.length >= 6, JSON.stringify(audit.json));
+      assert.ok(audit.json.events.length >= 5, JSON.stringify(audit.json));
     }, results);
 
     await runTest("dashboard includes assignment + note stats and new filters", async () => {

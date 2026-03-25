@@ -334,7 +334,7 @@ const run = async () => {
         data: {
           customerId: customer.id,
           locationId,
-          status: "BIKE_READY",
+          status: "READY_FOR_COLLECTION",
           source: "IN_STORE",
           scheduledDate: addDays(baseDate, 41),
           depositStatus: "NOT_REQUIRED",
@@ -345,19 +345,19 @@ const run = async () => {
       state.workshopJobIds.add(inStoreJob.id);
 
       const dashboard = await fetchJson(
-        "/api/workshop/dashboard?status=BOOKING_MADE,BIKE_READY&source=ONLINE,IN_STORE&limit=50",
+        "/api/workshop/dashboard?status=BOOKED,READY_FOR_COLLECTION&source=ONLINE,IN_STORE&limit=50",
         { headers: STAFF_HEADERS },
       );
       assert.equal(dashboard.status, 200, JSON.stringify(dashboard.json));
       assert.ok(Array.isArray(dashboard.json.jobs), JSON.stringify(dashboard.json));
       assert.ok(typeof dashboard.json.summary.totalJobs === "number", JSON.stringify(dashboard.json));
 
-      const readyOnly = await fetchJson("/api/workshop/dashboard?status=BIKE_READY&limit=50", {
+      const readyOnly = await fetchJson("/api/workshop/dashboard?status=READY_FOR_COLLECTION&limit=50", {
         headers: STAFF_HEADERS,
       });
       assert.equal(readyOnly.status, 200, JSON.stringify(readyOnly.json));
       assert.ok(
-        readyOnly.json.jobs.every((job) => job.status === "BIKE_READY"),
+        readyOnly.json.jobs.every((job) => job.status === "READY_FOR_COLLECTION"),
         JSON.stringify(readyOnly.json),
       );
     }, results);
@@ -514,7 +514,7 @@ const run = async () => {
         data: {
           customerId: customer.id,
           locationId,
-          status: "BOOKING_MADE",
+          status: "BOOKED",
           source: "IN_STORE",
           scheduledDate: addDays(baseDate, 43),
           depositStatus: "NOT_REQUIRED",

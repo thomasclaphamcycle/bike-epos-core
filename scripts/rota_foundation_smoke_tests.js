@@ -800,7 +800,7 @@ const run = async () => {
 
     await createWorkshopJob({
       scheduledDate: CAPACITY_LIGHT_DATE,
-      status: "BOOKING_MADE",
+      status: "BOOKED",
       notes: "manageable due-today job",
     });
 
@@ -815,7 +815,7 @@ const run = async () => {
 
     await createWorkshopJob({
       scheduledDate: CAPACITY_LIGHT_DATE,
-      status: "APPROVED",
+      status: "IN_PROGRESS",
       notes: "overdue active job one",
     });
     await createWorkshopJob({
@@ -825,7 +825,7 @@ const run = async () => {
     });
     await createWorkshopJob({
       scheduledDate: CAPACITY_OVERLOADED_DATE,
-      status: "BOOKING_MADE",
+      status: "BOOKED",
       notes: "busy due-today job",
     });
 
@@ -841,7 +841,7 @@ const run = async () => {
 
     await createWorkshopJob({
       scheduledDate: CAPACITY_NOCOVER_DATE,
-      status: "BOOKING_MADE",
+      status: "BOOKED",
       notes: "no-cover due-today job",
     });
 
