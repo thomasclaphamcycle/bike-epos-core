@@ -140,6 +140,8 @@ type WorkshopSchedulerScreenProps = {
   technicianId?: string;
   onTechnicianIdChange?: (technicianId: string) => void;
   visibleJobIds?: ReadonlySet<string> | null;
+  requestedOverlayJobId?: string | null;
+  onRequestedOverlayJobHandled?: () => void;
 };
 
 export type CalendarViewMode = "week" | "day";
@@ -709,6 +711,8 @@ export const WorkshopSchedulerScreen = ({
   technicianId,
   onTechnicianIdChange,
   visibleJobIds,
+  requestedOverlayJobId,
+  onRequestedOverlayJobHandled,
 }: WorkshopSchedulerScreenProps) => {
   const { success, error } = useToasts();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -851,6 +855,21 @@ export const WorkshopSchedulerScreen = ({
       setOverlayJobId(null);
     }
   }, [allJobsById, overlayJobId]);
+
+  useEffect(() => {
+    if (!requestedOverlayJobId) {
+      return;
+    }
+
+    if (!allJobsById.has(requestedOverlayJobId)) {
+      return;
+    }
+
+    setSelectedJobId(null);
+    setScheduleError(null);
+    setOverlayJobId(requestedOverlayJobId);
+    onRequestedOverlayJobHandled?.();
+  }, [allJobsById, onRequestedOverlayJobHandled, requestedOverlayJobId]);
 
   useEffect(() => {
     if (selectedTechnicianId && !(calendar?.staff ?? []).some((staff) => staff.id === selectedTechnicianId)) {

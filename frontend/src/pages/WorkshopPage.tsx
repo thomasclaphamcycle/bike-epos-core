@@ -15,7 +15,7 @@ import {
   workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
-import { WorkshopIntakeOverlay } from "../features/workshop/WorkshopIntakeOverlay";
+import { WorkshopCheckInModal } from "../features/workshop/WorkshopCheckInModal";
 
 const statusOptions = [
   "",
@@ -301,6 +301,7 @@ export const WorkshopPage = () => {
   const [loading, setLoading] = useState(false);
   const [schedulerRefreshToken, setSchedulerRefreshToken] = useState(0);
   const [isIntakeOpen, setIsIntakeOpen] = useState(false);
+  const [postCreateJobId, setPostCreateJobId] = useState<string | null>(null);
   const [selectedListJobId, setSelectedListJobId] = useState<string | null>(null);
 
   const listQuery = useMemo(
@@ -354,18 +355,6 @@ export const WorkshopPage = () => {
 
     return options;
   }, [jobs, user?.id, user?.name, user?.role, user?.username]);
-
-  const defaultIntakeTechnicianId = useMemo(() => {
-    if (selectedTechnicianId) {
-      return selectedTechnicianId;
-    }
-
-    if (quickFilter === "MY_JOBS" && user?.id) {
-      return user.id;
-    }
-
-    return "";
-  }, [quickFilter, selectedTechnicianId, user?.id]);
 
   const visibleJobs = useMemo(
     () => jobs.filter((job) => {
@@ -473,7 +462,7 @@ export const WorkshopPage = () => {
     await updateStatus(jobId, action.value);
   };
 
-  const handleIntakeCreated = async (_jobId: string) => {
+  const handleIntakeCreated = (jobId: string) => {
     setQuickFilter("ALL");
     setStatus("");
     setSearch("");
@@ -481,8 +470,9 @@ export const WorkshopPage = () => {
     setAnchorDateKey(workshopTodayDateKey());
     setSurfaceMode("week");
     setSelectedListJobId(null);
-    await loadJobs(buildDashboardQuery({}));
+    setPostCreateJobId(jobId);
     setSchedulerRefreshToken((current) => current + 1);
+    void loadJobs(buildDashboardQuery({}));
   };
 
   return (
@@ -837,15 +827,15 @@ export const WorkshopPage = () => {
               technicianId={selectedTechnicianId}
               onTechnicianIdChange={setSelectedTechnicianId}
               visibleJobIds={visibleJobIds}
+              requestedOverlayJobId={postCreateJobId}
+              onRequestedOverlayJobHandled={() => setPostCreateJobId(null)}
             />
           )}
         </section>
       </div>
 
-      <WorkshopIntakeOverlay
+      <WorkshopCheckInModal
         open={isIntakeOpen}
-        technicianOptions={technicianOptions}
-        defaultTechnicianId={defaultIntakeTechnicianId}
         onClose={() => setIsIntakeOpen(false)}
         onCreated={handleIntakeCreated}
       />
