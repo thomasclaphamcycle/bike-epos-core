@@ -4415,11 +4415,61 @@ th {
   padding-top: 16px;
 }
 
+.workshop-checkin-submodal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 15, 31, 0.52);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  z-index: 1260;
+}
+
+.workshop-checkin-submodal {
+  width: min(78vw, 920px);
+  height: min(76dvh, 760px);
+  max-height: min(76dvh, 760px);
+  border-radius: 20px;
+}
+
+.workshop-checkin-submodal__content {
+  gap: 16px;
+}
+
 .workshop-checkin-modal-body,
 .workshop-checkin-flow--embedded {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+.workshop-checkin-bike-picker {
+  display: grid;
+  gap: 14px;
+}
+
+.workshop-checkin-bike-picker__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workshop-checkin-bike-picker__selected {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #d5dfeb;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.workshop-checkin-bike-picker__selected strong {
+  display: block;
+  margin-bottom: 4px;
 }
 
 .workshop-checkin-modal-intro h3 {
@@ -4472,6 +4522,20 @@ th {
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 249, 253, 0.96) 100%);
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.07);
+}
+
+@media (max-width: 900px) {
+  .workshop-checkin-submodal {
+    width: min(94vw, 720px);
+    height: min(84dvh, 760px);
+    max-height: min(84dvh, 760px);
+  }
+
+  .workshop-checkin-bike-picker__header,
+  .workshop-checkin-bike-picker__selected {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
 }
 
 .workshop-os-overlay-hero__title {
