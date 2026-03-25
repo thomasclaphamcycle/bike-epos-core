@@ -4322,6 +4322,32 @@ th {
   z-index: 1200;
 }
 
+.workshop-os-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  padding-left: clamp(24px, 6vw, 72px);
+  background: rgba(8, 15, 31, 0.34);
+  backdrop-filter: blur(2px);
+  z-index: 1150;
+}
+
+.workshop-os-drawer {
+  width: min(760px, 100vw);
+  height: 100%;
+  max-width: 100%;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+  border-left: 1px solid #cfdae5;
+  box-shadow: -20px 0 48px rgba(8, 15, 31, 0.16);
+  padding: 22px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
 .workshop-os-modal {
   width: min(90vw, 1400px);
   max-width: 100%;
@@ -8897,6 +8923,15 @@ th {
 
   .workshop-os-modal-backdrop {
     padding: 12px;
+  }
+
+  .workshop-os-drawer-backdrop {
+    padding-left: 0;
+  }
+
+  .workshop-os-drawer {
+    width: 100vw;
+    padding: 16px;
   }
 
   .workshop-os-modal {
