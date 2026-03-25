@@ -177,6 +177,15 @@ export const WorkshopCheckInPage = ({
     [selectedTemplateId, templates],
   );
   const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
+  const trimmedCustomerSearch = customerSearch.trim();
+  const showInlineCreateCustomerOption = useMemo(() => {
+    if (!trimmedCustomerSearch || loadingCustomers) {
+      return false;
+    }
+
+    const normalizedSearch = trimmedCustomerSearch.toLocaleLowerCase();
+    return !customerResults.some((customer) => customer.name.trim().toLocaleLowerCase() === normalizedSearch);
+  }, [customerResults, loadingCustomers, trimmedCustomerSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -500,6 +509,16 @@ export const WorkshopCheckInPage = ({
     setSearchParams(nextParams);
   };
 
+  const beginInlineCustomerCreateFromSearch = () => {
+    const draftName = trimmedCustomerSearch || newCustomerName.trim();
+    setCreateCustomerInline(true);
+    setNewCustomerName(draftName);
+    setSelectedCustomer(null);
+    setManualCustomerName("");
+    setSelectedBikeId("");
+    setCreateBikeInline(false);
+  };
+
   const formContent = (
     <form className={embedded ? "workshop-checkin-flow workshop-checkin-flow--embedded" : "page-shell"} onSubmit={submitCheckIn}>
         {step === 0 ? (
@@ -579,6 +598,24 @@ export const WorkshopCheckInPage = ({
                   </table>
                 </div>
 
+                {showInlineCreateCustomerOption ? (
+                  <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+                    <div className="actions-inline" style={{ justifyContent: "space-between", gap: "12px" }}>
+                      <div>
+                        <strong>No exact customer match found.</strong>
+                        <div className="table-secondary">Create a new customer directly from the name you just typed.</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={beginInlineCustomerCreateFromSearch}
+                      >
+                        Create new customer "{trimmedCustomerSearch}"
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="job-meta-grid" style={{ marginTop: "12px" }}>
                   <div>
                     <strong>Selected customer:</strong> {selectedCustomer?.name || "-"}
@@ -603,10 +640,7 @@ export const WorkshopCheckInPage = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setCreateCustomerInline(true);
-                      setSelectedCustomer(null);
-                      setManualCustomerName("");
-                      setSelectedBikeId("");
+                      beginInlineCustomerCreateFromSearch();
                     }}
                   >
                     Create new customer
