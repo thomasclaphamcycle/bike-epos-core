@@ -1315,15 +1315,12 @@ export const WorkshopCheckInPage = ({
     return (
       <div className="workshop-checkin-modal-body">
         <section className="card workshop-checkin-modal-intro">
-          <div className="card-header-row">
-            <div>
-              <h3>New Job</h3>
-              <p className="muted-text">
-                Capture customer, bike, and intake details without leaving the Workshop Operating Screen.
-              </p>
+          {createdJobId ? (
+            <div className="card-header-row">
+              <div />
+              <Link to={`/workshop/${createdJobId}`}>Open created job</Link>
             </div>
-            {createdJobId ? <Link to={`/workshop/${createdJobId}`}>Open created job</Link> : null}
-          </div>
+          ) : null}
           {renderStepIndicators(step)}
         </section>
         {formContent}
