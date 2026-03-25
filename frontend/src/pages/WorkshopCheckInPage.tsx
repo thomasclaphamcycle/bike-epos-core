@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -133,6 +133,7 @@ export const WorkshopCheckInPage = ({
   onCreated,
 }: WorkshopCheckInPageProps = {}) => {
   const { success, error } = useToasts();
+  const customerOptionRefs = useRef<Array<HTMLElement | null>>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialBikeId = searchParams.get("bikeId");
@@ -141,6 +142,7 @@ export const WorkshopCheckInPage = ({
   const [customerSearch, setCustomerSearch] = useState("");
   const debouncedCustomerSearch = useDebouncedValue(customerSearch, 250);
   const [customerResults, setCustomerResults] = useState<CustomerRow[]>([]);
+  const [highlightedCustomerOptionIndex, setHighlightedCustomerOptionIndex] = useState(-1);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
@@ -222,6 +224,7 @@ export const WorkshopCheckInPage = ({
     const normalizedSearch = trimmedCustomerSearch.toLocaleLowerCase();
     return !customerResults.some((customer) => customer.name.trim().toLocaleLowerCase() === normalizedSearch);
   }, [customerResults, loadingCustomers, trimmedCustomerSearch]);
+  const customerSearchOptionCount = customerResults.length + (showInlineCreateCustomerOption ? 1 : 0);
   const filteredCustomerBikes = useMemo(() => {
     const query = bikeSearchText.trim().toLocaleLowerCase();
     if (!query) {
@@ -312,6 +315,26 @@ export const WorkshopCheckInPage = ({
       cancelled = true;
     };
   }, [debouncedCustomerSearch, error]);
+
+  useEffect(() => {
+    if (!trimmedCustomerSearch || customerSearchOptionCount === 0) {
+      setHighlightedCustomerOptionIndex(-1);
+      customerOptionRefs.current = [];
+      return;
+    }
+
+    setHighlightedCustomerOptionIndex(0);
+  }, [customerResults, customerSearchOptionCount, showInlineCreateCustomerOption, trimmedCustomerSearch]);
+
+  useEffect(() => {
+    if (highlightedCustomerOptionIndex < 0) {
+      return;
+    }
+
+    customerOptionRefs.current[highlightedCustomerOptionIndex]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [highlightedCustomerOptionIndex]);
 
   useEffect(() => {
     if (!initialBikeId) {
@@ -587,6 +610,16 @@ export const WorkshopCheckInPage = ({
     setManualCustomerName("");
     setSelectedBikeId("");
     resetBikeDraft();
+    setHighlightedCustomerOptionIndex(-1);
+  };
+
+  const selectExistingCustomer = (customer: CustomerRow) => {
+    setSelectedCustomer(customer);
+    setCreateCustomerInline(false);
+    setManualCustomerName("");
+    setSelectedBikeId("");
+    resetBikeDraft();
+    setHighlightedCustomerOptionIndex(-1);
   };
 
   const selectBikeRecord = (bike: CustomerBikeRecord) => {
@@ -631,7 +664,52 @@ export const WorkshopCheckInPage = ({
                     <input
                       value={customerSearch}
                       onChange={(event) => setCustomerSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          setHighlightedCustomerOptionIndex(-1);
+                          return;
+                        }
+
+                        if (customerSearchOptionCount === 0) {
+                          return;
+                        }
+
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setHighlightedCustomerOptionIndex((current) => (
+                            current < 0 ? 0 : Math.min(current + 1, customerSearchOptionCount - 1)
+                          ));
+                          return;
+                        }
+
+                        if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setHighlightedCustomerOptionIndex((current) => (
+                            current < 0 ? 0 : Math.max(current - 1, 0)
+                          ));
+                          return;
+                        }
+
+                        if (event.key !== "Enter" || highlightedCustomerOptionIndex < 0) {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        if (highlightedCustomerOptionIndex < customerResults.length) {
+                          selectExistingCustomer(customerResults[highlightedCustomerOptionIndex]);
+                          return;
+                        }
+
+                        if (showInlineCreateCustomerOption) {
+                          beginInlineCustomerCreateFromSearch();
+                        }
+                      }}
                       placeholder="name, phone, email"
+                      aria-activedescendant={
+                        highlightedCustomerOptionIndex >= 0
+                          ? `workshop-checkin-customer-option-${highlightedCustomerOptionIndex}`
+                          : undefined
+                      }
                     />
                   </label>
                 </div>
@@ -645,7 +723,7 @@ export const WorkshopCheckInPage = ({
                         <th>Action</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody role="listbox" aria-label="Customer search results">
                       {customerResults.length === 0 ? (
                         <tr>
                           <td colSpan={3}>
@@ -656,8 +734,18 @@ export const WorkshopCheckInPage = ({
                                 : "Search for an existing customer, create one inline, or use a manual intake name."}
                           </td>
                         </tr>
-                      ) : customerResults.map((customer) => (
-                        <tr key={customer.id}>
+                      ) : customerResults.map((customer, index) => (
+                        <tr
+                          key={customer.id}
+                          id={`workshop-checkin-customer-option-${index}`}
+                          ref={(element) => {
+                            customerOptionRefs.current[index] = element;
+                          }}
+                          className={index === highlightedCustomerOptionIndex ? "workshop-checkin-search-result workshop-checkin-search-result--active" : undefined}
+                          role="option"
+                          aria-selected={index === highlightedCustomerOptionIndex}
+                          onMouseEnter={() => setHighlightedCustomerOptionIndex(index)}
+                        >
                           <td>{customer.name}</td>
                           <td>
                             <div>{customer.email || "-"}</div>
@@ -667,11 +755,7 @@ export const WorkshopCheckInPage = ({
                             <button
                               type="button"
                               onClick={() => {
-                                setSelectedCustomer(customer);
-                                setCreateCustomerInline(false);
-                                setManualCustomerName("");
-                                setSelectedBikeId("");
-                                resetBikeDraft();
+                                selectExistingCustomer(customer);
                               }}
                             >
                               Select
@@ -684,7 +768,12 @@ export const WorkshopCheckInPage = ({
                 </div>
 
                 {showInlineCreateCustomerOption ? (
-                  <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
+                  <div
+                    className={`restricted-panel info-panel workshop-checkin-create-customer-option${highlightedCustomerOptionIndex === customerResults.length ? " workshop-checkin-create-customer-option--active" : ""}`}
+                    style={{ marginTop: "12px" }}
+                    role="option"
+                    aria-selected={highlightedCustomerOptionIndex === customerResults.length}
+                  >
                     <div className="actions-inline" style={{ justifyContent: "space-between", gap: "12px" }}>
                       <div>
                         <strong>No exact customer match found.</strong>
@@ -693,6 +782,13 @@ export const WorkshopCheckInPage = ({
                       <button
                         type="button"
                         className="primary"
+                        id={`workshop-checkin-customer-option-${customerResults.length}`}
+                        ref={(element) => {
+                          customerOptionRefs.current[customerResults.length] = element;
+                        }}
+                        aria-selected={highlightedCustomerOptionIndex === customerResults.length}
+                        onMouseEnter={() => setHighlightedCustomerOptionIndex(customerResults.length)}
+                        onFocus={() => setHighlightedCustomerOptionIndex(customerResults.length)}
                         onClick={beginInlineCustomerCreateFromSearch}
                       >
                         Create new customer "{trimmedCustomerSearch}"
@@ -718,6 +814,7 @@ export const WorkshopCheckInPage = ({
                       setSelectedCustomer(null);
                       setSelectedBikeId("");
                       resetBikeDraft();
+                      setHighlightedCustomerOptionIndex(-1);
                     }}
                   >
                     Use walk-in/manual name

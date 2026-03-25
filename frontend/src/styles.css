@@ -4472,6 +4472,15 @@ th {
   margin-bottom: 4px;
 }
 
+.workshop-checkin-search-result--active td {
+  background: rgba(15, 34, 52, 0.06);
+}
+
+.workshop-checkin-create-customer-option--active {
+  border-color: rgba(46, 124, 246, 0.45);
+  box-shadow: 0 0 0 2px rgba(46, 124, 246, 0.14);
+}
+
 .workshop-checkin-modal-intro h3 {
   margin: 0;
 }
