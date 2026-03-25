@@ -4479,6 +4479,25 @@ th {
   margin-bottom: 4px;
 }
 
+.workshop-os-modal__close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #d5dfeb;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #1f2937;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.workshop-os-modal__close-button:hover {
+  background: rgba(241, 245, 249, 0.96);
+}
+
 .workshop-checkin-bike-picker__header {
   display: flex;
   align-items: flex-start;

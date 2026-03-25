@@ -51,8 +51,13 @@ export const WorkshopCheckInModal = ({
                 Customer, bike, and intake details in one focused creation flow.
               </p>
             </div>
-            <button type="button" onClick={onClose} aria-label="Close new job modal">
-              Close
+            <button
+              type="button"
+              className="workshop-os-modal__close-button"
+              onClick={onClose}
+              aria-label="Close new job modal"
+            >
+              <span aria-hidden="true">×</span>
             </button>
           </div>
         </div>
