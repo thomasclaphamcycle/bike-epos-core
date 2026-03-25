@@ -4323,34 +4323,98 @@ th {
 }
 
 .workshop-os-modal {
-  width: min(86vw, 1320px);
+  width: min(90vw, 1400px);
   max-width: 100%;
-  max-height: min(90dvh, 980px);
+  height: min(88dvh, 1020px);
+  max-height: min(88dvh, 1020px);
   overflow: hidden;
   background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
   border: 1px solid #cfdae5;
   border-radius: 24px;
   box-shadow: 0 24px 56px rgba(8, 15, 31, 0.22);
-  padding: 20px 22px 22px;
   display: grid;
-  gap: 12px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
-.workshop-os-drawer__primary {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  padding-bottom: 2px;
+.workshop-os-modal__header {
+  padding: 20px 22px 0;
 }
 
-.workshop-os-drawer__details {
+.workshop-os-modal__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 22px 0;
+  border-bottom: 1px solid #d7e1eb;
+}
+
+.workshop-os-modal__tab {
+  border: 0;
+  background: transparent;
+  color: #4b5c70;
+  font: inherit;
+  font-weight: 600;
+  padding: 11px 14px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.workshop-os-modal__tab--active {
+  color: #122033;
+  border-bottom-color: #0f4f94;
+}
+
+.workshop-os-modal__content {
   min-height: 0;
   overflow-y: auto;
   display: grid;
   align-content: start;
+  gap: 12px;
+  padding: 14px 22px 22px;
+}
+
+.workshop-os-modal__panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.workshop-os-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 22px 18px;
+  border-top: 1px solid #d7e1eb;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.workshop-os-modal__footer-message {
+  min-height: 20px;
+  color: #4b5c70;
+  font-size: 0.92rem;
+}
+
+.workshop-os-modal__footer-message--error {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.workshop-os-modal__footer-message--status {
+  color: #1f4b99;
+}
+
+.workshop-os-modal__footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.workshop-os-modal__schedule-stack,
+.workshop-os-modal__assignment-controls {
+  display: grid;
   gap: 10px;
-  padding-right: 4px;
 }
 
 .workshop-os-overlay-hero {
@@ -4703,6 +4767,91 @@ th {
   justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.workshop-os-job-workspace-work-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.workshop-os-job-workspace-work-summary > div,
+.workshop-os-job-workspace-composer,
+.workshop-os-job-workspace-line {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1ec;
+  background: #fbfdff;
+}
+
+.workshop-os-job-workspace-work-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-job-workspace-composer,
+.workshop-os-job-workspace-search-results,
+.workshop-os-job-workspace-lines,
+.workshop-os-job-workspace-lines-group {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-job-workspace-composer__inputs {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.workshop-os-job-workspace-search-result {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  background: #fbfdff;
+  text-align: left;
+}
+
+.workshop-os-job-workspace-lines-group__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-job-workspace-line {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-os-job-workspace-line__summary {
+  display: grid;
+  gap: 2px;
+}
+
+.workshop-os-job-workspace-line__controls {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.workshop-os-job-workspace-line__qty-field {
+  width: 92px;
+}
+
+.workshop-os-job-workspace-line__qty-field input {
+  width: 100%;
+}
+
+.workshop-os-job-workspace-line__total {
+  min-width: 88px;
+  padding-bottom: 10px;
+  color: #122033;
 }
 
 .workshop-os-drawer__section h3 {
@@ -8712,6 +8861,8 @@ th {
   .workshop-os-job-card__header,
   .workshop-os-drawer__header,
   .workshop-os-job-workspace-section__list-meta,
+  .workshop-os-job-workspace-line__controls,
+  .workshop-os-job-workspace-work-actions,
   .workshop-os-intake-mode-row,
   .workshop-os-agenda-item,
   .workshop-os-intake-search-result,
@@ -8723,6 +8874,13 @@ th {
   .workshop-os-job-workspace-section__footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .workshop-os-job-workspace-line__qty-field,
+  .workshop-os-job-workspace-line__total {
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 0;
   }
 
   .workshop-os-agenda-item__meta {

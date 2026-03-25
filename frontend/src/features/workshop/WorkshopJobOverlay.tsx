@@ -184,6 +184,8 @@ type WorkshopJobOverlayAttachmentsResponse = {
   attachments: WorkshopJobOverlayAttachment[];
 };
 
+type WorkshopOverlayTab = "overview" | "work" | "schedule" | "activity";
+
 type JobWorkspaceSectionKey =
   | "customer"
   | "bike"
@@ -785,6 +787,7 @@ export const WorkshopJobOverlay = ({
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [workError, setWorkError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<WorkshopOverlayTab>("overview");
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("");
   const [statusActionDraft, setStatusActionDraft] = useState("");
   const [partSearch, setPartSearch] = useState("");
@@ -807,6 +810,27 @@ export const WorkshopJobOverlay = ({
   );
   const debouncedPartSearch = useDebouncedValue(partSearch, 250);
   const savingAnyAction = savingAssignment || savingQuickAction || savingStatus || savingSchedule;
+  const footerMessage = actionError
+    || scheduleError
+    || workError
+    || loadError
+    || (savingSchedule
+      ? "Saving scheduled slot..."
+      : savingAssignment
+        ? "Saving technician assignment..."
+        : savingQuickAction || savingStatus
+          ? "Saving workflow update..."
+          : addingPart
+            ? "Adding part..."
+            : addingLabour
+              ? "Adding labour..."
+              : savingLineId
+                ? "Saving work line..."
+                : removingLineId
+                  ? "Removing work line..."
+                  : null);
+  const footerMessageTone =
+    actionError || scheduleError || workError || loadError ? "error" : footerMessage ? "status" : "idle";
 
   useEffect(() => {
     setCollapsedSections(DEFAULT_JOB_WORKSPACE_COLLAPSED);
@@ -829,6 +853,7 @@ export const WorkshopJobOverlay = ({
     setLabourDescriptionDraft("");
     setLabourPriceDraft("");
     setLineQtyDrafts({});
+    setActiveTab("overview");
   }, [jobId]);
 
   useEffect(() => {
@@ -1761,144 +1786,341 @@ export const WorkshopJobOverlay = ({
     </section>
   );
 
-  return (
-    <div
-      className="workshop-os-modal-backdrop"
-      onClick={onClose}
-      aria-hidden="true"
-    >
-      <aside
-        className="workshop-os-modal"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Workshop job overlay"
-      >
-        <div className="workshop-os-drawer__primary">
-          <div className="workshop-os-drawer__header">
-            <div className="workshop-os-overlay-hero__title">
-              <p className="ui-page-eyebrow">Job Card</p>
-              <h2>{displayBikeDescription}</h2>
-              <p className="table-secondary">
-                {displayCustomerName} · <span className="mono-text">{jobId.slice(0, 8)}</span>
-              </p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close job card">
-              Close
+  const renderHeroSection = () => (
+    <section className="workshop-os-overlay-hero">
+      <div className="workshop-os-drawer__badges">
+        <span className={workshopRawStatusClass(displayStatus)}>{workshopRawStatusLabel(displayStatus)}</span>
+        <span className={displayWorkflowSummary.className}>{displayWorkflowSummary.label}</span>
+        {urgency ? <span className={urgency.className}>{urgency.label}</span> : null}
+        {displayPartsSummary ? (
+          <span className={displayPartsSummary.partsStatus === "SHORT" ? "parts-short" : displayPartsSummary.partsStatus === "UNALLOCATED" ? "parts-attention" : "parts-ok"}>
+            Parts: {displayPartsSummary.partsStatus}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="workshop-os-overlay-hero__facts">
+        <div>
+          <span className="metric-label">Customer</span>
+          <strong>{displayCustomerName}</strong>
+        </div>
+        <div>
+          <span className="metric-label">Promise date</span>
+          <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
+        </div>
+        <div>
+          <span className="metric-label">Technician</span>
+          <strong>{overlayJob?.assignedStaffName || summary?.assignedStaffName || "Unassigned"}</strong>
+        </div>
+        <div>
+          <span className="metric-label">Scheduled slot</span>
+          <strong>
+            {formatScheduleWindow(
+              overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+              overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+              timeZone,
+            )}
+          </strong>
+        </div>
+      </div>
+
+      {issueSummary ? (
+        <div className="workshop-os-overlay-hero__issue">
+          <span className="metric-label">Issue / summary</span>
+          <p>{issueSummary}</p>
+        </div>
+      ) : null}
+    </section>
+  );
+
+  const renderOverviewTab = () => (
+    <div className="workshop-os-modal__panel">
+      {renderHeroSection()}
+
+      <section className="workshop-os-overlay-next-action">
+        <div className="workshop-os-overlay-next-action__copy">
+          <p className="ui-page-eyebrow">Next Action</p>
+          <h3>{nextAction.title}</h3>
+          <p className="table-secondary">{nextAction.body || getNextStepHint(summary)}</p>
+        </div>
+        {quickAction ? (
+          <div className="workshop-os-overlay-next-action__buttons">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void runQuickAction()}
+              disabled={savingAnyAction}
+            >
+              {savingQuickAction ? "Saving..." : quickAction.label}
             </button>
           </div>
-
-          <section className="workshop-os-overlay-hero">
-            <div className="workshop-os-drawer__badges">
-              <span className={workshopRawStatusClass(displayStatus)}>{workshopRawStatusLabel(displayStatus)}</span>
-              <span className={displayWorkflowSummary.className}>{displayWorkflowSummary.label}</span>
-              {urgency ? <span className={urgency.className}>{urgency.label}</span> : null}
-              {displayPartsSummary ? (
-                <span className={displayPartsSummary.partsStatus === "SHORT" ? "parts-short" : displayPartsSummary.partsStatus === "UNALLOCATED" ? "parts-attention" : "parts-ok"}>
-                  Parts: {displayPartsSummary.partsStatus}
-                </span>
-              ) : null}
+        ) : null}
+        {statusActions.length ? (
+          <div className="workshop-os-overlay-next-action__status-row">
+            <label className="workshop-os-overlay-next-action__field">
+              <span className="metric-label">Change status</span>
+              <select
+                value={statusActionDraft}
+                onChange={(event) => setStatusActionDraft(event.target.value)}
+                disabled={savingAnyAction}
+              >
+                {statusActions.map((action) => (
+                  <option key={`${action.kind}:${action.value}`} value={`${action.kind}:${action.value}`}>
+                    {action.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveStatusDraft()}
+              disabled={savingAnyAction || !selectedStatusAction}
+            >
+              {savingStatus ? "Saving..." : "Apply"}
+            </button>
+          </div>
+        ) : null}
+        <div className="workshop-os-overlay-next-action__highlights">
+          {displayWorkflowSummary.blockerLabel ? (
+            <div className="workshop-os-overlay-next-action__highlight workshop-os-overlay-next-action__highlight--blocker">
+              <span className="metric-label">Next step</span>
+              <strong>{displayWorkflowSummary.blockerLabel}</strong>
+              <span className="table-secondary">{displayWorkflowSummary.detail}</span>
             </div>
+          ) : null}
+          {nextAction.highlights.map((highlight) => (
+            <div key={highlight} className="workshop-os-overlay-next-action__highlight">
+              <span className="table-secondary">{highlight}</span>
+            </div>
+          ))}
+        </div>
+        {actionError ? (
+          <div className="restricted-panel warning-panel">
+            <strong>Unable to complete inline action</strong>
+            <div className="table-secondary">{actionError}</div>
+          </div>
+        ) : null}
+      </section>
 
-            <div className="workshop-os-overlay-hero__facts">
+      {renderSection(
+        "customer",
+        "Customer",
+        "Customer context and contact details.",
+        <div className="workshop-os-job-workspace-section__stack">
+          <div className="workshop-os-drawer__grid">
+            <div>
+              <span className="metric-label">Customer</span>
+              <strong>{displayCustomerName}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Linked record</span>
+              <strong>{overlayJob?.customerId || summary?.customerId ? "Linked" : "Not linked"}</strong>
+            </div>
+          </div>
+          {summary?.customer?.email || summary?.customer?.phone ? (
+            <div className="workshop-os-job-workspace-section__meta-list">
+              {summary.customer?.email ? <span>Email: {summary.customer.email}</span> : null}
+              {summary.customer?.phone ? <span>Phone: {summary.customer.phone}</span> : null}
+            </div>
+          ) : (
+            <div className="workshop-os-empty-card">Customer contact details are available from the full job page when needed.</div>
+          )}
+        </div>,
+      )}
+
+      {renderSection(
+        "bike",
+        "Bike",
+        "Bike record and identification details.",
+        <div className="workshop-os-job-workspace-section__stack">
+          <div className="workshop-os-drawer__grid">
+            <div>
+              <span className="metric-label">Bike summary</span>
+              <strong>{displayBikeDescription}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Bike record</span>
+              <strong>{overlayJob?.bike?.displayName || "Not linked"}</strong>
+            </div>
+          </div>
+          {overlayJob?.bike ? (
+            <div className="workshop-os-job-workspace-section__meta-list">
+              {overlayJob.bike.make || overlayJob.bike.model ? <span>{overlayJob.bike.make || ""} {overlayJob.bike.model || ""}</span> : null}
+              {overlayJob.bike.colour ? <span>Colour: {overlayJob.bike.colour}</span> : null}
+              {overlayJob.bike.serialNumber ? <span>Serial: {overlayJob.bike.serialNumber}</span> : null}
+              {overlayJob.bike.frameNumber ? <span>Frame: {overlayJob.bike.frameNumber}</span> : null}
+            </div>
+          ) : (
+            <div className="workshop-os-empty-card">No bike record is linked to this job yet.</div>
+          )}
+        </div>,
+      )}
+    </div>
+  );
+
+  const renderWorkTab = () => (
+    <div className="workshop-os-modal__panel">
+      <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
+        <div className="workshop-os-job-workspace-section__toggle-copy">
+          <strong>Work</strong>
+          <span className="table-secondary">Parts and labour lines for the job, with quick add and quantity updates.</span>
+        </div>
+        <div className="workshop-os-job-workspace-section__body">
+          {renderWorkSectionContent()}
+        </div>
+      </section>
+
+      {renderSection(
+        "estimate",
+        "Estimate",
+        "Labour and parts totals stay grouped so the quote shape is easy to scan.",
+        <div className="workshop-os-job-workspace-section__stack">
+          {details?.currentEstimate ? (
+            <>
+              <div className="workshop-os-drawer__grid">
+                <div>
+                  <span className="metric-label">Quote status</span>
+                  <strong>{details.currentEstimate.status.replace(/_/g, " ")}</strong>
+                </div>
+                <div>
+                  <span className="metric-label">Total</span>
+                  <strong>{formatMoney(details.currentEstimate.subtotalPence)}</strong>
+                </div>
+                <div>
+                  <span className="metric-label">Labour</span>
+                  <strong>{formatMoney(details.currentEstimate.labourTotalPence)}</strong>
+                </div>
+                <div>
+                  <span className="metric-label">Parts</span>
+                  <strong>{formatMoney(details.currentEstimate.partsTotalPence)}</strong>
+                </div>
+              </div>
+              <div className="workshop-os-job-workspace-section__meta-list">
+                <span>{labourLines.length} labour line{labourLines.length === 1 ? "" : "s"}</span>
+                <span>{partLines.length} part line{partLines.length === 1 ? "" : "s"}</span>
+                {details.currentEstimate.requestedAt ? <span>Requested {formatDateTime(details.currentEstimate.requestedAt)}</span> : null}
+              </div>
+            </>
+          ) : (
+            <div className="workshop-os-empty-card">No live estimate yet.</div>
+          )}
+        </div>,
+      )}
+
+      {renderSection(
+        "partsAllocation",
+        "Parts allocation",
+        "Keep stock readiness separate from the estimate itself.",
+        <div className="workshop-os-job-workspace-section__stack">
+          {displayPartsSummary ? (
+            <div className="workshop-os-drawer__grid">
               <div>
-                <span className="metric-label">Customer</span>
-                <strong>{displayCustomerName}</strong>
+                <span className="metric-label">Required</span>
+                <strong>{displayPartsSummary.requiredQty}</strong>
               </div>
               <div>
-                <span className="metric-label">Promise date</span>
-                <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
+                <span className="metric-label">Allocated</span>
+                <strong>{displayPartsSummary.allocatedQty}</strong>
               </div>
               <div>
-                <span className="metric-label">Technician</span>
-                <strong>{overlayJob?.assignedStaffName || summary?.assignedStaffName || "Unassigned"}</strong>
+                <span className="metric-label">Outstanding</span>
+                <strong>{displayPartsSummary.outstandingQty}</strong>
               </div>
               <div>
-                <span className="metric-label">Scheduled slot</span>
-                {!isEditingSchedule ? (
-                  <button
-                    type="button"
-                    className="workshop-os-overlay-schedule-slot__display"
-                    onClick={startScheduleEdit}
-                    disabled={savingAnyAction}
-                  >
-                    {formatScheduleWindow(
-                      overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
-                      overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
-                      timeZone,
-                    )}
-                  </button>
-                ) : (
-                  <div className="workshop-os-overlay-schedule-slot__editor">
-                    <div className="workshop-os-overlay-schedule-slot__inputs">
-                      <label>
-                        <span className="metric-label">Date</span>
-                        <input
-                          type="date"
-                          value={scheduleDraft.dateKey}
-                          onChange={(event) => setScheduleDraft((current) => ({ ...current, dateKey: event.target.value }))}
-                          disabled={savingSchedule}
-                        />
-                      </label>
-                      <label>
-                        <span className="metric-label">Start</span>
-                        <input
-                          type="time"
-                          value={scheduleDraft.startTime}
-                          onChange={(event) => setScheduleDraft((current) => ({ ...current, startTime: event.target.value }))}
-                          disabled={savingSchedule}
-                        />
-                      </label>
-                      <label>
-                        <span className="metric-label">End</span>
-                        <input
-                          type="time"
-                          value={scheduleDraft.endTime}
-                          onChange={(event) => setScheduleDraft((current) => ({ ...current, endTime: event.target.value }))}
-                          disabled={savingSchedule}
-                        />
-                      </label>
-                    </div>
-                    <div className="workshop-os-overlay-schedule-slot__actions">
-                      <button type="button" className="primary" onClick={() => void saveSchedule()} disabled={savingSchedule}>
-                        {savingSchedule ? "Saving..." : "Save"}
-                      </button>
-                      <button type="button" onClick={cancelScheduleEdit} disabled={savingSchedule}>
-                        Cancel
-                      </button>
-                    </div>
-                    {scheduleError ? <span className="table-secondary">{scheduleError}</span> : null}
-                  </div>
+                <span className="metric-label">Missing</span>
+                <strong>{displayPartsSummary.missingQty}</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="workshop-os-empty-card">No parts allocation summary is available yet.</div>
+          )}
+        </div>,
+      )}
+    </div>
+  );
+
+  const renderScheduleTab = () => (
+    <div className="workshop-os-modal__panel">
+      <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
+        <div className="workshop-os-job-workspace-section__toggle-copy">
+          <strong>Schedule</strong>
+          <span className="table-secondary">Slot timing, technician assignment, and scheduling controls.</span>
+        </div>
+        <div className="workshop-os-job-workspace-section__body workshop-os-modal__schedule-stack">
+          <div className="workshop-os-overlay-hero__facts">
+            <div>
+              <span className="metric-label">Promise date</span>
+              <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Duration</span>
+              <strong>{overlayJob?.durationMinutes || summary?.durationMinutes ? `${overlayJob?.durationMinutes || summary?.durationMinutes} min` : "Not set"}</strong>
+            </div>
+          </div>
+
+          <div className="workshop-os-job-workspace-section__detail-card">
+            <strong>Scheduled slot</strong>
+            {!isEditingSchedule ? (
+              <button
+                type="button"
+                className="workshop-os-overlay-schedule-slot__display"
+                onClick={startScheduleEdit}
+                disabled={savingAnyAction}
+              >
+                {formatScheduleWindow(
+                  overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+                  overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+                  timeZone,
                 )}
+              </button>
+            ) : (
+              <div className="workshop-os-overlay-schedule-slot__editor">
+                <div className="workshop-os-overlay-schedule-slot__inputs">
+                  <label>
+                    <span className="metric-label">Date</span>
+                    <input
+                      type="date"
+                      value={scheduleDraft.dateKey}
+                      onChange={(event) => setScheduleDraft((current) => ({ ...current, dateKey: event.target.value }))}
+                      disabled={savingSchedule}
+                    />
+                  </label>
+                  <label>
+                    <span className="metric-label">Start</span>
+                    <input
+                      type="time"
+                      value={scheduleDraft.startTime}
+                      onChange={(event) => setScheduleDraft((current) => ({ ...current, startTime: event.target.value }))}
+                      disabled={savingSchedule}
+                    />
+                  </label>
+                  <label>
+                    <span className="metric-label">End</span>
+                    <input
+                      type="time"
+                      value={scheduleDraft.endTime}
+                      onChange={(event) => setScheduleDraft((current) => ({ ...current, endTime: event.target.value }))}
+                      disabled={savingSchedule}
+                    />
+                  </label>
+                </div>
+                <div className="workshop-os-overlay-schedule-slot__actions">
+                  <button type="button" className="primary" onClick={() => void saveSchedule()} disabled={savingSchedule}>
+                    {savingSchedule ? "Saving..." : "Save"}
+                  </button>
+                  <button type="button" onClick={cancelScheduleEdit} disabled={savingSchedule}>
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+            {scheduleError ? <span className="table-secondary">{scheduleError}</span> : null}
+          </div>
 
-            {issueSummary ? (
-              <div className="workshop-os-overlay-hero__issue">
-                <span className="metric-label">Issue / summary</span>
-                <p>{issueSummary}</p>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
-            <div className="workshop-os-job-workspace-section__toggle-copy">
-              <strong>Work</strong>
-              <span className="table-secondary">Parts and labour lines for the job, with quick add and quantity updates.</span>
-            </div>
-            <div className="workshop-os-job-workspace-section__body">
-              {renderWorkSectionContent()}
-            </div>
-          </section>
-
-          <section className="workshop-os-overlay-next-action">
-            <div className="workshop-os-overlay-next-action__copy">
-              <p className="ui-page-eyebrow">Next Action</p>
-              <h3>{nextAction.title}</h3>
-              <p className="table-secondary">{nextAction.body || getNextStepHint(summary)}</p>
-            </div>
+          <div className="workshop-os-job-workspace-section__detail-card">
+            <strong>Technician assignment</strong>
             {canAssignTechnician ? (
-              <div className="workshop-os-overlay-next-action__controls">
+              <div className="workshop-os-modal__assignment-controls">
                 <label className="workshop-os-overlay-next-action__field">
                   <span className="metric-label">Technician</span>
                   <select
@@ -1914,7 +2136,7 @@ export const WorkshopJobOverlay = ({
                     ))}
                   </select>
                 </label>
-                <div className="workshop-os-overlay-next-action__buttons">
+                <div className="workshop-os-job-workspace-work-actions">
                   <button
                     type="button"
                     onClick={() => void saveAssignment()}
@@ -1926,108 +2148,149 @@ export const WorkshopJobOverlay = ({
                         ? "Assign technician"
                         : "Clear technician"}
                   </button>
-                  {quickAction ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => void runQuickAction()}
-                      disabled={savingAnyAction}
-                    >
-                      {savingQuickAction ? "Saving..." : quickAction.label}
-                    </button>
-                  ) : null}
                 </div>
-                {statusActions.length ? (
-                  <div className="workshop-os-overlay-next-action__status-row">
-                    <label className="workshop-os-overlay-next-action__field">
-                      <span className="metric-label">Change status</span>
-                      <select
-                        value={statusActionDraft}
-                        onChange={(event) => setStatusActionDraft(event.target.value)}
-                        disabled={savingAnyAction}
-                      >
-                        {statusActions.map((action) => (
-                          <option key={`${action.kind}:${action.value}`} value={`${action.kind}:${action.value}`}>
-                            {action.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => void saveStatusDraft()}
-                      disabled={savingAnyAction || !selectedStatusAction}
-                    >
-                      {savingStatus ? "Saving..." : "Apply"}
-                    </button>
-                  </div>
-                ) : null}
               </div>
-            ) : quickAction ? (
-              <div className="workshop-os-overlay-next-action__buttons">
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => void runQuickAction()}
-                  disabled={savingAnyAction}
-                >
-                  {savingQuickAction ? "Saving..." : quickAction.label}
-                </button>
-              </div>
-            ) : statusActions.length ? (
-              <div className="workshop-os-overlay-next-action__status-row">
-                <label className="workshop-os-overlay-next-action__field">
-                  <span className="metric-label">Change status</span>
-                  <select
-                    value={statusActionDraft}
-                    onChange={(event) => setStatusActionDraft(event.target.value)}
-                    disabled={savingAnyAction}
-                  >
-                    {statusActions.map((action) => (
-                      <option key={`${action.kind}:${action.value}`} value={`${action.kind}:${action.value}`}>
-                        {action.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => void saveStatusDraft()}
-                  disabled={savingAnyAction || !selectedStatusAction}
-                >
-                  {savingStatus ? "Saving..." : "Apply"}
-                </button>
-              </div>
-            ) : null}
-            <div className="workshop-os-overlay-next-action__highlights">
-              {displayWorkflowSummary.blockerLabel ? (
-                <div className="workshop-os-overlay-next-action__highlight workshop-os-overlay-next-action__highlight--blocker">
-                  <span className="metric-label">Next step</span>
-                  <strong>{displayWorkflowSummary.blockerLabel}</strong>
-                  <span className="table-secondary">{displayWorkflowSummary.detail}</span>
-                </div>
-              ) : null}
-              {nextAction.highlights.map((highlight) => (
-                <div key={highlight} className="workshop-os-overlay-next-action__highlight">
-                  <span className="table-secondary">{highlight}</span>
-                </div>
-              ))}
-            </div>
+            ) : (
+              <div className="workshop-os-empty-card">Technician assignment is not available for this job.</div>
+            )}
             {actionError ? (
               <div className="restricted-panel warning-panel">
-                <strong>Unable to complete inline action</strong>
+                <strong>Unable to complete scheduling action</strong>
                 <div className="table-secondary">{actionError}</div>
               </div>
             ) : null}
-            <div className="workshop-os-drawer__actions">
-              <Link to={openPath} className="button-link">
-                Open full job page
-              </Link>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderActivityTab = () => (
+    <div className="workshop-os-modal__panel">
+      {renderSection(
+        "jobDetails",
+        "Activity",
+        "Issue summary and key timestamps.",
+        <div className="workshop-os-job-workspace-section__stack">
+          <div className="workshop-os-drawer__grid">
+            <div>
+              <span className="metric-label">Created</span>
+              <strong>{formatDateTime(overlayJob?.createdAt || summary?.createdAt || null)}</strong>
             </div>
-          </section>
+            <div>
+              <span className="metric-label">Updated</span>
+              <strong>{formatDateTime(overlayJob?.updatedAt || summary?.updatedAt || null)}</strong>
+            </div>
+          </div>
+          <div className="workshop-os-job-workspace-section__detail-card">
+            <strong>Issue / summary</strong>
+            <p className="muted-text">{issueSummary || "No issue summary has been captured yet."}</p>
+          </div>
+        </div>,
+      )}
+
+      {renderSection(
+        "notes",
+        "Notes",
+        "Internal and customer-visible notes.",
+        <div className="workshop-os-job-workspace-section__stack">
+          {notes.length ? (
+            <div className="workshop-os-job-workspace-section__list">
+              {notes.slice(0, 8).map((note) => (
+                <article key={note.id} className="workshop-os-job-workspace-section__list-item">
+                  <div className="workshop-os-job-workspace-section__list-meta">
+                    <span className={note.visibility === "CUSTOMER" ? "status-badge status-info" : "stock-badge stock-muted"}>
+                      {note.visibility === "CUSTOMER" ? "Customer visible" : "Internal"}
+                    </span>
+                    <span>{formatDateTime(note.createdAt)}</span>
+                  </div>
+                  <p className="muted-text">{note.note}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="workshop-os-empty-card">No workshop notes have been added yet.</div>
+          )}
+        </div>,
+      )}
+
+      {renderSection(
+        "attachments",
+        "Attachments",
+        "Photos and files linked to this job.",
+        <div className="workshop-os-job-workspace-section__stack">
+          {attachments.length ? (
+            <div className="workshop-os-job-workspace-section__list">
+              {attachments.slice(0, 8).map((attachment) => (
+                <article key={attachment.id} className="workshop-os-job-workspace-section__list-item">
+                  <div className="workshop-os-job-workspace-section__list-meta">
+                    <span className={attachment.visibility === "CUSTOMER" ? "status-badge status-info" : "stock-badge stock-muted"}>
+                      {attachment.visibility === "CUSTOMER" ? "Customer visible" : "Internal"}
+                    </span>
+                    <span>{formatFileSize(attachment.fileSizeBytes)}</span>
+                  </div>
+                  <strong>{attachment.filename}</strong>
+                  <p className="muted-text">{attachment.mimeType} · Added {formatDateTime(attachment.createdAt)}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="workshop-os-empty-card">No attachments are on this job yet.</div>
+          )}
+        </div>,
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      className="workshop-os-modal-backdrop"
+      onClick={onClose}
+      aria-hidden="true"
+    >
+      <aside
+        className="workshop-os-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Workshop job overlay"
+      >
+        <div className="workshop-os-modal__header">
+          <div className="workshop-os-drawer__header">
+            <div className="workshop-os-overlay-hero__title">
+              <p className="ui-page-eyebrow">Job Card</p>
+              <h2>{displayBikeDescription}</h2>
+              <p className="table-secondary">
+                {displayCustomerName} · <span className="mono-text">{jobId.slice(0, 8)}</span>
+              </p>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Close job card">
+              Close
+            </button>
+          </div>
         </div>
 
-        <div className="workshop-os-drawer__details">
+        <div className="workshop-os-modal__tabs" role="tablist" aria-label="Workshop job workspace tabs">
+          {([
+            ["overview", "Overview"],
+            ["work", "Work"],
+            ["schedule", "Schedule"],
+            ["activity", "Activity"],
+          ] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              className={`workshop-os-modal__tab${activeTab === tab ? " workshop-os-modal__tab--active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="workshop-os-modal__content">
           {loading ? (
             <div className="workshop-os-empty-card">Loading job card…</div>
           ) : null}
@@ -2038,232 +2301,21 @@ export const WorkshopJobOverlay = ({
               <div className="table-secondary">{loadError}</div>
             </div>
           ) : null}
+          {activeTab === "overview" ? renderOverviewTab() : null}
+          {activeTab === "work" ? renderWorkTab() : null}
+          {activeTab === "schedule" ? renderScheduleTab() : null}
+          {activeTab === "activity" ? renderActivityTab() : null}
+        </div>
 
-          {renderSection(
-          "planning",
-          "Planning",
-          "Promise date, slot timing, and technician ownership.",
-          <div className="workshop-os-job-workspace-section__stack">
-            <div className="workshop-os-drawer__grid">
-              <div>
-                <span className="metric-label">Promise date</span>
-                <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
-              </div>
-              <div>
-                <span className="metric-label">Technician</span>
-                <strong>{overlayJob?.assignedStaffName || summary?.assignedStaffName || "Unassigned"}</strong>
-              </div>
-              <div>
-                <span className="metric-label">Scheduled slot</span>
-                <strong>
-                  {formatScheduleWindow(
-                    overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
-                    overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
-                    timeZone,
-                  )}
-                </strong>
-              </div>
-              <div>
-                <span className="metric-label">Duration</span>
-                <strong>{overlayJob?.durationMinutes || summary?.durationMinutes ? `${overlayJob?.durationMinutes || summary?.durationMinutes} min` : "Not set"}</strong>
-              </div>
-            </div>
-          </div>,
-          )}
-
-          {renderSection(
-          "customer",
-          "Customer",
-          "Customer context and contact details.",
-          <div className="workshop-os-job-workspace-section__stack">
-            <div className="workshop-os-drawer__grid">
-              <div>
-                <span className="metric-label">Customer</span>
-                <strong>{displayCustomerName}</strong>
-              </div>
-              <div>
-                <span className="metric-label">Linked record</span>
-                <strong>{overlayJob?.customerId || summary?.customerId ? "Linked" : "Not linked"}</strong>
-              </div>
-            </div>
-            {summary?.customer?.email || summary?.customer?.phone ? (
-              <div className="workshop-os-job-workspace-section__meta-list">
-                {summary.customer?.email ? <span>Email: {summary.customer.email}</span> : null}
-                {summary.customer?.phone ? <span>Phone: {summary.customer.phone}</span> : null}
-              </div>
-            ) : (
-              <div className="workshop-os-empty-card">Customer contact details are available from the full job page when needed.</div>
-            )}
-          </div>,
-          )}
-
-          {renderSection(
-          "bike",
-          "Bike",
-          "Bike record and identification details.",
-          <div className="workshop-os-job-workspace-section__stack">
-            <div className="workshop-os-drawer__grid">
-              <div>
-                <span className="metric-label">Bike summary</span>
-                <strong>{displayBikeDescription}</strong>
-              </div>
-              <div>
-                <span className="metric-label">Bike record</span>
-                <strong>{overlayJob?.bike?.displayName || "Not linked"}</strong>
-              </div>
-            </div>
-            {overlayJob?.bike ? (
-              <div className="workshop-os-job-workspace-section__meta-list">
-                {overlayJob.bike.make || overlayJob.bike.model ? <span>{overlayJob.bike.make || ""} {overlayJob.bike.model || ""}</span> : null}
-                {overlayJob.bike.colour ? <span>Colour: {overlayJob.bike.colour}</span> : null}
-                {overlayJob.bike.serialNumber ? <span>Serial: {overlayJob.bike.serialNumber}</span> : null}
-                {overlayJob.bike.frameNumber ? <span>Frame: {overlayJob.bike.frameNumber}</span> : null}
-              </div>
-            ) : (
-              <div className="workshop-os-empty-card">No bike record is linked to this job yet.</div>
-            )}
-          </div>,
-          )}
-
-          {renderSection(
-          "jobDetails",
-          "Job details",
-          "Issue summary and key activity timestamps.",
-          <div className="workshop-os-job-workspace-section__stack">
-            <div className="workshop-os-drawer__grid">
-              <div>
-                <span className="metric-label">Created</span>
-                <strong>{formatDateTime(overlayJob?.createdAt || summary?.createdAt || null)}</strong>
-              </div>
-              <div>
-                <span className="metric-label">Updated</span>
-                <strong>{formatDateTime(overlayJob?.updatedAt || summary?.updatedAt || null)}</strong>
-              </div>
-            </div>
-            <div className="workshop-os-job-workspace-section__detail-card">
-              <strong>Issue / summary</strong>
-              <p className="muted-text">{issueSummary || "No issue summary has been captured yet."}</p>
-            </div>
-          </div>,
-          )}
-
-          {renderSection(
-          "estimate",
-          "Estimate",
-          "Labour and parts totals stay grouped so the quote shape is easy to scan.",
-          <div className="workshop-os-job-workspace-section__stack">
-            {details?.currentEstimate ? (
-              <>
-                <div className="workshop-os-drawer__grid">
-                  <div>
-                    <span className="metric-label">Quote status</span>
-                    <strong>{details.currentEstimate.status.replace(/_/g, " ")}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Total</span>
-                    <strong>{formatMoney(details.currentEstimate.subtotalPence)}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Labour</span>
-                    <strong>{formatMoney(details.currentEstimate.labourTotalPence)}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Parts</span>
-                    <strong>{formatMoney(details.currentEstimate.partsTotalPence)}</strong>
-                  </div>
-                </div>
-                <div className="workshop-os-job-workspace-section__meta-list">
-                  <span>{labourLines.length} labour line{labourLines.length === 1 ? "" : "s"}</span>
-                  <span>{partLines.length} part line{partLines.length === 1 ? "" : "s"}</span>
-                  {details.currentEstimate.requestedAt ? <span>Requested {formatDateTime(details.currentEstimate.requestedAt)}</span> : null}
-                </div>
-              </>
-            ) : (
-              <div className="workshop-os-empty-card">No live estimate yet.</div>
-            )}
-          </div>,
-          )}
-
-          {renderSection(
-          "partsAllocation",
-          "Parts allocation",
-          "Keep stock readiness separate from the estimate itself.",
-          <div className="workshop-os-job-workspace-section__stack">
-            {displayPartsSummary ? (
-              <div className="workshop-os-drawer__grid">
-                <div>
-                  <span className="metric-label">Required</span>
-                  <strong>{displayPartsSummary.requiredQty}</strong>
-                </div>
-                <div>
-                  <span className="metric-label">Allocated</span>
-                  <strong>{displayPartsSummary.allocatedQty}</strong>
-                </div>
-                <div>
-                  <span className="metric-label">Outstanding</span>
-                  <strong>{displayPartsSummary.outstandingQty}</strong>
-                </div>
-                <div>
-                  <span className="metric-label">Missing</span>
-                  <strong>{displayPartsSummary.missingQty}</strong>
-                </div>
-              </div>
-            ) : (
-              <div className="workshop-os-empty-card">No parts allocation summary is available yet.</div>
-            )}
-          </div>,
-          )}
-
-          {renderSection(
-          "notes",
-          "Notes",
-          "Internal and customer-visible notes stay grouped but separate from the issue summary.",
-          <div className="workshop-os-job-workspace-section__stack">
-            {notes.length ? (
-              <div className="workshop-os-job-workspace-section__list">
-                {notes.slice(0, 4).map((note) => (
-                  <article key={note.id} className="workshop-os-job-workspace-section__list-item">
-                    <div className="workshop-os-job-workspace-section__list-meta">
-                      <span className={note.visibility === "CUSTOMER" ? "status-badge status-info" : "stock-badge stock-muted"}>
-                        {note.visibility === "CUSTOMER" ? "Customer visible" : "Internal"}
-                      </span>
-                      <span>{formatDateTime(note.createdAt)}</span>
-                    </div>
-                    <p className="muted-text">{note.note}</p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="workshop-os-empty-card">No workshop notes have been added yet.</div>
-            )}
-          </div>,
-          )}
-
-          {renderSection(
-          "attachments",
-          "Attachments",
-          "Photos and files stay separate so the drawer keeps a clean operational structure.",
-          <div className="workshop-os-job-workspace-section__stack">
-            {attachments.length ? (
-              <div className="workshop-os-job-workspace-section__list">
-                {attachments.slice(0, 4).map((attachment) => (
-                  <article key={attachment.id} className="workshop-os-job-workspace-section__list-item">
-                    <div className="workshop-os-job-workspace-section__list-meta">
-                      <span className={attachment.visibility === "CUSTOMER" ? "status-badge status-info" : "stock-badge stock-muted"}>
-                        {attachment.visibility === "CUSTOMER" ? "Customer visible" : "Internal"}
-                      </span>
-                      <span>{formatFileSize(attachment.fileSizeBytes)}</span>
-                    </div>
-                    <strong>{attachment.filename}</strong>
-                    <p className="muted-text">{attachment.mimeType} · Added {formatDateTime(attachment.createdAt)}</p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="workshop-os-empty-card">No attachments are on this job yet.</div>
-            )}
-          </div>,
-          )}
+        <div className="workshop-os-modal__footer">
+          <div className={`workshop-os-modal__footer-message workshop-os-modal__footer-message--${footerMessageTone}`}>
+            {footerMessage || <span aria-hidden="true"> </span>}
+          </div>
+          <div className="workshop-os-modal__footer-actions">
+            <Link to={openPath} className="button-link">
+              Open full job
+            </Link>
+          </div>
         </div>
       </aside>
     </div>
