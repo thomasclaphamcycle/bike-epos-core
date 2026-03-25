@@ -1,6 +1,7 @@
 import { Prisma, RefundRecordStatus, RefundTenderType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { recordCashRefundMovementForSaleRefundTx } from "./tillService";
 
@@ -966,7 +967,6 @@ export const listCompletedRefunds = async (input: ListRefundsInput = {}) => {
           customer: {
             select: {
               id: true,
-              name: true,
               firstName: true,
               lastName: true,
             },
@@ -1010,9 +1010,7 @@ export const listCompletedRefunds = async (input: ListRefundsInput = {}) => {
       customer: refund.sale.customer
         ? {
             id: refund.sale.customer.id,
-            name:
-              normalizeOptionalText(refund.sale.customer.name) ??
-              `${refund.sale.customer.firstName} ${refund.sale.customer.lastName}`.trim(),
+            name: getCustomerDisplayName(refund.sale.customer, ""),
           }
         : null,
     })),

@@ -219,7 +219,6 @@ const main = async () => {
 
     const reminderCustomer = await prisma.customer.create({
       data: {
-        name: `M126 Reminder ${RUN_REF}`,
         firstName: "Reminder",
         lastName: RUN_REF,
         email: `m126-reminder-${RUN_REF}@local`,
@@ -227,7 +226,6 @@ const main = async () => {
     });
     const backlogCustomer = await prisma.customer.create({
       data: {
-        name: `M126 Backlog ${RUN_REF}`,
         firstName: "Backlog",
         lastName: RUN_REF,
         email: `m126-backlog-${RUN_REF}@local`,
@@ -239,7 +237,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: reminderCustomer.id,
-          customerName: reminderCustomer.name,
+          customerName: `${reminderCustomer.firstName} ${reminderCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Reminder bike",
           status: "COMPLETED",
@@ -250,7 +248,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: `M126 backlog anchor ${RUN_REF}`,
           status: "IN_PROGRESS",
@@ -260,7 +258,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: `M126 recently completed A ${RUN_REF}`,
           status: "COMPLETED",
@@ -271,7 +269,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: `M126 recently completed B ${RUN_REF}`,
           status: "COMPLETED",
@@ -282,7 +280,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Queue A",
           status: "BOOKED",
@@ -292,7 +290,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Queue B",
           status: "WAITING_FOR_APPROVAL",
@@ -302,7 +300,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Queue C",
           status: "WAITING_FOR_PARTS",
@@ -312,7 +310,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Queue D",
           status: "ON_HOLD",
@@ -322,7 +320,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Queue E",
           status: "READY_FOR_COLLECTION",
@@ -332,7 +330,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: backlogCustomer.id,
-          customerName: backlogCustomer.name,
+          customerName: `${backlogCustomer.firstName} ${backlogCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Queue F",
           status: "IN_PROGRESS",

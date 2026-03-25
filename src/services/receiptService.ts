@@ -1,6 +1,7 @@
 import { PaymentMethod, Prisma, RefundTenderType, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { buildLegacyReceiptSettingsFromStore, listShopSettings } from "./configurationService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
@@ -12,18 +13,8 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const toCustomerName = (customer: {
-  name?: string | null;
-  firstName: string;
-  lastName: string;
-}) => {
-  const explicitName = normalizeOptionalText(customer.name ?? undefined);
-  if (explicitName) {
-    return explicitName;
-  }
-
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
-};
+const toCustomerName = (customer: { firstName: string; lastName: string }) =>
+  getCustomerDisplayName(customer, "");
 
 const paymentMethodToTenderMethod = (method: PaymentMethod): SaleTenderMethod => {
   switch (method) {

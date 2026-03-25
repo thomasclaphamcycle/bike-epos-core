@@ -2,6 +2,7 @@ import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/c
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { ensureDefaultLocationTx } from "./locationService";
 import {
@@ -89,17 +90,8 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const toCustomerName = (customer: {
-  name?: string | null;
-  firstName: string;
-  lastName: string;
-}) => {
-  const explicitName = normalizeOptionalText(customer.name ?? undefined);
-  if (explicitName) {
-    return explicitName;
-  }
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
-};
+const toCustomerName = (customer: { firstName: string; lastName: string }) =>
+  getCustomerDisplayName(customer, "");
 
 const toReceiptNumber = (saleId: string, completedAt: Date) => {
   const y = completedAt.getUTCFullYear();

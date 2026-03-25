@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName, normalizeNamePart } from "../utils/customerName";
 
 const CUSTOMER_CAPTURE_SESSION_TTL_MINUTES = 15;
 
@@ -50,9 +51,6 @@ const normalizeEmail = (value: string | undefined | null) => {
   const normalized = normalizeOptionalText(value);
   return normalized ? normalized.toLowerCase() : undefined;
 };
-
-const toCustomerDisplayName = (firstName: string, lastName: string) =>
-  [firstName, lastName].filter(Boolean).join(" ").trim();
 
 const createSecureToken = () => crypto.randomBytes(24).toString("base64url");
 
@@ -207,7 +205,6 @@ const findOrCreateCustomerTx = async (
   try {
     const customer = await tx.customer.create({
       data: {
-        name: toCustomerDisplayName(input.firstName, input.lastName),
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email ?? null,
@@ -305,8 +302,8 @@ export const submitPublicSaleCustomerCapture = async (
   token: string,
   input: SubmitSaleCustomerCaptureInput,
 ) => {
-  const firstName = normalizeOptionalText(input.firstName);
-  const lastName = normalizeOptionalText(input.lastName);
+  const firstName = normalizeOptionalText(normalizeNamePart(input.firstName));
+  const lastName = normalizeOptionalText(normalizeNamePart(input.lastName));
   const email = normalizeEmail(input.email);
   const phone = normalizeOptionalText(input.phone);
 
@@ -373,7 +370,7 @@ export const submitPublicSaleCustomerCapture = async (
       },
       customer: {
         id: customer.id,
-        name: customer.name || toCustomerDisplayName(customer.firstName, customer.lastName),
+        name: getCustomerDisplayName(customer),
         firstName: customer.firstName,
         lastName: customer.lastName,
         email: customer.email,

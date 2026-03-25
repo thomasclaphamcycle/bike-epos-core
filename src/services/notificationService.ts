@@ -11,6 +11,7 @@ import {
   logCorePosEvent,
   logOperationalEvent,
 } from "../lib/operationalLogger";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx } from "./auditService";
 import { listStoreInfoSettings } from "./configurationService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
@@ -98,7 +99,6 @@ const quoteEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()(
       customer: {
         select: {
           id: true,
-          name: true,
           firstName: true,
           lastName: true,
           email: true,
@@ -132,7 +132,6 @@ const readyJobInclude = Prisma.validator<Prisma.WorkshopJobInclude>()({
   customer: {
     select: {
       id: true,
-      name: true,
       firstName: true,
       lastName: true,
       email: true,
@@ -295,20 +294,9 @@ const toWorkshopNotificationResponse = (notification: WorkshopNotificationRecord
 });
 
 const buildCustomerDisplayName = (customer: {
-  name: string;
   firstName: string;
   lastName: string;
-}) => {
-  const explicitName = normalizeOptionalText(customer.name);
-  if (explicitName) {
-    return explicitName;
-  }
-
-  return (
-    [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() ||
-    "Workshop customer"
-  );
-};
+}) => getCustomerDisplayName(customer, "Workshop customer");
 
 const buildBikeDisplayName = (input: {
   bike:

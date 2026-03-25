@@ -62,7 +62,6 @@ const main = async () => {
     const [overdueCustomer, dueSoonCustomer, recentCustomer] = await Promise.all([
       prisma.customer.create({
         data: {
-          name: `M103 Overdue ${RUN_REF}`,
           firstName: "Overdue",
           lastName: RUN_REF,
           email: `m103-overdue-${RUN_REF}@local`,
@@ -70,7 +69,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `M103 DueSoon ${RUN_REF}`,
           firstName: "DueSoon",
           lastName: RUN_REF,
           email: `m103-due-${RUN_REF}@local`,
@@ -78,7 +76,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `M103 Recent ${RUN_REF}`,
           firstName: "Recent",
           lastName: RUN_REF,
           email: `m103-recent-${RUN_REF}@local`,
@@ -91,7 +88,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: overdueCustomer.id,
-          customerName: overdueCustomer.name,
+          customerName: `${overdueCustomer.firstName} ${overdueCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Overdue bike",
           status: "COMPLETED",
@@ -101,7 +98,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: dueSoonCustomer.id,
-          customerName: dueSoonCustomer.name,
+          customerName: `${dueSoonCustomer.firstName} ${dueSoonCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Due soon bike",
           status: "COMPLETED",
@@ -111,7 +108,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: recentCustomer.id,
-          customerName: recentCustomer.name,
+          customerName: `${recentCustomer.firstName} ${recentCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Recent bike",
           status: "COMPLETED",
@@ -121,7 +118,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: overdueCustomer.id,
-          customerName: overdueCustomer.name,
+          customerName: `${overdueCustomer.firstName} ${overdueCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Open bike",
           status: "WAITING_FOR_PARTS",

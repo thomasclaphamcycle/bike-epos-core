@@ -1,6 +1,7 @@
 import { HireAssetStatus, HireBookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 
 type CreateHireAssetInput = {
@@ -137,7 +138,8 @@ const hireAssetInclude = {
       customer: {
         select: {
           id: true,
-          name: true,
+          firstName: true,
+          lastName: true,
         },
       },
     },
@@ -170,7 +172,8 @@ const hireBookingInclude = {
   customer: {
     select: {
       id: true,
-      name: true,
+      firstName: true,
+      lastName: true,
       email: true,
       phone: true,
     },
@@ -201,7 +204,10 @@ const mapHireAsset = (asset: Prisma.HireAssetGetPayload<{ include: typeof hireAs
         status: asset.bookings[0].status,
         startsAt: asset.bookings[0].startsAt,
         dueBackAt: asset.bookings[0].dueBackAt,
-        customer: asset.bookings[0].customer,
+        customer: {
+          id: asset.bookings[0].customer.id,
+          name: getCustomerDisplayName(asset.bookings[0].customer),
+        },
       }
     : null,
 });
@@ -236,7 +242,12 @@ const mapHireBooking = (booking: Prisma.HireBookingGetPayload<{ include: typeof 
       brand: booking.hireAsset.variant.product.brand,
     },
   },
-  customer: booking.customer,
+  customer: {
+    id: booking.customer.id,
+    name: getCustomerDisplayName(booking.customer),
+    email: booking.customer.email,
+    phone: booking.customer.phone,
+  },
 });
 
 const getHireBookingOrThrowTx = async (tx: Prisma.TransactionClient, bookingId: string) => {

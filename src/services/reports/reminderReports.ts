@@ -84,7 +84,6 @@ export const getReminderCandidatesReport = async (
       customer: {
         select: {
           id: true,
-          name: true,
           firstName: true,
           lastName: true,
         },

@@ -21,7 +21,6 @@ export const getCustomerInsightsReport = async (from?: string, to?: string, take
     prisma.customer.findMany({
       select: {
         id: true,
-        name: true,
         firstName: true,
         lastName: true,
         email: true,
@@ -263,7 +262,6 @@ export const getCustomerServiceRemindersReport = async (
         customer: {
           select: {
             id: true,
-            name: true,
             firstName: true,
             lastName: true,
             email: true,

@@ -201,7 +201,6 @@ const main = async () => {
     const [retailCustomer, workshopCustomer] = await Promise.all([
       prisma.customer.create({
         data: {
-          name: `Financial Retail ${RUN_REF}`,
           firstName: "Financial",
           lastName: `Retail ${RUN_REF}`,
           email: `financial-retail-${RUN_REF}@local`,
@@ -209,7 +208,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `Financial Workshop ${RUN_REF}`,
           firstName: "Financial",
           lastName: `Workshop ${RUN_REF}`,
           email: `financial-workshop-${RUN_REF}@local`,
@@ -253,7 +251,7 @@ const main = async () => {
       data: {
         customerId: workshopCustomer.id,
         locationId,
-        customerName: workshopCustomer.name,
+        customerName: `${workshopCustomer.firstName} ${workshopCustomer.lastName}`.trim(),
         bikeDescription: "Financial workshop bike",
         status: "COMPLETED",
         completedAt: REPORT_TIMESTAMP,

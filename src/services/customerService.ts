@@ -1,5 +1,11 @@
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import {
+  buildCustomerSearchWhere,
+  getCustomerDisplayName,
+  normalizeNamePart,
+  parseCombinedCustomerName,
+} from "../utils/customerName";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type CreateCustomerInput = {
@@ -56,45 +62,8 @@ const parseOptionalTake = (value: number | undefined): number | undefined => {
   return value;
 };
 
-const splitNameToParts = (name: string): { firstName: string; lastName: string } => {
-  const tokens = name
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
-
-  if (tokens.length === 0) {
-    throw new HttpError(400, "name must not be empty", "INVALID_CUSTOMER");
-  }
-
-  if (tokens.length === 1) {
-    return {
-      firstName: tokens[0],
-      lastName: tokens[0],
-    };
-  }
-
-  return {
-    firstName: tokens[0],
-    lastName: tokens.slice(1).join(" "),
-  };
-};
-
-const toDisplayName = (customer: {
-  name: string;
-  firstName: string;
-  lastName: string;
-}) => {
-  const explicit = normalizeOptionalText(customer.name);
-  if (explicit) {
-    return explicit;
-  }
-
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
-};
-
 const toCustomerResponse = (customer: {
   id: string;
-  name: string;
   firstName: string;
   lastName: string;
   email: string | null;
@@ -106,7 +75,7 @@ const toCustomerResponse = (customer: {
   createdAt: Date;
   updatedAt: Date;
 }) => {
-  const name = toDisplayName(customer);
+  const name = getCustomerDisplayName(customer);
 
   return {
     id: customer.id,
@@ -141,27 +110,22 @@ const assertCustomerExists = async (customerId: string) => {
 
 export const createCustomer = async (input: CreateCustomerInput) => {
   const explicitName = normalizeOptionalText(input.name);
-  const suppliedFirstName = normalizeOptionalText(input.firstName);
-  const suppliedLastName = normalizeOptionalText(input.lastName);
+  const suppliedFirstName = normalizeOptionalText(normalizeNamePart(input.firstName));
+  const suppliedLastName = normalizeOptionalText(normalizeNamePart(input.lastName));
 
   let firstName = suppliedFirstName;
   let lastName = suppliedLastName;
-  let name = explicitName;
 
-  if (name && (!firstName || !lastName)) {
-    const split = splitNameToParts(name);
+  if (explicitName && !firstName) {
+    const split = parseCombinedCustomerName(explicitName);
     firstName = firstName ?? split.firstName;
     lastName = lastName ?? split.lastName;
   }
 
-  if (!name && firstName && lastName) {
-    name = `${firstName} ${lastName}`;
-  }
-
-  if (!name || !firstName || !lastName) {
+  if (!firstName) {
     throw new HttpError(
       400,
-      "name is required (or provide firstName and lastName)",
+      "name is required (or provide firstName)",
       "INVALID_CUSTOMER",
     );
   }
@@ -173,9 +137,8 @@ export const createCustomer = async (input: CreateCustomerInput) => {
   try {
     const customer = await prisma.customer.create({
       data: {
-        name,
         firstName,
-        lastName,
+        lastName: lastName ?? "",
         email,
         phone,
         notes,
@@ -219,17 +182,7 @@ export const searchCustomers = async (query?: string, take = 20) => {
   const normalizedQuery = normalizeOptionalText(query);
 
   const customers = await prisma.customer.findMany({
-    where: normalizedQuery
-      ? {
-          OR: [
-            { name: { contains: normalizedQuery, mode: "insensitive" } },
-            { firstName: { contains: normalizedQuery, mode: "insensitive" } },
-            { lastName: { contains: normalizedQuery, mode: "insensitive" } },
-            { email: { contains: normalizedQuery, mode: "insensitive" } },
-            { phone: { contains: normalizedQuery, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
+    where: normalizedQuery ? buildCustomerSearchWhere(normalizedQuery) : undefined,
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     take,
   });

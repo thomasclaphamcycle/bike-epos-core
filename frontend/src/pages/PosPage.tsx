@@ -4,6 +4,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { parseCombinedCustomerName } from "../utils/customerName";
 import {
   DEFAULT_SALE_CONTEXT,
   getPosOpenState,
@@ -728,8 +729,10 @@ export const PosPage = () => {
 
     setCreatingCustomer(true);
     try {
+      const parsedName = parseCombinedCustomerName(newCustomerName);
       const created = await apiPost<CustomerSearchRow>("/api/customers", {
-        name: newCustomerName.trim(),
+        firstName: parsedName.firstName,
+        lastName: parsedName.lastName || undefined,
         email: newCustomerEmail.trim() || undefined,
         phone: newCustomerPhone.trim() || undefined,
       });

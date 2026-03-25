@@ -226,7 +226,6 @@ const main = async () => {
 
     const customer = await prisma.customer.create({
       data: {
-        name: `Hire Customer ${RUN_REF}`,
         firstName: "Hire",
         lastName: `Customer ${RUN_REF}`,
         email: `hire-${RUN_REF}@corepos.test`,
