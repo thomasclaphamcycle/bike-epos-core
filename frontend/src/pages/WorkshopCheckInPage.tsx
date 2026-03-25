@@ -327,10 +327,14 @@ export const WorkshopCheckInPage = ({
     () => buildCheckInNotes({ problemWork, additionalNotes }),
     [additionalNotes, problemWork],
   );
-  const selectedBikeRecord = useMemo(
-    () => customerBikes.find((bike) => bike.id === selectedBikeId) ?? workshopStartContext?.bike ?? null,
-    [customerBikes, selectedBikeId, workshopStartContext?.bike],
-  );
+  const selectedBikeRecord = useMemo(() => {
+    if (!selectedBikeId) {
+      return null;
+    }
+
+    return customerBikes.find((bike) => bike.id === selectedBikeId)
+      ?? (workshopStartContext?.bike.id === selectedBikeId ? workshopStartContext.bike : null);
+  }, [customerBikes, selectedBikeId, workshopStartContext?.bike]);
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
@@ -796,6 +800,15 @@ export const WorkshopCheckInPage = ({
     setBikeSearchModalOpen(false);
   };
 
+  const openBikeSelector = () => {
+    setBikeSearchText("");
+    setBikeSearchModalOpen(true);
+  };
+
+  const clearSelectedBike = () => {
+    setSelectedBikeId("");
+  };
+
   const saveBikeDraft = () => {
     setSelectedBikeId("");
     setCreateBikeInline(true);
@@ -1214,10 +1227,7 @@ export const WorkshopCheckInPage = ({
                           <button
                             type="button"
                             className="primary"
-                            onClick={() => {
-                              setBikeSearchText("");
-                              setBikeSearchModalOpen(true);
-                            }}
+                            onClick={openBikeSelector}
                           >
                             Search/select bike
                           </button>
@@ -1242,14 +1252,14 @@ export const WorkshopCheckInPage = ({
                           {buildBikeInlineMeta(selectedBikeRecord)}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedBikeId("");
-                        }}
-                      >
-                        Change bike
-                      </button>
+                      <div className="actions-inline">
+                        <button type="button" onClick={openBikeSelector}>
+                          Change
+                        </button>
+                        <button type="button" onClick={clearSelectedBike}>
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ) : null}
 
