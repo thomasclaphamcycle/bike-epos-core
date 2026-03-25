@@ -301,6 +301,7 @@ export const WorkshopPage = () => {
   const [loading, setLoading] = useState(false);
   const [schedulerRefreshToken, setSchedulerRefreshToken] = useState(0);
   const [isIntakeOpen, setIsIntakeOpen] = useState(false);
+  const [postCreateJobId, setPostCreateJobId] = useState<string | null>(null);
   const [selectedListJobId, setSelectedListJobId] = useState<string | null>(null);
 
   const listQuery = useMemo(
@@ -461,7 +462,7 @@ export const WorkshopPage = () => {
     await updateStatus(jobId, action.value);
   };
 
-  const handleIntakeCreated = async (_jobId: string) => {
+  const handleIntakeCreated = (jobId: string) => {
     setQuickFilter("ALL");
     setStatus("");
     setSearch("");
@@ -469,8 +470,9 @@ export const WorkshopPage = () => {
     setAnchorDateKey(workshopTodayDateKey());
     setSurfaceMode("week");
     setSelectedListJobId(null);
-    await loadJobs(buildDashboardQuery({}));
+    setPostCreateJobId(jobId);
     setSchedulerRefreshToken((current) => current + 1);
+    void loadJobs(buildDashboardQuery({}));
   };
 
   return (
@@ -825,6 +827,8 @@ export const WorkshopPage = () => {
               technicianId={selectedTechnicianId}
               onTechnicianIdChange={setSelectedTechnicianId}
               visibleJobIds={visibleJobIds}
+              requestedOverlayJobId={postCreateJobId}
+              onRequestedOverlayJobHandled={() => setPostCreateJobId(null)}
             />
           )}
         </section>
