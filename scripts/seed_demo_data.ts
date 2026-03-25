@@ -690,7 +690,6 @@ const seedDemoCustomers = async () => {
     });
 
     const customerData = {
-      name: customer.name,
       firstName: customer.firstName,
       lastName: customer.lastName,
       email: customer.email,

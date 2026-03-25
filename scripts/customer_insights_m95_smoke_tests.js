@@ -71,7 +71,6 @@ const main = async () => {
     const [repeatCustomer, workshopCustomer, quietCustomer] = await Promise.all([
       prisma.customer.create({
         data: {
-          name: `M95 Repeat ${RUN_REF}`,
           firstName: "Repeat",
           lastName: RUN_REF,
           email: `repeat-${RUN_REF}@local`,
@@ -79,7 +78,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `M95 Workshop ${RUN_REF}`,
           firstName: "Workshop",
           lastName: RUN_REF,
           email: `workshop-${RUN_REF}@local`,
@@ -87,7 +85,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `M95 Quiet ${RUN_REF}`,
           firstName: "Quiet",
           lastName: RUN_REF,
           email: `quiet-${RUN_REF}@local`,
@@ -125,7 +122,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: workshopCustomer.id,
-          customerName: workshopCustomer.name,
+          customerName: `${workshopCustomer.firstName} ${workshopCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Road bike",
           status: "WAITING_FOR_APPROVAL",
@@ -134,7 +131,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: workshopCustomer.id,
-          customerName: workshopCustomer.name,
+          customerName: `${workshopCustomer.firstName} ${workshopCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Commuter bike",
           status: "IN_PROGRESS",

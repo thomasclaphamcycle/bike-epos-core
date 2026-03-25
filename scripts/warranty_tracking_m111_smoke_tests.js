@@ -66,7 +66,6 @@ const main = async () => {
 
     const customer = await prisma.customer.create({
       data: {
-        name: `M111 Customer ${RUN_REF}`,
         firstName: "M111",
         lastName: RUN_REF,
         email: `m111-${RUN_REF}@local`,
@@ -77,7 +76,7 @@ const main = async () => {
     const job = await prisma.workshopJob.create({
       data: {
         customerId: customer.id,
-        customerName: customer.name,
+        customerName: `${customer.firstName} ${customer.lastName}`.trim(),
         locationId,
         bikeDescription: `Warranty bike ${RUN_REF}`,
         status: "IN_PROGRESS",

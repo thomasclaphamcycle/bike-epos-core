@@ -224,7 +224,6 @@ const run = async () => {
 
     const emailMatchCustomer = await prisma.customer.create({
       data: {
-        name: `Email Match ${token}`,
         firstName: "Email",
         lastName: "Match",
         email: `email-match-${token}@example.com`,
@@ -235,7 +234,6 @@ const run = async () => {
 
     const phoneMatchCustomer = await prisma.customer.create({
       data: {
-        name: `Phone Match ${token}`,
         firstName: "Phone",
         lastName: "Match",
         email: `phone-match-${token}@example.com`,

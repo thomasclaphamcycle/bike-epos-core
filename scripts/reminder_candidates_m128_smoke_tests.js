@@ -79,7 +79,6 @@ const main = async () => {
 
     const customer = await prisma.customer.create({
       data: {
-        name: `M128 Reminder ${RUN_REF}`,
         firstName: "Reminder",
         lastName: RUN_REF,
         email: `m128-${RUN_REF}@local`,
@@ -91,7 +90,7 @@ const main = async () => {
       method: "POST",
       headers: STAFF_HEADERS,
       body: JSON.stringify({
-        customerName: customer.name,
+        customerName: `${customer.firstName} ${customer.lastName}`.trim(),
         bikeDescription: "Reminder groundwork bike",
       }),
     });
@@ -188,7 +187,7 @@ const main = async () => {
     assert.ok(row, JSON.stringify(report.json));
     assert.equal(row.reminderCandidateId, candidate.id);
     assert.equal(row.customerId, customer.id);
-    assert.equal(row.customerName, customer.name);
+    assert.equal(row.customerName, `${customer.firstName} ${customer.lastName}`.trim());
     assert.equal(row.status, "PENDING");
     assert.equal(row.reviewState, "UNREVIEWED");
     assert.equal(row.reviewedAt, null);

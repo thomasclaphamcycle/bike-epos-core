@@ -346,12 +346,10 @@ const seedCustomers = async () => {
   const customerIds = [];
 
   for (const customer of DEMO_CUSTOMERS) {
-    const fullName = `${customer.firstName} ${customer.lastName}`;
     const seeded = await prisma.customer.upsert({
       where: { email: customer.email },
       create: {
         id: customer.id,
-        name: fullName,
         firstName: customer.firstName,
         lastName: customer.lastName,
         email: customer.email,
@@ -359,7 +357,6 @@ const seedCustomers = async () => {
         notes: customer.notes,
       },
       update: {
-        name: fullName,
         firstName: customer.firstName,
         lastName: customer.lastName,
         phone: customer.phone,
@@ -377,7 +374,13 @@ const seedWorkshopJobs = async (locationId, customerIds, productLookup) => {
   for (const [index, job] of DEMO_WORKSHOP_JOBS.entries()) {
     const customerId = customerIds[job.customerIndex] || null;
     const customer = customerId
-      ? await prisma.customer.findUnique({ where: { id: customerId }, select: { name: true } })
+      ? await prisma.customer.findUnique({
+          where: { id: customerId },
+          select: { firstName: true, lastName: true },
+        })
+      : null;
+    const customerName = customer
+      ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
       : null;
 
     const scheduledDate = new Date();
@@ -390,7 +393,7 @@ const seedWorkshopJobs = async (locationId, customerIds, productLookup) => {
         id: job.id,
         customerId,
         locationId,
-        customerName: customer ? customer.name : null,
+        customerName,
         bikeDescription: job.bikeDescription,
         status: job.status,
         source: 'IN_STORE',
@@ -402,7 +405,7 @@ const seedWorkshopJobs = async (locationId, customerIds, productLookup) => {
       update: {
         customerId,
         locationId,
-        customerName: customer ? customer.name : null,
+        customerName,
         bikeDescription: job.bikeDescription,
         status: job.status,
         scheduledDate,

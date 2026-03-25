@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { parseCombinedCustomerName } from "../utils/customerName";
 
 type Customer = {
   id: string;
@@ -128,8 +129,10 @@ export const CustomersPage = () => {
     event.preventDefault();
     setSubmitting(true);
     try {
+      const parsedName = parseCombinedCustomerName(name);
       await apiPost("/api/customers", {
-        name,
+        firstName: parsedName.firstName,
+        lastName: parsedName.lastName || undefined,
         email: email || undefined,
         phone: phone || undefined,
       });

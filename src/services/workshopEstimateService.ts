@@ -12,6 +12,7 @@ import {
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
@@ -90,7 +91,6 @@ const publicEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()
       customerName: true,
       customer: {
         select: {
-          name: true,
           firstName: true,
           lastName: true,
         },
@@ -503,17 +503,9 @@ const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
 });
 
 const buildCustomerDisplayName = (customer: {
-  name: string;
   firstName: string;
   lastName: string;
-}) => {
-  const explicitName = normalizeOptionalText(customer.name);
-  if (explicitName) {
-    return explicitName;
-  }
-
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
-};
+}) => getCustomerDisplayName(customer, "");
 
 const toCustomerWorkshopStatusLabel = (
   status: ReturnType<typeof toWorkshopExecutionStatus>,

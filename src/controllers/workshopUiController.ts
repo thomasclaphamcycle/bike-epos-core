@@ -48,7 +48,6 @@ export const getWorkshopPrintPageHandler = async (req: Request, res: Response) =
     include: {
       customer: {
         select: {
-          name: true,
           firstName: true,
           lastName: true,
           email: true,

@@ -2,6 +2,7 @@ import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus, WorkshopS
 import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import {
   buildCustomerBikeDisplayName,
@@ -105,18 +106,8 @@ const normalizeOptionalUuid = (
   return normalized;
 };
 
-const buildCustomerDisplayName = (customer: {
-  name: string;
-  firstName: string;
-  lastName: string;
-}) => {
-  const explicitName = normalizeOptionalText(customer.name);
-  if (explicitName) {
-    return explicitName;
-  }
-
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
-};
+const buildCustomerDisplayName = (customer: { firstName: string; lastName: string }) =>
+  getCustomerDisplayName(customer, "");
 
 const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) => {
   const existingDefault = await tx.stockLocation.findFirst({
@@ -224,7 +215,6 @@ const getCustomerByIdTx = async (
     where: { id: customerId },
     select: {
       id: true,
-      name: true,
       firstName: true,
       lastName: true,
     },

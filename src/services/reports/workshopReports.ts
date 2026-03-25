@@ -403,7 +403,6 @@ export const getWorkshopAnalyticsReport = async (from?: string, to?: string, loc
         closedAt: true,
         customer: {
           select: {
-            name: true,
             firstName: true,
             lastName: true,
           },
@@ -794,7 +793,6 @@ export const getWorkshopWarrantyReport = async (
           customer: {
             select: {
               id: true,
-              name: true,
               firstName: true,
               lastName: true,
               email: true,
@@ -828,7 +826,6 @@ export const getWorkshopWarrantyReport = async (
       scheduledDate: Date | null;
       customer: {
         id: string;
-        name: string | null;
         firstName: string;
         lastName: string;
         email: string | null;
@@ -868,12 +865,7 @@ export const getWorkshopWarrantyReport = async (
     .map((row) => {
       const customerName =
         row.job.customerName
-        || (row.job.customer
-          ? [row.job.customer.name, row.job.customer.firstName, row.job.customer.lastName]
-            .filter(Boolean)
-            .join(" ")
-            .trim()
-          : null)
+        || (row.job.customer ? toCustomerDisplayName(row.job.customer) : null)
         || "-";
 
       return {

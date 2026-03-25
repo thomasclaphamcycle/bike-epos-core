@@ -157,18 +157,7 @@ export const normalizeOptionalSearch = (value?: string) => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-export const toCustomerDisplayName = (customer: {
-  name: string | null;
-  firstName: string;
-  lastName: string;
-}) => {
-  const explicitName = customer.name?.trim() ?? "";
-  if (explicitName.length > 0) {
-    return explicitName;
-  }
-
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() || "Unknown customer";
-};
+export { getCustomerDisplayName as toCustomerDisplayName } from "../../utils/customerName";
 
 export const toPositiveIntWithinRangeOrThrow = (
   value: number | undefined,

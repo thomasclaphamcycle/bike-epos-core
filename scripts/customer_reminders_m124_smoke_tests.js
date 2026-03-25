@@ -66,7 +66,6 @@ const main = async () => {
     const [overdueCustomer, dueSoonCustomer, recentCustomer] = await Promise.all([
       prisma.customer.create({
         data: {
-          name: `M124 Overdue ${RUN_REF}`,
           firstName: "Overdue",
           lastName: RUN_REF,
           phone: `07123${String(Date.now()).slice(-6)}`,
@@ -74,7 +73,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `M124 DueSoon ${RUN_REF}`,
           firstName: "DueSoon",
           lastName: RUN_REF,
           email: `m124-due-${RUN_REF}@local`,
@@ -82,7 +80,6 @@ const main = async () => {
       }),
       prisma.customer.create({
         data: {
-          name: `M124 Recent ${RUN_REF}`,
           firstName: "Recent",
           lastName: RUN_REF,
           email: `m124-recent-${RUN_REF}@local`,
@@ -95,7 +92,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: overdueCustomer.id,
-          customerName: overdueCustomer.name,
+          customerName: `${overdueCustomer.firstName} ${overdueCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Overdue bike",
           status: "COMPLETED",
@@ -105,7 +102,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: dueSoonCustomer.id,
-          customerName: dueSoonCustomer.name,
+          customerName: `${dueSoonCustomer.firstName} ${dueSoonCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Due soon bike",
           status: "COMPLETED",
@@ -115,7 +112,7 @@ const main = async () => {
       prisma.workshopJob.create({
         data: {
           customerId: recentCustomer.id,
-          customerName: recentCustomer.name,
+          customerName: `${recentCustomer.firstName} ${recentCustomer.lastName}`.trim(),
           locationId,
           bikeDescription: "Recent bike",
           status: "COMPLETED",

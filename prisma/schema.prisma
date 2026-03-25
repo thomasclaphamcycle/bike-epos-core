@@ -967,7 +967,6 @@ model HistoricalFinancialSummary {
 
 model Customer {
   id              String   @id @default(uuid()) @db.Uuid
-  name            String   @default("")
   firstName       String
   lastName        String
   email           String?  @unique
@@ -989,7 +988,8 @@ model Customer {
   workshopConversations   WorkshopConversation[]
   hireBookings            HireBooking[]
 
-  @@index([name])
+  @@index([firstName])
+  @@index([lastName])
   @@index([phone])
 }
 

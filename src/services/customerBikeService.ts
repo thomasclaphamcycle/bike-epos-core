@@ -1,6 +1,7 @@
 import { Prisma, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
+import { getCustomerDisplayName } from "../utils/customerName";
 import {
   bikeServiceScheduleSelect,
   serializeBikeServiceSchedule,
@@ -123,7 +124,6 @@ const customerBikeHistorySelect = Prisma.validator<Prisma.CustomerBikeSelect>()(
   customer: {
     select: {
       id: true,
-      name: true,
       firstName: true,
       lastName: true,
       email: true,
@@ -180,18 +180,8 @@ const normalizeOptionalYear = (value: number | undefined | null): number | undef
   return value;
 };
 
-const buildCustomerDisplayName = (customer: {
-  name: string;
-  firstName: string;
-  lastName: string;
-}) => {
-  const explicitName = normalizeOptionalText(customer.name);
-  if (explicitName) {
-    return explicitName;
-  }
-
-  return [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
-};
+const buildCustomerDisplayName = (customer: { firstName: string; lastName: string }) =>
+  getCustomerDisplayName(customer, "");
 
 const buildWorkshopStartContext = (input: {
     bike: {
@@ -218,7 +208,6 @@ const buildWorkshopStartContext = (input: {
   };
   customer: {
     id: string;
-    name: string;
     firstName: string;
     lastName: string;
     email: string | null;
