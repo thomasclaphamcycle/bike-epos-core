@@ -649,6 +649,44 @@ export const WorkshopCheckInPage = ({
     setBikeCreateModalOpen(false);
   };
 
+  const persistBikeRecord = async (options: { useInIntake: boolean }) => {
+    if (!selectedCustomer?.id) {
+      if (options.useInIntake) {
+        saveBikeDraft();
+        return;
+      }
+      error("Save bike is only available once an existing customer has been selected.");
+      return;
+    }
+
+    try {
+      const createdBike = await apiPost<{ bike: CustomerBikeRecord }>(
+        `/api/customers/${encodeURIComponent(selectedCustomer.id)}/bikes`,
+        {
+          label: bikeLabel.trim() || undefined,
+          make: bikeMake.trim() || undefined,
+          model: bikeModel.trim() || undefined,
+          colour: bikeColour.trim() || undefined,
+          frameNumber: bikeFrameNumber.trim() || undefined,
+          serialNumber: bikeSerialNumber.trim() || undefined,
+          registrationNumber: bikeRegistrationNumber.trim() || undefined,
+          notes: bikeRecordNotes.trim() || undefined,
+        },
+      );
+
+      setCustomerBikes((current) => [createdBike.bike, ...current]);
+      resetBikeDraft();
+      setBikeCreateModalOpen(false);
+      success(options.useInIntake ? "Bike saved and linked to intake" : "Bike saved");
+
+      if (options.useInIntake) {
+        selectBikeRecord(createdBike.bike);
+      }
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save bike");
+    }
+  };
+
   const formContent = (
     <form className={embedded ? "workshop-checkin-flow workshop-checkin-flow--embedded" : "page-shell"} onSubmit={submitCheckIn}>
         {step === 0 ? (
@@ -1013,6 +1051,7 @@ export const WorkshopCheckInPage = ({
               </label>
               <label>
                 Problem / Work
+                <div className="table-secondary">Customer-facing. This is the main description of the problem or requested work.</div>
                 <textarea
                   value={problemWork}
                   onChange={(event) => setProblemWork(event.target.value)}
@@ -1022,6 +1061,7 @@ export const WorkshopCheckInPage = ({
               </label>
               <label>
                 Additional notes
+                <div className="table-secondary">Internal only. Use for staff notes, accessories left with the bike, or visible damage.</div>
                 <textarea
                   value={additionalNotes}
                   onChange={(event) => setAdditionalNotes(event.target.value)}
@@ -1274,14 +1314,31 @@ export const WorkshopCheckInPage = ({
               </div>
               <div className="workshop-os-modal__footer">
                 <div className="workshop-os-modal__footer-message">
-                  Bike summary will remain editable separately in the intake step.
+                  {selectedCustomer
+                    ? "Save the bike record now, or return it directly into intake. Bike summary stays editable separately."
+                    : "Bike summary will remain editable separately in the intake step. Save bike requires an existing customer record."}
                 </div>
                 <div className="workshop-os-modal__footer-actions">
                   <div className="actions-inline">
                     <button type="button" onClick={() => setBikeCreateModalOpen(false)}>
                       Cancel
                     </button>
-                    <button type="button" className="primary" onClick={saveBikeDraft}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void persistBikeRecord({ useInIntake: false });
+                      }}
+                      disabled={!selectedCustomer}
+                    >
+                      Save bike
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => {
+                        void persistBikeRecord({ useInIntake: true });
+                      }}
+                    >
                       Use bike in intake
                     </button>
                   </div>
