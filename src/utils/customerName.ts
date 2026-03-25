@@ -10,6 +10,32 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const normalizeNameWord = (value: string) =>
+  value
+    .split("-")
+    .map((segment) => {
+      if (!segment) {
+        return segment;
+      }
+
+      const lower = segment.toLowerCase();
+      return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+    })
+    .join("-");
+
+export const normalizeNamePart = (value: string | undefined | null): string => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(normalizeNameWord)
+    .join(" ");
+};
+
 export const parseCombinedCustomerName = (
   value: string | undefined | null,
 ): { firstName: string; lastName: string } => {
@@ -28,8 +54,8 @@ export const parseCombinedCustomerName = (
   }
 
   return {
-    firstName: tokens[0] ?? "",
-    lastName: tokens.slice(1).join(" "),
+    firstName: normalizeNamePart(tokens[0] ?? ""),
+    lastName: normalizeNamePart(tokens.slice(1).join(" ")),
   };
 };
 

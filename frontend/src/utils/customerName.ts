@@ -7,13 +7,39 @@ const normalizeOptionalText = (value: string | undefined | null) => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const normalizeNameWord = (value: string) =>
+  value
+    .split("-")
+    .map((segment) => {
+      if (!segment) {
+        return segment;
+      }
+
+      const lower = segment.toLowerCase();
+      return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+    })
+    .join("-");
+
+export const normalizeNamePart = (value: string | undefined | null) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(normalizeNameWord)
+    .join(" ");
+};
+
 export const parseCombinedCustomerName = (value: string) => {
   const normalized = normalizeOptionalText(value) ?? "";
   const tokens = normalized.split(/\s+/).filter(Boolean);
 
   return {
-    firstName: tokens[0] ?? "",
-    lastName: tokens.slice(1).join(" "),
+    firstName: normalizeNamePart(tokens[0] ?? ""),
+    lastName: normalizeNamePart(tokens.slice(1).join(" ")),
   };
 };
 

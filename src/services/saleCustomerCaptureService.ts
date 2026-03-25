@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
-import { getCustomerDisplayName } from "../utils/customerName";
+import { getCustomerDisplayName, normalizeNamePart } from "../utils/customerName";
 
 const CUSTOMER_CAPTURE_SESSION_TTL_MINUTES = 15;
 
@@ -302,8 +302,8 @@ export const submitPublicSaleCustomerCapture = async (
   token: string,
   input: SubmitSaleCustomerCaptureInput,
 ) => {
-  const firstName = normalizeOptionalText(input.firstName);
-  const lastName = normalizeOptionalText(input.lastName);
+  const firstName = normalizeOptionalText(normalizeNamePart(input.firstName));
+  const lastName = normalizeOptionalText(normalizeNamePart(input.lastName));
   const email = normalizeEmail(input.email);
   const phone = normalizeOptionalText(input.phone);
 

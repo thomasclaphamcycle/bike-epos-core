@@ -3,6 +3,7 @@ import { HttpError, isUuid } from "../utils/http";
 import {
   buildCustomerSearchWhere,
   getCustomerDisplayName,
+  normalizeNamePart,
   parseCombinedCustomerName,
 } from "../utils/customerName";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
@@ -109,8 +110,8 @@ const assertCustomerExists = async (customerId: string) => {
 
 export const createCustomer = async (input: CreateCustomerInput) => {
   const explicitName = normalizeOptionalText(input.name);
-  const suppliedFirstName = normalizeOptionalText(input.firstName);
-  const suppliedLastName = normalizeOptionalText(input.lastName);
+  const suppliedFirstName = normalizeOptionalText(normalizeNamePart(input.firstName));
+  const suppliedLastName = normalizeOptionalText(normalizeNamePart(input.lastName));
 
   let firstName = suppliedFirstName;
   let lastName = suppliedLastName;
