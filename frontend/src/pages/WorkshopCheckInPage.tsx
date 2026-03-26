@@ -373,6 +373,7 @@ export const WorkshopCheckInPage = ({
   const primaryStepActionRef = useRef<HTMLButtonElement | null>(null);
   const reviewSubmitIntentRef = useRef(false);
   const problemWorkTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasInitializedServicesTemplateRef = useRef(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialBikeId = searchParams.get("bikeId");
@@ -449,6 +450,10 @@ export const WorkshopCheckInPage = ({
   const sortedTemplatesForServices = useMemo(
     () => [...templates].sort(compareTemplatesForServicesQuickAccess),
     [templates],
+  );
+  const defaultServicesTemplate = useMemo(
+    () => sortedTemplatesForServices.find((template) => isInspectionDiagnosticTemplate(template)) ?? null,
+    [sortedTemplatesForServices],
   );
   const selectedOptionalTemplateCount = useMemo(
     () => selectedTemplate?.lines.filter((line) => line.isOptional && selectedOptionalTemplateLineIds.includes(line.id)).length ?? 0,
@@ -538,6 +543,17 @@ export const WorkshopCheckInPage = ({
   useEffect(() => {
     setSelectedOptionalTemplateLineIds(getDefaultSelectedOptionalLineIds(selectedTemplate));
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (step !== 2 || hasInitializedServicesTemplateRef.current) {
+      return;
+    }
+
+    hasInitializedServicesTemplateRef.current = true;
+    if (!selectedTemplateId && defaultServicesTemplate) {
+      setSelectedTemplateId(defaultServicesTemplate.id);
+    }
+  }, [defaultServicesTemplate, selectedTemplateId, step]);
 
   useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
@@ -961,6 +977,7 @@ export const WorkshopCheckInPage = ({
   };
 
   const selectServiceTemplate = (templateId: string) => {
+    hasInitializedServicesTemplateRef.current = true;
     setSelectedTemplateId(templateId);
 
     const activeElement = document.activeElement;
@@ -1498,7 +1515,6 @@ export const WorkshopCheckInPage = ({
         {step === 2 ? (
           <section className="card">
             <h2>Services</h2>
-            <p className="muted-text">Choose a service template or stay with custom work, then capture the customer-facing request and any internal notes.</p>
             <div className="workshop-checkin-services-template">
               <div className="workshop-checkin-services-template__header">
                 <div>
@@ -1575,7 +1591,7 @@ export const WorkshopCheckInPage = ({
               )}
               <div className="table-secondary">
                 {selectedTemplate
-                  ? `Selected template: ${selectedTemplate.name}. You can refine details later on the job card.`
+                  ? `Selected: ${selectedTemplate.name}`
                   : "Choose a template or stay with Custom work. You can refine details later on the job card."}
               </div>
               {selectedTemplate ? (
@@ -1595,9 +1611,6 @@ export const WorkshopCheckInPage = ({
             <div className="workshop-checkin-services-template__chips">
               <div>
                 <strong>Quick problem chips</strong>
-                <div className="table-secondary">
-                  Optional shortcuts for the most common requests.
-                </div>
               </div>
               <div className="workshop-checkin-services-template__chip-list" role="list" aria-label="Quick problem chips">
                 {QUICK_PROBLEM_WORK_CHIPS.map((chip) => {
