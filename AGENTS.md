@@ -228,7 +228,7 @@ The current known-good local setup is:
 - `npx prisma generate`
 - `npx prisma migrate dev`
 - `npm run db:seed:dev`
-- backend on `http://localhost:3000`
+- backend on `http://localhost:3100`
 - frontend dev server on `http://localhost:5173`
 
 Do not reintroduce placeholder DB credentials like `postgresql://user:password@...` into `.env.example` or docs as if they are expected to work locally.
@@ -249,7 +249,7 @@ Minimum expectations depend on the surface changed:
 - No stale dev/test servers should be running on shared ports such as `3100`.
 - Terminate any leftover Node or test server processes from previous runs.
 - Ensure verification commands run sequentially and not concurrently.
-- When normal manual inspection servers are running on `http://localhost:3000` and `http://localhost:5173`, prefer `scripts/dev_codex_guard.sh <command>` so the local inspection servers are stopped before the guarded workflow and restored afterward automatically.
+- When normal manual inspection servers are running on `http://localhost:3100` and `http://localhost:5173`, prefer `scripts/dev_codex_guard.sh <command>` so the local inspection servers are stopped before the guarded workflow and restored afterward automatically.
 - Use `scripts/dev_stop_local.sh` only when you need the explicit stop step, and `scripts/dev_start_local.sh` to restore the normal inspection servers manually afterward.
 
 ## Release Verification Rule
