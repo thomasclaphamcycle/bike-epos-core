@@ -211,6 +211,26 @@ const toWorkshopDateKey = (value) => {
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+const usedWorkshopDateKeys = new Set();
+
+const nextWorkshopWeekdayDistinct = (
+  baseOffset,
+  usedDateKeys = usedWorkshopDateKeys,
+  transform = (candidate) => candidate,
+) => {
+  let offset = baseOffset;
+
+  while (true) {
+    const candidate = transform(nextWorkshopWeekday(offset));
+    const dateKey = toWorkshopDateKey(candidate);
+    if (!usedDateKeys.has(dateKey)) {
+      usedDateKeys.add(dateKey);
+      return candidate;
+    }
+    offset += 1;
+  }
+};
+
 const getWorkshopTimeParts = (value) =>
   Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
@@ -1593,7 +1613,7 @@ const run = async () => {
       assert.equal(estimatedDetail.json.currentEstimate.subtotalPence, 2299);
       assert.equal(estimatedDetail.json.currentEstimate.lineCount, 2);
 
-      const scheduledJobDate = addDays(todayUtc(), 17);
+      const scheduledJobDate = nextWorkshopWeekdayDistinct(17);
       const scheduledJobStart = toScheduledSlot(scheduledJobDate, 12, 0);
       const scheduledJobEnd = toScheduledSlot(scheduledJobDate, 13, 30);
       const { job: scheduledJob } = await createJob(state, {
@@ -1767,7 +1787,7 @@ const run = async () => {
     }, results);
 
     await runTest("timed workshop jobs derive schedule fields, reject store-closed slots, and validate end-time consistency", async () => {
-      const scheduledDate = nextWorkshopWeekday(16);
+      const scheduledDate = nextWorkshopWeekdayDistinct(16);
       const validStart = toScheduledSlot(scheduledDate, 11, 0);
 
       const scheduledJob = await fetchJson("/api/workshop/jobs", {
@@ -1828,7 +1848,7 @@ const run = async () => {
     }, results);
 
     await runTest("staff assignment to timed workshop jobs respects working hours, time off, and overlap rules", async () => {
-      const scheduledDate = nextWorkshopWeekday(18);
+      const scheduledDate = nextWorkshopWeekdayDistinct(18);
       const dateKey = toWorkshopDateKey(scheduledDate);
 
       const firstStart = toScheduledSlot(scheduledDate, 11, 0);
@@ -1902,10 +1922,17 @@ const run = async () => {
     }, results);
 
     await runTest("technician assignment honors scheduled slot day for rota validation", async () => {
-      let operationalDate = nextWorkshopWeekday(33);
-      while (getWorkshopDayOfWeek(operationalDate) !== 1) {
-        operationalDate = addDays(operationalDate, 1);
-      }
+      const operationalDate = nextWorkshopWeekdayDistinct(
+        33,
+        usedWorkshopDateKeys,
+        (candidate) => {
+          let mondayCandidate = candidate;
+          while (getWorkshopDayOfWeek(mondayCandidate) !== 1) {
+            mondayCandidate = addDays(mondayCandidate, 1);
+          }
+          return mondayCandidate;
+        },
+      );
 
       const operationalDateKey = toWorkshopDateKey(operationalDate);
       const promiseDate = addDays(operationalDate, 1);
@@ -1947,7 +1974,7 @@ const run = async () => {
     }, results);
 
     await runTest("calendar api returns staff rows, scheduled jobs, and capacity clipped to working hours", async () => {
-      const scheduledDate = nextWorkshopWeekday(23);
+      const scheduledDate = nextWorkshopWeekdayDistinct(23);
       const dateKey = scheduledDate.toISOString().slice(0, 10);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
@@ -2073,7 +2100,7 @@ const run = async () => {
     }, results);
 
     await runTest("legacy workshop working hours stay as an explicit fallback when rota is missing", async () => {
-      const scheduledDate = nextWorkshopWeekday(22);
+      const scheduledDate = nextWorkshopWeekdayDistinct(22);
       const dateKey = toWorkshopDateKey(scheduledDate);
       const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
       assert.notEqual(dayOfWeek, undefined);
@@ -2116,7 +2143,7 @@ const run = async () => {
     }, results);
 
     await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
-      const scheduledDate = nextWorkshopWeekday(24);
+      const scheduledDate = nextWorkshopWeekdayDistinct(26);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
         date: toWorkshopDateKey(scheduledDate),
