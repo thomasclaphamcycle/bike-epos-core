@@ -98,12 +98,8 @@ const QUICK_PROBLEM_WORK_CHIPS = [
     text: "Check and adjust gears",
   },
   {
-    label: "Safety check",
-    text: "Safety check requested",
-  },
-  {
-    label: "General service",
-    text: "General service requested",
+    label: "Service due",
+    text: "Service due / service requested",
   },
   {
     label: "E-bike",
@@ -260,6 +256,38 @@ const compareCustomerBikesByRecency = (left: CustomerBikeRecord, right: Customer
   return left.displayName.localeCompare(right.displayName);
 };
 
+const isInspectionDiagnosticTemplate = (template: WorkshopServiceTemplate) => {
+  const normalizedName = template.name.trim().toLocaleLowerCase();
+  return normalizedName.includes("inspection") || normalizedName.includes("diagnostic");
+};
+
+const compareTemplatesForServicesQuickAccess = (left: WorkshopServiceTemplate, right: WorkshopServiceTemplate) => {
+  const leftPriority = isInspectionDiagnosticTemplate(left) ? 0 : 1;
+  const rightPriority = isInspectionDiagnosticTemplate(right) ? 0 : 1;
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+
+  if (left.sortOrder !== right.sortOrder) {
+    return left.sortOrder - right.sortOrder;
+  }
+
+  return left.name.localeCompare(right.name);
+};
+
+const buildTemplateQuickHint = (template: WorkshopServiceTemplate) => {
+  if (isInspectionDiagnosticTemplate(template)) {
+    return "Not sure? Start here";
+  }
+
+  const trimmedDescription = template.description?.trim();
+  if (trimmedDescription && trimmedDescription.length <= 48) {
+    return trimmedDescription;
+  }
+
+  return null;
+};
+
 const appendProblemWorkSnippet = (currentValue: string, snippet: string) => {
   const trimmedCurrent = currentValue.trim();
   if (!trimmedCurrent) {
@@ -323,6 +351,7 @@ export const WorkshopCheckInPage = ({
   const { success, error } = useToasts();
   const customerOptionRefs = useRef<Array<HTMLElement | null>>([]);
   const primaryStepActionRef = useRef<HTMLButtonElement | null>(null);
+  const problemWorkTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialBikeId = searchParams.get("bikeId");
@@ -396,6 +425,10 @@ export const WorkshopCheckInPage = ({
     [selectedTemplateId, templates],
   );
   const hasSelectedTemplate = Boolean(selectedTemplateId && selectedTemplate);
+  const sortedTemplatesForServices = useMemo(
+    () => [...templates].sort(compareTemplatesForServicesQuickAccess),
+    [templates],
+  );
   const selectedOptionalTemplateCount = useMemo(
     () => selectedTemplate?.lines.filter((line) => line.isOptional && selectedOptionalTemplateLineIds.includes(line.id)).length ?? 0,
     [selectedOptionalTemplateLineIds, selectedTemplate],
@@ -891,6 +924,20 @@ export const WorkshopCheckInPage = ({
 
   const applyQuickProblemChip = (snippet: string) => {
     setProblemWork((current) => appendProblemWorkSnippet(current, snippet));
+  };
+
+  const selectServiceTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+
+    const activeElement = document.activeElement;
+    const shouldMoveFocus = !activeElement || activeElement === document.body || activeElement instanceof HTMLButtonElement;
+    if (!shouldMoveFocus) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      problemWorkTextareaRef.current?.focus();
+    });
   };
 
   useEffect(() => {
@@ -1420,7 +1467,7 @@ export const WorkshopCheckInPage = ({
             <div className="workshop-checkin-services-template">
               <div className="workshop-checkin-services-template__header">
                 <div>
-                  <strong>Service template</strong>
+                  <strong>Choose service</strong>
                   <div className="table-secondary">
                     Pick a common workshop template first, or leave this as custom work and continue manually.
                   </div>
@@ -1437,28 +1484,41 @@ export const WorkshopCheckInPage = ({
                   <button
                     type="button"
                     className={`workshop-checkin-services-template__option${!hasSelectedTemplate ? " workshop-checkin-services-template__option--active workshop-checkin-services-template__option--custom" : ""}`}
-                    onClick={() => setSelectedTemplateId("")}
+                    onClick={() => selectServiceTemplate("")}
                     aria-pressed={!hasSelectedTemplate}
                   >
-                    <strong>Custom work</strong>
+                    <span className="workshop-checkin-services-template__option-title-row">
+                      <strong>Custom work</strong>
+                      {!hasSelectedTemplate ? (
+                        <span className="workshop-checkin-services-template__option-check" aria-hidden="true">
+                          ✓
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="workshop-checkin-services-template__option-meta">
                       No template
                     </span>
-                    <span className="table-secondary">
-                      Stay fully manual and describe the requested work yourself.
-                    </span>
                   </button>
-                  {templates.map((template) => {
+                  {sortedTemplatesForServices.map((template) => {
                     const isSelected = selectedTemplateId === template.id;
+                    const quickHint = buildTemplateQuickHint(template);
+                    const isFeatured = isInspectionDiagnosticTemplate(template);
                     return (
                       <button
                         key={template.id}
                         type="button"
-                        className={`workshop-checkin-services-template__option${isSelected ? " workshop-checkin-services-template__option--active" : ""}`}
-                        onClick={() => setSelectedTemplateId(template.id)}
+                        className={`workshop-checkin-services-template__option${isSelected ? " workshop-checkin-services-template__option--active" : ""}${isFeatured ? " workshop-checkin-services-template__option--featured" : ""}`}
+                        onClick={() => selectServiceTemplate(template.id)}
                         aria-pressed={isSelected}
                       >
-                        <strong>{template.name}</strong>
+                        <span className="workshop-checkin-services-template__option-title-row">
+                          <strong>{template.name}</strong>
+                          {isSelected ? (
+                            <span className="workshop-checkin-services-template__option-check" aria-hidden="true">
+                              ✓
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="workshop-checkin-services-template__option-meta">
                           {[
                             template.category,
@@ -1468,11 +1528,11 @@ export const WorkshopCheckInPage = ({
                             .filter(Boolean)
                             .join(" · ") || "Workshop template"}
                         </span>
-                        <span className="table-secondary">
-                          {template.description?.trim()
-                            ? template.description
-                            : `${template.lineCount} line${template.lineCount === 1 ? "" : "s"} ready to apply after create`}
-                        </span>
+                        {quickHint ? (
+                          <span className="table-secondary">
+                            {quickHint}
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -1480,8 +1540,8 @@ export const WorkshopCheckInPage = ({
               )}
               <div className="table-secondary">
                 {selectedTemplate
-                  ? "Selected template stays active here, and optional part suggestions can still be adjusted before the template applies after create."
-                  : "No template selected. You can continue with a fully manual service intake."}
+                  ? `Selected template: ${selectedTemplate.name}. You can refine details later on the job card.`
+                  : "Choose a template or stay with Custom work. You can refine details later on the job card."}
               </div>
               {selectedTemplate ? (
                 <WorkshopServiceTemplatePreview
@@ -1495,20 +1555,13 @@ export const WorkshopCheckInPage = ({
                     )}
                   emptyOptionalLabel="Optional part suggestions are currently included in this intake."
                 />
-              ) : (
-                <div className="workshop-checkin-services-template__empty">
-                  <strong>Custom work</strong>
-                  <div className="table-secondary">
-                    No template will be applied. Use the notes below to describe the requested work and continue with a manual job setup.
-                  </div>
-                </div>
-              )}
+              ) : null}
             </div>
             <div className="workshop-checkin-services-template__chips">
               <div>
                 <strong>Quick problem chips</strong>
                 <div className="table-secondary">
-                  Tap a common request to build the customer-facing note faster. You can still edit the text freely.
+                  Optional shortcuts for the most common requests.
                 </div>
               </div>
               <div className="workshop-checkin-services-template__chip-list" role="list" aria-label="Quick problem chips">
@@ -1532,10 +1585,11 @@ export const WorkshopCheckInPage = ({
               <label>
                 Problem / Work (Customer Facing)
                 <textarea
+                  ref={problemWorkTextareaRef}
                   value={problemWork}
                   onChange={(event) => setProblemWork(event.target.value)}
                   rows={4}
-                  placeholder="What is wrong, what work is needed, or what the customer is asking for"
+                  placeholder="Describe the problem or requested work"
                 />
               </label>
               <label>

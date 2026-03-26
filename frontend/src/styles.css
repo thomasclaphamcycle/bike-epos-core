@@ -4558,8 +4558,8 @@ th {
 
 .workshop-checkin-services-template {
   display: grid;
-  gap: 14px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 18px;
   padding: 14px 16px;
   border: 1px solid #d5dfeb;
   border-radius: 16px;
@@ -4598,13 +4598,40 @@ th {
 }
 
 .workshop-checkin-services-template__option--active {
-  border-color: rgba(46, 124, 246, 0.48);
-  box-shadow: inset 0 0 0 1px rgba(46, 124, 246, 0.16), 0 12px 26px rgba(46, 124, 246, 0.12);
-  background: linear-gradient(180deg, rgba(239, 247, 255, 0.98), rgba(255, 255, 255, 0.96));
+  border-color: rgba(24, 86, 188, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(24, 86, 188, 0.28), 0 16px 32px rgba(24, 86, 188, 0.18);
+  background: linear-gradient(180deg, rgba(220, 235, 255, 1), rgba(244, 249, 255, 0.98));
+  transform: translateY(-2px);
 }
 
 .workshop-checkin-services-template__option--custom {
   border-style: dashed;
+}
+
+.workshop-checkin-services-template__option--featured {
+  border-color: rgba(34, 111, 208, 0.42);
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(255, 255, 255, 0.94));
+}
+
+.workshop-checkin-services-template__option-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workshop-checkin-services-template__option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(24, 86, 188, 0.12);
+  color: #1856bc;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .workshop-checkin-services-template__option-meta {
@@ -4615,22 +4642,11 @@ th {
   color: #516275;
 }
 
-.workshop-checkin-services-template__empty {
-  padding: 12px 14px;
-  border: 1px dashed rgba(86, 110, 137, 0.36);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.workshop-checkin-services-template__empty strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
 .workshop-checkin-services-template__chips {
   display: grid;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-top: 6px;
+  margin-bottom: 18px;
 }
 
 .workshop-checkin-services-template__chip-list {
