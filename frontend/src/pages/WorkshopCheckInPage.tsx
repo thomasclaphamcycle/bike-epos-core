@@ -107,6 +107,21 @@ const QUICK_PROBLEM_WORK_CHIPS = [
   },
 ] as const;
 
+const REVIEW_ACTION_PILLS = [
+  {
+    key: "printJobTicket",
+    label: "Print Job Ticket",
+  },
+  {
+    key: "sendCustomerConfirmationEmail",
+    label: "Send Customer Confirmation (Email)",
+  },
+] as const;
+
+type ReviewActionKey = (typeof REVIEW_ACTION_PILLS)[number]["key"];
+
+type WorkshopReviewActionState = Record<ReviewActionKey, boolean>;
+
 const BIKE_TYPE_LABELS: Record<string, string> = {
   ROAD: "Road",
   MTB: "MTB",
@@ -419,6 +434,10 @@ export const WorkshopCheckInPage = ({
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedOptionalTemplateLineIds, setSelectedOptionalTemplateLineIds] = useState<string[]>([]);
+  const [reviewActions, setReviewActions] = useState<WorkshopReviewActionState>({
+    printJobTicket: true,
+    sendCustomerConfirmationEmail: true,
+  });
 
   const resolvedCustomerName = useMemo(() => {
     if (selectedCustomer) {
@@ -458,6 +477,10 @@ export const WorkshopCheckInPage = ({
   const selectedOptionalTemplateCount = useMemo(
     () => selectedTemplate?.lines.filter((line) => line.isOptional && selectedOptionalTemplateLineIds.includes(line.id)).length ?? 0,
     [selectedOptionalTemplateLineIds, selectedTemplate],
+  );
+  const activeReviewActionCount = useMemo(
+    () => REVIEW_ACTION_PILLS.filter((action) => reviewActions[action.key]).length,
+    [reviewActions],
   );
   const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
   const bikeDraftDisplayName = useMemo(
@@ -784,6 +807,11 @@ export const WorkshopCheckInPage = ({
 
     setSubmitting(true);
     try {
+      const postCreateActions = {
+        printJobTicket: reviewActions.printJobTicket,
+        sendCustomerConfirmationEmail: reviewActions.sendCustomerConfirmationEmail,
+      };
+
       let customerId = selectedCustomer?.id ?? null;
 
       if (!customerId && createCustomerInline) {
@@ -837,7 +865,9 @@ export const WorkshopCheckInPage = ({
               ? `Workshop check-in created, fixed-price template applied, and labour will rebalance to ${formatWorkshopTemplateMoney(applyResponse.pricingEffect.targetTotalPricePence ?? 0)}`
               : applyResponse.durationEffect.durationUpdated
                 ? `Workshop check-in created, template applied, and planning duration set to ${applyResponse.durationEffect.appliedDurationMinutes} min`
-                : "Workshop check-in created and template applied",
+                : postCreateActions.printJobTicket || postCreateActions.sendCustomerConfirmationEmail
+                  ? "Workshop check-in created and template applied"
+                  : "Workshop check-in created and template applied. Post-create actions are switched off for this intake",
           );
         } catch (templateError) {
           error(
@@ -848,7 +878,11 @@ export const WorkshopCheckInPage = ({
           return;
         }
       } else {
-        success("Workshop check-in created");
+        success(
+          postCreateActions.printJobTicket || postCreateActions.sendCustomerConfirmationEmail
+            ? "Workshop check-in created"
+            : "Workshop check-in created. Post-create actions are switched off for this intake",
+        );
       }
 
       if (onCreated) {
@@ -989,6 +1023,13 @@ export const WorkshopCheckInPage = ({
     window.requestAnimationFrame(() => {
       problemWorkTextareaRef.current?.focus();
     });
+  };
+
+  const toggleReviewAction = (action: ReviewActionKey) => {
+    setReviewActions((current) => ({
+      ...current,
+      [action]: !current[action],
+    }));
   };
 
   useEffect(() => {
@@ -1452,16 +1493,22 @@ export const WorkshopCheckInPage = ({
                         return (
                           <article
                             key={bike.id}
-                            className="workshop-checkin-bike-picker__list-item"
+                            className={`workshop-checkin-bike-picker__list-item${isSelected ? " workshop-checkin-bike-picker__list-item--selected" : ""}`}
                             role="listitem"
                           >
-                            <div className="grow">
-                              <strong className="workshop-checkin-bike-picker__list-summary">{buildBikeInlineSummary(bike)}</strong>
-                              <div className="table-secondary">{buildBikeInlineMeta(bike)}</div>
-                            </div>
-                            <button type="button" onClick={() => selectBikeRecord(bike)} disabled={isSelected}>
-                              Use
-                            </button>
+                            <label className="workshop-checkin-bike-picker__list-item-label">
+                              <input
+                                type="radio"
+                                className="workshop-checkin-bike-picker__list-item-input"
+                                name="selected-bike-record"
+                                checked={isSelected}
+                                onChange={() => selectBikeRecord(bike)}
+                              />
+                              <div className="grow">
+                                <strong className="workshop-checkin-bike-picker__list-summary">{buildBikeInlineSummary(bike)}</strong>
+                                <div className="table-secondary">{buildBikeInlineMeta(bike)}</div>
+                              </div>
+                            </label>
                           </article>
                         );
                       })}
@@ -1516,14 +1563,6 @@ export const WorkshopCheckInPage = ({
           <section className="card">
             <h2>Services</h2>
             <div className="workshop-checkin-services-template">
-              <div className="workshop-checkin-services-template__header">
-                <div>
-                  <strong>Choose service</strong>
-                  <div className="table-secondary">
-                    Pick a common workshop template first, or leave this as custom work and continue manually.
-                  </div>
-                </div>
-              </div>
               {loadingTemplates ? (
                 <div className="table-secondary">Loading active service templates...</div>
               ) : (
@@ -1654,49 +1693,136 @@ export const WorkshopCheckInPage = ({
         ) : null}
 
         {step === 3 ? (
-          <section className="card">
-            <h2>Review & Confirm</h2>
-            <p className="muted-text">Create the check-in to open the job and continue progress from the workshop dashboard.</p>
-            <div className="job-meta-grid">
-              <div><strong>Customer:</strong> {resolvedCustomerName}</div>
-              <div><strong>Workshop bike summary:</strong> {bikeDescription || "-"}</div>
-              <div>
-                <strong>Linked bike:</strong>{" "}
-                {createBikeInline
-                  ? `${bikeDraftDisplayName} (new record will be created with this check-in)`
-                  : selectedBikeId
-                    ? selectedBikeRecord?.displayName || "Existing bike selected"
-                    : "No linked bike record"}
+          <section className="card workshop-checkin-review-step">
+            <div className="workshop-checkin-review-hero">
+              <div className="workshop-checkin-review-hero__copy">
+                <p className="workshop-checkin-review-hero__eyebrow">Final review</p>
+                <h2>Review & Confirm</h2>
+                <p className="muted-text">Create the check-in to open the job and continue progress from the workshop dashboard.</p>
               </div>
-              <div>
-                <strong>Bike-led intake:</strong>{" "}
-                {workshopStartContext
-                  ? `Started from ${workshopStartContext.bike.displayName}`
-                  : "Manual check-in flow"}
-              </div>
-            </div>
-            <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-              <strong>Check-in summary</strong>
-              <pre className="note-pre">{checkInNotes || "No additional notes captured."}</pre>
-            </div>
-            <div className="restricted-panel" style={{ marginTop: "12px" }}>
-              <strong>Service setup</strong>
-              <div className="job-meta-grid" style={{ marginTop: "8px", marginBottom: 0 }}>
-                <div>
-                  <strong>Template:</strong> {selectedTemplate ? selectedTemplate.name : "Custom work / no template"}
-                </div>
-                <div>
-                  <strong>Apply after create:</strong>{" "}
+              <div className="workshop-checkin-review-hero__status">
+                <span className="workshop-checkin-review-hero__status-pill">
+                  {activeReviewActionCount === REVIEW_ACTION_PILLS.length
+                    ? "All follow-up actions on"
+                    : activeReviewActionCount === 0
+                      ? "No follow-up actions on"
+                      : `${activeReviewActionCount} follow-up action${activeReviewActionCount === 1 ? "" : "s"} on`}
+                </span>
+                <strong>
+                  {reviewActions.printJobTicket ? "Print Job Ticket is ready by default" : "Print Job Ticket is turned off"}
+                </strong>
+                <span>
                   {selectedTemplate
-                    ? `${selectedTemplate.lineCount} line${selectedTemplate.lineCount === 1 ? "" : "s"}${selectedTemplate.lines.some((line) => line.isOptional) ? ` · ${selectedOptionalTemplateCount} optional selected` : ""}`
-                    : "No template lines will be added automatically"}
-                </div>
+                    ? `Using ${selectedTemplate.name}`
+                    : "Continuing as custom workshop work"}
+                </span>
               </div>
-              {selectedTemplate?.description ? (
-                <div className="table-secondary" style={{ marginTop: "8px" }}>
-                  {selectedTemplate.description}
+            </div>
+
+            <div className="workshop-checkin-review-grid">
+              <section className="workshop-checkin-review-panel workshop-checkin-review-panel--primary">
+                <div className="workshop-checkin-review-panel__header">
+                  <span className="workshop-checkin-review-panel__eyebrow">Customer & Bike</span>
+                  <strong>Check-in overview</strong>
                 </div>
-              ) : null}
+                <div className="workshop-checkin-review-detail-grid">
+                  <div className="workshop-checkin-review-detail-card">
+                    <span className="workshop-checkin-review-detail-card__label">Customer</span>
+                    <strong>{resolvedCustomerName || "-"}</strong>
+                  </div>
+                  <div className="workshop-checkin-review-detail-card">
+                    <span className="workshop-checkin-review-detail-card__label">Workshop bike summary</span>
+                    <strong>{bikeDescription || "-"}</strong>
+                  </div>
+                  <div className="workshop-checkin-review-detail-card">
+                    <span className="workshop-checkin-review-detail-card__label">Linked bike</span>
+                    <strong>
+                      {createBikeInline
+                        ? `${bikeDraftDisplayName} (new record will be created with this check-in)`
+                        : selectedBikeId
+                          ? selectedBikeRecord?.displayName || "Existing bike selected"
+                          : "No linked bike record"}
+                    </strong>
+                  </div>
+                  <div className="workshop-checkin-review-detail-card">
+                    <span className="workshop-checkin-review-detail-card__label">Intake source</span>
+                    <strong>
+                      {workshopStartContext
+                        ? `Started from ${workshopStartContext.bike.displayName}`
+                        : "Manual check-in flow"}
+                    </strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="workshop-checkin-review-panel workshop-checkin-review-panel--info">
+                <div className="workshop-checkin-review-panel__header">
+                  <span className="workshop-checkin-review-panel__eyebrow">Intake summary</span>
+                  <strong>Notes captured at check-in</strong>
+                </div>
+                <pre className="note-pre workshop-checkin-review-note-pre">{checkInNotes || "No additional notes captured."}</pre>
+              </section>
+
+              <section className="workshop-checkin-review-panel">
+                <div className="workshop-checkin-review-panel__header">
+                  <span className="workshop-checkin-review-panel__eyebrow">Service setup</span>
+                  <strong>Template and line handling</strong>
+                </div>
+                <div className="workshop-checkin-review-summary-list">
+                  <div className="workshop-checkin-review-summary-row">
+                    <span>Template</span>
+                    <strong>{selectedTemplate ? selectedTemplate.name : "Custom work / no template"}</strong>
+                  </div>
+                  <div className="workshop-checkin-review-summary-row">
+                    <span>Apply after create</span>
+                    <strong>
+                      {selectedTemplate
+                        ? `${selectedTemplate.lineCount} line${selectedTemplate.lineCount === 1 ? "" : "s"}${selectedTemplate.lines.some((line) => line.isOptional) ? ` · ${selectedOptionalTemplateCount} optional selected` : ""}`
+                        : "No template lines will be added automatically"}
+                    </strong>
+                  </div>
+                </div>
+                {selectedTemplate?.description ? (
+                  <div className="table-secondary workshop-checkin-review-helper-copy">
+                    {selectedTemplate.description}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="workshop-checkin-review-panel workshop-checkin-review-panel--actions">
+                <div className="workshop-checkin-review-panel__header">
+                  <span className="workshop-checkin-review-panel__eyebrow">After create</span>
+                  <strong>Choose the immediate follow-up actions</strong>
+                </div>
+                <div className="table-secondary workshop-checkin-review-helper-copy">
+                  {activeReviewActionCount === REVIEW_ACTION_PILLS.length
+                    ? "The job ticket and customer confirmation are both selected and ready to run as soon as the check-in is created."
+                    : activeReviewActionCount === 0
+                      ? "No follow-up actions will run after create."
+                      : "Choose which follow-up action should stay on for this check-in."}
+                </div>
+                <div className="pos-context-pill-row workshop-checkin-review-actions">
+                  {REVIEW_ACTION_PILLS.map((action) => {
+                    const isActive = reviewActions[action.key];
+                    return (
+                      <button
+                        key={action.key}
+                        type="button"
+                        className={`workshop-checkin-review-action pos-context-pill${isActive ? "" : " pos-context-pill-soft"}${isActive ? " workshop-checkin-review-action--active" : " workshop-checkin-review-action--inactive"}`}
+                        onClick={() => toggleReviewAction(action.key)}
+                        aria-pressed={isActive}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`workshop-checkin-review-action__dot${isActive ? "" : " workshop-checkin-review-action__dot--inactive"}`}
+                        />
+                        <span className="workshop-checkin-review-action__label">{action.label}</span>
+                        <span className="workshop-checkin-review-action__state">{isActive ? "On" : "Off"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
             {createdJobId ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
