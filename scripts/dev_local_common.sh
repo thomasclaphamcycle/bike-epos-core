@@ -210,6 +210,19 @@ tail_log_file() {
   fi
 }
 
+spawn_detached_process() {
+  local pid_file="$1"
+  local log_file="$2"
+  shift 2
+
+  nohup perl -MPOSIX=setsid -e '
+    POSIX::setsid() or die "setsid failed: $!";
+    exec @ARGV or die "exec failed: $!";
+  ' "$@" </dev/null >>"$log_file" 2>&1 &
+
+  printf '%s\n' "$!" >"$pid_file"
+}
+
 write_dev_state_file() {
   local state_file="$1"
   local backend_was_running="$2"
