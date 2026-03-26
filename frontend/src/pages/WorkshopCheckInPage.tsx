@@ -79,7 +79,8 @@ type CustomerBikeWorkshopStartContextResponse = {
 
 const stepTitles = [
   "Customer",
-  "Bike & Intake",
+  "Bike",
+  "Services",
   "Review",
 ] as const;
 
@@ -621,6 +622,9 @@ export const WorkshopCheckInPage = ({
         error("Bike description is required.");
         return;
       }
+    }
+
+    if (step === 2) {
       if (!problemWork.trim()) {
         error("Problem / Work is required.");
         return;
@@ -642,6 +646,10 @@ export const WorkshopCheckInPage = ({
     event.preventDefault();
     if (!resolvedCustomerName || !bikeDescription.trim()) {
       error("Customer and bike details are required.");
+      return;
+    }
+    if (!problemWork.trim()) {
+      error("Problem / Work is required.");
       return;
     }
 
@@ -1203,7 +1211,8 @@ export const WorkshopCheckInPage = ({
 
         {step === 1 ? (
           <section className="card">
-            <h2>Bike & Intake</h2>
+            <h2>Bike</h2>
+            <p className="muted-text">Identify the bike first, then capture the service request on the next step.</p>
             {loadingWorkshopStartContext ? <p>Loading selected bike...</p> : null}
             {workshopStartContext ? (
               <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
@@ -1350,6 +1359,15 @@ export const WorkshopCheckInPage = ({
                   placeholder={workshopStartContext ? "Prefilled from the linked bike record" : "e.g. Trek road bike, blue, 56cm"}
                 />
               </label>
+            </div>
+          </section>
+        ) : null}
+
+        {step === 2 ? (
+          <section className="card">
+            <h2>Services</h2>
+            <p className="muted-text">Capture the customer-facing work requested, plus any workshop-only notes for the team.</p>
+            <div className="job-meta-grid">
               <label>
                 Problem / Work (Customer Facing)
                 <textarea
@@ -1372,7 +1390,7 @@ export const WorkshopCheckInPage = ({
           </section>
         ) : null}
 
-        {step === 2 ? (
+        {step === 3 ? (
           <section className="card">
             <h2>Review & Confirm</h2>
             <p className="muted-text">Create the check-in to open the job and continue progress from the workshop dashboard.</p>
@@ -1561,7 +1579,7 @@ export const WorkshopCheckInPage = ({
                   <div className="workshop-os-overlay-hero__title">
                     <p className="ui-page-eyebrow">Bike Record</p>
                     <h2>Add new bike</h2>
-                    <p className="table-secondary">Capture the bike record separately, then return it to the Bike & Intake step.</p>
+                    <p className="table-secondary">Capture the bike record separately, then return it to the Bike step.</p>
                   </div>
                   <button type="button" onClick={() => setBikeCreateModalOpen(false)} aria-label="Close bike create">
                     Close
