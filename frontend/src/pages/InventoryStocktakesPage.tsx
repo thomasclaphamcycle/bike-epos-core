@@ -165,6 +165,15 @@ export const InventoryStocktakesPage = () => {
   const [bulkImporting, setBulkImporting] = useState(false);
   const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
 
+  const restoreScanInputFocus = () => {
+    window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      if (!activeElement || activeElement === document.body || activeElement === scanInputRef.current) {
+        scanInputRef.current?.focus();
+      }
+    });
+  };
+
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId;
   }, [selectedSessionId]);
@@ -538,9 +547,7 @@ export const InventoryStocktakesPage = () => {
         `${payload.scannedLine.productName} counted to ${payload.scannedLine.countedQty}.`,
       );
       await loadSessions(payload.stocktake.id);
-      window.requestAnimationFrame(() => {
-        scanInputRef.current?.focus();
-      });
+      restoreScanInputFocus();
     } catch (scanError) {
       error(scanError instanceof Error ? scanError.message : "Failed to scan stocktake line");
     } finally {
@@ -573,9 +580,7 @@ export const InventoryStocktakesPage = () => {
       setBulkImportText("");
       success(`Applied ${payload.appliedCount} bulk stocktake count${payload.appliedCount === 1 ? "" : "s"}.`);
       await loadSessions(payload.stocktake.id);
-      window.requestAnimationFrame(() => {
-        scanInputRef.current?.focus();
-      });
+      restoreScanInputFocus();
     } catch (bulkError) {
       error(bulkError instanceof Error ? bulkError.message : "Failed to import bulk counts");
     } finally {
