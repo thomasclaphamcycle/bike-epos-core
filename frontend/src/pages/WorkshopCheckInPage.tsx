@@ -84,6 +84,33 @@ const stepTitles = [
   "Review",
 ] as const;
 
+const QUICK_PROBLEM_WORK_CHIPS = [
+  {
+    label: "Puncture",
+    text: "Puncture repair requested",
+  },
+  {
+    label: "Brake issue",
+    text: "Check and adjust brakes",
+  },
+  {
+    label: "Gear issue",
+    text: "Check and adjust gears",
+  },
+  {
+    label: "Safety check",
+    text: "Safety check requested",
+  },
+  {
+    label: "General service",
+    text: "General service requested",
+  },
+  {
+    label: "E-bike",
+    text: "E-bike diagnostic / service request",
+  },
+] as const;
+
 const BIKE_TYPE_LABELS: Record<string, string> = {
   ROAD: "Road",
   MTB: "MTB",
@@ -233,6 +260,20 @@ const compareCustomerBikesByRecency = (left: CustomerBikeRecord, right: Customer
   return left.displayName.localeCompare(right.displayName);
 };
 
+const appendProblemWorkSnippet = (currentValue: string, snippet: string) => {
+  const trimmedCurrent = currentValue.trim();
+  if (!trimmedCurrent) {
+    return snippet;
+  }
+
+  if (trimmedCurrent.toLocaleLowerCase().includes(snippet.toLocaleLowerCase())) {
+    return currentValue;
+  }
+
+  const separator = /[.!?]$/.test(trimmedCurrent) ? " " : ". ";
+  return `${currentValue.trimEnd()}${separator}${snippet}`;
+};
+
 type WorkshopCheckInPageProps = {
   embedded?: boolean;
   onClose?: () => void;
@@ -354,6 +395,7 @@ export const WorkshopCheckInPage = ({
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
   );
+  const hasSelectedTemplate = Boolean(selectedTemplateId && selectedTemplate);
   const selectedOptionalTemplateCount = useMemo(
     () => selectedTemplate?.lines.filter((line) => line.isOptional && selectedOptionalTemplateLineIds.includes(line.id)).length ?? 0,
     [selectedOptionalTemplateLineIds, selectedTemplate],
@@ -845,6 +887,10 @@ export const WorkshopCheckInPage = ({
     setCreateBikeInline(true);
     setBikeDescription((current) => current.trim() || bikeDraftDisplayName);
     setBikeCreateModalOpen(false);
+  };
+
+  const applyQuickProblemChip = (snippet: string) => {
+    setProblemWork((current) => appendProblemWorkSnippet(current, snippet));
   };
 
   useEffect(() => {
@@ -1380,28 +1426,62 @@ export const WorkshopCheckInPage = ({
                   </div>
                 </div>
               </div>
-              <div className="job-meta-grid" style={{ marginBottom: 0 }}>
-                <label>
-                  Template selection
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+              {loadingTemplates ? (
+                <div className="table-secondary">Loading active service templates...</div>
+              ) : (
+                <div
+                  className="workshop-checkin-services-template__grid"
+                  role="list"
+                  aria-label="Quick access service templates"
+                >
+                  <button
+                    type="button"
+                    className={`workshop-checkin-services-template__option${!hasSelectedTemplate ? " workshop-checkin-services-template__option--active workshop-checkin-services-template__option--custom" : ""}`}
+                    onClick={() => setSelectedTemplateId("")}
+                    aria-pressed={!hasSelectedTemplate}
                   >
-                    <option value="">Custom work / no template</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="table-secondary">
-                  {loadingTemplates
-                    ? "Loading active service templates..."
-                    : selectedTemplate
-                      ? "Optional part suggestions can be adjusted here before the template applies after the job is created."
-                      : "No template selected. You can continue with a fully manual service intake."}
+                    <strong>Custom work</strong>
+                    <span className="workshop-checkin-services-template__option-meta">
+                      No template
+                    </span>
+                    <span className="table-secondary">
+                      Stay fully manual and describe the requested work yourself.
+                    </span>
+                  </button>
+                  {templates.map((template) => {
+                    const isSelected = selectedTemplateId === template.id;
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        className={`workshop-checkin-services-template__option${isSelected ? " workshop-checkin-services-template__option--active" : ""}`}
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        aria-pressed={isSelected}
+                      >
+                        <strong>{template.name}</strong>
+                        <span className="workshop-checkin-services-template__option-meta">
+                          {[
+                            template.category,
+                            template.defaultDurationMinutes ? `${template.defaultDurationMinutes} min` : null,
+                            template.pricingMode === "FIXED_PRICE_SERVICE" ? "Fixed price" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Workshop template"}
+                        </span>
+                        <span className="table-secondary">
+                          {template.description?.trim()
+                            ? template.description
+                            : `${template.lineCount} line${template.lineCount === 1 ? "" : "s"} ready to apply after create`}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
+              )}
+              <div className="table-secondary">
+                {selectedTemplate
+                  ? "Selected template stays active here, and optional part suggestions can still be adjusted before the template applies after create."
+                  : "No template selected. You can continue with a fully manual service intake."}
               </div>
               {selectedTemplate ? (
                 <WorkshopServiceTemplatePreview
@@ -1423,6 +1503,30 @@ export const WorkshopCheckInPage = ({
                   </div>
                 </div>
               )}
+            </div>
+            <div className="workshop-checkin-services-template__chips">
+              <div>
+                <strong>Quick problem chips</strong>
+                <div className="table-secondary">
+                  Tap a common request to build the customer-facing note faster. You can still edit the text freely.
+                </div>
+              </div>
+              <div className="workshop-checkin-services-template__chip-list" role="list" aria-label="Quick problem chips">
+                {QUICK_PROBLEM_WORK_CHIPS.map((chip) => {
+                  const isApplied = problemWork.toLocaleLowerCase().includes(chip.text.toLocaleLowerCase());
+                  return (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      className={`workshop-checkin-services-template__chip${isApplied ? " workshop-checkin-services-template__chip--active" : ""}`}
+                      onClick={() => applyQuickProblemChip(chip.text)}
+                      aria-pressed={isApplied}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="job-meta-grid">
               <label>
