@@ -53,12 +53,6 @@ export const WorkshopServiceTemplatePreview = ({
         <p className="muted-text">{template.description}</p>
       ) : null}
 
-      {template.defaultDurationMinutes ? (
-        <p className="table-secondary">
-          Default planning duration: {template.defaultDurationMinutes} min. Applying this template fills the job duration when one has not already been set.
-        </p>
-      ) : null}
-
       {template.pricingMode === "FIXED_PRICE_SERVICE" && template.targetTotalPricePence ? (
         <p className="table-secondary">
           Fixed-price service: labour auto-balances so the job total stays at {formatWorkshopTemplateMoney(template.targetTotalPricePence)} while parts are added or changed.

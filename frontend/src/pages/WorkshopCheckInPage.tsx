@@ -1500,7 +1500,6 @@ export const WorkshopCheckInPage = ({
         {step === 2 ? (
           <section className="card">
             <h2>Services</h2>
-            <p className="muted-text">Choose a service template or stay with custom work, then capture the customer-facing request and any internal notes.</p>
             <div className="workshop-checkin-services-template">
               <div className="workshop-checkin-services-template__header">
                 <div>
@@ -1577,7 +1576,7 @@ export const WorkshopCheckInPage = ({
               )}
               <div className="table-secondary">
                 {selectedTemplate
-                  ? `Selected template: ${selectedTemplate.name}. You can refine details later on the job card.`
+                  ? `Selected: ${selectedTemplate.name}`
                   : "Choose a template or stay with Custom work. You can refine details later on the job card."}
               </div>
               {selectedTemplate ? (
@@ -1597,9 +1596,6 @@ export const WorkshopCheckInPage = ({
             <div className="workshop-checkin-services-template__chips">
               <div>
                 <strong>Quick problem chips</strong>
-                <div className="table-secondary">
-                  Optional shortcuts for the most common requests.
-                </div>
               </div>
               <div className="workshop-checkin-services-template__chip-list" role="list" aria-label="Quick problem chips">
                 {QUICK_PROBLEM_WORK_CHIPS.map((chip) => {
