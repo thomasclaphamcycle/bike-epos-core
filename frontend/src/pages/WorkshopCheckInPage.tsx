@@ -371,6 +371,7 @@ export const WorkshopCheckInPage = ({
   const { success, error } = useToasts();
   const customerOptionRefs = useRef<Array<HTMLElement | null>>([]);
   const primaryStepActionRef = useRef<HTMLButtonElement | null>(null);
+  const reviewSubmitIntentRef = useRef(false);
   const problemWorkTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
@@ -505,6 +506,7 @@ export const WorkshopCheckInPage = ({
     [customerBikes],
   );
   const shouldScrollSavedBikeList = sortedCustomerBikes.length > 3;
+  const isReviewStep = step === stepTitles.length - 1;
 
   useEffect(() => {
     let cancelled = false;
@@ -709,6 +711,8 @@ export const WorkshopCheckInPage = ({
   }, [error, selectedCustomer?.id]);
 
   const goNext = () => {
+    reviewSubmitIntentRef.current = false;
+
     if (step === 0) {
       if (!resolvedCustomerName) {
         error("Choose an existing customer, create one, or enter a customer name.");
@@ -734,15 +738,25 @@ export const WorkshopCheckInPage = ({
   };
 
   const goBack = () => {
+    reviewSubmitIntentRef.current = false;
     setStep((current) => Math.max(current - 1, 0));
   };
 
   const goToPreviousStep = (targetStep: number) => {
+    reviewSubmitIntentRef.current = false;
     setStep((current) => (targetStep < current ? targetStep : current));
   };
 
   const submitCheckIn = async (event: FormEvent) => {
     event.preventDefault();
+
+    const shouldSubmitFromReview = isReviewStep && reviewSubmitIntentRef.current;
+    reviewSubmitIntentRef.current = false;
+
+    if (!shouldSubmitFromReview) {
+      return;
+    }
+
     if (!resolvedCustomerName || !bikeDescription.trim()) {
       error("Customer and bike details are required.");
       return;
@@ -1069,7 +1083,8 @@ export const WorkshopCheckInPage = ({
       return;
     }
 
-    event.currentTarget.requestSubmit();
+    reviewSubmitIntentRef.current = true;
+    event.currentTarget.requestSubmit(primaryStepActionRef.current ?? undefined);
   };
 
   const formContent = (
@@ -1683,12 +1698,21 @@ export const WorkshopCheckInPage = ({
             <button type="button" onClick={goBack} disabled={step === 0}>
               Back
             </button>
-            {step < stepTitles.length - 1 ? (
-              <button type="button" className="primary" onClick={goNext} ref={primaryStepActionRef}>
+            {!isReviewStep ? (
+              <button key="workshop-checkin-next" type="button" className="primary" onClick={goNext} ref={primaryStepActionRef}>
                 Next
               </button>
             ) : (
-              <button type="submit" className="primary" disabled={submitting || Boolean(createdJobId)} ref={primaryStepActionRef}>
+              <button
+                key="workshop-checkin-submit"
+                type="submit"
+                className="primary"
+                disabled={submitting || Boolean(createdJobId)}
+                ref={primaryStepActionRef}
+                onClick={() => {
+                  reviewSubmitIntentRef.current = true;
+                }}
+              >
                 {submitting ? "Creating..." : createdJobId ? "Created" : "Create check-in"}
               </button>
             )}

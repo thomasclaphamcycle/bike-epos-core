@@ -923,6 +923,43 @@ test("Login then workshop page can create a job", async ({ page, request }) => {
   await expect(page.locator("#jobs-wrap")).toContainText(customerName);
 });
 
+test("Workshop new job keeps Services -> Review as a non-submitting step", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-review-guard",
+  });
+  const token = uniqueToken("workshop-review-guard");
+  const customerName = `Review Guard ${token}`;
+  const bikeName = `Review Bike ${token}`;
+  const createRequests = [];
+
+  page.on("request", (pendingRequest) => {
+    if (
+      pendingRequest.method() === "POST"
+      && /\/api\/workshop\/jobs(?:\?|$)/.test(pendingRequest.url())
+    ) {
+      createRequests.push(pendingRequest.url());
+    }
+  });
+
+  await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
+  await page.getByRole("button", { name: "New Job", exact: true }).click();
+
+  const dialog = page.locator('[role="dialog"]').last();
+  await dialog.getByText("Use walk-in name", { exact: true }).click();
+  await dialog.getByPlaceholder("Walk-in customer or quick manual entry").fill(customerName);
+  await dialog.getByText("Next", { exact: true }).click();
+  await dialog.getByPlaceholder("e.g. Trek road bike, blue, 56cm").fill(bikeName);
+  await dialog.getByText("Next", { exact: true }).click();
+  await dialog.getByPlaceholder("Describe the problem or requested work").fill("Review guard repair request");
+  await dialog.getByText("Next", { exact: true }).click();
+
+  await expect(dialog.getByText("Review & Confirm", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Create check-in", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: bikeName, exact: true })).toHaveCount(0);
+  expect(createRequests).toHaveLength(0);
+});
+
 test("Login then workshop add labour and checkout marks job as collected", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
