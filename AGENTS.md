@@ -249,6 +249,8 @@ Minimum expectations depend on the surface changed:
 - No stale dev/test servers should be running on shared ports such as `3100`.
 - Terminate any leftover Node or test server processes from previous runs.
 - Ensure verification commands run sequentially and not concurrently.
+- When normal manual inspection servers are running on `http://localhost:3000` and `http://localhost:5173`, prefer `scripts/dev_codex_guard.sh <command>` so the local inspection servers are stopped before the guarded workflow and restored afterward automatically.
+- Use `scripts/dev_stop_local.sh` only when you need the explicit stop step, and `scripts/dev_start_local.sh` to restore the normal inspection servers manually afterward.
 
 ## Release Verification Rule
 
@@ -305,6 +307,7 @@ If a port conflict or stale server is detected:
 Agents may check for processes using the shared test port before verification. Example:
 
 - `lsof -i :3100`
+- Preferred local wrapper for Codex verification: `scripts/dev_codex_guard.sh npm run verify`
 
 Current baseline smoke runner: `scripts/run_smoke_suite.js`
 
