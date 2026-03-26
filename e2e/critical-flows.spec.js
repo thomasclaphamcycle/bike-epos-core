@@ -1036,6 +1036,7 @@ test("Stocktake scan mode and bulk import build counted lines quickly", async ({
   await page.getByTestId("stocktake-bulk-import").fill(
     `${firstVariant.barcode},4\n${secondVariant.barcode},6`,
   );
+  await expect(page.getByTestId("stocktake-bulk-apply")).toBeEnabled();
   await page.getByTestId("stocktake-bulk-apply").click();
   await expectStocktakeLineCount(page, firstVariant.variant.id, 4);
   await expectStocktakeLineCount(page, secondVariant.variant.id, 6);
