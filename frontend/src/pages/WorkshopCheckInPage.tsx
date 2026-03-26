@@ -354,6 +354,10 @@ export const WorkshopCheckInPage = ({
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
   );
+  const selectedOptionalTemplateCount = useMemo(
+    () => selectedTemplate?.lines.filter((line) => line.isOptional && selectedOptionalTemplateLineIds.includes(line.id)).length ?? 0,
+    [selectedOptionalTemplateLineIds, selectedTemplate],
+  );
   const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
   const bikeDraftDisplayName = useMemo(
     () =>
@@ -1366,7 +1370,60 @@ export const WorkshopCheckInPage = ({
         {step === 2 ? (
           <section className="card">
             <h2>Services</h2>
-            <p className="muted-text">Capture the customer-facing work requested, plus any workshop-only notes for the team.</p>
+            <p className="muted-text">Choose a service template or stay with custom work, then capture the customer-facing request and any internal notes.</p>
+            <div className="workshop-checkin-services-template">
+              <div className="workshop-checkin-services-template__header">
+                <div>
+                  <strong>Service template</strong>
+                  <div className="table-secondary">
+                    Pick a common workshop template first, or leave this as custom work and continue manually.
+                  </div>
+                </div>
+              </div>
+              <div className="job-meta-grid" style={{ marginBottom: 0 }}>
+                <label>
+                  Template selection
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                  >
+                    <option value="">Custom work / no template</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="table-secondary">
+                  {loadingTemplates
+                    ? "Loading active service templates..."
+                    : selectedTemplate
+                      ? "Optional part suggestions can be adjusted here before the template applies after the job is created."
+                      : "No template selected. You can continue with a fully manual service intake."}
+                </div>
+              </div>
+              {selectedTemplate ? (
+                <WorkshopServiceTemplatePreview
+                  template={selectedTemplate}
+                  selectedOptionalLineIds={selectedOptionalTemplateLineIds}
+                  onToggleOptionalLine={(lineId) =>
+                    setSelectedOptionalTemplateLineIds((current) =>
+                      current.includes(lineId)
+                        ? current.filter((entry) => entry !== lineId)
+                        : [...current, lineId],
+                    )}
+                  emptyOptionalLabel="Optional part suggestions are currently included in this intake."
+                />
+              ) : (
+                <div className="workshop-checkin-services-template__empty">
+                  <strong>Custom work</strong>
+                  <div className="table-secondary">
+                    No template will be applied. Use the notes below to describe the requested work and continue with a manual job setup.
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="job-meta-grid">
               <label>
                 Problem / Work (Customer Facing)
@@ -1416,44 +1473,25 @@ export const WorkshopCheckInPage = ({
               <strong>Check-in summary</strong>
               <pre className="note-pre">{checkInNotes || "No additional notes captured."}</pre>
             </div>
-            <div className="job-meta-grid" style={{ marginTop: "12px" }}>
-              <label>
-                Service template
-                <select
-                  value={selectedTemplateId}
-                  onChange={(event) => setSelectedTemplateId(event.target.value)}
-                >
-                  <option value="">No template</option>
-                  {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="table-secondary">
-                {loadingTemplates
-                  ? "Loading active service templates..."
-                  : selectedTemplate
-                    ? "Template lines will be applied after the check-in creates the workshop job."
-                    : "Templates can prefill common labour and part suggestions."}
+            <div className="restricted-panel" style={{ marginTop: "12px" }}>
+              <strong>Service setup</strong>
+              <div className="job-meta-grid" style={{ marginTop: "8px", marginBottom: 0 }}>
+                <div>
+                  <strong>Template:</strong> {selectedTemplate ? selectedTemplate.name : "Custom work / no template"}
+                </div>
+                <div>
+                  <strong>Apply after create:</strong>{" "}
+                  {selectedTemplate
+                    ? `${selectedTemplate.lineCount} line${selectedTemplate.lineCount === 1 ? "" : "s"}${selectedTemplate.lines.some((line) => line.isOptional) ? ` · ${selectedOptionalTemplateCount} optional selected` : ""}`
+                    : "No template lines will be added automatically"}
+                </div>
               </div>
+              {selectedTemplate?.description ? (
+                <div className="table-secondary" style={{ marginTop: "8px" }}>
+                  {selectedTemplate.description}
+                </div>
+              ) : null}
             </div>
-            {selectedTemplate ? (
-              <div style={{ marginTop: "12px" }}>
-                <WorkshopServiceTemplatePreview
-                  template={selectedTemplate}
-                  selectedOptionalLineIds={selectedOptionalTemplateLineIds}
-                  onToggleOptionalLine={(lineId) =>
-                    setSelectedOptionalTemplateLineIds((current) =>
-                      current.includes(lineId)
-                        ? current.filter((entry) => entry !== lineId)
-                        : [...current, lineId],
-                    )}
-                  emptyOptionalLabel="Optional part suggestions are currently included in this check-in."
-                />
-              </div>
-            ) : null}
             {createdJobId ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 Workshop job created: <Link to={`/workshop/${createdJobId}`}>{createdJobId}</Link>

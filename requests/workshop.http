@@ -444,6 +444,16 @@ X-Staff-Id: demo-manager
   ]
 }
 
+### Reorder workshop service templates (manager)
+POST {{baseUrl}}/api/workshop/service-templates/reorder
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: demo-manager
+
+{
+  "orderedTemplateIds": ["{{templateId}}", "{{otherTemplateId}}"]
+}
+
 ### Apply a workshop service template to a job
 ### If the job does not already have a planning duration, the template default duration is applied too.
 ### Fixed-price templates also activate balancing labour so later part scans keep the total on target.

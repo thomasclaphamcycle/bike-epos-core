@@ -24,6 +24,7 @@ export type WorkshopServiceTemplate = {
   name: string;
   description: string | null;
   category: string | null;
+  sortOrder: number;
   defaultDurationMinutes: number | null;
   pricingMode: "STANDARD_SERVICE" | "FIXED_PRICE_SERVICE";
   targetTotalPricePence: number | null;
