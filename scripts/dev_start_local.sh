@@ -94,11 +94,15 @@ start_backend() {
 
   : >"$COREPOS_DEV_BACKEND_LOG"
   dev_log "Starting backend on ${COREPOS_DEV_BACKEND_URL}"
-  (
-    COREPOS_REPO_ROOT="$COREPOS_REPO_ROOT" PORT="$COREPOS_DEV_BACKEND_PORT" \
-      nohup bash -lc 'cd "$COREPOS_REPO_ROOT" && exec npm run dev' </dev/null >>"$COREPOS_DEV_BACKEND_LOG" 2>&1 &
-    printf '%s\n' "$!" >"$COREPOS_DEV_BACKEND_PID_FILE"
-  )
+  spawn_detached_process \
+    "$COREPOS_DEV_BACKEND_PID_FILE" \
+    "$COREPOS_DEV_BACKEND_LOG" \
+    env \
+    COREPOS_REPO_ROOT="$COREPOS_REPO_ROOT" \
+    PORT="$COREPOS_DEV_BACKEND_PORT" \
+    bash \
+    -lc \
+    'cd "$COREPOS_REPO_ROOT" && exec npm run dev'
   started_backend=1
   pid="$(cat "$COREPOS_DEV_BACKEND_PID_FILE")"
   dev_log "Backend started in background with PID ${pid}; log: ${COREPOS_DEV_BACKEND_LOG}"
@@ -135,11 +139,15 @@ start_frontend() {
 
   : >"$COREPOS_DEV_FRONTEND_LOG"
   dev_log "Starting frontend on ${COREPOS_DEV_FRONTEND_URL}"
-  (
-    COREPOS_REPO_ROOT="$COREPOS_REPO_ROOT" COREPOS_DEV_FRONTEND_PORT="$COREPOS_DEV_FRONTEND_PORT" \
-      nohup bash -lc 'cd "$COREPOS_REPO_ROOT" && exec npm --prefix frontend run dev -- --host localhost --port "$COREPOS_DEV_FRONTEND_PORT" --strictPort' </dev/null >>"$COREPOS_DEV_FRONTEND_LOG" 2>&1 &
-    printf '%s\n' "$!" >"$COREPOS_DEV_FRONTEND_PID_FILE"
-  )
+  spawn_detached_process \
+    "$COREPOS_DEV_FRONTEND_PID_FILE" \
+    "$COREPOS_DEV_FRONTEND_LOG" \
+    env \
+    COREPOS_REPO_ROOT="$COREPOS_REPO_ROOT" \
+    COREPOS_DEV_FRONTEND_PORT="$COREPOS_DEV_FRONTEND_PORT" \
+    bash \
+    -lc \
+    'cd "$COREPOS_REPO_ROOT" && exec npm --prefix frontend run dev -- --host localhost --port "$COREPOS_DEV_FRONTEND_PORT" --strictPort'
   started_frontend=1
   pid="$(cat "$COREPOS_DEV_FRONTEND_PID_FILE")"
   dev_log "Frontend started in background with PID ${pid}; log: ${COREPOS_DEV_FRONTEND_LOG}"
