@@ -4606,6 +4606,8 @@ th {
 
 .workshop-checkin-services-template__option--custom {
   border-style: dashed;
+  background: rgba(252, 252, 252, 0.92);
+  border-color: rgba(134, 151, 170, 0.34);
 }
 
 .workshop-checkin-services-template__option--featured {

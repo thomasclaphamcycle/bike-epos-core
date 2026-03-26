@@ -261,11 +261,31 @@ const isInspectionDiagnosticTemplate = (template: WorkshopServiceTemplate) => {
   return normalizedName.includes("inspection") || normalizedName.includes("diagnostic");
 };
 
+const getStandardServiceLevelRank = (template: WorkshopServiceTemplate) => {
+  const normalizedName = template.name.trim().toLocaleLowerCase();
+  if (normalizedName.includes("basic") || normalizedName.includes("bronze")) {
+    return 0;
+  }
+  if (normalizedName.includes("pro") || normalizedName.includes("silver")) {
+    return 1;
+  }
+  if (normalizedName.includes("elite") || normalizedName.includes("gold")) {
+    return 2;
+  }
+  return null;
+};
+
 const compareTemplatesForServicesQuickAccess = (left: WorkshopServiceTemplate, right: WorkshopServiceTemplate) => {
-  const leftPriority = isInspectionDiagnosticTemplate(left) ? 0 : 1;
-  const rightPriority = isInspectionDiagnosticTemplate(right) ? 0 : 1;
+  const leftServiceLevelRank = getStandardServiceLevelRank(left);
+  const rightServiceLevelRank = getStandardServiceLevelRank(right);
+  const leftPriority = isInspectionDiagnosticTemplate(left) ? 0 : leftServiceLevelRank !== null ? 1 : 2;
+  const rightPriority = isInspectionDiagnosticTemplate(right) ? 0 : rightServiceLevelRank !== null ? 1 : 2;
   if (leftPriority !== rightPriority) {
     return leftPriority - rightPriority;
+  }
+
+  if (leftPriority === 1 && rightPriority === 1 && leftServiceLevelRank !== rightServiceLevelRank) {
+    return (leftServiceLevelRank ?? 0) - (rightServiceLevelRank ?? 0);
   }
 
   if (left.sortOrder !== right.sortOrder) {
@@ -1481,24 +1501,6 @@ export const WorkshopCheckInPage = ({
                   role="list"
                   aria-label="Quick access service templates"
                 >
-                  <button
-                    type="button"
-                    className={`workshop-checkin-services-template__option${!hasSelectedTemplate ? " workshop-checkin-services-template__option--active workshop-checkin-services-template__option--custom" : ""}`}
-                    onClick={() => selectServiceTemplate("")}
-                    aria-pressed={!hasSelectedTemplate}
-                  >
-                    <span className="workshop-checkin-services-template__option-title-row">
-                      <strong>Custom work</strong>
-                      {!hasSelectedTemplate ? (
-                        <span className="workshop-checkin-services-template__option-check" aria-hidden="true">
-                          ✓
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="workshop-checkin-services-template__option-meta">
-                      No template
-                    </span>
-                  </button>
                   {sortedTemplatesForServices.map((template) => {
                     const isSelected = selectedTemplateId === template.id;
                     const quickHint = buildTemplateQuickHint(template);
@@ -1536,6 +1538,24 @@ export const WorkshopCheckInPage = ({
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    className={`workshop-checkin-services-template__option workshop-checkin-services-template__option--custom${!hasSelectedTemplate ? " workshop-checkin-services-template__option--active" : ""}`}
+                    onClick={() => selectServiceTemplate("")}
+                    aria-pressed={!hasSelectedTemplate}
+                  >
+                    <span className="workshop-checkin-services-template__option-title-row">
+                      <strong>Custom work</strong>
+                      {!hasSelectedTemplate ? (
+                        <span className="workshop-checkin-services-template__option-check" aria-hidden="true">
+                          ✓
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="workshop-checkin-services-template__option-meta">
+                      No template
+                    </span>
+                  </button>
                 </div>
               )}
               <div className="table-secondary">
