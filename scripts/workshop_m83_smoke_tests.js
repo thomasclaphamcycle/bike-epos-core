@@ -1593,7 +1593,7 @@ const run = async () => {
       assert.equal(estimatedDetail.json.currentEstimate.subtotalPence, 2299);
       assert.equal(estimatedDetail.json.currentEstimate.lineCount, 2);
 
-      const scheduledJobDate = addDays(todayUtc(), 17);
+      const scheduledJobDate = nextWorkshopWeekday(17);
       const scheduledJobStart = toScheduledSlot(scheduledJobDate, 12, 0);
       const scheduledJobEnd = toScheduledSlot(scheduledJobDate, 13, 30);
       const { job: scheduledJob } = await createJob(state, {
@@ -2116,7 +2116,7 @@ const run = async () => {
     }, results);
 
     await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
-      const scheduledDate = nextWorkshopWeekday(24);
+      const scheduledDate = nextWorkshopWeekday(26);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
         date: toWorkshopDateKey(scheduledDate),

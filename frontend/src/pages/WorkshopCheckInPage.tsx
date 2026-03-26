@@ -240,22 +240,36 @@ type WorkshopCheckInPageProps = {
 
 const renderStepIndicators = (step: number, onStepSelect?: (index: number) => void): ReactNode => (
   <div className="step-indicator-row">
-    {stepTitles.map((title, index) => (
-      <button
-        type="button"
-        key={title}
-        className={`step-indicator ${index === step ? "step-indicator-active" : index < step ? "step-indicator-complete step-indicator-clickable" : ""}`}
-        onClick={() => {
-          if (index < step) {
-            onStepSelect?.(index);
-          }
-        }}
-        disabled={index >= step}
-      >
-        <span className="step-number">{index + 1}</span>
-        <span>{title}</span>
-      </button>
-    ))}
+    {stepTitles.map((title, index) => {
+      const isActive = index === step;
+      const isComplete = index < step;
+      const isUpcoming = index > step;
+
+      return (
+        <div className="step-indicator-slot" key={title}>
+          <button
+            type="button"
+            className={`step-indicator${isActive ? " step-indicator-active" : ""}${isComplete ? " step-indicator-complete step-indicator-clickable" : ""}${isUpcoming ? " step-indicator-upcoming" : ""}`}
+            onClick={() => {
+              if (isComplete) {
+                onStepSelect?.(index);
+              }
+            }}
+            disabled={!isComplete}
+            aria-current={isActive ? "step" : undefined}
+          >
+            <span className="step-number" aria-hidden="true">{isComplete ? "\u2713" : index + 1}</span>
+            <span className="step-indicator-label">{title}</span>
+          </button>
+          {index < stepTitles.length - 1 ? (
+            <span
+              className={`step-indicator-connector${index < step ? " step-indicator-connector-complete" : ""}`}
+              aria-hidden="true"
+            />
+          ) : null}
+        </div>
+      );
+    })}
   </div>
 );
 
