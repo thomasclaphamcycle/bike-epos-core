@@ -214,7 +214,14 @@ Default auth mode is real auth (`AUTH_MODE=real`) with cookie sessions.
 
 The login screen remains PIN-first and lists whatever active staff accounts already exist in the local database. For a fresh local setup, use `npm run auth:seed-local-staff` or `npm run db:reset-and-seed:dev` to restore the intended local roster with Thomas as the admin user.
 
-For the intended local dev roster, run `npm run auth:seed-local-staff` to upsert the standard PIN-enabled staff set and make `Thomas` the admin user.
+`npm run auth:seed-local-staff` is a local-development-only restore command. It refuses to run against non-local hosts, reserved databases, or test databases, and it upserts the standard PIN-enabled roster without resetting unrelated data:
+
+- `Dom` <`dom@corepos.local`> `STAFF/WORKSHOP` PIN `2468`
+- `Eric` <`eric@corepos.local`> `STAFF/SALES` PIN `1357`
+- `Mike` <`mike@corepos.local`> `STAFF/WORKSHOP` PIN `4321`
+- `Thomas` <`thomas@corepos.local`> `ADMIN/MIXED` PIN `8642`
+
+All restored local staff use the shared password from `LOCAL_STAFF_PASSWORD`, which defaults to `ChangeMe123!`.
 
 `npm run db:seed:dev` now keeps the demo environment intentionally small:
 

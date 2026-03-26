@@ -26,7 +26,7 @@
     "test:db:up": "bash scripts/test_db_up.sh",
     "test:db:down": "bash scripts/test_db_down.sh",
     "auth:seed-admin": "node scripts/create_admin_user.js",
-    "auth:seed-local-staff": "node scripts/seed_local_staff_users.js",
+    "auth:seed-local-staff": "ts-node --transpile-only scripts/dev/restore_local_staff.ts",
     "e2e": "node scripts/run_with_test_env.js npx playwright test",
     "test:workshop": "npm run test:m11 && npm run test:m12 && npm run test:m13 && npm run test:m14 && npm run test:m16 && npm run test:m17",
     "test:workshop:smoke": "node scripts/run_smoke_test.js scripts/workshop_checkout_deposit_tests.js",
