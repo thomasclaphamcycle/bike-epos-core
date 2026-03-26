@@ -4720,13 +4720,31 @@ th {
 
 .workshop-checkin-bike-picker__list-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-start;
-  gap: 14px;
   padding: 12px 14px;
   border: 1px solid #d5dfeb;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.86);
+}
+
+.workshop-checkin-bike-picker__list-item-label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.workshop-checkin-bike-picker__list-item-input {
+  width: auto;
+  min-height: auto;
+  margin: 2px 0 0;
+  accent-color: #1856bc;
+}
+
+.workshop-checkin-bike-picker__list-item:focus-within {
+  border-color: rgba(24, 86, 188, 0.56);
+  box-shadow: 0 0 0 3px rgba(24, 86, 188, 0.12);
 }
 
 .workshop-checkin-bike-picker__list-item--selected {
@@ -4786,6 +4804,23 @@ th {
   border-color: rgba(46, 124, 246, 0.34);
   box-shadow: inset 0 0 0 1px rgba(46, 124, 246, 0.12);
   background: linear-gradient(180deg, rgba(244, 249, 255, 0.94), rgba(255, 255, 255, 0.98));
+}
+
+.workshop-checkin-review-actions {
+  align-items: center;
+}
+
+.workshop-checkin-review-action {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.workshop-checkin-review-action:focus-visible {
+  outline: 2px solid rgba(24, 86, 188, 0.36);
+  outline-offset: 2px;
 }
 
 .workshop-checkin-search-result--active td {
