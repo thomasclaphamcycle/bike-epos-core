@@ -32,7 +32,6 @@ export const WorkshopCheckInModal = ({
   return (
     <div
       className="workshop-os-modal-backdrop"
-      onClick={onClose}
       aria-hidden="true"
     >
       <aside
