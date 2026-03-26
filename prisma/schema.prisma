@@ -1441,6 +1441,7 @@ model WorkshopServiceTemplate {
   name                   String
   description            String?
   category               String?
+  sortOrder              Int      @default(0)
   defaultDurationMinutes Int?
   pricingMode            WorkshopServicePricingMode @default(STANDARD_SERVICE)
   targetTotalPricePence  Int?
@@ -1450,6 +1451,7 @@ model WorkshopServiceTemplate {
 
   lines WorkshopServiceTemplateLine[]
 
+  @@index([sortOrder, name])
   @@index([isActive, name])
   @@index([category, isActive])
 }

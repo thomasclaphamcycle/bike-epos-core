@@ -9,6 +9,7 @@ import {
   deleteWorkshopServiceTemplate,
   getWorkshopServiceTemplateById,
   listWorkshopServiceTemplates,
+  reorderWorkshopServiceTemplates,
   updateWorkshopServiceTemplate,
 } from "../services/workshopServiceTemplateService";
 import { HttpError } from "../utils/http";
@@ -129,6 +130,22 @@ const parseTemplateSaveBody = (body: Record<string, unknown>) => {
   return parsed;
 };
 
+const parseTemplateOrderBody = (body: Record<string, unknown>) => {
+  if (!Array.isArray(body.orderedTemplateIds)) {
+    throw new HttpError(
+      400,
+      "orderedTemplateIds must be an array",
+      "INVALID_WORKSHOP_SERVICE_TEMPLATE_ORDER",
+    );
+  }
+
+  return {
+    orderedTemplateIds: body.orderedTemplateIds.map((templateId) =>
+      typeof templateId === "string" ? templateId : "",
+    ),
+  };
+};
+
 export const listWorkshopServiceTemplatesHandler = async (req: Request, res: Response) => {
   const includeInactive = parseOptionalBooleanQuery(req.query.includeInactive, "includeInactive");
   if (includeInactive) {
@@ -169,6 +186,14 @@ export const patchWorkshopServiceTemplateHandler = async (req: Request, res: Res
       actor: getRequestAuditActor(req),
     },
   );
+  res.json(result);
+};
+
+export const reorderWorkshopServiceTemplatesHandler = async (req: Request, res: Response) => {
+  const result = await reorderWorkshopServiceTemplates({
+    ...parseTemplateOrderBody((req.body ?? {}) as Record<string, unknown>),
+    actor: getRequestAuditActor(req),
+  });
   res.json(result);
 };
 

@@ -39,6 +39,7 @@ import {
   getWorkshopServiceTemplateHandler,
   listWorkshopServiceTemplatesHandler,
   patchWorkshopServiceTemplateHandler,
+  reorderWorkshopServiceTemplatesHandler,
 } from "../controllers/workshopServiceTemplateController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
@@ -48,6 +49,7 @@ workshopRouter.get("/availability", getWorkshopAvailabilityHandler);
 workshopRouter.get("/calendar", requireRoleAtLeast("STAFF"), getWorkshopCalendarHandler);
 workshopRouter.get("/dashboard", requireRoleAtLeast("STAFF"), getWorkshopDashboardHandler);
 workshopRouter.get("/service-templates", requireRoleAtLeast("STAFF"), listWorkshopServiceTemplatesHandler);
+workshopRouter.post("/service-templates/reorder", requireRoleAtLeast("MANAGER"), reorderWorkshopServiceTemplatesHandler);
 workshopRouter.get("/service-templates/:id", requireRoleAtLeast("STAFF"), getWorkshopServiceTemplateHandler);
 workshopRouter.post("/service-templates", requireRoleAtLeast("MANAGER"), createWorkshopServiceTemplateHandler);
 workshopRouter.patch("/service-templates/:id", requireRoleAtLeast("MANAGER"), patchWorkshopServiceTemplateHandler);

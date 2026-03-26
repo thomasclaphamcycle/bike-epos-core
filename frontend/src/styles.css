@@ -973,6 +973,29 @@ textarea {
   color: #688198;
 }
 
+.workshop-template-disclosure-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-template-disclosure {
+  display: flex;
+  width: 100%;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.workshop-template-disclosure-copy {
+  display: block;
+  margin-top: 4px;
+}
+
 .workshop-template-empty {
   border: 1px dashed #c6d3df;
   border-radius: 12px;

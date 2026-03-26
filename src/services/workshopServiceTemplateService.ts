@@ -38,6 +38,11 @@ type SaveWorkshopServiceTemplateInput = {
   actor?: AuditActor;
 };
 
+type ReorderWorkshopServiceTemplatesInput = {
+  orderedTemplateIds?: string[];
+  actor?: AuditActor;
+};
+
 type ApplyWorkshopServiceTemplateInput = {
   templateId?: string;
   selectedOptionalLineIds?: string[];
@@ -215,6 +220,39 @@ const parseOptionalLineIds = (value: string[] | undefined) => {
     }
     return normalized;
   });
+};
+
+const parseOrderedTemplateIds = (value: string[] | undefined) => {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new HttpError(
+      400,
+      "orderedTemplateIds must be a non-empty array of ids",
+      "INVALID_WORKSHOP_SERVICE_TEMPLATE_ORDER",
+    );
+  }
+
+  const normalizedIds = value.map((templateId) => {
+    const normalized = normalizeOptionalText(templateId);
+    if (!normalized || !isUuid(normalized)) {
+      throw new HttpError(
+        400,
+        "orderedTemplateIds must contain valid ids",
+        "INVALID_WORKSHOP_SERVICE_TEMPLATE_ORDER",
+      );
+    }
+
+    return normalized;
+  });
+
+  if (new Set(normalizedIds).size !== normalizedIds.length) {
+    throw new HttpError(
+      400,
+      "orderedTemplateIds cannot contain duplicates",
+      "INVALID_WORKSHOP_SERVICE_TEMPLATE_ORDER",
+    );
+  }
+
+  return normalizedIds;
 };
 
 const buildTemplateLineDescription = (
@@ -463,6 +501,7 @@ const toTemplateResponse = (template: WorkshopServiceTemplateRecord) => ({
   name: template.name,
   description: template.description,
   category: template.category,
+  sortOrder: template.sortOrder,
   defaultDurationMinutes: template.defaultDurationMinutes,
   pricingMode: template.pricingMode,
   targetTotalPricePence: template.targetTotalPricePence,
@@ -480,6 +519,23 @@ const getTemplateInclude = () =>
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     },
   } satisfies Prisma.WorkshopServiceTemplateInclude);
+
+const getTemplateOrderBy = () =>
+  ([
+    { sortOrder: "asc" },
+    { name: "asc" },
+    { createdAt: "asc" },
+  ] satisfies Prisma.WorkshopServiceTemplateOrderByWithRelationInput[]);
+
+const getNextTemplateSortOrderTx = async (tx: WorkshopServiceTemplateClient) => {
+  const result = await tx.workshopServiceTemplate.aggregate({
+    _max: {
+      sortOrder: true,
+    },
+  });
+
+  return (result._max.sortOrder ?? -1) + 1;
+};
 
 const getTemplateByIdTx = async (
   tx: WorkshopServiceTemplateClient,
@@ -610,7 +666,7 @@ export const listWorkshopServiceTemplates = async (input?: {
   const templates = await prisma.workshopServiceTemplate.findMany({
     where: includeInactive ? undefined : { isActive: true },
     include: getTemplateInclude(),
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    orderBy: getTemplateOrderBy(),
   });
 
   return {
@@ -663,11 +719,13 @@ export const createWorkshopServiceTemplate = async (
   });
 
   const template = await prisma.$transaction(async (tx) => {
+    const sortOrder = await getNextTemplateSortOrderTx(tx);
     const created = await tx.workshopServiceTemplate.create({
       data: {
         name,
         description,
         category,
+        sortOrder,
         defaultDurationMinutes: defaultDurationMinutes ?? null,
         pricingMode,
         targetTotalPricePence,
@@ -867,6 +925,74 @@ export const deleteWorkshopServiceTemplate = async (
     );
 
     return { ok: true };
+  });
+};
+
+export const reorderWorkshopServiceTemplates = async (
+  input: ReorderWorkshopServiceTemplatesInput,
+) => {
+  const orderedTemplateIds = parseOrderedTemplateIds(input.orderedTemplateIds);
+
+  return prisma.$transaction(async (tx) => {
+    const existingTemplates = await tx.workshopServiceTemplate.findMany({
+      select: {
+        id: true,
+        name: true,
+        sortOrder: true,
+      },
+      orderBy: getTemplateOrderBy(),
+    });
+
+    if (existingTemplates.length !== orderedTemplateIds.length) {
+      throw new HttpError(
+        400,
+        "orderedTemplateIds must include every workshop service template exactly once",
+        "INVALID_WORKSHOP_SERVICE_TEMPLATE_ORDER",
+      );
+    }
+
+    const existingIds = new Set(existingTemplates.map((template) => template.id));
+    for (const templateId of orderedTemplateIds) {
+      if (!existingIds.has(templateId)) {
+        throw new HttpError(
+          400,
+          "orderedTemplateIds must only reference existing workshop service templates",
+          "INVALID_WORKSHOP_SERVICE_TEMPLATE_ORDER",
+        );
+      }
+    }
+
+    await Promise.all(
+      orderedTemplateIds.map((templateId, index) =>
+        tx.workshopServiceTemplate.update({
+          where: { id: templateId },
+          data: {
+            sortOrder: index,
+          },
+        })),
+    );
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WORKSHOP_SERVICE_TEMPLATE_REORDERED",
+        entityType: "WORKSHOP_SERVICE_TEMPLATE",
+        entityId: orderedTemplateIds[0] ?? "BATCH",
+        metadata: {
+          orderedTemplateIds,
+        },
+      },
+      input.actor,
+    );
+
+    const reorderedTemplates = await tx.workshopServiceTemplate.findMany({
+      include: getTemplateInclude(),
+      orderBy: getTemplateOrderBy(),
+    });
+
+    return {
+      templates: reorderedTemplates.map(toTemplateResponse),
+    };
   });
 };
 

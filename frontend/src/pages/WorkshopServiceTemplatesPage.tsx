@@ -83,6 +83,39 @@ const emptyDraft = (): TemplateDraft => ({
 
 const draftLineId = () => `draft-${Math.random().toString(36).slice(2, 10)}`;
 
+const sortTemplates = (templates: WorkshopServiceTemplate[]) =>
+  [...templates].sort((left, right) =>
+    left.sortOrder - right.sortOrder
+    || left.name.localeCompare(right.name)
+    || left.createdAt.localeCompare(right.createdAt));
+
+const reorderTemplateCollection = (
+  templates: WorkshopServiceTemplate[],
+  draggedTemplateId: string,
+  targetTemplateId: string,
+) => {
+  if (draggedTemplateId === targetTemplateId) {
+    return null;
+  }
+
+  const currentTemplates = sortTemplates(templates);
+  const draggedIndex = currentTemplates.findIndex((template) => template.id === draggedTemplateId);
+  const targetIndex = currentTemplates.findIndex((template) => template.id === targetTemplateId);
+
+  if (draggedIndex === -1 || targetIndex === -1) {
+    return null;
+  }
+
+  const reordered = [...currentTemplates];
+  const [draggedTemplate] = reordered.splice(draggedIndex, 1);
+  reordered.splice(targetIndex, 0, draggedTemplate);
+
+  return reordered.map((template, index) => ({
+    ...template,
+    sortOrder: index,
+  }));
+};
+
 const normalizeDraftLinkValue = (value: string | null) => {
   if (!value) {
     return null;
@@ -178,12 +211,16 @@ export const WorkshopServiceTemplatesPage = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reordering, setReordering] = useState(false);
+  const [draggedTemplateId, setDraggedTemplateId] = useState<string | null>(null);
+  const [dropTargetTemplateId, setDropTargetTemplateId] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState<TemplateDraft>(emptyDraft);
   const [partSearch, setPartSearch] = useState("");
   const [partQty, setPartQty] = useState(DEFAULT_PART_QTY);
   const [partPrice, setPartPrice] = useState("");
   const [partOptional, setPartOptional] = useState(true);
+  const [optionalSuggestionsCollapsed, setOptionalSuggestionsCollapsed] = useState(true);
   const debouncedPartSearch = useDebouncedValue(partSearch, 250);
   const [partResults, setPartResults] = useState<ProductSearchRow[]>([]);
   const [labourDescription, setLabourDescription] = useState(DEFAULT_LABOUR_DESCRIPTION);
@@ -196,6 +233,7 @@ export const WorkshopServiceTemplatesPage = () => {
     setPartPrice("");
     setPartOptional(true);
     setPartResults([]);
+    setOptionalSuggestionsCollapsed(true);
     setLabourDescription(DEFAULT_LABOUR_DESCRIPTION);
     setLabourQty(DEFAULT_LABOUR_QTY);
     setLabourPrice(DEFAULT_LABOUR_PRICE);
@@ -213,7 +251,7 @@ export const WorkshopServiceTemplatesPage = () => {
       const response = await apiGet<WorkshopServiceTemplatesResponse>(
         "/api/workshop/service-templates?includeInactive=true",
       );
-      setTemplates(response.templates || []);
+      setTemplates(sortTemplates(response.templates || []));
       setRefreshNotice(null);
     } catch (loadError) {
       const message = options?.backgroundFailureMessage
@@ -365,7 +403,7 @@ export const WorkshopServiceTemplatesPage = () => {
   const upsertTemplate = (template: WorkshopServiceTemplate) => {
     setTemplates((current) => {
       const withoutCurrent = current.filter((entry) => entry.id !== template.id);
-      return [template, ...withoutCurrent].sort((left, right) => left.name.localeCompare(right.name));
+      return sortTemplates([template, ...withoutCurrent]);
     });
   };
 
@@ -373,6 +411,36 @@ export const WorkshopServiceTemplatesPage = () => {
     setDraft(toDraft(template));
     resetPendingLineInputs();
     setRefreshNotice(null);
+  };
+
+  const persistTemplateOrder = async (
+    nextTemplates: WorkshopServiceTemplate[],
+    previousTemplates: WorkshopServiceTemplate[],
+  ) => {
+    setTemplates(nextTemplates);
+    setReordering(true);
+    try {
+      const response = await apiPost<WorkshopServiceTemplatesResponse>(
+        "/api/workshop/service-templates/reorder",
+        {
+          orderedTemplateIds: nextTemplates.map((template) => template.id),
+        },
+      );
+      setTemplates(sortTemplates(response.templates || nextTemplates));
+      setRefreshNotice(null);
+      success("Workshop service order updated");
+      void loadTemplates({
+        backgroundFailureMessage:
+          "Template order saved, but the template list could not refresh. Refresh the page to confirm the latest data.",
+      });
+    } catch (reorderError) {
+      setTemplates(previousTemplates);
+      error(reorderError instanceof Error ? reorderError.message : "Failed to reorder workshop templates");
+    } finally {
+      setReordering(false);
+      setDraggedTemplateId(null);
+      setDropTargetTemplateId(null);
+    }
   };
 
   const saveTemplate = async () => {
@@ -565,7 +633,9 @@ export const WorkshopServiceTemplatesPage = () => {
               <h2>Templates</h2>
               <p className="muted-text">Manager-maintained presets for common services and repair quotes.</p>
             </div>
-            <span className="stock-badge stock-muted">{templates.length}</span>
+            <span className="stock-badge stock-muted">
+              {reordering ? "Saving order..." : templates.length}
+            </span>
           </div>
 
           {loading ? <p>Loading templates...</p> : null}
@@ -575,35 +645,90 @@ export const WorkshopServiceTemplatesPage = () => {
             {templates.length === 0 ? (
               <div className="workshop-template-empty">No workshop templates yet.</div>
             ) : templates.map((template) => (
-              <button
+              <div
                 key={template.id}
-                type="button"
-                className={`workshop-template-card${draft.id === template.id ? " workshop-template-card-active" : ""}`}
-                onClick={() => selectTemplate(template)}
+                className={[
+                  "workshop-template-card-shell",
+                  dropTargetTemplateId === template.id ? "workshop-template-card-shell-drop-target" : "",
+                  draggedTemplateId === template.id ? "workshop-template-card-shell-dragging" : "",
+                ].filter(Boolean).join(" ")}
+                draggable={!reordering}
+                onDragStart={() => {
+                  setDraggedTemplateId(template.id);
+                  setDropTargetTemplateId(template.id);
+                }}
+                onDragOver={(event) => {
+                  if (!draggedTemplateId || draggedTemplateId === template.id) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  setDropTargetTemplateId(template.id);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (!draggedTemplateId || draggedTemplateId === template.id) {
+                    setDraggedTemplateId(null);
+                    setDropTargetTemplateId(null);
+                    return;
+                  }
+
+                  const previousTemplates = templates;
+                  const nextTemplates = reorderTemplateCollection(
+                    previousTemplates,
+                    draggedTemplateId,
+                    template.id,
+                  );
+
+                  if (!nextTemplates) {
+                    setDraggedTemplateId(null);
+                    setDropTargetTemplateId(null);
+                    return;
+                  }
+
+                  void persistTemplateOrder(nextTemplates, previousTemplates);
+                }}
+                onDragEnd={() => {
+                  setDraggedTemplateId(null);
+                  setDropTargetTemplateId(null);
+                }}
               >
-                <div className="workshop-template-card-header">
-                  <strong>{template.name}</strong>
-                  <span className={template.isActive ? "status-badge status-complete" : "status-badge"}>
-                    {template.isActive ? "Active" : "Inactive"}
-                  </span>
-                </div>
-                <div className="table-secondary">
-                  {[
-                    template.category,
-                    template.pricingMode === "FIXED_PRICE_SERVICE" ? "Fixed price" : "Standard service",
-                    template.defaultDurationMinutes ? `${template.defaultDurationMinutes} min` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "General workshop template"}
-                </div>
-                <div className="table-secondary">
-                  {template.lineCount} line{template.lineCount === 1 ? "" : "s"} · {formatWorkshopTemplateMoney(
-                    template.pricingMode === "FIXED_PRICE_SERVICE" && template.targetTotalPricePence
-                      ? template.targetTotalPricePence
-                      : template.lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
-                  )}
-                </div>
-              </button>
+                <button
+                  type="button"
+                  className={`workshop-template-card${draft.id === template.id ? " workshop-template-card-active" : ""}`}
+                  onClick={() => selectTemplate(template)}
+                  disabled={reordering}
+                >
+                  <div className="workshop-template-card-header">
+                    <strong>{template.name}</strong>
+                    <span className={template.isActive ? "status-badge status-complete" : "status-badge"}>
+                      {template.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <div className="workshop-template-card-meta table-secondary">
+                    <span className="workshop-template-card-handle" aria-hidden="true">
+                      Drag
+                    </span>
+                    <span>#{template.sortOrder + 1}</span>
+                  </div>
+                  <div className="table-secondary">
+                    {[
+                      template.category,
+                      template.pricingMode === "FIXED_PRICE_SERVICE" ? "Fixed price" : "Standard service",
+                      template.defaultDurationMinutes ? `${template.defaultDurationMinutes} min` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "General workshop template"}
+                  </div>
+                  <div className="table-secondary">
+                    {template.lineCount} line{template.lineCount === 1 ? "" : "s"} · {formatWorkshopTemplateMoney(
+                      template.pricingMode === "FIXED_PRICE_SERVICE" && template.targetTotalPricePence
+                        ? template.targetTotalPricePence
+                        : template.lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
+                    )}
+                  </div>
+                </button>
+              </div>
             ))}
           </div>
         </section>
@@ -739,76 +864,97 @@ export const WorkshopServiceTemplatesPage = () => {
               ) : null}
             </section>
 
-            <section className="restricted-panel">
-              <strong>Add optional part suggestion</strong>
-              <div className="filter-row" style={{ marginTop: "10px" }}>
-                <label className="grow">
-                  Search product
-                  <input
-                    value={partSearch}
-                    onChange={(event) => setPartSearch(event.target.value)}
-                    placeholder="name / barcode / sku"
-                  />
-                </label>
-                <label>
-                  Qty
-                  <input type="number" min={1} value={partQty} onChange={(event) => setPartQty(Number(event.target.value) || 1)} />
-                </label>
-                <label>
-                  Unit price (£)
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={partPrice}
-                    onChange={(event) => setPartPrice(event.target.value)}
-                    placeholder="Use product price"
-                  />
-                </label>
-                <label className="staff-toggle">
-                  <input
-                    type="checkbox"
-                    checked={partOptional}
-                    onChange={(event) => setPartOptional(event.target.checked)}
-                  />
-                  Optional
-                </label>
-              </div>
-              <p className="muted-text workshop-template-builder-hint">
-                Part suggestions stay optional. Search results are not part of the template until you click Add Part.
-              </p>
-              {partBuilderMessage ? <p className="field-error">{partBuilderMessage}</p> : null}
+            <section className="restricted-panel workshop-template-disclosure-panel">
+              <button
+                type="button"
+                className="workshop-template-disclosure"
+                onClick={() => setOptionalSuggestionsCollapsed((current) => !current)}
+                aria-expanded={!optionalSuggestionsCollapsed}
+              >
+                <span>
+                  <strong>Optional part suggestions</strong>
+                  <span className="table-secondary workshop-template-disclosure-copy">
+                    Search linked products only when you need optional parts on this template.
+                  </span>
+                </span>
+                <span className="button-link--inline">{optionalSuggestionsCollapsed ? "Expand" : "Collapse"}</span>
+              </button>
+              {!optionalSuggestionsCollapsed ? (
+                <>
+                  <div className="filter-row" style={{ marginTop: "10px" }}>
+                    <label className="grow">
+                      Search product
+                      <input
+                        value={partSearch}
+                        onChange={(event) => setPartSearch(event.target.value)}
+                        placeholder="name / barcode / sku"
+                      />
+                    </label>
+                    <label>
+                      Qty
+                      <input type="number" min={1} value={partQty} onChange={(event) => setPartQty(Number(event.target.value) || 1)} />
+                    </label>
+                    <label>
+                      Unit price (£)
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={partPrice}
+                        onChange={(event) => setPartPrice(event.target.value)}
+                        placeholder="Use product price"
+                      />
+                    </label>
+                    <label className="staff-toggle">
+                      <input
+                        type="checkbox"
+                        checked={partOptional}
+                        onChange={(event) => setPartOptional(event.target.checked)}
+                      />
+                      Optional
+                    </label>
+                  </div>
+                  <p className="muted-text workshop-template-builder-hint">
+                    Part suggestions stay optional. Search results are not part of the template until you click Add Part.
+                  </p>
+                  {partBuilderMessage ? <p className="field-error">{partBuilderMessage}</p> : null}
 
-              <div className="table-wrap" style={{ marginTop: "10px" }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>SKU</th>
-                      <th>Price</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {partResults.length === 0 ? (
-                      <tr>
-                        <td colSpan={4}>Search for a part to add a linked template line.</td>
-                      </tr>
-                    ) : partResults.map((result) => (
-                      <tr key={result.id}>
-                        <td>{result.name}</td>
-                        <td>{result.sku}</td>
-                        <td>{formatWorkshopTemplateMoney(result.pricePence)}</td>
-                        <td>
-                          <button type="button" onClick={() => addPartLine(result)} disabled={Boolean(partBuilderMessage)}>
-                            Add Part
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  <div className="table-wrap" style={{ marginTop: "10px" }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>SKU</th>
+                          <th>Price</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {partResults.length === 0 ? (
+                          <tr>
+                            <td colSpan={4}>Search for a part to add a linked template line.</td>
+                          </tr>
+                        ) : partResults.map((result) => (
+                          <tr key={result.id}>
+                            <td>{result.name}</td>
+                            <td>{result.sku}</td>
+                            <td>{formatWorkshopTemplateMoney(result.pricePence)}</td>
+                            <td>
+                              <button type="button" onClick={() => addPartLine(result)} disabled={Boolean(partBuilderMessage)}>
+                                Add Part
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <p className="table-secondary workshop-template-builder-hint">
+                  Collapsed by default to keep template editing focused. Expand when you want to add optional parts.
+                </p>
+              )}
             </section>
           </div>
 

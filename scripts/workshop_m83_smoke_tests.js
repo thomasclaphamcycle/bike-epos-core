@@ -1406,6 +1406,92 @@ const run = async () => {
       assert.equal(inactiveForManager.json.template.description, "Updated workshop service quote");
     }, results);
 
+    await runTest("workshop service templates can be manually reordered and staff selection keeps that order", async () => {
+      const firstTemplate = await createWorkshopServiceTemplate(state, {
+        name: `Ordering A ${uniqueRef()}`,
+        category: "Service",
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Ordering labour A",
+            qty: 1,
+            unitPricePence: 2000,
+          },
+        ],
+      });
+
+      const secondTemplate = await createWorkshopServiceTemplate(state, {
+        name: `Ordering B ${uniqueRef()}`,
+        category: "Repair",
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Ordering labour B",
+            qty: 1,
+            unitPricePence: 2100,
+          },
+        ],
+      });
+
+      const thirdTemplate = await createWorkshopServiceTemplate(state, {
+        name: `Ordering C ${uniqueRef()}`,
+        category: "Wheels",
+        lines: [
+          {
+            type: "LABOUR",
+            description: "Ordering labour C",
+            qty: 1,
+            unitPricePence: 2200,
+          },
+        ],
+      });
+
+      const managerListBeforeReorder = await fetchJson("/api/workshop/service-templates?includeInactive=true", {
+        headers: MANAGER_HEADERS,
+      });
+      assert.equal(managerListBeforeReorder.status, 200, JSON.stringify(managerListBeforeReorder.json));
+      const remainingTemplateIds = managerListBeforeReorder.json.templates
+        .map((template) => template.id)
+        .filter((templateId) =>
+          ![firstTemplate.id, secondTemplate.id, thirdTemplate.id].includes(templateId));
+
+      const reorder = await fetchJson("/api/workshop/service-templates/reorder", {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+        body: JSON.stringify({
+          orderedTemplateIds: [
+            thirdTemplate.id,
+            firstTemplate.id,
+            secondTemplate.id,
+            ...remainingTemplateIds,
+          ],
+        }),
+      });
+      assert.equal(reorder.status, 200, JSON.stringify(reorder.json));
+
+      const reorderedSubset = reorder.json.templates.filter((template) =>
+        [firstTemplate.id, secondTemplate.id, thirdTemplate.id].includes(template.id));
+      assert.deepEqual(
+        reorderedSubset.map((template) => template.id),
+        [thirdTemplate.id, firstTemplate.id, secondTemplate.id],
+      );
+      assert.deepEqual(
+        reorderedSubset.map((template) => template.sortOrder),
+        reorderedSubset.map((_, index) => index),
+      );
+
+      const staffList = await fetchJson("/api/workshop/service-templates", {
+        headers: STAFF_HEADERS,
+      });
+      assert.equal(staffList.status, 200, JSON.stringify(staffList.json));
+      const staffSubset = staffList.json.templates.filter((template) =>
+        [firstTemplate.id, secondTemplate.id, thirdTemplate.id].includes(template.id));
+      assert.deepEqual(
+        staffSubset.map((template) => template.id),
+        [thirdTemplate.id, firstTemplate.id, secondTemplate.id],
+      );
+    }, results);
+
     await runTest("labour template lines tolerate null and empty inventory-link fields from clients", async () => {
       const response = await fetchJson("/api/workshop/service-templates", {
         method: "POST",
