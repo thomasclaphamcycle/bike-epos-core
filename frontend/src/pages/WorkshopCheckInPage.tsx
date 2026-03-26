@@ -372,6 +372,7 @@ export const WorkshopCheckInPage = ({
   const customerOptionRefs = useRef<Array<HTMLElement | null>>([]);
   const primaryStepActionRef = useRef<HTMLButtonElement | null>(null);
   const problemWorkTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasInitializedServicesTemplateRef = useRef(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialBikeId = searchParams.get("bikeId");
@@ -448,6 +449,10 @@ export const WorkshopCheckInPage = ({
   const sortedTemplatesForServices = useMemo(
     () => [...templates].sort(compareTemplatesForServicesQuickAccess),
     [templates],
+  );
+  const defaultServicesTemplate = useMemo(
+    () => sortedTemplatesForServices.find((template) => isInspectionDiagnosticTemplate(template)) ?? null,
+    [sortedTemplatesForServices],
   );
   const selectedOptionalTemplateCount = useMemo(
     () => selectedTemplate?.lines.filter((line) => line.isOptional && selectedOptionalTemplateLineIds.includes(line.id)).length ?? 0,
@@ -536,6 +541,17 @@ export const WorkshopCheckInPage = ({
   useEffect(() => {
     setSelectedOptionalTemplateLineIds(getDefaultSelectedOptionalLineIds(selectedTemplate));
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (step !== 2 || hasInitializedServicesTemplateRef.current) {
+      return;
+    }
+
+    hasInitializedServicesTemplateRef.current = true;
+    if (!selectedTemplateId && defaultServicesTemplate) {
+      setSelectedTemplateId(defaultServicesTemplate.id);
+    }
+  }, [defaultServicesTemplate, selectedTemplateId, step]);
 
   useEffect(() => {
     if (!debouncedCustomerSearch.trim()) {
@@ -947,6 +963,7 @@ export const WorkshopCheckInPage = ({
   };
 
   const selectServiceTemplate = (templateId: string) => {
+    hasInitializedServicesTemplateRef.current = true;
     setSelectedTemplateId(templateId);
 
     const activeElement = document.activeElement;
