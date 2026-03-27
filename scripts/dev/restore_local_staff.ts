@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import {
@@ -12,6 +12,46 @@ import { hashPassword, hashPin, normalizePinOrThrow } from "../../src/services/p
 
 const RESERVED_DATABASES = new Set(["postgres", "template0", "template1"]);
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+const DIRECT_USER_REFERENCE_TARGETS = [
+  { table: "CashCount", column: "countedByStaffId" },
+  { table: "CashMovement", column: "createdByStaffId" },
+  { table: "CashSession", column: "closedByStaffId" },
+  { table: "CashSession", column: "openedByStaffId" },
+  { table: "HireBooking", column: "checkedOutByStaffId" },
+  { table: "HireBooking", column: "createdByStaffId" },
+  { table: "HireBooking", column: "returnedByStaffId" },
+  { table: "HolidayRequest", column: "reviewedByUserId" },
+  { table: "HolidayRequest", column: "staffId" },
+  { table: "Receipt", column: "issuedByStaffId" },
+  { table: "Refund", column: "createdByStaffId" },
+  { table: "RefundTender", column: "createdByStaffId" },
+  { table: "Sale", column: "createdByStaffId" },
+  { table: "SaleTender", column: "createdByStaffId" },
+  { table: "StockLedgerEntry", column: "createdByStaffId" },
+  { table: "StockTransfer", column: "createdByStaffId" },
+  { table: "StockTransfer", column: "receivedByStaffId" },
+  { table: "StockTransfer", column: "sentByStaffId" },
+  { table: "WorkshopAttachment", column: "uploadedByStaffId" },
+  { table: "WorkshopEstimate", column: "createdByStaffId" },
+  { table: "WorkshopEstimate", column: "decisionByStaffId" },
+  { table: "WorkshopJob", column: "assignedStaffId" },
+  { table: "WorkshopJobNote", column: "authorStaffId" },
+  { table: "WorkshopMessage", column: "authorStaffId" },
+  { table: "WorkshopTimeOff", column: "staffId" },
+] as const;
+
+const CONFLICT_AWARE_USER_REFERENCE_TARGETS = [
+  { table: "RotaAssignment", column: "staffId", conflictColumns: ["date"] },
+  { table: "WorkshopWorkingHours", column: "staffId", conflictColumns: ["dayOfWeek"] },
+] as const;
+
+type FixtureMatch = {
+  id: string;
+  username: string;
+  email: string | null;
+  createdAt: Date;
+};
 
 const assertLocalDevDatabase = () => {
   const databaseUrl = process.env.DATABASE_URL;
@@ -45,14 +85,90 @@ const assertLocalDevDatabase = () => {
 };
 
 const buildFixtureMatchers = (fixture: LocalDevStaffFixture) => {
-  const usernameMatchers = [fixture.username, ...(fixture.matchUsernames ?? [])].map((username) => ({
-    username,
-  }));
+  const usernameMatchers = [fixture.username, ...(fixture.matchUsernames ?? [])].map((username) => username.trim());
+  const emailMatchers = [fixture.email, ...(fixture.matchEmails ?? [])].map((email) => email.trim());
+  const dedupedMatchers = new Map<string, { username?: string; email?: string }>();
 
-  return [
-    ...usernameMatchers,
-    { email: fixture.email },
-  ];
+  for (const username of usernameMatchers) {
+    if (!username) {
+      continue;
+    }
+    dedupedMatchers.set(`username:${username}`, { username });
+  }
+
+  for (const email of emailMatchers) {
+    if (!email) {
+      continue;
+    }
+    dedupedMatchers.set(`email:${email}`, { email });
+  }
+
+  return [...dedupedMatchers.values()];
+};
+
+const quoteIdentifier = (value: string) => `"${value.replace(/"/g, "\"\"")}"`;
+
+const chooseCanonicalMatch = (fixture: LocalDevStaffFixture, matches: FixtureMatch[]) =>
+  matches.find((match) => match.username === fixture.username)
+  || matches.find((match) => match.email === fixture.email)
+  || matches[0];
+
+const updateUserReference = async (
+  tx: Prisma.TransactionClient,
+  target: { table: string; column: string },
+  fromUserId: string,
+  toUserId: string,
+) => {
+  await tx.$executeRawUnsafe(
+    `UPDATE ${quoteIdentifier(target.table)}
+     SET ${quoteIdentifier(target.column)} = $1
+     WHERE ${quoteIdentifier(target.column)} = $2`,
+    toUserId,
+    fromUserId,
+  );
+};
+
+const mergeConflictAwareReference = async (
+  tx: Prisma.TransactionClient,
+  target: { table: string; column: string; conflictColumns: readonly string[] },
+  fromUserId: string,
+  toUserId: string,
+) => {
+  const joinCondition = target.conflictColumns
+    .map((column) => `duplicate.${quoteIdentifier(column)} IS NOT DISTINCT FROM canonical.${quoteIdentifier(column)}`)
+    .join(" AND ");
+
+  await tx.$executeRawUnsafe(
+    `DELETE FROM ${quoteIdentifier(target.table)} AS duplicate
+     USING ${quoteIdentifier(target.table)} AS canonical
+     WHERE duplicate.${quoteIdentifier(target.column)} = $1
+       AND canonical.${quoteIdentifier(target.column)} = $2
+       AND ${joinCondition}`,
+    fromUserId,
+    toUserId,
+  );
+
+  await updateUserReference(tx, target, fromUserId, toUserId);
+};
+
+const mergeDuplicateUserIntoCanonical = async (
+  tx: Prisma.TransactionClient,
+  duplicateUserId: string,
+  canonicalUserId: string,
+) => {
+  for (const target of CONFLICT_AWARE_USER_REFERENCE_TARGETS) {
+    await mergeConflictAwareReference(tx, target, duplicateUserId, canonicalUserId);
+  }
+
+  for (const target of DIRECT_USER_REFERENCE_TARGETS) {
+    await updateUserReference(tx, target, duplicateUserId, canonicalUserId);
+  }
+
+  await tx.user.delete({
+    where: {
+      id: duplicateUserId,
+    },
+  });
 };
 
 const prisma = new PrismaClient({
@@ -62,7 +178,7 @@ const prisma = new PrismaClient({
 });
 
 const upsertFixture = async (
-  tx: Pick<PrismaClient, "user">,
+  tx: Prisma.TransactionClient,
   fixture: LocalDevStaffFixture,
 ) => {
   const normalizedPin = normalizePinOrThrow(fixture.pin, "INVALID_LOCAL_STAFF_PIN");
@@ -76,18 +192,12 @@ const upsertFixture = async (
       id: true,
       username: true,
       email: true,
+      createdAt: true,
     },
     orderBy: {
       createdAt: "asc",
     },
   });
-
-  if (matches.length > 1) {
-    const identities = matches
-      .map((user) => `${user.username}${user.email ? ` <${user.email}>` : ""}`)
-      .join(", ");
-    throw new Error(`Multiple users match local staff fixture ${fixture.username}: ${identities}`);
-  }
 
   const data = {
     username: fixture.username,
@@ -100,17 +210,32 @@ const upsertFixture = async (
     pinHash,
   };
 
-  if (matches.length === 1) {
+  let mergedFrom: FixtureMatch[] = [];
+  let canonicalMatch = matches.length > 0 ? chooseCanonicalMatch(fixture, matches) : null;
+
+  if (canonicalMatch) {
+    const duplicateMatches = matches.filter((match) => match.id !== canonicalMatch?.id);
+    for (const duplicateMatch of duplicateMatches) {
+      await mergeDuplicateUserIntoCanonical(tx, duplicateMatch.id, canonicalMatch.id);
+    }
+    mergedFrom = duplicateMatches;
+  }
+
+  if (canonicalMatch) {
     const updated = await tx.user.update({
-      where: { id: matches[0].id },
+      where: { id: canonicalMatch.id },
       data,
     });
 
-    return { status: "updated" as const, user: updated };
+    return {
+      status: mergedFrom.length > 0 ? ("merged" as const) : ("updated" as const),
+      user: updated,
+      mergedFrom,
+    };
   }
 
   const created = await tx.user.create({ data });
-  return { status: "created" as const, user: created };
+  return { status: "created" as const, user: created, mergedFrom };
 };
 
 async function main() {
@@ -127,7 +252,7 @@ async function main() {
   for (const result of results) {
     const fixture = LOCAL_DEV_STAFF_FIXTURES.find((entry) => entry.username === result.user.username);
     console.log(
-      `- ${result.status}: ${result.user.name} <${result.user.email}> [${result.user.role}/${result.user.operationalRole ?? "UNSET"}] active=${result.user.isActive} PIN ${fixture?.pin ?? "unset"}`,
+      `- ${result.status}: ${result.user.name} <${result.user.email}> [${result.user.role}/${result.user.operationalRole ?? "UNSET"}] active=${result.user.isActive} PIN ${fixture?.pin ?? "unset"}${result.mergedFrom.length > 0 ? ` merged ${result.mergedFrom.map((entry) => entry.username).join(", ")}` : ""}`,
     );
   }
 }

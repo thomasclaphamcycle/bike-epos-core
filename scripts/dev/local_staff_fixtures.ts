@@ -9,6 +9,7 @@ export type LocalDevStaffFixture = {
   isActive: boolean;
   pin: string;
   matchUsernames?: string[];
+  matchEmails?: string[];
 };
 
 export const LOCAL_DEV_STAFF_PASSWORD = process.env.LOCAL_STAFF_PASSWORD || "ChangeMe123!";
@@ -22,6 +23,8 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     operationalRole: UserOperationalRole.WORKSHOP,
     isActive: true,
     pin: "2468",
+    matchUsernames: ["dom@claphamcycle.com"],
+    matchEmails: ["dom@claphamcycle.com"],
   },
   {
     username: "eric",
@@ -31,6 +34,8 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     operationalRole: UserOperationalRole.SALES,
     isActive: true,
     pin: "1357",
+    matchUsernames: ["eric@claphamcycle.com"],
+    matchEmails: ["eric@claphamcycle.com"],
   },
   {
     username: "mike",
@@ -40,6 +45,8 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     operationalRole: UserOperationalRole.WORKSHOP,
     isActive: true,
     pin: "4321",
+    matchUsernames: ["mike@claphamcycle.com"],
+    matchEmails: ["mike@claphamcycle.com"],
   },
   {
     username: "thomas",
