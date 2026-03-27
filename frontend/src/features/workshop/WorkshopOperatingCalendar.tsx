@@ -375,7 +375,7 @@ export const WorkshopOperatingCalendar = ({
                         <button
                           key={job.id}
                           type="button"
-                          className="workshop-os-calendar-job"
+                          className={`workshop-os-calendar-job ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
                           style={{ left: `${block.left}px`, width: `${block.width}px` }}
                           onClick={() => onSelectJob(job.id)}
                         >
@@ -431,7 +431,7 @@ export const WorkshopOperatingCalendar = ({
                       <button
                         key={job.id}
                         type="button"
-                        className="workshop-os-calendar-job workshop-os-calendar-job--unassigned"
+                        className={`workshop-os-calendar-job workshop-os-calendar-job--unassigned ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
                         style={{ left: `${block.left}px`, width: `${block.width}px` }}
                         onClick={() => onSelectJob(job.id)}
                       >
