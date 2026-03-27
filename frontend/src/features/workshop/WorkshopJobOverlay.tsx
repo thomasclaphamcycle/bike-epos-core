@@ -223,6 +223,8 @@ type WorkshopJobOverlayDaySnapshotResponse = {
   }>;
 };
 
+type WorkshopTechnicianAvailabilityState = "available" | "booked" | "off";
+
 const WORKSHOP_OVERLAY_TABS = [
   ["schedule", "Schedule"],
   ["work", "Work"],
@@ -2331,6 +2333,51 @@ export const WorkshopJobOverlay = ({
     toDateInputValue(overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null, scheduleSnapshotTimeZone)
     || null;
   const currentJobAppearsOnSelectedDay = currentJobScheduledDateKey === selectedScheduleDateKey;
+  const technicianAvailability = useMemo(() => {
+    const availabilityById = new Map<string, {
+      state: WorkshopTechnicianAvailabilityState;
+      optionLabel: string;
+    }>();
+    const availableNames: string[] = [];
+    const bookedNames: string[] = [];
+    const offNames: string[] = [];
+
+    technicianOptions.forEach((option) => {
+      const staffMember = scheduleDaySnapshot?.staff.find((staff) => staff.id === option.id);
+      const dayCapacity = staffMember?.dailyCapacity.find((entry) => entry.date === selectedScheduleDateKey);
+
+      if (!dayCapacity || dayCapacity.totalMinutes <= 0) {
+        availabilityById.set(option.id, {
+          state: "off",
+          optionLabel: `${option.name} - not on rota`,
+        });
+        offNames.push(option.name);
+        return;
+      }
+
+      if (dayCapacity.availableMinutes > 0) {
+        availabilityById.set(option.id, {
+          state: "available",
+          optionLabel: `${option.name} - available`,
+        });
+        availableNames.push(option.name);
+        return;
+      }
+
+      availabilityById.set(option.id, {
+        state: "booked",
+        optionLabel: `${option.name} - fully booked`,
+      });
+      bookedNames.push(option.name);
+    });
+
+    return {
+      byId: availabilityById,
+      availableNames,
+      bookedNames,
+      offNames,
+    };
+  }, [scheduleDaySnapshot?.staff, selectedScheduleDateKey, technicianOptions]);
 
   const renderOverviewHeader = () => (
     <section className="workshop-os-overview-header">
@@ -2612,12 +2659,12 @@ export const WorkshopJobOverlay = ({
                 </div>
 
                 <div className="workshop-os-schedule-surface__inputs">
-                  <label>
+                  <label className="workshop-os-schedule-surface__field workshop-os-schedule-surface__field--day">
                     <span className="metric-label">Day</span>
                     <div className="workshop-os-schedule-surface__date-stepper">
                       <button
                         type="button"
-                        className="button-link"
+                        className="workshop-os-schedule-surface__date-stepper-button"
                         onClick={() => stepScheduleDraftDate(-1)}
                         disabled={savingSchedule}
                       >
@@ -2631,7 +2678,7 @@ export const WorkshopJobOverlay = ({
                       />
                       <button
                         type="button"
-                        className="button-link"
+                        className="workshop-os-schedule-surface__date-stepper-button"
                         onClick={() => stepScheduleDraftDate(1)}
                         disabled={savingSchedule}
                       >
@@ -2639,7 +2686,7 @@ export const WorkshopJobOverlay = ({
                       </button>
                     </div>
                   </label>
-                  <label>
+                  <label className="workshop-os-schedule-surface__field workshop-os-schedule-surface__field--time">
                     <span className="metric-label">Start</span>
                     <input
                       type="time"
@@ -2648,7 +2695,7 @@ export const WorkshopJobOverlay = ({
                       disabled={savingSchedule}
                     />
                   </label>
-                  <label>
+                  <label className="workshop-os-schedule-surface__field workshop-os-schedule-surface__field--time">
                     <span className="metric-label">End</span>
                     <input
                       type="time"
@@ -2665,10 +2712,10 @@ export const WorkshopJobOverlay = ({
                   </div>
                 ) : null}
 
-                <div className="workshop-os-schedule-surface__actions">
+                <div className="workshop-os-schedule-surface__actions workshop-os-schedule-surface__actions--booking">
                   <button
                     type="button"
-                    className="primary"
+                    className="primary workshop-os-schedule-surface__confirm"
                     onClick={() => void saveSchedule()}
                     disabled={savingSchedule || !canSaveScheduleDraft}
                   >
@@ -2708,11 +2755,45 @@ export const WorkshopJobOverlay = ({
                         <option value="">Leave unassigned</option>
                         {technicianOptions.map((option) => (
                           <option key={option.id} value={option.id}>
-                            {option.name}
+                            {technicianAvailability.byId.get(option.id)?.optionLabel || option.name}
                           </option>
                         ))}
                       </select>
                     </label>
+                    {selectedScheduleDateKey ? (
+                      <div className="workshop-os-schedule-availability">
+                        {technicianAvailability.availableNames.length ? (
+                          <div className="workshop-os-schedule-availability__row">
+                            <span className="status-badge workshop-os-schedule-availability__badge workshop-os-schedule-availability__badge--available">
+                              Available
+                            </span>
+                            <span className="table-secondary">
+                              {technicianAvailability.availableNames.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
+                        {technicianAvailability.bookedNames.length ? (
+                          <div className="workshop-os-schedule-availability__row">
+                            <span className="status-badge workshop-os-schedule-availability__badge workshop-os-schedule-availability__badge--booked">
+                              Fully booked
+                            </span>
+                            <span className="table-secondary">
+                              {technicianAvailability.bookedNames.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
+                        {technicianAvailability.offNames.length ? (
+                          <div className="workshop-os-schedule-availability__row">
+                            <span className="status-badge workshop-os-schedule-availability__badge workshop-os-schedule-availability__badge--off">
+                              Not on rota
+                            </span>
+                            <span className="table-secondary">
+                              {technicianAvailability.offNames.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="workshop-os-schedule-surface__actions">
                       <button
                         type="button"

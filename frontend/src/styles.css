@@ -5349,13 +5349,19 @@ th {
 
 .workshop-os-schedule-surface__inputs {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  grid-template-columns: minmax(0, 1.55fr) repeat(2, minmax(112px, 0.62fr));
+  align-items: end;
 }
 
-.workshop-os-schedule-surface__inputs label {
+.workshop-os-schedule-surface__inputs label,
+.workshop-os-schedule-surface__field {
   display: grid;
   gap: 4px;
+}
+
+.workshop-os-schedule-surface__field--time {
+  max-width: 132px;
 }
 
 .workshop-os-schedule-surface__date-stepper {
@@ -5365,25 +5371,30 @@ th {
   gap: 8px;
 }
 
-.workshop-os-schedule-surface__date-stepper .button-link {
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px solid #cdd9e6;
-  border-radius: 10px;
-  background: rgba(248, 251, 255, 0.96);
-  color: #22405f;
-  font-weight: 600;
+.workshop-os-schedule-surface__date-stepper-button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid #b7cde2;
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.99), rgba(236, 244, 251, 0.98));
+  color: #163d63;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
   white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(20, 49, 77, 0.08);
 }
 
-.workshop-os-schedule-surface__date-stepper .button-link:hover:not(:disabled) {
-  border-color: #aac3dc;
-  background: rgba(240, 246, 252, 0.98);
+.workshop-os-schedule-surface__date-stepper-button:hover:not(:disabled) {
+  border-color: #8fb2d4;
+  background: linear-gradient(180deg, rgba(242, 248, 254, 1), rgba(230, 240, 249, 0.98));
+  box-shadow: 0 10px 18px rgba(20, 49, 77, 0.12);
 }
 
-.workshop-os-schedule-surface__date-stepper .button-link:disabled {
+.workshop-os-schedule-surface__date-stepper-button:disabled {
   opacity: 0.58;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .workshop-os-schedule-surface__inputs input {
@@ -5400,8 +5411,52 @@ th {
   padding-top: 2px;
 }
 
+.workshop-os-schedule-surface__actions--booking {
+  align-items: center;
+  gap: 12px;
+}
+
+.workshop-os-schedule-surface__confirm {
+  min-width: 138px;
+  box-shadow: 0 14px 24px rgba(21, 66, 122, 0.2);
+}
+
 .workshop-os-schedule-surface__actions .table-secondary {
   flex: 1 1 220px;
+}
+
+.workshop-os-schedule-availability {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.workshop-os-schedule-availability__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.workshop-os-schedule-availability__badge {
+  border-color: transparent;
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+}
+
+.workshop-os-schedule-availability__badge--available {
+  background: #ebf8f0;
+  color: #155f39;
+}
+
+.workshop-os-schedule-availability__badge--booked {
+  background: #fff7e8;
+  color: #8a6500;
+}
+
+.workshop-os-schedule-availability__badge--off {
+  background: #f2f5f9;
+  color: #566474;
 }
 
 .workshop-os-schedule-day-snapshot__body {
@@ -5528,6 +5583,10 @@ th {
 
   .workshop-os-schedule-surface__action-column {
     grid-template-rows: auto;
+  }
+
+  .workshop-os-schedule-surface__field--time {
+    max-width: none;
   }
 
   .workshop-os-schedule-day-snapshot__body {
