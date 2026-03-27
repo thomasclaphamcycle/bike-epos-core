@@ -486,6 +486,20 @@ const addMinutesToTimeValue = (timeValue: string, minutesToAdd: number) => {
   return `${`${nextHour}`.padStart(2, "0")}:${`${nextMinute}`.padStart(2, "0")}`;
 };
 
+const addDaysToDateKey = (dateKey: string, daysToAdd: number) => {
+  if (!dateKey || !Number.isInteger(daysToAdd)) {
+    return dateKey;
+  }
+
+  const date = new Date(`${dateKey}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return dateKey;
+  }
+
+  date.setUTCDate(date.getUTCDate() + daysToAdd);
+  return date.toISOString().slice(0, 10);
+};
+
 const formatScheduleWindow = (
   startAt: string | null | undefined,
   endAt: string | null | undefined,
@@ -1571,6 +1585,15 @@ export const WorkshopJobOverlay = ({
     setIsEditingSchedule(true);
   };
 
+  const stepScheduleDraftDate = (daysToAdd: number) => {
+    setScheduleDraft((current) => ({
+      ...current,
+      dateKey: addDaysToDateKey(current.dateKey, daysToAdd),
+    }));
+    setScheduleError(null);
+    setIsEditingSchedule(true);
+  };
+
   const saveSchedule = async () => {
     const scheduledStartAt = buildScheduleIso(scheduleDraft.dateKey, scheduleDraft.startTime);
     const scheduledEndAt = buildScheduleIso(scheduleDraft.dateKey, scheduleDraft.endTime);
@@ -2591,12 +2614,30 @@ export const WorkshopJobOverlay = ({
                 <div className="workshop-os-schedule-surface__inputs">
                   <label>
                     <span className="metric-label">Day</span>
-                    <input
-                      type="date"
-                      value={scheduleDraft.dateKey}
-                      onChange={(event) => updateScheduleDraftField("dateKey", event.target.value)}
-                      disabled={savingSchedule}
-                    />
+                    <div className="workshop-os-schedule-surface__date-stepper">
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => stepScheduleDraftDate(-1)}
+                        disabled={savingSchedule}
+                      >
+                        - Day
+                      </button>
+                      <input
+                        type="date"
+                        value={scheduleDraft.dateKey}
+                        onChange={(event) => updateScheduleDraftField("dateKey", event.target.value)}
+                        disabled={savingSchedule}
+                      />
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => stepScheduleDraftDate(1)}
+                        disabled={savingSchedule}
+                      >
+                        + Day
+                      </button>
+                    </div>
                   </label>
                   <label>
                     <span className="metric-label">Start</span>

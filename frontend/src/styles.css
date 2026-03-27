@@ -5358,6 +5358,34 @@ th {
   gap: 4px;
 }
 
+.workshop-os-schedule-surface__date-stepper {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.workshop-os-schedule-surface__date-stepper .button-link {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #cdd9e6;
+  border-radius: 10px;
+  background: rgba(248, 251, 255, 0.96);
+  color: #22405f;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.workshop-os-schedule-surface__date-stepper .button-link:hover:not(:disabled) {
+  border-color: #aac3dc;
+  background: rgba(240, 246, 252, 0.98);
+}
+
+.workshop-os-schedule-surface__date-stepper .button-link:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .workshop-os-schedule-surface__inputs input {
   width: 100%;
   min-width: 0;
@@ -5489,7 +5517,8 @@ th {
   .workshop-os-overview-planning__grid,
   .workshop-os-overview-operational,
   .workshop-os-schedule-surface,
-  .workshop-os-schedule-surface__inputs {
+  .workshop-os-schedule-surface__inputs,
+  .workshop-os-schedule-surface__date-stepper {
     grid-template-columns: 1fr;
   }
 
