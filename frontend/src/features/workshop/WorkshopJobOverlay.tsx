@@ -2553,14 +2553,14 @@ export const WorkshopJobOverlay = ({
   );
 
   const renderOverviewTab = () => (
-    <div className="workshop-os-modal__panel">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--overview">
       {renderOverviewHeader()}
       {overviewMode === "planning" ? renderPlanningOverview() : renderOperationalOverview()}
     </div>
   );
 
   const renderWorkTab = () => (
-    <div className="workshop-os-modal__panel">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--work">
       <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
         <div className="workshop-os-job-workspace-section__toggle-copy">
           <strong>Work</strong>
@@ -2897,7 +2897,7 @@ export const WorkshopJobOverlay = ({
   );
 
   const renderActivityTab = () => (
-    <div className="workshop-os-modal__panel">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--activity">
       {renderSection(
         "jobDetails",
         "Activity",
@@ -2980,7 +2980,7 @@ export const WorkshopJobOverlay = ({
       aria-hidden="true"
     >
       <aside
-        className="workshop-os-modal"
+        className={`workshop-os-modal workshop-os-modal--${activeTab}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
