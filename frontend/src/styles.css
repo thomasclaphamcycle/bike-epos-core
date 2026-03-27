@@ -5241,6 +5241,15 @@ th {
   gap: 10px;
 }
 
+.workshop-os-schedule-day-snapshot,
+.workshop-os-schedule-day-snapshot__groups,
+.workshop-os-schedule-day-snapshot__group {
+  width: 100%;
+  max-width: none;
+  justify-items: stretch;
+  align-items: start;
+}
+
 .workshop-os-schedule-surface__header,
 .workshop-os-schedule-day-snapshot__item-row,
 .workshop-os-schedule-day-snapshot__group-header {
@@ -5284,10 +5293,15 @@ th {
 }
 
 .workshop-os-schedule-day-snapshot__body {
-  max-height: 260px;
+  width: 100%;
+  max-width: none;
+  height: 260px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
   scrollbar-gutter: stable;
+  justify-self: stretch;
+  align-self: stretch;
 }
 
 .workshop-os-schedule-day-snapshot__item--current {
