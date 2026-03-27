@@ -2493,10 +2493,6 @@ export const WorkshopJobOverlay = ({
   const renderScheduleTab = () => (
     <div className="workshop-os-modal__panel">
       <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
-        <div className="workshop-os-job-workspace-section__toggle-copy">
-          <strong>Schedule</strong>
-          <span className="table-secondary">Set the slot first, check the day, then assign the technician.</span>
-        </div>
         <div className="workshop-os-job-workspace-section__body workshop-os-modal__schedule-stack">
           <div className="workshop-os-schedule-surface">
             <div className="workshop-os-schedule-surface__action-column">
@@ -2633,26 +2629,7 @@ export const WorkshopJobOverlay = ({
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Selected day snapshot</strong>
-                    <span className="table-secondary">Check the shape of the day before you confirm the booking.</span>
                   </div>
-                  <div className="workshop-os-job-workspace-section__meta-list">
-                    <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
-                    {selectedScheduleDay?.isClosed
-                      ? <span>{selectedScheduleDay.closedReason || "Closed"}</span>
-                      : selectedScheduleDay?.opensAt && selectedScheduleDay?.closesAt
-                        ? <span>{selectedScheduleDay.opensAt} - {selectedScheduleDay.closesAt}</span>
-                        : null}
-                    {scheduleDayCapacitySummary?.totalMinutes
-                      ? <span>{scheduleDayCapacitySummary.bookedMinutes} / {scheduleDayCapacitySummary.totalMinutes} mins booked</span>
-                      : null}
-                    <span>{selectedScheduleJobs.length} booked job{selectedScheduleJobs.length === 1 ? "" : "s"}</span>
-                  </div>
-                </div>
-
-                <div className="table-secondary">
-                  {currentJobAppearsOnSelectedDay
-                    ? "This job is already on the selected day."
-                    : "Existing jobs for the selected day are listed below."}
                 </div>
 
                 <div className="workshop-os-schedule-day-snapshot__body">
