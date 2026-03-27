@@ -2571,12 +2571,12 @@ export const WorkshopJobOverlay = ({
   );
 
   const renderScheduleTab = () => (
-    <div className="workshop-os-modal__panel">
-      <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--schedule">
+      <section className="workshop-os-drawer__section workshop-os-job-workspace-section workshop-os-job-workspace-section--schedule">
         <div className="workshop-os-job-workspace-section__body workshop-os-modal__schedule-stack">
           <div className="workshop-os-schedule-surface">
             <div className="workshop-os-schedule-surface__action-column">
-              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card">
+              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card workshop-os-schedule-surface__card--booking">
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Booking</strong>
@@ -2643,7 +2643,7 @@ export const WorkshopJobOverlay = ({
                 </div>
               </div>
 
-              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card">
+              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card workshop-os-schedule-surface__card--assignment">
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Assign technician</strong>
