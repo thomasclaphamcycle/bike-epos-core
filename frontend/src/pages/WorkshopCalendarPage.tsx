@@ -198,6 +198,24 @@ const parseDateKey = (value: string) => {
 
 export const workshopTodayDateKey = () => formatDateKey(new Date());
 
+const toOverlaySummary = (job: CalendarJob): WorkshopJobOverlaySummary => ({
+  id: job.id,
+  rawStatus: job.rawStatus,
+  status: job.status,
+  customerId: job.customerId,
+  customerName: job.customerName,
+  assignedStaffId: job.assignedStaffId,
+  bikeDescription: job.bikeDescription,
+  assignedStaffName: job.assignedStaffName,
+  scheduledDate: job.scheduledDate,
+  scheduledStartAt: job.scheduledStartAt,
+  scheduledEndAt: job.scheduledEndAt,
+  durationMinutes: job.durationMinutes,
+  notes: job.notes,
+  createdAt: job.createdAt,
+  updatedAt: job.updatedAt,
+});
+
 const startOfWeek = (value: Date) => {
   const next = new Date(value);
   const day = next.getDay();
@@ -721,6 +739,7 @@ export const WorkshopSchedulerScreen = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [overlayJobId, setOverlayJobId] = useState<string | null>(null);
+  const [overlaySummary, setOverlaySummary] = useState<WorkshopJobOverlaySummary | null>(null);
   const [internalTechnicianId, setInternalTechnicianId] = useState("");
   const [draft, setDraft] = useState<ScheduleDraft>({
     staffId: "",
@@ -847,26 +866,18 @@ export const WorkshopSchedulerScreen = ({
   }, [allJobsById, selectedJobId]);
 
   useEffect(() => {
-    if (!overlayJobId) {
-      return;
-    }
-
-    if (!allJobsById.has(overlayJobId)) {
-      setOverlayJobId(null);
-    }
-  }, [allJobsById, overlayJobId]);
-
-  useEffect(() => {
     if (!requestedOverlayJobId) {
       return;
     }
 
-    if (!allJobsById.has(requestedOverlayJobId)) {
+    const requestedJob = allJobsById.get(requestedOverlayJobId) ?? null;
+    if (!requestedJob) {
       return;
     }
 
     setSelectedJobId(null);
     setScheduleError(null);
+    setOverlaySummary(toOverlaySummary(requestedJob));
     setOverlayJobId(requestedOverlayJobId);
     onRequestedOverlayJobHandled?.();
   }, [allJobsById, onRequestedOverlayJobHandled, requestedOverlayJobId]);
@@ -967,33 +978,19 @@ export const WorkshopSchedulerScreen = ({
   const openJobOverlay = (job: CalendarJob) => {
     setSelectedJobId(null);
     setScheduleError(null);
+    setOverlaySummary(toOverlaySummary(job));
     setOverlayJobId(job.id);
   };
 
   const closeJobOverlay = () => {
+    setOverlaySummary(null);
     setOverlayJobId(null);
   };
 
   const selectedOverlayJob = overlayJobId ? allJobsById.get(overlayJobId) ?? null : null;
   const selectedOverlaySummary: WorkshopJobOverlaySummary | null = selectedOverlayJob
-    ? {
-        id: selectedOverlayJob.id,
-        rawStatus: selectedOverlayJob.rawStatus,
-        status: selectedOverlayJob.status,
-        customerId: selectedOverlayJob.customerId,
-        customerName: selectedOverlayJob.customerName,
-        assignedStaffId: selectedOverlayJob.assignedStaffId,
-        bikeDescription: selectedOverlayJob.bikeDescription,
-        assignedStaffName: selectedOverlayJob.assignedStaffName,
-        scheduledDate: selectedOverlayJob.scheduledDate,
-        scheduledStartAt: selectedOverlayJob.scheduledStartAt,
-        scheduledEndAt: selectedOverlayJob.scheduledEndAt,
-        durationMinutes: selectedOverlayJob.durationMinutes,
-        notes: selectedOverlayJob.notes,
-        createdAt: selectedOverlayJob.createdAt,
-        updatedAt: selectedOverlayJob.updatedAt,
-      }
-    : null;
+    ? toOverlaySummary(selectedOverlayJob)
+    : overlaySummary;
 
   const saveSchedule = async () => {
     if (!selectedJob) {
