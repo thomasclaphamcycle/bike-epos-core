@@ -5241,16 +5241,6 @@ th {
   gap: 10px;
 }
 
-.workshop-os-schedule-surface__grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.workshop-os-schedule-surface__card:first-child {
-  grid-column: span 2;
-}
-
 .workshop-os-schedule-surface__header,
 .workshop-os-schedule-day-snapshot__item-row,
 .workshop-os-schedule-day-snapshot__group-header {
@@ -5291,6 +5281,13 @@ th {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.workshop-os-schedule-day-snapshot__body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .workshop-os-schedule-day-snapshot__item--current {
@@ -5367,7 +5364,6 @@ th {
 
   .workshop-os-overview-planning__grid,
   .workshop-os-overview-operational,
-  .workshop-os-schedule-surface__grid,
   .workshop-os-schedule-surface__inputs {
     grid-template-columns: 1fr;
   }
