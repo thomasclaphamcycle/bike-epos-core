@@ -184,7 +184,14 @@ type WorkshopJobOverlayAttachmentsResponse = {
   attachments: WorkshopJobOverlayAttachment[];
 };
 
-type WorkshopOverlayTab = "overview" | "work" | "schedule" | "activity";
+const WORKSHOP_OVERLAY_TABS = [
+  ["schedule", "Schedule"],
+  ["work", "Work"],
+  ["overview", "Overview"],
+  ["activity", "Activity"],
+] as const;
+
+type WorkshopOverlayTab = (typeof WORKSHOP_OVERLAY_TABS)[number][0];
 
 type JobWorkspaceSectionKey =
   | "customer"
@@ -247,6 +254,7 @@ type WorkshopJobOverlayProps = {
   summary?: WorkshopJobOverlaySummary | null;
   onClose: () => void;
   fullJobPath?: string;
+  initialTab?: WorkshopOverlayTab | null;
   timeZone?: string;
   technicianOptions?: Array<{
     id: string;
@@ -260,6 +268,42 @@ const formatMoney = (pence: number | null) => {
     return "-";
   }
   return `£${(pence / 100).toFixed(2)}`;
+};
+
+const parseWorkshopOverlayTab = (value: string | null | undefined): WorkshopOverlayTab | null => {
+  switch (value) {
+    case "schedule":
+    case "work":
+    case "overview":
+    case "activity":
+      return value;
+    default:
+      return null;
+  }
+};
+
+const resolveWorkshopOverlayInitialTab = ({
+  fullJobPath,
+  initialTab,
+}: {
+  fullJobPath?: string | null;
+  initialTab?: WorkshopOverlayTab | null;
+}): WorkshopOverlayTab => {
+  if (initialTab) {
+    return initialTab;
+  }
+
+  if (fullJobPath) {
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+      const requestedTab = new URL(fullJobPath, origin).searchParams.get("tab");
+      return parseWorkshopOverlayTab(requestedTab) ?? "schedule";
+    } catch {
+      return "schedule";
+    }
+  }
+
+  return "schedule";
 };
 
 const parseMoneyToPence = (value: string) => {
@@ -907,11 +951,16 @@ export const WorkshopJobOverlay = ({
   summary,
   onClose,
   fullJobPath,
+  initialTab,
   timeZone,
   technicianOptions = [],
   onJobChanged,
 }: WorkshopJobOverlayProps) => {
   const { success, error } = useToasts();
+  const resolvedInitialTab = resolveWorkshopOverlayInitialTab({
+    fullJobPath,
+    initialTab,
+  });
   const [details, setDetails] = useState<WorkshopJobOverlayResponse | null>(null);
   const [notes, setNotes] = useState<WorkshopJobOverlayNote[]>([]);
   const [attachments, setAttachments] = useState<WorkshopJobOverlayAttachment[]>([]);
@@ -930,7 +979,7 @@ export const WorkshopJobOverlay = ({
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [workError, setWorkError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<WorkshopOverlayTab>("overview");
+  const [activeTab, setActiveTab] = useState<WorkshopOverlayTab>(resolvedInitialTab);
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("");
   const [partSearch, setPartSearch] = useState("");
   const [partResults, setPartResults] = useState<WorkshopJobOverlayProductSearchRow[]>([]);
@@ -995,8 +1044,8 @@ export const WorkshopJobOverlay = ({
     setLabourDescriptionDraft("");
     setLabourPriceDraft("");
     setLineQtyDrafts({});
-    setActiveTab("overview");
-  }, [jobId]);
+    setActiveTab(resolvedInitialTab);
+  }, [jobId, resolvedInitialTab]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2239,22 +2288,39 @@ export const WorkshopJobOverlay = ({
       <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
         <div className="workshop-os-job-workspace-section__toggle-copy">
           <strong>Schedule</strong>
-          <span className="table-secondary">Slot timing, technician assignment, and scheduling controls.</span>
+          <span className="table-secondary">Book the job first: when it is coming in and who owns it on the bench.</span>
         </div>
         <div className="workshop-os-job-workspace-section__body workshop-os-modal__schedule-stack">
-          <div className="workshop-os-overlay-hero__facts">
-            <div>
-              <span className="metric-label">Promise date</span>
-              <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
+          <section className="workshop-os-schedule-intro">
+            <div className="workshop-os-schedule-intro__copy">
+              <p className="ui-page-eyebrow">Setup First</p>
+              <h3>Lock in the booking and technician</h3>
+              <p className="table-secondary">
+                Start with when the job is booked, then confirm who is taking ownership.
+              </p>
             </div>
-            <div>
-              <span className="metric-label">Duration</span>
-              <strong>{overlayJob?.durationMinutes || summary?.durationMinutes ? `${overlayJob?.durationMinutes || summary?.durationMinutes} min` : "Not set"}</strong>
+            <div className="workshop-os-schedule-summary">
+              <article className="workshop-os-overview-card">
+                <span className="metric-label">When is this booked?</span>
+                <strong>{hasBookingCommitment ? scheduleWindowLabel : "Not booked into a timed slot yet"}</strong>
+                <p>{hasBookingCommitment ? `Promise ${promiseDateLabel}` : "Choose a promise date or timed slot so the job can be placed properly."}</p>
+              </article>
+              <article className="workshop-os-overview-card">
+                <span className="metric-label">Who is doing it?</span>
+                <strong>{assignedTechnicianLabel}</strong>
+                <p>{assignedTechnicianLabel === "Not assigned yet" ? "Assign bench ownership so the job does not stay floating in the queue." : "Technician ownership is already set for this booking."}</p>
+              </article>
+              <article className="workshop-os-overview-card">
+                <span className="metric-label">Booking context</span>
+                <strong>{overlayJob?.durationMinutes || summary?.durationMinutes ? `${overlayJob?.durationMinutes || summary?.durationMinutes} min planned` : "Duration not set yet"}</strong>
+                <p>{displayWorkflowSummary.assignmentSummary}</p>
+              </article>
             </div>
-          </div>
+          </section>
 
           <div className="workshop-os-job-workspace-section__detail-card">
-            <strong>Scheduled slot</strong>
+            <strong>When is this being booked?</strong>
+            <span className="table-secondary">Set the date and timed slot the workshop team should work from.</span>
             {!isEditingSchedule ? (
               <button
                 type="button"
@@ -2313,7 +2379,8 @@ export const WorkshopJobOverlay = ({
           </div>
 
           <div className="workshop-os-job-workspace-section__detail-card">
-            <strong>Technician assignment</strong>
+            <strong>Who is doing it?</strong>
+            <span className="table-secondary">Keep ownership clear before the job moves deeper into normal workshop flow.</span>
             {canAssignTechnician ? (
               <div className="workshop-os-modal__assignment-controls">
                 <label className="workshop-os-overlay-next-action__field">
@@ -2466,12 +2533,7 @@ export const WorkshopJobOverlay = ({
         </div>
 
         <div className="workshop-os-modal__tabs" role="tablist" aria-label="Workshop job workspace tabs">
-          {([
-            ["overview", "Overview"],
-            ["work", "Work"],
-            ["schedule", "Schedule"],
-            ["activity", "Activity"],
-          ] as const).map(([tab, label]) => (
+          {WORKSHOP_OVERLAY_TABS.map(([tab, label]) => (
             <button
               key={tab}
               type="button"
@@ -2496,9 +2558,9 @@ export const WorkshopJobOverlay = ({
               <div className="table-secondary">{loadError}</div>
             </div>
           ) : null}
-          {activeTab === "overview" ? renderOverviewTab() : null}
-          {activeTab === "work" ? renderWorkTab() : null}
           {activeTab === "schedule" ? renderScheduleTab() : null}
+          {activeTab === "work" ? renderWorkTab() : null}
+          {activeTab === "overview" ? renderOverviewTab() : null}
           {activeTab === "activity" ? renderActivityTab() : null}
         </div>
 

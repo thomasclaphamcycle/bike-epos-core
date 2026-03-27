@@ -5174,7 +5174,8 @@ th {
 
 .workshop-os-overview-header,
 .workshop-os-overview-planning,
-.workshop-os-overview-operational {
+.workshop-os-overview-operational,
+.workshop-os-schedule-intro {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -5185,7 +5186,8 @@ th {
 }
 
 .workshop-os-overview-header__identity,
-.workshop-os-overview-planning__copy {
+.workshop-os-overview-planning__copy,
+.workshop-os-schedule-intro__copy {
   display: grid;
   gap: 4px;
 }
@@ -5194,6 +5196,8 @@ th {
 .workshop-os-overview-header__identity p,
 .workshop-os-overview-planning__copy h3,
 .workshop-os-overview-planning__copy p,
+.workshop-os-schedule-intro__copy h3,
+.workshop-os-schedule-intro__copy p,
 .workshop-os-overview-card p,
 .workshop-os-overview-note p,
 .workshop-os-overlay-next-action__copy h3,
@@ -5230,6 +5234,12 @@ th {
 
 .workshop-os-overview-planning__grid,
 .workshop-os-overview-operational {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workshop-os-schedule-summary {
+  display: grid;
+  gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -5301,7 +5311,8 @@ th {
   }
 
   .workshop-os-overview-planning__grid,
-  .workshop-os-overview-operational {
+  .workshop-os-overview-operational,
+  .workshop-os-schedule-summary {
     grid-template-columns: 1fr;
   }
 }
