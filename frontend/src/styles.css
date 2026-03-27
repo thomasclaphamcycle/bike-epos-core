@@ -5172,6 +5172,118 @@ th {
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.07);
 }
 
+.workshop-os-overview-header,
+.workshop-os-overview-planning,
+.workshop-os-overview-operational {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #d4dee8;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 249, 253, 0.96) 100%);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.07);
+}
+
+.workshop-os-overview-header__identity,
+.workshop-os-overview-planning__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-overview-header__identity h3,
+.workshop-os-overview-header__identity p,
+.workshop-os-overview-planning__copy h3,
+.workshop-os-overview-planning__copy p,
+.workshop-os-overview-card p,
+.workshop-os-overview-note p,
+.workshop-os-overlay-next-action__copy h3,
+.workshop-os-overlay-next-action__copy p {
+  margin: 0;
+}
+
+.workshop-os-overview-header__signals {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-overview-planning__actions,
+.workshop-os-overlay-next-action__buttons,
+.workshop-os-overlay-next-action__secondary-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.workshop-os-overview-planning__actions button,
+.workshop-os-overlay-next-action__buttons .button-link,
+.workshop-os-overlay-next-action__buttons button {
+  flex: 1 1 180px;
+}
+
+.workshop-os-overview-planning__actions .primary,
+.workshop-os-overlay-next-action__buttons .primary {
+  box-shadow: 0 10px 18px rgba(23, 58, 94, 0.16);
+}
+
+.workshop-os-overview-planning__grid,
+.workshop-os-overview-operational {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workshop-os-overview-planning__grid,
+.workshop-os-overview-planning__notes {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-os-overview-planning__notes {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.workshop-os-overview-card,
+.workshop-os-overview-note,
+.workshop-os-overlay-next-action__highlight {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #dde6ef;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.workshop-os-overview-card strong,
+.workshop-os-overview-note strong,
+.workshop-os-overlay-next-action__highlight strong {
+  color: #1a2432;
+}
+
+.workshop-os-overview-card p,
+.workshop-os-overview-note p {
+  color: #334155;
+}
+
+.workshop-os-overview-card__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #526071;
+  font-size: 0.86rem;
+}
+
+.workshop-os-overlay-next-action__secondary {
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-os-overlay-next-action__secondary-buttons button {
+  flex: 0 1 auto;
+  border-color: #c2d5e8;
+  background: rgba(255, 255, 255, 0.94);
+}
+
 @media (max-width: 900px) {
   .workshop-checkin-submodal {
     width: min(94vw, 720px);
@@ -5186,6 +5298,11 @@ th {
   .workshop-checkin-services-template__header {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .workshop-os-overview-planning__grid,
+  .workshop-os-overview-operational {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -5269,9 +5386,7 @@ th {
   border: 1px solid #d6e4f2;
 }
 
-.workshop-os-overlay-hero__issue p,
-.workshop-os-overlay-next-action__copy h3,
-.workshop-os-overlay-next-action__copy p {
+.workshop-os-overlay-hero__issue p {
   margin: 0;
 }
 
@@ -5309,33 +5424,6 @@ th {
   width: 100%;
   background: #fff;
   border-color: #bacfe3;
-}
-
-.workshop-os-overlay-next-action__buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: stretch;
-}
-
-.workshop-os-overlay-next-action__buttons .button-link,
-.workshop-os-overlay-next-action__buttons button {
-  flex: 1 1 180px;
-}
-
-.workshop-os-overlay-next-action__buttons .primary {
-  box-shadow: 0 10px 18px rgba(23, 58, 94, 0.16);
-}
-
-.workshop-os-overlay-next-action__status-row {
-  display: flex;
-  gap: 8px;
-  align-items: end;
-  flex-wrap: wrap;
-}
-
-.workshop-os-overlay-next-action__status-row .workshop-os-overlay-next-action__field {
-  flex: 1 1 240px;
 }
 
 .workshop-os-overlay-next-action__copy h3 {

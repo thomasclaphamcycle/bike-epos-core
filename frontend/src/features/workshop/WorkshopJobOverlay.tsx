@@ -508,6 +508,197 @@ type WorkshopOverlayStatusAction =
       value: "APPROVED";
     };
 
+type WorkshopWorkflowAction = WorkshopOverlayQuickAction | WorkshopOverlayStatusAction;
+
+type WorkshopOverviewMode = "planning" | "operational";
+
+type WorkshopOverviewSignal = {
+  label: string;
+  detail: string;
+  className: string;
+};
+
+const truncateText = (value: string, limit = 140) =>
+  value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
+
+const getApprovalSignal = ({
+  status,
+  estimate,
+  timeZone,
+}: {
+  status: string;
+  estimate: WorkshopJobOverlayEstimate | null;
+  timeZone?: string;
+}): WorkshopOverviewSignal => {
+  if (status === "WAITING_FOR_APPROVAL" || estimate?.status === "PENDING_APPROVAL") {
+    return {
+      label: "Waiting for approval",
+      detail: estimate?.requestedAt
+        ? `Quote sent ${formatDateTime(estimate.requestedAt, timeZone)}.`
+        : "Customer approval is still needed before bench work can move on.",
+      className: "status-badge status-warning",
+    };
+  }
+
+  if (estimate?.status === "APPROVED") {
+    return {
+      label: "Approved",
+      detail: estimate.approvedAt
+        ? `Approved ${formatDateTime(estimate.approvedAt, timeZone)}.`
+        : "Customer approval is already in place.",
+      className: "status-badge status-complete",
+    };
+  }
+
+  if (estimate?.status === "REJECTED") {
+    return {
+      label: "Needs quote follow-up",
+      detail: estimate.rejectedAt
+        ? `Latest quote was declined ${formatDateTime(estimate.rejectedAt, timeZone)}.`
+        : "The current quote needs revision before work continues.",
+      className: "status-badge status-warning",
+    };
+  }
+
+  return {
+    label: "Not awaiting approval",
+    detail: estimate
+      ? "No customer approval blocker is active right now."
+      : "This job is not currently waiting on a customer decision.",
+    className: "status-badge status-info",
+  };
+};
+
+const getPartsSignal = (
+  partsSummary:
+    | {
+        requiredQty: number;
+        allocatedQty: number;
+        consumedQty: number;
+        returnedQty: number;
+        outstandingQty: number;
+        missingQty: number;
+        partsStatus: "OK" | "UNALLOCATED" | "SHORT";
+      }
+    | null
+    | undefined,
+): WorkshopOverviewSignal => {
+  if (!partsSummary || partsSummary.requiredQty === 0) {
+    return {
+      label: "No parts planned",
+      detail: "This job does not currently depend on workshop stock.",
+      className: "status-badge",
+    };
+  }
+
+  if (partsSummary.partsStatus === "SHORT") {
+    return {
+      label: "Waiting on parts",
+      detail: partsSummary.missingQty
+        ? `${partsSummary.missingQty} item(s) are still missing from stock.`
+        : `${partsSummary.outstandingQty} item(s) are still outstanding.`,
+      className: "status-badge status-warning",
+    };
+  }
+
+  if (partsSummary.partsStatus === "UNALLOCATED") {
+    return {
+      label: "Parts to reserve",
+      detail: `${partsSummary.outstandingQty} item(s) still need allocation to the job.`,
+      className: "status-badge status-info",
+    };
+  }
+
+  return {
+    label: "All parts ready",
+    detail: `${partsSummary.allocatedQty} allocated, ${partsSummary.consumedQty} already fitted.`,
+    className: "status-badge status-complete",
+  };
+};
+
+const getOverviewMode = ({
+  status,
+  assignedStaffName,
+  scheduledDate,
+  scheduledStartAt,
+}: {
+  status: string;
+  assignedStaffName: string | null;
+  scheduledDate: string | null;
+  scheduledStartAt: string | null;
+}): WorkshopOverviewMode => {
+  const hasAssignment = Boolean(assignedStaffName);
+  const hasBookingCommitment = Boolean(scheduledStartAt || scheduledDate);
+
+  if (["WAITING_FOR_APPROVAL", "IN_PROGRESS", "WAITING_FOR_PARTS", "ON_HOLD", "READY_FOR_COLLECTION", "COMPLETED", "CANCELLED"].includes(status)) {
+    return "operational";
+  }
+
+  if (["BOOKED", "BOOKING_MADE", "BIKE_ARRIVED", "APPROVED"].includes(status)) {
+    return hasAssignment && hasBookingCommitment ? "operational" : "planning";
+  }
+
+  return hasAssignment && hasBookingCommitment ? "operational" : "planning";
+};
+
+const isSameWorkflowAction = (
+  left: WorkshopWorkflowAction | null,
+  right: WorkshopWorkflowAction | null,
+) => Boolean(left && right && left.kind === right.kind && left.value === right.value);
+
+const getPrimaryOverviewAction = ({
+  status,
+  assignedStaffName,
+  hasSale,
+  partsStatus,
+}: {
+  status: string;
+  assignedStaffName: string | null;
+  hasSale: boolean;
+  partsStatus?: "OK" | "UNALLOCATED" | "SHORT" | null;
+}): WorkshopWorkflowAction | null => {
+  switch (status) {
+    case "BOOKED":
+    case "BIKE_ARRIVED":
+      return {
+        kind: "status",
+        label: assignedStaffName ? "Move to bench" : "Mark in progress",
+        value: "IN_PROGRESS",
+      };
+    case "WAITING_FOR_APPROVAL":
+      return {
+        kind: "approval",
+        label: "Mark approved",
+        value: "APPROVED",
+      };
+    case "WAITING_FOR_PARTS":
+    case "ON_HOLD":
+      return {
+        kind: "status",
+        label: "Resume bench work",
+        value: "IN_PROGRESS",
+      };
+    case "IN_PROGRESS":
+      return partsStatus === "SHORT"
+        ? {
+            kind: "status",
+            label: "Mark waiting for parts",
+            value: "WAITING_FOR_PARTS",
+          }
+        : null;
+    case "READY_FOR_COLLECTION":
+      return hasSale
+        ? {
+            kind: "status",
+            label: "Complete collection",
+            value: "COMPLETED",
+          }
+        : null;
+    default:
+      return null;
+  }
+};
+
 const getNextActionCard = ({
   status,
   workflowSummary,
@@ -660,54 +851,6 @@ const createScheduleDraft = ({
   endTime: toTimeInputValue(scheduledEndAt, timeZone) || "11:00",
 });
 
-const getQuickOverlayAction = ({
-  status,
-  assignedStaffName,
-  hasSale,
-}: {
-  status: string;
-  assignedStaffName: string | null;
-  hasSale: boolean;
-}): WorkshopOverlayQuickAction | null => {
-  switch (status) {
-    case "BOOKED":
-    case "BIKE_ARRIVED":
-      return {
-        kind: "status",
-        label: assignedStaffName ? "Move to bench" : "Mark in progress",
-        value: "IN_PROGRESS",
-      };
-    case "WAITING_FOR_APPROVAL":
-      return {
-        kind: "approval",
-        label: "Mark approved",
-        value: "APPROVED",
-      };
-    case "WAITING_FOR_PARTS":
-      return {
-        kind: "status",
-        label: "Move back to bench",
-        value: "IN_PROGRESS",
-      };
-    case "ON_HOLD":
-      return {
-        kind: "status",
-        label: "Resume on bench",
-        value: "IN_PROGRESS",
-      };
-    case "READY_FOR_COLLECTION":
-      return hasSale
-        ? {
-            kind: "status",
-            label: "Complete collection",
-            value: "COMPLETED",
-          }
-        : null;
-    default:
-      return null;
-  }
-};
-
 const getStatusProgressionActions = ({
   status,
   hasSale,
@@ -789,7 +932,6 @@ export const WorkshopJobOverlay = ({
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<WorkshopOverlayTab>("overview");
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("");
-  const [statusActionDraft, setStatusActionDraft] = useState("");
   const [partSearch, setPartSearch] = useState("");
   const [partResults, setPartResults] = useState<WorkshopJobOverlayProductSearchRow[]>([]);
   const [showPartComposer, setShowPartComposer] = useState(false);
@@ -995,20 +1137,30 @@ export const WorkshopJobOverlay = ({
   const workTotalPence = lines.reduce((sum, line) => sum + line.lineTotalPence, 0);
   const openPath = fullJobPath || `/workshop/${jobId}`;
   const issueSummary = overlayJob?.notes || summary?.notes || null;
-  const quickAction = getQuickOverlayAction({
+  const overviewMode = getOverviewMode({
+    status: displayStatus,
+    assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
+    scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
+    scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+  });
+  const approvalSignal = getApprovalSignal({
+    status: displayStatus,
+    estimate: details?.currentEstimate || null,
+    timeZone,
+  });
+  const partsSignal = getPartsSignal(displayPartsSummary);
+  const primaryAction = getPrimaryOverviewAction({
     status: displayStatus,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
+    partsStatus: displayPartsSummary?.partsStatus,
   });
-  const statusActions = getStatusProgressionActions({
+  const secondaryActions = getStatusProgressionActions({
     status: displayStatus,
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
   }).filter((action) =>
-    !quickAction
-    || action.kind !== quickAction.kind
-    || action.value !== quickAction.value,
+    !isSameWorkflowAction(action, primaryAction),
   );
-  const selectedStatusAction = statusActions.find((action) => `${action.kind}:${action.value}` === statusActionDraft) ?? null;
   const canAssignTechnician = technicianOptions.length > 0 && !["COMPLETED", "CANCELLED"].includes(displayStatus);
   const hasAssignmentChange =
     (overlayJob?.assignedStaffId || summary?.assignedStaffId || "") !== assignedStaffIdDraft;
@@ -1029,12 +1181,6 @@ export const WorkshopJobOverlay = ({
     estimate: details?.currentEstimate || null,
     timeZone,
   });
-
-  useEffect(() => {
-    setStatusActionDraft(
-      statusActions[0] ? `${statusActions[0].kind}:${statusActions[0].value}` : "",
-    );
-  }, [displayStatus, statusActions.length]);
 
   const refreshOverlay = async () => {
     setRefreshKey((current) => current + 1);
@@ -1277,7 +1423,7 @@ export const WorkshopJobOverlay = ({
   };
 
   const runQuickAction = async () => {
-    if (!quickAction) {
+    if (!primaryAction) {
       return;
     }
 
@@ -1289,9 +1435,9 @@ export const WorkshopJobOverlay = ({
     setActionError(null);
 
     try {
-      if (quickAction.kind === "approval") {
+      if (primaryAction.kind === "approval") {
         const response = await apiPost<WorkshopJobOverlayApprovalResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
-          status: quickAction.value,
+          status: primaryAction.value,
         });
         applyInlineStatusUpdate({
           status: response.job.status,
@@ -1300,7 +1446,7 @@ export const WorkshopJobOverlay = ({
         success("Quote marked approved");
       } else {
         const response = await apiPost<WorkshopJobOverlayStatusResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
-          status: quickAction.value,
+          status: primaryAction.value,
         });
         applyInlineStatusUpdate({
           status: response.job.status,
@@ -1320,8 +1466,8 @@ export const WorkshopJobOverlay = ({
     }
   };
 
-  const saveStatusDraft = async () => {
-    if (!selectedStatusAction || !jobId || savingAnyAction) {
+  const runSecondaryAction = async (action: WorkshopOverlayStatusAction) => {
+    if (!jobId || savingAnyAction) {
       return;
     }
 
@@ -1329,9 +1475,9 @@ export const WorkshopJobOverlay = ({
     setActionError(null);
 
     try {
-      if (selectedStatusAction.kind === "approval") {
+      if (action.kind === "approval") {
         const response = await apiPost<WorkshopJobOverlayApprovalResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/approval`, {
-          status: selectedStatusAction.value,
+          status: action.value,
         });
         applyInlineStatusUpdate({
           status: response.job.status,
@@ -1340,7 +1486,7 @@ export const WorkshopJobOverlay = ({
         success("Quote marked approved");
       } else {
         const response = await apiPost<WorkshopJobOverlayStatusResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
-          status: selectedStatusAction.value,
+          status: action.value,
         });
         applyInlineStatusUpdate({
           status: response.job.status,
@@ -1786,64 +1932,132 @@ export const WorkshopJobOverlay = ({
     </section>
   );
 
-  const renderHeroSection = () => (
-    <section className="workshop-os-overlay-hero">
-      <div className="workshop-os-drawer__badges">
+  const assignedTechnicianLabel = overlayJob?.assignedStaffName || summary?.assignedStaffName || "Not assigned yet";
+  const promiseDateLabel = formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null);
+  const scheduleWindowLabel = formatScheduleWindow(
+    overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+    overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+    timeZone,
+  );
+  const hasBookingCommitment = Boolean(overlayJob?.scheduledStartAt || summary?.scheduledStartAt || overlayJob?.scheduledDate || summary?.scheduledDate);
+  const workValueLabel = details?.currentEstimate
+    ? `Quoted ${formatMoney(details.currentEstimate.subtotalPence)}`
+    : lines.length
+      ? `Current work ${formatMoney(workTotalPence)}`
+      : "No price yet";
+  const workSummaryText = issueSummary
+    ? truncateText(issueSummary, 120)
+    : lines.length
+      ? "Labour and parts lines are in place. Open Work for full line detail."
+      : "No work summary has been added yet.";
+  const planningSignals = [
+    approvalSignal.label !== "Not awaiting approval" ? approvalSignal : null,
+    partsSignal.label !== "No parts planned" ? partsSignal : null,
+    urgency
+      ? {
+          label: urgency.label,
+          detail: "The promise date already needs attention while this job is still being booked.",
+          className: urgency.className,
+        }
+      : null,
+  ].filter((signal): signal is WorkshopOverviewSignal => Boolean(signal));
+  const collectionSignal = overlayJob?.sale
+    ? {
+        title: "Collection handoff",
+        detail: "Sale is already linked for collection.",
+      }
+    : overlayJob?.finalizedBasketId
+      ? {
+          title: "Collection handoff",
+          detail: "POS handoff basket is ready.",
+        }
+      : null;
+
+  const renderOverviewHeader = () => (
+    <section className="workshop-os-overview-header">
+      <div className="workshop-os-overview-header__identity">
+        <p className="ui-page-eyebrow">{overviewMode === "planning" ? "Planning Overview" : "Operational Overview"}</p>
+        <h3>{displayBikeDescription}</h3>
+        <p className="table-secondary">
+          {displayCustomerName} · <span className="mono-text">{jobId.slice(0, 8)}</span>
+        </p>
+      </div>
+      <div className="workshop-os-overview-header__signals">
         <span className={workshopRawStatusClass(displayStatus)}>{workshopRawStatusLabel(displayStatus)}</span>
         <span className={displayWorkflowSummary.className}>{displayWorkflowSummary.label}</span>
+        {overviewMode === "planning" ? <span className="status-badge">Needs booking</span> : null}
         {urgency ? <span className={urgency.className}>{urgency.label}</span> : null}
-        {displayPartsSummary ? (
-          <span className={displayPartsSummary.partsStatus === "SHORT" ? "parts-short" : displayPartsSummary.partsStatus === "UNALLOCATED" ? "parts-attention" : "parts-ok"}>
-            Parts: {displayPartsSummary.partsStatus}
-          </span>
-        ) : null}
       </div>
-
-      <div className="workshop-os-overlay-hero__facts">
-        <div>
-          <span className="metric-label">Customer</span>
-          <strong>{displayCustomerName}</strong>
-        </div>
-        <div>
-          <span className="metric-label">Promise date</span>
-          <strong>{formatPromiseDate(overlayJob?.scheduledDate || summary?.scheduledDate || null)}</strong>
-        </div>
-        <div>
-          <span className="metric-label">Technician</span>
-          <strong>{overlayJob?.assignedStaffName || summary?.assignedStaffName || "Unassigned"}</strong>
-        </div>
-        <div>
-          <span className="metric-label">Scheduled slot</span>
-          <strong>
-            {formatScheduleWindow(
-              overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
-              overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
-              timeZone,
-            )}
-          </strong>
-        </div>
-      </div>
-
-      {issueSummary ? (
-        <div className="workshop-os-overlay-hero__issue">
-          <span className="metric-label">Issue / summary</span>
-          <p>{issueSummary}</p>
-        </div>
-      ) : null}
     </section>
   );
 
-  const renderOverviewTab = () => (
-    <div className="workshop-os-modal__panel">
-      {renderHeroSection()}
+  const renderPlanningOverview = () => (
+    <>
+      <section className="workshop-os-overview-planning">
+        <div className="workshop-os-overview-planning__copy">
+          <p className="ui-page-eyebrow">Book This Job</p>
+          <h3>{hasBookingCommitment || assignedTechnicianLabel !== "Not assigned yet" ? "Finish workshop booking" : "Set workshop booking"}</h3>
+          <p className="table-secondary">
+            Start with when the job is being booked and who owns it, then sense-check the work and likely price.
+          </p>
+        </div>
+        <div className="workshop-os-overview-planning__actions">
+          <button type="button" className="primary" onClick={() => setActiveTab("schedule")}>
+            {hasBookingCommitment || assignedTechnicianLabel !== "Not assigned yet" ? "Finish booking details" : "Set booking details"}
+          </button>
+          <button type="button" onClick={() => setActiveTab("work")}>
+            {lines.length || details?.currentEstimate ? "Review work and price" : "Add work details"}
+          </button>
+        </div>
+        <div className="workshop-os-overview-planning__grid">
+          <article className="workshop-os-overview-card">
+            <span className="metric-label">When is this being booked?</span>
+            <strong>{hasBookingCommitment ? scheduleWindowLabel : "Not booked into the workshop yet"}</strong>
+            <p>{hasBookingCommitment ? `Promise ${promiseDateLabel}` : "Set a promise date or slot so the job can be placed on the board."}</p>
+          </article>
+          <article className="workshop-os-overview-card">
+            <span className="metric-label">Who is doing it?</span>
+            <strong>{assignedTechnicianLabel}</strong>
+            <p>{assignedTechnicianLabel === "Not assigned yet" ? "Choose technician ownership before the job drops into normal bench flow." : "Assignment is in place, but booking detail may still need finishing."}</p>
+          </article>
+          <article className="workshop-os-overview-card">
+            <span className="metric-label">What work and likely price?</span>
+            <strong>{workValueLabel}</strong>
+            <p>{workSummaryText}</p>
+            <div className="workshop-os-overview-card__meta">
+              {details?.currentEstimate?.lineCount
+                ? <span>{details.currentEstimate.lineCount} quoted line{details.currentEstimate.lineCount === 1 ? "" : "s"}</span>
+                : null}
+              {lines.length ? <span>{lines.length} live work line{lines.length === 1 ? "" : "s"}</span> : null}
+              {!lines.length && !details?.currentEstimate ? <span>Add labour or parts to shape the job.</span> : null}
+            </div>
+          </article>
+        </div>
+        {planningSignals.length ? (
+          <div className="workshop-os-overview-planning__notes">
+            {planningSignals.map((signal) => (
+              <article key={`${signal.label}:${signal.detail}`} className="workshop-os-overview-note">
+                <div className="workshop-os-overview-header__signals">
+                  <span className={signal.className}>{signal.label}</span>
+                </div>
+                <p className="table-secondary">{signal.detail}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </>
+  );
 
+  const renderOperationalOverview = () => (
+    <>
       <section className="workshop-os-overlay-next-action">
         <div className="workshop-os-overlay-next-action__copy">
           <p className="ui-page-eyebrow">Next Action</p>
           <h3>{nextAction.title}</h3>
           <p className="table-secondary">{nextAction.body || getNextStepHint(summary)}</p>
         </div>
-        {quickAction ? (
+        {primaryAction ? (
           <div className="workshop-os-overlay-next-action__buttons">
             <button
               type="button"
@@ -1851,43 +2065,43 @@ export const WorkshopJobOverlay = ({
               onClick={() => void runQuickAction()}
               disabled={savingAnyAction}
             >
-              {savingQuickAction ? "Saving..." : quickAction.label}
+              {savingQuickAction ? "Saving..." : primaryAction.label}
             </button>
           </div>
         ) : null}
-        {statusActions.length ? (
-          <div className="workshop-os-overlay-next-action__status-row">
-            <label className="workshop-os-overlay-next-action__field">
-              <span className="metric-label">Change status</span>
-              <select
-                value={statusActionDraft}
-                onChange={(event) => setStatusActionDraft(event.target.value)}
-                disabled={savingAnyAction}
-              >
-                {statusActions.map((action) => (
-                  <option key={`${action.kind}:${action.value}`} value={`${action.kind}:${action.value}`}>
-                    {action.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => void saveStatusDraft()}
-              disabled={savingAnyAction || !selectedStatusAction}
-            >
-              {savingStatus ? "Saving..." : "Apply"}
-            </button>
+        {secondaryActions.length ? (
+          <div className="workshop-os-overlay-next-action__secondary">
+            <span className="metric-label">Other workflow actions</span>
+            <div className="workshop-os-overlay-next-action__secondary-buttons">
+              {secondaryActions.map((action) => (
+                <button
+                  key={`${action.kind}:${action.value}`}
+                  type="button"
+                  onClick={() => void runSecondaryAction(action)}
+                  disabled={savingAnyAction}
+                >
+                  {savingStatus ? "Saving..." : action.label}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
         <div className="workshop-os-overlay-next-action__highlights">
-          {displayWorkflowSummary.blockerLabel ? (
-            <div className="workshop-os-overlay-next-action__highlight workshop-os-overlay-next-action__highlight--blocker">
-              <span className="metric-label">Next step</span>
-              <strong>{displayWorkflowSummary.blockerLabel}</strong>
-              <span className="table-secondary">{displayWorkflowSummary.detail}</span>
-            </div>
-          ) : null}
+          <div className="workshop-os-overlay-next-action__highlight workshop-os-overlay-next-action__highlight--blocker">
+            <span className="metric-label">Current blocker</span>
+            <strong>{displayWorkflowSummary.blockerLabel}</strong>
+            <span className="table-secondary">{displayWorkflowSummary.detail}</span>
+          </div>
+          <div className="workshop-os-overlay-next-action__highlight">
+            <span className="metric-label">Approval</span>
+            <strong>{approvalSignal.label}</strong>
+            <span className="table-secondary">{approvalSignal.detail}</span>
+          </div>
+          <div className="workshop-os-overlay-next-action__highlight">
+            <span className="metric-label">Parts</span>
+            <strong>{partsSignal.label}</strong>
+            <span className="table-secondary">{partsSignal.detail}</span>
+          </div>
           {nextAction.highlights.map((highlight) => (
             <div key={highlight} className="workshop-os-overlay-next-action__highlight">
               <span className="table-secondary">{highlight}</span>
@@ -1902,59 +2116,40 @@ export const WorkshopJobOverlay = ({
         ) : null}
       </section>
 
-      {renderSection(
-        "customer",
-        "Customer",
-        "Customer context and contact details.",
-        <div className="workshop-os-job-workspace-section__stack">
-          <div className="workshop-os-drawer__grid">
-            <div>
-              <span className="metric-label">Customer</span>
-              <strong>{displayCustomerName}</strong>
-            </div>
-            <div>
-              <span className="metric-label">Linked record</span>
-              <strong>{overlayJob?.customerId || summary?.customerId ? "Linked" : "Not linked"}</strong>
-            </div>
+      <section className="workshop-os-overview-operational">
+        <article className="workshop-os-overview-card">
+          <span className="metric-label">Who and when</span>
+          <strong>{assignedTechnicianLabel}</strong>
+          <p>{scheduleWindowLabel}</p>
+          <div className="workshop-os-overview-card__meta">
+            <span>Promise {promiseDateLabel}</span>
+            {urgency ? <span>{urgency.label}</span> : null}
           </div>
-          {summary?.customer?.email || summary?.customer?.phone ? (
-            <div className="workshop-os-job-workspace-section__meta-list">
-              {summary.customer?.email ? <span>Email: {summary.customer.email}</span> : null}
-              {summary.customer?.phone ? <span>Phone: {summary.customer.phone}</span> : null}
-            </div>
-          ) : (
-            <div className="workshop-os-empty-card">Customer contact details are available from the full job page when needed.</div>
-          )}
-        </div>,
-      )}
+        </article>
+        <article className="workshop-os-overview-card">
+          <span className="metric-label">Work summary</span>
+          <strong>{workValueLabel}</strong>
+          <p>{workSummaryText}</p>
+          <div className="workshop-os-overview-card__meta">
+            {details?.currentEstimate ? <span>{approvalSignal.label}</span> : null}
+            {lines.length ? <span>{lines.length} live work line{lines.length === 1 ? "" : "s"}</span> : <span>No live work lines yet</span>}
+          </div>
+        </article>
+        {collectionSignal ? (
+          <article className="workshop-os-overview-card">
+            <span className="metric-label">{collectionSignal.title}</span>
+            <strong>{overlayJob?.sale ? formatMoney(overlayJob.sale.totalPence) : "Ready in POS"}</strong>
+            <p>{collectionSignal.detail}</p>
+          </article>
+        ) : null}
+      </section>
+    </>
+  );
 
-      {renderSection(
-        "bike",
-        "Bike",
-        "Bike record and identification details.",
-        <div className="workshop-os-job-workspace-section__stack">
-          <div className="workshop-os-drawer__grid">
-            <div>
-              <span className="metric-label">Bike summary</span>
-              <strong>{displayBikeDescription}</strong>
-            </div>
-            <div>
-              <span className="metric-label">Bike record</span>
-              <strong>{overlayJob?.bike?.displayName || "Not linked"}</strong>
-            </div>
-          </div>
-          {overlayJob?.bike ? (
-            <div className="workshop-os-job-workspace-section__meta-list">
-              {overlayJob.bike.make || overlayJob.bike.model ? <span>{overlayJob.bike.make || ""} {overlayJob.bike.model || ""}</span> : null}
-              {overlayJob.bike.colour ? <span>Colour: {overlayJob.bike.colour}</span> : null}
-              {overlayJob.bike.serialNumber ? <span>Serial: {overlayJob.bike.serialNumber}</span> : null}
-              {overlayJob.bike.frameNumber ? <span>Frame: {overlayJob.bike.frameNumber}</span> : null}
-            </div>
-          ) : (
-            <div className="workshop-os-empty-card">No bike record is linked to this job yet.</div>
-          )}
-        </div>,
-      )}
+  const renderOverviewTab = () => (
+    <div className="workshop-os-modal__panel">
+      {renderOverviewHeader()}
+      {overviewMode === "planning" ? renderPlanningOverview() : renderOperationalOverview()}
     </div>
   );
 
