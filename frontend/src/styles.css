@@ -5174,8 +5174,7 @@ th {
 
 .workshop-os-overview-header,
 .workshop-os-overview-planning,
-.workshop-os-overview-operational,
-.workshop-os-schedule-intro {
+.workshop-os-overview-operational {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -5186,8 +5185,7 @@ th {
 }
 
 .workshop-os-overview-header__identity,
-.workshop-os-overview-planning__copy,
-.workshop-os-schedule-intro__copy {
+.workshop-os-overview-planning__copy {
   display: grid;
   gap: 4px;
 }
@@ -5196,8 +5194,6 @@ th {
 .workshop-os-overview-header__identity p,
 .workshop-os-overview-planning__copy h3,
 .workshop-os-overview-planning__copy p,
-.workshop-os-schedule-intro__copy h3,
-.workshop-os-schedule-intro__copy p,
 .workshop-os-overview-card p,
 .workshop-os-overview-note p,
 .workshop-os-overlay-next-action__copy h3,
@@ -5237,10 +5233,69 @@ th {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.workshop-os-schedule-summary {
+.workshop-os-schedule-surface,
+.workshop-os-schedule-day-snapshot,
+.workshop-os-schedule-day-snapshot__groups,
+.workshop-os-schedule-day-snapshot__group {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-os-schedule-surface__grid {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workshop-os-schedule-surface__card:first-child {
+  grid-column: span 2;
+}
+
+.workshop-os-schedule-surface__header,
+.workshop-os-schedule-day-snapshot__item-row,
+.workshop-os-schedule-day-snapshot__group-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workshop-os-schedule-surface__header > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-schedule-surface__header .table-secondary {
+  margin: 0;
+}
+
+.workshop-os-schedule-surface__inputs {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workshop-os-schedule-surface__inputs label {
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-os-schedule-surface__inputs input {
+  width: 100%;
+  min-width: 0;
+}
+
+.workshop-os-schedule-surface__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.workshop-os-schedule-day-snapshot__item--current {
+  border-color: #bfd4e7;
+  background: #f3f8fc;
 }
 
 .workshop-os-overview-planning__grid,
@@ -5312,7 +5367,8 @@ th {
 
   .workshop-os-overview-planning__grid,
   .workshop-os-overview-operational,
-  .workshop-os-schedule-summary {
+  .workshop-os-schedule-surface__grid,
+  .workshop-os-schedule-surface__inputs {
     grid-template-columns: 1fr;
   }
 }
@@ -5341,51 +5397,6 @@ th {
 .workshop-os-overlay-hero__facts strong,
 .workshop-os-overlay-next-action__highlight strong {
   color: #1a2432;
-}
-
-.workshop-os-overlay-schedule-slot__display {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #1a2432;
-  font: inherit;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.workshop-os-overlay-schedule-slot__display:hover {
-  color: #0f4f94;
-}
-
-.workshop-os-overlay-schedule-slot__editor {
-  display: grid;
-  gap: 8px;
-}
-
-.workshop-os-overlay-schedule-slot__inputs {
-  display: grid;
-  gap: 8px;
-}
-
-.workshop-os-overlay-schedule-slot__inputs label {
-  display: grid;
-  gap: 4px;
-}
-
-.workshop-os-overlay-schedule-slot__inputs input {
-  width: 100%;
-  min-width: 0;
-}
-
-.workshop-os-overlay-schedule-slot__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .workshop-os-overlay-hero__issue {
