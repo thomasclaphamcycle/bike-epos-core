@@ -2499,213 +2499,217 @@ export const WorkshopJobOverlay = ({
         </div>
         <div className="workshop-os-job-workspace-section__body workshop-os-modal__schedule-stack">
           <div className="workshop-os-schedule-surface">
-            <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card">
-              <div className="workshop-os-schedule-surface__header">
-                <div>
-                  <strong>Booking</strong>
-                  <span className="table-secondary">Choose the workshop day and timed slot for this job.</span>
-                </div>
-                <div className="workshop-os-job-workspace-section__meta-list">
-                  <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
-                  <span>{scheduleDraftDurationMinutes ? `${scheduleDraftDurationMinutes} min` : "Pick a valid slot"}</span>
-                </div>
-              </div>
-
-              <div className="workshop-os-schedule-surface__inputs">
-                <label>
-                  <span className="metric-label">Day</span>
-                  <input
-                    type="date"
-                    value={scheduleDraft.dateKey}
-                    onChange={(event) => updateScheduleDraftField("dateKey", event.target.value)}
-                    disabled={savingSchedule}
-                  />
-                </label>
-                <label>
-                  <span className="metric-label">Start</span>
-                  <input
-                    type="time"
-                    value={scheduleDraft.startTime}
-                    onChange={(event) => updateScheduleDraftField("startTime", event.target.value)}
-                    disabled={savingSchedule}
-                  />
-                </label>
-                <label>
-                  <span className="metric-label">End</span>
-                  <input
-                    type="time"
-                    value={scheduleDraft.endTime}
-                    onChange={(event) => updateScheduleDraftField("endTime", event.target.value)}
-                    disabled={savingSchedule}
-                  />
-                </label>
-              </div>
-
-              {scheduleError ? (
-                <div className="restricted-panel warning-panel">
-                  {scheduleError}
-                </div>
-              ) : null}
-
-              <div className="workshop-os-schedule-surface__actions">
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => void saveSchedule()}
-                  disabled={savingSchedule || !canSaveScheduleDraft}
-                >
-                  {savingSchedule ? "Confirming..." : "Confirm"}
-                </button>
-                <span className="table-secondary">
-                  {hasTimedBooking
-                    ? `Current slot: ${scheduleWindowLabel}`
-                    : hasBookingCommitment
-                      ? `Promise date: ${promiseDateLabel}`
-                      : "No timed booking is saved yet."}
-                </span>
-              </div>
-            </div>
-
-            <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-day-snapshot">
-              <div className="workshop-os-schedule-surface__header">
-                <div>
-                  <strong>Selected day snapshot</strong>
-                  <span className="table-secondary">Check the shape of the day before you confirm the booking.</span>
-                </div>
-                <div className="workshop-os-job-workspace-section__meta-list">
-                  <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
-                  {selectedScheduleDay?.isClosed
-                    ? <span>{selectedScheduleDay.closedReason || "Closed"}</span>
-                    : selectedScheduleDay?.opensAt && selectedScheduleDay?.closesAt
-                      ? <span>{selectedScheduleDay.opensAt} - {selectedScheduleDay.closesAt}</span>
-                      : null}
-                  {scheduleDayCapacitySummary?.totalMinutes
-                    ? <span>{scheduleDayCapacitySummary.bookedMinutes} / {scheduleDayCapacitySummary.totalMinutes} mins booked</span>
-                    : null}
-                  <span>{selectedScheduleJobs.length} booked job{selectedScheduleJobs.length === 1 ? "" : "s"}</span>
-                </div>
-              </div>
-
-              <div className="table-secondary">
-                {currentJobAppearsOnSelectedDay
-                  ? "This job is already on the selected day."
-                  : "Existing jobs for the selected day are listed below."}
-              </div>
-
-              <div className="workshop-os-schedule-day-snapshot__body">
-                {loadingScheduleDaySnapshot ? (
-                  <div className="workshop-os-empty-card">Loading selected day…</div>
-                ) : scheduleDaySnapshotError ? (
-                  <div className="restricted-panel warning-panel">
-                    {scheduleDaySnapshotError}
+            <div className="workshop-os-schedule-surface__action-column">
+              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card">
+                <div className="workshop-os-schedule-surface__header">
+                  <div>
+                    <strong>Booking</strong>
+                    <span className="table-secondary">Choose the workshop day and timed slot for this job.</span>
                   </div>
-                ) : selectedScheduleDay?.isClosed ? (
-                  <div className="workshop-os-empty-card">
-                    {selectedScheduleDay.closedReason || "Workshop is closed on the selected day."}
+                  <div className="workshop-os-job-workspace-section__meta-list">
+                    <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
+                    <span>{scheduleDraftDurationMinutes ? `${scheduleDraftDurationMinutes} min` : "Pick a valid slot"}</span>
                   </div>
-                ) : groupedScheduleJobs.length === 0 ? (
-                  <div className="workshop-os-empty-card">No jobs booked for this day yet.</div>
-                ) : (
-                  <div className="workshop-os-schedule-day-snapshot__groups">
-                    {groupedScheduleJobs.map((group) => (
-                      <section key={group.label} className="workshop-os-schedule-day-snapshot__group">
-                        <div className="workshop-os-schedule-day-snapshot__group-header">
-                          <strong>{group.label}</strong>
-                          <span className="stock-badge stock-muted">{group.jobs.length}</span>
-                        </div>
-                        <div className="workshop-os-job-workspace-section__list">
-                          {group.jobs.map((job) => {
-                            const isCurrentJob = job.id === jobId;
-                            const timeLabel = [
-                              formatOptionalTime(job.scheduledStartAt, scheduleSnapshotTimeZone) || "--:--",
-                              formatOptionalTime(job.scheduledEndAt, scheduleSnapshotTimeZone) || "--:--",
-                            ].join(" - ");
-
-                            return (
-                              <article
-                                key={job.id}
-                                className={`workshop-os-job-workspace-section__list-item${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
-                              >
-                                <div className="workshop-os-schedule-day-snapshot__item-row">
-                                  <div>
-                                    <strong>{timeLabel}</strong>
-                                    <p className="muted-text">{getSnapshotJobHeading(job)}</p>
-                                  </div>
-                                  <div className="workshop-os-overview-header__signals">
-                                    {isCurrentJob ? <span className="status-badge status-info">This job</span> : null}
-                                    <span className={workshopRawStatusClass(job.rawStatus)}>{workshopRawStatusLabel(job.rawStatus)}</span>
-                                  </div>
-                                </div>
-                                <p className="muted-text">{getSnapshotJobSubline(job)}</p>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card">
-              <div className="workshop-os-schedule-surface__header">
-                <div>
-                  <strong>Assign technician</strong>
-                  <span className="table-secondary">Set bench ownership once the booking slot looks right.</span>
                 </div>
-                <div className="workshop-os-job-workspace-section__meta-list">
-                  <span>{assignedTechnicianLabel}</span>
-                  <span>{displayWorkflowSummary.label}</span>
-                </div>
-              </div>
 
-              {canAssignTechnician ? (
-                <div className="workshop-os-modal__assignment-controls">
-                  <label className="workshop-os-overlay-next-action__field">
-                    <span className="metric-label">Technician</span>
-                    <select
-                      value={assignedStaffIdDraft}
-                      onChange={(event) => setAssignedStaffIdDraft(event.target.value)}
-                      disabled={savingAnyAction}
-                    >
-                      <option value="">Leave unassigned</option>
-                      {technicianOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
+                <div className="workshop-os-schedule-surface__inputs">
+                  <label>
+                    <span className="metric-label">Day</span>
+                    <input
+                      type="date"
+                      value={scheduleDraft.dateKey}
+                      onChange={(event) => updateScheduleDraftField("dateKey", event.target.value)}
+                      disabled={savingSchedule}
+                    />
                   </label>
-                  <div className="workshop-os-schedule-surface__actions">
-                    <button
-                      type="button"
-                      onClick={() => void saveAssignment()}
-                      disabled={savingAnyAction || !hasAssignmentChange}
-                    >
-                      {savingAssignment
-                        ? "Saving..."
-                        : assignedStaffIdDraft
-                          ? "Assign technician"
-                          : "Clear technician"}
-                    </button>
-                    <span className="table-secondary">
-                      {assignedTechnicianLabel === "Not assigned yet"
-                        ? "No technician is currently holding this booking."
-                        : `Currently assigned to ${assignedTechnicianLabel}.`}
-                    </span>
+                  <label>
+                    <span className="metric-label">Start</span>
+                    <input
+                      type="time"
+                      value={scheduleDraft.startTime}
+                      onChange={(event) => updateScheduleDraftField("startTime", event.target.value)}
+                      disabled={savingSchedule}
+                    />
+                  </label>
+                  <label>
+                    <span className="metric-label">End</span>
+                    <input
+                      type="time"
+                      value={scheduleDraft.endTime}
+                      onChange={(event) => updateScheduleDraftField("endTime", event.target.value)}
+                      disabled={savingSchedule}
+                    />
+                  </label>
+                </div>
+
+                {scheduleError ? (
+                  <div className="restricted-panel warning-panel">
+                    {scheduleError}
+                  </div>
+                ) : null}
+
+                <div className="workshop-os-schedule-surface__actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => void saveSchedule()}
+                    disabled={savingSchedule || !canSaveScheduleDraft}
+                  >
+                    {savingSchedule ? "Confirming..." : "Confirm"}
+                  </button>
+                  <span className="table-secondary">
+                    {hasTimedBooking
+                      ? `Current slot: ${scheduleWindowLabel}`
+                      : hasBookingCommitment
+                        ? `Promise date: ${promiseDateLabel}`
+                        : "No timed booking is saved yet."}
+                  </span>
+                </div>
+              </div>
+
+              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-surface__card">
+                <div className="workshop-os-schedule-surface__header">
+                  <div>
+                    <strong>Assign technician</strong>
+                    <span className="table-secondary">Set bench ownership once the booking slot looks right.</span>
+                  </div>
+                  <div className="workshop-os-job-workspace-section__meta-list">
+                    <span>{assignedTechnicianLabel}</span>
+                    <span>{displayWorkflowSummary.label}</span>
                   </div>
                 </div>
-              ) : (
-                <div className="workshop-os-empty-card">Technician assignment is not available for this job.</div>
-              )}
 
-              {actionError ? (
-                <div className="restricted-panel warning-panel">
-                  <strong>Unable to complete scheduling action</strong>
-                  <div className="table-secondary">{actionError}</div>
+                {canAssignTechnician ? (
+                  <div className="workshop-os-modal__assignment-controls">
+                    <label className="workshop-os-overlay-next-action__field">
+                      <span className="metric-label">Technician</span>
+                      <select
+                        value={assignedStaffIdDraft}
+                        onChange={(event) => setAssignedStaffIdDraft(event.target.value)}
+                        disabled={savingAnyAction}
+                      >
+                        <option value="">Leave unassigned</option>
+                        {technicianOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="workshop-os-schedule-surface__actions">
+                      <button
+                        type="button"
+                        onClick={() => void saveAssignment()}
+                        disabled={savingAnyAction || !hasAssignmentChange}
+                      >
+                        {savingAssignment
+                          ? "Saving..."
+                          : assignedStaffIdDraft
+                            ? "Assign technician"
+                            : "Clear technician"}
+                      </button>
+                      <span className="table-secondary">
+                        {assignedTechnicianLabel === "Not assigned yet"
+                          ? "No technician is currently holding this booking."
+                          : `Currently assigned to ${assignedTechnicianLabel}.`}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="workshop-os-empty-card">Technician assignment is not available for this job.</div>
+                )}
+
+                {actionError ? (
+                  <div className="restricted-panel warning-panel">
+                    <strong>Unable to complete scheduling action</strong>
+                    <div className="table-secondary">{actionError}</div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="workshop-os-schedule-surface__reference-column">
+              <div className="workshop-os-job-workspace-section__detail-card workshop-os-schedule-day-snapshot">
+                <div className="workshop-os-schedule-surface__header">
+                  <div>
+                    <strong>Selected day snapshot</strong>
+                    <span className="table-secondary">Check the shape of the day before you confirm the booking.</span>
+                  </div>
+                  <div className="workshop-os-job-workspace-section__meta-list">
+                    <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
+                    {selectedScheduleDay?.isClosed
+                      ? <span>{selectedScheduleDay.closedReason || "Closed"}</span>
+                      : selectedScheduleDay?.opensAt && selectedScheduleDay?.closesAt
+                        ? <span>{selectedScheduleDay.opensAt} - {selectedScheduleDay.closesAt}</span>
+                        : null}
+                    {scheduleDayCapacitySummary?.totalMinutes
+                      ? <span>{scheduleDayCapacitySummary.bookedMinutes} / {scheduleDayCapacitySummary.totalMinutes} mins booked</span>
+                      : null}
+                    <span>{selectedScheduleJobs.length} booked job{selectedScheduleJobs.length === 1 ? "" : "s"}</span>
+                  </div>
                 </div>
-              ) : null}
+
+                <div className="table-secondary">
+                  {currentJobAppearsOnSelectedDay
+                    ? "This job is already on the selected day."
+                    : "Existing jobs for the selected day are listed below."}
+                </div>
+
+                <div className="workshop-os-schedule-day-snapshot__body">
+                  {loadingScheduleDaySnapshot ? (
+                    <div className="workshop-os-empty-card">Loading selected day…</div>
+                  ) : scheduleDaySnapshotError ? (
+                    <div className="restricted-panel warning-panel">
+                      {scheduleDaySnapshotError}
+                    </div>
+                  ) : selectedScheduleDay?.isClosed ? (
+                    <div className="workshop-os-empty-card">
+                      {selectedScheduleDay.closedReason || "Workshop is closed on the selected day."}
+                    </div>
+                  ) : groupedScheduleJobs.length === 0 ? (
+                    <div className="workshop-os-empty-card">No jobs booked for this day yet.</div>
+                  ) : (
+                    <div className="workshop-os-schedule-day-snapshot__groups">
+                      {groupedScheduleJobs.map((group) => (
+                        <section key={group.label} className="workshop-os-schedule-day-snapshot__group">
+                          <div className="workshop-os-schedule-day-snapshot__group-header">
+                            <strong>{group.label}</strong>
+                            <span className="stock-badge stock-muted">{group.jobs.length}</span>
+                          </div>
+                          <div className="workshop-os-job-workspace-section__list">
+                            {group.jobs.map((job) => {
+                              const isCurrentJob = job.id === jobId;
+                              const timeLabel = [
+                                formatOptionalTime(job.scheduledStartAt, scheduleSnapshotTimeZone) || "--:--",
+                                formatOptionalTime(job.scheduledEndAt, scheduleSnapshotTimeZone) || "--:--",
+                              ].join(" - ");
+
+                              return (
+                                <article
+                                  key={job.id}
+                                  className={`workshop-os-job-workspace-section__list-item${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
+                                >
+                                  <div className="workshop-os-schedule-day-snapshot__item-row">
+                                    <div>
+                                      <strong>{timeLabel}</strong>
+                                      <p className="muted-text">{getSnapshotJobHeading(job)}</p>
+                                    </div>
+                                    <div className="workshop-os-overview-header__signals">
+                                      {isCurrentJob ? <span className="status-badge status-info">This job</span> : null}
+                                      <span className={workshopRawStatusClass(job.rawStatus)}>{workshopRawStatusLabel(job.rawStatus)}</span>
+                                    </div>
+                                  </div>
+                                  <p className="muted-text">{getSnapshotJobSubline(job)}</p>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
