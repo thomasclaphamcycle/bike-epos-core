@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
@@ -166,6 +166,21 @@ type PositionedJob = {
   width: number;
 };
 
+type DragState = {
+  pointerId: number;
+  job: CalendarJob;
+  dateKey: string;
+  left: number;
+  width: number;
+  height: number;
+  pointerOffsetY: number;
+  startClientY: number;
+  currentTop: number;
+  snappedStartMinutes: number;
+  durationMinutes: number;
+  active: boolean;
+};
+
 type TimeOffBlock = {
   id: string;
   top: number;
@@ -183,6 +198,8 @@ const JOB_BLOCK_GAP = 6;
 const MIN_BOOKING_BLOCK_HEIGHT = 48;
 const COMPACT_BOOKING_BLOCK_HEIGHT = 72;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
+const DRAG_SNAP_MINUTES = 15;
+const DRAG_START_THRESHOLD_PX = 6;
 
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
@@ -686,6 +703,53 @@ const buildInitialDraft = (
   durationMinutes: `${job.durationMinutes || 60}`,
 });
 
+const getScheduledDurationMinutes = (job: CalendarJob, timeZone?: string) => {
+  if (job.durationMinutes && job.durationMinutes > 0) {
+    return job.durationMinutes;
+  }
+
+  const startMinutes = getMinutesInTimeZone(job.scheduledStartAt, timeZone);
+  const endMinutes = getMinutesInTimeZone(job.scheduledEndAt, timeZone);
+  if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
+    return 60;
+  }
+
+  return endMinutes - startMinutes;
+};
+
+const snapMinutesToGrid = (minutes: number, intervalMinutes: number) =>
+  Math.round(minutes / intervalMinutes) * intervalMinutes;
+
+const buildBlockTimeLabel = (startMinutes: number, durationMinutes: number) =>
+  `${formatClockLabel(startMinutes)} - ${formatClockLabel(startMinutes + durationMinutes)}`;
+
+const renderSchedulerBlockContent = ({
+  job,
+  timeLabel,
+  metaLabel,
+  isCompactBlock,
+}: {
+  job: CalendarJob;
+  timeLabel: string;
+  metaLabel: string;
+  isCompactBlock: boolean;
+}) => (
+  <>
+    <div className="workshop-scheduler-block__time">{timeLabel}</div>
+    <strong className="workshop-scheduler-block__customer">
+      {getBookingCustomerName(job)}
+    </strong>
+    <div className="workshop-scheduler-block__bike">
+      {getBookingBikeLine(job)}
+    </div>
+    {!isCompactBlock ? (
+      <div className="workshop-scheduler-block__meta">
+        {metaLabel}
+      </div>
+    ) : null}
+  </>
+);
+
 const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   const classes = ["workshop-scheduler-block"];
 
@@ -749,6 +813,16 @@ export const WorkshopSchedulerScreen = ({
   });
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dragSavingJobId, setDragSavingJobId] = useState<string | null>(null);
+  const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const dragStateRef = useRef<DragState | null>(null);
+  const suppressClickJobIdRef = useRef<string | null>(null);
+
+  const updateDragState = (nextState: DragState | null) => {
+    dragStateRef.current = nextState;
+    setDragState(nextState);
+  };
 
   const standaloneView = searchParams.get("view") === "day" ? "day" : "week";
   const standaloneAnchorDateKey = searchParams.get("date") || workshopTodayDateKey();
@@ -888,6 +962,80 @@ export const WorkshopSchedulerScreen = ({
     }
   }, [calendar?.staff, selectedTechnicianId]);
 
+  useEffect(() => {
+    if (!dragState) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const current = dragStateRef.current;
+      if (!current || event.pointerId !== current.pointerId) {
+        return;
+      }
+
+      const track = dayTrackRefs.current[current.dateKey];
+      if (!track) {
+        return;
+      }
+
+      const nextActive = current.active
+        || Math.abs(event.clientY - current.startClientY) >= DRAG_START_THRESHOLD_PX;
+      const relativeTop = event.clientY - track.getBoundingClientRect().top - current.pointerOffsetY;
+      const rawMinutes = timeline.openMinutes + (relativeTop / PX_PER_MINUTE);
+      const maxStartMinutes = Math.max(timeline.openMinutes, timeline.closeMinutes - current.durationMinutes);
+      const snappedStartMinutes = clamp(
+        snapMinutesToGrid(rawMinutes, DRAG_SNAP_MINUTES),
+        timeline.openMinutes,
+        maxStartMinutes,
+      );
+      const nextTop = (snappedStartMinutes - timeline.openMinutes) * PX_PER_MINUTE;
+
+      if (!nextActive && nextTop === current.currentTop) {
+        return;
+      }
+
+      updateDragState({
+        ...current,
+        active: nextActive,
+        currentTop: nextTop,
+        snappedStartMinutes,
+      });
+
+      if (nextActive) {
+        event.preventDefault();
+      }
+    };
+
+    const finishDrag = (event: PointerEvent, cancelled: boolean) => {
+      const current = dragStateRef.current;
+      if (!current || event.pointerId !== current.pointerId) {
+        return;
+      }
+
+      updateDragState(null);
+
+      if (cancelled || !current.active) {
+        return;
+      }
+
+      suppressClickJobIdRef.current = current.job.id;
+      void persistDraggedSchedule(current);
+    };
+
+    const handlePointerUp = (event: PointerEvent) => finishDrag(event, false);
+    const handlePointerCancel = (event: PointerEvent) => finishDrag(event, true);
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+    };
+  }, [dragState, timeline.closeMinutes, timeline.openMinutes]);
+
   const visibleScheduledJobs = useMemo(
     () => (
       selectedTechnicianId
@@ -991,6 +1139,96 @@ export const WorkshopSchedulerScreen = ({
   const selectedOverlaySummary: WorkshopJobOverlaySummary | null = selectedOverlayJob
     ? toOverlaySummary(selectedOverlayJob)
     : overlaySummary;
+
+  const persistDraggedSchedule = async (state: DragState) => {
+    const startTimeValue = formatClockLabel(state.snappedStartMinutes);
+    const scheduledStartAt = buildScheduleIso(state.dateKey, startTimeValue);
+    if (!scheduledStartAt) {
+      error("Could not calculate the dropped booking time.");
+      return;
+    }
+
+    setDragSavingJobId(state.job.id);
+    setScheduleError(null);
+
+    try {
+      const response = await apiPatch<SchedulePatchResponse>(
+        `/api/workshop/jobs/${encodeURIComponent(state.job.id)}/schedule`,
+        {
+          staffId: state.job.assignedStaffId || null,
+          scheduledStartAt,
+          durationMinutes: state.durationMinutes,
+        },
+      );
+
+      if (selectedJobId === state.job.id) {
+        setDraft((current) => ({
+          ...current,
+          dateKey: state.dateKey,
+          startTime: startTimeValue,
+          durationMinutes: `${state.durationMinutes}`,
+        }));
+      }
+
+      success(
+        response.idempotent
+          ? `Booking already matched ${buildBlockTimeLabel(state.snappedStartMinutes, state.durationMinutes)}.`
+          : `Booking moved to ${buildBlockTimeLabel(state.snappedStartMinutes, state.durationMinutes)}.`,
+      );
+      await loadCalendar();
+    } catch (dragError) {
+      const message = dragError instanceof Error ? dragError.message : "Failed to update workshop schedule";
+      setScheduleError(message);
+      error(message);
+    } finally {
+      setDragSavingJobId(null);
+    }
+  };
+
+  const handleJobBlockPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    job: CalendarJob,
+    dateKey: string,
+    top: number,
+    height: number,
+    left: number,
+    width: number,
+  ) => {
+    if (event.button !== 0 || saving || Boolean(dragSavingJobId)) {
+      return;
+    }
+
+    const durationMinutes = getScheduledDurationMinutes(job, calendarTimeZone);
+    const startMinutes = getMinutesInTimeZone(job.scheduledStartAt, calendarTimeZone);
+    if (!durationMinutes || startMinutes === null) {
+      return;
+    }
+
+    const blockRect = event.currentTarget.getBoundingClientRect();
+    updateDragState({
+      pointerId: event.pointerId,
+      job,
+      dateKey,
+      left,
+      width,
+      height,
+      pointerOffsetY: event.clientY - blockRect.top,
+      startClientY: event.clientY,
+      currentTop: top,
+      snappedStartMinutes: startMinutes,
+      durationMinutes,
+      active: false,
+    });
+  };
+
+  const handleJobBlockClick = (job: CalendarJob) => {
+    if (suppressClickJobIdRef.current === job.id) {
+      suppressClickJobIdRef.current = null;
+      return;
+    }
+
+    openJobOverlay(job);
+  };
 
   const saveSchedule = async () => {
     if (!selectedJob) {
@@ -1246,11 +1484,15 @@ export const WorkshopSchedulerScreen = ({
               {days.map((day) => {
                 const dayBlocks = positionedJobsByDay.get(day.date) ?? [];
                 const timeOffBlocks = workshopTimeOffByDay.get(day.date) ?? [];
+                const previewBlock = dragState?.active && dragState.dateKey === day.date ? dragState : null;
 
                 return (
                   <div
                     key={`${day.date}-track`}
-                    className={`workshop-scheduler-grid__day-track${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}`}
+                    ref={(node) => {
+                      dayTrackRefs.current[day.date] = node;
+                    }}
+                    className={`workshop-scheduler-grid__day-track${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}${previewBlock ? " workshop-scheduler-grid__day-track--drag-active" : ""}`}
                     style={{ height: `${trackHeight}px` }}
                   >
                     {timeLabels.map((minutes) => (
@@ -1273,7 +1515,8 @@ export const WorkshopSchedulerScreen = ({
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
                       const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
-                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}`;
+                      const isDragging = dragState?.active && dragState.job.id === job.id;
+                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}${isDragging ? " workshop-scheduler-block--dragging" : ""}`;
 
                       return (
                         <button
@@ -1287,25 +1530,39 @@ export const WorkshopSchedulerScreen = ({
                             width: `${width}px`,
                             height: `${height}px`,
                           }}
-                          onClick={() => openJobOverlay(job)}
+                          onPointerDown={(event) => handleJobBlockPointerDown(event, job, day.date, top, height, left, width)}
+                          onClick={() => handleJobBlockClick(job)}
+                          disabled={saving || dragSavingJobId === job.id}
                         >
-                          <div className="workshop-scheduler-block__time">
-                            {formatOptionalTime(job.scheduledStartAt, calendarTimeZone)} - {formatOptionalTime(job.scheduledEndAt, calendarTimeZone)}
-                          </div>
-                          <strong className="workshop-scheduler-block__customer">
-                            {getBookingCustomerName(job)}
-                          </strong>
-                          <div className="workshop-scheduler-block__bike">
-                            {getBookingBikeLine(job)}
-                          </div>
-                          {!isCompactBlock ? (
-                            <div className="workshop-scheduler-block__meta">
-                              {getBookingMetaLine(job, todayKey, calendarTimeZone)}
-                            </div>
-                          ) : null}
+                          {renderSchedulerBlockContent({
+                            job,
+                            timeLabel: `${formatOptionalTime(job.scheduledStartAt, calendarTimeZone)} - ${formatOptionalTime(job.scheduledEndAt, calendarTimeZone)}`,
+                            metaLabel: getBookingMetaLine(job, todayKey, calendarTimeZone),
+                            isCompactBlock,
+                          })}
                         </button>
                       );
                     })}
+
+                    {previewBlock ? (
+                      <div
+                        aria-hidden="true"
+                        className={`${buildJobToneClass(previewBlock.job, todayKey, calendarTimeZone)} workshop-scheduler-block--drag-preview${previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT ? " workshop-scheduler-block--compact" : ""}`}
+                        style={{
+                          top: `${previewBlock.currentTop}px`,
+                          left: `${previewBlock.left}px`,
+                          width: `${previewBlock.width}px`,
+                          height: `${previewBlock.height}px`,
+                        }}
+                      >
+                        {renderSchedulerBlockContent({
+                          job: previewBlock.job,
+                          timeLabel: buildBlockTimeLabel(previewBlock.snappedStartMinutes, previewBlock.durationMinutes),
+                          metaLabel: `Drop to move this booking to ${formatClockLabel(previewBlock.snappedStartMinutes)}`,
+                          isCompactBlock: previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT,
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
