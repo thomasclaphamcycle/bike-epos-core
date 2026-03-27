@@ -468,6 +468,24 @@ const minutesBetweenTimes = (startTime: string, endTime: string) => {
   return ((endHour * 60) + endMinute) - ((startHour * 60) + startMinute);
 };
 
+const addMinutesToTimeValue = (timeValue: string, minutesToAdd: number) => {
+  if (!timeValue || !timeValue.includes(":") || !Number.isInteger(minutesToAdd)) {
+    return timeValue;
+  }
+
+  const [hour, minute] = timeValue.split(":").map((value) => Number(value));
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+    return timeValue;
+  }
+
+  const totalMinutesInDay = 24 * 60;
+  const normalizedMinutes = ((((hour * 60) + minute + minutesToAdd) % totalMinutesInDay) + totalMinutesInDay) % totalMinutesInDay;
+  const nextHour = Math.floor(normalizedMinutes / 60);
+  const nextMinute = normalizedMinutes % 60;
+
+  return `${`${nextHour}`.padStart(2, "0")}:${`${nextMinute}`.padStart(2, "0")}`;
+};
+
 const formatScheduleWindow = (
   startAt: string | null | undefined,
   endAt: string | null | undefined,
@@ -974,24 +992,64 @@ type WorkshopJobOverlayScheduleDraft = {
   endTime: string;
 };
 
+const getPreferredScheduleDurationMinutes = ({
+  durationMinutes,
+  scheduledStartAt,
+  scheduledEndAt,
+  timeZone,
+  fallbackMinutes = 60,
+}: {
+  durationMinutes?: number | null | undefined;
+  scheduledStartAt?: string | null | undefined;
+  scheduledEndAt?: string | null | undefined;
+  timeZone?: string;
+  fallbackMinutes?: number;
+}) => {
+  if (Number.isInteger(durationMinutes) && (durationMinutes ?? 0) > 0) {
+    return durationMinutes as number;
+  }
+
+  const persistedDurationMinutes = minutesBetweenTimes(
+    toTimeInputValue(scheduledStartAt, timeZone),
+    toTimeInputValue(scheduledEndAt, timeZone),
+  );
+  if (Number.isInteger(persistedDurationMinutes) && (persistedDurationMinutes ?? 0) > 0) {
+    return persistedDurationMinutes as number;
+  }
+
+  return fallbackMinutes;
+};
+
 const createScheduleDraft = ({
   scheduledDate,
   scheduledStartAt,
   scheduledEndAt,
+  durationMinutes,
   timeZone,
 }: {
   scheduledDate: string | null | undefined;
   scheduledStartAt: string | null | undefined;
   scheduledEndAt: string | null | undefined;
+  durationMinutes?: number | null | undefined;
   timeZone?: string;
-}): WorkshopJobOverlayScheduleDraft => ({
-  dateKey:
-    toDateInputValue(scheduledStartAt, timeZone)
-    || scheduledDate?.slice(0, 10)
-    || new Date().toISOString().slice(0, 10),
-  startTime: toTimeInputValue(scheduledStartAt, timeZone) || "10:00",
-  endTime: toTimeInputValue(scheduledEndAt, timeZone) || "11:00",
-});
+}): WorkshopJobOverlayScheduleDraft => {
+  const startTime = toTimeInputValue(scheduledStartAt, timeZone) || "10:00";
+  const defaultDurationMinutes = getPreferredScheduleDurationMinutes({
+    durationMinutes,
+    scheduledStartAt,
+    scheduledEndAt,
+    timeZone,
+  });
+
+  return {
+    dateKey:
+      toDateInputValue(scheduledStartAt, timeZone)
+      || scheduledDate?.slice(0, 10)
+      || new Date().toISOString().slice(0, 10),
+    startTime,
+    endTime: toTimeInputValue(scheduledEndAt, timeZone) || addMinutesToTimeValue(startTime, defaultDurationMinutes),
+  };
+};
 
 const getStatusProgressionActions = ({
   status,
@@ -1094,6 +1152,7 @@ export const WorkshopJobOverlay = ({
       scheduledDate: summary?.scheduledDate || null,
       scheduledStartAt: summary?.scheduledStartAt || null,
       scheduledEndAt: summary?.scheduledEndAt || null,
+      durationMinutes: summary?.durationMinutes || null,
       timeZone,
     }),
   );
@@ -1176,6 +1235,7 @@ export const WorkshopJobOverlay = ({
         scheduledDate: details?.job.scheduledDate || summary?.scheduledDate || null,
         scheduledStartAt: details?.job.scheduledStartAt || summary?.scheduledStartAt || null,
         scheduledEndAt: details?.job.scheduledEndAt || summary?.scheduledEndAt || null,
+        durationMinutes: details?.job.durationMinutes || summary?.durationMinutes || null,
         timeZone,
       }),
     );
@@ -1183,9 +1243,11 @@ export const WorkshopJobOverlay = ({
     details?.job.scheduledDate,
     details?.job.scheduledStartAt,
     details?.job.scheduledEndAt,
+    details?.job.durationMinutes,
     summary?.scheduledDate,
     summary?.scheduledStartAt,
     summary?.scheduledEndAt,
+    summary?.durationMinutes,
     timeZone,
     isEditingSchedule,
   ]);
@@ -1316,6 +1378,13 @@ export const WorkshopJobOverlay = ({
   const displayPartsSummary = details?.partsOverview?.summary ?? summary?.partsSummary ?? null;
   const currentScheduleDraft = createScheduleDraft({
     scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
+    scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+    scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+    durationMinutes: overlayJob?.durationMinutes || summary?.durationMinutes || null,
+    timeZone,
+  });
+  const scheduleAutoDurationMinutes = getPreferredScheduleDurationMinutes({
+    durationMinutes: overlayJob?.durationMinutes || summary?.durationMinutes || null,
     scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
     scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
     timeZone,
@@ -1484,10 +1553,20 @@ export const WorkshopJobOverlay = ({
     field: keyof WorkshopJobOverlayScheduleDraft,
     value: string,
   ) => {
-    setScheduleDraft((current) => ({
-      ...current,
-      [field]: value,
-    }));
+    setScheduleDraft((current) => {
+      if (field === "startTime") {
+        return {
+          ...current,
+          startTime: value,
+          endTime: value ? addMinutesToTimeValue(value, scheduleAutoDurationMinutes) : current.endTime,
+        };
+      }
+
+      return {
+        ...current,
+        [field]: value,
+      };
+    });
     setScheduleError(null);
     setIsEditingSchedule(true);
   };
@@ -1563,6 +1642,7 @@ export const WorkshopJobOverlay = ({
           scheduledDate: response.job.scheduledDate,
           scheduledStartAt: response.job.scheduledStartAt,
           scheduledEndAt: response.job.scheduledEndAt,
+          durationMinutes: response.job.durationMinutes,
           timeZone,
         }),
       );
