@@ -2885,21 +2885,17 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block {
-  --scheduler-block-bg: #ffffff;
-  --scheduler-block-border: #d7dee6;
-  --scheduler-block-shadow: rgba(15, 23, 42, 0.1);
-  --scheduler-block-accent: #327ac3;
   position: absolute;
   z-index: 2;
   display: grid;
   align-content: start;
   gap: 4px;
   min-height: 48px;
-  padding: 9px 10px 9px 14px;
-  border: 1px solid var(--scheduler-block-border);
+  padding: 9px 10px;
+  border: 1px solid #d7dee6;
   border-radius: 14px;
-  background: var(--scheduler-block-bg);
-  box-shadow: 0 6px 14px var(--scheduler-block-shadow);
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
   color: #111;
   text-align: left;
   overflow: hidden;
@@ -2909,22 +2905,8 @@ button.primary.workshop-status-action {
     transform 140ms ease,
     box-shadow 140ms ease,
     background 140ms ease,
-    border-color 140ms ease;
-}
-
-.workshop-scheduler-block::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 5px;
-  background: var(--scheduler-block-accent);
-  border-radius: 14px 0 0 14px;
-  z-index: 0;
-}
-
-.workshop-scheduler-block > * {
-  position: relative;
-  z-index: 1;
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .workshop-scheduler-block:hover {
@@ -2996,7 +2978,52 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-block--compact {
   gap: 2px;
-  padding: 7px 8px 7px 12px;
+  padding: 7px 8px;
+}
+
+.workshop-scheduler-block--overdue {
+  box-shadow: 0 7px 16px rgba(120, 23, 23, 0.12);
+}
+
+.workshop-scheduler-block--selected {
+  border-color: #275f95;
+  box-shadow:
+    0 0 0 2px rgba(39, 95, 149, 0.18),
+    0 12px 20px rgba(15, 23, 42, 0.16);
+}
+
+.workshop-scheduler-block.workshop-status-surface {
+  border-color: var(--workshop-status-border);
+  background: var(--workshop-status-surface);
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.workshop-scheduler-block.workshop-status-surface:hover {
+  background: var(--workshop-status-surface-hover);
+  border-color: color-mix(in srgb, var(--workshop-status-border) 72%, var(--workshop-status-accent));
+}
+
+.workshop-scheduler-block.workshop-status-surface.workshop-scheduler-block--selected {
+  border-color: color-mix(in srgb, var(--workshop-status-border) 64%, #275f95);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--workshop-status-accent) 18%, transparent),
+    0 14px 24px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.workshop-scheduler-block.workshop-status-surface strong {
+  color: var(--workshop-status-surface-title, #102f4a);
+}
+
+.workshop-scheduler-block.workshop-status-surface .workshop-scheduler-block__time,
+.workshop-scheduler-block.workshop-status-surface .workshop-scheduler-block__meta {
+  color: var(--workshop-status-surface-muted, #28557a);
+}
+
+.workshop-scheduler-block.workshop-status-surface .workshop-scheduler-block__bike {
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #102f4a) 80%, #111);
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__time {
@@ -3011,40 +3038,6 @@ button.primary.workshop-status-action {
 .workshop-scheduler-block--compact .workshop-scheduler-block__bike {
   font-size: 0.79rem;
   line-height: 1.15;
-}
-
-.workshop-scheduler-block--default {
-  --scheduler-block-border: #d7dee6;
-  --scheduler-block-accent: #327ac3;
-}
-
-.workshop-scheduler-block--booked {
-  --scheduler-block-accent: #2574c5;
-}
-
-.workshop-scheduler-block--approval {
-  --scheduler-block-accent: #d3a514;
-}
-
-.workshop-scheduler-block--parts {
-  --scheduler-block-accent: #d9771c;
-}
-
-.workshop-scheduler-block--ready {
-  --scheduler-block-accent: #23985b;
-}
-
-.workshop-scheduler-block--overdue {
-  --scheduler-block-border: #e0b0b0;
-  --scheduler-block-accent: #d43a3a;
-  box-shadow: 0 7px 16px rgba(120, 23, 23, 0.12);
-}
-
-.workshop-scheduler-block--selected {
-  border-color: #275f95;
-  box-shadow:
-    0 0 0 2px rgba(39, 95, 149, 0.18),
-    0 12px 20px rgba(15, 23, 42, 0.16);
 }
 
 .workshop-scheduler-rail {
@@ -3088,8 +3081,20 @@ button.primary.workshop-status-action {
   background: #fbfdff;
 }
 
+.workshop-scheduler-queue-card.workshop-status-surface {
+  border-color: var(--workshop-status-border);
+  background: var(--workshop-status-surface);
+  box-shadow:
+    0 8px 16px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
 .workshop-scheduler-queue-card strong {
-  color: var(--cp-navy);
+  color: var(--workshop-status-surface-title, var(--cp-navy));
+}
+
+.workshop-scheduler-queue-card.workshop-status-surface .table-secondary {
+  color: var(--workshop-status-surface-muted, #506274);
 }
 
 .workshop-scheduler-empty {
@@ -5763,7 +5768,7 @@ button.primary.workshop-status-action {
   background: rgba(255, 255, 255, 0.96);
 }
 
-.workshop-os-schedule-day-snapshot .workshop-os-job-workspace-section__list-item.workshop-status-surface {
+.workshop-os-schedule-day-snapshot__job.workshop-status-surface {
   border-color: var(--workshop-status-border);
   background: var(--workshop-status-surface);
   box-shadow:

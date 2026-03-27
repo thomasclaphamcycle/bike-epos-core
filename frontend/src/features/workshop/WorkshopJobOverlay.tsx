@@ -2887,7 +2887,7 @@ export const WorkshopJobOverlay = ({
                               return (
                                 <article
                                   key={job.id}
-                                  className={`workshop-os-job-workspace-section__list-item ${workshopRawStatusSurfaceClass(job.rawStatus)}${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
+                                  className={`workshop-os-job-workspace-section__list-item workshop-os-schedule-day-snapshot__job ${workshopRawStatusSurfaceClass(job.rawStatus)}${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
                                 >
                                   <div className="workshop-os-schedule-day-snapshot__item-row">
                                     <div>
