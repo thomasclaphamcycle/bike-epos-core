@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import { workshopRawStatusLabel } from "./status";
+import {
+  workshopRawStatusClass,
+  workshopRawStatusLabel,
+  workshopRawStatusSurfaceClass,
+} from "./status";
 
 type CalendarWorkingHours = {
   id: string;
@@ -464,11 +468,12 @@ export const WorkshopOperatingCalendar = ({
                   <button
                     key={job.id}
                     type="button"
-                    className="workshop-os-calendar-queue-card"
+                    className={`workshop-os-calendar-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
                     onClick={() => onSelectJob(job.id)}
                   >
                     <strong>{presentation?.bikeLabel || job.bikeDescription || "Workshop job"}</strong>
                     <span>{presentation?.customerLabel || job.customerName || workshopRawStatusLabel(job.rawStatus)}</span>
+                    <span className={workshopRawStatusClass(job.rawStatus)}>{workshopRawStatusLabel(job.rawStatus)}</span>
                     <span className="table-secondary">
                       {job.scheduledDate ? `Promised ${formatDisplayDate(job.scheduledDate)}` : "No promised day yet"}
                     </span>

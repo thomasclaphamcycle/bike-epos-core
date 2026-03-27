@@ -5,6 +5,7 @@ import { useToasts } from "../../components/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
   getWorkshopTechnicianWorkflowSummary,
+  workshopRawStatusActionClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "./status";
@@ -821,6 +822,24 @@ const isSameWorkflowAction = (
   left: WorkshopWorkflowAction | null,
   right: WorkshopWorkflowAction | null,
 ) => Boolean(left && right && left.kind === right.kind && left.value === right.value);
+
+const getWorkshopActionStatusValue = (
+  action: WorkshopWorkflowAction | WorkshopOverlayStatusAction | null,
+) => {
+  if (!action) {
+    return null;
+  }
+
+  if (action.kind === "status") {
+    return action.value;
+  }
+
+  if (action.kind === "approval" && action.value === "APPROVED") {
+    return "APPROVED";
+  }
+
+  return null;
+};
 
 const getPrimaryOverviewAction = ({
   status,
@@ -2467,7 +2486,7 @@ export const WorkshopJobOverlay = ({
           <div className="workshop-os-overlay-next-action__buttons">
             <button
               type="button"
-              className="primary"
+              className={`primary${getWorkshopActionStatusValue(primaryAction) ? ` ${workshopRawStatusActionClass(getWorkshopActionStatusValue(primaryAction))}` : ""}`}
               onClick={() => void runQuickAction()}
               disabled={savingAnyAction}
             >
@@ -2483,6 +2502,7 @@ export const WorkshopJobOverlay = ({
                 <button
                   key={`${action.kind}:${action.value}`}
                   type="button"
+                  className={getWorkshopActionStatusValue(action) ? workshopRawStatusActionClass(getWorkshopActionStatusValue(action)) : undefined}
                   onClick={() => void runSecondaryAction(action)}
                   disabled={savingAnyAction}
                 >

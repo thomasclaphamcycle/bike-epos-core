@@ -9,6 +9,7 @@ import {
   getWorkshopTechnicianWorkflowSummary,
   workshopRawStatusClass,
   workshopRawStatusLabel,
+  workshopRawStatusSurfaceClass,
 } from "./status";
 import { WorkshopIntakeOverlay } from "./WorkshopIntakeOverlay";
 
@@ -1216,7 +1217,7 @@ export const WorkshopDashboardPage = () => {
                             return (
                               <article
                                 key={job.id}
-                                className="workshop-os-job-card"
+                                className={`workshop-os-job-card ${workshopRawStatusSurfaceClass(job.status)}`}
                                 onClick={() => setSelectedJobId(job.id)}
                               >
                                 <div className="workshop-os-job-card__header">
@@ -1227,6 +1228,7 @@ export const WorkshopDashboardPage = () => {
                                     </div>
                                   </div>
                                   <div className="workshop-os-job-card__signals">
+                                    <span className={workshopRawStatusClass(job.status)}>{workshopRawStatusLabel(job.status)}</span>
                                     {urgency ? (
                                       <span className={`${urgency.className} workshop-os-job-card__signal--urgency`}>{urgency.label}</span>
                                     ) : null}
@@ -1239,9 +1241,6 @@ export const WorkshopDashboardPage = () => {
                                     Due {formatDate(job.scheduledDate)}
                                   </span>
                                   <span className={workflowSummary.className}>{workflowSummary.label}</span>
-                                  {job.status === "WAITING_FOR_APPROVAL" ? (
-                                    <span className="status-badge status-warning">Approval needed</span>
-                                  ) : null}
                                 </div>
 
                                 {workflowSummary.blockerLabel ? (
@@ -1316,7 +1315,9 @@ export const WorkshopDashboardPage = () => {
                           <tr key={job.id} className="clickable-row" onClick={() => setSelectedJobId(job.id)}>
                             <td>
                               <div className="table-primary mono-text">{job.id.slice(0, 8)}</div>
-                              <div className="table-secondary">{workshopRawStatusLabel(job.status)}</div>
+                              <div className="status-stack">
+                                <span className={workshopRawStatusClass(job.status)}>{workshopRawStatusLabel(job.status)}</span>
+                              </div>
                             </td>
                             <td>
                               <div className="table-primary">{job.bikeDescription || "Workshop job"}</div>

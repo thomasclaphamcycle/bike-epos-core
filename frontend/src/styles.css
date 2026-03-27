@@ -1326,6 +1326,108 @@ th {
   color: #8b1f1f;
 }
 
+.workshop-status-badge--blue,
+.workshop-status-surface--blue,
+.workshop-status-action--blue {
+  --workshop-status-bg: #e9f4ff;
+  --workshop-status-border: #bfd9f3;
+  --workshop-status-text: #175377;
+  --workshop-status-accent: #4b88d6;
+  --workshop-status-surface: linear-gradient(180deg, rgba(233, 244, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 70%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(223, 239, 255, 1) 0%, rgba(249, 252, 255, 0.99) 72%);
+}
+
+.workshop-status-badge--purple,
+.workshop-status-surface--purple,
+.workshop-status-action--purple {
+  --workshop-status-bg: #f3edff;
+  --workshop-status-border: #d7c3f6;
+  --workshop-status-text: #5d3f90;
+  --workshop-status-accent: #8361cc;
+  --workshop-status-surface: linear-gradient(180deg, rgba(243, 237, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 72%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(236, 228, 255, 1) 0%, rgba(251, 249, 255, 0.99) 74%);
+}
+
+.workshop-status-badge--yellow,
+.workshop-status-surface--yellow,
+.workshop-status-action--yellow {
+  --workshop-status-bg: #fff7e7;
+  --workshop-status-border: #f2db9e;
+  --workshop-status-text: #8a6500;
+  --workshop-status-accent: #d0a432;
+  --workshop-status-surface: linear-gradient(180deg, rgba(255, 247, 231, 0.98) 0%, rgba(255, 255, 255, 0.98) 72%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(255, 243, 219, 1) 0%, rgba(255, 252, 246, 0.99) 74%);
+}
+
+.workshop-status-badge--rose,
+.workshop-status-surface--rose,
+.workshop-status-action--rose {
+  --workshop-status-bg: #ffe9ef;
+  --workshop-status-border: #f2c1cf;
+  --workshop-status-text: #98274a;
+  --workshop-status-accent: #d65f7d;
+  --workshop-status-surface: linear-gradient(180deg, rgba(255, 233, 239, 0.98) 0%, rgba(255, 255, 255, 0.98) 72%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(255, 225, 234, 1) 0%, rgba(255, 248, 250, 0.99) 74%);
+}
+
+.workshop-status-badge--green,
+.workshop-status-surface--green,
+.workshop-status-action--green {
+  --workshop-status-bg: #e8f7f1;
+  --workshop-status-border: #bfe6d3;
+  --workshop-status-text: #1d7b4a;
+  --workshop-status-accent: #3aa36e;
+  --workshop-status-surface: linear-gradient(180deg, rgba(232, 247, 241, 0.98) 0%, rgba(255, 255, 255, 0.98) 72%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(224, 244, 235, 1) 0%, rgba(248, 253, 250, 0.99) 74%);
+}
+
+.workshop-status-badge--red,
+.workshop-status-surface--red,
+.workshop-status-action--red {
+  --workshop-status-bg: #ffecec;
+  --workshop-status-border: #f4bebe;
+  --workshop-status-text: #8b1f1f;
+  --workshop-status-accent: #d45a5a;
+  --workshop-status-surface: linear-gradient(180deg, rgba(255, 236, 236, 0.98) 0%, rgba(255, 255, 255, 0.98) 72%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(255, 228, 228, 1) 0%, rgba(255, 248, 248, 0.99) 74%);
+}
+
+.workshop-status-badge--neutral,
+.workshop-status-surface--neutral,
+.workshop-status-action--neutral {
+  --workshop-status-bg: #f2f5f9;
+  --workshop-status-border: #d3d9e2;
+  --workshop-status-text: #506274;
+  --workshop-status-accent: #9badc0;
+  --workshop-status-surface: linear-gradient(180deg, rgba(242, 245, 249, 0.94) 0%, rgba(255, 255, 255, 0.98) 72%);
+  --workshop-status-surface-hover: linear-gradient(180deg, rgba(236, 241, 246, 1) 0%, rgba(249, 251, 253, 0.99) 74%);
+}
+
+.workshop-status-badge {
+  border-color: var(--workshop-status-border);
+  background: var(--workshop-status-bg);
+  color: var(--workshop-status-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.workshop-status-action {
+  border-color: var(--workshop-status-border);
+  background: var(--workshop-status-bg);
+  color: var(--workshop-status-text);
+}
+
+.workshop-status-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--workshop-status-border) 78%, var(--workshop-status-accent));
+  background: color-mix(in srgb, var(--workshop-status-bg) 88%, #ffffff);
+}
+
+button.primary.workshop-status-action {
+  border-color: var(--workshop-status-accent);
+  box-shadow:
+    0 12px 24px color-mix(in srgb, var(--workshop-status-accent) 28%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--workshop-status-accent) 26%, transparent);
+}
+
 .parts-short {
   color: #8a6500;
   font-weight: 600;
@@ -3982,6 +4084,22 @@ th {
   background: #fbfdff;
 }
 
+.workshop-os-calendar-queue-card.workshop-status-surface {
+  position: relative;
+  border-color: var(--workshop-status-border);
+  background: var(--workshop-status-surface);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.workshop-os-calendar-queue-card.workshop-status-surface::before {
+  content: "";
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 4px;
+  border-radius: 0 999px 999px 0;
+  background: var(--workshop-status-accent);
+}
+
 .workshop-os-calendar-queue-card strong {
   color: var(--cp-navy);
 }
@@ -4215,6 +4333,27 @@ th {
   background: #f9fbfe;
 }
 
+.workshop-os-job-card.workshop-status-surface {
+  position: relative;
+  border-color: var(--workshop-status-border);
+  background: var(--workshop-status-surface);
+  box-shadow: 0 8px 16px rgba(13, 31, 47, 0.05);
+}
+
+.workshop-os-job-card.workshop-status-surface::before {
+  content: "";
+  position: absolute;
+  inset: 12px auto 12px 0;
+  width: 4px;
+  border-radius: 0 999px 999px 0;
+  background: var(--workshop-status-accent);
+}
+
+.workshop-os-job-card.workshop-status-surface:hover {
+  border-color: var(--workshop-status-accent);
+  background: var(--workshop-status-surface-hover);
+}
+
 .workshop-os-job-card__header,
 .workshop-os-drawer__header {
   display: flex;
@@ -4244,6 +4383,10 @@ th {
 
 .workshop-os-job-card__signals {
   justify-content: flex-end;
+}
+
+.workshop-os-job-card__signals .workshop-status-badge {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .workshop-os-job-card__signal--urgency {
@@ -5328,6 +5471,11 @@ th {
   align-items: center;
 }
 
+.workshop-os-overview-header__signals .workshop-status-badge,
+.workshop-os-drawer__badges .workshop-status-badge {
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+}
+
 .workshop-os-overview-planning__actions,
 .workshop-os-overlay-next-action__buttons,
 .workshop-os-overlay-next-action__secondary-buttons {
@@ -5651,6 +5799,12 @@ th {
   flex: 0 1 auto;
   border-color: #c2d5e8;
   background: rgba(255, 255, 255, 0.94);
+}
+
+.workshop-os-overlay-next-action__secondary-buttons .workshop-status-action {
+  border-color: var(--workshop-status-border);
+  background: color-mix(in srgb, var(--workshop-status-bg) 88%, #ffffff);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 @media (max-width: 900px) {
