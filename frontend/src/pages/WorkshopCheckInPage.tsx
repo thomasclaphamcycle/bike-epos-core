@@ -1837,7 +1837,7 @@ export const WorkshopCheckInPage = ({
             </div>
             {createdJobId ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-                Workshop job created: <Link to={`/workshop/${createdJobId}`}>{createdJobId}</Link>
+                Workshop job created: <Link to={`/workshop/${createdJobId}?tab=schedule`}>{createdJobId}</Link>
               </div>
             ) : null}
           </section>
