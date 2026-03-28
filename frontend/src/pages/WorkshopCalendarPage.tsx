@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
@@ -192,6 +192,12 @@ type PendingTechnicianPromptState = PlacementState & {
   dateKey: string;
 };
 
+type PendingTechnicianPickerLayout = {
+  top: number;
+  left: number;
+  maxHeight: number;
+};
+
 type TimeOffBlock = {
   id: string;
   top: number;
@@ -212,6 +218,9 @@ const COMPACT_BOOKING_BLOCK_HEIGHT = 72;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 const DRAG_SNAP_MINUTES = 15;
 const DRAG_START_THRESHOLD_PX = 6;
+const TECHNICIAN_PICKER_WIDTH = 204;
+const TECHNICIAN_PICKER_MIN_HEIGHT = 156;
+const TECHNICIAN_PICKER_VIEWPORT_GAP = 10;
 
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
@@ -226,6 +235,13 @@ const parseDateKey = (value: string) => {
 };
 
 export const workshopTodayDateKey = () => formatDateKey(new Date());
+
+const clampPickerPosition = (value: number, min: number, max: number) => {
+  if (max < min) {
+    return min;
+  }
+  return clamp(value, min, max);
+};
 
 const toOverlaySummary = (job: CalendarJob): WorkshopJobOverlaySummary => ({
   id: job.id,
@@ -841,11 +857,13 @@ export const WorkshopSchedulerScreen = ({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragSavingJobId, setDragSavingJobId] = useState<string | null>(null);
   const [pendingTechnicianPrompt, setPendingTechnicianPrompt] = useState<PendingTechnicianPromptState | null>(null);
+  const [pendingTechnicianPickerHeight, setPendingTechnicianPickerHeight] = useState(TECHNICIAN_PICKER_MIN_HEIGHT);
   const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const suppressClickJobIdRef = useRef<string | null>(null);
+  const technicianPickerRef = useRef<HTMLDivElement | null>(null);
 
   const updateDragState = (nextState: DragState | null) => {
     dragStateRef.current = nextState;
@@ -1026,15 +1044,56 @@ export const WorkshopSchedulerScreen = ({
       return;
     }
 
+    const dismissPendingPrompt = () => {
+      setPendingTechnicianPrompt(null);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && technicianPickerRef.current?.contains(target)) {
+        return;
+      }
+      dismissPendingPrompt();
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setPendingTechnicianPrompt(null);
+        dismissPendingPrompt();
       }
     };
 
+    const handleViewportChange = () => {
+      dismissPendingPrompt();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
   }, [pendingTechnicianPrompt]);
+
+  useLayoutEffect(() => {
+    if (!pendingTechnicianPrompt) {
+      setPendingTechnicianPickerHeight(TECHNICIAN_PICKER_MIN_HEIGHT);
+      return;
+    }
+
+    const nextHeight = technicianPickerRef.current?.getBoundingClientRect().height;
+    if (!nextHeight) {
+      return;
+    }
+
+    setPendingTechnicianPickerHeight((current) => {
+      const rounded = Math.max(TECHNICIAN_PICKER_MIN_HEIGHT, Math.ceil(nextHeight));
+      return current === rounded ? current : rounded;
+    });
+  }, [calendar?.staff?.length, pendingTechnicianPrompt]);
 
   const visibleScheduledJobs = useMemo(
     () => (
@@ -1312,6 +1371,38 @@ export const WorkshopSchedulerScreen = ({
       setPendingTechnicianPrompt(null);
     }
   };
+
+  const pendingTechnicianPickerLayout = useMemo<PendingTechnicianPickerLayout | null>(() => {
+    if (!pendingTechnicianPrompt || typeof window === "undefined") {
+      return null;
+    }
+
+    const track = dayTrackRefs.current[pendingTechnicianPrompt.dateKey];
+    if (!track) {
+      return null;
+    }
+
+    const trackRect = track.getBoundingClientRect();
+    const pickerHeight = pendingTechnicianPickerHeight;
+    const viewportMaxTop = Math.max(TECHNICIAN_PICKER_VIEWPORT_GAP, window.innerHeight - pickerHeight - TECHNICIAN_PICKER_VIEWPORT_GAP);
+    const anchorTop = trackRect.top + pendingTechnicianPrompt.currentTop;
+    const anchorBottom = anchorTop + pendingTechnicianPrompt.height;
+    const spaceBelow = window.innerHeight - anchorBottom - TECHNICIAN_PICKER_VIEWPORT_GAP;
+    const spaceAbove = anchorTop - TECHNICIAN_PICKER_VIEWPORT_GAP;
+    const preferredTop = spaceBelow >= pickerHeight || spaceBelow >= spaceAbove
+      ? anchorBottom + 8
+      : anchorTop - pickerHeight - 8;
+    const top = clampPickerPosition(preferredTop, TECHNICIAN_PICKER_VIEWPORT_GAP, viewportMaxTop);
+    const preferredLeft = trackRect.left + pendingTechnicianPrompt.left + 8;
+    const left = clampPickerPosition(
+      preferredLeft,
+      TECHNICIAN_PICKER_VIEWPORT_GAP,
+      Math.max(TECHNICIAN_PICKER_VIEWPORT_GAP, window.innerWidth - TECHNICIAN_PICKER_WIDTH - TECHNICIAN_PICKER_VIEWPORT_GAP),
+    );
+    const maxHeight = Math.max(96, window.innerHeight - (top + TECHNICIAN_PICKER_VIEWPORT_GAP));
+
+    return { top, left, maxHeight };
+  }, [pendingTechnicianPickerHeight, pendingTechnicianPrompt]);
 
   const persistDraggedSchedule = async (state: PlacementState) => {
     if (!state.dateKey) {
@@ -1635,18 +1726,6 @@ export const WorkshopSchedulerScreen = ({
                 const previewBlock = dragState?.active && dragState.dateKey === day.date ? dragState : null;
                 const pendingPrompt = pendingTechnicianPrompt?.dateKey === day.date ? pendingTechnicianPrompt : null;
                 const pendingPromptIsCompact = (pendingPrompt?.height ?? 0) < COMPACT_BOOKING_BLOCK_HEIGHT;
-                const pendingPromptTop = pendingPrompt
-                  ? Math.min(
-                    Math.max(10, pendingPrompt.currentTop + pendingPrompt.height + 8),
-                    Math.max(10, trackHeight - 138),
-                  )
-                  : 0;
-                const pendingPromptLeft = pendingPrompt
-                  ? Math.min(
-                    Math.max(8, pendingPrompt.left + 8),
-                    Math.max(8, dayColumnWidth - 212),
-                  )
-                  : 0;
                 const isToday = day.date === todayKey;
 
                 return (
@@ -1751,46 +1830,56 @@ export const WorkshopSchedulerScreen = ({
                             isCompactBlock: pendingPromptIsCompact,
                           })}
                         </div>
-                        <div
-                          className="workshop-scheduler-technician-picker"
-                          data-testid={`workshop-scheduler-technician-picker-${day.date}`}
-                          style={{
-                            top: `${pendingPromptTop}px`,
-                            left: `${pendingPromptLeft}px`,
-                          }}
-                        >
-                          <div className="workshop-scheduler-technician-picker__copy">
-                            <strong>Assign technician</strong>
-                            <span>{buildBlockTimeLabel(pendingPrompt.snappedStartMinutes, pendingPrompt.durationMinutes)} on {day.weekday}</span>
-                          </div>
-                          <div className="workshop-scheduler-technician-picker__actions">
-                            {staffFilterOptions.map((staff) => (
-                              <button
-                                key={staff.id}
-                                type="button"
-                                data-testid={`workshop-scheduler-technician-option-${staff.id}`}
-                                onClick={() => void completePendingTechnicianPrompt(staff.id)}
-                                disabled={dragSavingJobId === pendingPrompt.job.id}
-                              >
-                                {staff.name}
-                              </button>
-                            ))}
-                          </div>
-                          <button
-                            type="button"
-                            className="button-link"
-                            onClick={() => setPendingTechnicianPrompt(null)}
-                            disabled={dragSavingJobId === pendingPrompt.job.id}
-                          >
-                            Cancel
-                          </button>
-                        </div>
                       </>
                     ) : null}
                   </div>
                 );
               })}
             </div>
+            {pendingTechnicianPrompt && pendingTechnicianPickerLayout ? (
+              <div
+                ref={technicianPickerRef}
+                className="workshop-scheduler-technician-picker"
+                data-testid={`workshop-scheduler-technician-picker-${pendingTechnicianPrompt.dateKey}`}
+                style={{
+                  top: `${pendingTechnicianPickerLayout.top}px`,
+                  left: `${pendingTechnicianPickerLayout.left}px`,
+                  maxHeight: `${pendingTechnicianPickerLayout.maxHeight}px`,
+                }}
+              >
+                <div className="workshop-scheduler-technician-picker__copy">
+                  <strong>Assign technician</strong>
+                  <span>
+                    {buildBlockTimeLabel(pendingTechnicianPrompt.snappedStartMinutes, pendingTechnicianPrompt.durationMinutes)}
+                    {" "}
+                    on
+                    {" "}
+                    {days.find((day) => day.date === pendingTechnicianPrompt.dateKey)?.weekday ?? pendingTechnicianPrompt.dateKey}
+                  </span>
+                </div>
+                <div className="workshop-scheduler-technician-picker__actions">
+                  {staffFilterOptions.map((staff) => (
+                    <button
+                      key={staff.id}
+                      type="button"
+                      data-testid={`workshop-scheduler-technician-option-${staff.id}`}
+                      onClick={() => void completePendingTechnicianPrompt(staff.id)}
+                      disabled={dragSavingJobId === pendingTechnicianPrompt.job.id}
+                    >
+                      {staff.name}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={() => setPendingTechnicianPrompt(null)}
+                  disabled={dragSavingJobId === pendingTechnicianPrompt.job.id}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
 

@@ -3308,8 +3308,8 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-technician-picker {
-  position: absolute;
-  z-index: 6;
+  position: fixed;
+  z-index: 30;
   display: grid;
   gap: 8px;
   width: min(204px, calc(100% - 16px));
@@ -3319,6 +3319,7 @@ button.primary.workshop-status-action {
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(12px);
+  overflow-y: auto;
 }
 
 .workshop-scheduler-technician-picker__copy {
