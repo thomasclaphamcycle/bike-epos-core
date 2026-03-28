@@ -130,6 +130,37 @@ const ensureOpenRegisterSession = async (request) => {
   );
 };
 
+const createRotaPeriodViaBypass = async (request, startsOn, label) => {
+  return apiJsonWithHeaderBypass(request, "POST", "/api/rota/periods", "MANAGER", {
+    data: {
+      startsOn,
+      label,
+    },
+  });
+};
+
+const saveRotaAssignmentViaBypass = async (request, input) => {
+  return apiJsonWithHeaderBypass(request, "POST", "/api/rota/assignments", "MANAGER", {
+    data: input,
+  });
+};
+
+const dragBetweenLocators = async (page, source, target) => {
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+
+  if (!sourceBox || !targetBox) {
+    throw new Error("Expected both drag endpoints to be visible.");
+  }
+
+  await page.mouse.move(sourceBox.x + (sourceBox.width / 2), sourceBox.y + (sourceBox.height / 2));
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + (targetBox.width / 2), targetBox.y + (targetBox.height / 2), {
+    steps: 12,
+  });
+  await page.mouse.up();
+};
+
 const seedNamedQuickAddProduct = async (request, options) => {
   const token = uniqueToken(`quick-add-${options.slug}`);
   const safeToken = token.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -921,6 +952,87 @@ test("Login then workshop page can create a job", async ({ page, request }) => {
   await expect(page.locator("#job-create-status")).toContainText("Job created");
   await expect(page.locator("#selected-job-meta")).toContainText(customerName);
   await expect(page.locator("#jobs-wrap")).toContainText(customerName);
+});
+
+test("Rota planner supports row drag-copy and Fill Mon-Fri without spilling into another staff row", async ({
+  page,
+  request,
+}) => {
+  const managerCredentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "rota-manager",
+  });
+  const token = uniqueToken("rota-drag");
+  const alpha = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "rota-alpha",
+    name: `Rota Alpha ${token}`,
+  });
+  const beta = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "rota-beta",
+    name: `Rota Beta ${token}`,
+  });
+
+  const rotaPeriod = await createRotaPeriodViaBypass(request, "2099-04-06", `Rota drag ${token}`);
+  await saveRotaAssignmentViaBypass(request, {
+    rotaPeriodId: rotaPeriod.rotaPeriod.id,
+    staffId: alpha.user.id,
+    date: "2099-04-11",
+    shiftType: "HALF_DAY_PM",
+  });
+  await saveRotaAssignmentViaBypass(request, {
+    rotaPeriodId: rotaPeriod.rotaPeriod.id,
+    staffId: beta.user.id,
+    date: "2099-04-07",
+    shiftType: "FULL_DAY",
+  });
+  await saveRotaAssignmentViaBypass(request, {
+    rotaPeriodId: rotaPeriod.rotaPeriod.id,
+    staffId: beta.user.id,
+    date: "2099-04-08",
+    shiftType: "FULL_DAY",
+  });
+
+  await loginViaUi(
+    page,
+    managerCredentials,
+    `/management/staff-rota?periodId=${encodeURIComponent(rotaPeriod.rotaPeriod.id)}&staffScope=all&search=${encodeURIComponent(token)}`,
+    { surface: "frontend" },
+  );
+
+  const alphaMonday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-06`);
+  const alphaTuesday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-07`);
+  const alphaWednesday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-08`);
+  const alphaThursday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-09`);
+  const alphaFriday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-10`);
+  const alphaSaturday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-11`);
+  const betaMonday = page.getByTestId(`rota-cell-trigger-${beta.user.id}-2099-04-06`);
+  const betaTuesday = page.getByTestId(`rota-cell-trigger-${beta.user.id}-2099-04-07`);
+  const betaWednesday = page.getByTestId(`rota-cell-trigger-${beta.user.id}-2099-04-08`);
+
+  await alphaMonday.click();
+  await page.getByRole("menuitem", { name: "AM", exact: true }).click();
+  await expect(alphaMonday).toContainText("AM");
+
+  await dragBetweenLocators(page, alphaMonday, alphaWednesday);
+  await expect(alphaTuesday).toContainText("AM");
+  await expect(alphaWednesday).toContainText("AM");
+  await expect(betaTuesday).toContainText("Full");
+  await expect(betaWednesday).toContainText("Full");
+
+  await dragBetweenLocators(page, betaMonday, betaWednesday);
+  await expect(betaTuesday).toContainText("Off");
+  await expect(betaWednesday).toContainText("Off");
+  await expect(alphaTuesday).toContainText("AM");
+
+  await page.getByTestId(`rota-fill-weekdays-${alpha.user.id}`).click();
+  await expect(alphaMonday).toContainText("Full");
+  await expect(alphaTuesday).toContainText("Full");
+  await expect(alphaWednesday).toContainText("Full");
+  await expect(alphaThursday).toContainText("Full");
+  await expect(alphaFriday).toContainText("Full");
+  await expect(alphaSaturday).toContainText("PM");
 });
 
 test("Workshop new job keeps Services -> Review as a non-submitting step", async ({ page, request }) => {
