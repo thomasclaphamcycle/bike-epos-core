@@ -479,11 +479,7 @@ export const WorkshopPage = () => {
     <div className="page-shell page-shell-workspace workshop-primary-page">
       <section className="workshop-primary-topbar">
         <div className="workshop-primary-title">
-          <p className="ui-page-eyebrow">Workshop Operating Screen</p>
           <h1 className="ui-page-title">Workshop</h1>
-          <p className="ui-page-description">
-            Week scheduling is the default view, with day zoom and list fallback in the same operating surface.
-          </p>
         </div>
 
         <label className="workshop-primary-search">

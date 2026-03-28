@@ -196,8 +196,9 @@ type TimeOffBlock = {
 
 const DEFAULT_OPEN_MINUTES = 9 * 60;
 const DEFAULT_CLOSE_MINUTES = 18 * 60;
-const PX_PER_MINUTE = 1.05;
-const WEEK_DAY_WIDTH = 244;
+const PX_PER_MINUTE = 1;
+const TIME_AXIS_WIDTH = 60;
+const WEEK_DAY_WIDTH = 118;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
 const MIN_BOOKING_BLOCK_HEIGHT = 48;
@@ -928,7 +929,7 @@ export const WorkshopSchedulerScreen = ({
   );
   const timeline = useMemo(() => buildTimelineRange(days), [days]);
   const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
-  const trackHeight = Math.max(660, timeline.totalMinutes * PX_PER_MINUTE);
+  const trackHeight = Math.max(620, timeline.totalMinutes * PX_PER_MINUTE);
   const dayColumnWidth = view === "week" ? WEEK_DAY_WIDTH : DAY_VIEW_WIDTH;
   const scheduledJobs = calendar?.scheduledJobs ?? [];
   const unassignedJobs = calendar?.unassignedJobs ?? [];
@@ -1589,19 +1590,13 @@ export const WorkshopSchedulerScreen = ({
           <div className="workshop-scheduler-board__header">
             <div>
               <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
-              <p className="muted-text">
-                Scheduled jobs render as timed blocks in the grid. Pick a booking to adjust timing and assignment without leaving the scheduler.
-              </p>
-            </div>
-            <div className="table-secondary">
-              {calendar?.range.timeZone || "Local"} time
             </div>
           </div>
 
           <div className="workshop-scheduler-scroll">
             <div
               className="workshop-scheduler-grid"
-              style={{ gridTemplateColumns: `88px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)` }}
+              style={{ gridTemplateColumns: `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)` }}
             >
               <div className="workshop-scheduler-grid__corner">Time</div>
 
