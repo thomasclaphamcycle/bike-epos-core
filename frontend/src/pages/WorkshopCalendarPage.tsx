@@ -394,6 +394,23 @@ const getJobHeading = (job: CalendarJob) =>
 const getJobSubline = (job: CalendarJob) =>
   [job.customerName, job.assignedStaffName].filter(Boolean).join(" · ") || workshopRawStatusLabel(job.rawStatus);
 
+const formatCompactScheduleMeta = (job: CalendarJob, timeZone: string) => {
+  if (!job.scheduledStartAt) {
+    return "Schedule pending";
+  }
+
+  return `Scheduled ${formatOptionalDate(job.scheduledStartAt, timeZone)} · ${formatOptionalTime(job.scheduledStartAt, timeZone)}`;
+};
+
+const getQueueMetaLine = (job: CalendarJob, timeZone: string) => {
+  const customerLabel = job.customerName?.trim() || "Customer pending";
+  const scheduleLabel = job.scheduledStartAt
+    ? formatCompactScheduleMeta(job, timeZone)
+    : `Promise ${formatPromiseDate(job.scheduledDate)}`;
+
+  return `${customerLabel} · ${scheduleLabel}`;
+};
+
 const getBookingCustomerName = (job: CalendarJob) =>
   job.customerName || "Customer pending";
 
@@ -1807,11 +1824,6 @@ export const WorkshopSchedulerScreen = ({
             <div className="card-header-row">
               <div>
                 <h2>{selectedJob ? "Booking editor" : "Booking details"}</h2>
-                <p className="muted-text">
-                  {selectedJob
-                    ? "Adjust the selected workshop booking without leaving the schedule."
-                    : "Pick a booking block or queue item to schedule it."}
-                </p>
               </div>
               {selectedJob ? (
                 <button type="button" onClick={closeEditor} disabled={saving}>
@@ -1919,7 +1931,6 @@ export const WorkshopSchedulerScreen = ({
             <div className="card-header-row">
               <div>
                 <h2>Needs scheduling</h2>
-                <p className="muted-text">Drag a job into the calendar to place its first timed slot, or open it to schedule manually.</p>
               </div>
               <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
             </div>
@@ -1933,21 +1944,20 @@ export const WorkshopSchedulerScreen = ({
                   className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
                   onPointerDown={(event) => handleQueueJobPointerDown(event, job)}
                 >
-                  <div>
-                    <strong>{getJobHeading(job)}</strong>
-                    <div className="table-secondary">{job.customerName || "Customer pending"}</div>
-                    <div className="table-secondary">
-                      Promise date: {job.scheduledDate ? formatPromiseDate(job.scheduledDate) : "Not set"}
-                    </div>
-                    <div>
-                      <span className={workshopRawStatusClass(job.rawStatus)}>
-                        {workshopRawStatusLabel(job.rawStatus)}
-                      </span>
+                  <div className="workshop-scheduler-queue-card__topline">
+                    <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
+                    <div className="workshop-scheduler-queue-card__actions">
+                      <button type="button" onClick={() => openEditor(job, anchorDateKey)}>Schedule</button>
+                      <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                     </div>
                   </div>
-                  <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job, anchorDateKey)}>Schedule</button>
-                    <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
+                  <div className="table-secondary workshop-scheduler-queue-card__meta">
+                    {getQueueMetaLine(job, calendarTimeZone)}
+                  </div>
+                  <div className="workshop-scheduler-queue-card__footer">
+                    <span className={`${workshopRawStatusClass(job.rawStatus)} workshop-scheduler-queue-card__badge`}>
+                      {workshopRawStatusLabel(job.rawStatus)}
+                    </span>
                   </div>
                 </article>
               ))}
@@ -1958,7 +1968,6 @@ export const WorkshopSchedulerScreen = ({
             <div className="card-header-row">
               <div>
                 <h2>Timed but unassigned</h2>
-                <p className="muted-text">Timed jobs that still need a named technician.</p>
               </div>
               <span className="stock-badge stock-muted">{filteredUnassignedJobs.length}</span>
             </div>
@@ -1971,21 +1980,20 @@ export const WorkshopSchedulerScreen = ({
                   key={job.id}
                   className={`workshop-scheduler-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
                 >
-                  <div>
-                    <strong>{getJobHeading(job)}</strong>
-                    <div className="table-secondary">
-                      Scheduled {formatOptionalDate(job.scheduledStartAt, calendarTimeZone)} · {formatOptionalTime(job.scheduledStartAt, calendarTimeZone)}
-                    </div>
-                    <div className="table-secondary">{job.customerName || workshopRawStatusLabel(job.rawStatus)}</div>
-                    <div>
-                      <span className={workshopRawStatusClass(job.rawStatus)}>
-                        {workshopRawStatusLabel(job.rawStatus)}
-                      </span>
+                  <div className="workshop-scheduler-queue-card__topline">
+                    <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
+                    <div className="workshop-scheduler-queue-card__actions">
+                      <button type="button" onClick={() => openEditor(job, getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey)}>Assign</button>
+                      <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                     </div>
                   </div>
-                  <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job, getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey)}>Assign</button>
-                    <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
+                  <div className="table-secondary workshop-scheduler-queue-card__meta">
+                    {getQueueMetaLine(job, calendarTimeZone)}
+                  </div>
+                  <div className="workshop-scheduler-queue-card__footer">
+                    <span className={`${workshopRawStatusClass(job.rawStatus)} workshop-scheduler-queue-card__badge`}>
+                      {workshopRawStatusLabel(job.rawStatus)}
+                    </span>
                   </div>
                 </article>
               ))}

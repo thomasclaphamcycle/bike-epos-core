@@ -2730,7 +2730,7 @@ button.primary.workshop-status-action {
 .workshop-scheduler-board,
 .workshop-scheduler-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .workshop-scheduler-board--embedded {
@@ -3126,7 +3126,7 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-rail {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   align-content: start;
 }
 
@@ -3151,17 +3151,16 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-queue {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .workshop-scheduler-queue-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   align-items: start;
-  padding: 9px;
+  padding: 8px 9px;
   border: 1px solid #dbe5ef;
-  border-radius: 12px;
+  border-radius: 11px;
   background: #fbfdff;
   transition:
     transform 140ms ease,
@@ -3184,6 +3183,69 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-queue-card.workshop-status-surface .table-secondary {
   color: var(--workshop-status-surface-muted, #506274);
+}
+
+.workshop-scheduler-queue-card__topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.workshop-scheduler-queue-card__title {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 0.88rem;
+  line-height: 1.18;
+}
+
+.workshop-scheduler-queue-card__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.workshop-scheduler-queue-card__actions button,
+.workshop-scheduler-queue-card__actions .button-link {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  line-height: 1;
+}
+
+.workshop-scheduler-queue-card__meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.77rem;
+  line-height: 1.2;
+}
+
+.workshop-scheduler-queue-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workshop-scheduler-queue-card__badge {
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-queue-card--draggable {
@@ -3275,7 +3337,23 @@ button.primary.workshop-status-action {
   }
 
   .workshop-scheduler-queue-card {
+    gap: 7px;
+  }
+
+  .workshop-scheduler-queue-card__topline {
     grid-template-columns: 1fr;
+  }
+
+  .workshop-scheduler-queue-card__actions {
+    justify-content: flex-start;
+  }
+
+  .workshop-scheduler-queue-card__meta {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 }
 
