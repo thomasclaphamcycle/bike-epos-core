@@ -169,13 +169,16 @@ type PositionedJob = {
 };
 
 type DragState = {
+  source: "calendar" | "queue";
   pointerId: number;
   job: CalendarJob;
-  dateKey: string;
+  dateKey: string | null;
+  staffId: string | null;
   left: number;
   width: number;
   height: number;
   pointerOffsetY: number;
+  startClientX: number;
   startClientY: number;
   currentTop: number;
   snappedStartMinutes: number;
@@ -725,6 +728,44 @@ const snapMinutesToGrid = (minutes: number, intervalMinutes: number) =>
 const buildBlockTimeLabel = (startMinutes: number, durationMinutes: number) =>
   `${formatClockLabel(startMinutes)} - ${formatClockLabel(startMinutes + durationMinutes)}`;
 
+const buildPreviewPosition = (input: {
+  job: CalendarJob;
+  jobs: CalendarJob[];
+  dateKey: string;
+  startMinutes: number;
+  durationMinutes: number;
+  openMinutes: number;
+  closeMinutes: number;
+  columnWidth: number;
+  timeZone?: string;
+}) => {
+  const previewStartAt = buildScheduleIso(input.dateKey, formatClockLabel(input.startMinutes));
+  const previewEndAt = buildScheduleIso(
+    input.dateKey,
+    formatClockLabel(input.startMinutes + input.durationMinutes),
+  );
+
+  if (!previewStartAt || !previewEndAt) {
+    return null;
+  }
+
+  const previewJob: CalendarJob = {
+    ...input.job,
+    id: `${input.job.id}::drag-preview`,
+    scheduledStartAt: previewStartAt,
+    scheduledEndAt: previewEndAt,
+    durationMinutes: input.durationMinutes,
+  };
+
+  return toPositionedJobs(
+    [...input.jobs.filter((job) => job.id !== input.job.id), previewJob],
+    input.openMinutes,
+    input.closeMinutes,
+    input.columnWidth,
+    input.timeZone,
+  ).find((entry) => entry.job.id === previewJob.id) ?? null;
+};
+
 const renderSchedulerBlockContent = ({
   job,
   timeLabel,
@@ -944,80 +985,6 @@ export const WorkshopSchedulerScreen = ({
     }
   }, [calendar?.staff, selectedTechnicianId]);
 
-  useEffect(() => {
-    if (!dragState) {
-      return;
-    }
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const current = dragStateRef.current;
-      if (!current || event.pointerId !== current.pointerId) {
-        return;
-      }
-
-      const track = dayTrackRefs.current[current.dateKey];
-      if (!track) {
-        return;
-      }
-
-      const nextActive = current.active
-        || Math.abs(event.clientY - current.startClientY) >= DRAG_START_THRESHOLD_PX;
-      const relativeTop = event.clientY - track.getBoundingClientRect().top - current.pointerOffsetY;
-      const rawMinutes = timeline.openMinutes + (relativeTop / PX_PER_MINUTE);
-      const maxStartMinutes = Math.max(timeline.openMinutes, timeline.closeMinutes - current.durationMinutes);
-      const snappedStartMinutes = clamp(
-        snapMinutesToGrid(rawMinutes, DRAG_SNAP_MINUTES),
-        timeline.openMinutes,
-        maxStartMinutes,
-      );
-      const nextTop = (snappedStartMinutes - timeline.openMinutes) * PX_PER_MINUTE;
-
-      if (!nextActive && nextTop === current.currentTop) {
-        return;
-      }
-
-      updateDragState({
-        ...current,
-        active: nextActive,
-        currentTop: nextTop,
-        snappedStartMinutes,
-      });
-
-      if (nextActive) {
-        event.preventDefault();
-      }
-    };
-
-    const finishDrag = (event: PointerEvent, cancelled: boolean) => {
-      const current = dragStateRef.current;
-      if (!current || event.pointerId !== current.pointerId) {
-        return;
-      }
-
-      updateDragState(null);
-
-      if (cancelled || !current.active) {
-        return;
-      }
-
-      suppressClickJobIdRef.current = current.job.id;
-      void persistDraggedSchedule(current);
-    };
-
-    const handlePointerUp = (event: PointerEvent) => finishDrag(event, false);
-    const handlePointerCancel = (event: PointerEvent) => finishDrag(event, true);
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerCancel);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerCancel);
-    };
-  }, [dragState, timeline.closeMinutes, timeline.openMinutes]);
-
   const visibleScheduledJobs = useMemo(
     () => (
       selectedTechnicianId
@@ -1043,6 +1010,161 @@ export const WorkshopSchedulerScreen = ({
 
     return next;
   }, [days, visibleScheduledJobs]);
+
+  useEffect(() => {
+    if (!dragState) {
+      return;
+    }
+
+    const getDayTrackTarget = (clientX: number) => {
+      for (const day of days) {
+        const track = dayTrackRefs.current[day.date];
+        if (!track) {
+          continue;
+        }
+
+        const rect = track.getBoundingClientRect();
+        if (clientX >= rect.left && clientX <= rect.right) {
+          return {
+            dateKey: day.date,
+            track,
+          };
+        }
+      }
+
+      return null;
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const current = dragStateRef.current;
+      if (!current || event.pointerId !== current.pointerId) {
+        return;
+      }
+
+      const target =
+        current.source === "queue"
+          ? getDayTrackTarget(event.clientX)
+          : current.dateKey
+            ? {
+                dateKey: current.dateKey,
+                track: dayTrackRefs.current[current.dateKey],
+              }
+            : null;
+      const track = target?.track;
+      const nextDateKey = target?.dateKey ?? null;
+      const nextActive = current.active
+        || Math.max(
+          Math.abs(event.clientX - current.startClientX),
+          Math.abs(event.clientY - current.startClientY),
+        ) >= DRAG_START_THRESHOLD_PX;
+
+      if (!nextActive && !track) {
+        return;
+      }
+
+      if (!track || !nextDateKey) {
+        updateDragState({
+          ...current,
+          active: nextActive,
+          dateKey: null,
+        });
+
+        if (nextActive) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      const relativeTop = event.clientY - track.getBoundingClientRect().top - current.pointerOffsetY;
+      const rawMinutes = timeline.openMinutes + (relativeTop / PX_PER_MINUTE);
+      const maxStartMinutes = Math.max(timeline.openMinutes, timeline.closeMinutes - current.durationMinutes);
+      const snappedStartMinutes = clamp(
+        snapMinutesToGrid(rawMinutes, DRAG_SNAP_MINUTES),
+        timeline.openMinutes,
+        maxStartMinutes,
+      );
+      const previewPosition = buildPreviewPosition({
+        job: current.job,
+        jobs: jobsByDay.get(nextDateKey) ?? [],
+        dateKey: nextDateKey,
+        startMinutes: snappedStartMinutes,
+        durationMinutes: current.durationMinutes,
+        openMinutes: timeline.openMinutes,
+        closeMinutes: timeline.closeMinutes,
+        columnWidth: dayColumnWidth,
+        timeZone: calendarTimeZone,
+      });
+      const nextTop =
+        previewPosition?.top
+        ?? ((snappedStartMinutes - timeline.openMinutes) * PX_PER_MINUTE);
+      const nextLeft = previewPosition?.left ?? 0;
+      const nextWidth = previewPosition?.width ?? dayColumnWidth;
+      const nextHeight =
+        previewPosition?.height
+        ?? Math.max(MIN_BOOKING_BLOCK_HEIGHT, current.durationMinutes * PX_PER_MINUTE);
+
+      if (
+        !nextActive
+        && nextTop === current.currentTop
+        && nextLeft === current.left
+        && nextWidth === current.width
+        && nextHeight === current.height
+      ) {
+        return;
+      }
+
+      updateDragState({
+        ...current,
+        active: nextActive,
+        dateKey: nextDateKey,
+        left: nextLeft,
+        width: nextWidth,
+        height: nextHeight,
+        currentTop: nextTop,
+        snappedStartMinutes,
+      });
+
+      if (nextActive) {
+        event.preventDefault();
+      }
+    };
+
+    const finishDrag = (event: PointerEvent, cancelled: boolean) => {
+      const current = dragStateRef.current;
+      if (!current || event.pointerId !== current.pointerId) {
+        return;
+      }
+
+      updateDragState(null);
+
+      if (cancelled || !current.active) {
+        return;
+      }
+
+      if (!current.dateKey) {
+        error("Drop the job onto a visible day column to create a timed booking.");
+        return;
+      }
+
+      if (current.source === "calendar") {
+        suppressClickJobIdRef.current = current.job.id;
+      }
+      void persistDraggedSchedule(current);
+    };
+
+    const handlePointerUp = (event: PointerEvent) => finishDrag(event, false);
+    const handlePointerCancel = (event: PointerEvent) => finishDrag(event, true);
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+    };
+  }, [calendarTimeZone, dayColumnWidth, days, dragState, error, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
 
   const positionedJobsByDay = useMemo(() => {
     const next = new Map<string, PositionedJob[]>();
@@ -1123,6 +1245,11 @@ export const WorkshopSchedulerScreen = ({
     : overlaySummary;
 
   const persistDraggedSchedule = async (state: DragState) => {
+    if (!state.dateKey) {
+      error("Could not calculate a workshop day for this drop.");
+      return;
+    }
+
     const startTimeValue = formatClockLabel(state.snappedStartMinutes);
     const scheduledStartAt = buildScheduleIso(state.dateKey, startTimeValue);
     if (!scheduledStartAt) {
@@ -1137,7 +1264,7 @@ export const WorkshopSchedulerScreen = ({
       const response = await apiPatch<SchedulePatchResponse>(
         `/api/workshop/jobs/${encodeURIComponent(state.job.id)}/schedule`,
         {
-          staffId: state.job.assignedStaffId || null,
+          staffId: state.staffId,
           scheduledStartAt,
           durationMinutes: state.durationMinutes,
         },
@@ -1147,15 +1274,24 @@ export const WorkshopSchedulerScreen = ({
         setDraft((current) => ({
           ...current,
           dateKey: state.dateKey,
+          staffId: state.staffId || "",
           startTime: startTimeValue,
           durationMinutes: `${state.durationMinutes}`,
         }));
       }
 
+      const assignedStaffName = state.staffId
+        ? staffFilterOptions.find((staff) => staff.id === state.staffId)?.name ?? null
+        : null;
+      const timeLabel = buildBlockTimeLabel(state.snappedStartMinutes, state.durationMinutes);
+      const placementLabel = assignedStaffName ? `${timeLabel} with ${assignedStaffName}` : timeLabel;
+
       success(
         response.idempotent
-          ? `Booking already matched ${buildBlockTimeLabel(state.snappedStartMinutes, state.durationMinutes)}.`
-          : `Booking moved to ${buildBlockTimeLabel(state.snappedStartMinutes, state.durationMinutes)}.`,
+          ? `Booking already matched ${placementLabel}.`
+          : state.source === "queue"
+            ? `Scheduled for ${placementLabel}.`
+            : `Booking moved to ${placementLabel}.`,
       );
       await loadCalendar();
     } catch (dragError) {
@@ -1188,16 +1324,57 @@ export const WorkshopSchedulerScreen = ({
 
     const blockRect = event.currentTarget.getBoundingClientRect();
     updateDragState({
+      source: "calendar",
       pointerId: event.pointerId,
       job,
       dateKey,
+      staffId: job.assignedStaffId || null,
       left,
       width,
       height,
       pointerOffsetY: event.clientY - blockRect.top,
+      startClientX: event.clientX,
       startClientY: event.clientY,
       currentTop: top,
       snappedStartMinutes: startMinutes,
+      durationMinutes,
+      active: false,
+    });
+  };
+
+  const handleQueueJobPointerDown = (
+    event: ReactPointerEvent<HTMLElement>,
+    job: CalendarJob,
+  ) => {
+    const target = event.target as HTMLElement | null;
+    if (
+      event.button !== 0
+      || saving
+      || Boolean(dragSavingJobId)
+      || target?.closest("button, a, input, select, textarea")
+    ) {
+      return;
+    }
+
+    const durationMinutes = getScheduledDurationMinutes(job, calendarTimeZone);
+    const previewHeight = Math.max(MIN_BOOKING_BLOCK_HEIGHT, durationMinutes * PX_PER_MINUTE);
+
+    event.preventDefault();
+
+    updateDragState({
+      source: "queue",
+      pointerId: event.pointerId,
+      job,
+      dateKey: null,
+      staffId: selectedTechnicianId || null,
+      left: 0,
+      width: dayColumnWidth,
+      height: previewHeight,
+      pointerOffsetY: clamp(previewHeight / 2, 16, Math.max(16, previewHeight - 16)),
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      currentTop: 0,
+      snappedStartMinutes: timeline.openMinutes,
       durationMinutes,
       active: false,
     });
@@ -1408,7 +1585,7 @@ export const WorkshopSchedulerScreen = ({
       ) : null}
 
       <div className={embedded ? "workshop-scheduler-layout workshop-scheduler-layout--embedded" : "workshop-scheduler-layout"}>
-        <section className={embedded ? "workshop-scheduler-board workshop-scheduler-board--embedded" : "card workshop-scheduler-board"}>
+        <section className={`${embedded ? "workshop-scheduler-board workshop-scheduler-board--embedded" : "card workshop-scheduler-board"}${dragState?.source === "queue" && dragState.active ? " workshop-scheduler-board--queue-dragging" : ""}`}>
           <div className="workshop-scheduler-board__header">
             <div>
               <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
@@ -1540,7 +1717,9 @@ export const WorkshopSchedulerScreen = ({
                         {renderSchedulerBlockContent({
                           job: previewBlock.job,
                           timeLabel: buildBlockTimeLabel(previewBlock.snappedStartMinutes, previewBlock.durationMinutes),
-                          metaLabel: `Drop to move this booking to ${formatClockLabel(previewBlock.snappedStartMinutes)}`,
+                          metaLabel: previewBlock.source === "queue"
+                            ? `Drop to schedule${previewBlock.staffId && selectedTechnician ? ` with ${selectedTechnician.name}` : ""} at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
+                            : `Drop to move this booking to ${formatClockLabel(previewBlock.snappedStartMinutes)}`,
                           isCompactBlock: previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT,
                         })}
                       </div>
@@ -1669,7 +1848,7 @@ export const WorkshopSchedulerScreen = ({
             <div className="card-header-row">
               <div>
                 <h2>Needs scheduling</h2>
-                <p className="muted-text">Jobs created through intake that still need a timed slot.</p>
+                <p className="muted-text">Drag a job into the calendar to place its first timed slot, or open it to schedule manually.</p>
               </div>
               <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
             </div>
@@ -1680,7 +1859,8 @@ export const WorkshopSchedulerScreen = ({
               ) : filteredUnscheduledJobs.map((job) => (
                 <article
                   key={job.id}
-                  className={`workshop-scheduler-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
+                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
+                  onPointerDown={(event) => handleQueueJobPointerDown(event, job)}
                 >
                   <div>
                     <strong>{getJobHeading(job)}</strong>
