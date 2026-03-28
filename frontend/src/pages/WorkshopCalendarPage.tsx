@@ -154,13 +154,6 @@ type WorkshopOverlayTechnicianOption = {
   name: string;
 };
 
-type ScheduleDraft = {
-  staffId: string;
-  dateKey: string;
-  startTime: string;
-  durationMinutes: string;
-};
-
 type PositionedJob = {
   job: CalendarJob;
   top: number;
@@ -361,20 +354,6 @@ const formatPromiseDate = (value: string | null | undefined) => {
   });
 };
 
-const toTimeInputValue = (isoValue: string | null | undefined, timeZone?: string) => {
-  if (!isoValue) {
-    return "";
-  }
-
-  const date = new Date(isoValue);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const parts = getTimeZoneParts(date, timeZone);
-  return `${`${parts.hour}`.padStart(2, "0")}:${`${parts.minute}`.padStart(2, "0")}`;
-};
-
 const buildScheduleIso = (dateKey: string, timeValue: string) => {
   if (!dateKey || !timeValue) {
     return null;
@@ -390,9 +369,6 @@ const buildScheduleIso = (dateKey: string, timeValue: string) => {
 
 const getJobHeading = (job: CalendarJob) =>
   job.bikeDescription || job.customerName || job.summaryText || `Workshop job ${job.id.slice(0, 8)}`;
-
-const getJobSubline = (job: CalendarJob) =>
-  [job.customerName, job.assignedStaffName].filter(Boolean).join(" · ") || workshopRawStatusLabel(job.rawStatus);
 
 const formatCompactScheduleMeta = (job: CalendarJob, timeZone: string) => {
   if (!job.scheduledStartAt) {
@@ -730,18 +706,6 @@ const toPositionedJobs = (
   }));
 };
 
-const buildInitialDraft = (
-  job: CalendarJob,
-  preferredDateKey: string,
-  calendarDay: CalendarResponse["days"][number] | undefined,
-  timeZone?: string,
-): ScheduleDraft => ({
-  staffId: job.assignedStaffId || "",
-  dateKey: getJobOperationalDateKey(job, timeZone) || preferredDateKey,
-  startTime: toTimeInputValue(job.scheduledStartAt, timeZone) || calendarDay?.opensAt || "10:00",
-  durationMinutes: `${job.durationMinutes || 60}`,
-});
-
 const getScheduledDurationMinutes = (job: CalendarJob, timeZone?: string) => {
   if (job.durationMinutes && job.durationMinutes > 0) {
     return job.durationMinutes;
@@ -859,18 +823,9 @@ export const WorkshopSchedulerScreen = ({
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [overlayJobId, setOverlayJobId] = useState<string | null>(null);
   const [overlaySummary, setOverlaySummary] = useState<WorkshopJobOverlaySummary | null>(null);
   const [internalTechnicianId, setInternalTechnicianId] = useState("");
-  const [draft, setDraft] = useState<ScheduleDraft>({
-    staffId: "",
-    dateKey: "",
-    startTime: "",
-    durationMinutes: "60",
-  });
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragSavingJobId, setDragSavingJobId] = useState<string | null>(null);
   const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
@@ -962,10 +917,6 @@ export const WorkshopSchedulerScreen = ({
   }, [requestedRange.from, requestedRange.to, refreshToken]);
 
   const days = calendar?.days ?? [];
-  const daysByDateKey = useMemo(
-    () => new Map(days.map((day) => [day.date, day])),
-    [days],
-  );
   const timeline = useMemo(() => buildTimelineRange(days), [days]);
   const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
   const trackHeight = Math.max(620, timeline.totalMinutes * PX_PER_MINUTE);
@@ -1035,18 +986,6 @@ export const WorkshopSchedulerScreen = ({
     const entries = [...filteredScheduledJobs, ...filteredUnassignedJobs, ...filteredUnscheduledJobs];
     return new Map(entries.map((job) => [job.id, job]));
   }, [filteredScheduledJobs, filteredUnassignedJobs, filteredUnscheduledJobs]);
-  const selectedJob = selectedJobId ? allJobsById.get(selectedJobId) ?? null : null;
-
-  useEffect(() => {
-    if (!selectedJobId) {
-      return;
-    }
-
-    if (!allJobsById.has(selectedJobId)) {
-      setSelectedJobId(null);
-      setScheduleError(null);
-    }
-  }, [allJobsById, selectedJobId]);
 
   useEffect(() => {
     if (!requestedOverlayJobId) {
@@ -1058,8 +997,6 @@ export const WorkshopSchedulerScreen = ({
       return;
     }
 
-    setSelectedJobId(null);
-    setScheduleError(null);
     setOverlaySummary(toOverlaySummary(requestedJob));
     setOverlayJobId(requestedOverlayJobId);
     onRequestedOverlayJobHandled?.();
@@ -1301,21 +1238,7 @@ export const WorkshopSchedulerScreen = ({
     [staffFilterOptions],
   );
 
-  const openEditor = (job: CalendarJob, preferredDateKey?: string) => {
-    const editorDateKey = preferredDateKey || getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey;
-    setSelectedJobId(job.id);
-    setDraft(buildInitialDraft(job, editorDateKey, daysByDateKey.get(editorDateKey), calendarTimeZone));
-    setScheduleError(null);
-  };
-
-  const closeEditor = () => {
-    setSelectedJobId(null);
-    setScheduleError(null);
-  };
-
   const openJobOverlay = (job: CalendarJob) => {
-    setSelectedJobId(null);
-    setScheduleError(null);
     setOverlaySummary(toOverlaySummary(job));
     setOverlayJobId(job.id);
   };
@@ -1344,7 +1267,6 @@ export const WorkshopSchedulerScreen = ({
     }
 
     setDragSavingJobId(state.job.id);
-    setScheduleError(null);
 
     try {
       const response = await apiPatch<SchedulePatchResponse>(
@@ -1355,16 +1277,6 @@ export const WorkshopSchedulerScreen = ({
           durationMinutes: state.durationMinutes,
         },
       );
-
-      if (selectedJobId === state.job.id) {
-        setDraft((current) => ({
-          ...current,
-          dateKey: state.dateKey,
-          staffId: state.staffId || "",
-          startTime: startTimeValue,
-          durationMinutes: `${state.durationMinutes}`,
-        }));
-      }
 
       const assignedStaffName = state.staffId
         ? staffFilterOptions.find((staff) => staff.id === state.staffId)?.name ?? null
@@ -1382,7 +1294,6 @@ export const WorkshopSchedulerScreen = ({
       await loadCalendar();
     } catch (dragError) {
       const message = dragError instanceof Error ? dragError.message : "Failed to update workshop schedule";
-      setScheduleError(message);
       error(message);
     } finally {
       setDragSavingJobId(null);
@@ -1398,7 +1309,7 @@ export const WorkshopSchedulerScreen = ({
     left: number,
     width: number,
   ) => {
-    if (event.button !== 0 || saving || Boolean(dragSavingJobId)) {
+    if (event.button !== 0 || Boolean(dragSavingJobId)) {
       return;
     }
 
@@ -1435,7 +1346,6 @@ export const WorkshopSchedulerScreen = ({
     const target = event.target as HTMLElement | null;
     if (
       event.button !== 0
-      || saving
       || Boolean(dragSavingJobId)
       || target?.closest("button, a, input, select, textarea")
     ) {
@@ -1473,80 +1383,6 @@ export const WorkshopSchedulerScreen = ({
     }
 
     openJobOverlay(job);
-  };
-
-  const saveSchedule = async () => {
-    if (!selectedJob) {
-      return;
-    }
-
-    const scheduledStartAt = buildScheduleIso(draft.dateKey, draft.startTime);
-    const durationMinutes = Number(draft.durationMinutes);
-
-    if (!draft.dateKey) {
-      setScheduleError("Choose a valid calendar date.");
-      return;
-    }
-    if (!scheduledStartAt) {
-      setScheduleError("Choose a valid start time.");
-      return;
-    }
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-      setScheduleError("Duration must be a positive whole number of minutes.");
-      return;
-    }
-
-    setSaving(true);
-    setScheduleError(null);
-
-    try {
-      const response = await apiPatch<SchedulePatchResponse>(
-        `/api/workshop/jobs/${encodeURIComponent(selectedJob.id)}/schedule`,
-        {
-          staffId: draft.staffId || null,
-          scheduledStartAt,
-          durationMinutes,
-        },
-      );
-
-      success(response.idempotent ? "Schedule already matches." : "Workshop schedule updated.");
-      await loadCalendar();
-      closeEditor();
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : "Failed to update workshop schedule";
-      setScheduleError(message);
-      error(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const clearSchedule = async () => {
-    if (!selectedJob) {
-      return;
-    }
-
-    setSaving(true);
-    setScheduleError(null);
-
-    try {
-      const response = await apiPatch<SchedulePatchResponse>(
-        `/api/workshop/jobs/${encodeURIComponent(selectedJob.id)}/schedule`,
-        {
-          clearSchedule: true,
-        },
-      );
-
-      success(response.idempotent ? "Timed schedule already cleared." : "Timed schedule cleared.");
-      await loadCalendar();
-      closeEditor();
-    } catch (clearError) {
-      const message = clearError instanceof Error ? clearError.message : "Failed to clear timed schedule";
-      setScheduleError(message);
-      error(message);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const toolbarLeadingAction: ReactNode = backLinkTo ? (
@@ -1763,7 +1599,7 @@ export const WorkshopSchedulerScreen = ({
                     {dayBlocks.map(({ job, top, height, left, width }) => {
                       const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
                       const isDragging = dragState?.active && dragState.job.id === job.id;
-                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}${isDragging ? " workshop-scheduler-block--dragging" : ""}`;
+                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}${isDragging ? " workshop-scheduler-block--dragging" : ""}`;
 
                       return (
                         <button
@@ -1779,7 +1615,7 @@ export const WorkshopSchedulerScreen = ({
                           }}
                           onPointerDown={(event) => handleJobBlockPointerDown(event, job, day.date, top, height, left, width)}
                           onClick={() => handleJobBlockClick(job)}
-                          disabled={saving || dragSavingJobId === job.id}
+                          disabled={dragSavingJobId === job.id}
                         >
                           {renderSchedulerBlockContent({
                             job,
@@ -1823,113 +1659,6 @@ export const WorkshopSchedulerScreen = ({
           <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
-                <h2>{selectedJob ? "Booking editor" : "Booking details"}</h2>
-              </div>
-              {selectedJob ? (
-                <button type="button" onClick={closeEditor} disabled={saving}>
-                  Close
-                </button>
-              ) : null}
-            </div>
-
-            {selectedJob ? (
-              <div className="workshop-scheduler-editor">
-                <div className="workshop-scheduler-editor__summary">
-                  <strong>{getJobHeading(selectedJob)}</strong>
-                  <span className={workshopRawStatusClass(selectedJob.rawStatus)}>
-                    {workshopRawStatusLabel(selectedJob.rawStatus)}
-                  </span>
-                  <div className="table-secondary">{getJobSubline(selectedJob)}</div>
-                </div>
-
-                <label>
-                  Date
-                  <input
-                    type="date"
-                    value={draft.dateKey}
-                    onChange={(event) => setDraft((current) => ({ ...current, dateKey: event.target.value }))}
-                    disabled={saving}
-                  />
-                </label>
-
-                <label>
-                  Technician
-                  <select
-                    value={draft.staffId}
-                    onChange={(event) => setDraft((current) => ({ ...current, staffId: event.target.value }))}
-                    disabled={saving}
-                  >
-                    <option value="">Leave unassigned</option>
-                    {staffFilterOptions.map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="job-meta-grid">
-                  <label>
-                    Start time
-                    <input
-                      type="time"
-                      value={draft.startTime}
-                      onChange={(event) => setDraft((current) => ({ ...current, startTime: event.target.value }))}
-                      disabled={saving}
-                    />
-                  </label>
-                  <label>
-                    Duration (minutes)
-                    <input
-                      type="number"
-                      min={15}
-                      step={15}
-                      value={draft.durationMinutes}
-                      list="workshop-scheduler-duration-presets"
-                      onChange={(event) => setDraft((current) => ({ ...current, durationMinutes: event.target.value }))}
-                      disabled={saving}
-                    />
-                    <datalist id="workshop-scheduler-duration-presets">
-                      {DURATION_PRESETS.map((value) => (
-                        <option key={value} value={value} />
-                      ))}
-                    </datalist>
-                  </label>
-                </div>
-
-                {scheduleError ? (
-                  <div className="restricted-panel warning-panel">
-                    {scheduleError}
-                  </div>
-                ) : null}
-
-                <div className="actions-inline">
-                  <button type="button" className="primary" onClick={() => void saveSchedule()} disabled={saving}>
-                    {saving ? "Saving..." : selectedJob.scheduledStartAt ? "Save booking" : "Schedule job"}
-                  </button>
-                  {selectedJob.scheduledStartAt ? (
-                    <button type="button" onClick={() => void clearSchedule()} disabled={saving}>
-                      Clear slot
-                    </button>
-                  ) : null}
-                  <button type="button" onClick={() => openJobOverlay(selectedJob)} disabled={saving}>
-                    Open job card
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="ui-empty-state">
-                <strong className="ui-empty-state__title">No booking selected</strong>
-                <span className="ui-empty-state__description">
-                  Use the week grid as the main scheduler, then fine-tune a job here.
-                </span>
-              </div>
-            )}
-          </section>
-
-          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
-            <div className="card-header-row">
-              <div>
                 <h2>Needs scheduling</h2>
               </div>
               <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
@@ -1947,7 +1676,6 @@ export const WorkshopSchedulerScreen = ({
                   <div className="workshop-scheduler-queue-card__topline">
                     <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
                     <div className="workshop-scheduler-queue-card__actions">
-                      <button type="button" onClick={() => openEditor(job, anchorDateKey)}>Schedule</button>
                       <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                     </div>
                   </div>
@@ -1955,6 +1683,7 @@ export const WorkshopSchedulerScreen = ({
                     {getQueueMetaLine(job, calendarTimeZone)}
                   </div>
                   <div className="workshop-scheduler-queue-card__footer">
+                    <span className="workshop-scheduler-queue-card__drag-hint">Drag to slot</span>
                     <span className={`${workshopRawStatusClass(job.rawStatus)} workshop-scheduler-queue-card__badge`}>
                       {workshopRawStatusLabel(job.rawStatus)}
                     </span>
@@ -1978,12 +1707,12 @@ export const WorkshopSchedulerScreen = ({
               ) : filteredUnassignedJobs.map((job) => (
                 <article
                   key={job.id}
-                  className={`workshop-scheduler-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
+                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
+                  onPointerDown={(event) => handleQueueJobPointerDown(event, job)}
                 >
                   <div className="workshop-scheduler-queue-card__topline">
                     <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
                     <div className="workshop-scheduler-queue-card__actions">
-                      <button type="button" onClick={() => openEditor(job, getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey)}>Assign</button>
                       <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                     </div>
                   </div>
@@ -1991,6 +1720,7 @@ export const WorkshopSchedulerScreen = ({
                     {getQueueMetaLine(job, calendarTimeZone)}
                   </div>
                   <div className="workshop-scheduler-queue-card__footer">
+                    <span className="workshop-scheduler-queue-card__drag-hint">Drag to slot</span>
                     <span className={`${workshopRawStatusClass(job.rawStatus)} workshop-scheduler-queue-card__badge`}>
                       {workshopRawStatusLabel(job.rawStatus)}
                     </span>

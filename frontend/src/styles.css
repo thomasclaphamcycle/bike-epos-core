@@ -3232,8 +3232,30 @@ button.primary.workshop-status-action {
 .workshop-scheduler-queue-card__footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   min-width: 0;
+}
+
+.workshop-scheduler-queue-card__drag-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #5e7082;
+  font-size: 0.71rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.workshop-scheduler-queue-card__drag-hint::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border-radius: 4px;
+  border: 1px dashed currentColor;
+  opacity: 0.8;
 }
 
 .workshop-scheduler-queue-card__badge {
