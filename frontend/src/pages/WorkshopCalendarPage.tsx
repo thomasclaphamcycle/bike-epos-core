@@ -864,6 +864,7 @@ export const WorkshopSchedulerScreen = ({
   const dragStateRef = useRef<DragState | null>(null);
   const suppressClickJobIdRef = useRef<string | null>(null);
   const technicianPickerRef = useRef<HTMLDivElement | null>(null);
+  const pendingBookingRef = useRef<HTMLButtonElement | null>(null);
 
   const updateDragState = (nextState: DragState | null) => {
     dragStateRef.current = nextState;
@@ -1050,7 +1051,13 @@ export const WorkshopSchedulerScreen = ({
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (target && technicianPickerRef.current?.contains(target)) {
+      if (
+        target
+        && (
+          technicianPickerRef.current?.contains(target)
+          || pendingBookingRef.current?.contains(target)
+        )
+      ) {
         return;
       }
       dismissPendingPrompt();
@@ -1403,6 +1410,10 @@ export const WorkshopSchedulerScreen = ({
 
     return { top, left, maxHeight };
   }, [pendingTechnicianPickerHeight, pendingTechnicianPrompt]);
+  const isDraggingPendingTechnicianPrompt = Boolean(
+    pendingTechnicianPrompt
+    && dragState?.job.id === pendingTechnicianPrompt.job.id,
+  );
 
   const persistDraggedSchedule = async (state: PlacementState) => {
     if (!state.dateKey) {
@@ -1490,6 +1501,35 @@ export const WorkshopSchedulerScreen = ({
       currentTop: top,
       snappedStartMinutes: startMinutes,
       durationMinutes,
+      active: false,
+    });
+  };
+
+  const handlePendingPromptPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    pendingPrompt: PendingTechnicianPromptState,
+  ) => {
+    if (event.button !== 0 || Boolean(dragSavingJobId)) {
+      return;
+    }
+
+    const blockRect = event.currentTarget.getBoundingClientRect();
+    updateDragState({
+      source: "queue",
+      queueKind: "unassigned",
+      pointerId: event.pointerId,
+      job: pendingPrompt.job,
+      dateKey: pendingPrompt.dateKey,
+      staffId: null,
+      left: pendingPrompt.left,
+      width: pendingPrompt.width,
+      height: pendingPrompt.height,
+      pointerOffsetY: event.clientY - blockRect.top,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      currentTop: pendingPrompt.currentTop,
+      snappedStartMinutes: pendingPrompt.snappedStartMinutes,
+      durationMinutes: pendingPrompt.durationMinutes,
       active: false,
     });
   };
@@ -1811,17 +1851,20 @@ export const WorkshopSchedulerScreen = ({
                       </div>
                     ) : null}
 
-                    {pendingPrompt ? (
+                    {pendingPrompt && !isDraggingPendingTechnicianPrompt ? (
                       <>
-                        <div
-                          aria-hidden="true"
+                        <button
+                          ref={pendingBookingRef}
+                          type="button"
                           className={`${buildJobToneClass(pendingPrompt.job, todayKey, calendarTimeZone)} workshop-scheduler-block--pending-assignment${pendingPromptIsCompact ? " workshop-scheduler-block--compact" : ""}`}
+                          title={getBookingTooltip(pendingPrompt.job, calendarTimeZone)}
                           style={{
                             top: `${pendingPrompt.currentTop}px`,
                             left: `${pendingPrompt.left}px`,
                             width: `${pendingPrompt.width}px`,
                             height: `${pendingPrompt.height}px`,
                           }}
+                          onPointerDown={(event) => handlePendingPromptPointerDown(event, pendingPrompt)}
                         >
                           {renderSchedulerBlockContent({
                             job: pendingPrompt.job,
@@ -1829,14 +1872,14 @@ export const WorkshopSchedulerScreen = ({
                             metaLabel: "Choose technician to confirm placement",
                             isCompactBlock: pendingPromptIsCompact,
                           })}
-                        </div>
+                        </button>
                       </>
                     ) : null}
                   </div>
                 );
               })}
             </div>
-            {pendingTechnicianPrompt && pendingTechnicianPickerLayout ? (
+            {pendingTechnicianPrompt && pendingTechnicianPickerLayout && !isDraggingPendingTechnicianPrompt ? (
               <div
                 ref={technicianPickerRef}
                 className="workshop-scheduler-technician-picker"
