@@ -1038,9 +1038,7 @@ export const StaffRotaPage = () => {
     <div className="page-shell page-shell-workspace ui-page ui-page--workspace rota-page">
       <SurfaceCard tone="soft">
         <PageHeader
-          eyebrow="Management / Rota"
           title="Rota"
-          description="Plan rota coverage inside CorePOS with a simple Monday to Saturday weekly editor. Store Info opening hours and closed-day rules stay as the source of truth for what can be scheduled."
           actions={(
             <div className="actions-inline">
               <button type="button" onClick={() => void loadOverview(selectedPeriodId, true)} disabled={loading || refreshing}>
@@ -1086,7 +1084,6 @@ export const StaffRotaPage = () => {
       <SurfaceCard>
         <SectionHeader
           title="Weekly Editor"
-          description="Switch between the detailed weekly planner and a six-week overview for quick team scanning. Off remains the default state until a live assignment is added."
           actions={(
             <div className="actions-inline rota-period-controls">
             <div className="rota-view-toggle" role="tablist" aria-label="Rota view mode">
@@ -1241,14 +1238,11 @@ export const StaffRotaPage = () => {
               </label>
             </div>
 
-            <p className="muted-text rota-filter-summary">
-              {staffScope === "all"
-                ? "Showing the full active team for this rota period."
-                : "Showing staff who already have assignments somewhere in this six-week period."}
-              {unassignedVisibleStaffCount
-                ? ` ${unassignedVisibleStaffCount} visible ${unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.`
-                : ""}
-            </p>
+            {unassignedVisibleStaffCount ? (
+              <p className="muted-text rota-filter-summary">
+                {unassignedVisibleStaffCount} visible {unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.
+              </p>
+            ) : null}
 
             {viewMode === "planner" ? (
               <div className="table-wrap rota-grid-wrap">
@@ -1294,21 +1288,25 @@ export const StaffRotaPage = () => {
                       >
                         <th className="rota-sticky rota-sticky-name rota-staff-name" scope="row">
                           <div className="rota-staff-name-copy">
-                            <span>{row.name}</span>
-                            {!visibleDayIndices.some((index) => row.cells[index]?.shiftType) ? (
-                              <span className="table-secondary">Off all week in this view</span>
-                            ) : null}
-                            {canEditGrid ? (
-                              <button
-                                type="button"
-                                className="button-link button-link-compact rota-row-quick-action"
-                                data-testid={`rota-fill-weekdays-${row.staffId}`}
-                                onClick={() => void fillWeekdaysForRow(row)}
-                                disabled={bulkSavingStaffId === row.staffId}
-                              >
-                                Fill Mon–Fri
-                              </button>
-                            ) : null}
+                            <div className="rota-staff-name-main">
+                              <div className="rota-staff-name-details">
+                                <span>{row.name}</span>
+                                {!visibleDayIndices.some((index) => row.cells[index]?.shiftType) ? (
+                                  <span className="table-secondary">Off all week in this view</span>
+                                ) : null}
+                              </div>
+                              {canEditGrid ? (
+                                <button
+                                  type="button"
+                                  className="button-link button-link-compact rota-row-quick-action"
+                                  data-testid={`rota-fill-weekdays-${row.staffId}`}
+                                  onClick={() => void fillWeekdaysForRow(row)}
+                                  disabled={bulkSavingStaffId === row.staffId}
+                                >
+                                  Fill Mon–Fri
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         </th>
                         <td className="rota-sticky rota-sticky-role rota-staff-role">

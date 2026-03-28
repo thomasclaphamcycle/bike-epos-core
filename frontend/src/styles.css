@@ -7366,8 +7366,24 @@ button.primary.workshop-status-action {
   gap: 4px;
 }
 
+.rota-staff-name-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rota-staff-name-details {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .rota-row-quick-action {
-  justify-self: start;
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-self: flex-start;
+  white-space: nowrap;
   padding: 0;
   font-size: 0.76rem;
 }
@@ -7664,6 +7680,14 @@ body.rota-row-drag-copy-active {
 }
 
 @media (max-width: 900px) {
+  .rota-staff-name-main {
+    flex-wrap: wrap;
+  }
+
+  .rota-row-quick-action {
+    margin-left: 0;
+  }
+
   .rota-view-toggle {
     width: 100%;
     justify-content: stretch;
