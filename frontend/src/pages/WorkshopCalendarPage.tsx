@@ -1158,15 +1158,7 @@ export const WorkshopSchedulerScreen = ({
         return;
       }
 
-      const target =
-        current.source === "queue"
-          ? getDayTrackTarget(event.clientX)
-          : current.dateKey
-            ? {
-                dateKey: current.dateKey,
-                track: dayTrackRefs.current[current.dateKey],
-              }
-            : null;
+      const target = getDayTrackTarget(event.clientX);
       const track = target?.track;
       const nextDateKey = target?.dateKey ?? null;
       const nextActive = current.active
@@ -1259,7 +1251,11 @@ export const WorkshopSchedulerScreen = ({
       }
 
       if (!current.dateKey) {
-        error("Drop the job onto a visible day column to create a timed booking.");
+        error(
+          current.source === "queue"
+            ? "Drop the job onto a visible day column to create a timed booking."
+            : "Drop the booking onto a visible day column to move it.",
+        );
         return;
       }
 
