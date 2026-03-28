@@ -4,6 +4,8 @@ import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
 import {
+  workshopRawStatusSurfaceClass,
+  workshopRawStatusClass,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
 
@@ -751,27 +753,7 @@ const renderSchedulerBlockContent = ({
 );
 
 const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string) => {
-  const classes = ["workshop-scheduler-block"];
-
-  switch (job.rawStatus) {
-    case "BOOKED":
-    case "BIKE_ARRIVED":
-      classes.push("workshop-scheduler-block--booked");
-      break;
-    case "WAITING_FOR_APPROVAL":
-      classes.push("workshop-scheduler-block--approval");
-      break;
-    case "WAITING_FOR_PARTS":
-      classes.push("workshop-scheduler-block--parts");
-      break;
-    case "READY_FOR_COLLECTION":
-      classes.push("workshop-scheduler-block--ready");
-      break;
-    default:
-      classes.push("workshop-scheduler-block--default");
-      break;
-  }
-
+  const classes = ["workshop-scheduler-block", workshopRawStatusSurfaceClass(job.rawStatus)];
   if (isOverdueJob(job, todayKey, timeZone)) {
     classes.push("workshop-scheduler-block--overdue");
   }
@@ -1696,12 +1678,20 @@ export const WorkshopSchedulerScreen = ({
               {filteredUnscheduledJobs.length === 0 ? (
                 <div className="workshop-scheduler-empty">No jobs are waiting for a first timed slot.</div>
               ) : filteredUnscheduledJobs.map((job) => (
-                <article key={job.id} className="workshop-scheduler-queue-card">
+                <article
+                  key={job.id}
+                  className={`workshop-scheduler-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
+                >
                   <div>
                     <strong>{getJobHeading(job)}</strong>
                     <div className="table-secondary">{job.customerName || "Customer pending"}</div>
                     <div className="table-secondary">
                       Promise date: {job.scheduledDate ? formatPromiseDate(job.scheduledDate) : "Not set"}
+                    </div>
+                    <div>
+                      <span className={workshopRawStatusClass(job.rawStatus)}>
+                        {workshopRawStatusLabel(job.rawStatus)}
+                      </span>
                     </div>
                   </div>
                   <div className="actions-inline">
@@ -1726,13 +1716,21 @@ export const WorkshopSchedulerScreen = ({
               {filteredUnassignedJobs.length === 0 ? (
                 <div className="workshop-scheduler-empty">Every timed booking is assigned to a technician.</div>
               ) : filteredUnassignedJobs.map((job) => (
-                <article key={job.id} className="workshop-scheduler-queue-card">
+                <article
+                  key={job.id}
+                  className={`workshop-scheduler-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
+                >
                   <div>
                     <strong>{getJobHeading(job)}</strong>
                     <div className="table-secondary">
                       Scheduled {formatOptionalDate(job.scheduledStartAt, calendarTimeZone)} · {formatOptionalTime(job.scheduledStartAt, calendarTimeZone)}
                     </div>
                     <div className="table-secondary">{job.customerName || workshopRawStatusLabel(job.rawStatus)}</div>
+                    <div>
+                      <span className={workshopRawStatusClass(job.rawStatus)}>
+                        {workshopRawStatusLabel(job.rawStatus)}
+                      </span>
+                    </div>
                   </div>
                   <div className="actions-inline">
                     <button type="button" onClick={() => openEditor(job, getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey)}>Assign</button>

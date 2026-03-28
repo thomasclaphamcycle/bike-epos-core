@@ -26,6 +26,15 @@ type WorkshopTechnicianWorkflowSummaryInput = {
   hasBasket?: boolean;
 };
 
+type WorkshopRawStatusTone =
+  | "blue"
+  | "purple"
+  | "yellow"
+  | "rose"
+  | "green"
+  | "red"
+  | "neutral";
+
 export const workshopExecutionStatusLabel = (
   status: WorkshopExecutionStatus | string | null | undefined,
 ) => {
@@ -69,8 +78,9 @@ export const workshopRawStatusLabel = (
   status: string | null | undefined,
 ) => {
   switch (status) {
-    case "BOOKED":
     case "BOOKING_MADE":
+      return "Booking Made";
+    case "BOOKED":
       return "Booked";
     case "BIKE_ARRIVED":
       return "Bike Arrived";
@@ -79,7 +89,7 @@ export const workshopRawStatusLabel = (
     case "WAITING_FOR_APPROVAL":
       return "Waiting for Approval";
     case "APPROVED":
-      return "Bike Arrived";
+      return "Approved";
     case "WAITING_FOR_PARTS":
       return "Waiting for Parts";
     case "ON_HOLD":
@@ -96,29 +106,46 @@ export const workshopRawStatusLabel = (
   }
 };
 
+export const getWorkshopRawStatusTone = (
+  status: string | null | undefined,
+): WorkshopRawStatusTone => {
+  switch (status) {
+    case "BOOKED":
+    case "BOOKING_MADE":
+    case "BIKE_ARRIVED":
+    case "IN_PROGRESS":
+      return "blue";
+    case "APPROVED":
+      return "purple";
+    case "WAITING_FOR_PARTS":
+      return "yellow";
+    case "WAITING_FOR_APPROVAL":
+      return "rose";
+    case "READY_FOR_COLLECTION":
+    case "BIKE_READY":
+    case "COMPLETED":
+      return "green";
+    case "ON_HOLD":
+    case "CANCELLED":
+      return "red";
+    default:
+      return "neutral";
+  }
+};
+
 export const workshopRawStatusClass = (
   status: string | null | undefined,
 ) => {
-  switch (status) {
-    case "WAITING_FOR_APPROVAL":
-    case "WAITING_FOR_PARTS":
-      return "status-badge status-warning";
-    case "BIKE_ARRIVED":
-    case "IN_PROGRESS":
-    case "APPROVED":
-    case "ON_HOLD":
-      return "status-badge status-info";
-    case "READY_FOR_COLLECTION":
-    case "BIKE_READY":
-      return "status-badge status-ready";
-    case "COMPLETED":
-      return "status-badge status-complete";
-    case "CANCELLED":
-      return "status-badge status-cancelled";
-    default:
-      return "status-badge";
-  }
+  return `status-badge workshop-status-badge workshop-status-badge--${getWorkshopRawStatusTone(status)}`;
 };
+
+export const workshopRawStatusSurfaceClass = (
+  status: string | null | undefined,
+) => `workshop-status-surface workshop-status-surface--${getWorkshopRawStatusTone(status)}`;
+
+export const workshopRawStatusActionClass = (
+  status: string | null | undefined,
+) => `workshop-status-action workshop-status-action--${getWorkshopRawStatusTone(status)}`;
 
 export const workshopTechnicianWorkflowLabel = (
   stage: WorkshopTechnicianWorkflowStage | string | null | undefined,

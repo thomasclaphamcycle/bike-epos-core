@@ -5,8 +5,10 @@ import { useToasts } from "../../components/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
   getWorkshopTechnicianWorkflowSummary,
+  workshopRawStatusActionClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
+  workshopRawStatusSurfaceClass,
 } from "./status";
 
 type WorkshopJobOverlayLine = {
@@ -821,6 +823,24 @@ const isSameWorkflowAction = (
   left: WorkshopWorkflowAction | null,
   right: WorkshopWorkflowAction | null,
 ) => Boolean(left && right && left.kind === right.kind && left.value === right.value);
+
+const getWorkshopActionStatusValue = (
+  action: WorkshopWorkflowAction | WorkshopOverlayStatusAction | null,
+) => {
+  if (!action) {
+    return null;
+  }
+
+  if (action.kind === "status") {
+    return action.value;
+  }
+
+  if (action.kind === "approval" && action.value === "APPROVED") {
+    return "APPROVED";
+  }
+
+  return null;
+};
 
 const getPrimaryOverviewAction = ({
   status,
@@ -2358,7 +2378,7 @@ export const WorkshopJobOverlay = ({
       if (dayCapacity.availableMinutes > 0) {
         availabilityById.set(option.id, {
           state: "available",
-          optionLabel: `${option.name} - available`,
+          optionLabel: option.name,
         });
         availableNames.push(option.name);
         return;
@@ -2467,7 +2487,7 @@ export const WorkshopJobOverlay = ({
           <div className="workshop-os-overlay-next-action__buttons">
             <button
               type="button"
-              className="primary"
+              className={`primary${getWorkshopActionStatusValue(primaryAction) ? ` ${workshopRawStatusActionClass(getWorkshopActionStatusValue(primaryAction))}` : ""}`}
               onClick={() => void runQuickAction()}
               disabled={savingAnyAction}
             >
@@ -2483,6 +2503,7 @@ export const WorkshopJobOverlay = ({
                 <button
                   key={`${action.kind}:${action.value}`}
                   type="button"
+                  className={getWorkshopActionStatusValue(action) ? workshopRawStatusActionClass(getWorkshopActionStatusValue(action)) : undefined}
                   onClick={() => void runSecondaryAction(action)}
                   disabled={savingAnyAction}
                 >
@@ -2553,14 +2574,14 @@ export const WorkshopJobOverlay = ({
   );
 
   const renderOverviewTab = () => (
-    <div className="workshop-os-modal__panel">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--overview">
       {renderOverviewHeader()}
       {overviewMode === "planning" ? renderPlanningOverview() : renderOperationalOverview()}
     </div>
   );
 
   const renderWorkTab = () => (
-    <div className="workshop-os-modal__panel">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--work">
       <section className="workshop-os-drawer__section workshop-os-job-workspace-section">
         <div className="workshop-os-job-workspace-section__toggle-copy">
           <strong>Work</strong>
@@ -2650,7 +2671,6 @@ export const WorkshopJobOverlay = ({
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Booking</strong>
-                    <span className="table-secondary">Choose the workshop day and timed slot for this job.</span>
                   </div>
                   <div className="workshop-os-job-workspace-section__meta-list">
                     <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
@@ -2735,7 +2755,6 @@ export const WorkshopJobOverlay = ({
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Assign technician</strong>
-                    <span className="table-secondary">Set bench ownership once the booking slot looks right.</span>
                   </div>
                   <div className="workshop-os-job-workspace-section__meta-list">
                     <span>{assignedTechnicianLabel}</span>
@@ -2866,7 +2885,7 @@ export const WorkshopJobOverlay = ({
                               return (
                                 <article
                                   key={job.id}
-                                  className={`workshop-os-job-workspace-section__list-item${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
+                                  className={`workshop-os-job-workspace-section__list-item workshop-os-schedule-day-snapshot__job ${workshopRawStatusSurfaceClass(job.rawStatus)}${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
                                 >
                                   <div className="workshop-os-schedule-day-snapshot__item-row">
                                     <div>
@@ -2897,7 +2916,7 @@ export const WorkshopJobOverlay = ({
   );
 
   const renderActivityTab = () => (
-    <div className="workshop-os-modal__panel">
+    <div className="workshop-os-modal__panel workshop-os-modal__panel--activity">
       {renderSection(
         "jobDetails",
         "Activity",
@@ -2980,7 +2999,7 @@ export const WorkshopJobOverlay = ({
       aria-hidden="true"
     >
       <aside
-        className="workshop-os-modal"
+        className={`workshop-os-modal workshop-os-modal--${activeTab}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
