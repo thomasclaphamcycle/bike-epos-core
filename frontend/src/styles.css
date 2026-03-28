@@ -3212,6 +3212,17 @@ button.primary.workshop-status-action {
   line-height: 1.1;
 }
 
+.workshop-scheduler-block--minimal .workshop-scheduler-block__technician {
+  margin-top: 1px;
+  gap: 3px;
+  font-size: 0.64rem;
+  line-height: 1.04;
+}
+
+.workshop-scheduler-block--minimal .workshop-scheduler-block__technician-icon {
+  font-size: 0.58rem;
+}
+
 .workshop-scheduler-block--compact {
   gap: 2px;
   padding: 7px 8px;

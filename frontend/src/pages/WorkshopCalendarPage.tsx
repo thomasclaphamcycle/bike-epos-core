@@ -925,7 +925,7 @@ const renderSchedulerBlockContent = ({
   density: SchedulerBlockDensity;
 }) => {
   const technician = getBookingTechnicianLabel(job, technicianOverride);
-  const showTechnician = density !== "minimal";
+  const showTechnician = true;
   const showBike = density === "full";
   const showMeta = density === "full";
 
