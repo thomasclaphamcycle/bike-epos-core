@@ -1016,10 +1016,10 @@ export const StaffRotaPage = () => {
                 {refreshing ? "Refreshing..." : "Refresh"}
               </button>
               <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
-              <Link to="/dashboard">Dashboard</Link>
-              {canEditGrid ? <Link to="/management/staff-rota/tools">Rota Tools</Link> : null}
-              {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
-              {isAdmin ? <Link to="/settings/roles-permissions">Roles & Permissions</Link> : null}
+              <Link to="/dashboard" className="button-link">Dashboard</Link>
+              {canEditGrid ? <Link to="/management/staff-rota/tools" className="button-link">Rota Tools</Link> : null}
+              {isAdmin ? <Link to="/settings/staff-list" className="button-link">Staff List</Link> : null}
+              {isAdmin ? <Link to="/settings/roles-permissions" className="button-link">Roles & Permissions</Link> : null}
             </div>
           )}
         />
