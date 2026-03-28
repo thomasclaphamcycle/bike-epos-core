@@ -7261,8 +7261,47 @@ button.primary.workshop-status-action {
 }
 
 .rota-week-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.rota-week-heading__copy {
   display: grid;
   gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.rota-week-heading__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d7e0ea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.rota-week-heading__nav:hover:not(:disabled) {
+  background: #eef4fb;
+  border-color: #c4d2e2;
+}
+
+.rota-week-heading__nav:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.rota-week-heading__nav:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .rota-week-heading strong {

@@ -459,6 +459,8 @@ export const StaffRotaPage = () => {
   const previousPeriod = currentPeriodIndex > 0 ? overview?.periods[currentPeriodIndex - 1] ?? null : null;
   const nextPeriod = currentPeriodIndex >= 0 && overview ? overview.periods[currentPeriodIndex + 1] ?? null : null;
   const selectedWeek = currentPeriod?.weeks[selectedWeekIndex] ?? null;
+  const canGoToPreviousWeek = selectedWeekIndex > 0;
+  const canGoToNextWeek = currentPeriod ? selectedWeekIndex < currentPeriod.weeks.length - 1 : false;
   const todayDateKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const visibleDayIndices = useMemo(() => (
     currentPeriod?.days.reduce<number[]>((indices, day, index) => {
@@ -614,6 +616,18 @@ export const StaffRotaPage = () => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("periodId", periodId);
     setSearchParams(nextParams);
+  };
+
+  const goToPreviousWeek = () => {
+    setSelectedWeekIndex((current) => Math.max(0, current - 1));
+  };
+
+  const goToNextWeek = () => {
+    if (!currentPeriod) {
+      return;
+    }
+
+    setSelectedWeekIndex((current) => Math.min(currentPeriod.weeks.length - 1, current + 1));
   };
 
   const createPeriod = async () => {
@@ -1253,8 +1267,30 @@ export const StaffRotaPage = () => {
                       <th className="rota-sticky rota-sticky-role" rowSpan={2}>Role</th>
                       <th colSpan={visibleDays.length}>
                         <div className="rota-week-heading">
-                          <strong>Week {selectedWeekIndex + 1}</strong>
-                          <span>{selectedWeek?.label ?? "Selected week"}</span>
+                          <button
+                            type="button"
+                            className="rota-week-heading__nav"
+                            onClick={goToPreviousWeek}
+                            disabled={!canGoToPreviousWeek}
+                            aria-label="Go to previous rota week"
+                            data-testid="rota-week-prev"
+                          >
+                            ←
+                          </button>
+                          <div className="rota-week-heading__copy" data-testid="rota-week-heading">
+                            <strong>Week {selectedWeekIndex + 1}</strong>
+                            <span>{selectedWeek?.label ?? "Selected week"}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="rota-week-heading__nav"
+                            onClick={goToNextWeek}
+                            disabled={!canGoToNextWeek}
+                            aria-label="Go to next rota week"
+                            data-testid="rota-week-next"
+                          >
+                            →
+                          </button>
                         </div>
                       </th>
                     </tr>

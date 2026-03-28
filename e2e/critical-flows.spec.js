@@ -1001,6 +1001,12 @@ test("Rota planner supports row drag-copy and Fill Mon-Fri without spilling into
     { surface: "frontend" },
   );
 
+  await expect(page.getByTestId("rota-week-heading")).toContainText("Week 1");
+  await page.getByTestId("rota-week-next").click();
+  await expect(page.getByTestId("rota-week-heading")).toContainText("Week 2");
+  await page.getByTestId("rota-week-prev").click();
+  await expect(page.getByTestId("rota-week-heading")).toContainText("Week 1");
+
   const alphaMonday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-06`);
   const alphaTuesday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-07`);
   const alphaWednesday = page.getByTestId(`rota-cell-trigger-${alpha.user.id}-2099-04-08`);
