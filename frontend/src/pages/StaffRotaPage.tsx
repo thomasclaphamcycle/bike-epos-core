@@ -808,6 +808,37 @@ export const StaffRotaPage = () => {
     setOpenEditorCellKey((current) => current === cellKey ? null : cellKey);
   };
 
+  const handleCellTriggerDoubleClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    input: {
+      rotaPeriodId: string;
+      staffId: string;
+      cellKey: string;
+      cell: RotaGridCell;
+    },
+  ) => {
+    if (!canEditGrid || savingCellKey === input.cellKey || bulkSavingStaffId === input.staffId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    suppressCellClickRef.current = false;
+    setOpenEditorCellKey(null);
+
+    const nextValue: RotaEditorShiftValue = input.cell.shiftType === "FULL_DAY" ? "OFF" : "FULL_DAY";
+    void applyEditorShift(
+      {
+        rotaPeriodId: input.rotaPeriodId,
+        staffId: input.staffId,
+        date: input.cell.date,
+      },
+      input.cell,
+      input.cellKey,
+      nextValue,
+    );
+  };
+
   const beginRowDragCopy = (
     event: React.PointerEvent<HTMLButtonElement>,
     input: {
@@ -1345,6 +1376,12 @@ export const StaffRotaPage = () => {
                                     value: getCellEditorValue(cell),
                                   })}
                                   onClick={() => handleCellTriggerClick(cellKey)}
+                                  onDoubleClick={(event) => handleCellTriggerDoubleClick(event, {
+                                    rotaPeriodId: currentPeriod.id,
+                                    staffId: row.staffId,
+                                    cellKey,
+                                    cell,
+                                  })}
                                   disabled={!canEditGrid || isSavingCell || isBulkSavingRow}
                                   aria-expanded={isEditorOpen}
                                   aria-haspopup="menu"

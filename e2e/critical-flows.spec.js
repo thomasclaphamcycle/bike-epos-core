@@ -1015,6 +1015,11 @@ test("Rota planner supports row drag-copy and Fill Mon-Fri without spilling into
   await page.getByRole("menuitem", { name: "AM", exact: true }).click();
   await expect(alphaMonday).toContainText("AM");
 
+  await alphaThursday.dblclick();
+  await expect(alphaThursday).toContainText("Full");
+  await alphaThursday.dblclick();
+  await expect(alphaThursday).toContainText("Off");
+
   await dragBetweenLocators(page, alphaMonday, alphaWednesday);
   await expect(alphaTuesday).toContainText("AM");
   await expect(alphaWednesday).toContainText("AM");
