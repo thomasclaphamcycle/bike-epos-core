@@ -1,14 +1,17 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client";
 import { useToasts } from "../../components/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
+  getWorkshopStatusTimeline,
   getWorkshopTechnicianWorkflowSummary,
+  toWorkshopDisplayStatus,
   workshopRawStatusActionClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
   workshopRawStatusSurfaceClass,
+  workshopStatusSelectorOptions,
 } from "./status";
 
 type WorkshopJobOverlayLine = {
@@ -1180,6 +1183,7 @@ export const WorkshopJobOverlay = ({
   const [labourDescriptionDraft, setLabourDescriptionDraft] = useState("");
   const [labourPriceDraft, setLabourPriceDraft] = useState("");
   const [lineQtyDrafts, setLineQtyDrafts] = useState<Record<string, string>>({});
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [scheduleDaySnapshot, setScheduleDaySnapshot] = useState<WorkshopJobOverlayDaySnapshotResponse | null>(null);
   const [loadingScheduleDaySnapshot, setLoadingScheduleDaySnapshot] = useState(false);
   const [scheduleDaySnapshotError, setScheduleDaySnapshotError] = useState<string | null>(null);
@@ -1195,6 +1199,7 @@ export const WorkshopJobOverlay = ({
   const [collapsedSections, setCollapsedSections] = useState<Record<JobWorkspaceSectionKey, boolean>>(
     DEFAULT_JOB_WORKSPACE_COLLAPSED,
   );
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const debouncedPartSearch = useDebouncedValue(partSearch, 250);
   const savingAnyAction = savingAssignment || savingQuickAction || savingStatus || savingSchedule;
   const footerMessage = actionError
@@ -1243,19 +1248,51 @@ export const WorkshopJobOverlay = ({
     setScheduleDaySnapshot(null);
     setLoadingScheduleDaySnapshot(false);
     setScheduleDaySnapshotError(null);
+    setStatusMenuOpen(false);
     setActiveTab(resolvedInitialTab);
   }, [jobId, resolvedInitialTab]);
 
   useEffect(() => {
+    if (!statusMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && statusMenuRef.current?.contains(target)) {
+        return;
+      }
+      setStatusMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [statusMenuOpen]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (statusMenuOpen) {
+          setStatusMenuOpen(false);
+          return;
+        }
         onClose();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, statusMenuOpen]);
 
   useEffect(() => {
     setAssignedStaffIdDraft(details?.job.assignedStaffId || summary?.assignedStaffId || "");
@@ -1408,7 +1445,8 @@ export const WorkshopJobOverlay = ({
   }, [jobId, refreshKey]);
 
   const overlayJob = details?.job ?? null;
-  const displayStatus = overlayJob?.status || summary?.rawStatus || summary?.status || "BOOKED";
+  const rawOverlayStatus = overlayJob?.status || summary?.rawStatus || summary?.status || "BOOKED";
+  const displayStatus = toWorkshopDisplayStatus(rawOverlayStatus) ?? "BOOKED";
   const displayCustomerName = overlayJob?.customerName || getOverlayCustomerName(summary);
   const displayBikeDescription = overlayJob?.bikeDescription || summary?.bikeDescription || "Workshop job";
   const displayPartsSummary = details?.partsOverview?.summary ?? summary?.partsSummary ?? null;
@@ -1426,7 +1464,7 @@ export const WorkshopJobOverlay = ({
     timeZone,
   });
   const displayWorkflowSummary = getWorkshopTechnicianWorkflowSummary({
-    rawStatus: displayStatus,
+    rawStatus: rawOverlayStatus,
     partsStatus: displayPartsSummary?.partsStatus,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
     scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
@@ -1434,7 +1472,7 @@ export const WorkshopJobOverlay = ({
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
     hasBasket: Boolean(overlayJob?.finalizedBasketId || summary?.finalizedBasketId),
   });
-  const urgency = getUrgency(overlayJob?.scheduledDate || summary?.scheduledDate, displayStatus);
+  const urgency = getUrgency(overlayJob?.scheduledDate || summary?.scheduledDate, rawOverlayStatus);
   const lines = details?.lines ?? [];
   const labourLines = lines.filter((line) => line.type === "LABOUR");
   const partLines = lines.filter((line) => line.type === "PART");
@@ -1444,30 +1482,32 @@ export const WorkshopJobOverlay = ({
   const openPath = fullJobPath || `/workshop/${jobId}`;
   const issueSummary = overlayJob?.notes || summary?.notes || null;
   const overviewMode = getOverviewMode({
-    status: displayStatus,
+    status: rawOverlayStatus,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
     scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
     scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
   });
   const approvalSignal = getApprovalSignal({
-    status: displayStatus,
+    status: rawOverlayStatus,
     estimate: details?.currentEstimate || null,
     timeZone,
   });
   const partsSignal = getPartsSignal(displayPartsSummary);
   const primaryAction = getPrimaryOverviewAction({
-    status: displayStatus,
+    status: rawOverlayStatus,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
     partsStatus: displayPartsSummary?.partsStatus,
   });
   const secondaryActions = getStatusProgressionActions({
-    status: displayStatus,
+    status: rawOverlayStatus,
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
   }).filter((action) =>
     !isSameWorkflowAction(action, primaryAction),
   );
   const canAssignTechnician = technicianOptions.length > 0 && !["COMPLETED", "CANCELLED"].includes(displayStatus);
+  const statusTimeline = useMemo(() => getWorkshopStatusTimeline(displayStatus), [displayStatus]);
+  const canManuallyUpdateStatus = !["COMPLETED", "CANCELLED"].includes(displayStatus);
   const hasAssignmentChange =
     (overlayJob?.assignedStaffId || summary?.assignedStaffId || "") !== assignedStaffIdDraft;
   const hasScheduleDraftChanges =
@@ -1477,7 +1517,7 @@ export const WorkshopJobOverlay = ({
   const hasTimedBooking = Boolean(overlayJob?.scheduledStartAt || summary?.scheduledStartAt);
   const canSaveScheduleDraft = !hasTimedBooking || hasScheduleDraftChanges;
   const nextAction = getNextActionCard({
-    status: displayStatus,
+    status: rawOverlayStatus,
     workflowSummary: displayWorkflowSummary,
     assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
     scheduledDate: overlayJob?.scheduledDate || summary?.scheduledDate || null,
@@ -1815,6 +1855,35 @@ export const WorkshopJobOverlay = ({
         success("Job status updated");
       }
 
+      refreshOverlayInBackground();
+    } catch (statusError) {
+      const message = statusError instanceof Error ? statusError.message : "Failed to update workflow status";
+      setActionError(message);
+      error(message);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const updateStatusFromModal = async (nextStatus: string) => {
+    if (!jobId || savingAnyAction || !canManuallyUpdateStatus) {
+      return;
+    }
+
+    setSavingStatus(true);
+    setActionError(null);
+
+    try {
+      const response = await apiPost<WorkshopJobOverlayStatusResponse>(`/api/workshop/jobs/${encodeURIComponent(jobId)}/status`, {
+        status: nextStatus,
+      });
+      applyInlineStatusUpdate({
+        status: response.job.status,
+        completedAt: response.job.completedAt,
+        cancelledAt: response.job.cancelledAt,
+      });
+      setStatusMenuOpen(false);
+      success(`Status updated to ${workshopRawStatusLabel(nextStatus)}`);
       refreshOverlayInBackground();
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update workflow status";
@@ -3006,7 +3075,7 @@ export const WorkshopJobOverlay = ({
         aria-label="Workshop job overlay"
       >
         <div className="workshop-os-modal__header">
-          <div className="workshop-os-drawer__header">
+          <div className="workshop-os-drawer__header workshop-os-drawer__header--status">
             <div className="workshop-os-overlay-hero__title">
               <p className="ui-page-eyebrow">Job Card</p>
               <h2>{displayBikeDescription}</h2>
@@ -3014,9 +3083,69 @@ export const WorkshopJobOverlay = ({
                 {displayCustomerName} · <span className="mono-text">{jobId.slice(0, 8)}</span>
               </p>
             </div>
-            <button type="button" onClick={onClose} aria-label="Close job card">
-              Close
-            </button>
+            <div className="workshop-os-modal-status" ref={statusMenuRef}>
+              <span className="ui-page-eyebrow">Workshop status</span>
+              <button
+                type="button"
+                className={`workshop-job-status-trigger ${workshopRawStatusActionClass(displayStatus)}`}
+                onClick={() => {
+                  if (!canManuallyUpdateStatus) {
+                    return;
+                  }
+                  setStatusMenuOpen((open) => !open);
+                }}
+                disabled={savingAnyAction || !canManuallyUpdateStatus}
+                aria-haspopup="menu"
+                aria-expanded={statusMenuOpen}
+              >
+                <span>{workshopRawStatusLabel(displayStatus)}</span>
+                <span className="workshop-job-status-trigger__meta">
+                  {savingStatus ? "Updating..." : canManuallyUpdateStatus ? "Change" : "Locked"}
+                </span>
+              </button>
+              {statusMenuOpen ? (
+                <div className="workshop-job-status-menu" role="menu" aria-label="Workshop statuses">
+                  {workshopStatusSelectorOptions.map((option) => {
+                    const isCurrent = option.value === displayStatus;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={isCurrent}
+                        className={`workshop-job-status-option ${workshopRawStatusActionClass(option.value)}${isCurrent ? " workshop-job-status-option--current" : ""}`}
+                        onClick={() => void updateStatusFromModal(option.value)}
+                        disabled={savingAnyAction || isCurrent}
+                      >
+                        <span className="workshop-job-status-option__content">
+                          <strong>{option.label}</strong>
+                          <span>{option.description}</span>
+                        </span>
+                        <span className="workshop-job-status-option__state">
+                          {isCurrent ? "Current" : "Set"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <div className="workshop-job-status-timeline workshop-os-modal-status__timeline" aria-label="Workshop progress">
+                {statusTimeline.map((step) => (
+                  <div
+                    key={step.status}
+                    className={`workshop-job-status-timeline__step workshop-job-status-timeline__step--${step.state}`}
+                  >
+                    <span className="workshop-job-status-timeline__dot" />
+                    <span className="workshop-job-status-timeline__label">{step.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="workshop-os-modal__header-actions">
+              <button type="button" onClick={onClose} aria-label="Close job card">
+                Close
+              </button>
+            </div>
           </div>
         </div>
 

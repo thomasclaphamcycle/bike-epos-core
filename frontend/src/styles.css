@@ -4703,6 +4703,42 @@ button.primary.workshop-status-action {
   align-items: flex-start;
 }
 
+.workshop-os-drawer__header--status {
+  gap: 18px;
+}
+
+.workshop-os-drawer__header--status .workshop-os-overlay-hero__title,
+.workshop-os-modal__header-actions {
+  flex: 1 1 0;
+}
+
+.workshop-os-modal__header-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.workshop-os-modal-status {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  flex: 0 1 360px;
+  min-width: 0;
+  text-align: center;
+}
+
+.workshop-os-modal-status .workshop-job-status-trigger {
+  min-width: min(260px, 100%);
+}
+
+.workshop-os-modal-status .workshop-job-status-menu {
+  width: min(360px, calc(100vw - 48px));
+}
+
+.workshop-os-modal-status__timeline {
+  width: 100%;
+}
+
 .workshop-os-job-card__identity {
   display: grid;
   gap: 3px;
@@ -10949,6 +10985,20 @@ body.rota-row-drag-copy-active {
   .workshop-os-job-workspace-section__footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .workshop-os-drawer__header--status .workshop-os-overlay-hero__title,
+  .workshop-os-modal__header-actions {
+    flex: 1 1 auto;
+  }
+
+  .workshop-os-modal__header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .workshop-os-modal-status {
+    width: 100%;
   }
 
   .workshop-os-job-workspace-line__qty-field,
