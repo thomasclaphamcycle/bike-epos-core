@@ -137,6 +137,7 @@ type WorkshopSchedulerScreenProps = {
   backLinkTo?: string | null;
   view?: CalendarViewMode;
   anchorDateKey?: string;
+  weekRangeMode?: "calendar" | "operational";
   onChangeView?: (view: CalendarViewMode) => void;
   onChangeAnchorDateKey?: (dateKey: string) => void;
   technicianId?: string;
@@ -469,9 +470,24 @@ const isOverdueJob = (job: CalendarJob, todayKey: string, timeZone?: string) => 
   );
 };
 
-const buildVisibleRange = (anchorDateKey: string, view: CalendarViewMode) => {
+const getOperationalWeekStart = (anchor: Date) => {
+  const monday = startOfWeek(anchor);
+  const weekdayIndex = (anchor.getDay() + 6) % 7;
+  if (weekdayIndex <= 2) {
+    return monday;
+  }
+  return addDays(anchor, -2);
+};
+
+const buildVisibleRange = (
+  anchorDateKey: string,
+  view: CalendarViewMode,
+  weekRangeMode: "calendar" | "operational" = "calendar",
+) => {
   const anchor = parseDateKey(anchorDateKey);
-  const start = view === "week" ? startOfWeek(anchor) : anchor;
+  const start = view === "week"
+    ? (weekRangeMode === "operational" ? getOperationalWeekStart(anchor) : startOfWeek(anchor))
+    : anchor;
   const end = view === "week" ? addDays(start, 6) : start;
   const dates: string[] = [];
 
@@ -812,6 +828,7 @@ export const WorkshopSchedulerScreen = ({
   backLinkTo = embedded ? null : "/workshop",
   view: controlledView,
   anchorDateKey: controlledAnchorDateKey,
+  weekRangeMode = "calendar",
   onChangeView,
   onChangeAnchorDateKey,
   technicianId,
@@ -855,7 +872,10 @@ export const WorkshopSchedulerScreen = ({
   const view = controlledView ?? standaloneView;
   const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
   const selectedTechnicianId = technicianId ?? internalTechnicianId;
-  const requestedRange = useMemo(() => buildVisibleRange(anchorDateKey, view), [anchorDateKey, view]);
+  const requestedRange = useMemo(
+    () => buildVisibleRange(anchorDateKey, view, weekRangeMode),
+    [anchorDateKey, view, weekRangeMode],
+  );
   const calendarTimeZone = calendar?.range.timeZone;
   const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey();
 
@@ -1651,9 +1671,15 @@ export const WorkshopSchedulerScreen = ({
               {days.map((day) => {
                 const dayCapacity = toDayCapacitySummary(calendar?.staff ?? [], day.date, selectedTechnicianId);
                 const visibleDayJobs = jobsByDay.get(day.date)?.length ?? 0;
+                const isToday = day.date === todayKey;
 
                 return (
-                  <div key={day.date} className="workshop-scheduler-grid__day-header">
+                  <div
+                    key={day.date}
+                    className={`workshop-scheduler-grid__day-header${isToday ? " workshop-scheduler-grid__day-header--today" : ""}`}
+                    data-testid={`workshop-scheduler-day-header-${day.date}`}
+                    data-current-day={isToday ? "true" : "false"}
+                  >
                     <strong>{day.weekday}</strong>
                     <span>{formatOptionalDate(`${day.date}T12:00:00.000Z`, calendarTimeZone)}</span>
                     <span>
@@ -1687,6 +1713,7 @@ export const WorkshopSchedulerScreen = ({
                 const dayBlocks = positionedJobsByDay.get(day.date) ?? [];
                 const timeOffBlocks = workshopTimeOffByDay.get(day.date) ?? [];
                 const previewBlock = dragState?.active && dragState.dateKey === day.date ? dragState : null;
+                const isToday = day.date === todayKey;
 
                 return (
                   <div
@@ -1694,7 +1721,8 @@ export const WorkshopSchedulerScreen = ({
                     ref={(node) => {
                       dayTrackRefs.current[day.date] = node;
                     }}
-                    className={`workshop-scheduler-grid__day-track${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}${previewBlock ? " workshop-scheduler-grid__day-track--drag-active" : ""}`}
+                    className={`workshop-scheduler-grid__day-track${isToday ? " workshop-scheduler-grid__day-track--today" : ""}${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}${previewBlock ? " workshop-scheduler-grid__day-track--drag-active" : ""}`}
+                    data-testid={`workshop-scheduler-day-track-${day.date}`}
                     style={{ height: `${trackHeight}px` }}
                   >
                     {timeLabels.map((minutes) => (

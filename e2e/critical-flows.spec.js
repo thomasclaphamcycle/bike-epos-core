@@ -108,6 +108,38 @@ const expectStocktakeLineCount = async (page, variantId, expectedCount) => {
   }).toBe(String(expectedCount));
 };
 
+const getLondonDateKey = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const lookup = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${lookup("year")}-${lookup("month")}-${lookup("day")}`;
+};
+
+const parseDateKeyAtNoon = (dateKey) => new Date(`${dateKey}T12:00:00`);
+
+const addDaysToDateKey = (dateKey, days) => {
+  const next = parseDateKeyAtNoon(dateKey);
+  next.setDate(next.getDate() + days);
+  return getLondonDateKey(next);
+};
+
+const getOperationalWeekStartDateKey = (anchorDateKey) => {
+  const anchor = parseDateKeyAtNoon(anchorDateKey);
+  const day = anchor.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = parseDateKeyAtNoon(anchorDateKey);
+  monday.setDate(monday.getDate() + mondayOffset);
+  const weekdayIndex = (day + 6) % 7;
+  if (weekdayIndex <= 2) {
+    return getLondonDateKey(monday);
+  }
+  return addDaysToDateKey(anchorDateKey, -2);
+};
+
 const ensureOpenRegisterSession = async (request) => {
   const current = await apiJsonWithHeaderBypass(
     request,
@@ -952,6 +984,40 @@ test("Login then workshop page can create a job", async ({ page, request }) => {
   await expect(page.locator("#job-create-status")).toContainText("Job created");
   await expect(page.locator("#selected-job-meta")).toContainText(customerName);
   await expect(page.locator("#jobs-wrap")).toContainText(customerName);
+});
+
+test("Workshop page highlights today and keeps the live schedule range today-aware", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-today",
+  });
+  const todayKey = getLondonDateKey();
+  const visibleStart = getOperationalWeekStartDateKey(todayKey);
+  const visibleEnd = addDaysToDateKey(visibleStart, 6);
+  const nextVisibleStart = getOperationalWeekStartDateKey(addDaysToDateKey(todayKey, 7));
+
+  await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
+
+  const headers = page.locator('[data-testid^="workshop-scheduler-day-header-"]');
+  await expect(headers).toHaveCount(7);
+  await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");
+
+  const headerIds = await headers.evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-testid")),
+  );
+
+  expect(headerIds[0]).toBe(`workshop-scheduler-day-header-${visibleStart}`);
+  expect(headerIds[headerIds.length - 1]).toBe(`workshop-scheduler-day-header-${visibleEnd}`);
+  const todayIndex = headerIds.indexOf(`workshop-scheduler-day-header-${todayKey}`);
+  expect(todayIndex).toBeGreaterThanOrEqual(0);
+  expect((headerIds.length - 1) - todayIndex).toBeGreaterThan(todayIndex);
+
+  await page.getByRole("button", { name: "Next Week" }).click();
+  await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveCount(0);
+  await expect(page.getByTestId(`workshop-scheduler-day-header-${nextVisibleStart}`)).toBeVisible();
+
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");
 });
 
 test("Rota planner supports row drag-copy and Fill Mon-Fri without spilling into another staff row", async ({

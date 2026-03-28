@@ -819,6 +819,7 @@ export const WorkshopPage = () => {
               refreshToken={schedulerRefreshToken}
               view={surfaceMode}
               anchorDateKey={anchorDateKey}
+              weekRangeMode="operational"
               onChangeAnchorDateKey={setAnchorDateKey}
               technicianId={selectedTechnicianId}
               onTechnicianIdChange={setSelectedTechnicianId}
