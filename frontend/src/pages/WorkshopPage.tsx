@@ -561,7 +561,7 @@ export const WorkshopPage = () => {
           <section className="workshop-primary-filter-card">
             <div className="workshop-primary-filter-card__header">
               <h2>Context</h2>
-              <span className="table-secondary">Technician and queue constraints.</span>
+              <span className="table-secondary">Supporting constraints and scheduler controls.</span>
             </div>
 
             <div className="workshop-primary-filter-fields">
@@ -571,20 +571,9 @@ export const WorkshopPage = () => {
                   <option value="">Everyone</option>
                   {technicianOptions.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Raw status
-                <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
-                  {statusOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option ? workshopRawStatusLabel(option) : "All raw states"}
-                    </option>
-                  ))}
+                    {option.name}
+                  </option>
+                ))}
                 </select>
               </label>
 
@@ -606,6 +595,28 @@ export const WorkshopPage = () => {
                 Standalone Calendar
               </Link>
             </div>
+
+            <details className="workshop-primary-advanced-filters">
+              <summary>
+                <span>Advanced filters</span>
+                <span className="table-secondary">
+                  {status ? workshopRawStatusLabel(status) : "Optional"}
+                </span>
+              </summary>
+
+              <div className="workshop-primary-filter-fields workshop-primary-filter-fields--advanced">
+                <label>
+                  Raw status
+                  <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
+                    {statusOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option ? workshopRawStatusLabel(option) : "All raw states"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </details>
           </section>
         </aside>
 

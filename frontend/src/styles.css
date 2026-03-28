@@ -3703,6 +3703,10 @@ button.primary.workshop-status-action {
   gap: 4px;
 }
 
+.workshop-primary-filter-fields--advanced {
+  padding-top: 8px;
+}
+
 .workshop-primary-filter-button {
   width: 100%;
   text-align: left;
@@ -3725,6 +3729,40 @@ button.primary.workshop-status-action {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.workshop-primary-advanced-filters {
+  display: grid;
+  gap: 0;
+  padding-top: 2px;
+  border-top: 1px solid rgba(214, 224, 235, 0.9);
+}
+
+.workshop-primary-advanced-filters summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--cp-navy);
+  list-style: none;
+}
+
+.workshop-primary-advanced-filters summary::-webkit-details-marker {
+  display: none;
+}
+
+.workshop-primary-advanced-filters summary::after {
+  content: "+";
+  font-size: 0.9rem;
+  color: #607286;
+}
+
+.workshop-primary-advanced-filters[open] summary::after {
+  content: "-";
 }
 
 .workshop-primary-surface {
