@@ -2835,6 +2835,11 @@ button.primary.workshop-status-action {
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 253, 0.98) 100%);
 }
 
+.workshop-scheduler-grid__day-track--drag-active {
+  background:
+    linear-gradient(180deg, rgba(240, 247, 252, 0.98) 0%, rgba(232, 242, 249, 0.98) 100%);
+}
+
 .workshop-scheduler-grid__day-track--closed {
   background:
     repeating-linear-gradient(
@@ -2901,6 +2906,8 @@ button.primary.workshop-status-action {
   overflow: hidden;
   cursor: pointer;
   isolation: isolate;
+  touch-action: none;
+  user-select: none;
   transition:
     transform 140ms ease,
     box-shadow 140ms ease,
@@ -3038,6 +3045,26 @@ button.primary.workshop-status-action {
 .workshop-scheduler-block--compact .workshop-scheduler-block__bike {
   font-size: 0.79rem;
   line-height: 1.15;
+}
+
+.workshop-scheduler-block--dragging {
+  opacity: 0.26;
+  transform: none;
+  box-shadow: none;
+}
+
+.workshop-scheduler-block--dragging:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.workshop-scheduler-block--drag-preview {
+  z-index: 5;
+  pointer-events: none;
+  cursor: grabbing;
+  opacity: 0.98;
+  border-style: dashed;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.18);
 }
 
 .workshop-scheduler-rail {
