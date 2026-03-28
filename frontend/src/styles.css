@@ -3124,6 +3124,13 @@ button.primary.workshop-status-action {
   box-shadow: 0 16px 28px rgba(15, 23, 42, 0.18);
 }
 
+.workshop-scheduler-block--pending-assignment {
+  z-index: 4;
+  border-style: dashed;
+  opacity: 0.86;
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.14);
+}
+
 .workshop-scheduler-rail {
   display: grid;
   gap: 6px;
@@ -3300,6 +3307,49 @@ button.primary.workshop-status-action {
   background: #f8fbfd;
 }
 
+.workshop-scheduler-technician-picker {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  gap: 8px;
+  width: min(204px, calc(100% - 16px));
+  padding: 10px;
+  border: 1px solid #c9d8e7;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.workshop-scheduler-technician-picker__copy {
+  display: grid;
+  gap: 2px;
+}
+
+.workshop-scheduler-technician-picker__copy strong {
+  color: #14283c;
+  font-size: 0.82rem;
+}
+
+.workshop-scheduler-technician-picker__copy span {
+  color: #5d6c7d;
+  font-size: 0.74rem;
+  line-height: 1.25;
+}
+
+.workshop-scheduler-technician-picker__actions {
+  display: grid;
+  gap: 6px;
+}
+
+.workshop-scheduler-technician-picker__actions button {
+  justify-content: flex-start;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 9px;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 1180px) {
   .workshop-calendar-layout {
     grid-template-columns: 1fr;
@@ -3356,6 +3406,10 @@ button.primary.workshop-status-action {
   .workshop-scheduler-grid__day-header {
     min-height: 88px;
     padding: 10px 12px;
+  }
+
+  .workshop-scheduler-technician-picker {
+    width: min(220px, calc(100% - 16px));
   }
 
   .workshop-scheduler-queue-card {

@@ -162,22 +162,34 @@ type PositionedJob = {
   width: number;
 };
 
-type DragState = {
+type QueuePlacementKind = "unscheduled" | "unassigned";
+
+type PlacementState = {
   source: "calendar" | "queue";
-  pointerId: number;
+  queueKind: QueuePlacementKind | null;
   job: CalendarJob;
   dateKey: string | null;
   staffId: string | null;
   left: number;
   width: number;
   height: number;
-  pointerOffsetY: number;
-  startClientX: number;
-  startClientY: number;
   currentTop: number;
   snappedStartMinutes: number;
   durationMinutes: number;
+};
+
+type DragState = PlacementState & {
+  pointerId: number;
+  pointerOffsetY: number;
+  startClientX: number;
+  startClientY: number;
   active: boolean;
+};
+
+type PendingTechnicianPromptState = PlacementState & {
+  source: "queue";
+  queueKind: "unassigned";
+  dateKey: string;
 };
 
 type TimeOffBlock = {
@@ -828,6 +840,7 @@ export const WorkshopSchedulerScreen = ({
   const [internalTechnicianId, setInternalTechnicianId] = useState("");
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragSavingJobId, setDragSavingJobId] = useState<string | null>(null);
+  const [pendingTechnicianPrompt, setPendingTechnicianPrompt] = useState<PendingTechnicianPromptState | null>(null);
   const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1008,6 +1021,21 @@ export const WorkshopSchedulerScreen = ({
     }
   }, [calendar?.staff, selectedTechnicianId]);
 
+  useEffect(() => {
+    if (!pendingTechnicianPrompt) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPendingTechnicianPrompt(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pendingTechnicianPrompt]);
+
   const visibleScheduledJobs = useMemo(
     () => (
       selectedTechnicianId
@@ -1172,6 +1200,24 @@ export const WorkshopSchedulerScreen = ({
       if (current.source === "calendar") {
         suppressClickJobIdRef.current = current.job.id;
       }
+
+      if (current.source === "queue" && current.queueKind === "unassigned" && !current.staffId) {
+        setPendingTechnicianPrompt({
+          source: "queue",
+          queueKind: "unassigned",
+          job: current.job,
+          dateKey: current.dateKey,
+          staffId: null,
+          left: current.left,
+          width: current.width,
+          height: current.height,
+          currentTop: current.currentTop,
+          snappedStartMinutes: current.snappedStartMinutes,
+          durationMinutes: current.durationMinutes,
+        });
+        return;
+      }
+
       void persistDraggedSchedule(current);
     };
 
@@ -1253,17 +1299,31 @@ export const WorkshopSchedulerScreen = ({
     ? toOverlaySummary(selectedOverlayJob)
     : overlaySummary;
 
-  const persistDraggedSchedule = async (state: DragState) => {
+  const completePendingTechnicianPrompt = async (staffId: string) => {
+    if (!pendingTechnicianPrompt) {
+      return;
+    }
+
+    const didPersist = await persistDraggedSchedule({
+      ...pendingTechnicianPrompt,
+      staffId,
+    });
+    if (didPersist) {
+      setPendingTechnicianPrompt(null);
+    }
+  };
+
+  const persistDraggedSchedule = async (state: PlacementState) => {
     if (!state.dateKey) {
       error("Could not calculate a workshop day for this drop.");
-      return;
+      return false;
     }
 
     const startTimeValue = formatClockLabel(state.snappedStartMinutes);
     const scheduledStartAt = buildScheduleIso(state.dateKey, startTimeValue);
     if (!scheduledStartAt) {
       error("Could not calculate the dropped booking time.");
-      return;
+      return false;
     }
 
     setDragSavingJobId(state.job.id);
@@ -1292,9 +1352,11 @@ export const WorkshopSchedulerScreen = ({
             : `Booking moved to ${placementLabel}.`,
       );
       await loadCalendar();
+      return true;
     } catch (dragError) {
       const message = dragError instanceof Error ? dragError.message : "Failed to update workshop schedule";
       error(message);
+      return false;
     } finally {
       setDragSavingJobId(null);
     }
@@ -1319,9 +1381,11 @@ export const WorkshopSchedulerScreen = ({
       return;
     }
 
+    setPendingTechnicianPrompt(null);
     const blockRect = event.currentTarget.getBoundingClientRect();
     updateDragState({
       source: "calendar",
+      queueKind: null,
       pointerId: event.pointerId,
       job,
       dateKey,
@@ -1342,6 +1406,7 @@ export const WorkshopSchedulerScreen = ({
   const handleQueueJobPointerDown = (
     event: ReactPointerEvent<HTMLElement>,
     job: CalendarJob,
+    queueKind: QueuePlacementKind,
   ) => {
     const target = event.target as HTMLElement | null;
     if (
@@ -1356,9 +1421,11 @@ export const WorkshopSchedulerScreen = ({
     const previewHeight = Math.max(MIN_BOOKING_BLOCK_HEIGHT, durationMinutes * PX_PER_MINUTE);
 
     event.preventDefault();
+    setPendingTechnicianPrompt(null);
 
     updateDragState({
       source: "queue",
+      queueKind,
       pointerId: event.pointerId,
       job,
       dateKey: null,
@@ -1566,6 +1633,20 @@ export const WorkshopSchedulerScreen = ({
                 const dayBlocks = positionedJobsByDay.get(day.date) ?? [];
                 const timeOffBlocks = workshopTimeOffByDay.get(day.date) ?? [];
                 const previewBlock = dragState?.active && dragState.dateKey === day.date ? dragState : null;
+                const pendingPrompt = pendingTechnicianPrompt?.dateKey === day.date ? pendingTechnicianPrompt : null;
+                const pendingPromptIsCompact = (pendingPrompt?.height ?? 0) < COMPACT_BOOKING_BLOCK_HEIGHT;
+                const pendingPromptTop = pendingPrompt
+                  ? Math.min(
+                    Math.max(10, pendingPrompt.currentTop + pendingPrompt.height + 8),
+                    Math.max(10, trackHeight - 138),
+                  )
+                  : 0;
+                const pendingPromptLeft = pendingPrompt
+                  ? Math.min(
+                    Math.max(8, pendingPrompt.left + 8),
+                    Math.max(8, dayColumnWidth - 212),
+                  )
+                  : 0;
                 const isToday = day.date === todayKey;
 
                 return (
@@ -1642,11 +1723,69 @@ export const WorkshopSchedulerScreen = ({
                           job: previewBlock.job,
                           timeLabel: buildBlockTimeLabel(previewBlock.snappedStartMinutes, previewBlock.durationMinutes),
                           metaLabel: previewBlock.source === "queue"
-                            ? `Drop to schedule${previewBlock.staffId && selectedTechnician ? ` with ${selectedTechnician.name}` : ""} at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
+                            ? previewBlock.queueKind === "unassigned" && !previewBlock.staffId
+                              ? `Drop to place, then pick technician at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
+                              : `Drop to schedule${previewBlock.staffId && selectedTechnician ? ` with ${selectedTechnician.name}` : ""} at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
                             : `Drop to move this booking to ${formatClockLabel(previewBlock.snappedStartMinutes)}`,
                           isCompactBlock: previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT,
                         })}
                       </div>
+                    ) : null}
+
+                    {pendingPrompt ? (
+                      <>
+                        <div
+                          aria-hidden="true"
+                          className={`${buildJobToneClass(pendingPrompt.job, todayKey, calendarTimeZone)} workshop-scheduler-block--pending-assignment${pendingPromptIsCompact ? " workshop-scheduler-block--compact" : ""}`}
+                          style={{
+                            top: `${pendingPrompt.currentTop}px`,
+                            left: `${pendingPrompt.left}px`,
+                            width: `${pendingPrompt.width}px`,
+                            height: `${pendingPrompt.height}px`,
+                          }}
+                        >
+                          {renderSchedulerBlockContent({
+                            job: pendingPrompt.job,
+                            timeLabel: buildBlockTimeLabel(pendingPrompt.snappedStartMinutes, pendingPrompt.durationMinutes),
+                            metaLabel: "Choose technician to confirm placement",
+                            isCompactBlock: pendingPromptIsCompact,
+                          })}
+                        </div>
+                        <div
+                          className="workshop-scheduler-technician-picker"
+                          data-testid={`workshop-scheduler-technician-picker-${day.date}`}
+                          style={{
+                            top: `${pendingPromptTop}px`,
+                            left: `${pendingPromptLeft}px`,
+                          }}
+                        >
+                          <div className="workshop-scheduler-technician-picker__copy">
+                            <strong>Assign technician</strong>
+                            <span>{buildBlockTimeLabel(pendingPrompt.snappedStartMinutes, pendingPrompt.durationMinutes)} on {day.weekday}</span>
+                          </div>
+                          <div className="workshop-scheduler-technician-picker__actions">
+                            {staffFilterOptions.map((staff) => (
+                              <button
+                                key={staff.id}
+                                type="button"
+                                data-testid={`workshop-scheduler-technician-option-${staff.id}`}
+                                onClick={() => void completePendingTechnicianPrompt(staff.id)}
+                                disabled={dragSavingJobId === pendingPrompt.job.id}
+                              >
+                                {staff.name}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="button-link"
+                            onClick={() => setPendingTechnicianPrompt(null)}
+                            disabled={dragSavingJobId === pendingPrompt.job.id}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
                     ) : null}
                   </div>
                 );
@@ -1671,7 +1810,7 @@ export const WorkshopSchedulerScreen = ({
                 <article
                   key={job.id}
                   className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
-                  onPointerDown={(event) => handleQueueJobPointerDown(event, job)}
+                  onPointerDown={(event) => handleQueueJobPointerDown(event, job, "unscheduled")}
                 >
                   <div className="workshop-scheduler-queue-card__topline">
                     <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
@@ -1708,7 +1847,7 @@ export const WorkshopSchedulerScreen = ({
                 <article
                   key={job.id}
                   className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
-                  onPointerDown={(event) => handleQueueJobPointerDown(event, job)}
+                  onPointerDown={(event) => handleQueueJobPointerDown(event, job, "unassigned")}
                 >
                   <div className="workshop-scheduler-queue-card__topline">
                     <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
