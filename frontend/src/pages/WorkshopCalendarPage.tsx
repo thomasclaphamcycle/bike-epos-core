@@ -839,7 +839,9 @@ export const WorkshopSchedulerScreen = ({
   const [saving, setSaving] = useState(false);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragSavingJobId, setDragSavingJobId] = useState<string | null>(null);
+  const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const suppressClickJobIdRef = useRef<string | null>(null);
 
@@ -930,7 +932,53 @@ export const WorkshopSchedulerScreen = ({
   const timeline = useMemo(() => buildTimelineRange(days), [days]);
   const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
   const trackHeight = Math.max(620, timeline.totalMinutes * PX_PER_MINUTE);
-  const dayColumnWidth = view === "week" ? WEEK_DAY_WIDTH : DAY_VIEW_WIDTH;
+  const dayColumnWidth = useMemo(() => {
+    if (view !== "week") {
+      return DAY_VIEW_WIDTH;
+    }
+
+    const visibleDayCount = Math.max(days.length, 1);
+    const availableWidth = schedulerViewportWidth - TIME_AXIS_WIDTH;
+    if (availableWidth <= 0) {
+      return WEEK_DAY_WIDTH;
+    }
+
+    return Math.max(WEEK_DAY_WIDTH, Math.floor(availableWidth / visibleDayCount));
+  }, [days.length, schedulerViewportWidth, view]);
+  const schedulerGridTemplateColumns = useMemo(() => {
+    if (view === "week") {
+      return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, minmax(${WEEK_DAY_WIDTH}px, 1fr))`;
+    }
+
+    return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)`;
+  }, [dayColumnWidth, days.length, view]);
+
+  useEffect(() => {
+    const node = schedulerScrollRef.current;
+    if (!node) {
+      return;
+    }
+
+    const updateWidth = (nextWidth: number) => {
+      setSchedulerViewportWidth((current) => {
+        const rounded = Math.max(0, Math.floor(nextWidth));
+        return current === rounded ? current : rounded;
+      });
+    };
+
+    updateWidth(node.clientWidth);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      updateWidth(entry.contentRect.width);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [days.length, view]);
   const scheduledJobs = calendar?.scheduledJobs ?? [];
   const unassignedJobs = calendar?.unassignedJobs ?? [];
   const unscheduledJobs = calendar?.unscheduledJobs ?? [];
@@ -1593,10 +1641,10 @@ export const WorkshopSchedulerScreen = ({
             </div>
           </div>
 
-          <div className="workshop-scheduler-scroll">
+          <div ref={schedulerScrollRef} className="workshop-scheduler-scroll">
             <div
               className="workshop-scheduler-grid"
-              style={{ gridTemplateColumns: `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)` }}
+              style={{ gridTemplateColumns: schedulerGridTemplateColumns }}
             >
               <div className="workshop-scheduler-grid__corner">Time</div>
 

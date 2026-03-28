@@ -2771,7 +2771,8 @@ button.primary.workshop-status-action {
   display: grid;
   align-items: start;
   gap: 0;
-  min-width: max-content;
+  width: 100%;
+  min-width: 100%;
   border: 1px solid #dbe5ef;
   border-radius: 16px;
   overflow: hidden;
