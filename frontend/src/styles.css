@@ -4647,11 +4647,11 @@ button.primary.workshop-status-action {
 }
 
 .workshop-os-modal--schedule {
-  --workshop-os-tab-accent: #215f4e;
-  --workshop-os-tab-active-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(242, 249, 246, 0.96) 100%);
-  --workshop-os-content-surface: linear-gradient(180deg, #ecf5f2 0%, #f7fbfa 20%, #edf6f3 100%);
-  --workshop-os-panel-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(243, 249, 246, 0.98) 100%);
-  --workshop-os-panel-border: #cfe1d8;
+  --workshop-os-tab-accent: #1c5b53;
+  --workshop-os-tab-active-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(244, 248, 250, 0.97) 100%);
+  --workshop-os-content-surface: linear-gradient(180deg, #f1f5f8 0%, #fafcfd 20%, #eef3f7 100%);
+  --workshop-os-panel-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.995) 0%, rgba(245, 248, 251, 0.985) 100%);
+  --workshop-os-panel-border: #d2dbe5;
 }
 
 .workshop-os-modal--work {
@@ -4763,6 +4763,8 @@ button.primary.workshop-status-action {
 .workshop-os-modal__panel--schedule {
   min-height: clamp(560px, 72dvh, 820px);
   align-content: start;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.995) 0%, rgba(247, 250, 252, 0.985) 100%);
 }
 
 .workshop-os-modal__panel--schedule,
@@ -5534,20 +5536,20 @@ button.primary.workshop-status-action {
 .workshop-os-schedule-day-snapshot__groups,
 .workshop-os-schedule-day-snapshot__group {
   display: grid;
-  gap: 10px;
+  gap: 9px;
 }
 
 .workshop-os-schedule-surface {
   min-height: 100%;
   grid-template-columns: minmax(0, 1.4fr) minmax(340px, 1fr);
   align-items: start;
-  gap: 14px;
+  gap: 12px;
 }
 
 .workshop-os-schedule-surface__action-column,
 .workshop-os-schedule-surface__reference-column {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-content: start;
   min-width: 0;
 }
@@ -5566,12 +5568,14 @@ button.primary.workshop-status-action {
 .workshop-os-schedule-day-snapshot {
   min-height: 0;
   align-self: start;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border-color: #d2ddea;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 254, 0.98) 100%);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.07);
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: 18px;
+  border-color: #d6e0ea;
+  background: linear-gradient(180deg, rgba(252, 253, 255, 0.995) 0%, rgba(246, 249, 252, 0.985) 100%);
+  box-shadow:
+    0 14px 26px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .workshop-os-schedule-surface__card {
@@ -5580,15 +5584,34 @@ button.primary.workshop-status-action {
 
 .workshop-os-schedule-surface__card--booking {
   grid-template-rows: auto auto minmax(0, auto) auto;
+  border-color: #ccd8e6;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.998) 0%, rgba(248, 250, 253, 0.99) 100%);
+  box-shadow:
+    0 18px 34px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(228, 235, 242, 0.92),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .workshop-os-schedule-surface__card--assignment {
   grid-template-rows: auto minmax(0, 1fr);
+  border-color: #dde5ee;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 253, 0.99) 0%, rgba(243, 247, 251, 0.985) 100%);
+  box-shadow:
+    0 10px 20px rgba(15, 23, 42, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .workshop-os-schedule-day-snapshot {
   grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
+  border-color: #cfd9e5;
+  background:
+    linear-gradient(180deg, rgba(244, 248, 252, 0.995) 0%, rgba(238, 243, 249, 0.985) 100%);
+  box-shadow:
+    0 16px 30px rgba(15, 23, 42, 0.085),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .workshop-os-schedule-surface__card .workshop-os-job-workspace-section__meta-list {
@@ -5623,9 +5646,32 @@ button.primary.workshop-status-action {
   margin: 0;
 }
 
+.workshop-os-schedule-surface__card--booking .workshop-os-schedule-surface__header strong,
+.workshop-os-schedule-day-snapshot .workshop-os-schedule-surface__header strong {
+  color: #17273a;
+}
+
+.workshop-os-schedule-surface__card--assignment .workshop-os-schedule-surface__header strong {
+  color: #26384a;
+}
+
+.workshop-os-schedule-surface__card--booking .workshop-os-schedule-surface__header .table-secondary,
+.workshop-os-schedule-surface__card--booking .workshop-os-schedule-surface__actions .table-secondary {
+  color: #42586d;
+}
+
+.workshop-os-schedule-surface__card--assignment .workshop-os-schedule-surface__header .table-secondary,
+.workshop-os-schedule-surface__card--assignment .workshop-os-schedule-surface__actions .table-secondary {
+  color: #556577;
+}
+
+.workshop-os-schedule-day-snapshot .workshop-os-schedule-surface__header {
+  align-items: center;
+}
+
 .workshop-os-schedule-surface__inputs {
   display: grid;
-  gap: 10px 12px;
+  gap: 8px 10px;
   grid-template-columns: minmax(0, 1.55fr) repeat(2, minmax(112px, 0.62fr));
   align-items: end;
 }
@@ -5637,34 +5683,36 @@ button.primary.workshop-status-action {
 }
 
 .workshop-os-schedule-surface__field--time {
-  max-width: 132px;
+  max-width: 118px;
 }
 
 .workshop-os-schedule-surface__date-stepper {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .workshop-os-schedule-surface__date-stepper-button {
   min-height: 40px;
-  padding: 0 13px;
-  border: 1px solid #b7cde2;
+  padding: 0 12px;
+  border: 1px solid #9eb5cc;
   border-radius: 11px;
-  background: linear-gradient(180deg, rgba(248, 251, 255, 0.99), rgba(236, 244, 251, 0.98));
-  color: #163d63;
+  background: linear-gradient(180deg, rgba(246, 249, 253, 0.995), rgba(231, 239, 248, 0.985));
+  color: #183c60;
   font: inherit;
   font-size: 0.82rem;
   font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 8px 16px rgba(20, 49, 77, 0.08);
+  box-shadow:
+    0 8px 16px rgba(20, 49, 77, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
 }
 
 .workshop-os-schedule-surface__date-stepper-button:hover:not(:disabled) {
-  border-color: #8fb2d4;
-  background: linear-gradient(180deg, rgba(242, 248, 254, 1), rgba(230, 240, 249, 0.98));
-  box-shadow: 0 10px 18px rgba(20, 49, 77, 0.12);
+  border-color: #7ea1c5;
+  background: linear-gradient(180deg, rgba(240, 246, 252, 1), rgba(221, 233, 245, 0.99));
+  box-shadow: 0 10px 18px rgba(20, 49, 77, 0.13);
 }
 
 .workshop-os-schedule-surface__date-stepper-button:disabled {
@@ -5684,17 +5732,20 @@ button.primary.workshop-status-action {
   flex-wrap: wrap;
   align-items: center;
   margin-top: auto;
-  padding-top: 2px;
+  padding-top: 0;
 }
 
 .workshop-os-schedule-surface__actions--booking {
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .workshop-os-schedule-surface__confirm {
-  min-width: 138px;
-  box-shadow: 0 14px 24px rgba(21, 66, 122, 0.2);
+  min-width: 148px;
+  padding-inline: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 16px 28px rgba(255, 122, 24, 0.28);
 }
 
 .workshop-os-schedule-surface__actions .table-secondary {
@@ -5742,30 +5793,34 @@ button.primary.workshop-status-action {
   max-height: min(62dvh, 640px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 6px;
+  padding: 3px 6px 0 0;
   scrollbar-gutter: stable;
   justify-self: stretch;
   align-self: stretch;
 }
 
 .workshop-os-schedule-day-snapshot__groups {
-  gap: 8px;
+  gap: 7px;
 }
 
 .workshop-os-schedule-day-snapshot__group {
-  gap: 8px;
+  gap: 7px;
 }
 
 .workshop-os-schedule-day-snapshot .workshop-os-job-workspace-section__list {
   display: grid;
-  gap: 8px;
+  gap: 7px;
 }
 
 .workshop-os-schedule-day-snapshot .workshop-os-job-workspace-section__list-item {
   position: relative;
-  gap: 5px;
-  padding: 9px 10px;
-  background: rgba(255, 255, 255, 0.96);
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 4px 9px rgba(15, 23, 42, 0.03);
 }
 
 .workshop-os-schedule-day-snapshot__job.workshop-status-surface {
