@@ -213,8 +213,8 @@ const TIME_AXIS_WIDTH = 60;
 const WEEK_DAY_WIDTH = 118;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
-const MIN_BOOKING_BLOCK_HEIGHT = 48;
-const COMPACT_BOOKING_BLOCK_HEIGHT = 72;
+const MIN_BOOKING_BLOCK_HEIGHT = 52;
+const COMPACT_BOOKING_BLOCK_HEIGHT = 84;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 const DRAG_SNAP_MINUTES = 15;
 const DRAG_START_THRESHOLD_PX = 6;
@@ -421,20 +421,28 @@ const getBookingCustomerName = (job: CalendarJob) =>
 const getBookingBikeLine = (job: CalendarJob) =>
   job.bikeDescription?.trim() || "Bike details pending";
 
+const getBookingTechnicianLabel = (
+  job: CalendarJob,
+  overrideName?: string | null,
+) => {
+  const assignedName = overrideName?.trim() || job.assignedStaffName?.trim();
+  return assignedName
+    ? {
+        label: `Tech: ${assignedName}`,
+        assigned: true,
+      }
+    : {
+        label: "Unassigned",
+        assigned: false,
+      };
+};
+
 const getBookingMetaLine = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   if (isOverdueJob(job, todayKey, timeZone)) {
     return "Overdue";
   }
 
-  switch (job.rawStatus) {
-    case "BIKE_ARRIVED":
-    case "WAITING_FOR_APPROVAL":
-    case "WAITING_FOR_PARTS":
-    case "READY_FOR_COLLECTION":
-      return workshopRawStatusLabel(job.rawStatus);
-    default:
-      return job.assignedStaffName?.trim() || "Scheduled";
-  }
+  return workshopRawStatusLabel(job.rawStatus);
 };
 
 const getBookingServiceLabel = (job: CalendarJob) => {
@@ -796,28 +804,41 @@ const renderSchedulerBlockContent = ({
   job,
   timeLabel,
   metaLabel,
+  technicianOverride,
   isCompactBlock,
 }: {
   job: CalendarJob;
   timeLabel: string;
   metaLabel: string;
+  technicianOverride?: string | null;
   isCompactBlock: boolean;
-}) => (
-  <>
-    <div className="workshop-scheduler-block__time">{timeLabel}</div>
-    <strong className="workshop-scheduler-block__customer">
-      {getBookingCustomerName(job)}
-    </strong>
-    <div className="workshop-scheduler-block__bike">
-      {getBookingBikeLine(job)}
-    </div>
-    {!isCompactBlock ? (
-      <div className="workshop-scheduler-block__meta">
-        {metaLabel}
+}) => {
+  const technician = getBookingTechnicianLabel(job, technicianOverride);
+
+  return (
+    <>
+      <div className="workshop-scheduler-block__time">{timeLabel}</div>
+      <strong className="workshop-scheduler-block__customer">
+        {getBookingCustomerName(job)}
+      </strong>
+      {!isCompactBlock ? (
+        <div className="workshop-scheduler-block__bike">
+          {getBookingBikeLine(job)}
+        </div>
+      ) : null}
+      <div
+        className={`workshop-scheduler-block__technician${technician.assigned ? "" : " workshop-scheduler-block__technician--unassigned"}`}
+      >
+        {technician.label}
       </div>
-    ) : null}
-  </>
-);
+      {!isCompactBlock ? (
+        <div className="workshop-scheduler-block__meta">
+          {metaLabel}
+        </div>
+      ) : null}
+    </>
+  );
+};
 
 const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   const classes = ["workshop-scheduler-block", workshopRawStatusSurfaceClass(job.rawStatus)];
@@ -1842,6 +1863,9 @@ export const WorkshopSchedulerScreen = ({
                               ? `Drop to place, then pick technician at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
                               : `Drop to schedule${previewBlock.staffId && selectedTechnician ? ` with ${selectedTechnician.name}` : ""} at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
                             : `Drop to move this booking to ${formatClockLabel(previewBlock.snappedStartMinutes)}`,
+                          technicianOverride: previewBlock.staffId && selectedTechnician
+                            ? selectedTechnician.name
+                            : null,
                           isCompactBlock: previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT,
                         })}
                       </div>
