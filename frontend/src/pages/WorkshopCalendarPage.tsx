@@ -164,6 +164,7 @@ type PositionedJob = {
 
 type QueuePlacementKind = "unscheduled" | "unassigned";
 type SchedulerInteractionMode = "move" | "resize-top" | "resize-bottom";
+type SchedulerBlockDensity = "minimal" | "compact" | "full";
 
 type PlacementState = {
   source: "calendar" | "queue";
@@ -217,7 +218,8 @@ const WEEK_DAY_WIDTH = 118;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
 const MIN_BOOKING_BLOCK_HEIGHT = 52;
-const COMPACT_BOOKING_BLOCK_HEIGHT = 84;
+const MINIMAL_BOOKING_BLOCK_HEIGHT = 64;
+const COMPACT_BOOKING_BLOCK_HEIGHT = 96;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 const DRAG_SNAP_MINUTES = 15;
 const MIN_SCHEDULE_DURATION_MINUTES = 15;
@@ -432,7 +434,7 @@ const getBookingTechnicianLabel = (
   const assignedName = overrideName?.trim() || job.assignedStaffName?.trim();
   return assignedName
     ? {
-        label: `Tech: ${assignedName}`,
+        label: assignedName,
         assigned: true,
       }
     : {
@@ -785,6 +787,29 @@ const snapMinutesToGrid = (minutes: number, intervalMinutes: number) =>
 const buildBlockTimeLabel = (startMinutes: number, durationMinutes: number) =>
   `${formatClockLabel(startMinutes)} - ${formatClockLabel(startMinutes + durationMinutes)}`;
 
+const getSchedulerBlockDensity = (height: number): SchedulerBlockDensity => {
+  if (height < MINIMAL_BOOKING_BLOCK_HEIGHT) {
+    return "minimal";
+  }
+
+  if (height < COMPACT_BOOKING_BLOCK_HEIGHT) {
+    return "compact";
+  }
+
+  return "full";
+};
+
+const getSchedulerBlockDensityClass = (density: SchedulerBlockDensity) => {
+  switch (density) {
+    case "minimal":
+      return " workshop-scheduler-block--minimal";
+    case "compact":
+      return " workshop-scheduler-block--compact";
+    default:
+      return "";
+  }
+};
+
 const getInteractionModifierClass = (interaction: SchedulerInteractionMode) => {
   switch (interaction) {
     case "resize-top":
@@ -839,15 +864,18 @@ const renderSchedulerBlockContent = ({
   timeLabel,
   metaLabel,
   technicianOverride,
-  isCompactBlock,
+  density,
 }: {
   job: CalendarJob;
   timeLabel: string;
   metaLabel: string;
   technicianOverride?: string | null;
-  isCompactBlock: boolean;
+  density: SchedulerBlockDensity;
 }) => {
   const technician = getBookingTechnicianLabel(job, technicianOverride);
+  const showTechnician = density !== "minimal";
+  const showBike = density === "full";
+  const showMeta = density === "full";
 
   return (
     <>
@@ -855,17 +883,24 @@ const renderSchedulerBlockContent = ({
       <strong className="workshop-scheduler-block__customer">
         {getBookingCustomerName(job)}
       </strong>
-      {!isCompactBlock ? (
+      {showTechnician ? (
+        <div
+          className={`workshop-scheduler-block__technician${technician.assigned ? "" : " workshop-scheduler-block__technician--unassigned"}`}
+        >
+          <span className="workshop-scheduler-block__technician-icon" aria-hidden="true">
+            🔧
+          </span>
+          <span className="workshop-scheduler-block__technician-name">
+            {technician.label}
+          </span>
+        </div>
+      ) : null}
+      {showBike ? (
         <div className="workshop-scheduler-block__bike">
           {getBookingBikeLine(job)}
         </div>
       ) : null}
-      <div
-        className={`workshop-scheduler-block__technician${technician.assigned ? "" : " workshop-scheduler-block__technician--unassigned"}`}
-      >
-        {technician.label}
-      </div>
-      {!isCompactBlock ? (
+      {showMeta ? (
         <div className="workshop-scheduler-block__meta">
           {metaLabel}
         </div>
@@ -1965,7 +2000,12 @@ export const WorkshopSchedulerScreen = ({
                 const timeOffBlocks = workshopTimeOffByDay.get(day.date) ?? [];
                 const previewBlock = dragState?.active && dragState.dateKey === day.date ? dragState : null;
                 const pendingPrompt = pendingTechnicianPrompt?.dateKey === day.date ? pendingTechnicianPrompt : null;
-                const pendingPromptIsCompact = (pendingPrompt?.height ?? 0) < COMPACT_BOOKING_BLOCK_HEIGHT;
+                const previewDensity = previewBlock
+                  ? getSchedulerBlockDensity(previewBlock.height)
+                  : null;
+                const pendingDensity = pendingPrompt
+                  ? getSchedulerBlockDensity(pendingPrompt.height)
+                  : null;
                 const isToday = day.date === todayKey;
 
                 return (
@@ -1997,12 +2037,12 @@ export const WorkshopSchedulerScreen = ({
                     ))}
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
-                      const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
+                      const density = getSchedulerBlockDensity(height);
                       const isDragging = dragState?.active && dragState.job.id === job.id;
                       const interactionClass = isDragging
                         ? getInteractionModifierClass(dragState?.interaction ?? "move")
                         : "";
-                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}${isDragging ? " workshop-scheduler-block--dragging" : ""}${interactionClass}`;
+                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${getSchedulerBlockDensityClass(density)}${isDragging ? " workshop-scheduler-block--dragging" : ""}${interactionClass}`;
 
                       return (
                         <button
@@ -2037,16 +2077,16 @@ export const WorkshopSchedulerScreen = ({
                             job,
                             timeLabel: `${formatOptionalTime(job.scheduledStartAt, calendarTimeZone)} - ${formatOptionalTime(job.scheduledEndAt, calendarTimeZone)}`,
                             metaLabel: getBookingMetaLine(job, todayKey, calendarTimeZone),
-                            isCompactBlock,
+                            density,
                           })}
                         </button>
                       );
                     })}
 
-                    {previewBlock ? (
+                    {previewBlock && previewDensity ? (
                       <div
                         aria-hidden="true"
-                        className={`${buildJobToneClass(previewBlock.job, todayKey, calendarTimeZone)} workshop-scheduler-block--drag-preview${previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT ? " workshop-scheduler-block--compact" : ""}${getInteractionModifierClass(previewBlock.interaction)}`}
+                        className={`${buildJobToneClass(previewBlock.job, todayKey, calendarTimeZone)} workshop-scheduler-block--drag-preview${getSchedulerBlockDensityClass(previewDensity)}${getInteractionModifierClass(previewBlock.interaction)}`}
                         style={{
                           top: `${previewBlock.currentTop}px`,
                           left: `${previewBlock.left}px`,
@@ -2061,17 +2101,18 @@ export const WorkshopSchedulerScreen = ({
                           technicianOverride: previewBlock.staffId && selectedTechnician
                             ? selectedTechnician.name
                             : null,
-                          isCompactBlock: previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT,
+                          density: previewDensity,
                         })}
                       </div>
                     ) : null}
 
                     {pendingPrompt && !isDraggingPendingTechnicianPrompt ? (
                       <>
+                        {pendingDensity ? (
                         <button
                           ref={pendingBookingRef}
                           type="button"
-                          className={`${buildJobToneClass(pendingPrompt.job, todayKey, calendarTimeZone)} workshop-scheduler-block--pending-assignment${pendingPromptIsCompact ? " workshop-scheduler-block--compact" : ""}`}
+                          className={`${buildJobToneClass(pendingPrompt.job, todayKey, calendarTimeZone)} workshop-scheduler-block--pending-assignment${getSchedulerBlockDensityClass(pendingDensity)}`}
                           title={getBookingTooltip(pendingPrompt.job, calendarTimeZone)}
                           style={{
                             top: `${pendingPrompt.currentTop}px`,
@@ -2085,9 +2126,10 @@ export const WorkshopSchedulerScreen = ({
                             job: pendingPrompt.job,
                             timeLabel: buildBlockTimeLabel(pendingPrompt.snappedStartMinutes, pendingPrompt.durationMinutes),
                             metaLabel: "Choose technician to confirm placement",
-                            isCompactBlock: pendingPromptIsCompact,
+                            density: pendingDensity,
                           })}
                         </button>
+                        ) : null}
                       </>
                     ) : null}
                   </div>

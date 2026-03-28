@@ -3104,12 +3104,15 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block__customer {
+  display: block;
   font-size: 0.94rem;
   line-height: 1.22;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .workshop-scheduler-block__bike {
+  display: block;
   font-size: 0.82rem;
   line-height: 1.2;
   color: #222;
@@ -3118,24 +3121,60 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block__technician {
-  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 0.76rem;
   line-height: 1.16;
-  font-weight: 700;
+  font-weight: 600;
   color: #24384b;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.workshop-scheduler-block__technician-icon {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.workshop-scheduler-block__technician-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .workshop-scheduler-block__technician--unassigned {
   color: #5f6d7b;
   font-weight: 600;
+  opacity: 0.72;
 }
 
 .workshop-scheduler-block__meta {
+  display: block;
   font-size: 0.74rem;
   line-height: 1.15;
   color: #4f5a67;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.workshop-scheduler-block--minimal {
+  gap: 1px;
+  padding: 5px 8px 4px;
+}
+
+.workshop-scheduler-block--minimal .workshop-scheduler-block__time {
+  font-size: 0.64rem;
+  line-height: 1.02;
+}
+
+.workshop-scheduler-block--minimal .workshop-scheduler-block__customer {
+  font-size: 0.79rem;
+  line-height: 1.1;
 }
 
 .workshop-scheduler-block--compact {
@@ -3201,13 +3240,18 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__customer {
-  font-size: 0.92rem;
-  line-height: 1.18;
+  font-size: 0.88rem;
+  line-height: 1.14;
+  font-weight: 600;
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__technician {
-  font-size: 0.74rem;
-  line-height: 1.12;
+  font-size: 0.7rem;
+  line-height: 1.08;
+}
+
+.workshop-scheduler-block--compact .workshop-scheduler-block__technician-icon {
+  font-size: 0.64rem;
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__bike {
