@@ -71,7 +71,7 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: npx tsc -p tsconfig.reports.json --noEmit
 
       - name: Build frontend
         run: npm run build
