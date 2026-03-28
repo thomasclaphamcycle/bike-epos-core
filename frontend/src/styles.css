@@ -1326,6 +1326,9 @@ th {
   color: #8b1f1f;
 }
 
+.workshop-status-badge--booked,
+.workshop-status-surface--booked,
+.workshop-status-action--booked,
 .workshop-status-badge--blue,
 .workshop-status-surface--blue,
 .workshop-status-action--blue {
@@ -1339,6 +1342,22 @@ th {
   --workshop-status-surface-title: #102f4a;
 }
 
+.workshop-status-badge--arrived,
+.workshop-status-surface--arrived,
+.workshop-status-action--arrived {
+  --workshop-status-bg: #edf8ff;
+  --workshop-status-border: #97cfe8;
+  --workshop-status-text: #155270;
+  --workshop-status-accent: #4aa8d3;
+  --workshop-status-surface: linear-gradient(180deg, #dff4ff 0%, #ccecfb 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #d3f0ff 0%, #bde7f7 100%);
+  --workshop-status-surface-muted: #2f6781;
+  --workshop-status-surface-title: #123f56;
+}
+
+.workshop-status-badge--approval,
+.workshop-status-surface--approval,
+.workshop-status-action--approval,
 .workshop-status-badge--purple,
 .workshop-status-surface--purple,
 .workshop-status-action--purple {
@@ -1352,6 +1371,22 @@ th {
   --workshop-status-surface-title: #482a72;
 }
 
+.workshop-status-badge--approved,
+.workshop-status-surface--approved,
+.workshop-status-action--approved {
+  --workshop-status-bg: #edf8ef;
+  --workshop-status-border: #a7d6b1;
+  --workshop-status-text: #275c39;
+  --workshop-status-accent: #61a478;
+  --workshop-status-surface: linear-gradient(180deg, #e1f4e5 0%, #d0ebd8 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #d8f0de 0%, #c0e2cb 100%);
+  --workshop-status-surface-muted: #467154;
+  --workshop-status-surface-title: #244a30;
+}
+
+.workshop-status-badge--parts,
+.workshop-status-surface--parts,
+.workshop-status-action--parts,
 .workshop-status-badge--yellow,
 .workshop-status-surface--yellow,
 .workshop-status-action--yellow {
@@ -1365,32 +1400,41 @@ th {
   --workshop-status-surface-title: #5f4300;
 }
 
-.workshop-status-badge--rose,
-.workshop-status-surface--rose,
-.workshop-status-action--rose {
-  --workshop-status-bg: #ffe9ef;
-  --workshop-status-border: #e89ab0;
-  --workshop-status-text: #8f2347;
-  --workshop-status-accent: #d65f7d;
-  --workshop-status-surface: linear-gradient(180deg, #ffd6e2 0%, #f7bed0 100%);
-  --workshop-status-surface-hover: linear-gradient(180deg, #ffc9d8 0%, #f0adc3 100%);
-  --workshop-status-surface-muted: #7f2f49;
-  --workshop-status-surface-title: #6c1d38;
-}
-
+.workshop-status-badge--ready,
+.workshop-status-surface--ready,
+.workshop-status-action--ready,
 .workshop-status-badge--green,
 .workshop-status-surface--green,
 .workshop-status-action--green {
-  --workshop-status-bg: #e8f7f1;
-  --workshop-status-border: #8fc6a5;
-  --workshop-status-text: #1d6b43;
-  --workshop-status-accent: #3aa36e;
-  --workshop-status-surface: linear-gradient(180deg, #d7f1df 0%, #bfe4ca 100%);
-  --workshop-status-surface-hover: linear-gradient(180deg, #caecd5 0%, #afdcbf 100%);
-  --workshop-status-surface-muted: #2f6747;
-  --workshop-status-surface-title: #1e5335;
+  --workshop-status-bg: #e2f7ea;
+  --workshop-status-border: #76c695;
+  --workshop-status-text: #155933;
+  --workshop-status-accent: #2f9f64;
+  --workshop-status-surface: linear-gradient(180deg, #cdf2d9 0%, #afe5c3 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #bdebcf 0%, #9fdcb6 100%);
+  --workshop-status-surface-muted: #256846;
+  --workshop-status-surface-title: #114326;
 }
 
+.workshop-status-badge--hold,
+.workshop-status-surface--hold,
+.workshop-status-action--hold,
+.workshop-status-badge--rose,
+.workshop-status-surface--rose,
+.workshop-status-action--rose {
+  --workshop-status-bg: #ffecee;
+  --workshop-status-border: #e4a3ab;
+  --workshop-status-text: #8b2c3c;
+  --workshop-status-accent: #cf6177;
+  --workshop-status-surface: linear-gradient(180deg, #ffd9df 0%, #f6c2ca 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #ffcdd5 0%, #efb0bc 100%);
+  --workshop-status-surface-muted: #7d4250;
+  --workshop-status-surface-title: #652433;
+}
+
+.workshop-status-badge--cancelled,
+.workshop-status-surface--cancelled,
+.workshop-status-action--cancelled,
 .workshop-status-badge--red,
 .workshop-status-surface--red,
 .workshop-status-action--red {
@@ -1404,6 +1448,9 @@ th {
   --workshop-status-surface-title: #5c2020;
 }
 
+.workshop-status-badge--completed,
+.workshop-status-surface--completed,
+.workshop-status-action--completed,
 .workshop-status-badge--neutral,
 .workshop-status-surface--neutral,
 .workshop-status-action--neutral {
@@ -8720,6 +8767,197 @@ body.rota-row-drag-copy-active {
   margin-bottom: 12px;
 }
 
+.workshop-job-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr) auto;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.workshop-job-header__identity {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.workshop-job-header__identity h1 {
+  margin: 0;
+}
+
+.workshop-job-header__identity p {
+  margin: 0;
+}
+
+.workshop-job-header__actions {
+  justify-content: flex-end;
+}
+
+.workshop-job-status-panel {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 14px;
+  border: 1px solid #d6e1eb;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(249, 251, 254, 0.98) 0%, rgba(240, 245, 250, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+
+.workshop-job-status-trigger {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-width: min(280px, 100%);
+  padding: 10px 16px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.workshop-job-status-trigger__meta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.workshop-job-status-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  gap: 6px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid #d4dee9;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(12px);
+  transform: translateX(-50%);
+}
+
+.workshop-job-status-option {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.workshop-job-status-option__content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workshop-job-status-option__content strong {
+  font-size: 0.88rem;
+}
+
+.workshop-job-status-option__content span {
+  color: inherit;
+  font-size: 0.75rem;
+  line-height: 1.28;
+  opacity: 0.86;
+}
+
+.workshop-job-status-option__state {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.workshop-job-status-option--current {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--workshop-status-accent) 50%, transparent),
+    0 10px 18px color-mix(in srgb, var(--workshop-status-accent) 14%, transparent);
+}
+
+.workshop-job-status-timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.workshop-job-status-timeline::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: calc(100% / 12);
+  right: calc(100% / 12);
+  height: 2px;
+  border-radius: 999px;
+  background: #d6dee8;
+}
+
+.workshop-job-status-timeline__step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.workshop-job-status-timeline__dot {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #b7c4d2;
+  border-radius: 999px;
+  background: #f8fbfd;
+}
+
+.workshop-job-status-timeline__label {
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: #6a7787;
+}
+
+.workshop-job-status-timeline__step--past .workshop-job-status-timeline__dot {
+  border-color: #77af95;
+  background: #d5eee1;
+}
+
+.workshop-job-status-timeline__step--current .workshop-job-status-timeline__dot {
+  border-color: #2b7f53;
+  background: #2f9f64;
+  box-shadow: 0 0 0 4px rgba(47, 159, 100, 0.14);
+}
+
+.workshop-job-status-timeline__step--past .workshop-job-status-timeline__label,
+.workshop-job-status-timeline__step--current .workshop-job-status-timeline__label {
+  color: #1d3447;
+}
+
+.workshop-job-status-timeline__step--current .workshop-job-status-timeline__label {
+  font-weight: 700;
+}
+
+.workshop-job-status-panel__hint {
+  margin: 0;
+  max-width: 340px;
+  color: #5b6877;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .job-workflow-panel {
   margin-bottom: 12px;
 }
@@ -8779,6 +9017,35 @@ body.rota-row-drag-copy-active {
 
 .note-form-wide {
   grid-column: span 2;
+}
+
+@media (max-width: 1100px) {
+  .workshop-job-header {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-job-header__actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .workshop-job-status-trigger {
+    min-width: 100%;
+  }
+
+  .workshop-job-status-menu {
+    width: min(100%, calc(100vw - 32px));
+  }
+
+  .workshop-job-status-timeline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+
+  .workshop-job-status-timeline::before {
+    display: none;
+  }
 }
 
 .notes-grid {

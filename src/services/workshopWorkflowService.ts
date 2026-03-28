@@ -9,7 +9,11 @@ import {
   assertWorkshopScheduleAllowed,
   resolveWorkshopSchedulePatch,
 } from "./workshopCalendarService";
-import { toWorkshopExecutionStatus } from "./workshopStatusService";
+import {
+  buildWorkshopStatusAuditMetadata,
+  parseWorkshopRawStatusAlias,
+  toWorkshopExecutionStatus,
+} from "./workshopStatusService";
 
 type StaffRole = "STAFF" | "MANAGER" | "ADMIN";
 type WorkflowStage = "BOOKED" | "IN_PROGRESS" | "READY" | "COMPLETED" | "CANCELLED";
@@ -65,82 +69,54 @@ const stageByStatus: Record<WorkshopJobStatus, WorkflowStage> = {
   CANCELLED: "CANCELLED",
 };
 
-const ALLOWED_RAW_STATUS_TRANSITIONS: Record<WorkshopJobStatus, WorkshopJobStatus[]> = {
-  BOOKED: ["BIKE_ARRIVED", "IN_PROGRESS", "ON_HOLD", "CANCELLED"],
-  BIKE_ARRIVED: ["IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_APPROVAL", "WAITING_FOR_PARTS", "ON_HOLD", "READY_FOR_COLLECTION", "CANCELLED"],
-  WAITING_FOR_APPROVAL: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
-  WAITING_FOR_PARTS: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
-  ON_HOLD: ["IN_PROGRESS", "WAITING_FOR_PARTS", "WAITING_FOR_APPROVAL", "CANCELLED"],
-  READY_FOR_COLLECTION: ["COMPLETED"],
-  COMPLETED: [],
-  CANCELLED: [],
-};
+const ACTIVE_RAW_STATUSES = new Set<WorkshopJobStatus>([
+  "BOOKED",
+  "BIKE_ARRIVED",
+  "IN_PROGRESS",
+  "WAITING_FOR_APPROVAL",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
+  "READY_FOR_COLLECTION",
+]);
 
 const parseTargetStatusOrThrow = (inputStatus: string): {
   targetStatus: WorkshopJobStatus;
   requestedStatus: string;
 } => {
-  const normalized = inputStatus.trim().toUpperCase();
+  const requestedStatus = inputStatus.trim().toUpperCase();
+  const targetStatus = parseWorkshopRawStatusAlias(requestedStatus);
 
-  switch (normalized) {
-    case "BOOKED":
-    case "BOOKING_MADE":
-      return {
-        targetStatus: "BOOKED",
-        requestedStatus: normalized,
-      };
-    case "BIKE_ARRIVED":
-      return {
-        targetStatus: "BIKE_ARRIVED",
-        requestedStatus: normalized,
-      };
-    case "IN_PROGRESS":
-      return {
-        targetStatus: "IN_PROGRESS",
-        requestedStatus: normalized,
-      };
-    case "WAITING_FOR_PARTS":
-      return {
-        targetStatus: "WAITING_FOR_PARTS",
-        requestedStatus: normalized,
-      };
-    case "ON_HOLD":
-      return {
-        targetStatus: "ON_HOLD",
-        requestedStatus: normalized,
-      };
-    case "WAITING_FOR_APPROVAL":
-    case "APPROVED":
-      throw new HttpError(
-        409,
-        "Quote-controlled workflow states must be changed through the approval workflow",
-        "WORKSHOP_STATUS_REQUIRES_APPROVAL_FLOW",
-      );
-    case "READY":
-    case "BIKE_READY":
-    case "READY_FOR_COLLECTION":
-      return {
-        targetStatus: "READY_FOR_COLLECTION",
-        requestedStatus: normalized,
-      };
-    case "COMPLETED":
-      return {
-        targetStatus: "COMPLETED",
-        requestedStatus: normalized,
-      };
-    case "CANCELLED":
-      return {
-        targetStatus: "CANCELLED",
-        requestedStatus: normalized,
-      };
-    default:
-      throw new HttpError(
-        400,
-        "status must be one of BOOKED, BIKE_ARRIVED, IN_PROGRESS, WAITING_FOR_PARTS, ON_HOLD, READY_FOR_COLLECTION, COMPLETED, or CANCELLED (legacy aliases BOOKING_MADE, READY, and BIKE_READY are still accepted)",
-        "INVALID_STATUS",
-      );
+  if (!targetStatus) {
+    throw new HttpError(
+      400,
+      "status must be one of BOOKED, BIKE_ARRIVED, WAITING_FOR_APPROVAL, APPROVED, WAITING_FOR_PARTS, BIKE_READY, COMPLETED, ON_HOLD, or CANCELLED",
+      "INVALID_STATUS",
+    );
   }
+
+  return {
+    targetStatus,
+    requestedStatus,
+  };
+};
+
+const canManuallyTransitionStatus = (
+  currentStatus: WorkshopJobStatus,
+  targetStatus: WorkshopJobStatus,
+) => {
+  if (currentStatus === targetStatus) {
+    return true;
+  }
+
+  if (!ACTIVE_RAW_STATUSES.has(currentStatus)) {
+    return false;
+  }
+
+  if (targetStatus === "COMPLETED" || targetStatus === "CANCELLED") {
+    return true;
+  }
+
+  return ACTIVE_RAW_STATUSES.has(targetStatus);
 };
 
 const assertCanAssignOrUnassign = (jobAssignedStaffId: string | null, input: AssignWorkshopJobInput) => {
@@ -646,7 +622,7 @@ export const changeWorkshopJobStatus = async (
       };
     }
 
-    const isAllowed = ALLOWED_RAW_STATUS_TRANSITIONS[job.status].includes(targetStatus);
+    const isAllowed = canManuallyTransitionStatus(job.status, targetStatus);
 
     if (!isAllowed) {
       throw new HttpError(
@@ -688,11 +664,15 @@ export const changeWorkshopJobStatus = async (
         entityType: "WORKSHOP_JOB",
         entityId: workshopJobId,
         metadata: {
-          fromStatus: job.status,
-          toStatus: updated.status,
           fromStage,
           toStage: targetStage,
-          requestedStatus,
+          ...buildWorkshopStatusAuditMetadata({
+            fromStatus: job.status,
+            toStatus: updated.status,
+            requestedStatus,
+            changeSource: "MANUAL",
+            trigger: "MANUAL_STATUS_SELECTOR",
+          }),
         },
       },
       auditActor,

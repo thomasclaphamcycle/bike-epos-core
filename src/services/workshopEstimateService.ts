@@ -14,6 +14,7 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { buildWorkshopStatusAuditMetadata } from "./workshopStatusService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
@@ -1297,6 +1298,28 @@ const writeApprovalAuditEventsTx = async (
   },
   actor?: AuditActor,
 ) => {
+  if (input.fromJobStatus !== input.toJobStatus) {
+    await createAuditEventTx(
+      tx,
+      {
+        action: "JOB_STATUS_CHANGED",
+        entityType: "WORKSHOP_JOB",
+        entityId: input.workshopJobId,
+        metadata: {
+          estimateId: input.estimate.id,
+          estimateVersion: input.estimate.version,
+          ...buildWorkshopStatusAuditMetadata({
+            fromStatus: input.fromJobStatus,
+            toStatus: input.toJobStatus,
+            changeSource: "AUTOMATIC",
+            trigger: "ESTIMATE_STATUS_SYNC",
+          }),
+        },
+      },
+      actor,
+    );
+  }
+
   await createAuditEventTx(
     tx,
     {
@@ -1309,8 +1332,12 @@ const writeApprovalAuditEventsTx = async (
         fromEstimateStatus: input.fromEstimateStatus,
         toEstimateStatus: input.toEstimateStatus,
         decisionSource: input.estimate.decisionSource,
-        fromStatus: input.fromJobStatus,
-        toStatus: input.toJobStatus,
+        ...buildWorkshopStatusAuditMetadata({
+          fromStatus: input.fromJobStatus,
+          toStatus: input.toJobStatus,
+          changeSource: "AUTOMATIC",
+          trigger: "ESTIMATE_APPROVAL_FLOW",
+        }),
       },
     },
     actor,

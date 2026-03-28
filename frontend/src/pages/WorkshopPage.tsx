@@ -92,7 +92,7 @@ const quickFilters: Array<{
   { key: "DUE_TODAY", label: "Due Today", description: "Promised today and needs front-of-house attention." },
   { key: "OVERDUE", label: "Overdue", description: "Promised date has already passed." },
   { key: "WAITING_FOR_PARTS", label: "Waiting for Parts", description: "Bench work is blocked on stock." },
-  { key: "READY_FOR_COLLECTION", label: "Ready for Collection", description: "Ready to hand over or send to POS." },
+  { key: "READY_FOR_COLLECTION", label: "Bike Ready", description: "Bench work is complete and handover can start." },
 ];
 
 const buildDashboardQuery = (input: {
@@ -262,7 +262,7 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
     case "IN_PROGRESS":
       return [
         { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
-        { label: "Ready for Collection", kind: "status", value: "READY_FOR_COLLECTION" },
+        { label: "Bike Ready", kind: "status", value: "READY_FOR_COLLECTION" },
       ];
     case "WAITING_FOR_PARTS":
       return [

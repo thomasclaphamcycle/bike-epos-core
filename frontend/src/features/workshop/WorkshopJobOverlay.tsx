@@ -1106,7 +1106,7 @@ const getStatusProgressionActions = ({
       return [
         { kind: "status", label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
         { kind: "status", label: "Pause Job", value: "ON_HOLD" },
-        { kind: "status", label: "Ready for Collection", value: "READY_FOR_COLLECTION" },
+        { kind: "status", label: "Bike Ready", value: "READY_FOR_COLLECTION" },
         { kind: "status", label: "Cancel Job", value: "CANCELLED" },
       ];
     case "WAITING_FOR_APPROVAL":

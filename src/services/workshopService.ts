@@ -18,6 +18,7 @@ import {
 } from "./workshopCalendarService";
 import { getWorkshopJobPartsOverview } from "./workshopPartService";
 import {
+  buildWorkshopStatusAuditMetadata,
   parseWorkshopExecutionStatus,
   toWorkshopExecutionStatus,
   toWorkshopJobStatus,
@@ -1657,6 +1658,24 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
           : {}),
       },
     });
+
+    if (updatedJob.status !== job.status) {
+      await createAuditEventTx(tx, {
+        action: "JOB_STATUS_CHANGED",
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopJobId,
+        metadata: {
+          fromStage: toWorkshopExecutionStatus({ status: job.status, closedAt: job.closedAt }),
+          toStage: toWorkshopExecutionStatus({ status: updatedJob.status, closedAt: updatedJob.closedAt }),
+          ...buildWorkshopStatusAuditMetadata({
+            fromStatus: job.status,
+            toStatus: updatedJob.status,
+            changeSource: "AUTOMATIC",
+            trigger: "POS_HANDOFF_READY",
+          }),
+        },
+      });
+    }
 
     const basketResponse = await buildBasketResponseTx(tx, basket.id);
 

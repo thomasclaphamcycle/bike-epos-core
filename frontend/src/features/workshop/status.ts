@@ -1,3 +1,16 @@
+import {
+  WORKSHOP_CANONICAL_STATUSES,
+  WORKSHOP_STATUS_TIMELINE,
+  getWorkshopDisplayStatusDescription,
+  getWorkshopDisplayStatusLabel,
+  getWorkshopDisplayStatusTone,
+  getWorkshopTimelineStatus,
+  normalizeWorkshopDisplayStatus,
+  type WorkshopCanonicalStatus,
+  type WorkshopDisplayStatus,
+  type WorkshopTimelineStatus,
+} from "@shared/workshopStatus";
+
 export type WorkshopExecutionStatus =
   | "BOOKED"
   | "IN_PROGRESS"
@@ -27,13 +40,15 @@ type WorkshopTechnicianWorkflowSummaryInput = {
 };
 
 type WorkshopRawStatusTone =
-  | "blue"
-  | "purple"
-  | "yellow"
-  | "rose"
-  | "green"
-  | "red"
-  | "neutral";
+  | "booked"
+  | "arrived"
+  | "approval"
+  | "approved"
+  | "parts"
+  | "ready"
+  | "completed"
+  | "hold"
+  | "cancelled";
 
 export const workshopExecutionStatusLabel = (
   status: WorkshopExecutionStatus | string | null | undefined,
@@ -76,62 +91,11 @@ export const workshopExecutionStatusClass = (
 
 export const workshopRawStatusLabel = (
   status: string | null | undefined,
-) => {
-  switch (status) {
-    case "BOOKING_MADE":
-      return "Booking Made";
-    case "BOOKED":
-      return "Booked";
-    case "BIKE_ARRIVED":
-      return "Bike Arrived";
-    case "IN_PROGRESS":
-      return "In Progress";
-    case "WAITING_FOR_APPROVAL":
-      return "Waiting for Approval";
-    case "APPROVED":
-      return "Approved";
-    case "WAITING_FOR_PARTS":
-      return "Waiting for Parts";
-    case "ON_HOLD":
-      return "On Hold";
-    case "READY_FOR_COLLECTION":
-    case "BIKE_READY":
-      return "Ready for Collection";
-    case "COMPLETED":
-      return "Completed";
-    case "CANCELLED":
-      return "Cancelled";
-    default:
-      return status || "-";
-  }
-};
+) => getWorkshopDisplayStatusLabel(status);
 
 export const getWorkshopRawStatusTone = (
   status: string | null | undefined,
-): WorkshopRawStatusTone => {
-  switch (status) {
-    case "BOOKED":
-    case "BOOKING_MADE":
-    case "BIKE_ARRIVED":
-    case "IN_PROGRESS":
-      return "blue";
-    case "APPROVED":
-      return "purple";
-    case "WAITING_FOR_PARTS":
-      return "yellow";
-    case "WAITING_FOR_APPROVAL":
-      return "rose";
-    case "READY_FOR_COLLECTION":
-    case "BIKE_READY":
-    case "COMPLETED":
-      return "green";
-    case "ON_HOLD":
-    case "CANCELLED":
-      return "red";
-    default:
-      return "neutral";
-  }
-};
+): WorkshopRawStatusTone => getWorkshopDisplayStatusTone(status);
 
 export const workshopRawStatusClass = (
   status: string | null | undefined,
@@ -164,7 +128,7 @@ export const workshopTechnicianWorkflowLabel = (
     case "PAUSED":
       return "Paused";
     case "READY_FOR_COLLECTION":
-      return "Ready for Collection";
+      return "Bike Ready";
     case "COLLECTED":
       return "Collected";
     case "CANCELLED":
@@ -199,7 +163,7 @@ export const workshopTechnicianWorkflowClass = (
 export const toWorkshopTechnicianWorkflowStage = (
   rawStatus: string | null | undefined,
 ): WorkshopTechnicianWorkflowStage => {
-  switch (rawStatus) {
+  switch ((rawStatus || "").trim().toUpperCase()) {
     case "WAITING_FOR_APPROVAL":
       return "AWAITING_APPROVAL";
     case "APPROVED":
@@ -221,6 +185,89 @@ export const toWorkshopTechnicianWorkflowStage = (
     default:
       return "QUEUED";
   }
+};
+
+export const toWorkshopDisplayStatus = (
+  status: string | null | undefined,
+): WorkshopDisplayStatus | null => normalizeWorkshopDisplayStatus(status);
+
+export const workshopStatusSelectorOptions = WORKSHOP_CANONICAL_STATUSES.map((status) => ({
+  value: status,
+  label: getWorkshopDisplayStatusLabel(status),
+  description: getWorkshopDisplayStatusDescription(status),
+}));
+
+export type WorkshopStatusShortcutAction = {
+  label: string;
+  value: WorkshopCanonicalStatus;
+};
+
+export const getWorkshopStatusShortcutActions = (
+  status: string | null | undefined,
+): WorkshopStatusShortcutAction[] => {
+  switch (normalizeWorkshopDisplayStatus(status)) {
+    case "BOOKED":
+      return [
+        { label: "Bike Arrived", value: "BIKE_ARRIVED" },
+        { label: "Waiting for Approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Approved", value: "APPROVED" },
+      ];
+    case "BIKE_ARRIVED":
+      return [
+        { label: "Waiting for Approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Approved", value: "APPROVED" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "WAITING_FOR_APPROVAL":
+      return [
+        { label: "Approved", value: "APPROVED" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "APPROVED":
+      return [
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Bike Ready", value: "BIKE_READY" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "WAITING_FOR_PARTS":
+      return [
+        { label: "Approved", value: "APPROVED" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "ON_HOLD":
+      return [
+        { label: "Approved", value: "APPROVED" },
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+      ];
+    default:
+      return [];
+  }
+};
+
+export type WorkshopStatusTimelineStep = {
+  status: WorkshopTimelineStatus;
+  label: string;
+  state: "past" | "current" | "future";
+};
+
+export const getWorkshopStatusTimeline = (
+  status: string | null | undefined,
+): WorkshopStatusTimelineStep[] => {
+  const currentStatus = getWorkshopTimelineStatus(status);
+  const currentIndex = currentStatus ? WORKSHOP_STATUS_TIMELINE.indexOf(currentStatus) : -1;
+
+  return WORKSHOP_STATUS_TIMELINE.map((timelineStatus, index) => ({
+    status: timelineStatus,
+    label: getWorkshopDisplayStatusLabel(timelineStatus),
+    state:
+      currentIndex === -1
+        ? "future"
+        : index < currentIndex
+          ? "past"
+          : index === currentIndex
+            ? "current"
+            : "future",
+  }));
 };
 
 const formatScheduleLabel = (scheduledStartAt?: string | null, scheduledDate?: string | null) => {
@@ -294,7 +341,7 @@ export const getWorkshopTechnicianWorkflowSummary = (
         detail: "The bike is on the bench and the team should keep operational notes, parts, and attachments up to date.",
         nextStep: partsBlocked
           ? "Move the job into Waiting for Parts if stock is genuinely blocking progress."
-          : "Continue repair work, then move to Ready for Collection when the bench work is complete.",
+          : "Continue repair work, then move to Bike Ready when the bench work is complete.",
       };
     case "WAITING_FOR_PARTS":
       return {
