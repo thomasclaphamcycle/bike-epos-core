@@ -163,6 +163,21 @@ export type ClearRotaAssignmentResult = {
   previousSource: RotaAssignmentSource;
 };
 
+export type BulkRotaAssignmentResult = {
+  changes: Array<{
+    date: string;
+    action: "saved" | "cleared" | "unchanged";
+    shiftType: RotaShiftType | null;
+    previousSource: RotaAssignmentSource | null;
+    replacedHolidayApproved: boolean;
+  }>;
+  summary: {
+    savedCount: number;
+    clearedCount: number;
+    unchangedCount: number;
+  };
+};
+
 export type CreateRotaPeriodResult = {
   created: boolean;
   rotaPeriod: {
@@ -626,6 +641,135 @@ export const clearRotaAssignment = async (
     date: assignment.date,
     previousSource: assignment.source,
   };
+};
+
+export const saveBulkRotaAssignments = async (
+  input: {
+    rotaPeriodId?: string;
+    staffId?: string;
+    changes?: Array<{
+      date?: string;
+      shiftType?: RotaShiftType | "OFF";
+    }>;
+  },
+  db: RotaClient = prisma,
+): Promise<BulkRotaAssignmentResult> => {
+  const rotaPeriodId = typeof input.rotaPeriodId === "string" ? input.rotaPeriodId.trim() : "";
+  if (!rotaPeriodId) {
+    throw new HttpError(400, "rotaPeriodId is required", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const staffId = typeof input.staffId === "string" ? input.staffId.trim() : "";
+  if (!staffId) {
+    throw new HttpError(400, "staffId is required", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const rawChanges = Array.isArray(input.changes) ? input.changes : [];
+  if (rawChanges.length === 0) {
+    throw new HttpError(400, "changes must include at least one date", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const dedupedChanges = new Map<string, RotaShiftType | "OFF">();
+  for (const change of rawChanges) {
+    const date = normalizeDateKeyOrThrow(change?.date, "INVALID_ROTA_ASSIGNMENT");
+    const shiftType = change?.shiftType;
+    if (
+      shiftType !== "FULL_DAY"
+      && shiftType !== "HALF_DAY_AM"
+      && shiftType !== "HALF_DAY_PM"
+      && shiftType !== "HOLIDAY"
+      && shiftType !== "OFF"
+    ) {
+      throw new HttpError(
+        400,
+        "shiftType must be FULL_DAY, HALF_DAY_AM, HALF_DAY_PM, HOLIDAY, or OFF",
+        "INVALID_ROTA_ASSIGNMENT",
+      );
+    }
+    dedupedChanges.set(date, shiftType);
+  }
+
+  const run = async (tx: RotaClient): Promise<BulkRotaAssignmentResult> => {
+    await getSchedulableStaffOrThrow(staffId, tx);
+
+    const changes: BulkRotaAssignmentResult["changes"] = [];
+
+    for (const [date, shiftType] of dedupedChanges.entries()) {
+      await Promise.all([
+        getEditableRotaPeriodOrThrow(rotaPeriodId, date, tx),
+        assertEditableRotaDate(date, tx),
+      ]);
+
+      if (shiftType === "OFF") {
+        const existing = await tx.rotaAssignment.findUnique({
+          where: {
+            staffId_date: {
+              staffId,
+              date,
+            },
+          },
+          select: {
+            id: true,
+            source: true,
+          },
+        });
+
+        if (!existing) {
+          changes.push({
+            date,
+            action: "unchanged",
+            shiftType: null,
+            previousSource: null,
+            replacedHolidayApproved: false,
+          });
+          continue;
+        }
+
+        const cleared = await clearRotaAssignment({ assignmentId: existing.id }, tx);
+        changes.push({
+          date,
+          action: "cleared",
+          shiftType: null,
+          previousSource: cleared.previousSource,
+          replacedHolidayApproved: cleared.previousSource === RotaAssignmentSource.HOLIDAY_APPROVED,
+        });
+        continue;
+      }
+
+      const saved = await saveManualRotaAssignment(
+        {
+          rotaPeriodId,
+          staffId,
+          date,
+          shiftType,
+        },
+        tx,
+      );
+
+      changes.push({
+        date,
+        action: "saved",
+        shiftType: saved.assignment.shiftType,
+        previousSource: saved.previousSource,
+        replacedHolidayApproved: saved.replacedHolidayApproved,
+      });
+    }
+
+    return {
+      changes,
+      summary: {
+        savedCount: changes.filter((change) => change.action === "saved").length,
+        clearedCount: changes.filter((change) => change.action === "cleared").length,
+        unchangedCount: changes.filter((change) => change.action === "unchanged").length,
+      },
+    };
+  };
+
+  if ("$transaction" in db) {
+    return db.$transaction((tx) => run(tx));
+  }
+
+  return run(db);
 };
 
 export const getDashboardStaffToday = async (

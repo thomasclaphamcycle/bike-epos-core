@@ -7,7 +7,7 @@ import {
   exportRotaPeriodSpreadsheet,
   previewRotaSpreadsheetImport,
 } from "../services/rotaImportService";
-import { clearRotaAssignment, createRotaPeriod, getRotaOverview, saveManualRotaAssignment } from "../services/rotaService";
+import { clearRotaAssignment, createRotaPeriod, getRotaOverview, saveBulkRotaAssignments, saveManualRotaAssignment } from "../services/rotaService";
 import { HttpError } from "../utils/http";
 import { RotaShiftType } from "@prisma/client";
 
@@ -87,6 +87,65 @@ const parseAssignmentBody = (body: unknown) => {
   };
 };
 
+const parseBulkAssignmentBody = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "rota assignment body must be an object", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  const record = body as {
+    rotaPeriodId?: unknown;
+    staffId?: unknown;
+    changes?: unknown;
+  };
+
+  if (typeof record.rotaPeriodId !== "string" || !record.rotaPeriodId.trim()) {
+    throw new HttpError(400, "rotaPeriodId must be a string", "INVALID_ROTA_ASSIGNMENT");
+  }
+  if (typeof record.staffId !== "string" || !record.staffId.trim()) {
+    throw new HttpError(400, "staffId must be a string", "INVALID_ROTA_ASSIGNMENT");
+  }
+  if (!Array.isArray(record.changes) || record.changes.length === 0) {
+    throw new HttpError(400, "changes must be a non-empty array", "INVALID_ROTA_ASSIGNMENT");
+  }
+
+  return {
+    rotaPeriodId: record.rotaPeriodId.trim(),
+    staffId: record.staffId.trim(),
+    changes: record.changes.map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new HttpError(400, "each change must be an object", "INVALID_ROTA_ASSIGNMENT");
+      }
+
+      const change = entry as {
+        date?: unknown;
+        shiftType?: unknown;
+      };
+
+      if (typeof change.date !== "string" || !change.date.trim()) {
+        throw new HttpError(400, "change date must be a string", "INVALID_ROTA_ASSIGNMENT");
+      }
+      if (
+        typeof change.shiftType !== "string"
+        || (
+          !isRotaShiftType(change.shiftType.trim().toUpperCase())
+          && change.shiftType.trim().toUpperCase() !== "OFF"
+        )
+      ) {
+        throw new HttpError(
+          400,
+          "change shiftType must be FULL_DAY, HALF_DAY_AM, HALF_DAY_PM, HOLIDAY, or OFF",
+          "INVALID_ROTA_ASSIGNMENT",
+        );
+      }
+
+      return {
+        date: change.date.trim(),
+        shiftType: change.shiftType.trim().toUpperCase() as RotaShiftType | "OFF",
+      };
+    }),
+  };
+};
+
 const parseCreatePeriodBody = (body: unknown) => {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpError(400, "rota period body must be an object", "INVALID_ROTA_PERIOD");
@@ -158,6 +217,12 @@ export const confirmRotaImportHandler = async (req: Request, res: Response) => {
 export const saveRotaAssignmentHandler = async (req: Request, res: Response) => {
   const body = parseAssignmentBody(req.body);
   const result = await saveManualRotaAssignment(body);
+  res.status(201).json(result);
+};
+
+export const saveBulkRotaAssignmentHandler = async (req: Request, res: Response) => {
+  const body = parseBulkAssignmentBody(req.body);
+  const result = await saveBulkRotaAssignments(body);
   res.status(201).json(result);
 };
 

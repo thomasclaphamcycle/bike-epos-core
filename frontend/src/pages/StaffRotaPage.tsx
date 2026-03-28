@@ -120,6 +120,21 @@ type ClearRotaAssignmentResponse = {
   previousSource: RotaAssignmentSource;
 };
 
+type BulkRotaAssignmentResponse = {
+  changes: Array<{
+    date: string;
+    action: "saved" | "cleared" | "unchanged";
+    shiftType: RotaShiftType | null;
+    previousSource: RotaAssignmentSource | null;
+    replacedHolidayApproved: boolean;
+  }>;
+  summary: {
+    savedCount: number;
+    clearedCount: number;
+    unchangedCount: number;
+  };
+};
+
 type CreateRotaPeriodResponse = {
   created: boolean;
   rotaPeriod: {
@@ -147,6 +162,24 @@ type FloatingMenuPosition = {
   left: number;
   placement: "top" | "bottom";
 };
+
+type DragCopyState = {
+  pointerId: number;
+  sourceCellKey: string;
+  sourceStaffId: string;
+  sourceDate: string;
+  sourceDayIndex: number;
+  sourceValue: RotaEditorShiftValue;
+  sourceValueLabel: string;
+  rowName: string;
+  periodId: string;
+  startClientX: number;
+  startClientY: number;
+  targetDayIndex: number;
+  active: boolean;
+};
+
+const ROW_DRAG_THRESHOLD_PX = 8;
 
 const shiftShortLabel = (shiftType: RotaShiftType | null) => {
   if (shiftType === "FULL_DAY") {
@@ -210,6 +243,11 @@ const shiftClassName = (shiftType: RotaShiftType | null) => {
   }
   return "rota-shift-pill rota-shift-pill-off";
 };
+
+const editorValueLabel = (value: RotaEditorShiftValue) =>
+  SHIFT_OPTIONS.find((option) => option.value === value)?.label ?? value;
+
+const getCellEditorValue = (cell: RotaGridCell): RotaEditorShiftValue => cell.shiftType ?? "OFF";
 
 const addDaysToDateKey = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00.000Z`);
@@ -288,13 +326,17 @@ export const StaffRotaPage = () => {
   } | null>(null);
   const [openEditorCellKey, setOpenEditorCellKey] = useState<string | null>(null);
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
+  const [bulkSavingStaffId, setBulkSavingStaffId] = useState<string | null>(null);
   const [createPeriodStartsOn, setCreatePeriodStartsOn] = useState("");
   const [createPeriodLoading, setCreatePeriodLoading] = useState(false);
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
   const [viewMode, setViewMode] = useState<RotaViewMode>("planner");
   const [floatingMenuPosition, setFloatingMenuPosition] = useState<FloatingMenuPosition | null>(null);
+  const [dragCopyState, setDragCopyState] = useState<DragCopyState | null>(null);
   const cellTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const floatingMenuRef = useRef<HTMLDivElement | null>(null);
+  const dragCopyStateRef = useRef<DragCopyState | null>(null);
+  const suppressCellClickRef = useRef(false);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
   const staffScope = searchParams.get("staffScope") === "assigned" ? "assigned" : "all";
@@ -722,23 +764,291 @@ export const StaffRotaPage = () => {
     );
   };
 
+  useEffect(() => {
+    dragCopyStateRef.current = dragCopyState;
+  }, [dragCopyState]);
+
+  const applyBulkAssignments = async (
+    input: {
+      rotaPeriodId: string;
+      staffId: string;
+      changes: Array<{
+        date: string;
+        shiftType: RotaEditorShiftValue;
+      }>;
+    },
+    options: {
+      successMessage: (result: BulkRotaAssignmentResponse) => string;
+      failureMessage: string;
+    },
+  ) => {
+    if (input.changes.length === 0) {
+      return;
+    }
+
+    setOpenEditorCellKey(null);
+    setBulkSavingStaffId(input.staffId);
+    try {
+      const result = await apiPost<BulkRotaAssignmentResponse>("/api/rota/assignments/bulk", input);
+      await loadOverview(selectedPeriodId, true);
+      success(options.successMessage(result));
+    } catch (bulkSaveError) {
+      error(bulkSaveError instanceof Error ? bulkSaveError.message : options.failureMessage);
+    } finally {
+      setBulkSavingStaffId(null);
+    }
+  };
+
+  const handleCellTriggerClick = (cellKey: string) => {
+    if (suppressCellClickRef.current) {
+      suppressCellClickRef.current = false;
+      return;
+    }
+
+    setOpenEditorCellKey((current) => current === cellKey ? null : cellKey);
+  };
+
+  const handleCellTriggerDoubleClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    input: {
+      rotaPeriodId: string;
+      staffId: string;
+      cellKey: string;
+      cell: RotaGridCell;
+    },
+  ) => {
+    if (!canEditGrid || savingCellKey === input.cellKey || bulkSavingStaffId === input.staffId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    suppressCellClickRef.current = false;
+    setOpenEditorCellKey(null);
+
+    const nextValue: RotaEditorShiftValue = input.cell.shiftType === "FULL_DAY" ? "OFF" : "FULL_DAY";
+    void applyEditorShift(
+      {
+        rotaPeriodId: input.rotaPeriodId,
+        staffId: input.staffId,
+        date: input.cell.date,
+      },
+      input.cell,
+      input.cellKey,
+      nextValue,
+    );
+  };
+
+  const beginRowDragCopy = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    input: {
+      rowName: string;
+      staffId: string;
+      cellKey: string;
+      date: string;
+      dayIndex: number;
+      periodId: string;
+      value: RotaEditorShiftValue;
+    },
+  ) => {
+    if (
+      event.button !== 0
+      || !canEditGrid
+      || savingCellKey === input.cellKey
+      || bulkSavingStaffId === input.staffId
+    ) {
+      return;
+    }
+
+    setDragCopyState({
+      pointerId: event.pointerId,
+      sourceCellKey: input.cellKey,
+      sourceStaffId: input.staffId,
+      sourceDate: input.date,
+      sourceDayIndex: input.dayIndex,
+      sourceValue: input.value,
+      sourceValueLabel: editorValueLabel(input.value),
+      rowName: input.rowName,
+      periodId: input.periodId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      targetDayIndex: input.dayIndex,
+      active: false,
+    });
+  };
+
+  const fillWeekdaysForRow = async (
+    row: NonNullable<RotaOverviewResponse["period"]>["staffRows"][number],
+  ) => {
+    if (!currentPeriod) {
+      return;
+    }
+
+    const weekdayChanges = visibleDayIndices
+      .map((dayIndex) => ({
+        cell: row.cells[dayIndex],
+        day: currentPeriod.days[dayIndex],
+      }))
+      .filter(({ cell, day }) => !cell.isClosed && day.weekday !== "SATURDAY")
+      .map(({ cell }) => ({
+        date: cell.date,
+        shiftType: "FULL_DAY" as const,
+      }));
+
+    if (weekdayChanges.length === 0) {
+      error("No open Monday to Friday days are available in this week.");
+      return;
+    }
+
+    await applyBulkAssignments(
+      {
+        rotaPeriodId: currentPeriod.id,
+        staffId: row.staffId,
+        changes: weekdayChanges,
+      },
+      {
+        successMessage: (result) => {
+          if (result.summary.savedCount === 0 && result.summary.unchangedCount > 0) {
+            return "Monday to Friday already matched the default shift.";
+          }
+          return `Filled Monday to Friday for ${row.name}.`;
+        },
+        failureMessage: "Failed to fill Monday to Friday shifts",
+      },
+    );
+  };
+
+  useEffect(() => {
+    if (!dragCopyState) {
+      return;
+    }
+
+    document.body.classList.add("rota-row-drag-copy-active");
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const current = dragCopyStateRef.current;
+      if (!current || event.pointerId !== current.pointerId) {
+        return;
+      }
+
+      const nextActive = current.active
+        || Math.max(
+          Math.abs(event.clientX - current.startClientX),
+          Math.abs(event.clientY - current.startClientY),
+        ) >= ROW_DRAG_THRESHOLD_PX;
+
+      if (!nextActive) {
+        return;
+      }
+
+      const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
+      const target = hoveredElement instanceof HTMLElement
+        ? hoveredElement.closest<HTMLElement>("[data-rota-cell-trigger='true']")
+        : null;
+      const targetStaffId = target?.dataset.rotaStaffId ?? null;
+      const nextDayIndex = Number.parseInt(target?.dataset.rotaDayIndex ?? "", 10);
+
+      event.preventDefault();
+
+      if (targetStaffId !== current.sourceStaffId || Number.isNaN(nextDayIndex)) {
+        setDragCopyState({
+          ...current,
+          active: true,
+        });
+        return;
+      }
+
+      if (current.active && current.targetDayIndex === nextDayIndex) {
+        return;
+      }
+
+      setDragCopyState({
+        ...current,
+        active: true,
+        targetDayIndex: nextDayIndex,
+      });
+    };
+
+    const handlePointerFinish = (event: PointerEvent) => {
+      const current = dragCopyStateRef.current;
+      if (!current || event.pointerId !== current.pointerId) {
+        return;
+      }
+
+      document.body.classList.remove("rota-row-drag-copy-active");
+      setDragCopyState(null);
+
+      if (!current.active || !currentPeriod) {
+        return;
+      }
+
+      suppressCellClickRef.current = true;
+
+      const sourceRow = currentPeriod.staffRows.find((row) => row.staffId === current.sourceStaffId);
+      if (!sourceRow) {
+        return;
+      }
+
+      const startIndex = Math.min(current.sourceDayIndex, current.targetDayIndex);
+      const endIndex = Math.max(current.sourceDayIndex, current.targetDayIndex);
+      const changes = visibleDayIndices
+        .filter((dayIndex) => dayIndex >= startIndex && dayIndex <= endIndex)
+        .map((dayIndex) => sourceRow.cells[dayIndex])
+        .filter((cell) => !cell.isClosed && cell.date !== current.sourceDate)
+        .map((cell) => ({
+          date: cell.date,
+          shiftType: current.sourceValue,
+        }));
+
+      if (changes.length === 0) {
+        return;
+      }
+
+      void applyBulkAssignments(
+        {
+          rotaPeriodId: current.periodId,
+          staffId: current.sourceStaffId,
+          changes,
+        },
+        {
+          successMessage: (result) => {
+            const changedCount = result.summary.savedCount + result.summary.clearedCount;
+            if (changedCount === 0) {
+              return `${current.rowName} already matched ${current.sourceValueLabel.toLowerCase()} across that range.`;
+            }
+            return `Copied ${current.sourceValueLabel.toLowerCase()} across ${changedCount} ${changedCount === 1 ? "day" : "days"} for ${current.rowName}.`;
+          },
+          failureMessage: "Failed to copy the rota shift across the row",
+        },
+      );
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerFinish);
+    window.addEventListener("pointercancel", handlePointerFinish);
+    return () => {
+      document.body.classList.remove("rota-row-drag-copy-active");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerFinish);
+      window.removeEventListener("pointercancel", handlePointerFinish);
+    };
+  }, [canEditGrid, bulkSavingStaffId, currentPeriod, dragCopyState, error, selectedPeriodId, success, visibleDayIndices]);
+
   return (
     <div className="page-shell page-shell-workspace ui-page ui-page--workspace rota-page">
       <SurfaceCard tone="soft">
         <PageHeader
-          eyebrow="Management / Rota"
           title="Rota"
-          description="Plan rota coverage inside CorePOS with a simple Monday to Saturday weekly editor. Store Info opening hours and closed-day rules stay as the source of truth for what can be scheduled."
           actions={(
             <div className="actions-inline">
               <button type="button" onClick={() => void loadOverview(selectedPeriodId, true)} disabled={loading || refreshing}>
                 {refreshing ? "Refreshing..." : "Refresh"}
               </button>
               <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
-              <Link to="/dashboard">Dashboard</Link>
-              {canEditGrid ? <Link to="/management/staff-rota/tools">Rota Tools</Link> : null}
-              {isAdmin ? <Link to="/settings/staff-list">Staff List</Link> : null}
-              {isAdmin ? <Link to="/settings/roles-permissions">Roles & Permissions</Link> : null}
+              <Link to="/dashboard" className="button-link">Dashboard</Link>
+              {canEditGrid ? <Link to="/management/staff-rota/tools" className="button-link">Rota Tools</Link> : null}
+              {isAdmin ? <Link to="/settings/staff-list" className="button-link">Staff List</Link> : null}
+              {isAdmin ? <Link to="/settings/roles-permissions" className="button-link">Roles & Permissions</Link> : null}
             </div>
           )}
         />
@@ -774,7 +1084,6 @@ export const StaffRotaPage = () => {
       <SurfaceCard>
         <SectionHeader
           title="Weekly Editor"
-          description="Switch between the detailed weekly planner and a six-week overview for quick team scanning. Off remains the default state until a live assignment is added."
           actions={(
             <div className="actions-inline rota-period-controls">
             <div className="rota-view-toggle" role="tablist" aria-label="Rota view mode">
@@ -929,14 +1238,11 @@ export const StaffRotaPage = () => {
               </label>
             </div>
 
-            <p className="muted-text rota-filter-summary">
-              {staffScope === "all"
-                ? "Showing the full active team for this rota period."
-                : "Showing staff who already have assignments somewhere in this six-week period."}
-              {unassignedVisibleStaffCount
-                ? ` ${unassignedVisibleStaffCount} visible ${unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.`
-                : ""}
-            </p>
+            {unassignedVisibleStaffCount ? (
+              <p className="muted-text rota-filter-summary">
+                {unassignedVisibleStaffCount} visible {unassignedVisibleStaffCount === 1 ? "person has" : "people have"} no shifts yet.
+              </p>
+            ) : null}
 
             {viewMode === "planner" ? (
               <div className="table-wrap rota-grid-wrap">
@@ -975,13 +1281,32 @@ export const StaffRotaPage = () => {
                   </thead>
                   <tbody>
                     {currentPeriod.staffRows.length ? currentPeriod.staffRows.map((row) => (
-                      <tr key={row.staffId}>
+                      <tr
+                        key={row.staffId}
+                        data-testid={`rota-row-${row.staffId}`}
+                        className={dragCopyState?.sourceStaffId === row.staffId ? "rota-row-drag-scope" : ""}
+                      >
                         <th className="rota-sticky rota-sticky-name rota-staff-name" scope="row">
                           <div className="rota-staff-name-copy">
-                            <span>{row.name}</span>
-                            {!visibleDayIndices.some((index) => row.cells[index]?.shiftType) ? (
-                              <span className="table-secondary">Off all week in this view</span>
-                            ) : null}
+                            <div className="rota-staff-name-main">
+                              <div className="rota-staff-name-details">
+                                <span>{row.name}</span>
+                                {!visibleDayIndices.some((index) => row.cells[index]?.shiftType) ? (
+                                  <span className="table-secondary">Off all week in this view</span>
+                                ) : null}
+                              </div>
+                              {canEditGrid ? (
+                                <button
+                                  type="button"
+                                  className="button-link button-link-compact rota-row-quick-action"
+                                  data-testid={`rota-fill-weekdays-${row.staffId}`}
+                                  onClick={() => void fillWeekdaysForRow(row)}
+                                  disabled={bulkSavingStaffId === row.staffId}
+                                >
+                                  Fill Mon–Fri
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         </th>
                         <td className="rota-sticky rota-sticky-role rota-staff-role">
@@ -992,8 +1317,17 @@ export const StaffRotaPage = () => {
                           const cellKey = `${row.staffId}-${cell.date}`;
                           const isEditorOpen = openEditorCellKey === cellKey;
                           const isSavingCell = savingCellKey === cellKey;
+                          const isBulkSavingRow = bulkSavingStaffId === row.staffId;
                           const cellSourceLabel = sourceLabel(cell.source);
                           const cellVisibleSourceLabel = visibleSourceLabel(cell.source);
+                          const isDragSource = dragCopyState?.sourceCellKey === cellKey;
+                          const isDragPreview = Boolean(
+                            dragCopyState?.active
+                            && dragCopyState.sourceStaffId === row.staffId
+                            && dayIndex >= Math.min(dragCopyState.sourceDayIndex, dragCopyState.targetDayIndex)
+                            && dayIndex <= Math.max(dragCopyState.sourceDayIndex, dragCopyState.targetDayIndex)
+                            && !cell.isClosed,
+                          );
                           const triggerTitle = cell.isClosed
                             ? cell.closedReason || "Closed"
                             : canEditGrid
@@ -1008,6 +1342,8 @@ export const StaffRotaPage = () => {
                                 cell.isClosed ? "rota-cell-closed" : "",
                                 canEditGrid && !cell.isClosed ? "rota-cell-editable" : "",
                                 isEditorOpen ? "rota-cell-open" : "",
+                                isDragSource ? "rota-cell-drag-source" : "",
+                                isDragPreview ? "rota-cell-drag-preview" : "",
                               ].filter(Boolean).join(" ")}
                               title={triggerTitle}
                             >
@@ -1017,6 +1353,10 @@ export const StaffRotaPage = () => {
                                 <button
                                   type="button"
                                   className="rota-cell-trigger"
+                                  data-rota-cell-trigger="true"
+                                  data-rota-staff-id={row.staffId}
+                                  data-rota-day-index={String(dayIndex)}
+                                  data-testid={`rota-cell-trigger-${row.staffId}-${cell.date}`}
                                   ref={(node) => {
                                     if (node) {
                                       cellTriggerRefs.current.set(cellKey, node);
@@ -1024,8 +1364,23 @@ export const StaffRotaPage = () => {
                                       cellTriggerRefs.current.delete(cellKey);
                                     }
                                   }}
-                                  onClick={() => setOpenEditorCellKey((current) => current === cellKey ? null : cellKey)}
-                                  disabled={!canEditGrid || isSavingCell}
+                                  onPointerDown={(event) => beginRowDragCopy(event, {
+                                    rowName: row.name,
+                                    staffId: row.staffId,
+                                    cellKey,
+                                    date: cell.date,
+                                    dayIndex,
+                                    periodId: currentPeriod.id,
+                                    value: getCellEditorValue(cell),
+                                  })}
+                                  onClick={() => handleCellTriggerClick(cellKey)}
+                                  onDoubleClick={(event) => handleCellTriggerDoubleClick(event, {
+                                    rotaPeriodId: currentPeriod.id,
+                                    staffId: row.staffId,
+                                    cellKey,
+                                    cell,
+                                  })}
+                                  disabled={!canEditGrid || isSavingCell || isBulkSavingRow}
                                   aria-expanded={isEditorOpen}
                                   aria-haspopup="menu"
                                 >

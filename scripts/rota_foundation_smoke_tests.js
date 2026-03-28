@@ -1170,6 +1170,88 @@ const run = async () => {
     assert.equal(mondayAfterClearRes.json.staffToday.summary.scheduledStaffCount, 0);
     assert.equal(mondayAfterClearRes.json.staffToday.summary.holidayStaffCount, 1);
 
+    const bulkAssignRes = await fetchJson("/api/rota/assignments/bulk", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: JORDAN_STAFF_ID,
+        changes: [
+          {
+            date: IMPORTED_MONDAY,
+            shiftType: "FULL_DAY",
+          },
+          {
+            date: IMPORTED_TUESDAY,
+            shiftType: "HALF_DAY_PM",
+          },
+        ],
+      }),
+    });
+    assert.equal(bulkAssignRes.status, 201, JSON.stringify(bulkAssignRes.json));
+    assert.equal(bulkAssignRes.json.summary.savedCount, 2);
+    assert.equal(bulkAssignRes.json.summary.clearedCount, 0);
+
+    const overviewAfterBulkAssignRes = await fetchJson("/api/rota", { headers: MANAGER_HEADERS });
+    assert.equal(overviewAfterBulkAssignRes.status, 200, JSON.stringify(overviewAfterBulkAssignRes.json));
+    const jordanAfterBulkAssign = overviewAfterBulkAssignRes.json.period.staffRows.find((row) => row.name === "Jordan Patel");
+    assert.equal(jordanAfterBulkAssign.cells.find((cell) => cell.date === IMPORTED_MONDAY).shiftType, "FULL_DAY");
+    assert.equal(jordanAfterBulkAssign.cells.find((cell) => cell.date === IMPORTED_TUESDAY).shiftType, "HALF_DAY_PM");
+
+    const bulkClearRes = await fetchJson("/api/rota/assignments/bulk", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: JORDAN_STAFF_ID,
+        changes: [
+          {
+            date: IMPORTED_MONDAY,
+            shiftType: "OFF",
+          },
+          {
+            date: IMPORTED_TUESDAY,
+            shiftType: "OFF",
+          },
+        ],
+      }),
+    });
+    assert.equal(bulkClearRes.status, 201, JSON.stringify(bulkClearRes.json));
+    assert.equal(bulkClearRes.json.summary.savedCount, 0);
+    assert.equal(bulkClearRes.json.summary.clearedCount, 2);
+
+    const overviewAfterBulkClearRes = await fetchJson("/api/rota?staffScope=all", { headers: MANAGER_HEADERS });
+    assert.equal(overviewAfterBulkClearRes.status, 200, JSON.stringify(overviewAfterBulkClearRes.json));
+    const jordanAfterBulkClear = overviewAfterBulkClearRes.json.period.staffRows.find((row) => row.name === "Jordan Patel");
+    assert.ok(jordanAfterBulkClear, "Expected Jordan Patel to remain visible in all-staff rota overview");
+    assert.equal(jordanAfterBulkClear.cells.find((cell) => cell.date === IMPORTED_MONDAY).shiftType, null);
+    assert.equal(jordanAfterBulkClear.cells.find((cell) => cell.date === IMPORTED_TUESDAY).shiftType, null);
+
+    const bulkClosedDayRes = await fetchJson("/api/rota/assignments/bulk", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        rotaPeriodId: rotaPeriod.id,
+        staffId: JORDAN_STAFF_ID,
+        changes: [
+          {
+            date: IMPORTED_FRIDAY,
+            shiftType: "FULL_DAY",
+          },
+        ],
+      }),
+    });
+    assert.equal(bulkClosedDayRes.status, 409, JSON.stringify(bulkClosedDayRes.json));
+
     const closedDayRes = await fetchJson(`/api/dashboard/staff-today?date=${IMPORTED_FRIDAY}`, { headers: ADMIN_HEADERS });
     assert.equal(closedDayRes.status, 200, JSON.stringify(closedDayRes.json));
     assert.equal(closedDayRes.json.staffToday.summary.isClosed, true);

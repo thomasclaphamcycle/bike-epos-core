@@ -9,6 +9,7 @@ import {
   exportRotaPeriodHandler,
   listRotaOverviewHandler,
   previewRotaImportHandler,
+  saveBulkRotaAssignmentHandler,
   saveRotaAssignmentHandler,
   syncBankHolidaysHandler,
 } from "../controllers/rotaController";
@@ -22,6 +23,7 @@ rotaRouter.get("/periods/:periodId/export", requireRoleAtLeast("MANAGER"), expor
 rotaRouter.post("/bank-holidays/sync", requireRoleAtLeast("ADMIN"), syncBankHolidaysHandler);
 rotaRouter.post("/periods", requireRoleAtLeast("MANAGER"), createRotaPeriodHandler);
 rotaRouter.post("/assignments", requireRoleAtLeast("MANAGER"), saveRotaAssignmentHandler);
+rotaRouter.post("/assignments/bulk", requireRoleAtLeast("MANAGER"), saveBulkRotaAssignmentHandler);
 rotaRouter.delete("/assignments/:assignmentId", requireRoleAtLeast("MANAGER"), clearRotaAssignmentHandler);
 rotaRouter.post("/import/preview", requireRoleAtLeast("MANAGER"), previewRotaImportHandler);
 rotaRouter.post("/import/confirm", requireRoleAtLeast("MANAGER"), confirmRotaImportHandler);

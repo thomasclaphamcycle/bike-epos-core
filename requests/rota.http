@@ -52,6 +52,27 @@ X-Staff-Id: rota-manager
   "shiftType": "FULL_DAY"
 }
 
+### Bulk save rota assignments
+POST http://localhost:3000/api/rota/assignments/bulk
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
+{
+  "rotaPeriodId": "{{rotaPeriodId}}",
+  "staffId": "rota-alex-id",
+  "changes": [
+    {
+      "date": "2026-03-09",
+      "shiftType": "FULL_DAY"
+    },
+    {
+      "date": "2026-03-10",
+      "shiftType": "OFF"
+    }
+  ]
+}
+
 ### Clear rota assignment
 DELETE http://localhost:3000/api/rota/assignments/{{assignmentId}}
 X-Staff-Role: MANAGER
