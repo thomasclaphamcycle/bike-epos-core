@@ -2378,7 +2378,7 @@ export const WorkshopJobOverlay = ({
       if (dayCapacity.availableMinutes > 0) {
         availabilityById.set(option.id, {
           state: "available",
-          optionLabel: `${option.name} - available`,
+          optionLabel: option.name,
         });
         availableNames.push(option.name);
         return;
@@ -2671,7 +2671,6 @@ export const WorkshopJobOverlay = ({
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Booking</strong>
-                    <span className="table-secondary">Choose the workshop day and timed slot for this job.</span>
                   </div>
                   <div className="workshop-os-job-workspace-section__meta-list">
                     <span>{formatDateKeyLabel(selectedScheduleDateKey, scheduleSnapshotTimeZone)}</span>
@@ -2756,7 +2755,6 @@ export const WorkshopJobOverlay = ({
                 <div className="workshop-os-schedule-surface__header">
                   <div>
                     <strong>Assign technician</strong>
-                    <span className="table-secondary">Set bench ownership once the booking slot looks right.</span>
                   </div>
                   <div className="workshop-os-job-workspace-section__meta-list">
                     <span>{assignedTechnicianLabel}</span>
