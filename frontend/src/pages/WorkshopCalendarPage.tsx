@@ -648,6 +648,56 @@ const toDayCapacitySummary = (
   );
 };
 
+const getCompactTechnicianName = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "Unknown";
+  }
+
+  return trimmed.split(/\s+/)[0] || trimmed;
+};
+
+const getDayTechnicianAvailabilitySummary = (
+  staffRows: CalendarStaffRow[],
+  dateKey: string,
+  technicianId: string,
+) => {
+  const rows = technicianId
+    ? staffRows.filter((staff) => staff.id === technicianId)
+    : staffRows;
+
+  const availableStaff = rows
+    .filter((staff) => staff.availability.some((entry) => (
+      entry.date === dateKey
+      && entry.source !== "UNAVAILABLE"
+      && entry.totalMinutes > 0
+    )))
+    .map((staff) => ({
+      fullName: staff.name,
+      compactName: getCompactTechnicianName(staff.name),
+    }))
+    .sort((left, right) => left.fullName.localeCompare(right.fullName));
+
+  if (availableStaff.length === 0) {
+    return {
+      label: "Unstaffed",
+      title: "No technicians available",
+      hasAvailability: false,
+    };
+  }
+
+  const maxVisible = 2;
+  const visibleNames = availableStaff.slice(0, maxVisible).map((staff) => staff.compactName);
+  const remainingCount = Math.max(0, availableStaff.length - visibleNames.length);
+  const suffix = remainingCount > 0 ? ` +${remainingCount}` : "";
+
+  return {
+    label: `In: ${visibleNames.join(", ")}${suffix}`,
+    title: `In: ${availableStaff.map((staff) => staff.fullName).join(", ")}`,
+    hasAvailability: true,
+  };
+};
+
 const getWorkshopTimeOffBlocksForDay = (
   entries: CalendarTimeOff[],
   dateKey: string,
@@ -1956,6 +2006,11 @@ export const WorkshopSchedulerScreen = ({
 
               {days.map((day) => {
                 const dayCapacity = toDayCapacitySummary(calendar?.staff ?? [], day.date, selectedTechnicianId);
+                const technicianAvailability = getDayTechnicianAvailabilitySummary(
+                  calendar?.staff ?? [],
+                  day.date,
+                  selectedTechnicianId,
+                );
                 const visibleDayJobs = jobsByDay.get(day.date)?.length ?? 0;
                 const isToday = day.date === todayKey;
 
@@ -1968,13 +2023,16 @@ export const WorkshopSchedulerScreen = ({
                   >
                     <strong>{day.weekday}</strong>
                     <span>{formatOptionalDate(`${day.date}T12:00:00.000Z`, calendarTimeZone)}</span>
-                    <span>
-                      {day.isClosed
-                        ? "Closed"
-                        : `${day.opensAt || "--:--"} - ${day.closesAt || "--:--"}`}
+                    <span
+                      className={technicianAvailability.hasAvailability
+                        ? "workshop-scheduler-grid__day-header-availability"
+                        : "workshop-scheduler-grid__day-header-availability workshop-scheduler-grid__day-header-availability--empty"}
+                      title={technicianAvailability.title}
+                    >
+                      {technicianAvailability.label}
                     </span>
-                    <span>{visibleDayJobs} jobs</span>
-                    <span>
+                    <span className="workshop-scheduler-grid__day-header-summary">
+                      {visibleDayJobs} jobs · {" "}
                       {dayCapacity.totalMinutes
                         ? `${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
                         : "Capacity unavailable"}

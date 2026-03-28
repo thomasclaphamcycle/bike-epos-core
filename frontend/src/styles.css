@@ -2873,6 +2873,24 @@ button.primary.workshop-status-action {
   color: #526071;
 }
 
+.workshop-scheduler-grid__day-header-availability,
+.workshop-scheduler-grid__day-header-summary {
+  display: block;
+}
+
+.workshop-scheduler-grid__day-header-availability {
+  font-weight: 600;
+  color: #30465e;
+}
+
+.workshop-scheduler-grid__day-header-availability--empty {
+  color: #6f7f91;
+}
+
+.workshop-scheduler-grid__day-header-summary {
+  color: #607286;
+}
+
 .workshop-scheduler-grid__day-header--today strong {
   color: #14395f;
 }
