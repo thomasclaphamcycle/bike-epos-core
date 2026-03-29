@@ -205,6 +205,7 @@ export const PosPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
+  const isPageActiveRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const productResultRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -321,6 +322,12 @@ export const PosPage = () => {
   };
 
   const syncQuery = (next: { basketId?: string | null; saleId?: string | null }) => {
+    // Ignore late async POS updates once the route has unmounted so they cannot
+    // navigate the SPA back to /pos after the user has left the page.
+    if (!isPageActiveRef.current) {
+      return;
+    }
+
     const updated = new URLSearchParams(searchParams);
 
     if (next.basketId !== undefined) {
@@ -418,6 +425,8 @@ export const PosPage = () => {
       }));
 
   useEffect(() => {
+    isPageActiveRef.current = true;
+
     let cancelled = false;
 
     const init = async () => {
@@ -494,6 +503,7 @@ export const PosPage = () => {
 
     return () => {
       cancelled = true;
+      isPageActiveRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

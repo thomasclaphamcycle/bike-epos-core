@@ -1603,6 +1603,7 @@ model User {
   pinHash         String?
   role            UserRole             @default(STAFF)
   operationalRole UserOperationalRole?
+  isTechnician    Boolean              @default(false)
   isActive        Boolean              @default(true)
 
   assignedWorkshopJobs     WorkshopJob[]          @relation("WorkshopJobAssignedStaff")

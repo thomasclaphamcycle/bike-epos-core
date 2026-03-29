@@ -14,6 +14,7 @@ type AuthUser = {
   email: string | null;
   name: string | null;
   role: "STAFF" | "MANAGER" | "ADMIN";
+  isTechnician: boolean;
   isActive: boolean;
   hasPin: boolean;
 };

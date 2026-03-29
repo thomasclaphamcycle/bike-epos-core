@@ -205,6 +205,7 @@ const upsertFixture = async (
     name: fixture.name,
     role: fixture.role,
     operationalRole: fixture.operationalRole,
+    isTechnician: fixture.isTechnician,
     isActive: fixture.isActive,
     passwordHash,
     pinHash,
@@ -252,7 +253,7 @@ async function main() {
   for (const result of results) {
     const fixture = LOCAL_DEV_STAFF_FIXTURES.find((entry) => entry.username === result.user.username);
     console.log(
-      `- ${result.status}: ${result.user.name} <${result.user.email}> [${result.user.role}/${result.user.operationalRole ?? "UNSET"}] active=${result.user.isActive} PIN ${fixture?.pin ?? "unset"}${result.mergedFrom.length > 0 ? ` merged ${result.mergedFrom.map((entry) => entry.username).join(", ")}` : ""}`,
+      `- ${result.status}: ${result.user.name} <${result.user.email}> [${result.user.role}/${result.user.operationalRole ?? "UNSET"}] technician=${result.user.isTechnician} active=${result.user.isActive} PIN ${fixture?.pin ?? "unset"}${result.mergedFrom.length > 0 ? ` merged ${result.mergedFrom.map((entry) => entry.username).join(", ")}` : ""}`,
     );
   }
 }

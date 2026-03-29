@@ -11,6 +11,7 @@ import { HttpError } from "../utils/http";
 import { listShopSettings } from "./configurationService";
 import { resolveStoreDaySchedule } from "./storeScheduleService";
 import { formatDateKeyInTimeZone, getStoreWeekdayKeyForDate, STORE_WEEKDAY_LABELS } from "../utils/storeHours";
+import { filterWorkshopTechnicians } from "./workshopStaffingService";
 
 type RotaClient = Prisma.TransactionClient | typeof prisma;
 
@@ -33,6 +34,7 @@ export type DashboardStaffEntry = {
   name: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
   operationalRole: UserOperationalRole | null;
+  isTechnician: boolean;
   shiftType: RotaShiftType;
   note: string | null;
   source: RotaAssignmentSource;
@@ -219,9 +221,6 @@ const addDaysToDateKey = (date: string, days: number) => {
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 };
-
-const isWorkshopOperationalRole = (operationalRole: UserOperationalRole | null) =>
-  operationalRole === "WORKSHOP" || operationalRole === "MIXED";
 
 const HEADER_ACTOR_PASSWORD_HASH = "__header_actor__";
 
@@ -800,6 +799,7 @@ export const getDashboardStaffToday = async (
           name: true,
           role: true,
           operationalRole: true,
+          isTechnician: true,
         },
       },
     },
@@ -812,6 +812,7 @@ export const getDashboardStaffToday = async (
       name: toStaffDisplayName(assignment.staff),
       role: assignment.staff.role,
       operationalRole: assignment.staff.operationalRole,
+      isTechnician: assignment.staff.isTechnician,
       shiftType: assignment.shiftType,
       note: assignment.note ?? null,
       source: assignment.source,
@@ -825,6 +826,7 @@ export const getDashboardStaffToday = async (
         name: toStaffDisplayName(assignment.staff),
         role: assignment.staff.role,
         operationalRole: assignment.staff.operationalRole,
+        isTechnician: assignment.staff.isTechnician,
         shiftType: assignment.shiftType,
         note: assignment.note ?? null,
         source: assignment.source,
@@ -850,15 +852,13 @@ export const getWorkshopStaffingToday = async (
   db: RotaClient = prisma,
 ): Promise<WorkshopStaffingTodayResponse> => {
   const staffToday = await getDashboardStaffToday(input, db);
-  const usesOperationalRoleTags =
-    staffToday.staff.some((entry) => isWorkshopOperationalRole(entry.operationalRole))
-    || staffToday.holidayStaff.some((entry) => isWorkshopOperationalRole(entry.operationalRole));
-  const scheduledStaff = usesOperationalRoleTags
-    ? staffToday.staff.filter((entry) => isWorkshopOperationalRole(entry.operationalRole))
-    : staffToday.staff;
-  const holidayStaff = usesOperationalRoleTags
-    ? staffToday.holidayStaff.filter((entry) => isWorkshopOperationalRole(entry.operationalRole))
-    : staffToday.holidayStaff;
+  const staffingSelection = filterWorkshopTechnicians([
+    ...staffToday.staff,
+    ...staffToday.holidayStaff,
+  ]);
+  const selectedStaffIds = new Set(staffingSelection.staff.map((entry) => entry.staffId));
+  const scheduledStaff = staffToday.staff.filter((entry) => selectedStaffIds.has(entry.staffId));
+  const holidayStaff = staffToday.holidayStaff.filter((entry) => selectedStaffIds.has(entry.staffId));
   const coverageStatus = staffToday.summary.isClosed
     ? "closed"
     : scheduledStaff.length === 0
@@ -877,8 +877,8 @@ export const getWorkshopStaffingToday = async (
       coverageStatus,
     },
     context: {
-      usesOperationalRoleTags,
-      fallbackToBroadStaffing: !usesOperationalRoleTags,
+      usesOperationalRoleTags: staffingSelection.usesOperationalRoleTags,
+      fallbackToBroadStaffing: staffingSelection.fallbackToBroadStaffing,
     },
     scheduledStaff,
     holidayStaff,

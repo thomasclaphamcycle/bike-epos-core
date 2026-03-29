@@ -45,6 +45,7 @@ type CalendarStaffRow = {
   name: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
   operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
+  isTechnician: boolean;
   workingHours: CalendarWorkingHours[];
   availability: CalendarAvailability[];
   timeOff: CalendarTimeOff[];

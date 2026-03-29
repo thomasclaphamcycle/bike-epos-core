@@ -57,6 +57,7 @@ export type PublicUser = {
   name: string | null;
   role: UserRole;
   operationalRole: UserOperationalRole | null;
+  isTechnician: boolean;
   isActive: boolean;
   hasPin: boolean;
   createdAt: Date;
@@ -70,6 +71,7 @@ export const toPublicUser = (user: {
   name: string | null;
   role: UserRole;
   operationalRole: UserOperationalRole | null;
+  isTechnician: boolean;
   isActive: boolean;
   pinHash: string | null;
   createdAt: Date;
@@ -81,6 +83,7 @@ export const toPublicUser = (user: {
   name: user.name,
   role: user.role,
   operationalRole: user.operationalRole,
+  isTechnician: user.isTechnician,
   isActive: user.isActive,
   hasPin: Boolean(user.pinHash),
   createdAt: user.createdAt,

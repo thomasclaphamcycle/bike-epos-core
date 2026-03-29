@@ -150,6 +150,15 @@ const run = async () => {
     assert.equal(tagWorkshop.status, 200, JSON.stringify(tagWorkshop.json));
     assert.equal(tagWorkshop.json.user.operationalRole, "WORKSHOP");
 
+    const setTechnician = await fetchJson(`/api/staff-directory/${staffId}/profile`, {
+      method: "PATCH",
+      headers: { Cookie: managerCookie },
+      body: JSON.stringify({ operationalRole: "WORKSHOP", isTechnician: true }),
+    });
+    assert.equal(setTechnician.status, 200, JSON.stringify(setTechnician.json));
+    assert.equal(setTechnician.json.user.operationalRole, "WORKSHOP");
+    assert.equal(setTechnician.json.user.isTechnician, true);
+
     const resetPassword = await fetchJson(`/api/admin/users/${staffId}/reset-password`, {
       method: "POST",
       headers: { Cookie: adminCookie },
@@ -191,6 +200,13 @@ const run = async () => {
       body: JSON.stringify({ operationalRole: "SALES" }),
     });
     assert.equal(deniedDirectoryUpdate.status, 403, JSON.stringify(deniedDirectoryUpdate.json));
+
+    const deniedTechnicianUpdate = await fetchJson(`/api/staff-directory/${encodeURIComponent(staffId)}/profile`, {
+      method: "PATCH",
+      headers: { Cookie: staffCookie },
+      body: JSON.stringify({ isTechnician: false }),
+    });
+    assert.equal(deniedTechnicianUpdate.status, 403, JSON.stringify(deniedTechnicianUpdate.json));
 
     const selfDisable = await fetchJson(`/api/admin/users/${createStaff.json.user.id}`, {
       method: "PATCH",
