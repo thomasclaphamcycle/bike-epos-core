@@ -165,6 +165,7 @@ type PositionedJob = {
 type QueuePlacementKind = "unscheduled" | "unassigned";
 type SchedulerInteractionMode = "move" | "resize-top" | "resize-bottom";
 type SchedulerBlockDensity = "minimal" | "compact" | "full";
+type SchedulerZoomLevel = "compact" | "standard" | "comfortable";
 
 type PlacementState = {
   source: "calendar" | "queue";
@@ -212,12 +213,10 @@ type TimeOffBlock = {
 
 const DEFAULT_OPEN_MINUTES = 9 * 60;
 const DEFAULT_CLOSE_MINUTES = 18 * 60;
-const PX_PER_MINUTE = 1.5;
 const TIME_AXIS_WIDTH = 60;
 const WEEK_DAY_WIDTH = 118;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
-const MIN_BOOKING_BLOCK_HEIGHT = 26;
 const MINIMAL_BOOKING_BLOCK_HEIGHT = 64;
 const COMPACT_BOOKING_BLOCK_HEIGHT = 96;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
@@ -227,6 +226,51 @@ const DRAG_START_THRESHOLD_PX = 6;
 const TECHNICIAN_PICKER_WIDTH = 204;
 const TECHNICIAN_PICKER_MIN_HEIGHT = 156;
 const TECHNICIAN_PICKER_VIEWPORT_GAP = 10;
+const MIN_SCHEDULER_TRACK_HEIGHT = 640;
+const SCHEDULER_ZOOM_STORAGE_KEY = "corepos:workshop-scheduler-zoom";
+const DEFAULT_SCHEDULER_ZOOM_LEVEL: SchedulerZoomLevel = "standard";
+const SCHEDULER_ZOOM_OPTIONS: ReadonlyArray<{
+  value: SchedulerZoomLevel;
+  label: string;
+  pxPerMinute: number;
+}> = [
+  { value: "compact", label: "Compact", pxPerMinute: 1.2 },
+  { value: "standard", label: "Standard", pxPerMinute: 1.5 },
+  { value: "comfortable", label: "Comfortable", pxPerMinute: 1.9 },
+];
+
+const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+const isSchedulerZoomLevel = (value: string): value is SchedulerZoomLevel =>
+  SCHEDULER_ZOOM_OPTIONS.some((option) => option.value === value);
+
+const readStoredSchedulerZoomLevel = (): SchedulerZoomLevel => {
+  if (!isBrowser()) {
+    return DEFAULT_SCHEDULER_ZOOM_LEVEL;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(SCHEDULER_ZOOM_STORAGE_KEY);
+    return stored && isSchedulerZoomLevel(stored) ? stored : DEFAULT_SCHEDULER_ZOOM_LEVEL;
+  } catch {
+    return DEFAULT_SCHEDULER_ZOOM_LEVEL;
+  }
+};
+
+const persistSchedulerZoomLevel = (value: SchedulerZoomLevel) => {
+  if (!isBrowser()) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(SCHEDULER_ZOOM_STORAGE_KEY, value);
+  } catch {
+    // Ignore storage failures so the scheduler still works in restricted browsers.
+  }
+};
+
+const getMinimumBookingBlockHeight = (pxPerMinute: number) =>
+  Math.max(18, MIN_SCHEDULE_DURATION_MINUTES * pxPerMinute);
 
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
@@ -705,6 +749,7 @@ const getWorkshopTimeOffBlocksForDay = (
   dateKey: string,
   openMinutes: number,
   closeMinutes: number,
+  pxPerMinute: number,
   timeZone?: string,
 ) => {
   return entries.flatMap<TimeOffBlock>((entry) => {
@@ -734,8 +779,8 @@ const getWorkshopTimeOffBlocksForDay = (
 
     return [{
       id: `${entry.id}-${dateKey}`,
-      top: (clippedStart - openMinutes) * PX_PER_MINUTE,
-      height: Math.max(18, (clippedEnd - clippedStart) * PX_PER_MINUTE),
+      top: (clippedStart - openMinutes) * pxPerMinute,
+      height: Math.max(18, (clippedEnd - clippedStart) * pxPerMinute),
       scope: entry.scope,
       label: entry.reason || (entry.scope === "WORKSHOP" ? "Workshop block" : "Time off"),
     }];
@@ -747,6 +792,8 @@ const toPositionedJobs = (
   openMinutes: number,
   closeMinutes: number,
   columnWidth: number,
+  pxPerMinute: number,
+  minBookingBlockHeight: number,
   timeZone?: string,
 ) => {
   const sortableJobs = jobs
@@ -833,8 +880,8 @@ const toPositionedJobs = (
 
     return laneAssignments.map<PositionedJob>((entry) => ({
       job: entry.job,
-      top: (entry.clippedStart - openMinutes) * PX_PER_MINUTE,
-      height: Math.max(MIN_BOOKING_BLOCK_HEIGHT, (entry.clippedEnd - entry.clippedStart) * PX_PER_MINUTE),
+      top: (entry.clippedStart - openMinutes) * pxPerMinute,
+      height: Math.max(minBookingBlockHeight, (entry.clippedEnd - entry.clippedStart) * pxPerMinute),
       left: entry.laneIndex * (laneWidth + JOB_BLOCK_GAP),
       width: laneWidth,
     }));
@@ -904,6 +951,8 @@ const buildPreviewPosition = (input: {
   openMinutes: number;
   closeMinutes: number;
   columnWidth: number;
+  pxPerMinute: number;
+  minBookingBlockHeight: number;
   timeZone?: string;
 }) => {
   const previewStartAt = buildScheduleIso(input.dateKey, formatClockLabel(input.startMinutes));
@@ -929,6 +978,8 @@ const buildPreviewPosition = (input: {
     input.openMinutes,
     input.closeMinutes,
     input.columnWidth,
+    input.pxPerMinute,
+    input.minBookingBlockHeight,
     input.timeZone,
   ).find((entry) => entry.job.id === previewJob.id) ?? null;
 };
@@ -1030,6 +1081,7 @@ export const WorkshopSchedulerScreen = ({
   const [pendingTechnicianPrompt, setPendingTechnicianPrompt] = useState<PendingTechnicianPromptState | null>(null);
   const [pendingTechnicianPickerHeight, setPendingTechnicianPickerHeight] = useState(TECHNICIAN_PICKER_MIN_HEIGHT);
   const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
+  const [schedulerZoom, setSchedulerZoom] = useState<SchedulerZoomLevel>(() => readStoredSchedulerZoomLevel());
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -1051,6 +1103,12 @@ export const WorkshopSchedulerScreen = ({
     () => buildVisibleRange(anchorDateKey, view, weekRangeMode),
     [anchorDateKey, view, weekRangeMode],
   );
+  const schedulerZoomOption = useMemo(
+    () => SCHEDULER_ZOOM_OPTIONS.find((option) => option.value === schedulerZoom) ?? SCHEDULER_ZOOM_OPTIONS[1],
+    [schedulerZoom],
+  );
+  const pxPerMinute = schedulerZoomOption.pxPerMinute;
+  const minBookingBlockHeight = getMinimumBookingBlockHeight(pxPerMinute);
   const calendarTimeZone = calendar?.range.timeZone;
   const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey();
 
@@ -1093,6 +1151,10 @@ export const WorkshopSchedulerScreen = ({
     setInternalTechnicianId(nextTechnicianId);
   };
 
+  const changeSchedulerZoom = (nextZoom: SchedulerZoomLevel) => {
+    setSchedulerZoom(nextZoom);
+  };
+
   const loadCalendar = async () => {
     setLoading(true);
     setLoadError(null);
@@ -1119,6 +1181,10 @@ export const WorkshopSchedulerScreen = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedRange.from, requestedRange.to, refreshToken]);
 
+  useEffect(() => {
+    persistSchedulerZoomLevel(schedulerZoom);
+  }, [schedulerZoom]);
+
   const days = calendar?.days ?? [];
   const timeline = useMemo(() => buildTimelineRange(days), [days]);
   const dayByDate = useMemo(
@@ -1126,7 +1192,7 @@ export const WorkshopSchedulerScreen = ({
     [days],
   );
   const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
-  const trackHeight = Math.max(760, timeline.totalMinutes * PX_PER_MINUTE);
+  const trackHeight = Math.max(MIN_SCHEDULER_TRACK_HEIGHT, timeline.totalMinutes * pxPerMinute);
   const dayColumnWidth = useMemo(() => {
     if (view !== "week") {
       return DAY_VIEW_WIDTH;
@@ -1352,7 +1418,7 @@ export const WorkshopSchedulerScreen = ({
         const bounds = getDayScheduleBounds(dayByDate.get(current.dateKey), timeline);
         const pointerMinutes =
           timeline.openMinutes
-          + ((event.clientY - track.getBoundingClientRect().top) / PX_PER_MINUTE);
+          + ((event.clientY - track.getBoundingClientRect().top) / pxPerMinute);
         const snappedMinutes = snapMinutesToGrid(pointerMinutes, DRAG_SNAP_MINUTES);
 
         let snappedStartMinutes = current.snappedStartMinutes;
@@ -1382,16 +1448,18 @@ export const WorkshopSchedulerScreen = ({
           openMinutes: timeline.openMinutes,
           closeMinutes: timeline.closeMinutes,
           columnWidth: dayColumnWidth,
+          pxPerMinute,
+          minBookingBlockHeight,
           timeZone: calendarTimeZone,
         });
         const nextTop =
           previewPosition?.top
-          ?? ((snappedStartMinutes - timeline.openMinutes) * PX_PER_MINUTE);
+          ?? ((snappedStartMinutes - timeline.openMinutes) * pxPerMinute);
         const nextLeft = previewPosition?.left ?? current.left;
         const nextWidth = previewPosition?.width ?? current.width;
         const nextHeight =
           previewPosition?.height
-          ?? Math.max(MIN_BOOKING_BLOCK_HEIGHT, durationMinutes * PX_PER_MINUTE);
+          ?? Math.max(minBookingBlockHeight, durationMinutes * pxPerMinute);
 
         if (
           nextTop === current.currentTop
@@ -1441,7 +1509,7 @@ export const WorkshopSchedulerScreen = ({
       }
 
       const relativeTop = event.clientY - track.getBoundingClientRect().top - current.pointerOffsetY;
-      const rawMinutes = timeline.openMinutes + (relativeTop / PX_PER_MINUTE);
+      const rawMinutes = timeline.openMinutes + (relativeTop / pxPerMinute);
       const maxStartMinutes = Math.max(timeline.openMinutes, timeline.closeMinutes - current.durationMinutes);
       const snappedStartMinutes = clamp(
         snapMinutesToGrid(rawMinutes, DRAG_SNAP_MINUTES),
@@ -1457,16 +1525,18 @@ export const WorkshopSchedulerScreen = ({
         openMinutes: timeline.openMinutes,
         closeMinutes: timeline.closeMinutes,
         columnWidth: dayColumnWidth,
+        pxPerMinute,
+        minBookingBlockHeight,
         timeZone: calendarTimeZone,
       });
       const nextTop =
         previewPosition?.top
-        ?? ((snappedStartMinutes - timeline.openMinutes) * PX_PER_MINUTE);
+        ?? ((snappedStartMinutes - timeline.openMinutes) * pxPerMinute);
       const nextLeft = previewPosition?.left ?? 0;
       const nextWidth = previewPosition?.width ?? dayColumnWidth;
       const nextHeight =
         previewPosition?.height
-        ?? Math.max(MIN_BOOKING_BLOCK_HEIGHT, current.durationMinutes * PX_PER_MINUTE);
+        ?? Math.max(minBookingBlockHeight, current.durationMinutes * pxPerMinute);
 
       if (
         !nextActive
@@ -1553,7 +1623,7 @@ export const WorkshopSchedulerScreen = ({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
     };
-  }, [calendarTimeZone, dayByDate, dayColumnWidth, days, dragState, error, jobsByDay, timeline]);
+  }, [calendarTimeZone, dayByDate, dayColumnWidth, days, dragState, error, jobsByDay, minBookingBlockHeight, pxPerMinute, timeline]);
 
   const positionedJobsByDay = useMemo(() => {
     const next = new Map<string, PositionedJob[]>();
@@ -1565,12 +1635,14 @@ export const WorkshopSchedulerScreen = ({
           timeline.openMinutes,
           timeline.closeMinutes,
           dayColumnWidth,
+          pxPerMinute,
+          minBookingBlockHeight,
           calendarTimeZone,
         ),
       );
     });
     return next;
-  }, [calendarTimeZone, dayColumnWidth, days, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendarTimeZone, dayColumnWidth, days, jobsByDay, minBookingBlockHeight, pxPerMinute, timeline.closeMinutes, timeline.openMinutes]);
 
   const workshopTimeOffByDay = useMemo(() => {
     const next = new Map<string, TimeOffBlock[]>();
@@ -1589,12 +1661,13 @@ export const WorkshopSchedulerScreen = ({
           day.date,
           timeline.openMinutes,
           timeline.closeMinutes,
+          pxPerMinute,
           calendarTimeZone,
         ),
       );
     });
     return next;
-  }, [calendar?.workshopTimeOff, calendarTimeZone, days, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendar?.workshopTimeOff, calendarTimeZone, days, pxPerMinute, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
 
   const staffCount = calendar?.staff.length ?? 0;
   const staffFilterOptions = calendar?.staff ?? [];
@@ -1863,7 +1936,7 @@ export const WorkshopSchedulerScreen = ({
     }
 
     const durationMinutes = getScheduledDurationMinutes(job, calendarTimeZone);
-    const previewHeight = Math.max(MIN_BOOKING_BLOCK_HEIGHT, durationMinutes * PX_PER_MINUTE);
+    const previewHeight = Math.max(minBookingBlockHeight, durationMinutes * pxPerMinute);
 
     event.preventDefault();
     setPendingTechnicianPrompt(null);
@@ -1948,6 +2021,25 @@ export const WorkshopSchedulerScreen = ({
               </button>
             </div>
 
+            <label className="workshop-scheduler-toolbar__filter">
+              Zoom
+              <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Scheduler zoom level">
+                {SCHEDULER_ZOOM_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={schedulerZoom === option.value}
+                    className={schedulerZoom === option.value ? "primary" : ""}
+                    data-testid={`workshop-scheduler-zoom-${option.value}`}
+                    onClick={() => changeSchedulerZoom(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </label>
+
             <div className="actions-inline">
               <button
                 type="button"
@@ -2010,6 +2102,17 @@ export const WorkshopSchedulerScreen = ({
                   : "Showing all scheduled workshop work"}
               </span>
             </article>
+            <article className="metric-card">
+              <span className="metric-label">Zoom</span>
+              <strong className="metric-value">{schedulerZoomOption.label}</strong>
+              <span className="dashboard-metric-detail">
+                {schedulerZoom === "compact"
+                  ? "More time visible for weekly overview"
+                  : schedulerZoom === "comfortable"
+                    ? "Larger booking blocks for precise edits"
+                    : "Balanced default density for daily planning"}
+              </span>
+            </article>
           </div>
         </section>
       ) : null}
@@ -2026,6 +2129,23 @@ export const WorkshopSchedulerScreen = ({
             <div>
               <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
             </div>
+            {!showToolbar ? (
+              <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Scheduler zoom level">
+                {SCHEDULER_ZOOM_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={schedulerZoom === option.value}
+                    className={schedulerZoom === option.value ? "primary" : ""}
+                    data-testid={`workshop-scheduler-zoom-${option.value}`}
+                    onClick={() => changeSchedulerZoom(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div ref={schedulerScrollRef} className="workshop-scheduler-scroll">
@@ -2077,7 +2197,7 @@ export const WorkshopSchedulerScreen = ({
                   <div
                     key={minutes}
                     className="workshop-scheduler-grid__time-label mono-text"
-                    style={{ top: `${(minutes - timeline.openMinutes) * PX_PER_MINUTE}px` }}
+                    style={{ top: `${(minutes - timeline.openMinutes) * pxPerMinute}px` }}
                   >
                     {formatClockLabel(minutes)}
                   </div>
@@ -2111,7 +2231,7 @@ export const WorkshopSchedulerScreen = ({
                       <span
                         key={`${day.date}-${minutes}`}
                         className="workshop-scheduler-grid__hour-line"
-                        style={{ top: `${(minutes - timeline.openMinutes) * PX_PER_MINUTE}px` }}
+                        style={{ top: `${(minutes - timeline.openMinutes) * pxPerMinute}px` }}
                       />
                     ))}
 
