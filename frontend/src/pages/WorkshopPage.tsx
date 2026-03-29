@@ -11,6 +11,8 @@ import {
   workshopTodayDateKey,
 } from "./WorkshopCalendarPage";
 import {
+  getWorkshopDisplayStatus,
+  getWorkshopRawStatusValue,
   getWorkshopTechnicianWorkflowSummary,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -37,7 +39,8 @@ type QuickFilterKey =
   | "DUE_TODAY"
   | "OVERDUE"
   | "WAITING_FOR_PARTS"
-  | "READY_FOR_COLLECTION";
+  | "READY_FOR_COLLECTION"
+  | "COMPLETED";
 
 type QuickAction = {
   label: string;
@@ -92,7 +95,8 @@ const quickFilters: Array<{
   { key: "DUE_TODAY", label: "Due Today", description: "Promised today and needs front-of-house attention." },
   { key: "OVERDUE", label: "Overdue", description: "Promised date has already passed." },
   { key: "WAITING_FOR_PARTS", label: "Waiting for Parts", description: "Bench work is blocked on stock." },
-  { key: "READY_FOR_COLLECTION", label: "Ready for Collection", description: "Ready to hand over or send to POS." },
+  { key: "READY_FOR_COLLECTION", label: "Bike Ready", description: "Bench work is complete and handover can start." },
+  { key: "COMPLETED", label: "Completed", description: "Collected work kept visible for pickup context and recent closeout." },
 ];
 
 const buildDashboardQuery = (input: {
@@ -154,7 +158,7 @@ const toPartsStatus = (job: DashboardJob) => {
   if (job.partsStatus) {
     return job.partsStatus;
   }
-  return job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
+  return getWorkshopDisplayStatus(job) === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
 };
 
 const getPartsClassName = (job: DashboardJob) => {
@@ -169,7 +173,9 @@ const getPartsClassName = (job: DashboardJob) => {
 };
 
 const getUrgency = (job: DashboardJob) => {
-  if (!job.scheduledDate || job.status === "COMPLETED" || job.status === "CANCELLED") {
+  const displayStatus = getWorkshopDisplayStatus(job);
+
+  if (!job.scheduledDate || displayStatus === "COMPLETED" || displayStatus === "CANCELLED") {
     return null;
   }
 
@@ -231,6 +237,8 @@ const matchesQuickFilter = (
   filter: QuickFilterKey,
   currentUserId: string | null | undefined,
 ) => {
+  const displayStatus = getWorkshopDisplayStatus(job);
+
   switch (filter) {
     case "MY_JOBS":
       return Boolean(currentUserId) && job.assignedStaffId === currentUserId;
@@ -239,9 +247,11 @@ const matchesQuickFilter = (
     case "OVERDUE":
       return getUrgency(job)?.label === "Overdue";
     case "WAITING_FOR_PARTS":
-      return job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT";
+      return displayStatus === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT";
     case "READY_FOR_COLLECTION":
-      return job.status === "READY_FOR_COLLECTION";
+      return displayStatus === "BIKE_READY";
+    case "COMPLETED":
+      return displayStatus === "COMPLETED";
     default:
       return true;
   }
@@ -262,7 +272,7 @@ const getQuickActions = (job: DashboardJob): QuickAction[] => {
     case "IN_PROGRESS":
       return [
         { label: "Waiting for Parts", kind: "status", value: "WAITING_FOR_PARTS" },
-        { label: "Ready for Collection", kind: "status", value: "READY_FOR_COLLECTION" },
+        { label: "Bike Ready", kind: "status", value: "READY_FOR_COLLECTION" },
       ];
     case "WAITING_FOR_PARTS":
       return [
@@ -296,7 +306,6 @@ export const WorkshopPage = () => {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
-  const [showCompleted, setShowCompleted] = useState(false);
   const [jobs, setJobs] = useState<DashboardJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [schedulerRefreshToken, setSchedulerRefreshToken] = useState(0);
@@ -358,15 +367,12 @@ export const WorkshopPage = () => {
 
   const visibleJobs = useMemo(
     () => jobs.filter((job) => {
-      if (!showCompleted && job.status === "COMPLETED") {
-        return false;
-      }
       if (selectedTechnicianId && job.assignedStaffId !== selectedTechnicianId) {
         return false;
       }
       return matchesQuickFilter(job, quickFilter, user?.id);
     }),
-    [jobs, quickFilter, selectedTechnicianId, showCompleted, user?.id],
+    [jobs, quickFilter, selectedTechnicianId, user?.id],
   );
 
   useEffect(() => {
@@ -389,9 +395,9 @@ export const WorkshopPage = () => {
   );
 
   const listAlerts = useMemo(() => {
-    const approval = visibleJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
-    const parts = visibleJobs.filter((job) => job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT").length;
-    const ready = visibleJobs.filter((job) => job.status === "READY_FOR_COLLECTION").length;
+    const approval = visibleJobs.filter((job) => getWorkshopDisplayStatus(job) === "WAITING_FOR_APPROVAL").length;
+    const parts = visibleJobs.filter((job) => getWorkshopDisplayStatus(job) === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT").length;
+    const ready = visibleJobs.filter((job) => getWorkshopDisplayStatus(job) === "BIKE_READY").length;
 
     return [
       { key: "approval", label: "Waiting for approval", count: approval, tone: approval ? "status-warning" : "status-badge" },
@@ -407,7 +413,7 @@ export const WorkshopPage = () => {
 
   const selectedListWorkflow = selectedListJob
     ? getWorkshopTechnicianWorkflowSummary({
-        rawStatus: selectedListJob.status,
+        rawStatus: getWorkshopRawStatusValue(selectedListJob) ?? selectedListJob.status,
         partsStatus: selectedListJob.partsStatus,
         assignedStaffName: selectedListJob.assignedStaffName,
         scheduledDate: selectedListJob.scheduledDate,
@@ -479,11 +485,7 @@ export const WorkshopPage = () => {
     <div className="page-shell page-shell-workspace workshop-primary-page">
       <section className="workshop-primary-topbar">
         <div className="workshop-primary-title">
-          <p className="ui-page-eyebrow">Workshop Operating Screen</p>
           <h1 className="ui-page-title">Workshop</h1>
-          <p className="ui-page-description">
-            Week scheduling is the default view, with day zoom and list fallback in the same operating surface.
-          </p>
         </div>
 
         <label className="workshop-primary-search">
@@ -565,7 +567,7 @@ export const WorkshopPage = () => {
           <section className="workshop-primary-filter-card">
             <div className="workshop-primary-filter-card__header">
               <h2>Context</h2>
-              <span className="table-secondary">Technician and queue constraints.</span>
+              <span className="table-secondary">Supporting constraints and scheduler controls.</span>
             </div>
 
             <div className="workshop-primary-filter-fields">
@@ -575,30 +577,10 @@ export const WorkshopPage = () => {
                   <option value="">Everyone</option>
                   {technicianOptions.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
+                    {option.name}
+                  </option>
                   ))}
                 </select>
-              </label>
-
-              <label>
-                Raw status
-                <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
-                  {statusOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option ? workshopRawStatusLabel(option) : "All raw states"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="inline-check">
-                <input
-                  type="checkbox"
-                  checked={showCompleted}
-                  onChange={(event) => setShowCompleted(event.target.checked)}
-                />
-                <span>Show completed</span>
               </label>
             </div>
 
@@ -610,6 +592,28 @@ export const WorkshopPage = () => {
                 Standalone Calendar
               </Link>
             </div>
+
+            <details className="workshop-primary-advanced-filters">
+              <summary>
+                <span>Advanced filters</span>
+                <span className="table-secondary">
+                  {status ? workshopRawStatusLabel(status) : "Optional"}
+                </span>
+              </summary>
+
+              <div className="workshop-primary-filter-fields workshop-primary-filter-fields--advanced">
+                <label>
+                  Raw status
+                  <select value={status} onChange={(event) => setStatus(event.target.value as (typeof statusOptions)[number])}>
+                    {statusOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option ? workshopRawStatusLabel(option) : "All raw states"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </details>
           </section>
         </aside>
 
@@ -649,7 +653,7 @@ export const WorkshopPage = () => {
                       ) : (
                         [...visibleJobs].sort(compareJobs).map((job) => {
                           const workflowSummary = getWorkshopTechnicianWorkflowSummary({
-                            rawStatus: job.status,
+                            rawStatus: getWorkshopRawStatusValue(job) ?? job.status,
                             partsStatus: job.partsStatus,
                             assignedStaffName: job.assignedStaffName,
                             scheduledDate: job.scheduledDate,
@@ -721,7 +725,7 @@ export const WorkshopPage = () => {
                       <strong>{selectedListJob.bikeDescription || "Workshop job"}</strong>
                       <span className="table-secondary">{getCustomerName(selectedListJob)}</span>
                       <div className="workshop-primary-selection__badges">
-                        <span className={workshopRawStatusClass(selectedListJob.status)}>{workshopRawStatusLabel(selectedListJob.status)}</span>
+                        <span className={workshopRawStatusClass(selectedListJob)}>{workshopRawStatusLabel(selectedListJob)}</span>
                         {selectedListWorkflow ? (
                           <span className={selectedListWorkflow.className}>{selectedListWorkflow.label}</span>
                         ) : null}
@@ -823,6 +827,7 @@ export const WorkshopPage = () => {
               refreshToken={schedulerRefreshToken}
               view={surfaceMode}
               anchorDateKey={anchorDateKey}
+              weekRangeMode="operational"
               onChangeAnchorDateKey={setAnchorDateKey}
               technicianId={selectedTechnicianId}
               onTechnicianIdChange={setSelectedTechnicianId}

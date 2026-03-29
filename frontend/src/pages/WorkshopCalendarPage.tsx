@@ -1,9 +1,10 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
 import {
+  getWorkshopDisplayStatus,
   workshopRawStatusSurfaceClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -137,6 +138,7 @@ type WorkshopSchedulerScreenProps = {
   backLinkTo?: string | null;
   view?: CalendarViewMode;
   anchorDateKey?: string;
+  weekRangeMode?: "calendar" | "operational";
   onChangeView?: (view: CalendarViewMode) => void;
   onChangeAnchorDateKey?: (dateKey: string) => void;
   technicianId?: string;
@@ -153,13 +155,6 @@ type WorkshopOverlayTechnicianOption = {
   name: string;
 };
 
-type ScheduleDraft = {
-  staffId: string;
-  dateKey: string;
-  startTime: string;
-  durationMinutes: string;
-};
-
 type PositionedJob = {
   job: CalendarJob;
   top: number;
@@ -168,22 +163,45 @@ type PositionedJob = {
   width: number;
 };
 
-type DragState = {
+type QueuePlacementKind = "unscheduled" | "unassigned";
+type SchedulerInteractionMode = "move" | "resize-top" | "resize-bottom";
+type SchedulerBlockDensity = "minimal" | "compact" | "full";
+type SchedulerZoomLevel = "compact" | "standard" | "comfortable";
+
+type PlacementState = {
   source: "calendar" | "queue";
-  pointerId: number;
+  interaction: SchedulerInteractionMode;
+  queueKind: QueuePlacementKind | null;
   job: CalendarJob;
   dateKey: string | null;
   staffId: string | null;
   left: number;
   width: number;
   height: number;
-  pointerOffsetY: number;
-  startClientX: number;
-  startClientY: number;
   currentTop: number;
   snappedStartMinutes: number;
   durationMinutes: number;
+  fixedBoundaryMinutes: number | null;
+};
+
+type DragState = PlacementState & {
+  pointerId: number;
+  pointerOffsetY: number;
+  startClientX: number;
+  startClientY: number;
   active: boolean;
+};
+
+type PendingTechnicianPromptState = PlacementState & {
+  source: "queue";
+  queueKind: "unassigned";
+  dateKey: string;
+};
+
+type PendingTechnicianPickerLayout = {
+  top: number;
+  left: number;
+  maxHeight: number;
 };
 
 type TimeOffBlock = {
@@ -194,17 +212,85 @@ type TimeOffBlock = {
   label: string;
 };
 
+type SchedulerLayoutEntry = {
+  job: CalendarJob;
+  startMinutes: number;
+  endMinutes: number;
+  clippedStart: number;
+  clippedEnd: number;
+};
+
+type SchedulerCollisionGroup = {
+  entries: SchedulerLayoutEntry[];
+  maxEndMinutes: number;
+};
+
+type SchedulerLaneState = {
+  endMinutes: number;
+  occupiedMinutes: number;
+  bookingCount: number;
+};
+
 const DEFAULT_OPEN_MINUTES = 9 * 60;
 const DEFAULT_CLOSE_MINUTES = 18 * 60;
-const PX_PER_MINUTE = 1.05;
-const WEEK_DAY_WIDTH = 244;
+const TIME_AXIS_WIDTH = 60;
+const WEEK_DAY_WIDTH = 118;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
-const MIN_BOOKING_BLOCK_HEIGHT = 48;
-const COMPACT_BOOKING_BLOCK_HEIGHT = 72;
+const MINIMAL_BOOKING_BLOCK_HEIGHT = 64;
+const COMPACT_BOOKING_BLOCK_HEIGHT = 96;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 const DRAG_SNAP_MINUTES = 15;
+const MIN_SCHEDULE_DURATION_MINUTES = 15;
 const DRAG_START_THRESHOLD_PX = 6;
+const TECHNICIAN_PICKER_WIDTH = 204;
+const TECHNICIAN_PICKER_MIN_HEIGHT = 156;
+const TECHNICIAN_PICKER_VIEWPORT_GAP = 10;
+const MIN_SCHEDULER_TRACK_HEIGHT = 640;
+const SCHEDULER_ZOOM_STORAGE_KEY = "corepos:workshop-scheduler-zoom";
+const DEFAULT_SCHEDULER_ZOOM_LEVEL: SchedulerZoomLevel = "standard";
+const SCHEDULER_ZOOM_OPTIONS: ReadonlyArray<{
+  value: SchedulerZoomLevel;
+  label: string;
+  pxPerMinute: number;
+}> = [
+  { value: "compact", label: "Compact", pxPerMinute: 1.2 },
+  { value: "standard", label: "Standard", pxPerMinute: 1.5 },
+  { value: "comfortable", label: "Comfortable", pxPerMinute: 1.9 },
+];
+
+const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+const isSchedulerZoomLevel = (value: string): value is SchedulerZoomLevel =>
+  SCHEDULER_ZOOM_OPTIONS.some((option) => option.value === value);
+
+const readStoredSchedulerZoomLevel = (): SchedulerZoomLevel => {
+  if (!isBrowser()) {
+    return DEFAULT_SCHEDULER_ZOOM_LEVEL;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(SCHEDULER_ZOOM_STORAGE_KEY);
+    return stored && isSchedulerZoomLevel(stored) ? stored : DEFAULT_SCHEDULER_ZOOM_LEVEL;
+  } catch {
+    return DEFAULT_SCHEDULER_ZOOM_LEVEL;
+  }
+};
+
+const persistSchedulerZoomLevel = (value: SchedulerZoomLevel) => {
+  if (!isBrowser()) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(SCHEDULER_ZOOM_STORAGE_KEY, value);
+  } catch {
+    // Ignore storage failures so the scheduler still works in restricted browsers.
+  }
+};
+
+const getMinimumBookingBlockHeight = (pxPerMinute: number) =>
+  Math.max(18, MIN_SCHEDULE_DURATION_MINUTES * pxPerMinute);
 
 const formatDateKey = (value: Date) => {
   const year = value.getFullYear();
@@ -219,6 +305,13 @@ const parseDateKey = (value: string) => {
 };
 
 export const workshopTodayDateKey = () => formatDateKey(new Date());
+
+const clampPickerPosition = (value: number, min: number, max: number) => {
+  if (max < min) {
+    return min;
+  }
+  return clamp(value, min, max);
+};
 
 const toOverlaySummary = (job: CalendarJob): WorkshopJobOverlaySummary => ({
   id: job.id,
@@ -359,20 +452,6 @@ const formatPromiseDate = (value: string | null | undefined) => {
   });
 };
 
-const toTimeInputValue = (isoValue: string | null | undefined, timeZone?: string) => {
-  if (!isoValue) {
-    return "";
-  }
-
-  const date = new Date(isoValue);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const parts = getTimeZoneParts(date, timeZone);
-  return `${`${parts.hour}`.padStart(2, "0")}:${`${parts.minute}`.padStart(2, "0")}`;
-};
-
 const buildScheduleIso = (dateKey: string, timeValue: string) => {
   if (!dateKey || !timeValue) {
     return null;
@@ -389,8 +468,22 @@ const buildScheduleIso = (dateKey: string, timeValue: string) => {
 const getJobHeading = (job: CalendarJob) =>
   job.bikeDescription || job.customerName || job.summaryText || `Workshop job ${job.id.slice(0, 8)}`;
 
-const getJobSubline = (job: CalendarJob) =>
-  [job.customerName, job.assignedStaffName].filter(Boolean).join(" · ") || workshopRawStatusLabel(job.rawStatus);
+const formatCompactScheduleMeta = (job: CalendarJob, timeZone: string) => {
+  if (!job.scheduledStartAt) {
+    return "Schedule pending";
+  }
+
+  return `Scheduled ${formatOptionalDate(job.scheduledStartAt, timeZone)} · ${formatOptionalTime(job.scheduledStartAt, timeZone)}`;
+};
+
+const getQueueMetaLine = (job: CalendarJob, timeZone: string) => {
+  const customerLabel = job.customerName?.trim() || "Customer pending";
+  const scheduleLabel = job.scheduledStartAt
+    ? formatCompactScheduleMeta(job, timeZone)
+    : `Promise ${formatPromiseDate(job.scheduledDate)}`;
+
+  return `${customerLabel} · ${scheduleLabel}`;
+};
 
 const getBookingCustomerName = (job: CalendarJob) =>
   job.customerName || "Customer pending";
@@ -398,20 +491,28 @@ const getBookingCustomerName = (job: CalendarJob) =>
 const getBookingBikeLine = (job: CalendarJob) =>
   job.bikeDescription?.trim() || "Bike details pending";
 
+const getBookingTechnicianLabel = (
+  job: CalendarJob,
+  overrideName?: string | null,
+) => {
+  const assignedName = overrideName?.trim() || job.assignedStaffName?.trim();
+  return assignedName
+    ? {
+        label: assignedName,
+        assigned: true,
+      }
+    : {
+        label: "Unassigned",
+        assigned: false,
+      };
+};
+
 const getBookingMetaLine = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   if (isOverdueJob(job, todayKey, timeZone)) {
     return "Overdue";
   }
 
-  switch (job.rawStatus) {
-    case "BIKE_ARRIVED":
-    case "WAITING_FOR_APPROVAL":
-    case "WAITING_FOR_PARTS":
-    case "READY_FOR_COLLECTION":
-      return workshopRawStatusLabel(job.rawStatus);
-    default:
-      return job.assignedStaffName?.trim() || "Scheduled";
-  }
+  return workshopRawStatusLabel(job);
 };
 
 const getBookingServiceLabel = (job: CalendarJob) => {
@@ -429,6 +530,109 @@ const getBookingServiceLabel = (job: CalendarJob) => {
   return trimmed;
 };
 
+type SchedulerSignalKey = "approved" | "parts" | "overdue" | "ready";
+
+const SIGNAL_PRIORITY: SchedulerSignalKey[] = ["overdue", "parts", "approved", "ready"];
+
+const buildSchedulerSignals = (
+  job: CalendarJob,
+  todayKey: string,
+  timeZone?: string,
+): SchedulerSignalKey[] => {
+  const signals = new Set<SchedulerSignalKey>();
+  const displayStatus = getWorkshopDisplayStatus(job);
+
+  if (isOverdueJob(job, todayKey, timeZone)) {
+    signals.add("overdue");
+  }
+  if (displayStatus === "WAITING_FOR_PARTS") {
+    signals.add("parts");
+  }
+  if (displayStatus === "APPROVED") {
+    signals.add("approved");
+  }
+  if (displayStatus === "BIKE_READY") {
+    signals.add("ready");
+  }
+
+  return SIGNAL_PRIORITY.filter((signal) => signals.has(signal));
+};
+
+const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
+  switch (signal) {
+    case "approved":
+      return (
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          £
+        </span>
+      );
+    case "parts":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <path d="M9.55 2.45a2.15 2.15 0 0 1 3.04 3.04l-1.32 1.32-1.72-1.72 1.32-1.32a.7.7 0 0 0-.99-.99L8.56 4.1 6.84 2.38l1.32-1.32a2.15 2.15 0 0 1 1.39-.61Z" />
+          <path d="m2.2 10.64 4.7-4.7 3.56 3.56-4.7 4.7H2.2v-3.56Z" />
+          <path d="m9.82 5.23.95-.95 1.9 1.9-.95.95" />
+        </svg>
+      );
+    case "overdue":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <path d="M8 2.1 14.05 13H1.95L8 2.1Z" />
+          <path d="M8 5.3v3.9" />
+          <circle cx="8" cy="11.6" r=".85" />
+        </svg>
+      );
+    case "ready":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" />
+          <path d="m4.8 8.25 2.15 2.2 4.2-4.45" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
+
+const schedulerSignalLabel = (signal: SchedulerSignalKey) => {
+  switch (signal) {
+    case "approved":
+      return "Approved estimate";
+    case "parts":
+      return "Waiting for parts";
+    case "overdue":
+      return "Overdue";
+    case "ready":
+      return "Bike ready";
+    default:
+      return "";
+  }
+};
+
+const SchedulerSignals = ({
+  signals,
+}: {
+  signals: SchedulerSignalKey[];
+}) => {
+  if (signals.length === 0) {
+    return null;
+  }
+
+  return (
+    <span className="workshop-scheduler-block__signals" aria-label={signals.map(schedulerSignalLabel).join(", ")}>
+      {signals.map((signal) => (
+        <span
+          key={signal}
+          className={`workshop-scheduler-block__signal workshop-scheduler-block__signal--${signal}`}
+          aria-label={schedulerSignalLabel(signal)}
+        >
+          {renderSchedulerSignalIcon(signal)}
+        </span>
+      ))}
+    </span>
+  );
+};
+
 const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
   const details = [
     `${formatOptionalTime(job.scheduledStartAt, timeZone)} - ${formatOptionalTime(job.scheduledEndAt, timeZone)}`,
@@ -442,7 +646,7 @@ const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
   }
 
   details.push(job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Technician: Unassigned");
-  details.push(`Status: ${workshopRawStatusLabel(job.rawStatus)}`);
+  details.push(`Status: ${workshopRawStatusLabel(job)}`);
   if (job.scheduledDate) {
     details.push(`Promise date: ${formatPromiseDate(job.scheduledDate)}`);
   }
@@ -461,16 +665,32 @@ const getJobDueDateKey = (job: CalendarJob, timeZone?: string) =>
 
 const isOverdueJob = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   const jobDateKey = getJobDueDateKey(job, timeZone);
+  const displayStatus = getWorkshopDisplayStatus(job);
   return Boolean(
     jobDateKey
       && jobDateKey < todayKey
-      && !["COMPLETED", "CANCELLED", "READY_FOR_COLLECTION"].includes(job.rawStatus),
+      && !["COMPLETED", "CANCELLED", "BIKE_READY"].includes(displayStatus ?? ""),
   );
 };
 
-const buildVisibleRange = (anchorDateKey: string, view: CalendarViewMode) => {
+const getOperationalWeekStart = (anchor: Date) => {
+  const monday = startOfWeek(anchor);
+  const weekdayIndex = (anchor.getDay() + 6) % 7;
+  if (weekdayIndex <= 2) {
+    return monday;
+  }
+  return addDays(anchor, -2);
+};
+
+const buildVisibleRange = (
+  anchorDateKey: string,
+  view: CalendarViewMode,
+  weekRangeMode: "calendar" | "operational" = "calendar",
+) => {
   const anchor = parseDateKey(anchorDateKey);
-  const start = view === "week" ? startOfWeek(anchor) : anchor;
+  const start = view === "week"
+    ? (weekRangeMode === "operational" ? getOperationalWeekStart(anchor) : startOfWeek(anchor))
+    : anchor;
   const end = view === "week" ? addDays(start, 6) : start;
   const dates: string[] = [];
 
@@ -507,6 +727,25 @@ const buildTimelineRange = (days: CalendarResponse["days"]) => {
     openMinutes,
     closeMinutes: normalizedClose,
     totalMinutes: normalizedClose - openMinutes,
+  };
+};
+
+const getDayScheduleBounds = (
+  day: CalendarResponse["days"][number] | null | undefined,
+  timeline: { openMinutes: number; closeMinutes: number },
+) => {
+  const openMinutes = parseClockMinutes(day?.opensAt) ?? timeline.openMinutes;
+  const rawCloseMinutes = parseClockMinutes(day?.closesAt);
+  const fallbackCloseMinutes = Math.max(openMinutes + MIN_SCHEDULE_DURATION_MINUTES, timeline.closeMinutes);
+  const closeMinutes =
+    rawCloseMinutes !== null && rawCloseMinutes > openMinutes
+      ? rawCloseMinutes
+      : fallbackCloseMinutes;
+
+  return {
+    openMinutes,
+    closeMinutes,
+    isClosed: Boolean(day?.isClosed),
   };
 };
 
@@ -577,11 +816,62 @@ const toDayCapacitySummary = (
   );
 };
 
+const getCompactTechnicianName = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "Unknown";
+  }
+
+  return trimmed.split(/\s+/)[0] || trimmed;
+};
+
+const getDayTechnicianAvailabilitySummary = (
+  staffRows: CalendarStaffRow[],
+  dateKey: string,
+  technicianId: string,
+) => {
+  const rows = technicianId
+    ? staffRows.filter((staff) => staff.id === technicianId)
+    : staffRows;
+
+  const availableStaff = rows
+    .filter((staff) => staff.availability.some((entry) => (
+      entry.date === dateKey
+      && entry.source !== "UNAVAILABLE"
+      && entry.totalMinutes > 0
+    )))
+    .map((staff) => ({
+      fullName: staff.name,
+      compactName: getCompactTechnicianName(staff.name),
+    }))
+    .sort((left, right) => left.fullName.localeCompare(right.fullName));
+
+  if (availableStaff.length === 0) {
+    return {
+      label: "Unstaffed",
+      title: "No technicians available",
+      hasAvailability: false,
+    };
+  }
+
+  const maxVisible = 2;
+  const visibleNames = availableStaff.slice(0, maxVisible).map((staff) => staff.compactName);
+  const remainingCount = Math.max(0, availableStaff.length - visibleNames.length);
+  const suffix = remainingCount > 0 ? ` +${remainingCount}` : "";
+
+  return {
+    label: `In: ${visibleNames.join(", ")}${suffix}`,
+    title: `In: ${availableStaff.map((staff) => staff.fullName).join(", ")}`,
+    hasAvailability: true,
+  };
+};
+
 const getWorkshopTimeOffBlocksForDay = (
   entries: CalendarTimeOff[],
   dateKey: string,
   openMinutes: number,
   closeMinutes: number,
+  pxPerMinute: number,
   timeZone?: string,
 ) => {
   return entries.flatMap<TimeOffBlock>((entry) => {
@@ -611,12 +901,66 @@ const getWorkshopTimeOffBlocksForDay = (
 
     return [{
       id: `${entry.id}-${dateKey}`,
-      top: (clippedStart - openMinutes) * PX_PER_MINUTE,
-      height: Math.max(18, (clippedEnd - clippedStart) * PX_PER_MINUTE),
+      top: (clippedStart - openMinutes) * pxPerMinute,
+      height: Math.max(18, (clippedEnd - clippedStart) * pxPerMinute),
       scope: entry.scope,
       label: entry.reason || (entry.scope === "WORKSHOP" ? "Workshop block" : "Time off"),
     }];
   });
+};
+
+const buildSchedulerCollisionGroups = (entries: SchedulerLayoutEntry[]) => {
+  const groups: SchedulerCollisionGroup[] = [];
+
+  entries.forEach((entry) => {
+    const currentGroup = groups.at(-1);
+    if (!currentGroup || entry.startMinutes >= currentGroup.maxEndMinutes) {
+      groups.push({
+        entries: [entry],
+        maxEndMinutes: entry.endMinutes,
+      });
+      return;
+    }
+
+    currentGroup.entries.push(entry);
+    currentGroup.maxEndMinutes = Math.max(currentGroup.maxEndMinutes, entry.endMinutes);
+  });
+
+  return groups;
+};
+
+const pickBalancedLaneIndex = (
+  laneStates: SchedulerLaneState[],
+  entry: SchedulerLayoutEntry,
+) => {
+  const availableLaneIndexes = laneStates
+    .map((lane, index) => (lane.endMinutes <= entry.startMinutes ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (availableLaneIndexes.length === 0) {
+    laneStates.push({
+      endMinutes: entry.endMinutes,
+      occupiedMinutes: entry.clippedEnd - entry.clippedStart,
+      bookingCount: 1,
+    });
+    return laneStates.length - 1;
+  }
+
+  const laneIndex = availableLaneIndexes.sort((leftIndex, rightIndex) => {
+    const leftLane = laneStates[leftIndex];
+    const rightLane = laneStates[rightIndex];
+    return leftLane.occupiedMinutes - rightLane.occupiedMinutes
+      || leftLane.bookingCount - rightLane.bookingCount
+      || leftIndex - rightIndex;
+  })[0];
+
+  laneStates[laneIndex] = {
+    endMinutes: entry.endMinutes,
+    occupiedMinutes: laneStates[laneIndex].occupiedMinutes + (entry.clippedEnd - entry.clippedStart),
+    bookingCount: laneStates[laneIndex].bookingCount + 1,
+  };
+
+  return laneIndex;
 };
 
 const toPositionedJobs = (
@@ -624,6 +968,8 @@ const toPositionedJobs = (
   openMinutes: number,
   closeMinutes: number,
   columnWidth: number,
+  pxPerMinute: number,
+  minBookingBlockHeight: number,
   timeZone?: string,
 ) => {
   const sortableJobs = jobs
@@ -658,55 +1004,34 @@ const toPositionedJobs = (
         clippedEnd,
       };
     })
-    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .filter((entry): entry is SchedulerLayoutEntry => Boolean(entry))
     .sort((left, right) =>
       left.startMinutes - right.startMinutes
       || left.endMinutes - right.endMinutes
       || left.job.createdAt.localeCompare(right.job.createdAt));
 
-  const laneEndMinutes: number[] = [];
-  let laneCount = 0;
+  const collisionGroups = buildSchedulerCollisionGroups(sortableJobs);
 
-  const laneAssignments = sortableJobs.map((entry) => {
-    let laneIndex = laneEndMinutes.findIndex((laneEnd) => laneEnd <= entry.startMinutes);
-    if (laneIndex === -1) {
-      laneIndex = laneEndMinutes.length;
-      laneEndMinutes.push(entry.endMinutes);
-    } else {
-      laneEndMinutes[laneIndex] = entry.endMinutes;
-    }
-
-    laneCount = Math.max(laneCount, laneEndMinutes.length);
-    return {
+  return collisionGroups.flatMap<PositionedJob>((group) => {
+    const laneStates: SchedulerLaneState[] = [];
+    const laneAssignments = group.entries.map((entry) => ({
       ...entry,
-      laneIndex,
-    };
+      laneIndex: pickBalancedLaneIndex(laneStates, entry),
+    }));
+
+    const effectiveLaneCount = Math.max(1, laneStates.length);
+    const totalGap = JOB_BLOCK_GAP * (effectiveLaneCount - 1);
+    const laneWidth = Math.max(0, (columnWidth - totalGap) / effectiveLaneCount);
+
+    return laneAssignments.map<PositionedJob>((entry) => ({
+      job: entry.job,
+      top: (entry.clippedStart - openMinutes) * pxPerMinute,
+      height: Math.max(minBookingBlockHeight, (entry.clippedEnd - entry.clippedStart) * pxPerMinute),
+      left: entry.laneIndex * (laneWidth + JOB_BLOCK_GAP),
+      width: laneWidth,
+    }));
   });
-
-  const effectiveLaneCount = Math.max(1, laneCount);
-  const totalGap = JOB_BLOCK_GAP * (effectiveLaneCount - 1);
-  const laneWidth = Math.max(72, (columnWidth - totalGap) / effectiveLaneCount);
-
-  return laneAssignments.map<PositionedJob>((entry) => ({
-    job: entry.job,
-    top: (entry.clippedStart - openMinutes) * PX_PER_MINUTE,
-    height: Math.max(MIN_BOOKING_BLOCK_HEIGHT, (entry.clippedEnd - entry.clippedStart) * PX_PER_MINUTE),
-    left: entry.laneIndex * (laneWidth + JOB_BLOCK_GAP),
-    width: laneWidth,
-  }));
 };
-
-const buildInitialDraft = (
-  job: CalendarJob,
-  preferredDateKey: string,
-  calendarDay: CalendarResponse["days"][number] | undefined,
-  timeZone?: string,
-): ScheduleDraft => ({
-  staffId: job.assignedStaffId || "",
-  dateKey: getJobOperationalDateKey(job, timeZone) || preferredDateKey,
-  startTime: toTimeInputValue(job.scheduledStartAt, timeZone) || calendarDay?.opensAt || "10:00",
-  durationMinutes: `${job.durationMinutes || 60}`,
-});
 
 const getScheduledDurationMinutes = (job: CalendarJob, timeZone?: string) => {
   if (job.durationMinutes && job.durationMinutes > 0) {
@@ -728,6 +1053,40 @@ const snapMinutesToGrid = (minutes: number, intervalMinutes: number) =>
 const buildBlockTimeLabel = (startMinutes: number, durationMinutes: number) =>
   `${formatClockLabel(startMinutes)} - ${formatClockLabel(startMinutes + durationMinutes)}`;
 
+const getSchedulerBlockDensity = (height: number): SchedulerBlockDensity => {
+  if (height < MINIMAL_BOOKING_BLOCK_HEIGHT) {
+    return "minimal";
+  }
+
+  if (height < COMPACT_BOOKING_BLOCK_HEIGHT) {
+    return "compact";
+  }
+
+  return "full";
+};
+
+const getSchedulerBlockDensityClass = (density: SchedulerBlockDensity) => {
+  switch (density) {
+    case "minimal":
+      return " workshop-scheduler-block--minimal";
+    case "compact":
+      return " workshop-scheduler-block--compact";
+    default:
+      return "";
+  }
+};
+
+const getInteractionModifierClass = (interaction: SchedulerInteractionMode) => {
+  switch (interaction) {
+    case "resize-top":
+      return " workshop-scheduler-block--resizing-top";
+    case "resize-bottom":
+      return " workshop-scheduler-block--resizing-bottom";
+    default:
+      return "";
+  }
+};
+
 const buildPreviewPosition = (input: {
   job: CalendarJob;
   jobs: CalendarJob[];
@@ -737,6 +1096,8 @@ const buildPreviewPosition = (input: {
   openMinutes: number;
   closeMinutes: number;
   columnWidth: number;
+  pxPerMinute: number;
+  minBookingBlockHeight: number;
   timeZone?: string;
 }) => {
   const previewStartAt = buildScheduleIso(input.dateKey, formatClockLabel(input.startMinutes));
@@ -762,6 +1123,8 @@ const buildPreviewPosition = (input: {
     input.openMinutes,
     input.closeMinutes,
     input.columnWidth,
+    input.pxPerMinute,
+    input.minBookingBlockHeight,
     input.timeZone,
   ).find((entry) => entry.job.id === previewJob.id) ?? null;
 };
@@ -770,31 +1133,62 @@ const renderSchedulerBlockContent = ({
   job,
   timeLabel,
   metaLabel,
-  isCompactBlock,
+  technicianOverride,
+  density,
+  todayKey,
+  timeZone,
 }: {
   job: CalendarJob;
   timeLabel: string;
   metaLabel: string;
-  isCompactBlock: boolean;
-}) => (
-  <>
-    <div className="workshop-scheduler-block__time">{timeLabel}</div>
-    <strong className="workshop-scheduler-block__customer">
-      {getBookingCustomerName(job)}
-    </strong>
-    <div className="workshop-scheduler-block__bike">
-      {getBookingBikeLine(job)}
-    </div>
-    {!isCompactBlock ? (
-      <div className="workshop-scheduler-block__meta">
-        {metaLabel}
-      </div>
-    ) : null}
-  </>
-);
+  technicianOverride?: string | null;
+  density: SchedulerBlockDensity;
+  todayKey: string;
+  timeZone?: string;
+}) => {
+  const technician = getBookingTechnicianLabel(job, technicianOverride);
+  const showTechnician = true;
+  const showBike = density === "full";
+  const showMeta = density === "full";
+  const signals = buildSchedulerSignals(job, todayKey, timeZone);
+
+  return (
+    <>
+      <div className="workshop-scheduler-block__time">{timeLabel}</div>
+      <strong className="workshop-scheduler-block__customer">
+        <span className="workshop-scheduler-block__customer-name">
+          {getBookingCustomerName(job)}
+        </span>
+      </strong>
+      {showTechnician ? (
+        <div
+          className={`workshop-scheduler-block__technician${technician.assigned ? "" : " workshop-scheduler-block__technician--unassigned"}`}
+        >
+          <span className="workshop-scheduler-block__technician-icon" aria-hidden="true">
+            🔧
+          </span>
+          <span className="workshop-scheduler-block__technician-name">
+            {technician.label}
+          </span>
+        </div>
+      ) : null}
+      {showBike ? (
+        <div className="workshop-scheduler-block__bike">
+          {getBookingBikeLine(job)}
+        </div>
+      ) : null}
+      {showMeta ? (
+        <div className="workshop-scheduler-block__meta">
+          {metaLabel}
+        </div>
+      ) : null}
+      <SchedulerSignals signals={signals} />
+    </>
+  );
+};
 
 const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string) => {
-  const classes = ["workshop-scheduler-block", workshopRawStatusSurfaceClass(job.rawStatus)];
+  const classes = ["workshop-scheduler-block", workshopRawStatusSurfaceClass(job)];
   if (isOverdueJob(job, todayKey, timeZone)) {
     classes.push("workshop-scheduler-block--overdue");
   }
@@ -811,6 +1205,7 @@ export const WorkshopSchedulerScreen = ({
   backLinkTo = embedded ? null : "/workshop",
   view: controlledView,
   anchorDateKey: controlledAnchorDateKey,
+  weekRangeMode = "calendar",
   onChangeView,
   onChangeAnchorDateKey,
   technicianId,
@@ -824,23 +1219,21 @@ export const WorkshopSchedulerScreen = ({
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [overlayJobId, setOverlayJobId] = useState<string | null>(null);
   const [overlaySummary, setOverlaySummary] = useState<WorkshopJobOverlaySummary | null>(null);
   const [internalTechnicianId, setInternalTechnicianId] = useState("");
-  const [draft, setDraft] = useState<ScheduleDraft>({
-    staffId: "",
-    dateKey: "",
-    startTime: "",
-    durationMinutes: "60",
-  });
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragSavingJobId, setDragSavingJobId] = useState<string | null>(null);
+  const [pendingTechnicianPrompt, setPendingTechnicianPrompt] = useState<PendingTechnicianPromptState | null>(null);
+  const [pendingTechnicianPickerHeight, setPendingTechnicianPickerHeight] = useState(TECHNICIAN_PICKER_MIN_HEIGHT);
+  const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
+  const [schedulerZoom, setSchedulerZoom] = useState<SchedulerZoomLevel>(() => readStoredSchedulerZoomLevel());
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const suppressClickJobIdRef = useRef<string | null>(null);
+  const technicianPickerRef = useRef<HTMLDivElement | null>(null);
+  const pendingBookingRef = useRef<HTMLButtonElement | null>(null);
 
   const updateDragState = (nextState: DragState | null) => {
     dragStateRef.current = nextState;
@@ -852,7 +1245,16 @@ export const WorkshopSchedulerScreen = ({
   const view = controlledView ?? standaloneView;
   const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
   const selectedTechnicianId = technicianId ?? internalTechnicianId;
-  const requestedRange = useMemo(() => buildVisibleRange(anchorDateKey, view), [anchorDateKey, view]);
+  const requestedRange = useMemo(
+    () => buildVisibleRange(anchorDateKey, view, weekRangeMode),
+    [anchorDateKey, view, weekRangeMode],
+  );
+  const schedulerZoomOption = useMemo(
+    () => SCHEDULER_ZOOM_OPTIONS.find((option) => option.value === schedulerZoom) ?? SCHEDULER_ZOOM_OPTIONS[1],
+    [schedulerZoom],
+  );
+  const pxPerMinute = schedulerZoomOption.pxPerMinute;
+  const minBookingBlockHeight = getMinimumBookingBlockHeight(pxPerMinute);
   const calendarTimeZone = calendar?.range.timeZone;
   const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey();
 
@@ -895,6 +1297,10 @@ export const WorkshopSchedulerScreen = ({
     setInternalTechnicianId(nextTechnicianId);
   };
 
+  const changeSchedulerZoom = (nextZoom: SchedulerZoomLevel) => {
+    setSchedulerZoom(nextZoom);
+  };
+
   const loadCalendar = async () => {
     setLoading(true);
     setLoadError(null);
@@ -921,15 +1327,65 @@ export const WorkshopSchedulerScreen = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedRange.from, requestedRange.to, refreshToken]);
 
+  useEffect(() => {
+    persistSchedulerZoomLevel(schedulerZoom);
+  }, [schedulerZoom]);
+
   const days = calendar?.days ?? [];
-  const daysByDateKey = useMemo(
+  const timeline = useMemo(() => buildTimelineRange(days), [days]);
+  const dayByDate = useMemo(
     () => new Map(days.map((day) => [day.date, day])),
     [days],
   );
-  const timeline = useMemo(() => buildTimelineRange(days), [days]);
   const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
-  const trackHeight = Math.max(660, timeline.totalMinutes * PX_PER_MINUTE);
-  const dayColumnWidth = view === "week" ? WEEK_DAY_WIDTH : DAY_VIEW_WIDTH;
+  const trackHeight = Math.max(MIN_SCHEDULER_TRACK_HEIGHT, timeline.totalMinutes * pxPerMinute);
+  const dayColumnWidth = useMemo(() => {
+    if (view !== "week") {
+      return DAY_VIEW_WIDTH;
+    }
+
+    const visibleDayCount = Math.max(days.length, 1);
+    const availableWidth = schedulerViewportWidth - TIME_AXIS_WIDTH;
+    if (availableWidth <= 0) {
+      return WEEK_DAY_WIDTH;
+    }
+
+    return Math.max(WEEK_DAY_WIDTH, Math.floor(availableWidth / visibleDayCount));
+  }, [days.length, schedulerViewportWidth, view]);
+  const schedulerGridTemplateColumns = useMemo(() => {
+    if (view === "week") {
+      return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, minmax(${WEEK_DAY_WIDTH}px, 1fr))`;
+    }
+
+    return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)`;
+  }, [dayColumnWidth, days.length, view]);
+
+  useEffect(() => {
+    const node = schedulerScrollRef.current;
+    if (!node) {
+      return;
+    }
+
+    const updateWidth = (nextWidth: number) => {
+      setSchedulerViewportWidth((current) => {
+        const rounded = Math.max(0, Math.floor(nextWidth));
+        return current === rounded ? current : rounded;
+      });
+    };
+
+    updateWidth(node.clientWidth);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      updateWidth(entry.contentRect.width);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [days.length, view]);
   const scheduledJobs = calendar?.scheduledJobs ?? [];
   const unassignedJobs = calendar?.unassignedJobs ?? [];
   const unscheduledJobs = calendar?.unscheduledJobs ?? [];
@@ -949,18 +1405,6 @@ export const WorkshopSchedulerScreen = ({
     const entries = [...filteredScheduledJobs, ...filteredUnassignedJobs, ...filteredUnscheduledJobs];
     return new Map(entries.map((job) => [job.id, job]));
   }, [filteredScheduledJobs, filteredUnassignedJobs, filteredUnscheduledJobs]);
-  const selectedJob = selectedJobId ? allJobsById.get(selectedJobId) ?? null : null;
-
-  useEffect(() => {
-    if (!selectedJobId) {
-      return;
-    }
-
-    if (!allJobsById.has(selectedJobId)) {
-      setSelectedJobId(null);
-      setScheduleError(null);
-    }
-  }, [allJobsById, selectedJobId]);
 
   useEffect(() => {
     if (!requestedOverlayJobId) {
@@ -972,8 +1416,6 @@ export const WorkshopSchedulerScreen = ({
       return;
     }
 
-    setSelectedJobId(null);
-    setScheduleError(null);
     setOverlaySummary(toOverlaySummary(requestedJob));
     setOverlayJobId(requestedOverlayJobId);
     onRequestedOverlayJobHandled?.();
@@ -984,6 +1426,68 @@ export const WorkshopSchedulerScreen = ({
       changeTechnicianId("");
     }
   }, [calendar?.staff, selectedTechnicianId]);
+
+  useEffect(() => {
+    if (!pendingTechnicianPrompt) {
+      return;
+    }
+
+    const dismissPendingPrompt = () => {
+      setPendingTechnicianPrompt(null);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (
+        target
+        && (
+          technicianPickerRef.current?.contains(target)
+          || pendingBookingRef.current?.contains(target)
+        )
+      ) {
+        return;
+      }
+      dismissPendingPrompt();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        dismissPendingPrompt();
+      }
+    };
+
+    const handleViewportChange = () => {
+      dismissPendingPrompt();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [pendingTechnicianPrompt]);
+
+  useLayoutEffect(() => {
+    if (!pendingTechnicianPrompt) {
+      setPendingTechnicianPickerHeight(TECHNICIAN_PICKER_MIN_HEIGHT);
+      return;
+    }
+
+    const nextHeight = technicianPickerRef.current?.getBoundingClientRect().height;
+    if (!nextHeight) {
+      return;
+    }
+
+    setPendingTechnicianPickerHeight((current) => {
+      const rounded = Math.max(TECHNICIAN_PICKER_MIN_HEIGHT, Math.ceil(nextHeight));
+      return current === rounded ? current : rounded;
+    });
+  }, [calendar?.staff?.length, pendingTechnicianPrompt]);
 
   const visibleScheduledJobs = useMemo(
     () => (
@@ -1012,10 +1516,6 @@ export const WorkshopSchedulerScreen = ({
   }, [days, visibleScheduledJobs]);
 
   useEffect(() => {
-    if (!dragState) {
-      return;
-    }
-
     const getDayTrackTarget = (clientX: number) => {
       for (const day of days) {
         const track = dayTrackRefs.current[day.date];
@@ -1041,22 +1541,101 @@ export const WorkshopSchedulerScreen = ({
         return;
       }
 
-      const target =
-        current.source === "queue"
-          ? getDayTrackTarget(event.clientX)
-          : current.dateKey
-            ? {
-                dateKey: current.dateKey,
-                track: dayTrackRefs.current[current.dateKey],
-              }
-            : null;
-      const track = target?.track;
-      const nextDateKey = target?.dateKey ?? null;
       const nextActive = current.active
         || Math.max(
           Math.abs(event.clientX - current.startClientX),
           Math.abs(event.clientY - current.startClientY),
         ) >= DRAG_START_THRESHOLD_PX;
+
+      if (current.interaction === "resize-top" || current.interaction === "resize-bottom") {
+        if (!current.dateKey || current.fixedBoundaryMinutes === null) {
+          return;
+        }
+
+        const track = dayTrackRefs.current[current.dateKey];
+        if (!track) {
+          return;
+        }
+
+        if (!nextActive) {
+          return;
+        }
+
+        const bounds = getDayScheduleBounds(dayByDate.get(current.dateKey), timeline);
+        const pointerMinutes =
+          timeline.openMinutes
+          + ((event.clientY - track.getBoundingClientRect().top) / pxPerMinute);
+        const snappedMinutes = snapMinutesToGrid(pointerMinutes, DRAG_SNAP_MINUTES);
+
+        let snappedStartMinutes = current.snappedStartMinutes;
+        let durationMinutes = current.durationMinutes;
+
+        if (current.interaction === "resize-top") {
+          const maxStartMinutes = Math.max(
+            bounds.openMinutes,
+            current.fixedBoundaryMinutes - MIN_SCHEDULE_DURATION_MINUTES,
+          );
+          snappedStartMinutes = clamp(snappedMinutes, bounds.openMinutes, maxStartMinutes);
+          durationMinutes = current.fixedBoundaryMinutes - snappedStartMinutes;
+        } else {
+          const minEndMinutes = current.fixedBoundaryMinutes + MIN_SCHEDULE_DURATION_MINUTES;
+          const maxEndMinutes = Math.max(minEndMinutes, bounds.closeMinutes);
+          const snappedEndMinutes = clamp(snappedMinutes, minEndMinutes, maxEndMinutes);
+          snappedStartMinutes = current.fixedBoundaryMinutes;
+          durationMinutes = snappedEndMinutes - current.fixedBoundaryMinutes;
+        }
+
+        const previewPosition = buildPreviewPosition({
+          job: current.job,
+          jobs: jobsByDay.get(current.dateKey) ?? [],
+          dateKey: current.dateKey,
+          startMinutes: snappedStartMinutes,
+          durationMinutes,
+          openMinutes: timeline.openMinutes,
+          closeMinutes: timeline.closeMinutes,
+          columnWidth: dayColumnWidth,
+          pxPerMinute,
+          minBookingBlockHeight,
+          timeZone: calendarTimeZone,
+        });
+        const nextTop =
+          previewPosition?.top
+          ?? ((snappedStartMinutes - timeline.openMinutes) * pxPerMinute);
+        const nextLeft = previewPosition?.left ?? current.left;
+        const nextWidth = previewPosition?.width ?? current.width;
+        const nextHeight =
+          previewPosition?.height
+          ?? Math.max(minBookingBlockHeight, durationMinutes * pxPerMinute);
+
+        if (
+          nextTop === current.currentTop
+          && nextLeft === current.left
+          && nextWidth === current.width
+          && nextHeight === current.height
+          && snappedStartMinutes === current.snappedStartMinutes
+          && durationMinutes === current.durationMinutes
+          && nextActive === current.active
+        ) {
+          return;
+        }
+
+        updateDragState({
+          ...current,
+          active: nextActive,
+          left: nextLeft,
+          width: nextWidth,
+          height: nextHeight,
+          currentTop: nextTop,
+          snappedStartMinutes,
+          durationMinutes,
+        });
+        event.preventDefault();
+        return;
+      }
+
+      const target = getDayTrackTarget(event.clientX);
+      const track = target?.track;
+      const nextDateKey = target?.dateKey ?? null;
 
       if (!nextActive && !track) {
         return;
@@ -1076,7 +1655,7 @@ export const WorkshopSchedulerScreen = ({
       }
 
       const relativeTop = event.clientY - track.getBoundingClientRect().top - current.pointerOffsetY;
-      const rawMinutes = timeline.openMinutes + (relativeTop / PX_PER_MINUTE);
+      const rawMinutes = timeline.openMinutes + (relativeTop / pxPerMinute);
       const maxStartMinutes = Math.max(timeline.openMinutes, timeline.closeMinutes - current.durationMinutes);
       const snappedStartMinutes = clamp(
         snapMinutesToGrid(rawMinutes, DRAG_SNAP_MINUTES),
@@ -1092,16 +1671,18 @@ export const WorkshopSchedulerScreen = ({
         openMinutes: timeline.openMinutes,
         closeMinutes: timeline.closeMinutes,
         columnWidth: dayColumnWidth,
+        pxPerMinute,
+        minBookingBlockHeight,
         timeZone: calendarTimeZone,
       });
       const nextTop =
         previewPosition?.top
-        ?? ((snappedStartMinutes - timeline.openMinutes) * PX_PER_MINUTE);
+        ?? ((snappedStartMinutes - timeline.openMinutes) * pxPerMinute);
       const nextLeft = previewPosition?.left ?? 0;
       const nextWidth = previewPosition?.width ?? dayColumnWidth;
       const nextHeight =
         previewPosition?.height
-        ?? Math.max(MIN_BOOKING_BLOCK_HEIGHT, current.durationMinutes * PX_PER_MINUTE);
+        ?? Math.max(minBookingBlockHeight, current.durationMinutes * pxPerMinute);
 
       if (
         !nextActive
@@ -1142,13 +1723,37 @@ export const WorkshopSchedulerScreen = ({
       }
 
       if (!current.dateKey) {
-        error("Drop the job onto a visible day column to create a timed booking.");
+        error(
+          current.source === "queue"
+            ? "Drop the job onto a visible day column to create a timed booking."
+            : "Drop the booking onto a visible day column to move it.",
+        );
         return;
       }
 
       if (current.source === "calendar") {
         suppressClickJobIdRef.current = current.job.id;
       }
+
+      if (current.source === "queue" && current.queueKind === "unassigned" && !current.staffId) {
+        setPendingTechnicianPrompt({
+          source: "queue",
+          interaction: "move",
+          queueKind: "unassigned",
+          job: current.job,
+          dateKey: current.dateKey,
+          staffId: null,
+          left: current.left,
+          width: current.width,
+          height: current.height,
+          currentTop: current.currentTop,
+          snappedStartMinutes: current.snappedStartMinutes,
+          durationMinutes: current.durationMinutes,
+          fixedBoundaryMinutes: null,
+        });
+        return;
+      }
+
       void persistDraggedSchedule(current);
     };
 
@@ -1164,7 +1769,7 @@ export const WorkshopSchedulerScreen = ({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerCancel);
     };
-  }, [calendarTimeZone, dayColumnWidth, days, dragState, error, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendarTimeZone, dayByDate, dayColumnWidth, days, dragState, error, jobsByDay, minBookingBlockHeight, pxPerMinute, timeline]);
 
   const positionedJobsByDay = useMemo(() => {
     const next = new Map<string, PositionedJob[]>();
@@ -1176,12 +1781,14 @@ export const WorkshopSchedulerScreen = ({
           timeline.openMinutes,
           timeline.closeMinutes,
           dayColumnWidth,
+          pxPerMinute,
+          minBookingBlockHeight,
           calendarTimeZone,
         ),
       );
     });
     return next;
-  }, [calendarTimeZone, dayColumnWidth, days, jobsByDay, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendarTimeZone, dayColumnWidth, days, jobsByDay, minBookingBlockHeight, pxPerMinute, timeline.closeMinutes, timeline.openMinutes]);
 
   const workshopTimeOffByDay = useMemo(() => {
     const next = new Map<string, TimeOffBlock[]>();
@@ -1200,12 +1807,13 @@ export const WorkshopSchedulerScreen = ({
           day.date,
           timeline.openMinutes,
           timeline.closeMinutes,
+          pxPerMinute,
           calendarTimeZone,
         ),
       );
     });
     return next;
-  }, [calendar?.workshopTimeOff, calendarTimeZone, days, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
+  }, [calendar?.workshopTimeOff, calendarTimeZone, days, pxPerMinute, selectedTechnicianId, timeline.closeMinutes, timeline.openMinutes]);
 
   const staffCount = calendar?.staff.length ?? 0;
   const staffFilterOptions = calendar?.staff ?? [];
@@ -1215,21 +1823,7 @@ export const WorkshopSchedulerScreen = ({
     [staffFilterOptions],
   );
 
-  const openEditor = (job: CalendarJob, preferredDateKey?: string) => {
-    const editorDateKey = preferredDateKey || getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey;
-    setSelectedJobId(job.id);
-    setDraft(buildInitialDraft(job, editorDateKey, daysByDateKey.get(editorDateKey), calendarTimeZone));
-    setScheduleError(null);
-  };
-
-  const closeEditor = () => {
-    setSelectedJobId(null);
-    setScheduleError(null);
-  };
-
   const openJobOverlay = (job: CalendarJob) => {
-    setSelectedJobId(null);
-    setScheduleError(null);
     setOverlaySummary(toOverlaySummary(job));
     setOverlayJobId(job.id);
   };
@@ -1244,21 +1838,84 @@ export const WorkshopSchedulerScreen = ({
     ? toOverlaySummary(selectedOverlayJob)
     : overlaySummary;
 
-  const persistDraggedSchedule = async (state: DragState) => {
+  const completePendingTechnicianPrompt = async (staffId: string) => {
+    if (!pendingTechnicianPrompt) {
+      return;
+    }
+
+    const didPersist = await persistDraggedSchedule({
+      ...pendingTechnicianPrompt,
+      staffId,
+    });
+    if (didPersist) {
+      setPendingTechnicianPrompt(null);
+    }
+  };
+
+  const pendingTechnicianPickerLayout = useMemo<PendingTechnicianPickerLayout | null>(() => {
+    if (!pendingTechnicianPrompt || typeof window === "undefined") {
+      return null;
+    }
+
+    const track = dayTrackRefs.current[pendingTechnicianPrompt.dateKey];
+    if (!track) {
+      return null;
+    }
+
+    const trackRect = track.getBoundingClientRect();
+    const pickerHeight = pendingTechnicianPickerHeight;
+    const viewportMaxTop = Math.max(TECHNICIAN_PICKER_VIEWPORT_GAP, window.innerHeight - pickerHeight - TECHNICIAN_PICKER_VIEWPORT_GAP);
+    const anchorTop = trackRect.top + pendingTechnicianPrompt.currentTop;
+    const anchorBottom = anchorTop + pendingTechnicianPrompt.height;
+    const spaceBelow = window.innerHeight - anchorBottom - TECHNICIAN_PICKER_VIEWPORT_GAP;
+    const spaceAbove = anchorTop - TECHNICIAN_PICKER_VIEWPORT_GAP;
+    const preferredTop = spaceBelow >= pickerHeight || spaceBelow >= spaceAbove
+      ? anchorBottom + 8
+      : anchorTop - pickerHeight - 8;
+    const top = clampPickerPosition(preferredTop, TECHNICIAN_PICKER_VIEWPORT_GAP, viewportMaxTop);
+    const preferredLeft = trackRect.left + pendingTechnicianPrompt.left + 8;
+    const left = clampPickerPosition(
+      preferredLeft,
+      TECHNICIAN_PICKER_VIEWPORT_GAP,
+      Math.max(TECHNICIAN_PICKER_VIEWPORT_GAP, window.innerWidth - TECHNICIAN_PICKER_WIDTH - TECHNICIAN_PICKER_VIEWPORT_GAP),
+    );
+    const maxHeight = Math.max(96, window.innerHeight - (top + TECHNICIAN_PICKER_VIEWPORT_GAP));
+
+    return { top, left, maxHeight };
+  }, [pendingTechnicianPickerHeight, pendingTechnicianPrompt]);
+  const isDraggingPendingTechnicianPrompt = Boolean(
+    pendingTechnicianPrompt
+    && dragState?.job.id === pendingTechnicianPrompt.job.id,
+  );
+
+  const getDragPreviewMetaLabel = (state: PlacementState) => {
+    if (state.interaction === "resize-top" || state.interaction === "resize-bottom") {
+      return `Release to resize to ${buildBlockTimeLabel(state.snappedStartMinutes, state.durationMinutes)}`;
+    }
+
+    if (state.source === "queue") {
+      return state.queueKind === "unassigned" && !state.staffId
+        ? `Drop to place, then pick technician at ${formatClockLabel(state.snappedStartMinutes)}`
+        : `Drop to schedule${state.staffId && selectedTechnician ? ` with ${selectedTechnician.name}` : ""} at ${formatClockLabel(state.snappedStartMinutes)}`;
+    }
+
+    return `Drop to move this booking to ${formatClockLabel(state.snappedStartMinutes)}`;
+  };
+
+  const persistDraggedSchedule = async (state: PlacementState) => {
     if (!state.dateKey) {
       error("Could not calculate a workshop day for this drop.");
-      return;
+      return false;
     }
 
     const startTimeValue = formatClockLabel(state.snappedStartMinutes);
     const scheduledStartAt = buildScheduleIso(state.dateKey, startTimeValue);
     if (!scheduledStartAt) {
       error("Could not calculate the dropped booking time.");
-      return;
+      return false;
     }
 
     setDragSavingJobId(state.job.id);
-    setScheduleError(null);
 
     try {
       const response = await apiPatch<SchedulePatchResponse>(
@@ -1270,16 +1927,6 @@ export const WorkshopSchedulerScreen = ({
         },
       );
 
-      if (selectedJobId === state.job.id) {
-        setDraft((current) => ({
-          ...current,
-          dateKey: state.dateKey,
-          staffId: state.staffId || "",
-          startTime: startTimeValue,
-          durationMinutes: `${state.durationMinutes}`,
-        }));
-      }
-
       const assignedStaffName = state.staffId
         ? staffFilterOptions.find((staff) => staff.id === state.staffId)?.name ?? null
         : null;
@@ -1289,15 +1936,18 @@ export const WorkshopSchedulerScreen = ({
       success(
         response.idempotent
           ? `Booking already matched ${placementLabel}.`
-          : state.source === "queue"
+          : state.interaction === "resize-top" || state.interaction === "resize-bottom"
+            ? `Booking resized to ${timeLabel}.`
+            : state.source === "queue"
             ? `Scheduled for ${placementLabel}.`
             : `Booking moved to ${placementLabel}.`,
       );
       await loadCalendar();
+      return true;
     } catch (dragError) {
       const message = dragError instanceof Error ? dragError.message : "Failed to update workshop schedule";
-      setScheduleError(message);
       error(message);
+      return false;
     } finally {
       setDragSavingJobId(null);
     }
@@ -1312,19 +1962,62 @@ export const WorkshopSchedulerScreen = ({
     left: number,
     width: number,
   ) => {
-    if (event.button !== 0 || saving || Boolean(dragSavingJobId)) {
+    if (event.button !== 0 || Boolean(dragSavingJobId)) {
       return;
     }
 
+    const blockRect = event.currentTarget.getBoundingClientRect();
+    const pointerOffsetY = event.clientY - blockRect.top;
+    const resizeEdge =
+      pointerOffsetY <= 12
+        ? "top"
+        : blockRect.height - pointerOffsetY <= 12
+          ? "bottom"
+          : null;
     const durationMinutes = getScheduledDurationMinutes(job, calendarTimeZone);
     const startMinutes = getMinutesInTimeZone(job.scheduledStartAt, calendarTimeZone);
     if (!durationMinutes || startMinutes === null) {
       return;
     }
 
-    const blockRect = event.currentTarget.getBoundingClientRect();
+    if (resizeEdge === "top" || resizeEdge === "bottom") {
+      const dayBounds = getDayScheduleBounds(dayByDate.get(dateKey), timeline);
+      if (dayBounds.isClosed) {
+        error("Closed workshop days can't be resized from the calendar.");
+        return;
+      }
+
+      event.preventDefault();
+      setPendingTechnicianPrompt(null);
+
+      updateDragState({
+        source: "calendar",
+        interaction: resizeEdge === "top" ? "resize-top" : "resize-bottom",
+        queueKind: null,
+        pointerId: event.pointerId,
+        job,
+        dateKey,
+        staffId: job.assignedStaffId || null,
+        left,
+        width,
+        height,
+        pointerOffsetY,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        currentTop: top,
+        snappedStartMinutes: startMinutes,
+        durationMinutes,
+        fixedBoundaryMinutes: resizeEdge === "top" ? startMinutes + durationMinutes : startMinutes,
+        active: false,
+      });
+      return;
+    }
+
+    setPendingTechnicianPrompt(null);
     updateDragState({
       source: "calendar",
+      interaction: "move",
+      queueKind: null,
       pointerId: event.pointerId,
       job,
       dateKey,
@@ -1332,12 +2025,44 @@ export const WorkshopSchedulerScreen = ({
       left,
       width,
       height,
-      pointerOffsetY: event.clientY - blockRect.top,
+      pointerOffsetY,
       startClientX: event.clientX,
       startClientY: event.clientY,
       currentTop: top,
       snappedStartMinutes: startMinutes,
       durationMinutes,
+      fixedBoundaryMinutes: null,
+      active: false,
+    });
+  };
+
+  const handlePendingPromptPointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    pendingPrompt: PendingTechnicianPromptState,
+  ) => {
+    if (event.button !== 0 || Boolean(dragSavingJobId)) {
+      return;
+    }
+
+    const blockRect = event.currentTarget.getBoundingClientRect();
+    updateDragState({
+      source: "queue",
+      interaction: "move",
+      queueKind: "unassigned",
+      pointerId: event.pointerId,
+      job: pendingPrompt.job,
+      dateKey: pendingPrompt.dateKey,
+      staffId: null,
+      left: pendingPrompt.left,
+      width: pendingPrompt.width,
+      height: pendingPrompt.height,
+      pointerOffsetY: event.clientY - blockRect.top,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      currentTop: pendingPrompt.currentTop,
+      snappedStartMinutes: pendingPrompt.snappedStartMinutes,
+      durationMinutes: pendingPrompt.durationMinutes,
+      fixedBoundaryMinutes: null,
       active: false,
     });
   };
@@ -1345,11 +2070,11 @@ export const WorkshopSchedulerScreen = ({
   const handleQueueJobPointerDown = (
     event: ReactPointerEvent<HTMLElement>,
     job: CalendarJob,
+    queueKind: QueuePlacementKind,
   ) => {
     const target = event.target as HTMLElement | null;
     if (
       event.button !== 0
-      || saving
       || Boolean(dragSavingJobId)
       || target?.closest("button, a, input, select, textarea")
     ) {
@@ -1357,12 +2082,15 @@ export const WorkshopSchedulerScreen = ({
     }
 
     const durationMinutes = getScheduledDurationMinutes(job, calendarTimeZone);
-    const previewHeight = Math.max(MIN_BOOKING_BLOCK_HEIGHT, durationMinutes * PX_PER_MINUTE);
+    const previewHeight = Math.max(minBookingBlockHeight, durationMinutes * pxPerMinute);
 
     event.preventDefault();
+    setPendingTechnicianPrompt(null);
 
     updateDragState({
       source: "queue",
+      interaction: "move",
+      queueKind,
       pointerId: event.pointerId,
       job,
       dateKey: null,
@@ -1376,6 +2104,7 @@ export const WorkshopSchedulerScreen = ({
       currentTop: 0,
       snappedStartMinutes: timeline.openMinutes,
       durationMinutes,
+      fixedBoundaryMinutes: null,
       active: false,
     });
   };
@@ -1387,80 +2116,6 @@ export const WorkshopSchedulerScreen = ({
     }
 
     openJobOverlay(job);
-  };
-
-  const saveSchedule = async () => {
-    if (!selectedJob) {
-      return;
-    }
-
-    const scheduledStartAt = buildScheduleIso(draft.dateKey, draft.startTime);
-    const durationMinutes = Number(draft.durationMinutes);
-
-    if (!draft.dateKey) {
-      setScheduleError("Choose a valid calendar date.");
-      return;
-    }
-    if (!scheduledStartAt) {
-      setScheduleError("Choose a valid start time.");
-      return;
-    }
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-      setScheduleError("Duration must be a positive whole number of minutes.");
-      return;
-    }
-
-    setSaving(true);
-    setScheduleError(null);
-
-    try {
-      const response = await apiPatch<SchedulePatchResponse>(
-        `/api/workshop/jobs/${encodeURIComponent(selectedJob.id)}/schedule`,
-        {
-          staffId: draft.staffId || null,
-          scheduledStartAt,
-          durationMinutes,
-        },
-      );
-
-      success(response.idempotent ? "Schedule already matches." : "Workshop schedule updated.");
-      await loadCalendar();
-      closeEditor();
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : "Failed to update workshop schedule";
-      setScheduleError(message);
-      error(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const clearSchedule = async () => {
-    if (!selectedJob) {
-      return;
-    }
-
-    setSaving(true);
-    setScheduleError(null);
-
-    try {
-      const response = await apiPatch<SchedulePatchResponse>(
-        `/api/workshop/jobs/${encodeURIComponent(selectedJob.id)}/schedule`,
-        {
-          clearSchedule: true,
-        },
-      );
-
-      success(response.idempotent ? "Timed schedule already cleared." : "Timed schedule cleared.");
-      await loadCalendar();
-      closeEditor();
-    } catch (clearError) {
-      const message = clearError instanceof Error ? clearError.message : "Failed to clear timed schedule";
-      setScheduleError(message);
-      error(message);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const toolbarLeadingAction: ReactNode = backLinkTo ? (
@@ -1511,6 +2166,25 @@ export const WorkshopSchedulerScreen = ({
                 Day
               </button>
             </div>
+
+            <label className="workshop-scheduler-toolbar__filter">
+              Zoom
+              <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Scheduler zoom level">
+                {SCHEDULER_ZOOM_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={schedulerZoom === option.value}
+                    className={schedulerZoom === option.value ? "primary" : ""}
+                    data-testid={`workshop-scheduler-zoom-${option.value}`}
+                    onClick={() => changeSchedulerZoom(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </label>
 
             <div className="actions-inline">
               <button
@@ -1574,6 +2248,17 @@ export const WorkshopSchedulerScreen = ({
                   : "Showing all scheduled workshop work"}
               </span>
             </article>
+            <article className="metric-card">
+              <span className="metric-label">Zoom</span>
+              <strong className="metric-value">{schedulerZoomOption.label}</strong>
+              <span className="dashboard-metric-detail">
+                {schedulerZoom === "compact"
+                  ? "More time visible for weekly overview"
+                  : schedulerZoom === "comfortable"
+                    ? "Larger booking blocks for precise edits"
+                    : "Balanced default density for daily planning"}
+              </span>
+            </article>
           </div>
         </section>
       ) : null}
@@ -1589,37 +2274,62 @@ export const WorkshopSchedulerScreen = ({
           <div className="workshop-scheduler-board__header">
             <div>
               <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
-              <p className="muted-text">
-                Scheduled jobs render as timed blocks in the grid. Pick a booking to adjust timing and assignment without leaving the scheduler.
-              </p>
             </div>
-            <div className="table-secondary">
-              {calendar?.range.timeZone || "Local"} time
-            </div>
+            {!showToolbar ? (
+              <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Scheduler zoom level">
+                {SCHEDULER_ZOOM_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={schedulerZoom === option.value}
+                    className={schedulerZoom === option.value ? "primary" : ""}
+                    data-testid={`workshop-scheduler-zoom-${option.value}`}
+                    onClick={() => changeSchedulerZoom(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          <div className="workshop-scheduler-scroll">
+          <div ref={schedulerScrollRef} className="workshop-scheduler-scroll">
             <div
               className="workshop-scheduler-grid"
-              style={{ gridTemplateColumns: `88px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)` }}
+              style={{ gridTemplateColumns: schedulerGridTemplateColumns }}
             >
               <div className="workshop-scheduler-grid__corner">Time</div>
 
               {days.map((day) => {
                 const dayCapacity = toDayCapacitySummary(calendar?.staff ?? [], day.date, selectedTechnicianId);
+                const technicianAvailability = getDayTechnicianAvailabilitySummary(
+                  calendar?.staff ?? [],
+                  day.date,
+                  selectedTechnicianId,
+                );
                 const visibleDayJobs = jobsByDay.get(day.date)?.length ?? 0;
+                const isToday = day.date === todayKey;
 
                 return (
-                  <div key={day.date} className="workshop-scheduler-grid__day-header">
+                  <div
+                    key={day.date}
+                    className={`workshop-scheduler-grid__day-header${isToday ? " workshop-scheduler-grid__day-header--today" : ""}`}
+                    data-testid={`workshop-scheduler-day-header-${day.date}`}
+                    data-current-day={isToday ? "true" : "false"}
+                  >
                     <strong>{day.weekday}</strong>
                     <span>{formatOptionalDate(`${day.date}T12:00:00.000Z`, calendarTimeZone)}</span>
-                    <span>
-                      {day.isClosed
-                        ? "Closed"
-                        : `${day.opensAt || "--:--"} - ${day.closesAt || "--:--"}`}
+                    <span
+                      className={technicianAvailability.hasAvailability
+                        ? "workshop-scheduler-grid__day-header-availability"
+                        : "workshop-scheduler-grid__day-header-availability workshop-scheduler-grid__day-header-availability--empty"}
+                      title={technicianAvailability.title}
+                    >
+                      {technicianAvailability.label}
                     </span>
-                    <span>{visibleDayJobs} jobs</span>
-                    <span>
+                    <span className="workshop-scheduler-grid__day-header-summary">
+                      {visibleDayJobs} jobs · {" "}
                       {dayCapacity.totalMinutes
                         ? `${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
                         : "Capacity unavailable"}
@@ -1633,7 +2343,7 @@ export const WorkshopSchedulerScreen = ({
                   <div
                     key={minutes}
                     className="workshop-scheduler-grid__time-label mono-text"
-                    style={{ top: `${(minutes - timeline.openMinutes) * PX_PER_MINUTE}px` }}
+                    style={{ top: `${(minutes - timeline.openMinutes) * pxPerMinute}px` }}
                   >
                     {formatClockLabel(minutes)}
                   </div>
@@ -1644,6 +2354,14 @@ export const WorkshopSchedulerScreen = ({
                 const dayBlocks = positionedJobsByDay.get(day.date) ?? [];
                 const timeOffBlocks = workshopTimeOffByDay.get(day.date) ?? [];
                 const previewBlock = dragState?.active && dragState.dateKey === day.date ? dragState : null;
+                const pendingPrompt = pendingTechnicianPrompt?.dateKey === day.date ? pendingTechnicianPrompt : null;
+                const previewDensity = previewBlock
+                  ? getSchedulerBlockDensity(previewBlock.height)
+                  : null;
+                const pendingDensity = pendingPrompt
+                  ? getSchedulerBlockDensity(pendingPrompt.height)
+                  : null;
+                const isToday = day.date === todayKey;
 
                 return (
                   <div
@@ -1651,14 +2369,15 @@ export const WorkshopSchedulerScreen = ({
                     ref={(node) => {
                       dayTrackRefs.current[day.date] = node;
                     }}
-                    className={`workshop-scheduler-grid__day-track${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}${previewBlock ? " workshop-scheduler-grid__day-track--drag-active" : ""}`}
+                    className={`workshop-scheduler-grid__day-track${isToday ? " workshop-scheduler-grid__day-track--today" : ""}${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}${previewBlock ? " workshop-scheduler-grid__day-track--drag-active" : ""}`}
+                    data-testid={`workshop-scheduler-day-track-${day.date}`}
                     style={{ height: `${trackHeight}px` }}
                   >
                     {timeLabels.map((minutes) => (
                       <span
                         key={`${day.date}-${minutes}`}
                         className="workshop-scheduler-grid__hour-line"
-                        style={{ top: `${(minutes - timeline.openMinutes) * PX_PER_MINUTE}px` }}
+                        style={{ top: `${(minutes - timeline.openMinutes) * pxPerMinute}px` }}
                       />
                     ))}
 
@@ -1673,15 +2392,19 @@ export const WorkshopSchedulerScreen = ({
                     ))}
 
                     {dayBlocks.map(({ job, top, height, left, width }) => {
-                      const isCompactBlock = height < COMPACT_BOOKING_BLOCK_HEIGHT;
+                      const density = getSchedulerBlockDensity(height);
                       const isDragging = dragState?.active && dragState.job.id === job.id;
-                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${selectedJobId === job.id ? " workshop-scheduler-block--selected" : ""}${isCompactBlock ? " workshop-scheduler-block--compact" : ""}${isDragging ? " workshop-scheduler-block--dragging" : ""}`;
+                      const interactionClass = isDragging
+                        ? getInteractionModifierClass(dragState?.interaction ?? "move")
+                        : "";
+                      const toneClass = `${buildJobToneClass(job, todayKey, calendarTimeZone)}${getSchedulerBlockDensityClass(density)}${isDragging ? " workshop-scheduler-block--dragging" : ""}${interactionClass}`;
 
                       return (
                         <button
                           key={job.id}
                           type="button"
                           className={toneClass}
+                          data-testid={`workshop-scheduler-job-${job.id}`}
                           title={getBookingTooltip(job, calendarTimeZone)}
                           style={{
                             top: `${top}px`,
@@ -1691,22 +2414,36 @@ export const WorkshopSchedulerScreen = ({
                           }}
                           onPointerDown={(event) => handleJobBlockPointerDown(event, job, day.date, top, height, left, width)}
                           onClick={() => handleJobBlockClick(job)}
-                          disabled={saving || dragSavingJobId === job.id}
+                          disabled={dragSavingJobId === job.id}
                         >
+                          <span
+                            className="workshop-scheduler-block__resize-handle workshop-scheduler-block__resize-handle--top"
+                            data-testid={`workshop-scheduler-job-resize-top-${job.id}`}
+                            data-resize-edge="top"
+                            aria-hidden="true"
+                          />
+                          <span
+                            className="workshop-scheduler-block__resize-handle workshop-scheduler-block__resize-handle--bottom"
+                            data-testid={`workshop-scheduler-job-resize-bottom-${job.id}`}
+                            data-resize-edge="bottom"
+                            aria-hidden="true"
+                          />
                           {renderSchedulerBlockContent({
                             job,
                             timeLabel: `${formatOptionalTime(job.scheduledStartAt, calendarTimeZone)} - ${formatOptionalTime(job.scheduledEndAt, calendarTimeZone)}`,
                             metaLabel: getBookingMetaLine(job, todayKey, calendarTimeZone),
-                            isCompactBlock,
+                            density,
+                            todayKey,
+                            timeZone: calendarTimeZone,
                           })}
                         </button>
                       );
                     })}
 
-                    {previewBlock ? (
+                    {previewBlock && previewDensity ? (
                       <div
                         aria-hidden="true"
-                        className={`${buildJobToneClass(previewBlock.job, todayKey, calendarTimeZone)} workshop-scheduler-block--drag-preview${previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT ? " workshop-scheduler-block--compact" : ""}`}
+                        className={`${buildJobToneClass(previewBlock.job, todayKey, calendarTimeZone)} workshop-scheduler-block--drag-preview${getSchedulerBlockDensityClass(previewDensity)}${getInteractionModifierClass(previewBlock.interaction)}`}
                         style={{
                           top: `${previewBlock.currentTop}px`,
                           left: `${previewBlock.left}px`,
@@ -1717,17 +2454,93 @@ export const WorkshopSchedulerScreen = ({
                         {renderSchedulerBlockContent({
                           job: previewBlock.job,
                           timeLabel: buildBlockTimeLabel(previewBlock.snappedStartMinutes, previewBlock.durationMinutes),
-                          metaLabel: previewBlock.source === "queue"
-                            ? `Drop to schedule${previewBlock.staffId && selectedTechnician ? ` with ${selectedTechnician.name}` : ""} at ${formatClockLabel(previewBlock.snappedStartMinutes)}`
-                            : `Drop to move this booking to ${formatClockLabel(previewBlock.snappedStartMinutes)}`,
-                          isCompactBlock: previewBlock.height < COMPACT_BOOKING_BLOCK_HEIGHT,
+                          metaLabel: getDragPreviewMetaLabel(previewBlock),
+                          technicianOverride: previewBlock.staffId && selectedTechnician
+                            ? selectedTechnician.name
+                            : null,
+                          density: previewDensity,
+                          todayKey,
+                          timeZone: calendarTimeZone,
                         })}
                       </div>
+                    ) : null}
+
+                    {pendingPrompt && !isDraggingPendingTechnicianPrompt ? (
+                      <>
+                        {pendingDensity ? (
+                        <button
+                          ref={pendingBookingRef}
+                          type="button"
+                          className={`${buildJobToneClass(pendingPrompt.job, todayKey, calendarTimeZone)} workshop-scheduler-block--pending-assignment${getSchedulerBlockDensityClass(pendingDensity)}`}
+                          title={getBookingTooltip(pendingPrompt.job, calendarTimeZone)}
+                          style={{
+                            top: `${pendingPrompt.currentTop}px`,
+                            left: `${pendingPrompt.left}px`,
+                            width: `${pendingPrompt.width}px`,
+                            height: `${pendingPrompt.height}px`,
+                          }}
+                          onPointerDown={(event) => handlePendingPromptPointerDown(event, pendingPrompt)}
+                        >
+                          {renderSchedulerBlockContent({
+                            job: pendingPrompt.job,
+                            timeLabel: buildBlockTimeLabel(pendingPrompt.snappedStartMinutes, pendingPrompt.durationMinutes),
+                            metaLabel: "Choose technician to confirm placement",
+                            density: pendingDensity,
+                            todayKey,
+                            timeZone: calendarTimeZone,
+                          })}
+                        </button>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                 );
               })}
             </div>
+            {pendingTechnicianPrompt && pendingTechnicianPickerLayout && !isDraggingPendingTechnicianPrompt ? (
+              <div
+                ref={technicianPickerRef}
+                className="workshop-scheduler-technician-picker"
+                data-testid={`workshop-scheduler-technician-picker-${pendingTechnicianPrompt.dateKey}`}
+                style={{
+                  top: `${pendingTechnicianPickerLayout.top}px`,
+                  left: `${pendingTechnicianPickerLayout.left}px`,
+                  maxHeight: `${pendingTechnicianPickerLayout.maxHeight}px`,
+                }}
+              >
+                <div className="workshop-scheduler-technician-picker__copy">
+                  <strong>Assign technician</strong>
+                  <span>
+                    {buildBlockTimeLabel(pendingTechnicianPrompt.snappedStartMinutes, pendingTechnicianPrompt.durationMinutes)}
+                    {" "}
+                    on
+                    {" "}
+                    {days.find((day) => day.date === pendingTechnicianPrompt.dateKey)?.weekday ?? pendingTechnicianPrompt.dateKey}
+                  </span>
+                </div>
+                <div className="workshop-scheduler-technician-picker__actions">
+                  {staffFilterOptions.map((staff) => (
+                    <button
+                      key={staff.id}
+                      type="button"
+                      data-testid={`workshop-scheduler-technician-option-${staff.id}`}
+                      onClick={() => void completePendingTechnicianPrompt(staff.id)}
+                      disabled={dragSavingJobId === pendingTechnicianPrompt.job.id}
+                    >
+                      {staff.name}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={() => setPendingTechnicianPrompt(null)}
+                  disabled={dragSavingJobId === pendingTechnicianPrompt.job.id}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -1735,120 +2548,7 @@ export const WorkshopSchedulerScreen = ({
           <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
-                <h2>{selectedJob ? "Booking editor" : "Booking details"}</h2>
-                <p className="muted-text">
-                  {selectedJob
-                    ? "Adjust the selected workshop booking without leaving the schedule."
-                    : "Pick a booking block or queue item to schedule it."}
-                </p>
-              </div>
-              {selectedJob ? (
-                <button type="button" onClick={closeEditor} disabled={saving}>
-                  Close
-                </button>
-              ) : null}
-            </div>
-
-            {selectedJob ? (
-              <div className="workshop-scheduler-editor">
-                <div className="workshop-scheduler-editor__summary">
-                  <strong>{getJobHeading(selectedJob)}</strong>
-                  <span className={workshopRawStatusClass(selectedJob.rawStatus)}>
-                    {workshopRawStatusLabel(selectedJob.rawStatus)}
-                  </span>
-                  <div className="table-secondary">{getJobSubline(selectedJob)}</div>
-                </div>
-
-                <label>
-                  Date
-                  <input
-                    type="date"
-                    value={draft.dateKey}
-                    onChange={(event) => setDraft((current) => ({ ...current, dateKey: event.target.value }))}
-                    disabled={saving}
-                  />
-                </label>
-
-                <label>
-                  Technician
-                  <select
-                    value={draft.staffId}
-                    onChange={(event) => setDraft((current) => ({ ...current, staffId: event.target.value }))}
-                    disabled={saving}
-                  >
-                    <option value="">Leave unassigned</option>
-                    {staffFilterOptions.map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="job-meta-grid">
-                  <label>
-                    Start time
-                    <input
-                      type="time"
-                      value={draft.startTime}
-                      onChange={(event) => setDraft((current) => ({ ...current, startTime: event.target.value }))}
-                      disabled={saving}
-                    />
-                  </label>
-                  <label>
-                    Duration (minutes)
-                    <input
-                      type="number"
-                      min={15}
-                      step={15}
-                      value={draft.durationMinutes}
-                      list="workshop-scheduler-duration-presets"
-                      onChange={(event) => setDraft((current) => ({ ...current, durationMinutes: event.target.value }))}
-                      disabled={saving}
-                    />
-                    <datalist id="workshop-scheduler-duration-presets">
-                      {DURATION_PRESETS.map((value) => (
-                        <option key={value} value={value} />
-                      ))}
-                    </datalist>
-                  </label>
-                </div>
-
-                {scheduleError ? (
-                  <div className="restricted-panel warning-panel">
-                    {scheduleError}
-                  </div>
-                ) : null}
-
-                <div className="actions-inline">
-                  <button type="button" className="primary" onClick={() => void saveSchedule()} disabled={saving}>
-                    {saving ? "Saving..." : selectedJob.scheduledStartAt ? "Save booking" : "Schedule job"}
-                  </button>
-                  {selectedJob.scheduledStartAt ? (
-                    <button type="button" onClick={() => void clearSchedule()} disabled={saving}>
-                      Clear slot
-                    </button>
-                  ) : null}
-                  <button type="button" onClick={() => openJobOverlay(selectedJob)} disabled={saving}>
-                    Open job card
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="ui-empty-state">
-                <strong className="ui-empty-state__title">No booking selected</strong>
-                <span className="ui-empty-state__description">
-                  Use the week grid as the main scheduler, then fine-tune a job here.
-                </span>
-              </div>
-            )}
-          </section>
-
-          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
-            <div className="card-header-row">
-              <div>
                 <h2>Needs scheduling</h2>
-                <p className="muted-text">Drag a job into the calendar to place its first timed slot, or open it to schedule manually.</p>
               </div>
               <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
             </div>
@@ -1859,24 +2559,23 @@ export const WorkshopSchedulerScreen = ({
               ) : filteredUnscheduledJobs.map((job) => (
                 <article
                   key={job.id}
-                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
-                  onPointerDown={(event) => handleQueueJobPointerDown(event, job)}
+                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
+                  onPointerDown={(event) => handleQueueJobPointerDown(event, job, "unscheduled")}
                 >
-                  <div>
-                    <strong>{getJobHeading(job)}</strong>
-                    <div className="table-secondary">{job.customerName || "Customer pending"}</div>
-                    <div className="table-secondary">
-                      Promise date: {job.scheduledDate ? formatPromiseDate(job.scheduledDate) : "Not set"}
-                    </div>
-                    <div>
-                      <span className={workshopRawStatusClass(job.rawStatus)}>
-                        {workshopRawStatusLabel(job.rawStatus)}
-                      </span>
+                  <div className="workshop-scheduler-queue-card__topline">
+                    <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
+                    <div className="workshop-scheduler-queue-card__actions">
+                      <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                     </div>
                   </div>
-                  <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job, anchorDateKey)}>Schedule</button>
-                    <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
+                  <div className="table-secondary workshop-scheduler-queue-card__meta">
+                    {getQueueMetaLine(job, calendarTimeZone)}
+                  </div>
+                  <div className="workshop-scheduler-queue-card__footer">
+                    <span className="workshop-scheduler-queue-card__drag-hint">Drag to slot</span>
+                    <span className={`${workshopRawStatusClass(job)} workshop-scheduler-queue-card__badge`}>
+                      {workshopRawStatusLabel(job)}
+                    </span>
                   </div>
                 </article>
               ))}
@@ -1887,7 +2586,6 @@ export const WorkshopSchedulerScreen = ({
             <div className="card-header-row">
               <div>
                 <h2>Timed but unassigned</h2>
-                <p className="muted-text">Timed jobs that still need a named technician.</p>
               </div>
               <span className="stock-badge stock-muted">{filteredUnassignedJobs.length}</span>
             </div>
@@ -1898,23 +2596,23 @@ export const WorkshopSchedulerScreen = ({
               ) : filteredUnassignedJobs.map((job) => (
                 <article
                   key={job.id}
-                  className={`workshop-scheduler-queue-card ${workshopRawStatusSurfaceClass(job.rawStatus)}`}
+                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
+                  onPointerDown={(event) => handleQueueJobPointerDown(event, job, "unassigned")}
                 >
-                  <div>
-                    <strong>{getJobHeading(job)}</strong>
-                    <div className="table-secondary">
-                      Scheduled {formatOptionalDate(job.scheduledStartAt, calendarTimeZone)} · {formatOptionalTime(job.scheduledStartAt, calendarTimeZone)}
-                    </div>
-                    <div className="table-secondary">{job.customerName || workshopRawStatusLabel(job.rawStatus)}</div>
-                    <div>
-                      <span className={workshopRawStatusClass(job.rawStatus)}>
-                        {workshopRawStatusLabel(job.rawStatus)}
-                      </span>
+                  <div className="workshop-scheduler-queue-card__topline">
+                    <strong className="workshop-scheduler-queue-card__title">{getJobHeading(job)}</strong>
+                    <div className="workshop-scheduler-queue-card__actions">
+                      <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
                     </div>
                   </div>
-                  <div className="actions-inline">
-                    <button type="button" onClick={() => openEditor(job, getJobOperationalDateKey(job, calendarTimeZone) || anchorDateKey)}>Assign</button>
-                    <button type="button" onClick={() => openJobOverlay(job)}>Open</button>
+                  <div className="table-secondary workshop-scheduler-queue-card__meta">
+                    {getQueueMetaLine(job, calendarTimeZone)}
+                  </div>
+                  <div className="workshop-scheduler-queue-card__footer">
+                    <span className="workshop-scheduler-queue-card__drag-hint">Drag to slot</span>
+                    <span className={`${workshopRawStatusClass(job)} workshop-scheduler-queue-card__badge`}>
+                      {workshopRawStatusLabel(job)}
+                    </span>
                   </div>
                 </article>
               ))}

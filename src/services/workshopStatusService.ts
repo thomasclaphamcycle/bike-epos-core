@@ -1,4 +1,10 @@
 import { WorkshopJobStatus } from "@prisma/client";
+import {
+  getWorkshopDisplayStatusLabel,
+  normalizeWorkshopDisplayStatus,
+  toPersistedWorkshopStatusValue,
+  type WorkshopDisplayStatus,
+} from "../../shared/workshopStatus";
 import { HttpError } from "../utils/http";
 
 export type WorkshopExecutionStatus =
@@ -11,37 +17,17 @@ export type WorkshopExecutionStatus =
 export const parseWorkshopRawStatusAlias = (
   value: string,
 ): WorkshopJobStatus | null => {
-  const normalized = value.trim().toUpperCase();
-  switch (normalized) {
-    case "BOOKED":
-    case "BOOKING_MADE":
-      return "BOOKED";
-    case "BIKE_ARRIVED":
-      return "BIKE_ARRIVED";
-    case "IN_PROGRESS":
-      return "IN_PROGRESS";
-    case "APPROVED":
-      return "BIKE_ARRIVED";
-    case "WAITING_FOR_APPROVAL":
-      return "WAITING_FOR_APPROVAL";
-    case "WAITING_FOR_PARTS":
-      return "WAITING_FOR_PARTS";
-    case "ON_HOLD":
-      return "ON_HOLD";
-    case "READY":
-    case "BIKE_READY":
-    case "READY_FOR_COLLECTION":
-      return "READY_FOR_COLLECTION";
-    case "COMPLETED":
-    case "COLLECTED":
-    case "CLOSED":
-      return "COMPLETED";
-    case "CANCELLED":
-      return "CANCELLED";
-    default:
-      return null;
-  }
+  const persisted = toPersistedWorkshopStatusValue(value);
+  return (persisted as WorkshopJobStatus | null) ?? null;
 };
+
+export const toWorkshopDisplayStatus = (
+  value: string | WorkshopJobStatus | null | undefined,
+): WorkshopDisplayStatus | null => normalizeWorkshopDisplayStatus(value);
+
+export const getWorkshopDisplayStatusOrFallback = (
+  value: string | WorkshopJobStatus | null | undefined,
+) => getWorkshopDisplayStatusLabel(value);
 
 export const parseWorkshopExecutionStatus = (
   value: string,
@@ -92,11 +78,11 @@ export const toWorkshopExecutionStatus = (job: {
     return "CLOSED";
   }
 
-  switch (job.status) {
+  switch (normalizeWorkshopDisplayStatus(job.status)) {
     case "BOOKED":
     case "BIKE_ARRIVED":
       return "BOOKED";
-    case "READY_FOR_COLLECTION":
+    case "BIKE_READY":
       return "READY";
     case "COMPLETED":
       return "COLLECTED";
@@ -106,3 +92,19 @@ export const toWorkshopExecutionStatus = (job: {
       return "IN_PROGRESS";
   }
 };
+
+export const buildWorkshopStatusAuditMetadata = (input: {
+  fromStatus: string | WorkshopJobStatus;
+  toStatus: string | WorkshopJobStatus;
+  requestedStatus?: string | null;
+  changeSource: "MANUAL" | "AUTOMATIC";
+  trigger: string;
+}) => ({
+  fromStatus: normalizeWorkshopDisplayStatus(input.fromStatus),
+  toStatus: normalizeWorkshopDisplayStatus(input.toStatus),
+  requestedStatus: input.requestedStatus ? normalizeWorkshopDisplayStatus(input.requestedStatus) ?? input.requestedStatus : null,
+  persistedFromStatus: `${input.fromStatus}`,
+  persistedToStatus: `${input.toStatus}`,
+  changeSource: input.changeSource,
+  trigger: input.trigger,
+});

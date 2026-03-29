@@ -1,3 +1,16 @@
+import {
+  WORKSHOP_CANONICAL_STATUSES,
+  WORKSHOP_STATUS_TIMELINE,
+  getWorkshopDisplayStatusDescription as getSharedWorkshopDisplayStatusDescription,
+  getWorkshopDisplayStatusLabel as getSharedWorkshopDisplayStatusLabel,
+  getWorkshopDisplayStatusTone as getSharedWorkshopDisplayStatusTone,
+  getWorkshopTimelineStatus,
+  normalizeWorkshopDisplayStatus,
+  type WorkshopCanonicalStatus,
+  type WorkshopDisplayStatus,
+  type WorkshopTimelineStatus,
+} from "@shared/workshopStatus";
+
 export type WorkshopExecutionStatus =
   | "BOOKED"
   | "IN_PROGRESS"
@@ -27,13 +40,55 @@ type WorkshopTechnicianWorkflowSummaryInput = {
 };
 
 type WorkshopRawStatusTone =
-  | "blue"
-  | "purple"
-  | "yellow"
-  | "rose"
-  | "green"
-  | "red"
-  | "neutral";
+  | "booked"
+  | "arrived"
+  | "approval"
+  | "approved"
+  | "parts"
+  | "ready"
+  | "completed"
+  | "hold"
+  | "cancelled";
+
+export type WorkshopStatusSource = {
+  rawStatus?: string | null;
+  status?: string | null;
+};
+
+const getNormalizedWorkshopStatusSourceValue = (
+  source: WorkshopStatusSource | string | null | undefined,
+) => {
+  if (typeof source === "string") {
+    return source;
+  }
+
+  if (!source) {
+    return null;
+  }
+
+  if (source.rawStatus) {
+    return source.rawStatus;
+  }
+
+  switch (source.status) {
+    case "READY":
+      return "READY_FOR_COLLECTION";
+    case "COLLECTED":
+    case "CLOSED":
+      return "COMPLETED";
+    default:
+      return source.status ?? null;
+  }
+};
+
+export const getWorkshopRawStatusValue = (
+  source: WorkshopStatusSource | string | null | undefined,
+) => getNormalizedWorkshopStatusSourceValue(source);
+
+export const getWorkshopDisplayStatus = (
+  source: WorkshopStatusSource | string | null | undefined,
+): WorkshopDisplayStatus | null =>
+  normalizeWorkshopDisplayStatus(getNormalizedWorkshopStatusSourceValue(source));
 
 export const workshopExecutionStatusLabel = (
   status: WorkshopExecutionStatus | string | null | undefined,
@@ -75,76 +130,33 @@ export const workshopExecutionStatusClass = (
 };
 
 export const workshopRawStatusLabel = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => {
-  switch (status) {
-    case "BOOKING_MADE":
-      return "Booking Made";
-    case "BOOKED":
-      return "Booked";
-    case "BIKE_ARRIVED":
-      return "Bike Arrived";
-    case "IN_PROGRESS":
-      return "In Progress";
-    case "WAITING_FOR_APPROVAL":
-      return "Waiting for Approval";
-    case "APPROVED":
-      return "Approved";
-    case "WAITING_FOR_PARTS":
-      return "Waiting for Parts";
-    case "ON_HOLD":
-      return "On Hold";
-    case "READY_FOR_COLLECTION":
-    case "BIKE_READY":
-      return "Ready for Collection";
-    case "COMPLETED":
-      return "Completed";
-    case "CANCELLED":
-      return "Cancelled";
-    default:
-      return status || "-";
-  }
+  const normalized = getWorkshopDisplayStatus(status);
+  return normalized
+    ? getSharedWorkshopDisplayStatusLabel(normalized)
+    : getWorkshopRawStatusValue(status) || "-";
 };
 
 export const getWorkshopRawStatusTone = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ): WorkshopRawStatusTone => {
-  switch (status) {
-    case "BOOKED":
-    case "BOOKING_MADE":
-    case "BIKE_ARRIVED":
-    case "IN_PROGRESS":
-      return "blue";
-    case "APPROVED":
-      return "purple";
-    case "WAITING_FOR_PARTS":
-      return "yellow";
-    case "WAITING_FOR_APPROVAL":
-      return "rose";
-    case "READY_FOR_COLLECTION":
-    case "BIKE_READY":
-    case "COMPLETED":
-      return "green";
-    case "ON_HOLD":
-    case "CANCELLED":
-      return "red";
-    default:
-      return "neutral";
-  }
+  const normalized = getWorkshopDisplayStatus(status);
+  return normalized ? getSharedWorkshopDisplayStatusTone(normalized) : "booked";
 };
 
 export const workshopRawStatusClass = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => {
   return `status-badge workshop-status-badge workshop-status-badge--${getWorkshopRawStatusTone(status)}`;
 };
 
 export const workshopRawStatusSurfaceClass = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => `workshop-status-surface workshop-status-surface--${getWorkshopRawStatusTone(status)}`;
 
 export const workshopRawStatusActionClass = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => `workshop-status-action workshop-status-action--${getWorkshopRawStatusTone(status)}`;
 
 export const workshopTechnicianWorkflowLabel = (
@@ -164,7 +176,7 @@ export const workshopTechnicianWorkflowLabel = (
     case "PAUSED":
       return "Paused";
     case "READY_FOR_COLLECTION":
-      return "Ready for Collection";
+      return "Bike Ready";
     case "COLLECTED":
       return "Collected";
     case "CANCELLED":
@@ -199,7 +211,7 @@ export const workshopTechnicianWorkflowClass = (
 export const toWorkshopTechnicianWorkflowStage = (
   rawStatus: string | null | undefined,
 ): WorkshopTechnicianWorkflowStage => {
-  switch (rawStatus) {
+  switch ((rawStatus || "").trim().toUpperCase()) {
     case "WAITING_FOR_APPROVAL":
       return "AWAITING_APPROVAL";
     case "APPROVED":
@@ -221,6 +233,111 @@ export const toWorkshopTechnicianWorkflowStage = (
     default:
       return "QUEUED";
   }
+};
+
+export const toWorkshopDisplayStatus = (
+  status: string | null | undefined,
+): WorkshopDisplayStatus | null => getWorkshopDisplayStatus(status);
+
+export const workshopStatusSelectorOptions = WORKSHOP_CANONICAL_STATUSES.map((status) => ({
+  value: status,
+  label: getSharedWorkshopDisplayStatusLabel(status),
+  description: getSharedWorkshopDisplayStatusDescription(status),
+}));
+
+export type WorkshopStatusShortcutAction = {
+  label: string;
+  value: WorkshopCanonicalStatus;
+};
+
+export const getWorkshopStatusShortcutActions = (
+  status: WorkshopStatusSource | string | null | undefined,
+): WorkshopStatusShortcutAction[] => {
+  switch (getWorkshopDisplayStatus(status)) {
+    case "BOOKED":
+      return [
+        { label: "Bike Arrived", value: "BIKE_ARRIVED" },
+        { label: "Waiting for Approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Approved", value: "APPROVED" },
+      ];
+    case "BIKE_ARRIVED":
+      return [
+        { label: "Waiting for Approval", value: "WAITING_FOR_APPROVAL" },
+        { label: "Approved", value: "APPROVED" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "WAITING_FOR_APPROVAL":
+      return [
+        { label: "Approved", value: "APPROVED" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "APPROVED":
+      return [
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+        { label: "Bike Ready", value: "BIKE_READY" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "WAITING_FOR_PARTS":
+      return [
+        { label: "Approved", value: "APPROVED" },
+        { label: "On Hold", value: "ON_HOLD" },
+      ];
+    case "ON_HOLD":
+      return [
+        { label: "Approved", value: "APPROVED" },
+        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
+      ];
+    default:
+      return [];
+  }
+};
+
+export type WorkshopStatusTimelineStep = {
+  status: WorkshopTimelineStatus;
+  label: string;
+  state: "past" | "current" | "future";
+};
+
+const getWorkshopTimelineStepState = (
+  timelineStatus: WorkshopTimelineStatus,
+  currentStatus: WorkshopTimelineStatus | null,
+  index: number,
+  currentIndex: number,
+): WorkshopStatusTimelineStep["state"] => {
+  if (!currentStatus || currentIndex === -1) {
+    return "future";
+  }
+
+  if (currentStatus === "ON_HOLD") {
+    if (timelineStatus === "BOOKED") {
+      return "past";
+    }
+
+    return timelineStatus === "ON_HOLD" ? "current" : "future";
+  }
+
+  if (index < currentIndex) {
+    return "past";
+  }
+
+  if (index === currentIndex) {
+    return "current";
+  }
+
+  return "future";
+};
+
+export const getWorkshopStatusTimeline = (
+  status: WorkshopStatusSource | string | null | undefined,
+): WorkshopStatusTimelineStep[] => {
+  const currentStatus = getWorkshopTimelineStatus(getWorkshopRawStatusValue(status));
+  const currentIndex = currentStatus ? WORKSHOP_STATUS_TIMELINE.indexOf(currentStatus) : -1;
+
+  return WORKSHOP_STATUS_TIMELINE.map((timelineStatus, index) => ({
+    status: timelineStatus,
+    label: getSharedWorkshopDisplayStatusLabel(timelineStatus),
+    state: getWorkshopTimelineStepState(timelineStatus, currentStatus, index, currentIndex),
+  }));
 };
 
 const formatScheduleLabel = (scheduledStartAt?: string | null, scheduledDate?: string | null) => {
@@ -294,7 +411,7 @@ export const getWorkshopTechnicianWorkflowSummary = (
         detail: "The bike is on the bench and the team should keep operational notes, parts, and attachments up to date.",
         nextStep: partsBlocked
           ? "Move the job into Waiting for Parts if stock is genuinely blocking progress."
-          : "Continue repair work, then move to Ready for Collection when the bench work is complete.",
+          : "Continue repair work, then move to Bike Ready when the bench work is complete.",
       };
     case "WAITING_FOR_PARTS":
       return {

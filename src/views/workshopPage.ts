@@ -464,6 +464,19 @@ export const renderWorkshopPage = (input: WorkshopPageInput) => {
               notes: notes || undefined,
             }),
           });
+          state.selectedJobId = job.id;
+          state.selectedJob = {
+            job: {
+              id: job.id,
+              customerName: job.customerName || customerName,
+              bikeDescription: job.bikeDescription || bikeDescription,
+              status: job.status || "BOOKED",
+              finalizedBasketId: job.finalizedBasketId || null,
+            },
+            lines: [],
+          };
+          renderSelectedJob();
+          renderCustomerSearchResults();
           setStatus("job-create-status", "Job created.", "ok");
           await refreshJobs();
           await loadJob(job.id);

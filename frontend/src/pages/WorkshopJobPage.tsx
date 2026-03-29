@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
@@ -6,13 +6,17 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
 import {
+  getWorkshopDisplayStatus,
+  getWorkshopRawStatusValue,
   getWorkshopTechnicianWorkflowSummary,
+  getWorkshopStatusTimeline,
+  workshopRawStatusActionClass,
   workshopExecutionStatusClass,
   workshopExecutionStatusLabel,
-  workshopRawStatusClass,
   workshopRawStatusLabel,
   workshopTechnicianWorkflowClass,
   workshopTechnicianWorkflowLabel,
+  workshopStatusSelectorOptions,
 } from "../features/workshop/status";
 import {
   workshopCustomerQuoteLinkStatusLabel,
@@ -423,70 +427,10 @@ const notificationChannelSummaryLabel = (notification: WorkshopNotificationRecor
     .filter(Boolean)
     .join(" • ");
 
-const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
-  if (!job) {
-    return "";
-  }
-
-  if (job.rawStatus) {
-    return job.rawStatus;
-  }
-
-  switch (job.status) {
-    case "BOOKED":
-      return "BOOKED";
-    case "READY":
-      return "READY_FOR_COLLECTION";
-    case "COLLECTED":
-    case "CLOSED":
-      return "COMPLETED";
-    case "IN_PROGRESS":
-      return "IN_PROGRESS";
-    default:
-      return job.status;
-  }
-};
-
-const canPersistApprovalStatus = (status: string) =>
-  ["BOOKED", "BIKE_ARRIVED", "IN_PROGRESS", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(status);
-
-const getStageActions = (status: string): Array<{ label: string; value: string }> => {
-  switch (status) {
-    case "BOOKED":
-    case "BIKE_ARRIVED":
-      return [
-        { label: "Move to Bench", value: "IN_PROGRESS" },
-        { label: "Pause Job", value: "ON_HOLD" },
-        { label: "Cancel Job", value: "CANCELLED" },
-      ];
-    case "IN_PROGRESS":
-      return [
-        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
-        { label: "Pause Job", value: "ON_HOLD" },
-        { label: "Ready for Collection", value: "READY_FOR_COLLECTION" },
-        { label: "Cancel Job", value: "CANCELLED" },
-      ];
-    case "WAITING_FOR_PARTS":
-      return [
-        { label: "Resume Bench Work", value: "IN_PROGRESS" },
-        { label: "Pause Job", value: "ON_HOLD" },
-        { label: "Cancel Job", value: "CANCELLED" },
-      ];
-    case "ON_HOLD":
-      return [
-        { label: "Resume Bench Work", value: "IN_PROGRESS" },
-        { label: "Waiting for Parts", value: "WAITING_FOR_PARTS" },
-        { label: "Cancel Job", value: "CANCELLED" },
-      ];
-    case "WAITING_FOR_APPROVAL":
-      return [
-        { label: "Pause Job", value: "ON_HOLD" },
-        { label: "Cancel Job", value: "CANCELLED" },
-      ];
-    default:
-      return [];
-  }
-};
+const canPersistApprovalStatus = (status: string | null | undefined) =>
+  ["BOOKED", "BIKE_ARRIVED", "APPROVED", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(
+    getWorkshopDisplayStatus(status) ?? "",
+  );
 
 export const WorkshopJobPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -553,6 +497,9 @@ export const WorkshopJobPage = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedOptionalTemplateLineIds, setSelectedOptionalTemplateLineIds] = useState<string[]>([]);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   const canPostCustomerNotes = isManagerPlus(user?.role);
 
@@ -740,6 +687,33 @@ export const WorkshopJobPage = () => {
   }, [payload?.job.customerId]);
 
   useEffect(() => {
+    if (!statusMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && statusMenuRef.current?.contains(target)) {
+        return;
+      }
+      setStatusMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [statusMenuOpen]);
+
+  useEffect(() => {
     if (!debouncedPartSearch.trim()) {
       setPartResults([]);
       return;
@@ -771,17 +745,21 @@ export const WorkshopJobPage = () => {
   }, [debouncedPartSearch, error]);
 
   const updateStageStatus = async (nextStatus: string) => {
-    if (!id) {
+    if (!id || updatingStatus) {
       return;
     }
 
+    setUpdatingStatus(true);
     try {
       await apiPost(`/api/workshop/jobs/${encodeURIComponent(id)}/status`, { status: nextStatus });
-      success("Workflow status updated");
+      setStatusMenuOpen(false);
+      success(`Status updated to ${workshopRawStatusLabel(nextStatus)}`);
       await Promise.all([loadJob(), loadNotifications()]);
     } catch (statusError) {
       const message = statusError instanceof Error ? statusError.message : "Failed to update status";
       error(message);
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -1351,11 +1329,12 @@ export const WorkshopJobPage = () => {
     [partLines],
   );
   const subtotalPence = labourSubtotalPence + partsSubtotalPence;
-  const rawStatus = useMemo(() => toRawStatus(payload?.job), [payload?.job]);
+  const rawStatus = useMemo(() => getWorkshopRawStatusValue(payload?.job) ?? "", [payload?.job]);
+  const displayStatus = useMemo(() => getWorkshopDisplayStatus(payload?.job) ?? "BOOKED", [payload?.job]);
   const currentEstimate = payload?.currentEstimate ?? null;
   const estimateHistory = payload?.estimateHistory ?? [];
   const canResendQuoteNotification = currentEstimate?.status === "PENDING_APPROVAL";
-  const canResendReadyNotification = rawStatus === "READY_FOR_COLLECTION";
+  const canResendReadyNotification = displayStatus === "BIKE_READY";
   const portalConversationAccess = conversationPayload?.conversation.portalAccess ?? null;
   const currentEstimateQuoteUrl = currentEstimate?.customerQuote?.publicPath
     ? toPublicAppUrl(currentEstimate.customerQuote.publicPath)
@@ -1376,7 +1355,8 @@ export const WorkshopJobPage = () => {
     [partsPayload?.parts],
   );
 
-  const stageActions = useMemo(() => getStageActions(rawStatus), [rawStatus]);
+  const statusTimeline = useMemo(() => getWorkshopStatusTimeline(displayStatus), [displayStatus]);
+  const canManuallyUpdateStatus = !["COMPLETED", "CANCELLED"].includes(displayStatus);
 
   const customerNotes = useMemo(
     () => notes.filter((note) => note.visibility === "CUSTOMER"),
@@ -1424,12 +1404,12 @@ export const WorkshopJobPage = () => {
       return `POS basket ${payload.job.finalizedBasketId.slice(0, 8)} is ready for collection handoff.`;
     }
 
-    if (rawStatus === "READY_FOR_COLLECTION") {
+    if (displayStatus === "BIKE_READY") {
       return "Ready for collection, but the POS handoff has not been opened yet.";
     }
 
     return null;
-  }, [payload, rawStatus]);
+  }, [displayStatus, payload]);
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
@@ -1448,9 +1428,84 @@ export const WorkshopJobPage = () => {
   return (
     <div className="page-shell">
       <section className="card">
-        <div className="card-header-row">
-          <h1>Workshop Job {id.slice(0, 8)}</h1>
-          <div className="actions-inline">
+        <div className="workshop-job-header">
+          <div className="workshop-job-header__identity">
+            <span className="table-secondary">Workshop job {id.slice(0, 8)}</span>
+            <h1>{payload?.job.customerName || "Workshop Job"}</h1>
+            <p className="muted-text">
+              {payload?.job.bikeDescription || "Bike details still to be confirmed"}
+              {payload?.job.assignedStaffName ? ` · ${payload.job.assignedStaffName}` : ""}
+            </p>
+          </div>
+
+          <div className="workshop-job-status-panel" ref={statusMenuRef}>
+            <span className="table-secondary">Workshop status</span>
+            <button
+              type="button"
+              className={`workshop-job-status-trigger ${workshopRawStatusActionClass(displayStatus)}`}
+              onClick={() => {
+                if (!canManuallyUpdateStatus || !payload) {
+                  return;
+                }
+                setStatusMenuOpen((open) => !open);
+              }}
+              disabled={!payload || !canManuallyUpdateStatus || updatingStatus}
+              aria-haspopup="menu"
+              aria-expanded={statusMenuOpen}
+            >
+              <span>{workshopRawStatusLabel(displayStatus)}</span>
+              <span className="workshop-job-status-trigger__meta">
+                {updatingStatus ? "Updating..." : canManuallyUpdateStatus ? "Change" : "Locked"}
+              </span>
+            </button>
+
+            {statusMenuOpen && payload ? (
+              <div className="workshop-job-status-menu" role="menu" aria-label="Workshop statuses">
+                {workshopStatusSelectorOptions.map((option) => {
+                  const isCurrent = option.value === displayStatus;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={isCurrent}
+                      className={`workshop-job-status-option ${workshopRawStatusActionClass(option.value)}${isCurrent ? " workshop-job-status-option--current" : ""}`}
+                      onClick={() => void updateStageStatus(option.value)}
+                      disabled={updatingStatus || isCurrent}
+                    >
+                      <span className="workshop-job-status-option__content">
+                        <strong>{option.label}</strong>
+                        <span>{option.description}</span>
+                      </span>
+                      <span className="workshop-job-status-option__state">
+                        {isCurrent ? "Current" : "Set"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="workshop-job-status-timeline" aria-label="Workshop progress">
+              {statusTimeline.map((step) => (
+                <div
+                  key={step.status}
+                  className={`workshop-job-status-timeline__step workshop-job-status-timeline__step--${step.state}`}
+                >
+                  <span className="workshop-job-status-timeline__dot" />
+                  <span className="workshop-job-status-timeline__label">{step.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <p className="workshop-job-status-panel__hint">
+              {canManuallyUpdateStatus
+                ? "Automatic workshop updates still apply. Manual changes save immediately and are audited."
+                : "Completed and cancelled jobs stay locked so handoff history remains trustworthy."}
+            </p>
+          </div>
+
+          <div className="actions-inline workshop-job-header__actions">
             <Link to={workshopCalendarPath} className="button-link">
               Calendar
             </Link>
@@ -1459,7 +1514,7 @@ export const WorkshopJobPage = () => {
                 Bike History
               </Link>
             ) : null}
-            {payload && payload.job.status !== "CLOSED" && payload.job.status !== "CANCELLED" ? (
+            {payload && !["COMPLETED", "CANCELLED"].includes(displayStatus) ? (
               <button type="button" className="primary" onClick={openPosHandoff}>
                 {payload.job.sale
                   ? "Open sale"
@@ -1497,12 +1552,10 @@ export const WorkshopJobPage = () => {
                 <div className="job-workflow-highlight">
                   <span className="table-secondary">Technician coverage</span>
                   <strong>{workflowSummary.assignmentSummary}</strong>
-                  <p className="muted-text">
-                    Keep assignment and timing aligned with the calendar so the bench queue stays trustworthy.
-                  </p>
+                  <p className="muted-text">Keep assignment and timing aligned with the calendar so the bench queue stays trustworthy.</p>
                 </div>
                 <div className="job-workflow-highlight">
-                  <span className="table-secondary">Next step</span>
+                  <span className="table-secondary">Current blocker</span>
                   <strong>
                     <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
                   </strong>
@@ -1511,33 +1564,35 @@ export const WorkshopJobPage = () => {
                 <div className="job-workflow-highlight">
                   <span className="table-secondary">Next bench step</span>
                   <strong>{workflowSummary.nextStep}</strong>
-                  <p className="muted-text">Use the bench actions below to keep the workshop board, calendar, and handoff flow aligned.</p>
+                  <p className="muted-text">Use the status control above to keep the workshop board, calendar, and handoff flow aligned.</p>
                 </div>
               </div>
             </div>
 
             <div className="job-meta-grid">
+              <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
+              <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
               <div>
-                <strong>Execution Status:</strong>{" "}
+                <strong>Linked Bike Record:</strong>{" "}
+                {payload.job.bike ? (
+                  <Link to={`/customers/bikes/${payload.job.bike.id}`}>{payload.job.bike.displayName}</Link>
+                ) : (
+                  "No linked bike record"
+                )}
+              </div>
+              <div><strong>Assigned Technician:</strong> {payload.job.assignedStaffName || "Unassigned"}</div>
+              <div><strong>Technician Coverage:</strong> {workflowSummary.assignmentSummary}</div>
+              <div><strong>Scheduled:</strong> {formatOptionalDateTime(payload.job.scheduledStartAt || payload.job.scheduledDate)}</div>
+              <div>
+                <strong>Execution Stage:</strong>{" "}
                 <span className={workshopExecutionStatusClass(payload.job.status, rawStatus)}>
                   {workshopExecutionStatusLabel(payload.job.status)}
                 </span>
               </div>
               <div>
-                <strong>Bench Workflow:</strong>{" "}
-                <span className={workshopTechnicianWorkflowClass(workflowSummary.stage)}>
-                  {workshopTechnicianWorkflowLabel(workflowSummary.stage)}
-                </span>
-              </div>
-              <div>
-                <strong>Workflow Detail:</strong>{" "}
-                <span className={workshopRawStatusClass(rawStatus)}>{workshopRawStatusLabel(rawStatus)}</span>
-              </div>
-              <div>
-                <strong>Bench Blocker:</strong>{" "}
+                <strong>Current Blocker:</strong>{" "}
                 <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
               </div>
-              <div><strong>Next Bench Step:</strong> {workflowSummary.nextStep}</div>
               <div>
                 <strong>Quote Status:</strong>{" "}
                 <span className={workshopEstimateStatusClass(currentEstimate?.status)}>
@@ -1554,26 +1609,13 @@ export const WorkshopJobPage = () => {
                   "Not prepared"
                 )}
               </div>
-              <div><strong>Legacy Status Code:</strong> {rawStatus || "-"}</div>
               <div>
                 <strong>Parts State:</strong>{" "}
                 <span className={partsStatusClass(partsOverview?.summary.partsStatus)}>
                   {partsOverview?.summary.partsStatus ?? "OK"}
                 </span>
               </div>
-              <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
-              <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
-              <div>
-                <strong>Linked Bike Record:</strong>{" "}
-                {payload.job.bike ? (
-                  <Link to={`/customers/bikes/${payload.job.bike.id}`}>{payload.job.bike.displayName}</Link>
-                ) : (
-                  "No linked bike record"
-                )}
-              </div>
-              <div><strong>Technician Coverage:</strong> {workflowSummary.assignmentSummary}</div>
-              <div><strong>Assigned Technician:</strong> {payload.job.assignedStaffName || "Unassigned"}</div>
-              <div><strong>Scheduled:</strong> {formatOptionalDateTime(payload.job.scheduledDate)}</div>
+              <div><strong>Next Bench Step:</strong> {workflowSummary.nextStep}</div>
               <div><strong>Check-in Notes:</strong> {payload.job.notes || "-"}</div>
               <div><strong>Collection Handoff:</strong> {collectionSummary ?? "Not ready for collection yet."}</div>
               <div><strong>Updated:</strong> {new Date(payload.job.updatedAt).toLocaleString()}</div>
@@ -1585,29 +1627,11 @@ export const WorkshopJobPage = () => {
             <div className="job-action-groups">
               <div className="job-action-group">
                 <div>
-                  <strong>Bench Actions</strong>
-                  <p className="muted-text">Keep the bench queue aligned with real progress, blockers, and handoff state.</p>
-                </div>
-                <div className="action-wrap">
-                  {stageActions.length > 0 ? (
-                    stageActions.map((action) => (
-                      <button key={action.value} type="button" onClick={() => void updateStageStatus(action.value)}>
-                        {action.label}
-                      </button>
-                    ))
-                  ) : (
-                    <span className="muted-text">No manual bench workflow changes are available for this job right now.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="job-action-group">
-                <div>
                   <strong>Quote Actions</strong>
                   <p className="muted-text">Use estimate actions for customer approval states instead of forcing quote stages through the bench workflow.</p>
                 </div>
                 <div className="action-wrap">
-                  {canPersistApprovalStatus(rawStatus) ? (
+                  {canPersistApprovalStatus(displayStatus) ? (
                     <>
                       <button
                         type="button"
@@ -1672,7 +1696,7 @@ export const WorkshopJobPage = () => {
               </div>
             ) : null}
 
-            {rawStatus === "READY_FOR_COLLECTION" ? (
+            {displayStatus === "BIKE_READY" ? (
               <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
                 Collection is completed through POS checkout. Use the POS handoff button above instead of
                 manually marking the job collected.
