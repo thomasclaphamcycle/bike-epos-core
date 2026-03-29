@@ -103,19 +103,15 @@ const main = async () => {
   assert.equal(token.status, 201);
   assert.ok(typeof token.json.token === "string");
 
-  const uploaded = await fetchJson(`/api/public/receipt-upload/${encodeURIComponent(token.json.token)}`, {
+  const replacementToken = await fetchJson(`/api/management/cash/movements/${encodeURIComponent(pettyExpense.json.movement.id)}/receipt-token`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      imageDataUrl: ONE_PIXEL_PNG,
-    }),
+    headers: MANAGER_HEADERS,
   });
-  assert.equal(uploaded.status, 201);
-  assert.ok(String(uploaded.json.receiptImageUrl).startsWith("/uploads/cash-receipts/"));
+  assert.equal(replacementToken.status, 201);
+  assert.ok(typeof replacementToken.json.token === "string");
+  assert.notEqual(replacementToken.json.token, token.json.token);
 
-  const reused = await fetchJson(`/api/public/receipt-upload/${encodeURIComponent(token.json.token)}`, {
+  const invalidated = await fetchJson(`/api/public/receipt-upload/${encodeURIComponent(token.json.token)}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -124,7 +120,33 @@ const main = async () => {
       imageDataUrl: ONE_PIXEL_PNG,
     }),
   });
-  assert.equal(reused.status, 409);
+  assert.equal(invalidated.status, 410);
+
+  const [uploaded, raced] = await Promise.all([
+    fetchJson(`/api/public/receipt-upload/${encodeURIComponent(replacementToken.json.token)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        imageDataUrl: ONE_PIXEL_PNG,
+      }),
+    }),
+    fetchJson(`/api/public/receipt-upload/${encodeURIComponent(replacementToken.json.token)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        imageDataUrl: ONE_PIXEL_PNG,
+      }),
+    }),
+  ]);
+
+  const uploadStatuses = [uploaded.status, raced.status].sort((left, right) => left - right);
+  assert.deepEqual(uploadStatuses, [201, 409]);
+  const successfulUpload = uploaded.status === 201 ? uploaded : raced;
+  assert.ok(String(successfulUpload.json.receiptImageUrl).startsWith("/uploads/cash-receipts/"));
 
   const movements = await fetchJson("/api/management/cash/movements", {
     headers: MANAGER_HEADERS,

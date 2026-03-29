@@ -139,6 +139,16 @@ const parseImageDataUrlOrThrow = (imageDataUrl: string) => {
 
 const buildReceiptPublicPath = (filename: string) => `/uploads/cash-receipts/${filename}`;
 
+const removeReceiptFileIfExists = async (absolutePath: string) => {
+  try {
+    await fs.unlink(absolutePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+};
+
 export const openRegisterSession = async (input: OpenRegisterInput) =>
   openCashSession(input);
 
@@ -235,6 +245,16 @@ export const createCashMovementReceiptToken = async (movementId: string) => {
   const expiresAt = new Date(Date.now() + RECEIPT_UPLOAD_TTL_MINUTES * 60_000);
   const token = randomBytes(24).toString("base64url");
 
+  await prisma.cashReceiptUploadToken.updateMany({
+    where: {
+      cashMovementId: movement.id,
+      usedAt: null,
+    },
+    data: {
+      expiresAt: new Date(),
+    },
+  });
+
   const created = await prisma.cashReceiptUploadToken.create({
     data: {
       token,
@@ -292,19 +312,50 @@ export const attachCashMovementReceiptByToken = async (tokenValue: string, image
   await fs.mkdir(RECEIPT_UPLOAD_DIR, { recursive: true });
   const filename = `${randomUUID()}.${extension}`;
   const absolutePath = path.join(RECEIPT_UPLOAD_DIR, filename);
-  await fs.writeFile(absolutePath, buffer);
   const publicPath = buildReceiptPublicPath(filename);
+  await fs.writeFile(absolutePath, buffer);
 
-  await prisma.$transaction([
-    prisma.cashMovement.update({
-      where: { id: tokenRecord.cashMovementId },
-      data: { receiptImageUrl: publicPath },
-    }),
-    prisma.cashReceiptUploadToken.update({
-      where: { id: tokenRecord.id },
-      data: { usedAt: new Date() },
-    }),
-  ]);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const claimedToken = await tx.cashReceiptUploadToken.updateMany({
+        where: {
+          id: tokenRecord.id,
+          usedAt: null,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      });
+
+      if (claimedToken.count !== 1) {
+        throw new HttpError(409, "Receipt upload token has already been used", "RECEIPT_TOKEN_USED");
+      }
+
+      const attachedMovement = await tx.cashMovement.updateMany({
+        where: {
+          id: tokenRecord.cashMovementId,
+          receiptImageUrl: null,
+        },
+        data: {
+          receiptImageUrl: publicPath,
+        },
+      });
+
+      if (attachedMovement.count !== 1) {
+        throw new HttpError(409, "A receipt is already attached to this cash movement", "RECEIPT_ALREADY_ATTACHED");
+      }
+    });
+  } catch (error) {
+    try {
+      await removeReceiptFileIfExists(absolutePath);
+    } catch {
+      // Best-effort cleanup; preserve the original upload failure.
+    }
+    throw error;
+  }
 
   return {
     cashMovementId: tokenRecord.cashMovementId,

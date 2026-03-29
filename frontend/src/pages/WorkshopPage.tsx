@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -313,6 +313,7 @@ export const WorkshopPage = () => {
   const [isIntakeOpen, setIsIntakeOpen] = useState(false);
   const [postCreateJobId, setPostCreateJobId] = useState<string | null>(null);
   const [selectedListJobId, setSelectedListJobId] = useState<string | null>(null);
+  const loadJobsRequestIdRef = useRef(0);
 
   const listQuery = useMemo(
     () => buildDashboardQuery({ status, search: debouncedSearch }),
@@ -320,16 +321,29 @@ export const WorkshopPage = () => {
   );
 
   const loadJobs = async (queryString = listQuery) => {
+    const requestId = ++loadJobsRequestIdRef.current;
     setLoading(true);
     try {
       const payload = await apiGet<DashboardResponse>(`/api/workshop/dashboard?${queryString}`);
+      if (requestId !== loadJobsRequestIdRef.current) {
+        return;
+      }
       setJobs(payload.jobs || []);
     } catch (loadError) {
+      if (requestId !== loadJobsRequestIdRef.current) {
+        return;
+      }
       error(loadError instanceof Error ? loadError.message : "Failed to load workshop jobs");
     } finally {
-      setLoading(false);
+      if (requestId === loadJobsRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
+
+  useEffect(() => () => {
+    loadJobsRequestIdRef.current += 1;
+  }, []);
 
   useEffect(() => {
     void loadJobs();
