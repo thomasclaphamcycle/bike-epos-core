@@ -1454,14 +1454,14 @@ th {
 .workshop-status-badge--neutral,
 .workshop-status-surface--neutral,
 .workshop-status-action--neutral {
-  --workshop-status-bg: #f2f5f9;
-  --workshop-status-border: #c3ced8;
-  --workshop-status-text: #506274;
-  --workshop-status-accent: #9badc0;
-  --workshop-status-surface: linear-gradient(180deg, #edf2f7 0%, #dde5ee 100%);
-  --workshop-status-surface-hover: linear-gradient(180deg, #e6edf5 0%, #d4dee8 100%);
-  --workshop-status-surface-muted: #5a6979;
-  --workshop-status-surface-title: #334252;
+  --workshop-status-bg: #eef1f4;
+  --workshop-status-border: #b8c1cb;
+  --workshop-status-text: #4f5d6b;
+  --workshop-status-accent: #8e9ba9;
+  --workshop-status-surface: linear-gradient(180deg, #e7ebef 0%, #d6dde4 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #e0e6eb 0%, #cfd7df 100%);
+  --workshop-status-surface-muted: #5f6b78;
+  --workshop-status-surface-title: #3b4754;
 }
 
 .workshop-status-badge {
@@ -3204,20 +3204,20 @@ button.primary.workshop-status-action {
   vector-effect: non-scaling-stroke;
 }
 
-.workshop-scheduler-block__signal--approved circle,
-.workshop-scheduler-block__signal--ready circle {
+.workshop-scheduler-block__signal--approved circle {
   fill: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 78%, #ffffff);
   stroke: currentColor;
   stroke-width: 1.2;
 }
 
 .workshop-scheduler-block__signal--approved path,
-.workshop-scheduler-block__signal--ready path {
+.workshop-scheduler-block__signal--ready path,
+.workshop-scheduler-block__signal--overdue path {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.2;
+  stroke-width: 1.5;
 }
 
 .workshop-scheduler-block__signal--parts path {
@@ -3229,40 +3229,71 @@ button.primary.workshop-status-action {
   stroke: none;
 }
 
-.workshop-scheduler-block__signal--overdue path:last-child {
-  fill: none;
-  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 84%, #ffffff);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.3;
+.workshop-scheduler-block__signal--overdue path:nth-child(2) {
+  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 86%, #ffffff);
+  stroke-width: 1.5;
 }
 
-.workshop-scheduler-block__signal--overdue circle {
-  fill: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 84%, #ffffff);
-  stroke: none;
+.workshop-scheduler-block__signal--overdue path:last-child {
+  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 86%, #ffffff);
+  stroke-width: 1.9;
 }
 
 .workshop-scheduler-block__signal--parts {
-  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 72%, #6e7a88);
+  width: 14px;
+  height: 14px;
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #667482);
+  opacity: 0.9;
+}
+
+.workshop-scheduler-block__signal--approval {
+  width: 14px;
+  height: 14px;
+  color: #8a5bb0;
+  opacity: 0.94;
+}
+
+.workshop-scheduler-block__signal--arrived {
+  width: 14px;
+  height: 14px;
+  color: #556574;
+  opacity: 0.92;
+}
+
+.workshop-scheduler-block__signal--cancelled {
+  width: 14px;
+  height: 14px;
+  color: #aa3c3c;
+  opacity: 0.95;
 }
 
 .workshop-scheduler-block__signal--approved {
   width: 14px;
   height: 14px;
-  color: #1f4056;
+  color: #b78818;
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  opacity: 1;
+  opacity: 0.98;
 }
 
 .workshop-scheduler-block__signal--ready {
-  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #4e7660);
+  color: #2d7a4f;
+  width: 14px;
+  height: 14px;
+  opacity: 0.96;
 }
 
 .workshop-scheduler-block__signal--overdue {
-  color: #b15b3f;
+  width: 14px;
+  height: 14px;
+  color: #b14d31;
+  opacity: 0.98;
+}
+
+.workshop-scheduler-block__signal--overdue .workshop-scheduler-block__signal-glyph {
+  font-size: 1.62rem;
 }
 
 .workshop-scheduler-block__bike {
@@ -3289,7 +3320,7 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-block__technician-icon {
   flex: 0 0 auto;
-  font-size: 0.72rem;
+  font-size: 1.08rem;
   line-height: 1;
   opacity: 0.7;
 }
@@ -3339,7 +3370,7 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block--minimal .workshop-scheduler-block__technician-icon {
-  font-size: 0.58rem;
+  font-size: 0.87rem;
 }
 
 .workshop-scheduler-block--compact {
@@ -3448,7 +3479,7 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__technician-icon {
-  font-size: 0.64rem;
+  font-size: 0.96rem;
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__bike {
