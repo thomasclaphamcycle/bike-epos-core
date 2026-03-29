@@ -8,6 +8,7 @@ import {
   WorkshopSchedulerScreen,
   type CalendarViewMode,
   shiftWorkshopAnchorDateKey,
+  shiftWorkshopVisibleWindowDateKey,
   workshopTodayDateKey,
 } from "./WorkshopCalendarPage";
 import {
@@ -528,6 +529,14 @@ export const WorkshopPage = () => {
             >
               {effectiveCalendarView === "week" ? "Previous Week" : "Previous Day"}
             </button>
+            {effectiveCalendarView === "week" ? (
+              <button
+                type="button"
+                onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", -1))}
+              >
+                - Day
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setAnchorDateKey(workshopTodayDateKey())}
@@ -535,6 +544,14 @@ export const WorkshopPage = () => {
             >
               Today
             </button>
+            {effectiveCalendarView === "week" ? (
+              <button
+                type="button"
+                onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", 1))}
+              >
+                + Day
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, effectiveCalendarView, 1))}
