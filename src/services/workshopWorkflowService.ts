@@ -610,6 +610,7 @@ export const changeWorkshopJobStatus = async (
         job: {
           id: job.id,
           status: job.status,
+          rawStatus: job.status,
           cancelledAt: job.cancelledAt,
           updatedAt: job.updatedAt,
           completedAt: job.completedAt,
@@ -682,6 +683,7 @@ export const changeWorkshopJobStatus = async (
       job: {
         id: updated.id,
         status: updated.status,
+        rawStatus: updated.status,
         cancelledAt: updated.cancelledAt,
         updatedAt: updated.updatedAt,
         completedAt: updated.completedAt,
@@ -730,6 +732,7 @@ export const changeWorkshopJobStatus = async (
     job: {
       id: result.job.id,
       status: result.job.status,
+      rawStatus: result.job.rawStatus,
       cancelledAt: result.job.cancelledAt,
       updatedAt: result.job.updatedAt,
       completedAt: result.job.completedAt,
@@ -755,6 +758,7 @@ export const setWorkshopJobApprovalStatus = async (
     job: {
       id: result.job.id,
       status: result.job.status,
+      rawStatus: result.job.status,
       cancelledAt: null,
       updatedAt: result.estimate.updatedAt,
     },
