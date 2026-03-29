@@ -44,7 +44,6 @@ type CalendarStaffRow = {
   id: string;
   name: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
-  operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
   isTechnician: boolean;
   workingHours: CalendarWorkingHours[];
   availability: CalendarAvailability[];
@@ -125,12 +124,7 @@ const formatDisplayDate = (value: string | null | undefined) =>
     ? new Date(value).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })
     : "";
 
-const formatRoleLabel = (row: CalendarStaffRow) => {
-  if (row.operationalRole && row.operationalRole !== "WORKSHOP") {
-    return `${row.role} · ${row.operationalRole}`;
-  }
-  return row.role;
-};
+const formatRoleLabel = (row: CalendarStaffRow) => row.role;
 
 const getAvailabilityForDate = (row: CalendarStaffRow, dateKey: string) =>
   row.availability.find((entry) => entry.date === dateKey) ?? null;

@@ -242,10 +242,6 @@ const buildFallbackWorkshopStaffingToday = (
       totalHolidayStaffCount: 0,
       coverageStatus: "none",
     },
-    context: {
-      usesOperationalRoleTags: false,
-      fallbackToBroadStaffing: true,
-    },
     scheduledStaff: [],
     holidayStaff: [],
   };

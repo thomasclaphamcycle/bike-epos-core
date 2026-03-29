@@ -1,11 +1,10 @@
-import { UserOperationalRole, UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 
 export type LocalDevStaffFixture = {
   username: string;
   email: string;
   name: string;
   role: UserRole;
-  operationalRole: UserOperationalRole;
   isTechnician: boolean;
   isActive: boolean;
   pin: string;
@@ -21,7 +20,6 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     email: "dom@corepos.local",
     name: "Dom",
     role: UserRole.STAFF,
-    operationalRole: UserOperationalRole.WORKSHOP,
     isTechnician: true,
     isActive: true,
     pin: "2468",
@@ -33,7 +31,6 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     email: "eric@corepos.local",
     name: "Eric",
     role: UserRole.STAFF,
-    operationalRole: UserOperationalRole.SALES,
     isTechnician: false,
     isActive: true,
     pin: "1357",
@@ -45,7 +42,6 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     email: "mike@corepos.local",
     name: "Mike",
     role: UserRole.STAFF,
-    operationalRole: UserOperationalRole.WORKSHOP,
     isTechnician: true,
     isActive: true,
     pin: "4321",
@@ -57,7 +53,6 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     email: "thomas@corepos.local",
     name: "Thomas",
     role: UserRole.ADMIN,
-    operationalRole: UserOperationalRole.MIXED,
     isTechnician: true,
     isActive: true,
     pin: "8642",

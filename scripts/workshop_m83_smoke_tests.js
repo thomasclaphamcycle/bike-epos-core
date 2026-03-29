@@ -757,7 +757,7 @@ const run = async () => {
         name: "M83 Staff",
         passwordHash: "test",
         role: "STAFF",
-        operationalRole: "WORKSHOP",
+        isTechnician: true,
       },
     });
     state.userIds.add(staffUser.id);
@@ -769,7 +769,7 @@ const run = async () => {
         name: "M83 Manager",
         passwordHash: "test",
         role: "MANAGER",
-        operationalRole: "WORKSHOP",
+        isTechnician: true,
       },
     });
     state.userIds.add(managerUser.id);
