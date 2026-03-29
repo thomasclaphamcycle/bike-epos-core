@@ -1297,6 +1297,7 @@ export const WorkshopSchedulerScreen = ({
   const [schedulerZoom, setSchedulerZoom] = useState<SchedulerZoomLevel>(() => readStoredSchedulerZoomLevel());
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
+  const loadCalendarRequestIdRef = useRef(0);
   const dragStateRef = useRef<DragState | null>(null);
   const suppressClickJobIdRef = useRef<string | null>(null);
   const technicianPickerRef = useRef<HTMLDivElement | null>(null);
@@ -1370,6 +1371,7 @@ export const WorkshopSchedulerScreen = ({
   };
 
   const loadCalendar = async () => {
+    const requestId = ++loadCalendarRequestIdRef.current;
     setLoading(true);
     setLoadError(null);
 
@@ -1377,8 +1379,14 @@ export const WorkshopSchedulerScreen = ({
       const payload = await apiGet<CalendarResponse>(
         `/api/workshop/calendar?from=${encodeURIComponent(requestedRange.from)}&to=${encodeURIComponent(requestedRange.to)}`,
       );
+      if (requestId !== loadCalendarRequestIdRef.current) {
+        return;
+      }
       setCalendar(payload);
     } catch (loadCalendarError) {
+      if (requestId !== loadCalendarRequestIdRef.current) {
+        return;
+      }
       const message = loadCalendarError instanceof Error
         ? loadCalendarError.message
         : "Failed to load workshop calendar";
@@ -1386,7 +1394,9 @@ export const WorkshopSchedulerScreen = ({
       setLoadError(message);
       error(message);
     } finally {
-      setLoading(false);
+      if (requestId === loadCalendarRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1394,6 +1404,10 @@ export const WorkshopSchedulerScreen = ({
     void loadCalendar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedRange.from, requestedRange.to, refreshToken]);
+
+  useEffect(() => () => {
+    loadCalendarRequestIdRef.current += 1;
+  }, []);
 
   useEffect(() => {
     persistSchedulerZoomLevel(schedulerZoom);
