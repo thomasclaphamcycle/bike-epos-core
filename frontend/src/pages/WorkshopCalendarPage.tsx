@@ -529,9 +529,9 @@ const getBookingServiceLabel = (job: CalendarJob) => {
   return trimmed;
 };
 
-type SchedulerSignalKey = "approved" | "parts" | "overdue" | "ready";
+type SchedulerSignalKey = "approval" | "approved" | "arrived" | "cancelled" | "parts" | "overdue" | "ready";
 
-const SIGNAL_PRIORITY: SchedulerSignalKey[] = ["overdue", "parts", "approved", "ready"];
+const SIGNAL_PRIORITY: SchedulerSignalKey[] = ["overdue", "cancelled", "approval", "arrived", "parts", "approved", "ready"];
 
 const buildSchedulerSignals = (
   job: CalendarJob,
@@ -547,6 +547,15 @@ const buildSchedulerSignals = (
   if (displayStatus === "WAITING_FOR_PARTS") {
     signals.add("parts");
   }
+  if (displayStatus === "WAITING_FOR_APPROVAL") {
+    signals.add("approval");
+  }
+  if (displayStatus === "CANCELLED") {
+    signals.add("cancelled");
+  }
+  if (displayStatus === "BIKE_ARRIVED") {
+    signals.add("arrived");
+  }
   if (displayStatus === "APPROVED") {
     signals.add("approved");
   }
@@ -559,6 +568,12 @@ const buildSchedulerSignals = (
 
 const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
   switch (signal) {
+    case "approval":
+      return (
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          ❓
+        </span>
+      );
     case "approved":
       return (
         <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
@@ -567,23 +582,33 @@ const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
       );
     case "parts":
       return (
-        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <path d="M12.9 2.15a2.5 2.5 0 0 0-3.08 3.13L6.45 8.66 4.8 7 2 9.8l.95.95 1.85-1.85 1.66 1.66-1.85 1.85.95.95 2.8-2.8-1.66-1.65 3.38-3.39a2.5 2.5 0 0 0 3.12-3.07l-1.42 1.41-1.25-.23-.22-1.25 1.4-1.4Z" />
-        </svg>
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          🔧
+        </span>
+      );
+    case "cancelled":
+      return (
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          ❌
+        </span>
+      );
+    case "arrived":
+      return (
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          🚲
+        </span>
       );
     case "overdue":
       return (
-        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" />
-          <path d="M8 4.55v4.3" />
-          <path d="M8 11.45h.01" />
-        </svg>
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          ⚠
+        </span>
       );
     case "ready":
       return (
-        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <path d="m3.65 8.35 2.55 2.6 6.15-6.45" />
-        </svg>
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          ✔
+        </span>
       );
     default:
       return null;
@@ -592,10 +617,16 @@ const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
 
 const schedulerSignalLabel = (signal: SchedulerSignalKey) => {
   switch (signal) {
+    case "approval":
+      return "Approval needed";
     case "approved":
       return "Approved estimate";
     case "parts":
       return "Waiting for parts";
+    case "cancelled":
+      return "Cancelled";
+    case "arrived":
+      return "Bike arrived";
     case "overdue":
       return "Overdue";
     case "ready":
@@ -1161,7 +1192,7 @@ const renderSchedulerBlockContent = ({
           className={`workshop-scheduler-block__technician${technician.assigned ? "" : " workshop-scheduler-block__technician--unassigned"}`}
         >
           <span className="workshop-scheduler-block__technician-icon" aria-hidden="true">
-            🔧
+            👨‍🔧
           </span>
           <span className="workshop-scheduler-block__technician-name">
             {technician.label}
