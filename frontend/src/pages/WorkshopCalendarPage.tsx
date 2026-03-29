@@ -787,36 +787,58 @@ const toPositionedJobs = (
       || left.endMinutes - right.endMinutes
       || left.job.createdAt.localeCompare(right.job.createdAt));
 
-  const laneEndMinutes: number[] = [];
-  let laneCount = 0;
+  const collisionGroups = sortableJobs.reduce<Array<typeof sortableJobs>>((groups, entry) => {
+    const currentGroup = groups.at(-1);
 
-  const laneAssignments = sortableJobs.map((entry) => {
-    let laneIndex = laneEndMinutes.findIndex((laneEnd) => laneEnd <= entry.startMinutes);
-    if (laneIndex === -1) {
-      laneIndex = laneEndMinutes.length;
-      laneEndMinutes.push(entry.endMinutes);
-    } else {
-      laneEndMinutes[laneIndex] = entry.endMinutes;
+    if (!currentGroup || currentGroup.length === 0) {
+      groups.push([entry]);
+      return groups;
     }
 
-    laneCount = Math.max(laneCount, laneEndMinutes.length);
-    return {
-      ...entry,
-      laneIndex,
-    };
+    const currentGroupMaxEnd = currentGroup.reduce(
+      (maxEnd, currentEntry) => Math.max(maxEnd, currentEntry.endMinutes),
+      currentGroup[0].endMinutes,
+    );
+
+    if (entry.startMinutes < currentGroupMaxEnd) {
+      currentGroup.push(entry);
+    } else {
+      groups.push([entry]);
+    }
+
+    return groups;
+  }, []);
+
+  return collisionGroups.flatMap<PositionedJob>((group) => {
+    const laneEndMinutes: number[] = [];
+
+    const laneAssignments = group.map((entry) => {
+      let laneIndex = laneEndMinutes.findIndex((laneEnd) => laneEnd <= entry.startMinutes);
+      if (laneIndex === -1) {
+        laneIndex = laneEndMinutes.length;
+        laneEndMinutes.push(entry.endMinutes);
+      } else {
+        laneEndMinutes[laneIndex] = entry.endMinutes;
+      }
+
+      return {
+        ...entry,
+        laneIndex,
+      };
+    });
+
+    const effectiveLaneCount = Math.max(1, laneEndMinutes.length);
+    const totalGap = JOB_BLOCK_GAP * (effectiveLaneCount - 1);
+    const laneWidth = Math.max(0, (columnWidth - totalGap) / effectiveLaneCount);
+
+    return laneAssignments.map<PositionedJob>((entry) => ({
+      job: entry.job,
+      top: (entry.clippedStart - openMinutes) * PX_PER_MINUTE,
+      height: Math.max(MIN_BOOKING_BLOCK_HEIGHT, (entry.clippedEnd - entry.clippedStart) * PX_PER_MINUTE),
+      left: entry.laneIndex * (laneWidth + JOB_BLOCK_GAP),
+      width: laneWidth,
+    }));
   });
-
-  const effectiveLaneCount = Math.max(1, laneCount);
-  const totalGap = JOB_BLOCK_GAP * (effectiveLaneCount - 1);
-  const laneWidth = Math.max(72, (columnWidth - totalGap) / effectiveLaneCount);
-
-  return laneAssignments.map<PositionedJob>((entry) => ({
-    job: entry.job,
-    top: (entry.clippedStart - openMinutes) * PX_PER_MINUTE,
-    height: Math.max(MIN_BOOKING_BLOCK_HEIGHT, (entry.clippedEnd - entry.clippedStart) * PX_PER_MINUTE),
-    left: entry.laneIndex * (laneWidth + JOB_BLOCK_GAP),
-    width: laneWidth,
-  }));
 };
 
 const getScheduledDurationMinutes = (job: CalendarJob, timeZone?: string) => {
