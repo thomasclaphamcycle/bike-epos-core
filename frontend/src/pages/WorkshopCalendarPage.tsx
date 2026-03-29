@@ -1384,6 +1384,13 @@ export const WorkshopSchedulerScreen = ({
   const minBookingBlockHeight = getMinimumBookingBlockHeight(pxPerMinute);
   const calendarTimeZone = calendar?.range.timeZone;
   const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey();
+  const previousAnchorDateKeyRef = useRef(anchorDateKey);
+  const lastWindowScrollYRef = useRef(0);
+  const lastSchedulerScrollTopRef = useRef(0);
+  const pendingViewportRestoreRef = useRef<{
+    windowScrollY: number;
+    schedulerScrollTop: number;
+  } | null>(null);
 
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -1501,6 +1508,60 @@ export const WorkshopSchedulerScreen = ({
 
     return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)`;
   }, [dayColumnWidth, days.length, standaloneOverview, view]);
+
+  useEffect(() => {
+    const node = schedulerScrollRef.current;
+
+    const captureViewport = () => {
+      lastWindowScrollYRef.current = window.scrollY;
+      lastSchedulerScrollTopRef.current = node?.scrollTop ?? 0;
+    };
+
+    captureViewport();
+    window.addEventListener("scroll", captureViewport, { passive: true });
+    node?.addEventListener("scroll", captureViewport, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", captureViewport);
+      node?.removeEventListener("scroll", captureViewport);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (previousAnchorDateKeyRef.current === anchorDateKey) {
+      return;
+    }
+
+    pendingViewportRestoreRef.current = {
+      windowScrollY: lastWindowScrollYRef.current,
+      schedulerScrollTop: lastSchedulerScrollTopRef.current,
+    };
+    previousAnchorDateKeyRef.current = anchorDateKey;
+  }, [anchorDateKey]);
+
+  useLayoutEffect(() => {
+    const pendingViewportRestore = pendingViewportRestoreRef.current;
+    const node = schedulerScrollRef.current;
+
+    if (!pendingViewportRestore || !node) {
+      return;
+    }
+
+    if (node.scrollTop !== pendingViewportRestore.schedulerScrollTop) {
+      node.scrollTop = pendingViewportRestore.schedulerScrollTop;
+    }
+
+    if (window.scrollY !== pendingViewportRestore.windowScrollY) {
+      window.scrollTo({ top: pendingViewportRestore.windowScrollY });
+    }
+
+    if (
+      calendar?.range.from === requestedRange.from
+      && calendar?.range.to === requestedRange.to
+    ) {
+      pendingViewportRestoreRef.current = null;
+    }
+  }, [anchorDateKey, calendar?.range.from, calendar?.range.to, requestedRange.from, requestedRange.to, trackHeight]);
 
   useEffect(() => {
     const node = schedulerScrollRef.current;
