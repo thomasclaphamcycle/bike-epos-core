@@ -716,6 +716,60 @@ test("React POS restores the active basket across navigation and clears stored b
   )).toBeNull();
 });
 
+test("React POS delayed stored-basket restore cannot pull navigation back to stale POS state", async ({
+  page,
+  request,
+}) => {
+  const activeBasketStorageKey = "corepos_active_basket_id";
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-delayed-restore",
+  });
+  const seeded = await seedCatalogVariant(request, { prefix: "react-pos-delayed-restore" });
+  const seededBasket = await apiJsonWithHeaderBypass(request, "POST", "/api/baskets", "MANAGER");
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/baskets/${encodeURIComponent(seededBasket.id)}/items`,
+    "MANAGER",
+    {
+      data: {
+        variantId: seeded.variant.id,
+        quantity: 1,
+      },
+    },
+  );
+
+  let delayedBasketLoads = 0;
+  await page.route(`**/api/baskets/${encodeURIComponent(seededBasket.id)}`, async (route) => {
+    if (route.request().method() !== "GET" || delayedBasketLoads > 0) {
+      await route.continue();
+      return;
+    }
+
+    delayedBasketLoads += 1;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/customers", { surface: "frontend" });
+  await page.evaluate(([storageKey, basketId]) => {
+    window.localStorage.setItem(storageKey, basketId);
+  }, [activeBasketStorageKey, seededBasket.id]);
+
+  await page.goto(`${frontendBaseUrl}/pos`);
+  await expect.poll(() => delayedBasketLoads).toBe(1);
+
+  const primaryNav = page.getByRole("navigation", { name: "Primary navigation" });
+  await primaryNav.getByRole("link", { name: "Receipts", exact: true }).click();
+  await expect(page).toHaveURL(/\/sales-history\/receipt-view/);
+
+  await page.waitForTimeout(1800);
+  await expect(page).toHaveURL(/\/sales-history\/receipt-view/);
+});
+
 test("React POS replaces stale stored basket ids with a fresh basket on load", async ({
   page,
   request,
