@@ -533,45 +533,55 @@ export const WorkshopPage = () => {
             ))}
           </div>
 
-          <div className="actions-inline">
-            <button type="button" className="primary" onClick={() => setIsIntakeOpen(true)}>
-              New Job
-            </button>
+          <div className="actions-inline workshop-primary-actions__toolbar">
             <button
               type="button"
-              onClick={() => setAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, effectiveCalendarView, -1))}
+              className="primary workshop-primary-new-job-button"
+              onClick={() => setIsIntakeOpen(true)}
             >
-              {effectiveCalendarView === "week" ? "Previous Week" : "Previous Day"}
+              <span className="workshop-primary-new-job-button__icon" aria-hidden="true">
+                +
+              </span>
+              <span>New Job</span>
             </button>
-            {effectiveCalendarView === "week" ? (
+
+            <div className="actions-inline workshop-primary-actions__calendar-nav">
               <button
                 type="button"
-                onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", -1))}
+                onClick={() => setAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, effectiveCalendarView, -1))}
               >
-                - Day
+                {effectiveCalendarView === "week" ? "Previous Week" : "Previous Day"}
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setAnchorDateKey(workshopTodayDateKey())}
-              disabled={anchorDateKey === workshopTodayDateKey()}
-            >
-              Today
-            </button>
-            {effectiveCalendarView === "week" ? (
+              {effectiveCalendarView === "week" ? (
+                <button
+                  type="button"
+                  onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", -1))}
+                >
+                  - Day
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", 1))}
+                onClick={() => setAnchorDateKey(workshopTodayDateKey())}
+                disabled={anchorDateKey === workshopTodayDateKey()}
               >
-                + Day
+                Today
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, effectiveCalendarView, 1))}
-            >
-              {effectiveCalendarView === "week" ? "Next Week" : "Next Day"}
-            </button>
+              {effectiveCalendarView === "week" ? (
+                <button
+                  type="button"
+                  onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", 1))}
+                >
+                  + Day
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, effectiveCalendarView, 1))}
+              >
+                {effectiveCalendarView === "week" ? "Next Week" : "Next Day"}
+              </button>
+            </div>
           </div>
         </div>
       </section>
