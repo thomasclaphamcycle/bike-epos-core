@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import {
+  getWorkshopOperationalWeekStartDateKey,
   WorkshopSchedulerScreen,
   type CalendarViewMode,
   shiftWorkshopAnchorDateKey,
@@ -301,7 +302,7 @@ export const WorkshopPage = () => {
   const { success, error } = useToasts();
 
   const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>("week");
-  const [anchorDateKey, setAnchorDateKey] = useState(workshopTodayDateKey());
+  const [anchorDateKey, setAnchorDateKey] = useState(getWorkshopOperationalWeekStartDateKey());
   const [quickFilter, setQuickFilter] = useState<QuickFilterKey>("ALL");
   const [status, setStatus] = useState<(typeof statusOptions)[number]>("");
   const [search, setSearch] = useState("");
@@ -439,6 +440,8 @@ export const WorkshopPage = () => {
 
   const selectedListActions = selectedListJob ? getQuickActions(selectedListJob) : [];
   const effectiveCalendarView: CalendarViewMode = surfaceMode === "day" ? "day" : "week";
+  const currentTodayAnchorDateKey =
+    effectiveCalendarView === "week" ? getWorkshopOperationalWeekStartDateKey() : workshopTodayDateKey();
 
   const handleRefresh = async () => {
     await loadJobs();
@@ -488,7 +491,7 @@ export const WorkshopPage = () => {
     setStatus("");
     setSearch("");
     setSelectedTechnicianId("");
-    setAnchorDateKey(workshopTodayDateKey());
+    setAnchorDateKey(getWorkshopOperationalWeekStartDateKey());
     setSurfaceMode("week");
     setSelectedListJobId(null);
     setPostCreateJobId(jobId);
@@ -560,13 +563,13 @@ export const WorkshopPage = () => {
                   - Day
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => setAnchorDateKey(workshopTodayDateKey())}
-                disabled={anchorDateKey === workshopTodayDateKey()}
-              >
-                Today
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setAnchorDateKey(currentTodayAnchorDateKey)}
+                  disabled={anchorDateKey === currentTodayAnchorDateKey}
+                >
+                  Today
+                </button>
               {effectiveCalendarView === "week" ? (
                 <button
                   type="button"
