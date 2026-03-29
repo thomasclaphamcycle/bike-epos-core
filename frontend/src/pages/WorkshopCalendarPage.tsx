@@ -2484,6 +2484,9 @@ export const WorkshopSchedulerScreen = ({
                 );
                 const visibleDayJobs = jobsByDay.get(day.date)?.length ?? 0;
                 const isToday = day.date === todayKey;
+                const capacitySummaryLabel = dayCapacity.totalMinutes
+                  ? `${visibleDayJobs} jobs · ${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
+                  : `${visibleDayJobs} jobs · Capacity unavailable`;
 
                 return (
                   <div
@@ -2508,11 +2511,11 @@ export const WorkshopSchedulerScreen = ({
                     >
                       {dayUtilisation.label}
                     </span>
-                    <span className="workshop-scheduler-grid__day-header-summary">
-                      {visibleDayJobs} jobs · {" "}
-                      {dayCapacity.totalMinutes
-                        ? `${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
-                        : "Capacity unavailable"}
+                    <span
+                      className="workshop-scheduler-grid__day-header-summary"
+                      title={capacitySummaryLabel}
+                    >
+                      {capacitySummaryLabel}
                     </span>
                   </div>
                 );

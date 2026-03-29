@@ -2857,6 +2857,7 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-grid {
+  --workshop-scheduler-header-height: 92px;
   display: grid;
   align-items: start;
   gap: 0;
@@ -2873,7 +2874,9 @@ button.primary.workshop-status-action {
   position: sticky;
   top: 0;
   z-index: 3;
-  min-height: 74px;
+  box-sizing: border-box;
+  height: var(--workshop-scheduler-header-height);
+  min-height: var(--workshop-scheduler-header-height);
   padding: 7px 8px;
   border-bottom: 1px solid #dbe5ef;
   background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
@@ -2896,6 +2899,10 @@ button.primary.workshop-status-action {
   border-right: 1px solid #dbe5ef;
 }
 
+.workshop-scheduler-grid__day-header > * {
+  min-width: 0;
+}
+
 .workshop-scheduler-grid__day-header--today {
   border-right-color: #b8cff1;
   border-bottom-color: #b8cff1;
@@ -2907,12 +2914,18 @@ button.primary.workshop-status-action {
   font-size: 0.84rem;
   color: var(--cp-navy);
   line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-grid__day-header span {
   font-size: 0.68rem;
   line-height: 1.1;
   color: #526071;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-grid__day-header-availability,
@@ -2944,6 +2957,8 @@ button.primary.workshop-status-action {
   font-weight: 800;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-grid__day-header-utilisation::before {
@@ -3892,7 +3907,7 @@ button.primary.workshop-status-action {
 
   .workshop-scheduler-grid__corner,
   .workshop-scheduler-grid__day-header {
-    min-height: 88px;
+    --workshop-scheduler-header-height: 104px;
     padding: 10px 12px;
   }
 
