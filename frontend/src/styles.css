@@ -3147,43 +3147,90 @@ button.primary.workshop-status-action {
   text-overflow: ellipsis;
 }
 
-.workshop-scheduler-block__approved-indicator {
+.workshop-scheduler-block__signals {
   position: absolute;
   right: 8px;
   bottom: 8px;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.workshop-scheduler-block__signal {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 13px;
   height: 13px;
-  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 76%, #526071);
-  opacity: 0.82;
-  pointer-events: none;
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #586575);
+  opacity: 0.84;
 }
 
-.workshop-scheduler-block__approved-indicator svg {
+.workshop-scheduler-block__signal svg {
   width: 100%;
   height: 100%;
 }
 
-.workshop-scheduler-block__approved-indicator circle,
-.workshop-scheduler-block__approved-indicator path {
+.workshop-scheduler-block__signal circle,
+.workshop-scheduler-block__signal path {
   vector-effect: non-scaling-stroke;
 }
 
-.workshop-scheduler-block__approved-indicator circle {
+.workshop-scheduler-block__signal--approved circle,
+.workshop-scheduler-block__signal--ready circle {
   fill: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 78%, #ffffff);
   stroke: currentColor;
   stroke-width: 1.2;
 }
 
-.workshop-scheduler-block__approved-indicator path {
+.workshop-scheduler-block__signal--approved path,
+.workshop-scheduler-block__signal--ready path {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.2;
+}
+
+.workshop-scheduler-block__signal--parts path {
+  fill: currentColor;
+}
+
+.workshop-scheduler-block__signal--overdue path:first-child {
+  fill: currentColor;
+  stroke: none;
+}
+
+.workshop-scheduler-block__signal--overdue path:last-child {
+  fill: none;
+  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 84%, #ffffff);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.3;
+}
+
+.workshop-scheduler-block__signal--overdue circle {
+  fill: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 84%, #ffffff);
+  stroke: none;
+}
+
+.workshop-scheduler-block__signal--parts {
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 72%, #6e7a88);
+}
+
+.workshop-scheduler-block__signal--approved {
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 78%, #4f6478);
+}
+
+.workshop-scheduler-block__signal--ready {
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #4e7660);
+}
+
+.workshop-scheduler-block__signal--overdue {
+  color: #b15b3f;
 }
 
 .workshop-scheduler-block__bike {
@@ -3331,16 +3378,24 @@ button.primary.workshop-status-action {
   font-weight: 600;
 }
 
-.workshop-scheduler-block--minimal .workshop-scheduler-block__approved-indicator {
+.workshop-scheduler-block--minimal .workshop-scheduler-block__signals {
   right: 6px;
   bottom: 6px;
+  gap: 3px;
+}
+
+.workshop-scheduler-block--minimal .workshop-scheduler-block__signal {
   width: 12px;
   height: 12px;
 }
 
-.workshop-scheduler-block--compact .workshop-scheduler-block__approved-indicator {
+.workshop-scheduler-block--compact .workshop-scheduler-block__signals {
   right: 7px;
   bottom: 7px;
+  gap: 3px;
+}
+
+.workshop-scheduler-block--compact .workshop-scheduler-block__signal {
   width: 12px;
   height: 12px;
 }

@@ -529,17 +529,109 @@ const getBookingServiceLabel = (job: CalendarJob) => {
   return trimmed;
 };
 
-const hasApprovedIndicator = (job: CalendarJob) => job.rawStatus === "APPROVED";
+type SchedulerSignalKey = "approved" | "parts" | "overdue" | "ready";
 
-const ApprovedBookingIndicator = () => (
-  <span className="workshop-scheduler-block__approved-indicator" aria-label="Approved estimate">
-    <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-      <circle cx="8" cy="8" r="7" />
-      <path d="M10.75 4.75H7.55a2.3 2.3 0 0 0 0 4.6H9a1.4 1.4 0 0 1 0 2.8H5.25" />
-      <path d="M8 3.6v8.8" />
-    </svg>
-  </span>
-);
+const SIGNAL_PRIORITY: SchedulerSignalKey[] = ["overdue", "parts", "approved", "ready"];
+
+const buildSchedulerSignals = (
+  job: CalendarJob,
+  todayKey: string,
+  timeZone?: string,
+): SchedulerSignalKey[] => {
+  const signals = new Set<SchedulerSignalKey>();
+
+  if (isOverdueJob(job, todayKey, timeZone)) {
+    signals.add("overdue");
+  }
+  if (job.rawStatus === "WAITING_FOR_PARTS") {
+    signals.add("parts");
+  }
+  if (job.rawStatus === "APPROVED") {
+    signals.add("approved");
+  }
+  if (job.rawStatus === "READY_FOR_COLLECTION") {
+    signals.add("ready");
+  }
+
+  return SIGNAL_PRIORITY.filter((signal) => signals.has(signal));
+};
+
+const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
+  switch (signal) {
+    case "approved":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" />
+          <path d="M10.75 4.75H7.55a2.3 2.3 0 0 0 0 4.6H9a1.4 1.4 0 0 1 0 2.8H5.25" />
+          <path d="M8 3.6v8.8" />
+        </svg>
+      );
+    case "parts":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <path d="M9.55 2.45a2.15 2.15 0 0 1 3.04 3.04l-1.32 1.32-1.72-1.72 1.32-1.32a.7.7 0 0 0-.99-.99L8.56 4.1 6.84 2.38l1.32-1.32a2.15 2.15 0 0 1 1.39-.61Z" />
+          <path d="m2.2 10.64 4.7-4.7 3.56 3.56-4.7 4.7H2.2v-3.56Z" />
+          <path d="m9.82 5.23.95-.95 1.9 1.9-.95.95" />
+        </svg>
+      );
+    case "overdue":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <path d="M8 2.1 14.05 13H1.95L8 2.1Z" />
+          <path d="M8 5.3v3.9" />
+          <circle cx="8" cy="11.6" r=".85" />
+        </svg>
+      );
+    case "ready":
+      return (
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" />
+          <path d="m4.8 8.25 2.15 2.2 4.2-4.45" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
+
+const schedulerSignalLabel = (signal: SchedulerSignalKey) => {
+  switch (signal) {
+    case "approved":
+      return "Approved estimate";
+    case "parts":
+      return "Waiting for parts";
+    case "overdue":
+      return "Overdue";
+    case "ready":
+      return "Bike ready";
+    default:
+      return "";
+  }
+};
+
+const SchedulerSignals = ({
+  signals,
+}: {
+  signals: SchedulerSignalKey[];
+}) => {
+  if (signals.length === 0) {
+    return null;
+  }
+
+  return (
+    <span className="workshop-scheduler-block__signals" aria-label={signals.map(schedulerSignalLabel).join(", ")}>
+      {signals.map((signal) => (
+        <span
+          key={signal}
+          className={`workshop-scheduler-block__signal workshop-scheduler-block__signal--${signal}`}
+          aria-label={schedulerSignalLabel(signal)}
+        >
+          {renderSchedulerSignalIcon(signal)}
+        </span>
+      ))}
+    </span>
+  );
+};
 
 const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
   const details = [
@@ -1042,17 +1134,22 @@ const renderSchedulerBlockContent = ({
   metaLabel,
   technicianOverride,
   density,
+  todayKey,
+  timeZone,
 }: {
   job: CalendarJob;
   timeLabel: string;
   metaLabel: string;
   technicianOverride?: string | null;
   density: SchedulerBlockDensity;
+  todayKey: string;
+  timeZone?: string;
 }) => {
   const technician = getBookingTechnicianLabel(job, technicianOverride);
   const showTechnician = true;
   const showBike = density === "full";
   const showMeta = density === "full";
+  const signals = buildSchedulerSignals(job, todayKey, timeZone);
 
   return (
     <>
@@ -1084,7 +1181,7 @@ const renderSchedulerBlockContent = ({
           {metaLabel}
         </div>
       ) : null}
-      {hasApprovedIndicator(job) ? <ApprovedBookingIndicator /> : null}
+      <SchedulerSignals signals={signals} />
     </>
   );
 };
@@ -2335,6 +2432,8 @@ export const WorkshopSchedulerScreen = ({
                             timeLabel: `${formatOptionalTime(job.scheduledStartAt, calendarTimeZone)} - ${formatOptionalTime(job.scheduledEndAt, calendarTimeZone)}`,
                             metaLabel: getBookingMetaLine(job, todayKey, calendarTimeZone),
                             density,
+                            todayKey,
+                            timeZone: calendarTimeZone,
                           })}
                         </button>
                       );
@@ -2359,6 +2458,8 @@ export const WorkshopSchedulerScreen = ({
                             ? selectedTechnician.name
                             : null,
                           density: previewDensity,
+                          todayKey,
+                          timeZone: calendarTimeZone,
                         })}
                       </div>
                     ) : null}
@@ -2384,6 +2485,8 @@ export const WorkshopSchedulerScreen = ({
                             timeLabel: buildBlockTimeLabel(pendingPrompt.snappedStartMinutes, pendingPrompt.durationMinutes),
                             metaLabel: "Choose technician to confirm placement",
                             density: pendingDensity,
+                            todayKey,
+                            timeZone: calendarTimeZone,
                           })}
                         </button>
                         ) : null}
