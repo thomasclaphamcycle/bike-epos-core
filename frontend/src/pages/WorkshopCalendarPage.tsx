@@ -4,6 +4,7 @@ import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
 import {
+  getWorkshopDisplayStatus,
   workshopRawStatusSurfaceClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -511,7 +512,7 @@ const getBookingMetaLine = (job: CalendarJob, todayKey: string, timeZone?: strin
     return "Overdue";
   }
 
-  return workshopRawStatusLabel(job.rawStatus);
+  return workshopRawStatusLabel(job);
 };
 
 const getBookingServiceLabel = (job: CalendarJob) => {
@@ -539,17 +540,18 @@ const buildSchedulerSignals = (
   timeZone?: string,
 ): SchedulerSignalKey[] => {
   const signals = new Set<SchedulerSignalKey>();
+  const displayStatus = getWorkshopDisplayStatus(job);
 
   if (isOverdueJob(job, todayKey, timeZone)) {
     signals.add("overdue");
   }
-  if (job.rawStatus === "WAITING_FOR_PARTS") {
+  if (displayStatus === "WAITING_FOR_PARTS") {
     signals.add("parts");
   }
-  if (job.rawStatus === "APPROVED") {
+  if (displayStatus === "APPROVED") {
     signals.add("approved");
   }
-  if (job.rawStatus === "READY_FOR_COLLECTION") {
+  if (displayStatus === "BIKE_READY") {
     signals.add("ready");
   }
 
@@ -560,11 +562,9 @@ const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
   switch (signal) {
     case "approved":
       return (
-        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <circle cx="8" cy="8" r="7" />
-          <path d="M10.75 4.75H7.55a2.3 2.3 0 0 0 0 4.6H9a1.4 1.4 0 0 1 0 2.8H5.25" />
-          <path d="M8 3.6v8.8" />
-        </svg>
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          £
+        </span>
       );
     case "parts":
       return (
@@ -646,7 +646,7 @@ const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
   }
 
   details.push(job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Technician: Unassigned");
-  details.push(`Status: ${workshopRawStatusLabel(job.rawStatus)}`);
+  details.push(`Status: ${workshopRawStatusLabel(job)}`);
   if (job.scheduledDate) {
     details.push(`Promise date: ${formatPromiseDate(job.scheduledDate)}`);
   }
@@ -665,10 +665,11 @@ const getJobDueDateKey = (job: CalendarJob, timeZone?: string) =>
 
 const isOverdueJob = (job: CalendarJob, todayKey: string, timeZone?: string) => {
   const jobDateKey = getJobDueDateKey(job, timeZone);
+  const displayStatus = getWorkshopDisplayStatus(job);
   return Boolean(
     jobDateKey
       && jobDateKey < todayKey
-      && !["COMPLETED", "CANCELLED", "READY_FOR_COLLECTION"].includes(job.rawStatus),
+      && !["COMPLETED", "CANCELLED", "BIKE_READY"].includes(displayStatus ?? ""),
   );
 };
 
@@ -1187,7 +1188,7 @@ const renderSchedulerBlockContent = ({
 };
 
 const buildJobToneClass = (job: CalendarJob, todayKey: string, timeZone?: string) => {
-  const classes = ["workshop-scheduler-block", workshopRawStatusSurfaceClass(job.rawStatus)];
+  const classes = ["workshop-scheduler-block", workshopRawStatusSurfaceClass(job)];
   if (isOverdueJob(job, todayKey, timeZone)) {
     classes.push("workshop-scheduler-block--overdue");
   }
@@ -2558,7 +2559,7 @@ export const WorkshopSchedulerScreen = ({
               ) : filteredUnscheduledJobs.map((job) => (
                 <article
                   key={job.id}
-                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
+                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
                   onPointerDown={(event) => handleQueueJobPointerDown(event, job, "unscheduled")}
                 >
                   <div className="workshop-scheduler-queue-card__topline">
@@ -2572,8 +2573,8 @@ export const WorkshopSchedulerScreen = ({
                   </div>
                   <div className="workshop-scheduler-queue-card__footer">
                     <span className="workshop-scheduler-queue-card__drag-hint">Drag to slot</span>
-                    <span className={`${workshopRawStatusClass(job.rawStatus)} workshop-scheduler-queue-card__badge`}>
-                      {workshopRawStatusLabel(job.rawStatus)}
+                    <span className={`${workshopRawStatusClass(job)} workshop-scheduler-queue-card__badge`}>
+                      {workshopRawStatusLabel(job)}
                     </span>
                   </div>
                 </article>
@@ -2595,7 +2596,7 @@ export const WorkshopSchedulerScreen = ({
               ) : filteredUnassignedJobs.map((job) => (
                 <article
                   key={job.id}
-                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job.rawStatus)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
+                  className={`workshop-scheduler-queue-card workshop-scheduler-queue-card--draggable ${workshopRawStatusSurfaceClass(job)}${dragState?.source === "queue" && dragState.active && dragState.job.id === job.id ? " workshop-scheduler-queue-card--dragging" : ""}`}
                   onPointerDown={(event) => handleQueueJobPointerDown(event, job, "unassigned")}
                 >
                   <div className="workshop-scheduler-queue-card__topline">
@@ -2609,8 +2610,8 @@ export const WorkshopSchedulerScreen = ({
                   </div>
                   <div className="workshop-scheduler-queue-card__footer">
                     <span className="workshop-scheduler-queue-card__drag-hint">Drag to slot</span>
-                    <span className={`${workshopRawStatusClass(job.rawStatus)} workshop-scheduler-queue-card__badge`}>
-                      {workshopRawStatusLabel(job.rawStatus)}
+                    <span className={`${workshopRawStatusClass(job)} workshop-scheduler-queue-card__badge`}>
+                      {workshopRawStatusLabel(job)}
                     </span>
                   </div>
                 </article>

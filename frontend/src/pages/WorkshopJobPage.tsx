@@ -6,9 +6,10 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useOpenPosWithContext, type PosLineItem, type SaleContext } from "../features/pos/posContext";
 import {
+  getWorkshopDisplayStatus,
+  getWorkshopRawStatusValue,
   getWorkshopTechnicianWorkflowSummary,
   getWorkshopStatusTimeline,
-  toWorkshopDisplayStatus,
   workshopRawStatusActionClass,
   workshopExecutionStatusClass,
   workshopExecutionStatusLabel,
@@ -426,33 +427,9 @@ const notificationChannelSummaryLabel = (notification: WorkshopNotificationRecor
     .filter(Boolean)
     .join(" • ");
 
-const toRawStatus = (job: WorkshopJobResponse["job"] | null | undefined) => {
-  if (!job) {
-    return "";
-  }
-
-  if (job.rawStatus) {
-    return job.rawStatus;
-  }
-
-  switch (job.status) {
-    case "BOOKED":
-      return "BOOKED";
-    case "READY":
-      return "READY_FOR_COLLECTION";
-    case "COLLECTED":
-    case "CLOSED":
-      return "COMPLETED";
-    case "IN_PROGRESS":
-      return "IN_PROGRESS";
-    default:
-      return job.status;
-  }
-};
-
 const canPersistApprovalStatus = (status: string | null | undefined) =>
   ["BOOKED", "BIKE_ARRIVED", "APPROVED", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(
-    toWorkshopDisplayStatus(status) ?? "",
+    getWorkshopDisplayStatus(status) ?? "",
   );
 
 export const WorkshopJobPage = () => {
@@ -1352,8 +1329,8 @@ export const WorkshopJobPage = () => {
     [partLines],
   );
   const subtotalPence = labourSubtotalPence + partsSubtotalPence;
-  const rawStatus = useMemo(() => toRawStatus(payload?.job), [payload?.job]);
-  const displayStatus = useMemo(() => toWorkshopDisplayStatus(rawStatus) ?? "BOOKED", [rawStatus]);
+  const rawStatus = useMemo(() => getWorkshopRawStatusValue(payload?.job) ?? "", [payload?.job]);
+  const displayStatus = useMemo(() => getWorkshopDisplayStatus(payload?.job) ?? "BOOKED", [payload?.job]);
   const currentEstimate = payload?.currentEstimate ?? null;
   const estimateHistory = payload?.estimateHistory ?? [];
   const canResendQuoteNotification = currentEstimate?.status === "PENDING_APPROVAL";

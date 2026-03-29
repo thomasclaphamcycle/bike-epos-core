@@ -4,9 +4,10 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client";
 import { useToasts } from "../../components/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
+  getWorkshopDisplayStatus,
+  getWorkshopRawStatusValue,
   getWorkshopStatusTimeline,
   getWorkshopTechnicianWorkflowSummary,
-  toWorkshopDisplayStatus,
   workshopRawStatusActionClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -76,6 +77,7 @@ type WorkshopJobOverlayResponse = {
   job: {
     id: string;
     status: string;
+    rawStatus?: string | null;
     customerId: string | null;
     customerName: string | null;
     bikeId: string | null;
@@ -168,6 +170,7 @@ type WorkshopJobOverlayStatusResponse = {
   job: {
     id: string;
     status: string;
+    rawStatus?: string | null;
     updatedAt: string;
     completedAt: string | null;
     cancelledAt?: string | null;
@@ -180,6 +183,7 @@ type WorkshopJobOverlayApprovalResponse = {
   job: {
     id: string;
     status: string;
+    rawStatus?: string | null;
   };
   idempotent: boolean;
 };
@@ -605,7 +609,7 @@ const getSnapshotJobSubline = (job: WorkshopJobOverlayDaySnapshotJob) => {
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
 
-  return parts.join(" · ") || workshopRawStatusLabel(job.rawStatus);
+  return parts.join(" · ") || workshopRawStatusLabel(job);
 };
 
 const formatFileSize = (bytes: number) => {
@@ -623,7 +627,7 @@ const getOverlayCustomerName = (summary?: WorkshopJobOverlaySummary | null) =>
 
 const getNextStepHint = (summary?: WorkshopJobOverlaySummary | null) =>
   getWorkshopTechnicianWorkflowSummary({
-    rawStatus: summary?.rawStatus || summary?.status || "BOOKED",
+    rawStatus: getWorkshopRawStatusValue(summary) ?? "BOOKED",
     partsStatus: summary?.partsSummary?.partsStatus,
     assignedStaffName: summary?.assignedStaffName || null,
     scheduledDate: summary?.scheduledDate || null,
@@ -1445,8 +1449,9 @@ export const WorkshopJobOverlay = ({
   }, [jobId, refreshKey]);
 
   const overlayJob = details?.job ?? null;
-  const rawOverlayStatus = overlayJob?.status || summary?.rawStatus || summary?.status || "BOOKED";
-  const displayStatus = toWorkshopDisplayStatus(rawOverlayStatus) ?? "BOOKED";
+  const overlayStatusSource = overlayJob ?? summary ?? null;
+  const rawOverlayStatus = getWorkshopRawStatusValue(overlayStatusSource) ?? "BOOKED";
+  const displayStatus = getWorkshopDisplayStatus(overlayStatusSource) ?? "BOOKED";
   const displayCustomerName = overlayJob?.customerName || getOverlayCustomerName(summary);
   const displayBikeDescription = overlayJob?.bikeDescription || summary?.bikeDescription || "Workshop job";
   const displayPartsSummary = details?.partsOverview?.summary ?? summary?.partsSummary ?? null;
@@ -1598,11 +1603,13 @@ export const WorkshopJobOverlay = ({
 
   const applyInlineStatusUpdate = ({
     status,
+    rawStatus,
     completedAt,
     cancelledAt,
     estimate,
   }: {
     status: string;
+    rawStatus?: string | null;
     completedAt?: string | null;
     cancelledAt?: string | null;
     estimate?: WorkshopJobOverlayEstimate | null;
@@ -1616,7 +1623,7 @@ export const WorkshopJobOverlay = ({
         ...current,
         job: {
           ...current.job,
-          status,
+          rawStatus: rawStatus || status,
           ...(completedAt !== undefined ? { completedAt } : {}),
           ...(cancelledAt !== undefined ? { cancelledAt } : {}),
         },
@@ -1800,6 +1807,7 @@ export const WorkshopJobOverlay = ({
         });
         applyInlineStatusUpdate({
           status: response.job.status,
+          rawStatus: response.job.rawStatus,
           estimate: response.estimate,
         });
         success("Quote marked approved");
@@ -1809,6 +1817,7 @@ export const WorkshopJobOverlay = ({
         });
         applyInlineStatusUpdate({
           status: response.job.status,
+          rawStatus: response.job.rawStatus,
           completedAt: response.job.completedAt,
           cancelledAt: response.job.cancelledAt,
         });
@@ -1840,6 +1849,7 @@ export const WorkshopJobOverlay = ({
         });
         applyInlineStatusUpdate({
           status: response.job.status,
+          rawStatus: response.job.rawStatus,
           estimate: response.estimate,
         });
         success("Quote marked approved");
@@ -1849,6 +1859,7 @@ export const WorkshopJobOverlay = ({
         });
         applyInlineStatusUpdate({
           status: response.job.status,
+          rawStatus: response.job.rawStatus,
           completedAt: response.job.completedAt,
           cancelledAt: response.job.cancelledAt,
         });
@@ -1879,6 +1890,7 @@ export const WorkshopJobOverlay = ({
       });
       applyInlineStatusUpdate({
         status: response.job.status,
+        rawStatus: response.job.rawStatus,
         completedAt: response.job.completedAt,
         cancelledAt: response.job.cancelledAt,
       });
@@ -2954,7 +2966,7 @@ export const WorkshopJobOverlay = ({
                               return (
                                 <article
                                   key={job.id}
-                                  className={`workshop-os-job-workspace-section__list-item workshop-os-schedule-day-snapshot__job ${workshopRawStatusSurfaceClass(job.rawStatus)}${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
+                                  className={`workshop-os-job-workspace-section__list-item workshop-os-schedule-day-snapshot__job ${workshopRawStatusSurfaceClass(job)}${isCurrentJob ? " workshop-os-schedule-day-snapshot__item--current" : ""}`}
                                 >
                                   <div className="workshop-os-schedule-day-snapshot__item-row">
                                     <div>
@@ -2963,7 +2975,7 @@ export const WorkshopJobOverlay = ({
                                     </div>
                                     <div className="workshop-os-overview-header__signals">
                                       {isCurrentJob ? <span className="status-badge status-info">This job</span> : null}
-                                      <span className={workshopRawStatusClass(job.rawStatus)}>{workshopRawStatusLabel(job.rawStatus)}</span>
+                                      <span className={workshopRawStatusClass(job)}>{workshopRawStatusLabel(job)}</span>
                                     </div>
                                   </div>
                                   <p className="muted-text">{getSnapshotJobSubline(job)}</p>

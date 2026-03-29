@@ -1,9 +1,9 @@
 import {
   WORKSHOP_CANONICAL_STATUSES,
   WORKSHOP_STATUS_TIMELINE,
-  getWorkshopDisplayStatusDescription,
-  getWorkshopDisplayStatusLabel,
-  getWorkshopDisplayStatusTone,
+  getWorkshopDisplayStatusDescription as getSharedWorkshopDisplayStatusDescription,
+  getWorkshopDisplayStatusLabel as getSharedWorkshopDisplayStatusLabel,
+  getWorkshopDisplayStatusTone as getSharedWorkshopDisplayStatusTone,
   getWorkshopTimelineStatus,
   normalizeWorkshopDisplayStatus,
   type WorkshopCanonicalStatus,
@@ -50,6 +50,46 @@ type WorkshopRawStatusTone =
   | "hold"
   | "cancelled";
 
+export type WorkshopStatusSource = {
+  rawStatus?: string | null;
+  status?: string | null;
+};
+
+const getNormalizedWorkshopStatusSourceValue = (
+  source: WorkshopStatusSource | string | null | undefined,
+) => {
+  if (typeof source === "string") {
+    return source;
+  }
+
+  if (!source) {
+    return null;
+  }
+
+  if (source.rawStatus) {
+    return source.rawStatus;
+  }
+
+  switch (source.status) {
+    case "READY":
+      return "READY_FOR_COLLECTION";
+    case "COLLECTED":
+    case "CLOSED":
+      return "COMPLETED";
+    default:
+      return source.status ?? null;
+  }
+};
+
+export const getWorkshopRawStatusValue = (
+  source: WorkshopStatusSource | string | null | undefined,
+) => getNormalizedWorkshopStatusSourceValue(source);
+
+export const getWorkshopDisplayStatus = (
+  source: WorkshopStatusSource | string | null | undefined,
+): WorkshopDisplayStatus | null =>
+  normalizeWorkshopDisplayStatus(getNormalizedWorkshopStatusSourceValue(source));
+
 export const workshopExecutionStatusLabel = (
   status: WorkshopExecutionStatus | string | null | undefined,
 ) => {
@@ -90,25 +130,33 @@ export const workshopExecutionStatusClass = (
 };
 
 export const workshopRawStatusLabel = (
-  status: string | null | undefined,
-) => getWorkshopDisplayStatusLabel(status);
+  status: WorkshopStatusSource | string | null | undefined,
+) => {
+  const normalized = getWorkshopDisplayStatus(status);
+  return normalized
+    ? getSharedWorkshopDisplayStatusLabel(normalized)
+    : getWorkshopRawStatusValue(status) || "-";
+};
 
 export const getWorkshopRawStatusTone = (
-  status: string | null | undefined,
-): WorkshopRawStatusTone => getWorkshopDisplayStatusTone(status);
+  status: WorkshopStatusSource | string | null | undefined,
+): WorkshopRawStatusTone => {
+  const normalized = getWorkshopDisplayStatus(status);
+  return normalized ? getSharedWorkshopDisplayStatusTone(normalized) : "booked";
+};
 
 export const workshopRawStatusClass = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => {
   return `status-badge workshop-status-badge workshop-status-badge--${getWorkshopRawStatusTone(status)}`;
 };
 
 export const workshopRawStatusSurfaceClass = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => `workshop-status-surface workshop-status-surface--${getWorkshopRawStatusTone(status)}`;
 
 export const workshopRawStatusActionClass = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ) => `workshop-status-action workshop-status-action--${getWorkshopRawStatusTone(status)}`;
 
 export const workshopTechnicianWorkflowLabel = (
@@ -189,12 +237,12 @@ export const toWorkshopTechnicianWorkflowStage = (
 
 export const toWorkshopDisplayStatus = (
   status: string | null | undefined,
-): WorkshopDisplayStatus | null => normalizeWorkshopDisplayStatus(status);
+): WorkshopDisplayStatus | null => getWorkshopDisplayStatus(status);
 
 export const workshopStatusSelectorOptions = WORKSHOP_CANONICAL_STATUSES.map((status) => ({
   value: status,
-  label: getWorkshopDisplayStatusLabel(status),
-  description: getWorkshopDisplayStatusDescription(status),
+  label: getSharedWorkshopDisplayStatusLabel(status),
+  description: getSharedWorkshopDisplayStatusDescription(status),
 }));
 
 export type WorkshopStatusShortcutAction = {
@@ -203,9 +251,9 @@ export type WorkshopStatusShortcutAction = {
 };
 
 export const getWorkshopStatusShortcutActions = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ): WorkshopStatusShortcutAction[] => {
-  switch (normalizeWorkshopDisplayStatus(status)) {
+  switch (getWorkshopDisplayStatus(status)) {
     case "BOOKED":
       return [
         { label: "Bike Arrived", value: "BIKE_ARRIVED" },
@@ -250,23 +298,45 @@ export type WorkshopStatusTimelineStep = {
   state: "past" | "current" | "future";
 };
 
+const getWorkshopTimelineStepState = (
+  timelineStatus: WorkshopTimelineStatus,
+  currentStatus: WorkshopTimelineStatus | null,
+  index: number,
+  currentIndex: number,
+): WorkshopStatusTimelineStep["state"] => {
+  if (!currentStatus || currentIndex === -1) {
+    return "future";
+  }
+
+  if (currentStatus === "ON_HOLD") {
+    if (timelineStatus === "BOOKED") {
+      return "past";
+    }
+
+    return timelineStatus === "ON_HOLD" ? "current" : "future";
+  }
+
+  if (index < currentIndex) {
+    return "past";
+  }
+
+  if (index === currentIndex) {
+    return "current";
+  }
+
+  return "future";
+};
+
 export const getWorkshopStatusTimeline = (
-  status: string | null | undefined,
+  status: WorkshopStatusSource | string | null | undefined,
 ): WorkshopStatusTimelineStep[] => {
-  const currentStatus = getWorkshopTimelineStatus(status);
+  const currentStatus = getWorkshopTimelineStatus(getWorkshopRawStatusValue(status));
   const currentIndex = currentStatus ? WORKSHOP_STATUS_TIMELINE.indexOf(currentStatus) : -1;
 
   return WORKSHOP_STATUS_TIMELINE.map((timelineStatus, index) => ({
     status: timelineStatus,
-    label: getWorkshopDisplayStatusLabel(timelineStatus),
-    state:
-      currentIndex === -1
-        ? "future"
-        : index < currentIndex
-          ? "past"
-          : index === currentIndex
-            ? "current"
-            : "future",
+    label: getSharedWorkshopDisplayStatusLabel(timelineStatus),
+    state: getWorkshopTimelineStepState(timelineStatus, currentStatus, index, currentIndex),
   }));
 };
 

@@ -11,6 +11,8 @@ import {
   workshopTodayDateKey,
 } from "./WorkshopCalendarPage";
 import {
+  getWorkshopDisplayStatus,
+  getWorkshopRawStatusValue,
   getWorkshopTechnicianWorkflowSummary,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -156,7 +158,7 @@ const toPartsStatus = (job: DashboardJob) => {
   if (job.partsStatus) {
     return job.partsStatus;
   }
-  return job.status === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
+  return getWorkshopDisplayStatus(job) === "WAITING_FOR_PARTS" ? "SHORT" : "OK";
 };
 
 const getPartsClassName = (job: DashboardJob) => {
@@ -171,7 +173,9 @@ const getPartsClassName = (job: DashboardJob) => {
 };
 
 const getUrgency = (job: DashboardJob) => {
-  if (!job.scheduledDate || job.status === "COMPLETED" || job.status === "CANCELLED") {
+  const displayStatus = getWorkshopDisplayStatus(job);
+
+  if (!job.scheduledDate || displayStatus === "COMPLETED" || displayStatus === "CANCELLED") {
     return null;
   }
 
@@ -233,6 +237,8 @@ const matchesQuickFilter = (
   filter: QuickFilterKey,
   currentUserId: string | null | undefined,
 ) => {
+  const displayStatus = getWorkshopDisplayStatus(job);
+
   switch (filter) {
     case "MY_JOBS":
       return Boolean(currentUserId) && job.assignedStaffId === currentUserId;
@@ -241,11 +247,11 @@ const matchesQuickFilter = (
     case "OVERDUE":
       return getUrgency(job)?.label === "Overdue";
     case "WAITING_FOR_PARTS":
-      return job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT";
+      return displayStatus === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT";
     case "READY_FOR_COLLECTION":
-      return job.status === "READY_FOR_COLLECTION";
+      return displayStatus === "BIKE_READY";
     case "COMPLETED":
-      return job.status === "COMPLETED";
+      return displayStatus === "COMPLETED";
     default:
       return true;
   }
@@ -389,9 +395,9 @@ export const WorkshopPage = () => {
   );
 
   const listAlerts = useMemo(() => {
-    const approval = visibleJobs.filter((job) => job.status === "WAITING_FOR_APPROVAL").length;
-    const parts = visibleJobs.filter((job) => job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT").length;
-    const ready = visibleJobs.filter((job) => job.status === "READY_FOR_COLLECTION").length;
+    const approval = visibleJobs.filter((job) => getWorkshopDisplayStatus(job) === "WAITING_FOR_APPROVAL").length;
+    const parts = visibleJobs.filter((job) => getWorkshopDisplayStatus(job) === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT").length;
+    const ready = visibleJobs.filter((job) => getWorkshopDisplayStatus(job) === "BIKE_READY").length;
 
     return [
       { key: "approval", label: "Waiting for approval", count: approval, tone: approval ? "status-warning" : "status-badge" },
@@ -407,7 +413,7 @@ export const WorkshopPage = () => {
 
   const selectedListWorkflow = selectedListJob
     ? getWorkshopTechnicianWorkflowSummary({
-        rawStatus: selectedListJob.status,
+        rawStatus: getWorkshopRawStatusValue(selectedListJob) ?? selectedListJob.status,
         partsStatus: selectedListJob.partsStatus,
         assignedStaffName: selectedListJob.assignedStaffName,
         scheduledDate: selectedListJob.scheduledDate,
@@ -647,7 +653,7 @@ export const WorkshopPage = () => {
                       ) : (
                         [...visibleJobs].sort(compareJobs).map((job) => {
                           const workflowSummary = getWorkshopTechnicianWorkflowSummary({
-                            rawStatus: job.status,
+                            rawStatus: getWorkshopRawStatusValue(job) ?? job.status,
                             partsStatus: job.partsStatus,
                             assignedStaffName: job.assignedStaffName,
                             scheduledDate: job.scheduledDate,
@@ -719,7 +725,7 @@ export const WorkshopPage = () => {
                       <strong>{selectedListJob.bikeDescription || "Workshop job"}</strong>
                       <span className="table-secondary">{getCustomerName(selectedListJob)}</span>
                       <div className="workshop-primary-selection__badges">
-                        <span className={workshopRawStatusClass(selectedListJob.status)}>{workshopRawStatusLabel(selectedListJob.status)}</span>
+                        <span className={workshopRawStatusClass(selectedListJob)}>{workshopRawStatusLabel(selectedListJob)}</span>
                         {selectedListWorkflow ? (
                           <span className={selectedListWorkflow.className}>{selectedListWorkflow.label}</span>
                         ) : null}
