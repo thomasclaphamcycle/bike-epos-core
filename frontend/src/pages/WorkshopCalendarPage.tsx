@@ -710,17 +710,15 @@ const getOperationalWeekStart = (anchor: Date) => {
 
 const getStandaloneWeekStart = (anchor: Date) => addDays(anchor, -2);
 
+export const getWorkshopOperationalWeekStartDateKey = (referenceDate = new Date()) =>
+  formatDateKey(getOperationalWeekStart(referenceDate));
+
 const getAnchorDateForVisibleWeekStart = (
   start: Date,
   weekRangeMode: "calendar" | "operational" | "standalone",
 ) => {
   if (weekRangeMode === "standalone") {
     return addDays(start, 2);
-  }
-
-  if (weekRangeMode === "operational") {
-    const weekdayIndex = (start.getDay() + 6) % 7;
-    return weekdayIndex === 0 ? start : addDays(start, 2);
   }
 
   return start;
@@ -735,7 +733,7 @@ const buildVisibleRange = (
   const start = view === "week"
     ? (
       weekRangeMode === "operational"
-        ? getOperationalWeekStart(anchor)
+        ? anchor
         : weekRangeMode === "standalone"
           ? getStandaloneWeekStart(anchor)
           : startOfWeek(anchor)
@@ -769,6 +767,10 @@ export const shiftWorkshopVisibleWindowDateKey = (
 ) => {
   if (view !== "week" || weekRangeMode === "calendar") {
     return shiftWorkshopAnchorDateKey(anchorDateKey, view, direction);
+  }
+
+  if (weekRangeMode === "operational") {
+    return formatDateKey(addDays(parseDateKey(anchorDateKey), direction));
   }
 
   const { from } = buildVisibleRange(anchorDateKey, view, weekRangeMode);
