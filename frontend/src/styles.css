@@ -3204,20 +3204,20 @@ button.primary.workshop-status-action {
   vector-effect: non-scaling-stroke;
 }
 
-.workshop-scheduler-block__signal--approved circle,
-.workshop-scheduler-block__signal--ready circle {
+.workshop-scheduler-block__signal--approved circle {
   fill: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 78%, #ffffff);
   stroke: currentColor;
   stroke-width: 1.2;
 }
 
 .workshop-scheduler-block__signal--approved path,
-.workshop-scheduler-block__signal--ready path {
+.workshop-scheduler-block__signal--ready path,
+.workshop-scheduler-block__signal--overdue path {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.2;
+  stroke-width: 1.5;
 }
 
 .workshop-scheduler-block__signal--parts path {
@@ -3229,21 +3229,21 @@ button.primary.workshop-status-action {
   stroke: none;
 }
 
-.workshop-scheduler-block__signal--overdue path:last-child {
-  fill: none;
-  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 84%, #ffffff);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.3;
+.workshop-scheduler-block__signal--overdue path:nth-child(2) {
+  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 86%, #ffffff);
+  stroke-width: 1.5;
 }
 
-.workshop-scheduler-block__signal--overdue circle {
-  fill: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 84%, #ffffff);
-  stroke: none;
+.workshop-scheduler-block__signal--overdue path:last-child {
+  stroke: color-mix(in srgb, var(--workshop-status-surface, #ffffff) 86%, #ffffff);
+  stroke-width: 1.9;
 }
 
 .workshop-scheduler-block__signal--parts {
-  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 72%, #6e7a88);
+  width: 14px;
+  height: 14px;
+  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #667482);
+  opacity: 0.9;
 }
 
 .workshop-scheduler-block__signal--approved {
@@ -3259,10 +3259,16 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-block__signal--ready {
   color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #4e7660);
+  width: 14px;
+  height: 14px;
+  opacity: 0.94;
 }
 
 .workshop-scheduler-block__signal--overdue {
-  color: #b15b3f;
+  width: 14px;
+  height: 14px;
+  color: #b14d31;
+  opacity: 0.98;
 }
 
 .workshop-scheduler-block__bike {

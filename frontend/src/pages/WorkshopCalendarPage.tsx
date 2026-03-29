@@ -568,24 +568,21 @@ const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
     case "parts":
       return (
         <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <path d="M9.55 2.45a2.15 2.15 0 0 1 3.04 3.04l-1.32 1.32-1.72-1.72 1.32-1.32a.7.7 0 0 0-.99-.99L8.56 4.1 6.84 2.38l1.32-1.32a2.15 2.15 0 0 1 1.39-.61Z" />
-          <path d="m2.2 10.64 4.7-4.7 3.56 3.56-4.7 4.7H2.2v-3.56Z" />
-          <path d="m9.82 5.23.95-.95 1.9 1.9-.95.95" />
+          <path d="M12.9 2.15a2.5 2.5 0 0 0-3.08 3.13L6.45 8.66 4.8 7 2 9.8l.95.95 1.85-1.85 1.66 1.66-1.85 1.85.95.95 2.8-2.8-1.66-1.65 3.38-3.39a2.5 2.5 0 0 0 3.12-3.07l-1.42 1.41-1.25-.23-.22-1.25 1.4-1.4Z" />
         </svg>
       );
     case "overdue":
       return (
         <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <path d="M8 2.1 14.05 13H1.95L8 2.1Z" />
-          <path d="M8 5.3v3.9" />
-          <circle cx="8" cy="11.6" r=".85" />
+          <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" />
+          <path d="M8 4.55v4.3" />
+          <path d="M8 11.45h.01" />
         </svg>
       );
     case "ready":
       return (
         <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
-          <circle cx="8" cy="8" r="7" />
-          <path d="m4.8 8.25 2.15 2.2 4.2-4.45" />
+          <path d="m3.65 8.35 2.55 2.6 6.15-6.45" />
         </svg>
       );
     default:
