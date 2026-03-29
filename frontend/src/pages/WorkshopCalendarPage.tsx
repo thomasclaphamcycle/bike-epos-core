@@ -137,7 +137,7 @@ type WorkshopSchedulerScreenProps = {
   backLinkTo?: string | null;
   view?: CalendarViewMode;
   anchorDateKey?: string;
-  weekRangeMode?: "calendar" | "operational";
+  weekRangeMode?: "calendar" | "operational" | "standalone";
   onChangeView?: (view: CalendarViewMode) => void;
   onChangeAnchorDateKey?: (dateKey: string) => void;
   technicianId?: string;
@@ -234,6 +234,7 @@ const DEFAULT_OPEN_MINUTES = 9 * 60;
 const DEFAULT_CLOSE_MINUTES = 18 * 60;
 const TIME_AXIS_WIDTH = 60;
 const WEEK_DAY_WIDTH = 118;
+const STANDALONE_WEEK_DAY_WIDTH = 98;
 const DAY_VIEW_WIDTH = 460;
 const JOB_BLOCK_GAP = 6;
 const MINIMAL_BOOKING_BLOCK_HEIGHT = 64;
@@ -709,14 +710,22 @@ const getOperationalWeekStart = (anchor: Date) => {
   return addDays(anchor, -2);
 };
 
+const getStandaloneWeekStart = (anchor: Date) => addDays(anchor, -2);
+
 const buildVisibleRange = (
   anchorDateKey: string,
   view: CalendarViewMode,
-  weekRangeMode: "calendar" | "operational" = "calendar",
+  weekRangeMode: "calendar" | "operational" | "standalone" = "calendar",
 ) => {
   const anchor = parseDateKey(anchorDateKey);
   const start = view === "week"
-    ? (weekRangeMode === "operational" ? getOperationalWeekStart(anchor) : startOfWeek(anchor))
+    ? (
+      weekRangeMode === "operational"
+        ? getOperationalWeekStart(anchor)
+        : weekRangeMode === "standalone"
+          ? getStandaloneWeekStart(anchor)
+          : startOfWeek(anchor)
+    )
     : anchor;
   const end = view === "week" ? addDays(start, 6) : start;
   const dates: string[] = [];
@@ -1269,6 +1278,7 @@ export const WorkshopSchedulerScreen = ({
 
   const standaloneView = searchParams.get("view") === "day" ? "day" : "week";
   const standaloneAnchorDateKey = searchParams.get("date") || workshopTodayDateKey();
+  const standaloneOverview = !embedded;
   const view = controlledView ?? standaloneView;
   const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
   const selectedTechnicianId = technicianId ?? internalTechnicianId;
@@ -1373,19 +1383,21 @@ export const WorkshopSchedulerScreen = ({
 
     const visibleDayCount = Math.max(days.length, 1);
     const availableWidth = schedulerViewportWidth - TIME_AXIS_WIDTH;
+    const minimumWeekDayWidth = standaloneOverview ? STANDALONE_WEEK_DAY_WIDTH : WEEK_DAY_WIDTH;
     if (availableWidth <= 0) {
-      return WEEK_DAY_WIDTH;
+      return minimumWeekDayWidth;
     }
 
-    return Math.max(WEEK_DAY_WIDTH, Math.floor(availableWidth / visibleDayCount));
-  }, [days.length, schedulerViewportWidth, view]);
+    return Math.max(minimumWeekDayWidth, Math.floor(availableWidth / visibleDayCount));
+  }, [days.length, schedulerViewportWidth, standaloneOverview, view]);
   const schedulerGridTemplateColumns = useMemo(() => {
     if (view === "week") {
-      return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, minmax(${WEEK_DAY_WIDTH}px, 1fr))`;
+      const minimumWeekDayWidth = standaloneOverview ? STANDALONE_WEEK_DAY_WIDTH : WEEK_DAY_WIDTH;
+      return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, minmax(${minimumWeekDayWidth}px, 1fr))`;
     }
 
     return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)`;
-  }, [dayColumnWidth, days.length, view]);
+  }, [dayColumnWidth, days.length, standaloneOverview, view]);
 
   useEffect(() => {
     const node = schedulerScrollRef.current;
@@ -2145,34 +2157,39 @@ export const WorkshopSchedulerScreen = ({
     openJobOverlay(job);
   };
 
-  const toolbarLeadingAction: ReactNode = backLinkTo ? (
+  const toolbarLeadingAction: ReactNode = !standaloneOverview && backLinkTo ? (
     <Link to={backLinkTo} className="button-link">Back to Operating System</Link>
   ) : null;
 
   return (
-    <div className={embedded ? "workshop-scheduler-screen workshop-scheduler-screen--embedded" : "page-shell page-shell-workspace workshop-scheduler-page"}>
+    <div className={
+      embedded
+        ? "workshop-scheduler-screen workshop-scheduler-screen--embedded"
+        : "page-shell page-shell-workspace workshop-scheduler-page workshop-scheduler-page--standalone"
+    }>
       {showToolbar ? (
-        <section className={embedded ? "workshop-scheduler-toolbar workshop-scheduler-toolbar--embedded" : "card workshop-scheduler-toolbar"}>
+        <section className={
+          embedded
+            ? "workshop-scheduler-toolbar workshop-scheduler-toolbar--embedded"
+            : "workshop-scheduler-toolbar workshop-scheduler-toolbar--standalone"
+        }>
           <div className="card-header-row">
             <div>
-              <h1>{title || (embedded ? "Scheduler" : "Workshop Calendar")}</h1>
+              <h1>{title || (embedded ? "Scheduler" : "Workshop Calendar Overview")}</h1>
               <p className="muted-text">
                 {description || (
                   embedded
                     ? "Week-first timed scheduling is now the main workshop surface, with day detail on demand and booking blocks rendered directly in the grid."
-                    : "Timed workshop scheduler with week view first, day detail on demand, and bookings rendered as real calendar blocks instead of staffing rows."
+                    : "A dedicated full-width planning view focused entirely on the workshop calendar, staffing availability, and booking density."
                 )}
               </p>
             </div>
             <div className="actions-inline">
               {toolbarLeadingAction}
-              <button type="button" onClick={() => void loadCalendar()} disabled={loading}>
-                {loading ? "Refreshing..." : "Refresh"}
-              </button>
             </div>
           </div>
 
-          <div className="workshop-scheduler-toolbar__controls">
+          <div className={`workshop-scheduler-toolbar__controls${standaloneOverview ? " workshop-scheduler-toolbar__controls--standalone" : ""}`}>
             <div className="workshop-scheduler-toolbar__view-toggle" role="tablist" aria-label="Calendar view mode">
               <button
                 type="button"
@@ -2235,22 +2252,25 @@ export const WorkshopSchedulerScreen = ({
               </button>
             </div>
 
-            <label className="workshop-scheduler-toolbar__filter">
-              Technician
-              <select
-                value={selectedTechnicianId}
-                onChange={(event) => changeTechnicianId(event.target.value)}
-              >
-                <option value="">All technicians</option>
-                {staffFilterOptions.map((staff) => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!standaloneOverview ? (
+              <label className="workshop-scheduler-toolbar__filter">
+                Technician
+                <select
+                  value={selectedTechnicianId}
+                  onChange={(event) => changeTechnicianId(event.target.value)}
+                >
+                  <option value="">All technicians</option>
+                  {staffFilterOptions.map((staff) => (
+                    <option key={staff.id} value={staff.id}>
+                      {staff.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
 
+          {!standaloneOverview ? (
           <div className="workshop-scheduler-toolbar__summary">
             <article className="metric-card">
               <span className="metric-label">Visible range</span>
@@ -2283,10 +2303,11 @@ export const WorkshopSchedulerScreen = ({
                   ? "More time visible for weekly overview"
                   : schedulerZoom === "comfortable"
                     ? "Larger booking blocks for precise edits"
-                    : "Balanced default density for daily planning"}
+                  : "Balanced default density for daily planning"}
               </span>
             </article>
           </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -2296,8 +2317,13 @@ export const WorkshopSchedulerScreen = ({
         </section>
       ) : null}
 
-      <div className={embedded ? "workshop-scheduler-layout workshop-scheduler-layout--embedded" : "workshop-scheduler-layout"}>
-        <section className={`${embedded ? "workshop-scheduler-board workshop-scheduler-board--embedded" : "card workshop-scheduler-board"}${dragState?.source === "queue" && dragState.active ? " workshop-scheduler-board--queue-dragging" : ""}`}>
+      <div className={
+        embedded
+          ? "workshop-scheduler-layout workshop-scheduler-layout--embedded"
+          : "workshop-scheduler-layout workshop-scheduler-layout--standalone"
+      }>
+        <section className={`${embedded ? "workshop-scheduler-board workshop-scheduler-board--embedded" : "workshop-scheduler-board workshop-scheduler-board--standalone"}${dragState?.source === "queue" && dragState.active ? " workshop-scheduler-board--queue-dragging" : ""}`}>
+          {!standaloneOverview || !showToolbar ? (
           <div className="workshop-scheduler-board__header">
             <div>
               <h2>{view === "week" ? "Week schedule" : "Day schedule"}</h2>
@@ -2320,6 +2346,7 @@ export const WorkshopSchedulerScreen = ({
               </div>
             ) : null}
           </div>
+          ) : null}
 
           <div ref={schedulerScrollRef} className="workshop-scheduler-scroll">
             <div
@@ -2571,6 +2598,7 @@ export const WorkshopSchedulerScreen = ({
           </div>
         </section>
 
+        {!standaloneOverview ? (
         <aside className={embedded ? "workshop-scheduler-rail workshop-scheduler-rail--embedded" : "workshop-scheduler-rail"}>
           <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
@@ -2674,6 +2702,7 @@ export const WorkshopSchedulerScreen = ({
             </section>
           ) : null}
         </aside>
+        ) : null}
       </div>
 
       {overlayJobId ? (
@@ -2691,4 +2720,4 @@ export const WorkshopSchedulerScreen = ({
   );
 };
 
-export const WorkshopCalendarPage = () => <WorkshopSchedulerScreen />;
+export const WorkshopCalendarPage = () => <WorkshopSchedulerScreen weekRangeMode="standalone" />;
