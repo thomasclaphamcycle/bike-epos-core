@@ -4,9 +4,9 @@ export const WORKSHOP_CANONICAL_STATUSES = [
   "WAITING_FOR_APPROVAL",
   "APPROVED",
   "WAITING_FOR_PARTS",
+  "ON_HOLD",
   "BIKE_READY",
   "COMPLETED",
-  "ON_HOLD",
 ] as const;
 
 export const WORKSHOP_EXCEPTIONAL_STATUSES = [
@@ -23,6 +23,8 @@ export const WORKSHOP_STATUS_TIMELINE = [
   "BIKE_ARRIVED",
   "WAITING_FOR_APPROVAL",
   "APPROVED",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
   "BIKE_READY",
   "COMPLETED",
 ] as const;
@@ -155,11 +157,5 @@ export const getWorkshopTimelineStatus = (
     return null;
   }
 
-  switch (normalized) {
-    case "WAITING_FOR_PARTS":
-    case "ON_HOLD":
-      return "APPROVED";
-    default:
-      return normalized;
-  }
+  return normalized;
 };

@@ -342,10 +342,10 @@ const run = async () => {
       const invalid = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
         headers: STAFF_HEADERS,
-        body: JSON.stringify({ status: "READY_FOR_COLLECTION" }),
+        body: JSON.stringify({ status: "NOT_A_STATUS" }),
       });
-      assert.equal(invalid.status, 409, JSON.stringify(invalid.json));
-      assert.equal(invalid.json.error.code, "INVALID_STATUS_TRANSITION");
+      assert.equal(invalid.status, 400, JSON.stringify(invalid.json));
+      assert.equal(invalid.json.error.code, "INVALID_STATUS");
 
       const toInProgress = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
         method: "POST",
@@ -424,8 +424,8 @@ const run = async () => {
         headers: STAFF_HEADERS,
         body: JSON.stringify({ status: "CANCELLED" }),
       });
-      assert.equal(toCancelled.status, 409, JSON.stringify(toCancelled.json));
-      assert.equal(toCancelled.json.error.code, "INVALID_STATUS_TRANSITION");
+      assert.equal(toCancelled.status, 201, JSON.stringify(toCancelled.json));
+      assert.equal(toCancelled.json.job.rawStatus, "CANCELLED");
 
       const audit = await fetchJson(
         `/api/audit?entityType=WORKSHOP_JOB&entityId=${job.id}&action=JOB_STATUS_CHANGED&limit=20`,
@@ -433,6 +433,74 @@ const run = async () => {
       );
       assert.equal(audit.status, 200, JSON.stringify(audit.json));
       assert.ok(audit.json.events.length >= 5, JSON.stringify(audit.json));
+    }, results);
+
+    await runTest("manual status selections keep the chosen workflow state and clear audit metadata", async () => {
+      const scenarios = [
+        {
+          requestedStatus: "BIKE_ARRIVED",
+          expectedRawStatus: "BIKE_ARRIVED",
+          expectedDisplayStatus: "BIKE_ARRIVED",
+          expectedExecutionStatus: "BOOKED",
+        },
+        {
+          requestedStatus: "WAITING_FOR_APPROVAL",
+          expectedRawStatus: "WAITING_FOR_APPROVAL",
+          expectedDisplayStatus: "WAITING_FOR_APPROVAL",
+          expectedExecutionStatus: "IN_PROGRESS",
+        },
+        {
+          requestedStatus: "WAITING_FOR_PARTS",
+          expectedRawStatus: "WAITING_FOR_PARTS",
+          expectedDisplayStatus: "WAITING_FOR_PARTS",
+          expectedExecutionStatus: "IN_PROGRESS",
+        },
+        {
+          requestedStatus: "APPROVED",
+          expectedRawStatus: "IN_PROGRESS",
+          expectedDisplayStatus: "APPROVED",
+          expectedExecutionStatus: "IN_PROGRESS",
+        },
+        {
+          requestedStatus: "BIKE_READY",
+          expectedRawStatus: "READY_FOR_COLLECTION",
+          expectedDisplayStatus: "BIKE_READY",
+          expectedExecutionStatus: "READY",
+        },
+      ];
+
+      for (const scenario of scenarios) {
+        const { job } = await createCustomerAndJob(state);
+
+        const updated = await fetchJson(`/api/workshop/jobs/${job.id}/status`, {
+          method: "POST",
+          headers: STAFF_HEADERS,
+          body: JSON.stringify({ status: scenario.requestedStatus }),
+        });
+        assert.equal(updated.status, 201, JSON.stringify(updated.json));
+        assert.equal(updated.json.job.rawStatus, scenario.expectedRawStatus);
+
+        const detail = await fetchJson(`/api/workshop/jobs/${job.id}`, {
+          headers: STAFF_HEADERS,
+        });
+        assert.equal(detail.status, 200, JSON.stringify(detail.json));
+        assert.equal(detail.json.job.rawStatus, scenario.expectedRawStatus);
+        assert.equal(detail.json.job.status, scenario.expectedExecutionStatus);
+
+        const audit = await fetchJson(
+          `/api/audit?entityType=WORKSHOP_JOB&entityId=${job.id}&action=JOB_STATUS_CHANGED&limit=1`,
+          { headers: MANAGER_HEADERS },
+        );
+        assert.equal(audit.status, 200, JSON.stringify(audit.json));
+        assert.equal(audit.json.events.length, 1, JSON.stringify(audit.json));
+        assert.equal(audit.json.events[0].metadata.fromStatus, "BOOKED");
+        assert.equal(audit.json.events[0].metadata.toStatus, scenario.expectedDisplayStatus);
+        assert.equal(audit.json.events[0].metadata.requestedStatus, scenario.requestedStatus);
+        assert.equal(audit.json.events[0].metadata.changeSource, "MANUAL");
+        assert.equal(audit.json.events[0].metadata.trigger, "MANUAL_STATUS_SELECTOR");
+        assert.equal(audit.json.events[0].actorId, STAFF_USER_ID);
+        assert.ok(audit.json.events[0].createdAt);
+      }
     }, results);
 
     await runTest("dashboard includes assignment + note stats and new filters", async () => {

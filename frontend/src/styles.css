@@ -3147,31 +3147,56 @@ button.primary.workshop-status-action {
   text-overflow: ellipsis;
 }
 
-.workshop-scheduler-block__signals {
+.workshop-scheduler-block .workshop-scheduler-block__signals {
   position: absolute;
   right: 8px;
   bottom: 8px;
   z-index: 2;
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
   pointer-events: none;
 }
 
-.workshop-scheduler-block__signal {
+.workshop-scheduler-block .workshop-scheduler-block__signal {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 13px;
   height: 13px;
+  overflow: visible;
+  text-overflow: clip;
   color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #586575);
   opacity: 0.84;
 }
 
-.workshop-scheduler-block__signal svg {
+.workshop-scheduler-block .workshop-scheduler-block__signal svg {
   width: 100%;
   height: 100%;
+}
+
+.workshop-scheduler-block .workshop-scheduler-block__signal-glyph {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.98rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  transform: translateY(-0.5px);
 }
 
 .workshop-scheduler-block__signal circle,
@@ -3222,7 +3247,14 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-block__signal--approved {
-  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 78%, #4f6478);
+  width: 14px;
+  height: 14px;
+  color: #1f4056;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 1;
 }
 
 .workshop-scheduler-block__signal--ready {
@@ -3389,6 +3421,11 @@ button.primary.workshop-status-action {
   height: 12px;
 }
 
+.workshop-scheduler-block--minimal .workshop-scheduler-block__signal--approved {
+  width: 14px;
+  height: 14px;
+}
+
 .workshop-scheduler-block--compact .workshop-scheduler-block__signals {
   right: 7px;
   bottom: 7px;
@@ -3398,6 +3435,11 @@ button.primary.workshop-status-action {
 .workshop-scheduler-block--compact .workshop-scheduler-block__signal {
   width: 12px;
   height: 12px;
+}
+
+.workshop-scheduler-block--compact .workshop-scheduler-block__signal--approved {
+  width: 14px;
+  height: 14px;
 }
 
 .workshop-scheduler-block--compact .workshop-scheduler-block__technician {
@@ -9255,7 +9297,7 @@ body.rota-row-drag-copy-active {
 .workshop-job-status-timeline {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
 }
@@ -9264,8 +9306,8 @@ body.rota-row-drag-copy-active {
   content: "";
   position: absolute;
   top: 7px;
-  left: calc(100% / 12);
-  right: calc(100% / 12);
+  left: calc(100% / 16);
+  right: calc(100% / 16);
   height: 2px;
   border-radius: 999px;
   background: #d6dee8;
@@ -9288,9 +9330,10 @@ body.rota-row-drag-copy-active {
 }
 
 .workshop-job-status-timeline__label {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   line-height: 1.2;
   color: #6a7787;
+  text-align: center;
 }
 
 .workshop-job-status-timeline__step--past .workshop-job-status-timeline__dot {
