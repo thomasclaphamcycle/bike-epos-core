@@ -1454,14 +1454,14 @@ th {
 .workshop-status-badge--neutral,
 .workshop-status-surface--neutral,
 .workshop-status-action--neutral {
-  --workshop-status-bg: #f2f5f9;
-  --workshop-status-border: #c3ced8;
-  --workshop-status-text: #506274;
-  --workshop-status-accent: #9badc0;
-  --workshop-status-surface: linear-gradient(180deg, #edf2f7 0%, #dde5ee 100%);
-  --workshop-status-surface-hover: linear-gradient(180deg, #e6edf5 0%, #d4dee8 100%);
-  --workshop-status-surface-muted: #5a6979;
-  --workshop-status-surface-title: #334252;
+  --workshop-status-bg: #eef1f4;
+  --workshop-status-border: #b8c1cb;
+  --workshop-status-text: #4f5d6b;
+  --workshop-status-accent: #8e9ba9;
+  --workshop-status-surface: linear-gradient(180deg, #e7ebef 0%, #d6dde4 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #e0e6eb 0%, #cfd7df 100%);
+  --workshop-status-surface-muted: #5f6b78;
+  --workshop-status-surface-title: #3b4754;
 }
 
 .workshop-status-badge {
