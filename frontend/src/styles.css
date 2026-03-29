@@ -1332,27 +1332,27 @@ th {
 .workshop-status-badge--blue,
 .workshop-status-surface--blue,
 .workshop-status-action--blue {
-  --workshop-status-bg: #e9f4ff;
-  --workshop-status-border: #88b7e5;
-  --workshop-status-text: #123e61;
-  --workshop-status-accent: #4b88d6;
-  --workshop-status-surface: linear-gradient(180deg, #d4e8ff 0%, #c0ddfb 100%);
-  --workshop-status-surface-hover: linear-gradient(180deg, #c8e2ff 0%, #b0d2f7 100%);
-  --workshop-status-surface-muted: #28557a;
-  --workshop-status-surface-title: #102f4a;
+  --workshop-status-bg: #edf5fb;
+  --workshop-status-border: #abc0d6;
+  --workshop-status-text: #21455d;
+  --workshop-status-accent: #6f9bbe;
+  --workshop-status-surface: linear-gradient(180deg, #e4eef7 0%, #d6e3ef 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #dce8f3 0%, #cad9e8 100%);
+  --workshop-status-surface-muted: #476277;
+  --workshop-status-surface-title: #203949;
 }
 
 .workshop-status-badge--arrived,
 .workshop-status-surface--arrived,
 .workshop-status-action--arrived {
-  --workshop-status-bg: #edf8ff;
-  --workshop-status-border: #97cfe8;
-  --workshop-status-text: #155270;
-  --workshop-status-accent: #4aa8d3;
-  --workshop-status-surface: linear-gradient(180deg, #dff4ff 0%, #ccecfb 100%);
-  --workshop-status-surface-hover: linear-gradient(180deg, #d3f0ff 0%, #bde7f7 100%);
-  --workshop-status-surface-muted: #2f6781;
-  --workshop-status-surface-title: #123f56;
+  --workshop-status-bg: #e8eef3;
+  --workshop-status-border: #a2b0bd;
+  --workshop-status-text: #314553;
+  --workshop-status-accent: #708699;
+  --workshop-status-surface: linear-gradient(180deg, #dde4eb 0%, #cad4de 100%);
+  --workshop-status-surface-hover: linear-gradient(180deg, #d3dce5 0%, #bec9d5 100%);
+  --workshop-status-surface-muted: #516575;
+  --workshop-status-surface-title: #283845;
 }
 
 .workshop-status-badge--approval,
