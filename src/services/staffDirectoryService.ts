@@ -6,6 +6,11 @@ import { toPublicUser } from "./userAccountService";
 
 type StaffDirectoryClient = Prisma.TransactionClient | typeof prisma;
 
+type StaffDirectoryProfileInput = {
+  operationalRole?: string | null;
+  isTechnician?: boolean;
+};
+
 const parseOperationalRoleOrThrow = (
   value: string | null | undefined,
   code: string,
@@ -85,6 +90,63 @@ export const updateUserOperationalRole = async (
         metadata: {
           role: updated.role,
           operationalRole: updated.operationalRole,
+          email: updated.email,
+        },
+      },
+      auditActor,
+    );
+
+    return toPublicUser(updated);
+  });
+};
+
+export const updateStaffDirectoryProfile = async (
+  userId: string,
+  input: StaffDirectoryProfileInput,
+  auditActor?: AuditActor,
+  db: StaffDirectoryClient = prisma,
+) => {
+  const hasOperationalRole = Object.prototype.hasOwnProperty.call(input, "operationalRole");
+  const hasIsTechnician = Object.prototype.hasOwnProperty.call(input, "isTechnician");
+  if (!hasOperationalRole && !hasIsTechnician) {
+    throw new HttpError(400, "No staff directory fields provided", "INVALID_STAFF_DIRECTORY_UPDATE");
+  }
+
+  const parsedOperationalRole = hasOperationalRole
+    ? parseOperationalRoleOrThrow(input.operationalRole, "INVALID_STAFF_DIRECTORY_UPDATE")
+    : undefined;
+
+  if (hasIsTechnician && typeof input.isTechnician !== "boolean") {
+    throw new HttpError(400, "isTechnician must be a boolean", "INVALID_STAFF_DIRECTORY_UPDATE");
+  }
+
+  return db.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existing) {
+      throw new HttpError(404, "User not found", "USER_NOT_FOUND");
+    }
+
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: {
+        ...(hasOperationalRole ? { operationalRole: parsedOperationalRole } : {}),
+        ...(hasIsTechnician ? { isTechnician: input.isTechnician } : {}),
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "USER_STAFF_DIRECTORY_UPDATED",
+        entityType: "USER",
+        entityId: updated.id,
+        metadata: {
+          role: updated.role,
+          operationalRole: updated.operationalRole,
+          isTechnician: updated.isTechnician,
           email: updated.email,
         },
       },

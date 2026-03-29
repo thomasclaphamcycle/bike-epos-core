@@ -7,6 +7,7 @@ type UserListResponse = {
   users: Array<{
     id: string;
     role: "STAFF" | "MANAGER" | "ADMIN";
+    isTechnician: boolean;
     isActive: boolean;
   }>;
 };

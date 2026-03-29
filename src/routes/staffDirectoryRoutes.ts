@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
   listStaffDirectoryHandler,
+  updateStaffDirectoryProfileHandler,
   updateUserOperationalRoleHandler,
 } from "../controllers/staffDirectoryController";
 
@@ -12,4 +13,9 @@ staffDirectoryRouter.patch(
   "/:id/operational-role",
   requireRoleAtLeast("MANAGER"),
   updateUserOperationalRoleHandler,
+);
+staffDirectoryRouter.patch(
+  "/:id/profile",
+  requireRoleAtLeast("MANAGER"),
+  updateStaffDirectoryProfileHandler,
 );

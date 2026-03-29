@@ -10,6 +10,7 @@ import {
   formatDateKeyInTimeZone,
   getStoreWeekdayKeyForDate,
 } from "../utils/storeHours";
+import { filterWorkshopTechnicians } from "./workshopStaffingService";
 
 type WorkshopCalendarClient = Prisma.TransactionClient | typeof prisma;
 
@@ -146,9 +147,6 @@ const addDays = (value: Date, days: number) => {
 };
 
 const toDateFromDateKey = (value: string) => new Date(`${value}T12:00:00.000Z`);
-
-const isWorkshopOperationalRole = (value: UserOperationalRole | null) =>
-  value === "WORKSHOP" || value === "MIXED";
 
 const toStaffDisplayName = (staff: { name: string | null; username: string }) =>
   staff.name?.trim() || staff.username;
@@ -1129,6 +1127,7 @@ export const getWorkshopCalendar = async (
       name: true,
       role: true,
       operationalRole: true,
+      isTechnician: true,
     },
     orderBy: [
       { name: "asc" },
@@ -1136,10 +1135,8 @@ export const getWorkshopCalendar = async (
     ],
   });
 
-  const usesOperationalRoleTags = allStaff.some((staff) => isWorkshopOperationalRole(staff.operationalRole));
-  const calendarStaff = usesOperationalRoleTags
-    ? allStaff.filter((staff) => isWorkshopOperationalRole(staff.operationalRole))
-    : allStaff;
+  const staffingSelection = filterWorkshopTechnicians(allStaff);
+  const calendarStaff = staffingSelection.staff;
   const staffIds = calendarStaff.map((staff) => staff.id);
 
   const [legacyWorkingHours, rotaAssignments, timeOff, visibleScheduledJobsRaw, capacityScheduledJobsRaw, unscheduledJobs, days] = await Promise.all([
@@ -1337,7 +1334,7 @@ export const getWorkshopCalendar = async (
       timeZone: settings.store.timeZone,
     },
     locationId,
-    usesOperationalRoleTags,
+    usesOperationalRoleTags: staffingSelection.usesOperationalRoleTags,
     days: days.map((day) => ({
       date: day.date,
       weekday: day.weekday,
@@ -1388,6 +1385,7 @@ export const getWorkshopCalendar = async (
         username: staff.username,
         role: staff.role as UserRole,
         operationalRole: staff.operationalRole,
+        isTechnician: staff.isTechnician,
         workingHours: availabilityByDate.flatMap(({ workingHours }) =>
           workingHours
             ? [

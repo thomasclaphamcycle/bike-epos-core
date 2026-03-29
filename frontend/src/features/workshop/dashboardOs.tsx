@@ -102,6 +102,7 @@ type DashboardResponse = {
       name: string;
       role: "STAFF" | "MANAGER" | "ADMIN";
       operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
+      isTechnician: boolean;
       shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
       note: string | null;
       source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";
@@ -111,6 +112,7 @@ type DashboardResponse = {
       name: string;
       role: "STAFF" | "MANAGER" | "ADMIN";
       operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
+      isTechnician: boolean;
       shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
       note: string | null;
       source: "MANUAL" | "IMPORT" | "HOLIDAY_APPROVED";

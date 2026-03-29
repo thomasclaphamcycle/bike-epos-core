@@ -6,6 +6,7 @@ export type LocalDevStaffFixture = {
   name: string;
   role: UserRole;
   operationalRole: UserOperationalRole;
+  isTechnician: boolean;
   isActive: boolean;
   pin: string;
   matchUsernames?: string[];
@@ -21,6 +22,7 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     name: "Dom",
     role: UserRole.STAFF,
     operationalRole: UserOperationalRole.WORKSHOP,
+    isTechnician: true,
     isActive: true,
     pin: "2468",
     matchUsernames: ["dom@claphamcycle.com"],
@@ -32,6 +34,7 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     name: "Eric",
     role: UserRole.STAFF,
     operationalRole: UserOperationalRole.SALES,
+    isTechnician: false,
     isActive: true,
     pin: "1357",
     matchUsernames: ["eric@claphamcycle.com"],
@@ -43,6 +46,7 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     name: "Mike",
     role: UserRole.STAFF,
     operationalRole: UserOperationalRole.WORKSHOP,
+    isTechnician: true,
     isActive: true,
     pin: "4321",
     matchUsernames: ["mike@claphamcycle.com"],
@@ -54,6 +58,7 @@ export const LOCAL_DEV_STAFF_FIXTURES: LocalDevStaffFixture[] = [
     name: "Thomas",
     role: UserRole.ADMIN,
     operationalRole: UserOperationalRole.MIXED,
+    isTechnician: true,
     isActive: true,
     pin: "8642",
     matchUsernames: ["thomas@corepos.local"],

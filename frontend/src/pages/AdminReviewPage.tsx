@@ -11,6 +11,7 @@ type StaffUser = {
   email: string | null;
   name: string | null;
   role: UserRole;
+  isTechnician: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

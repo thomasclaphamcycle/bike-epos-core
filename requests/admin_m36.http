@@ -43,5 +43,14 @@ Content-Type: application/json
   "operationalRole": "WORKSHOP"
 }
 
+### Update workshop staffing profile (MANAGER+)
+PATCH {{baseUrl}}/api/staff-directory/{{userId}}/profile
+Content-Type: application/json
+
+{
+  "operationalRole": "WORKSHOP",
+  "isTechnician": true
+}
+
 ### Audit feed (MANAGER+)
 GET {{baseUrl}}/api/audit?entityType=USER&limit=50
