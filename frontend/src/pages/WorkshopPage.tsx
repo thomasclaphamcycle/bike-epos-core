@@ -37,7 +37,8 @@ type QuickFilterKey =
   | "DUE_TODAY"
   | "OVERDUE"
   | "WAITING_FOR_PARTS"
-  | "READY_FOR_COLLECTION";
+  | "READY_FOR_COLLECTION"
+  | "COMPLETED";
 
 type QuickAction = {
   label: string;
@@ -93,6 +94,7 @@ const quickFilters: Array<{
   { key: "OVERDUE", label: "Overdue", description: "Promised date has already passed." },
   { key: "WAITING_FOR_PARTS", label: "Waiting for Parts", description: "Bench work is blocked on stock." },
   { key: "READY_FOR_COLLECTION", label: "Bike Ready", description: "Bench work is complete and handover can start." },
+  { key: "COMPLETED", label: "Completed", description: "Collected work kept visible for pickup context and recent closeout." },
 ];
 
 const buildDashboardQuery = (input: {
@@ -242,6 +244,8 @@ const matchesQuickFilter = (
       return job.status === "WAITING_FOR_PARTS" || toPartsStatus(job) === "SHORT";
     case "READY_FOR_COLLECTION":
       return job.status === "READY_FOR_COLLECTION";
+    case "COMPLETED":
+      return job.status === "COMPLETED";
     default:
       return true;
   }
@@ -296,7 +300,6 @@ export const WorkshopPage = () => {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
-  const [showCompleted, setShowCompleted] = useState(false);
   const [jobs, setJobs] = useState<DashboardJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [schedulerRefreshToken, setSchedulerRefreshToken] = useState(0);
@@ -358,15 +361,12 @@ export const WorkshopPage = () => {
 
   const visibleJobs = useMemo(
     () => jobs.filter((job) => {
-      if (!showCompleted && job.status === "COMPLETED") {
-        return false;
-      }
       if (selectedTechnicianId && job.assignedStaffId !== selectedTechnicianId) {
         return false;
       }
       return matchesQuickFilter(job, quickFilter, user?.id);
     }),
-    [jobs, quickFilter, selectedTechnicianId, showCompleted, user?.id],
+    [jobs, quickFilter, selectedTechnicianId, user?.id],
   );
 
   useEffect(() => {
@@ -573,17 +573,8 @@ export const WorkshopPage = () => {
                     <option key={option.id} value={option.id}>
                     {option.name}
                   </option>
-                ))}
+                  ))}
                 </select>
-              </label>
-
-              <label className="inline-check">
-                <input
-                  type="checkbox"
-                  checked={showCompleted}
-                  onChange={(event) => setShowCompleted(event.target.checked)}
-                />
-                <span>Show completed</span>
               </label>
             </div>
 

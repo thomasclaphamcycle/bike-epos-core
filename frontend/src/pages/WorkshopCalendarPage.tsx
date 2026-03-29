@@ -531,6 +531,16 @@ const getBookingServiceLabel = (job: CalendarJob) => {
 
 const hasApprovedIndicator = (job: CalendarJob) => job.rawStatus === "APPROVED";
 
+const ApprovedBookingIndicator = () => (
+  <span className="workshop-scheduler-block__approved-indicator" aria-label="Approved estimate">
+    <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+      <circle cx="8" cy="8" r="7" />
+      <path d="M10.75 4.75H7.55a2.3 2.3 0 0 0 0 4.6H9a1.4 1.4 0 0 1 0 2.8H5.25" />
+      <path d="M8 3.6v8.8" />
+    </svg>
+  </span>
+);
+
 const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
   const details = [
     `${formatOptionalTime(job.scheduledStartAt, timeZone)} - ${formatOptionalTime(job.scheduledEndAt, timeZone)}`,
@@ -1051,11 +1061,6 @@ const renderSchedulerBlockContent = ({
         <span className="workshop-scheduler-block__customer-name">
           {getBookingCustomerName(job)}
         </span>
-        {hasApprovedIndicator(job) ? (
-          <span className="workshop-scheduler-block__approved-indicator" aria-label="Approved">
-            £
-          </span>
-        ) : null}
       </strong>
       {showTechnician ? (
         <div
@@ -1079,6 +1084,7 @@ const renderSchedulerBlockContent = ({
           {metaLabel}
         </div>
       ) : null}
+      {hasApprovedIndicator(job) ? <ApprovedBookingIndicator /> : null}
     </>
   );
 };
