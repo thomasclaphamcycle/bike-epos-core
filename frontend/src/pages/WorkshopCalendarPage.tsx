@@ -712,6 +712,22 @@ const getOperationalWeekStart = (anchor: Date) => {
 
 const getStandaloneWeekStart = (anchor: Date) => addDays(anchor, -2);
 
+const getAnchorDateForVisibleWeekStart = (
+  start: Date,
+  weekRangeMode: "calendar" | "operational" | "standalone",
+) => {
+  if (weekRangeMode === "standalone") {
+    return addDays(start, 2);
+  }
+
+  if (weekRangeMode === "operational") {
+    const weekdayIndex = (start.getDay() + 6) % 7;
+    return weekdayIndex === 0 ? start : addDays(start, 2);
+  }
+
+  return start;
+};
+
 const buildVisibleRange = (
   anchorDateKey: string,
   view: CalendarViewMode,
@@ -745,6 +761,21 @@ export const shiftWorkshopAnchorDateKey = (anchorDateKey: string, view: Calendar
   const anchor = parseDateKey(anchorDateKey);
   anchor.setDate(anchor.getDate() + (view === "week" ? direction * 7 : direction));
   return formatDateKey(anchor);
+};
+
+export const shiftWorkshopVisibleWindowDateKey = (
+  anchorDateKey: string,
+  view: CalendarViewMode,
+  weekRangeMode: "calendar" | "operational" | "standalone",
+  direction: -1 | 1,
+) => {
+  if (view !== "week" || weekRangeMode === "calendar") {
+    return shiftWorkshopAnchorDateKey(anchorDateKey, view, direction);
+  }
+
+  const { from } = buildVisibleRange(anchorDateKey, view, weekRangeMode);
+  const nextStart = addDays(parseDateKey(from), direction);
+  return formatDateKey(getAnchorDateForVisibleWeekStart(nextStart, weekRangeMode));
 };
 
 const buildTimelineRange = (days: CalendarResponse["days"]) => {
@@ -2237,6 +2268,14 @@ export const WorkshopSchedulerScreen = ({
               >
                 {view === "week" ? "Previous Week" : "Previous Day"}
               </button>
+              {view === "week" && weekRangeMode !== "calendar" ? (
+                <button
+                  type="button"
+                  onClick={() => changeAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, view, weekRangeMode, -1))}
+                >
+                  - Day
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => changeAnchorDateKey(workshopTodayDateKey())}
@@ -2244,6 +2283,14 @@ export const WorkshopSchedulerScreen = ({
               >
                 Today
               </button>
+              {view === "week" && weekRangeMode !== "calendar" ? (
+                <button
+                  type="button"
+                  onClick={() => changeAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, view, weekRangeMode, 1))}
+                >
+                  + Day
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => changeAnchorDateKey(shiftWorkshopAnchorDateKey(anchorDateKey, view, 1))}
