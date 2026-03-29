@@ -807,6 +807,11 @@ textarea {
   gap: var(--cp-space-5);
 }
 
+.workshop-scheduler-page--standalone {
+  gap: 10px;
+  min-height: clamp(860px, calc(100dvh - 82px), 1380px);
+}
+
 .card {
   border: 1px solid var(--cp-border);
   border-radius: var(--cp-radius-md);
@@ -2728,12 +2733,24 @@ button.primary.workshop-status-action {
   padding: 0;
 }
 
+.workshop-scheduler-toolbar--standalone {
+  display: grid;
+  gap: 10px;
+  padding: 0 2px;
+}
+
 .workshop-scheduler-toolbar__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   justify-content: space-between;
   gap: 12px;
+}
+
+.workshop-scheduler-toolbar__controls--standalone {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
 }
 
 .workshop-scheduler-toolbar__view-toggle {
@@ -2770,6 +2787,12 @@ button.primary.workshop-status-action {
   align-items: start;
 }
 
+.workshop-scheduler-layout--standalone {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: inherit;
+  align-items: stretch;
+}
+
 .workshop-scheduler-layout--embedded {
   grid-template-columns: minmax(0, 1fr) 240px;
   gap: 8px;
@@ -2784,6 +2807,11 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-board--embedded {
+  gap: 8px;
+  min-height: inherit;
+}
+
+.workshop-scheduler-board--standalone {
   gap: 8px;
   min-height: inherit;
 }
@@ -2816,6 +2844,11 @@ button.primary.workshop-status-action {
 .workshop-scheduler-scroll {
   overflow-x: auto;
   padding-bottom: 2px;
+}
+
+.workshop-scheduler-board--standalone .workshop-scheduler-scroll {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .workshop-scheduler-board--embedded .workshop-scheduler-scroll {
@@ -3761,6 +3794,10 @@ button.primary.workshop-status-action {
   }
 
   .workshop-scheduler-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-scheduler-layout--standalone {
     grid-template-columns: 1fr;
   }
 
