@@ -1104,7 +1104,7 @@ export const WorkshopSchedulerScreen = ({
     [days],
   );
   const timeLabels = useMemo(() => toTimeLabels(timeline), [timeline]);
-  const trackHeight = Math.max(620, timeline.totalMinutes * PX_PER_MINUTE);
+  const trackHeight = Math.max(760, timeline.totalMinutes * PX_PER_MINUTE);
   const dayColumnWidth = useMemo(() => {
     if (view !== "week") {
       return DAY_VIEW_WIDTH;
