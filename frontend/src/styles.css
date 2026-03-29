@@ -2873,7 +2873,7 @@ button.primary.workshop-status-action {
   position: sticky;
   top: 0;
   z-index: 3;
-  min-height: 62px;
+  min-height: 74px;
   padding: 7px 8px;
   border-bottom: 1px solid #dbe5ef;
   background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
@@ -2916,6 +2916,7 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-grid__day-header-availability,
+.workshop-scheduler-grid__day-header-utilisation,
 .workshop-scheduler-grid__day-header-summary {
   display: block;
 }
@@ -2927,6 +2928,55 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-grid__day-header-availability--empty {
   color: #6f7f91;
+}
+
+.workshop-scheduler-grid__day-header-utilisation {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.workshop-scheduler-grid__day-header-utilisation::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.workshop-scheduler-grid__day-header-utilisation--healthy {
+  color: #1c6a45;
+  background: rgba(208, 239, 219, 0.78);
+  border-color: rgba(118, 191, 145, 0.45);
+}
+
+.workshop-scheduler-grid__day-header-utilisation--tight {
+  color: #8c5b05;
+  background: rgba(255, 234, 180, 0.82);
+  border-color: rgba(223, 183, 94, 0.48);
+}
+
+.workshop-scheduler-grid__day-header-utilisation--overloaded {
+  color: #8d1d1d;
+  background: rgba(249, 216, 216, 0.84);
+  border-color: rgba(210, 128, 128, 0.48);
+}
+
+.workshop-scheduler-grid__day-header-utilisation--none {
+  color: #5e7185;
+  background: rgba(229, 236, 243, 0.84);
+  border-color: rgba(184, 197, 211, 0.52);
 }
 
 .workshop-scheduler-grid__day-header-summary {
