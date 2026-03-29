@@ -883,6 +883,46 @@ const toDayCapacitySummary = (
   );
 };
 
+const getDayCapacityUtilisationIndicator = (summary: {
+  totalMinutes: number;
+  bookedMinutes: number;
+}) => {
+  if (summary.totalMinutes <= 0) {
+    return {
+      label: "No capacity",
+      title: summary.bookedMinutes > 0
+        ? `${summary.bookedMinutes} booked mins with no staffed capacity`
+        : "No staffed capacity available",
+      tone: "none" as const,
+    };
+  }
+
+  const utilisation = summary.bookedMinutes / summary.totalMinutes;
+  const percentUsed = Math.round(utilisation * 100);
+
+  if (utilisation > 1) {
+    return {
+      label: "Over capacity",
+      title: `${percentUsed}% utilised (${summary.bookedMinutes} of ${summary.totalMinutes} mins booked)`,
+      tone: "overloaded" as const,
+    };
+  }
+
+  if (utilisation >= 0.75) {
+    return {
+      label: `${percentUsed}% used`,
+      title: `${percentUsed}% utilised (${summary.bookedMinutes} of ${summary.totalMinutes} mins booked)`,
+      tone: "tight" as const,
+    };
+  }
+
+  return {
+    label: `${percentUsed}% used`,
+    title: `${percentUsed}% utilised (${summary.bookedMinutes} of ${summary.totalMinutes} mins booked)`,
+    tone: "healthy" as const,
+  };
+};
+
 const getCompactTechnicianName = (name: string) => {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -2418,6 +2458,7 @@ export const WorkshopSchedulerScreen = ({
 
               {days.map((day) => {
                 const dayCapacity = toDayCapacitySummary(calendar?.staff ?? [], day.date, selectedTechnicianId);
+                const dayUtilisation = getDayCapacityUtilisationIndicator(dayCapacity);
                 const technicianAvailability = getDayTechnicianAvailabilitySummary(
                   calendar?.staff ?? [],
                   day.date,
@@ -2442,6 +2483,12 @@ export const WorkshopSchedulerScreen = ({
                       title={technicianAvailability.title}
                     >
                       {technicianAvailability.label}
+                    </span>
+                    <span
+                      className={`workshop-scheduler-grid__day-header-utilisation workshop-scheduler-grid__day-header-utilisation--${dayUtilisation.tone}`}
+                      title={dayUtilisation.title}
+                    >
+                      {dayUtilisation.label}
                     </span>
                     <span className="workshop-scheduler-grid__day-header-summary">
                       {visibleDayJobs} jobs · {" "}
