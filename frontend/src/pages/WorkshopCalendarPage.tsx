@@ -211,6 +211,25 @@ type TimeOffBlock = {
   label: string;
 };
 
+type SchedulerLayoutEntry = {
+  job: CalendarJob;
+  startMinutes: number;
+  endMinutes: number;
+  clippedStart: number;
+  clippedEnd: number;
+};
+
+type SchedulerCollisionGroup = {
+  entries: SchedulerLayoutEntry[];
+  maxEndMinutes: number;
+};
+
+type SchedulerLaneState = {
+  endMinutes: number;
+  occupiedMinutes: number;
+  bookingCount: number;
+};
+
 const DEFAULT_OPEN_MINUTES = 9 * 60;
 const DEFAULT_CLOSE_MINUTES = 18 * 60;
 const TIME_AXIS_WIDTH = 60;
@@ -787,6 +806,60 @@ const getWorkshopTimeOffBlocksForDay = (
   });
 };
 
+const buildSchedulerCollisionGroups = (entries: SchedulerLayoutEntry[]) => {
+  const groups: SchedulerCollisionGroup[] = [];
+
+  entries.forEach((entry) => {
+    const currentGroup = groups.at(-1);
+    if (!currentGroup || entry.startMinutes >= currentGroup.maxEndMinutes) {
+      groups.push({
+        entries: [entry],
+        maxEndMinutes: entry.endMinutes,
+      });
+      return;
+    }
+
+    currentGroup.entries.push(entry);
+    currentGroup.maxEndMinutes = Math.max(currentGroup.maxEndMinutes, entry.endMinutes);
+  });
+
+  return groups;
+};
+
+const pickBalancedLaneIndex = (
+  laneStates: SchedulerLaneState[],
+  entry: SchedulerLayoutEntry,
+) => {
+  const availableLaneIndexes = laneStates
+    .map((lane, index) => (lane.endMinutes <= entry.startMinutes ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (availableLaneIndexes.length === 0) {
+    laneStates.push({
+      endMinutes: entry.endMinutes,
+      occupiedMinutes: entry.clippedEnd - entry.clippedStart,
+      bookingCount: 1,
+    });
+    return laneStates.length - 1;
+  }
+
+  const laneIndex = availableLaneIndexes.sort((leftIndex, rightIndex) => {
+    const leftLane = laneStates[leftIndex];
+    const rightLane = laneStates[rightIndex];
+    return leftLane.occupiedMinutes - rightLane.occupiedMinutes
+      || leftLane.bookingCount - rightLane.bookingCount
+      || leftIndex - rightIndex;
+  })[0];
+
+  laneStates[laneIndex] = {
+    endMinutes: entry.endMinutes,
+    occupiedMinutes: laneStates[laneIndex].occupiedMinutes + (entry.clippedEnd - entry.clippedStart),
+    bookingCount: laneStates[laneIndex].bookingCount + 1,
+  };
+
+  return laneIndex;
+};
+
 const toPositionedJobs = (
   jobs: CalendarJob[],
   openMinutes: number,
@@ -828,53 +901,22 @@ const toPositionedJobs = (
         clippedEnd,
       };
     })
-    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .filter((entry): entry is SchedulerLayoutEntry => Boolean(entry))
     .sort((left, right) =>
       left.startMinutes - right.startMinutes
       || left.endMinutes - right.endMinutes
       || left.job.createdAt.localeCompare(right.job.createdAt));
 
-  const collisionGroups = sortableJobs.reduce<Array<typeof sortableJobs>>((groups, entry) => {
-    const currentGroup = groups.at(-1);
-
-    if (!currentGroup || currentGroup.length === 0) {
-      groups.push([entry]);
-      return groups;
-    }
-
-    const currentGroupMaxEnd = currentGroup.reduce(
-      (maxEnd, currentEntry) => Math.max(maxEnd, currentEntry.endMinutes),
-      currentGroup[0].endMinutes,
-    );
-
-    if (entry.startMinutes < currentGroupMaxEnd) {
-      currentGroup.push(entry);
-    } else {
-      groups.push([entry]);
-    }
-
-    return groups;
-  }, []);
+  const collisionGroups = buildSchedulerCollisionGroups(sortableJobs);
 
   return collisionGroups.flatMap<PositionedJob>((group) => {
-    const laneEndMinutes: number[] = [];
+    const laneStates: SchedulerLaneState[] = [];
+    const laneAssignments = group.entries.map((entry) => ({
+      ...entry,
+      laneIndex: pickBalancedLaneIndex(laneStates, entry),
+    }));
 
-    const laneAssignments = group.map((entry) => {
-      let laneIndex = laneEndMinutes.findIndex((laneEnd) => laneEnd <= entry.startMinutes);
-      if (laneIndex === -1) {
-        laneIndex = laneEndMinutes.length;
-        laneEndMinutes.push(entry.endMinutes);
-      } else {
-        laneEndMinutes[laneIndex] = entry.endMinutes;
-      }
-
-      return {
-        ...entry,
-        laneIndex,
-      };
-    });
-
-    const effectiveLaneCount = Math.max(1, laneEndMinutes.length);
+    const effectiveLaneCount = Math.max(1, laneStates.length);
     const totalGap = JOB_BLOCK_GAP * (effectiveLaneCount - 1);
     const laneWidth = Math.max(0, (columnWidth - totalGap) / effectiveLaneCount);
 
