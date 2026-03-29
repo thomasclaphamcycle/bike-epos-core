@@ -490,11 +490,16 @@ export const WorkshopPage = () => {
 
         <label className="workshop-primary-search">
           <span className="table-secondary">Search</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search customer, bike, job"
-          />
+          <div className="workshop-primary-search__field">
+            <span className="workshop-primary-search__icon" aria-hidden="true">
+              ⌕
+            </span>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search customer, bike, job"
+            />
+          </div>
         </label>
 
         <div className="workshop-primary-actions">
