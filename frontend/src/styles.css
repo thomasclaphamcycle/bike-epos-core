@@ -3724,6 +3724,9 @@ button.primary.workshop-status-action {
 .workshop-primary-title {
   display: grid;
   gap: 2px;
+  align-self: start;
+  padding-top: 14px;
+  padding-left: 6px;
 }
 
 .workshop-primary-title .ui-page-eyebrow {
