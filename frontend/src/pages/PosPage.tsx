@@ -206,14 +206,19 @@ export const PosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
   const isPageActiveRef = useRef(true);
+  const posLifecycleRequestIdRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const productResultRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
+  const pendingQuerySyncFrameRef = useRef<number | null>(null);
   const searchFocusFrameRef = useRef<number | null>(null);
   const basketItemRefs = useRef<Record<string, HTMLElement | null>>({});
+  const basketStateRef = useRef<BasketResponse | null>(null);
+  const saleStateRef = useRef<SaleResponse | null>(null);
+  const selectedCustomerStateRef = useRef<CustomerSearchRow | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
@@ -253,7 +258,28 @@ export const PosPage = () => {
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
-  const posOpenState = getPosOpenState(location.state);
+  const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
+  const posOpenStateSignature = useMemo(() => JSON.stringify(posOpenState ?? null), [posOpenState]);
+
+  useEffect(() => {
+    basketStateRef.current = basket;
+  }, [basket]);
+
+  useEffect(() => {
+    saleStateRef.current = sale;
+  }, [sale]);
+
+  useEffect(() => {
+    selectedCustomerStateRef.current = selectedCustomer;
+  }, [selectedCustomer]);
+
+  const beginPosLifecycleRequest = () => {
+    posLifecycleRequestIdRef.current += 1;
+    return posLifecycleRequestIdRef.current;
+  };
+
+  const canApplyPosLifecycle = (requestId?: number) =>
+    isPageActiveRef.current && (requestId === undefined || requestId === posLifecycleRequestIdRef.current);
 
   const focusProductSearch = () => {
     window.requestAnimationFrame(() => {
@@ -328,40 +354,75 @@ export const PosPage = () => {
       return;
     }
 
-    const updated = new URLSearchParams(searchParams);
-
-    if (next.basketId !== undefined) {
-      if (next.basketId) {
-        updated.set("basketId", next.basketId);
-      } else {
-        updated.delete("basketId");
-      }
+    if (pendingQuerySyncFrameRef.current) {
+      window.cancelAnimationFrame(pendingQuerySyncFrameRef.current);
     }
 
-    if (next.saleId !== undefined) {
-      if (next.saleId) {
-        updated.set("saleId", next.saleId);
-      } else {
-        updated.delete("saleId");
-      }
-    }
+    const routePathname = location.pathname;
+    pendingQuerySyncFrameRef.current = window.requestAnimationFrame(() => {
+      pendingQuerySyncFrameRef.current = window.requestAnimationFrame(() => {
+        pendingQuerySyncFrameRef.current = null;
+        if (!isPageActiveRef.current || window.location.pathname !== routePathname) {
+          return;
+        }
 
-    setSearchParams(updated, { replace: true });
+        const currentSearch = window.location.search.startsWith("?")
+          ? window.location.search.slice(1)
+          : window.location.search;
+        const updated = new URLSearchParams(window.location.search);
+
+        if (next.basketId !== undefined) {
+          if (next.basketId) {
+            updated.set("basketId", next.basketId);
+          } else {
+            updated.delete("basketId");
+          }
+        }
+
+        if (next.saleId !== undefined) {
+          if (next.saleId) {
+            updated.set("saleId", next.saleId);
+          } else {
+            updated.delete("saleId");
+          }
+        }
+
+        if (updated.toString() === currentSearch) {
+          return;
+        }
+
+        setSearchParams(updated, { replace: true });
+      });
+    });
   };
 
-  const loadContextCustomer = async (customerId: string | null) => {
-    setContextCustomerId(customerId);
+  const loadContextCustomer = async (
+    customerId: string | null,
+    options?: {
+      requestId?: number;
+      syncContext?: boolean;
+    },
+  ) => {
+    if (options?.syncContext !== false) {
+      setContextCustomerId(customerId);
+    }
     if (!customerId) {
       return null;
     }
 
     const customer = await apiGet<CustomerSearchRow>(`/api/customers/${encodeURIComponent(customerId)}`);
+    if (!canApplyPosLifecycle(options?.requestId)) {
+      return null;
+    }
     setSelectedCustomer(customer);
     return customer;
   };
 
-  const loadBasket = async (id: string) => {
+  const loadBasket = async (id: string, options?: { requestId?: number }) => {
     const payload = await apiGet<BasketResponse>(`/api/baskets/${encodeURIComponent(id)}`);
+    if (!canApplyPosLifecycle(options?.requestId)) {
+      return null;
+    }
     setBasket(payload);
     persistActiveBasketId(payload.id);
     return payload;
@@ -372,14 +433,24 @@ export const PosPage = () => {
     return payload.rows || [];
   };
 
-  const loadSale = async (id: string, options?: { preserveCaptureSession?: boolean }) => {
+  const loadSale = async (
+    id: string,
+    options?: {
+      preserveCaptureSession?: boolean;
+      requestId?: number;
+    },
+  ) => {
     const payload = await apiGet<SaleResponse>(`/api/sales/${encodeURIComponent(id)}`);
+    if (!canApplyPosLifecycle(options?.requestId)) {
+      return null;
+    }
     setSale(payload);
     setSelectedCustomer(payload.sale.customer ?? null);
     if (!options?.preserveCaptureSession) {
       setCaptureSession(null);
     }
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
+    return payload;
   };
 
   const createBasket = async (options?: {
@@ -387,32 +458,56 @@ export const PosPage = () => {
     customerId?: string | null;
     preloadedItems?: PreloadedBasketItemInput[];
     announce?: boolean;
+    preserveTransientUi?: boolean;
     successMessage?: string;
+    requestId?: number;
   }) => {
+    const requestId = options?.requestId ?? beginPosLifecycleRequest();
     const created = await apiPost<BasketResponse>("/api/baskets", options?.preloadedItems?.length
       ? { items: options.preloadedItems }
       : {});
+    if (!canApplyPosLifecycle(requestId)) {
+      return null;
+    }
     setBasket(created);
     persistActiveBasketId(created.id);
     setSale(null);
     setReceiptUrl(null);
     setCashTenderedAmount("");
-    setCustomerSearchText("");
-    setCustomerResults([]);
-    setShowCreateCustomer(false);
     setCaptureSession(null);
+    if (!options?.preserveTransientUi) {
+      setSearchText("");
+      setSearchRows([]);
+      setHighlightedProductIndex(-1);
+      setCustomerSearchText("");
+      setCustomerResults([]);
+      setHighlightedCustomerIndex(-1);
+      setShowCreateCustomer(false);
+    }
     setSaleContext(options?.saleContext ?? DEFAULT_SALE_CONTEXT);
     setContextCustomerId(options?.customerId ?? null);
     if (options?.customerId) {
-      await loadContextCustomer(options.customerId);
+      const customer = await loadContextCustomer(options.customerId, {
+        requestId,
+        syncContext: false,
+      });
+      if (!customer) {
+        return null;
+      }
     } else {
       setSelectedCustomer(null);
+    }
+    if (!canApplyPosLifecycle(requestId)) {
+      return null;
     }
     syncQuery({ basketId: created.id, saleId: null });
     if (options?.announce !== false) {
       success(options?.successMessage ?? "New sale created");
     }
-    focusProductSearch();
+    if (!options?.preserveTransientUi) {
+      focusProductSearch();
+    }
+    return created;
   };
 
   const toPreloadedBasketItems = (items: PosLineItem[]): PreloadedBasketItemInput[] =>
@@ -427,38 +522,108 @@ export const PosPage = () => {
   useEffect(() => {
     isPageActiveRef.current = true;
 
-    let cancelled = false;
+    return () => {
+      isPageActiveRef.current = false;
+      posLifecycleRequestIdRef.current += 1;
+      if (pendingQuerySyncFrameRef.current) {
+        window.cancelAnimationFrame(pendingQuerySyncFrameRef.current);
+      }
+    };
+  }, []);
 
-    const init = async () => {
-      setLoading(true);
+  useEffect(() => {
+    const requestId = beginPosLifecycleRequest();
+    let didStartAsyncWork = false;
+    const nextContext = posOpenState?.saleContext ?? DEFAULT_SALE_CONTEXT;
+    const nextCustomerId = posOpenState?.customerId ?? null;
+
+    const beginAsyncLoad = () => {
+      if (!didStartAsyncWork && canApplyPosLifecycle(requestId)) {
+        didStartAsyncWork = true;
+        setLoading(true);
+      }
+    };
+
+    setSaleContext(nextContext);
+    setContextCustomerId(nextCustomerId);
+
+    const syncPosStateFromRoute = async () => {
       try {
-        const nextContext = posOpenState?.saleContext ?? DEFAULT_SALE_CONTEXT;
-        const nextCustomerId = posOpenState?.customerId ?? null;
-        if (!cancelled) {
-          setSaleContext(nextContext);
-          setContextCustomerId(nextCustomerId);
-        }
+        const currentSale = saleStateRef.current;
+        const currentBasket = basketStateRef.current;
+        const currentSelectedCustomer = selectedCustomerStateRef.current;
 
         if (saleId) {
-          await loadSale(saleId);
-          if (nextCustomerId) {
-            await loadContextCustomer(nextCustomerId);
+          const needsSaleLoad = !currentSale || currentSale.sale.id !== saleId;
+          const needsContextCustomerLoad = Boolean(
+            nextCustomerId
+              && currentSale?.sale.customer?.id !== nextCustomerId
+              && currentSelectedCustomer?.id !== nextCustomerId,
+          );
+
+          if (needsSaleLoad) {
+            beginAsyncLoad();
           }
+          const loadedSale = needsSaleLoad
+            ? await loadSale(saleId, {
+                requestId,
+                preserveCaptureSession: true,
+              })
+            : currentSale;
+
+          if (!loadedSale || !canApplyPosLifecycle(requestId)) {
+            return;
+          }
+
+          if (needsContextCustomerLoad && nextCustomerId) {
+            beginAsyncLoad();
+            await loadContextCustomer(nextCustomerId, {
+              requestId,
+              syncContext: false,
+            });
+          }
+          return;
         }
 
-        const storedBasketId = !saleId ? readStoredBasketId() : null;
+        if (currentSale) {
+          setSale(null);
+          setReceiptUrl(null);
+          setCaptureSession(null);
+        }
+
+        const storedBasketId = readStoredBasketId();
         const candidateBasketId = basketId ?? storedBasketId;
 
         if (candidateBasketId) {
           try {
-            const restoredBasket = await loadBasket(candidateBasketId);
-            if (!saleId) {
+            const restoredBasket = currentBasket?.id === candidateBasketId
+              ? currentBasket
+              : await (() => {
+                  beginAsyncLoad();
+                  return loadBasket(candidateBasketId, { requestId });
+                })();
+
+            if (!restoredBasket || !canApplyPosLifecycle(requestId)) {
+              return;
+            }
+
+            if (!basketId) {
               syncQuery({ basketId: restoredBasket.id, saleId: null });
             }
-            if (nextCustomerId && !saleId) {
-              await loadContextCustomer(nextCustomerId);
+
+            if (nextCustomerId && currentSelectedCustomer?.id !== nextCustomerId) {
+              beginAsyncLoad();
+              await loadContextCustomer(nextCustomerId, {
+                requestId,
+                syncContext: false,
+              });
             }
+            return;
           } catch (loadBasketError) {
+            if (!canApplyPosLifecycle(requestId)) {
+              return;
+            }
+
             const isStoredBasketRestore = Boolean(storedBasketId) && candidateBasketId === storedBasketId;
             const canRecoverFromMissingBasket = getApiErrorStatus(loadBasketError) === 404;
             const canRecoverBasket = isStoredBasketRestore || canRecoverFromMissingBasket;
@@ -468,45 +633,33 @@ export const PosPage = () => {
             }
 
             clearStoredBasketId();
-
-            if (saleId) {
-              setBasket(null);
-              syncQuery({ basketId: null, saleId });
-            } else {
-              await createBasket({
-                saleContext: nextContext,
-                customerId: nextCustomerId,
-                preloadedItems: posOpenState?.items?.length ? toPreloadedBasketItems(posOpenState.items) : undefined,
-                announce: false,
-              });
-            }
           }
-        } else if (!saleId) {
-          await createBasket({
-            saleContext: nextContext,
-            customerId: nextCustomerId,
-            preloadedItems: posOpenState?.items?.length ? toPreloadedBasketItems(posOpenState.items) : undefined,
-            announce: false,
-          });
         }
+
+        beginAsyncLoad();
+        await createBasket({
+          saleContext: nextContext,
+          customerId: nextCustomerId,
+          preloadedItems: posOpenState?.items?.length ? toPreloadedBasketItems(posOpenState.items) : undefined,
+          announce: false,
+          preserveTransientUi: true,
+          requestId,
+        });
       } catch (initError) {
+        if (!canApplyPosLifecycle(requestId)) {
+          return;
+        }
         const message = initError instanceof Error ? initError.message : "Failed to initialize POS";
         error(message);
       } finally {
-        if (!cancelled) {
+        if (canApplyPosLifecycle(requestId)) {
           setLoading(false);
         }
       }
     };
 
-    void init();
-
-    return () => {
-      cancelled = true;
-      isPageActiveRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void syncPosStateFromRoute();
+  }, [basketId, saleId, posOpenStateSignature, error]);
 
   useEffect(() => {
     if (!debouncedSearch.trim()) {
@@ -677,10 +830,17 @@ export const PosPage = () => {
     });
   }, [highlightedCustomerIndex]);
 
-  const attachCustomerToSale = async (targetSaleId: string, customerId: string | null) => {
+  const attachCustomerToSale = async (
+    targetSaleId: string,
+    customerId: string | null,
+    options?: { requestId?: number },
+  ) => {
     const payload = await apiPatch<SaleResponse>(`/api/sales/${encodeURIComponent(targetSaleId)}/customer`, {
       customerId,
     });
+    if (!canApplyPosLifecycle(options?.requestId)) {
+      return null;
+    }
     setSale(payload);
     setSelectedCustomer(payload.sale.customer ?? null);
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
@@ -974,23 +1134,41 @@ export const PosPage = () => {
     }
 
     try {
+      const requestId = beginPosLifecycleRequest();
       setCompletedSale(null);
       setCaptureSession(null);
       const payload = await apiPost<{ sale: { id: string } }>(
         `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
         {},
       );
+      if (!canApplyPosLifecycle(requestId)) {
+        return;
+      }
       const nextSaleId = payload.sale.id;
       clearStoredBasketId();
-      syncQuery({ basketId, saleId: nextSaleId });
       if (selectedCustomer?.id) {
-        await attachCustomerToSale(nextSaleId, selectedCustomer.id);
+        await attachCustomerToSale(nextSaleId, selectedCustomer.id, { requestId });
+        if (!canApplyPosLifecycle(requestId)) {
+          return;
+        }
+        syncQuery({ basketId, saleId: nextSaleId });
         success("Sale created and customer attached.");
       } else if (contextCustomerId) {
-        await attachCustomerToSale(nextSaleId, contextCustomerId);
+        await attachCustomerToSale(nextSaleId, contextCustomerId, { requestId });
+        if (!canApplyPosLifecycle(requestId)) {
+          return;
+        }
+        syncQuery({ basketId, saleId: nextSaleId });
         success("Sale created and customer attached.");
       } else {
-        await loadSale(nextSaleId);
+        await loadSale(nextSaleId, {
+          requestId,
+          preserveCaptureSession: true,
+        });
+        if (!canApplyPosLifecycle(requestId)) {
+          return;
+        }
+        syncQuery({ basketId, saleId: nextSaleId });
         success("Sale created.");
       }
     } catch (checkoutError) {
