@@ -3249,19 +3249,19 @@ button.primary.workshop-status-action {
 .workshop-scheduler-block__signal--approved {
   width: 14px;
   height: 14px;
-  color: #1f4056;
+  color: #b78818;
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  opacity: 1;
+  opacity: 0.98;
 }
 
 .workshop-scheduler-block__signal--ready {
-  color: color-mix(in srgb, var(--workshop-status-surface-title, #203949) 74%, #4e7660);
+  color: #2d7a4f;
   width: 14px;
   height: 14px;
-  opacity: 0.94;
+  opacity: 0.96;
 }
 
 .workshop-scheduler-block__signal--overdue {
