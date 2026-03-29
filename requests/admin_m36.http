@@ -35,20 +35,11 @@ Content-Type: application/json
   "tempPassword": "AnotherTempPass123!"
 }
 
-### Update operational role tag (MANAGER+)
-PATCH {{baseUrl}}/api/staff-directory/{{userId}}/operational-role
-Content-Type: application/json
-
-{
-  "operationalRole": "WORKSHOP"
-}
-
 ### Update workshop staffing profile (MANAGER+)
 PATCH {{baseUrl}}/api/staff-directory/{{userId}}/profile
 Content-Type: application/json
 
 {
-  "operationalRole": "WORKSHOP",
   "isTechnician": true
 }
 

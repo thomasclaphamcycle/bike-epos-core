@@ -1334,7 +1334,6 @@ export const getWorkshopCalendar = async (
       timeZone: settings.store.timeZone,
     },
     locationId,
-    usesOperationalRoleTags: staffingSelection.usesOperationalRoleTags,
     days: days.map((day) => ({
       date: day.date,
       weekday: day.weekday,
@@ -1384,7 +1383,6 @@ export const getWorkshopCalendar = async (
         name: toStaffDisplayName(staff),
         username: staff.username,
         role: staff.role as UserRole,
-        operationalRole: staff.operationalRole,
         isTechnician: staff.isTechnician,
         workingHours: availabilityByDate.flatMap(({ workingHours }) =>
           workingHours

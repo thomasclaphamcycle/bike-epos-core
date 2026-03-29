@@ -4,7 +4,6 @@ import {
   RotaClosedDayType,
   RotaPeriodStatus,
   RotaShiftType,
-  UserOperationalRole,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
@@ -33,7 +32,6 @@ export type DashboardStaffEntry = {
   staffId: string;
   name: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
-  operationalRole: UserOperationalRole | null;
   isTechnician: boolean;
   shiftType: RotaShiftType;
   note: string | null;
@@ -52,10 +50,6 @@ export type WorkshopStaffingTodayResponse = {
     totalScheduledStaffCount: number;
     totalHolidayStaffCount: number;
     coverageStatus: "closed" | "none" | "thin" | "covered";
-  };
-  context: {
-    usesOperationalRoleTags: boolean;
-    fallbackToBroadStaffing: boolean;
   };
   scheduledStaff: DashboardStaffEntry[];
   holidayStaff: DashboardStaffEntry[];
@@ -811,7 +805,6 @@ export const getDashboardStaffToday = async (
       staffId: assignment.staff.id,
       name: toStaffDisplayName(assignment.staff),
       role: assignment.staff.role,
-      operationalRole: assignment.staff.operationalRole,
       isTechnician: assignment.staff.isTechnician,
       shiftType: assignment.shiftType,
       note: assignment.note ?? null,
@@ -825,7 +818,6 @@ export const getDashboardStaffToday = async (
         staffId: assignment.staff.id,
         name: toStaffDisplayName(assignment.staff),
         role: assignment.staff.role,
-        operationalRole: assignment.staff.operationalRole,
         isTechnician: assignment.staff.isTechnician,
         shiftType: assignment.shiftType,
         note: assignment.note ?? null,
@@ -875,10 +867,6 @@ export const getWorkshopStaffingToday = async (
       totalScheduledStaffCount: staffToday.summary.scheduledStaffCount,
       totalHolidayStaffCount: staffToday.summary.holidayStaffCount,
       coverageStatus,
-    },
-    context: {
-      usesOperationalRoleTags: staffingSelection.usesOperationalRoleTags,
-      fallbackToBroadStaffing: staffingSelection.fallbackToBroadStaffing,
     },
     scheduledStaff,
     holidayStaff,

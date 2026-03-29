@@ -7,7 +7,6 @@ import { toPublicUser } from "./userAccountService";
 type StaffDirectoryClient = Prisma.TransactionClient | typeof prisma;
 
 type StaffDirectoryProfileInput = {
-  operationalRole?: string | null;
   isTechnician?: boolean;
 };
 
@@ -106,15 +105,10 @@ export const updateStaffDirectoryProfile = async (
   auditActor?: AuditActor,
   db: StaffDirectoryClient = prisma,
 ) => {
-  const hasOperationalRole = Object.prototype.hasOwnProperty.call(input, "operationalRole");
   const hasIsTechnician = Object.prototype.hasOwnProperty.call(input, "isTechnician");
-  if (!hasOperationalRole && !hasIsTechnician) {
+  if (!hasIsTechnician) {
     throw new HttpError(400, "No staff directory fields provided", "INVALID_STAFF_DIRECTORY_UPDATE");
   }
-
-  const parsedOperationalRole = hasOperationalRole
-    ? parseOperationalRoleOrThrow(input.operationalRole, "INVALID_STAFF_DIRECTORY_UPDATE")
-    : undefined;
 
   if (hasIsTechnician && typeof input.isTechnician !== "boolean") {
     throw new HttpError(400, "isTechnician must be a boolean", "INVALID_STAFF_DIRECTORY_UPDATE");
@@ -132,7 +126,6 @@ export const updateStaffDirectoryProfile = async (
     const updated = await tx.user.update({
       where: { id: userId },
       data: {
-        ...(hasOperationalRole ? { operationalRole: parsedOperationalRole } : {}),
         ...(hasIsTechnician ? { isTechnician: input.isTechnician } : {}),
       },
     });
@@ -145,7 +138,6 @@ export const updateStaffDirectoryProfile = async (
         entityId: updated.id,
         metadata: {
           role: updated.role,
-          operationalRole: updated.operationalRole,
           isTechnician: updated.isTechnician,
           email: updated.email,
         },

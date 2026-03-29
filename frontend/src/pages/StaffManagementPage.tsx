@@ -4,7 +4,6 @@ import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
 
 type UserRole = "STAFF" | "MANAGER" | "ADMIN";
-type UserOperationalRole = "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
 
 type StaffUser = {
   id: string;
@@ -12,7 +11,6 @@ type StaffUser = {
   email: string | null;
   name: string | null;
   role: UserRole;
-  operationalRole: UserOperationalRole;
   isTechnician: boolean;
   isActive: boolean;
   hasPin: boolean;
@@ -28,18 +26,10 @@ type UserEditState = {
   name: string;
   role: UserRole;
   isActive: boolean;
-  operationalRole: UserOperationalRole;
   isTechnician: boolean;
 };
 
 const roleOptions: UserRole[] = ["STAFF", "MANAGER", "ADMIN"];
-const operationalRoleOptions: Array<{ value: UserOperationalRole; label: string }> = [
-  { value: null, label: "Not set" },
-  { value: "WORKSHOP", label: "Workshop" },
-  { value: "SALES", label: "Sales" },
-  { value: "ADMIN", label: "Admin" },
-  { value: "MIXED", label: "Mixed" },
-];
 
 const normalizeIsActive = (value: boolean | string | null | undefined, fallback: boolean) => {
   if (typeof value === "boolean") {
@@ -52,45 +42,6 @@ const normalizeIsActive = (value: boolean | string | null | undefined, fallback:
     return false;
   }
   return fallback;
-};
-
-const normalizeOperationalRole = (
-  value: UserOperationalRole | string | undefined,
-  fallback: UserOperationalRole,
-): UserOperationalRole => {
-  if (value === null) {
-    return null;
-  }
-
-  if (
-    value === "WORKSHOP"
-    || value === "SALES"
-    || value === "ADMIN"
-    || value === "MIXED"
-  ) {
-    return value;
-  }
-
-  if (value === "") {
-    return null;
-  }
-
-  return fallback;
-};
-
-const toOperationalRoleLabel = (value: UserOperationalRole) => {
-  switch (value) {
-    case "WORKSHOP":
-      return "Workshop";
-    case "SALES":
-      return "Sales";
-    case "ADMIN":
-      return "Admin";
-    case "MIXED":
-      return "Mixed";
-    default:
-      return "Not tagged";
-  }
 };
 
 export const StaffManagementPage = () => {
@@ -126,7 +77,6 @@ export const StaffManagementPage = () => {
               name: user.name ?? "",
               role: user.role,
               isActive: user.isActive,
-              operationalRole: user.operationalRole ?? null,
               isTechnician: user.isTechnician,
             },
           ]),
@@ -214,16 +164,12 @@ export const StaffManagementPage = () => {
 
     try {
       await apiPatch(`/api/staff-directory/${encodeURIComponent(userId)}/profile`, {
-        operationalRole: normalizeOperationalRole(
-          userEdits[userId]?.operationalRole,
-          existingUser.operationalRole,
-        ),
         isTechnician: Boolean(userEdits[userId]?.isTechnician ?? existingUser.isTechnician),
       });
-      success("Workshop settings updated");
+      success("Staffing settings updated");
       await loadUsers();
     } catch (updateError) {
-      error(updateError instanceof Error ? updateError.message : "Failed to update workshop settings");
+      error(updateError instanceof Error ? updateError.message : "Failed to update staffing settings");
     }
   };
 
@@ -281,10 +227,10 @@ export const StaffManagementPage = () => {
       {isAdmin ? (
         <section className="card staff-create-card">
           <div className="staff-create-shell">
-            <div className="card-header-row staff-section-heading">
+              <div className="card-header-row staff-section-heading">
               <div>
                 <h2>Create User</h2>
-                <p className="muted-text">Auth role controls access. Operational role tags are edited below for rota and workshop context.</p>
+                <p className="muted-text">Auth role controls access. Technician status is edited below for workshop capacity and scheduling.</p>
               </div>
               <button type="button" className="secondary" onClick={() => void loadUsers()} disabled={loading}>
                 {loading ? "Refreshing..." : "Refresh"}
@@ -332,7 +278,7 @@ export const StaffManagementPage = () => {
       ) : (
         <section className="card staff-list-card">
           <div className="restricted-panel info-panel">
-            Auth roles and credentials remain admin-controlled. Managers can use this page to maintain operational team tags for workshop and rota visibility.
+            Auth roles and credentials remain admin-controlled. Managers can use this page to maintain technician status for workshop capacity and scheduling.
           </div>
         </section>
       )}
@@ -341,7 +287,7 @@ export const StaffManagementPage = () => {
         <div className="card-header-row staff-list-header">
           <div>
             <h2>Staff Directory</h2>
-            <p className="muted-text">Auth role controls access. Operational role helps workshop and rota views prefer relevant scheduled staff.</p>
+            <p className="muted-text">Auth role controls access. Technician status controls workshop capacity and scheduler staffing.</p>
           </div>
           <label className="staff-toggle">
             <input
@@ -367,9 +313,6 @@ export const StaffManagementPage = () => {
                 </div>
                 <div className="staff-summary-meta">
                   <span className={`staff-role-badge staff-role-badge-${user.role.toLowerCase()}`}>{user.role}</span>
-                  <span className={`staff-role-badge staff-operational-role-badge${user.operationalRole ? ` staff-operational-role-badge-${user.operationalRole.toLowerCase()}` : ""}`}>
-                    {toOperationalRoleLabel(user.operationalRole)}
-                  </span>
                   <span className={`staff-status-badge ${user.isTechnician ? "staff-status-badge-active" : "staff-status-badge-inactive"}`}>
                     {user.isTechnician ? "TECHNICIAN" : "NON-TECH"}
                   </span>
@@ -397,10 +340,6 @@ export const StaffManagementPage = () => {
                             name: event.target.value,
                             role: current[user.id]?.role ?? user.role,
                             isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
-                            operationalRole: normalizeOperationalRole(
-                              current[user.id]?.operationalRole,
-                              user.operationalRole,
-                            ),
                             isTechnician: current[user.id]?.isTechnician ?? user.isTechnician,
                           },
                         }))}
@@ -417,10 +356,6 @@ export const StaffManagementPage = () => {
                             name: current[user.id]?.name ?? user.name ?? "",
                             role: event.target.value as UserRole,
                             isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
-                            operationalRole: normalizeOperationalRole(
-                              current[user.id]?.operationalRole,
-                              user.operationalRole,
-                            ),
                             isTechnician: current[user.id]?.isTechnician ?? user.isTechnician,
                           },
                         }))}
@@ -433,31 +368,6 @@ export const StaffManagementPage = () => {
                     </label>
 
                     <label className="staff-form-field staff-field-role">
-                      <span>Operational Role</span>
-                      <select
-                        value={userEdits[user.id]?.operationalRole ?? ""}
-                        onChange={(event) => setUserEdits((current) => ({
-                          ...current,
-                          [user.id]: {
-                            name: current[user.id]?.name ?? user.name ?? "",
-                            role: current[user.id]?.role ?? user.role,
-                            isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
-                            operationalRole: normalizeOperationalRole(
-                              event.target.value as UserOperationalRole | "",
-                              user.operationalRole,
-                            ),
-                            isTechnician: current[user.id]?.isTechnician ?? user.isTechnician,
-                          },
-                        }))}
-                      >
-                        {operationalRoleOptions.map((option) => (
-                          <option key={option.label} value={option.value ?? ""}>{option.label}</option>
-                        ))}
-                      </select>
-                      <span className="muted-text">Separate from auth role. Used for workshop-aware staffing summaries and grouping.</span>
-                    </label>
-
-                    <label className="staff-form-field staff-field-role">
                       <span>Technician</span>
                       <div className="staff-toggle">
                         <input
@@ -465,17 +375,13 @@ export const StaffManagementPage = () => {
                           checked={Boolean(userEdits[user.id]?.isTechnician ?? user.isTechnician)}
                           onChange={(event) => setUserEdits((current) => ({
                             ...current,
-                            [user.id]: {
-                              name: current[user.id]?.name ?? user.name ?? "",
-                              role: current[user.id]?.role ?? user.role,
-                              isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
-                              operationalRole: normalizeOperationalRole(
-                                current[user.id]?.operationalRole,
-                                user.operationalRole,
-                              ),
-                              isTechnician: event.target.checked,
-                            },
-                          }))}
+                          [user.id]: {
+                            name: current[user.id]?.name ?? user.name ?? "",
+                            role: current[user.id]?.role ?? user.role,
+                            isActive: normalizeIsActive(current[user.id]?.isActive, user.isActive),
+                            isTechnician: event.target.checked,
+                          },
+                        }))}
                         />
                         <span>{Boolean(userEdits[user.id]?.isTechnician ?? user.isTechnician) ? "Yes" : "No"}</span>
                       </div>
@@ -506,10 +412,6 @@ export const StaffManagementPage = () => {
                                   name: current[user.id]?.name ?? user.name ?? "",
                                   role: current[user.id]?.role ?? user.role,
                                   isActive: nextIsActive,
-                                  operationalRole: normalizeOperationalRole(
-                                    current[user.id]?.operationalRole,
-                                    user.operationalRole,
-                                  ),
                                   isTechnician: current[user.id]?.isTechnician ?? user.isTechnician,
                                 },
                               }));
@@ -528,7 +430,7 @@ export const StaffManagementPage = () => {
                         className="secondary"
                         onClick={() => void updateStaffDirectoryProfile(user.id)}
                       >
-                        Save Workshop Settings
+                        Save Staffing Settings
                       </button>
                       {isAdmin ? (
                         <button

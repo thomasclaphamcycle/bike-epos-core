@@ -82,7 +82,6 @@ type CalendarStaffRow = {
   name: string;
   username: string;
   role: "STAFF" | "MANAGER" | "ADMIN";
-  operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
   isTechnician: boolean;
   workingHours: CalendarWorkingHours[];
   availability: CalendarAvailability[];
@@ -98,7 +97,6 @@ type CalendarResponse = {
     timeZone: string;
   };
   locationId: string | null;
-  usesOperationalRoleTags: boolean;
   days: Array<{
     date: string;
     weekday: string;

@@ -93,15 +93,10 @@ type DashboardResponse = {
       totalHolidayStaffCount: number;
       coverageStatus: "closed" | "none" | "thin" | "covered";
     };
-    context: {
-      usesOperationalRoleTags: boolean;
-      fallbackToBroadStaffing: boolean;
-    };
     scheduledStaff: Array<{
       staffId: string;
       name: string;
       role: "STAFF" | "MANAGER" | "ADMIN";
-      operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
       isTechnician: boolean;
       shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
       note: string | null;
@@ -111,7 +106,6 @@ type DashboardResponse = {
       staffId: string;
       name: string;
       role: "STAFF" | "MANAGER" | "ADMIN";
-      operationalRole: "WORKSHOP" | "SALES" | "ADMIN" | "MIXED" | null;
       isTechnician: boolean;
       shiftType: "FULL_DAY" | "HALF_DAY_AM" | "HALF_DAY_PM" | "HOLIDAY";
       note: string | null;
@@ -1477,9 +1471,7 @@ export const WorkshopDashboardPage = () => {
                   <span className="table-secondary">
                     {staffingToday.summary.isClosed
                       ? staffingToday.summary.closedReason || "Store closed today."
-                      : staffingToday.context.usesOperationalRoleTags
-                        ? "Using workshop-tagged rota cover."
-                        : "Using broader rota cover until workshop tags are tightened."}
+                      : "Using today's scheduled technician cover."}
                   </span>
                 </div>
 
