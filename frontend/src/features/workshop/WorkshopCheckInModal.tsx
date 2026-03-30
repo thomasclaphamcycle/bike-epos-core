@@ -41,6 +41,7 @@ export const WorkshopCheckInModal = ({
     >
       <aside
         className="workshop-os-modal workshop-checkin-modal"
+        data-testid="workshop-intake"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"

@@ -2454,14 +2454,10 @@ export const WorkshopSchedulerScreen = ({
     });
   };
 
-  const handleDayTrackClick = (
+  const handleDayTrackDoubleClick = (
     event: ReactMouseEvent<HTMLDivElement>,
     day: CalendarResponse["days"][number],
   ) => {
-    if (event.detail < 2) {
-      return;
-    }
-
     const target = event.target as HTMLElement | null;
     if (
       dragStateRef.current
@@ -2800,7 +2796,7 @@ export const WorkshopSchedulerScreen = ({
                     style={{ height: `${trackHeight}px` }}
                     onPointerMove={(event) => handleDayTrackPointerMove(event, day)}
                     onPointerLeave={() => clearHoveredCreateSlot(day.date)}
-                    onClick={(event) => handleDayTrackClick(event, day)}
+                    onDoubleClick={(event) => handleDayTrackDoubleClick(event, day)}
                   >
                     {timeLabels.map((minutes) => (
                       <span

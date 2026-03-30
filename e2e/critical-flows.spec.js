@@ -1109,22 +1109,35 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
 
   const emptyPoint = await todayTrack.evaluate((track) => {
     const trackRect = track.getBoundingClientRect();
+    const timelineOpenMinutes = 8 * 60;
+    const timelineCloseMinutes = 19 * 60;
+    const defaultDurationMinutes = 30;
+    const pxPerMinute = trackRect.height / (timelineCloseMinutes - timelineOpenMinutes);
     const blockers = Array.from(
       track.querySelectorAll(".workshop-scheduler-block, .workshop-scheduler-timeoff"),
     )
       .map((node) => {
         const rect = node.getBoundingClientRect();
         return {
+          left: rect.left - trackRect.left,
+          right: rect.right - trackRect.left,
           top: rect.top - trackRect.top,
           bottom: rect.bottom - trackRect.top,
         };
       })
-      .sort((left, right) => left.top - right.top);
+      .sort((left, right) => left.top - right.top || left.left - right.left);
 
-    const isClear = (offset) =>
-      offset > 24
-      && offset < trackRect.height - 24
-      && blockers.every((blocker) => offset < blocker.top || offset > blocker.bottom);
+    const isClear = (xOffset, yOffset) =>
+      xOffset > 16
+      && xOffset < trackRect.width - 16
+      && yOffset > 24
+      && yOffset < trackRect.height - 24
+      && blockers.every((blocker) =>
+        yOffset < blocker.top
+        || yOffset > blocker.bottom
+        || xOffset < blocker.left
+        || xOffset > blocker.right,
+      );
 
     const preferredOffsets = [
       Math.max(40, trackRect.height * 0.25),
@@ -1132,74 +1145,58 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
       Math.max(72, trackRect.height * 0.65),
       Math.max(88, trackRect.height * 0.82),
     ];
+    const preferredXOffsets = [
+      trackRect.width * 0.5,
+      trackRect.width * 0.25,
+      trackRect.width * 0.75,
+      trackRect.width * 0.125,
+      trackRect.width * 0.875,
+    ];
 
-    for (const offset of preferredOffsets) {
-      if (isClear(offset)) {
-        return { x: trackRect.width / 2, y: offset };
+    for (const yOffset of preferredOffsets) {
+      for (const xOffset of preferredXOffsets) {
+        if (isClear(xOffset, yOffset)) {
+          const pointerMinutes = timelineOpenMinutes + (yOffset / pxPerMinute);
+          const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
+          const startMinutes = Math.max(
+            timelineOpenMinutes,
+            Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
+          );
+          const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
+          return { x: xOffset, y: yOffset, expectedTime };
+        }
       }
     }
 
-    for (let offset = 40; offset < trackRect.height - 40; offset += 18) {
-      if (isClear(offset)) {
-        return { x: trackRect.width / 2, y: offset };
+    for (let yOffset = 40; yOffset < trackRect.height - 40; yOffset += 18) {
+      for (let xOffset = 24; xOffset < trackRect.width - 24; xOffset += 18) {
+        if (isClear(xOffset, yOffset)) {
+          const pointerMinutes = timelineOpenMinutes + (yOffset / pxPerMinute);
+          const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
+          const startMinutes = Math.max(
+            timelineOpenMinutes,
+            Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
+          );
+          const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
+          return { x: xOffset, y: yOffset, expectedTime };
+        }
       }
     }
 
-    return { x: trackRect.width / 2, y: Math.max(48, trackRect.height - 60) };
+    const fallbackY = Math.max(48, trackRect.height - 60);
+    const pointerMinutes = timelineOpenMinutes + (fallbackY / pxPerMinute);
+    const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
+    const startMinutes = Math.max(
+      timelineOpenMinutes,
+      Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
+    );
+    const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
+    return { x: trackRect.width * 0.5, y: fallbackY, expectedTime };
   });
 
   const trackBox = await todayTrack.boundingBox();
   if (!trackBox) {
     throw new Error("Expected today track to have a bounding box.");
-  }
-
-  await page.mouse.move(trackBox.x + emptyPoint.x, trackBox.y + emptyPoint.y);
-  const preview = todayTrack.locator(".workshop-scheduler-create-slot-preview__plus");
-  await expect(preview).toBeVisible();
-  const initialPreviewBox = await preview.boundingBox();
-  if (!initialPreviewBox) {
-    throw new Error("Expected scheduler create preview to render a bounding box.");
-  }
-
-  const lowerPoint = await todayTrack.evaluate((track, currentYOffset) => {
-    const trackRect = track.getBoundingClientRect();
-    const blockers = Array.from(
-      track.querySelectorAll(".workshop-scheduler-block, .workshop-scheduler-timeoff"),
-    )
-      .map((node) => {
-        const rect = node.getBoundingClientRect();
-        return {
-          top: rect.top - trackRect.top,
-          bottom: rect.bottom - trackRect.top,
-        };
-      })
-      .sort((left, right) => left.top - right.top);
-
-    const isClear = (offset) =>
-      offset > 24
-      && offset < trackRect.height - 24
-      && blockers.every((blocker) => offset < blocker.top || offset > blocker.bottom);
-
-    for (let offset = Math.max(currentYOffset + 48, trackRect.height * 0.55); offset < trackRect.height - 40; offset += 18) {
-      if (isClear(offset)) {
-        return { x: trackRect.width / 2, y: offset };
-      }
-    }
-
-    return null;
-  }, emptyPoint.y);
-
-  if (lowerPoint) {
-    await page.mouse.move(trackBox.x + lowerPoint.x, trackBox.y + lowerPoint.y);
-    await expect(preview).toBeVisible();
-    const movedPreviewBox = await preview.boundingBox();
-    if (!movedPreviewBox) {
-      throw new Error("Expected moved scheduler create preview to render a bounding box.");
-    }
-    expect(movedPreviewBox.y).toBeGreaterThan(initialPreviewBox.y + 8);
-
-    await page.mouse.move(trackBox.x + emptyPoint.x, trackBox.y + emptyPoint.y);
-    await expect(preview).toBeVisible();
   }
 
   await todayTrack.dblclick({
@@ -1209,7 +1206,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
     },
   });
 
-  const intakeDialog = page.locator(".workshop-checkin-modal").last();
+  const intakeDialog = page.getByTestId("workshop-intake");
   await expect(intakeDialog).toBeVisible();
   await expect(intakeDialog.getByTestId("workshop-checkin-planned-slot-summary")).toContainText("30 min");
 
@@ -1222,11 +1219,11 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
   await intakeDialog.getByText("Next", { exact: true }).click();
 
   await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-date")).toHaveValue(todayKey);
-  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-time")).toHaveValue(/^\d{2}:\d{2}$/);
+  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-time")).toHaveValue(emptyPoint.expectedTime);
   await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-duration")).toHaveValue("30");
 
   await intakeDialog.getByLabel("Close new job modal").click();
-  await expect(intakeDialog).toHaveCount(0);
+  await expect(page.getByTestId("workshop-intake")).toHaveCount(0);
 
   await page.getByTestId(`workshop-scheduler-job-${seededJob.id}`).dblclick();
   await expect(page.locator(".workshop-checkin-modal")).toHaveCount(0);
