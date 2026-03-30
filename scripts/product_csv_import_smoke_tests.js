@@ -156,6 +156,10 @@ const main = async () => {
     assert.ok(warningPreviewRow, JSON.stringify(preview.json));
     assert.equal(warningPreviewRow.isEligible, true);
     assert.ok(warningPreviewRow.warnings.some((warning) => warning.includes("Cost is missing")));
+    assert.ok(
+      warningPreviewRow.warnings.some((warning) => warning.includes("CorePOS will generate an internal barcode")),
+      JSON.stringify(warningPreviewRow),
+    );
     const conflictPreviewRow = preview.json.items.find((row) => row.parsed.sku === existingProduct.variants[0].sku);
     assert.ok(conflictPreviewRow, JSON.stringify(preview.json));
     assert.ok(conflictPreviewRow.errors.some((issue) => issue.includes("SKU already exists")));
@@ -210,7 +214,9 @@ const main = async () => {
     const importedTube = importedVariants.find((variant) => variant.sku === warningSku);
     assert.ok(importedTube);
     assert.equal(importedTube.costPricePence, null);
-    assert.equal(importedTube.barcode, null);
+    assert.match(importedTube.barcode ?? "", /^CP-\d{6}$/);
+    assert.equal(importedTube.manufacturerBarcode, null);
+    assert.equal(importedTube.internalBarcode, importedTube.barcode);
 
     const groupedInventory = await prisma.inventoryMovement.groupBy({
       by: ["variantId"],

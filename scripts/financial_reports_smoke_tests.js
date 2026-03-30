@@ -111,6 +111,13 @@ const cleanup = async (state) => {
   }
 
   if (state.variantIds.length) {
+    await prisma.barcode.deleteMany({
+      where: {
+        variantId: {
+          in: state.variantIds,
+        },
+      },
+    });
     await prisma.variant.deleteMany({
       where: {
         id: {

@@ -9,6 +9,8 @@ type VariantRow = {
   productId: string;
   sku: string;
   barcode: string | null;
+  manufacturerBarcode: string | null;
+  internalBarcode: string | null;
   name: string | null;
   option: string | null;
   retailPrice: string;
@@ -259,7 +261,7 @@ export const ProductDataQueuePage = () => {
       variantId: variant.id,
       name: variant.product?.name ?? "",
       sku: variant.sku,
-      barcode: variant.barcode ?? "",
+      barcode: variant.manufacturerBarcode ?? "",
       retailPrice: variant.retailPrice,
       category: variant.product?.category ?? "",
       isActive: variant.isActive,
@@ -301,7 +303,7 @@ export const ProductDataQueuePage = () => {
         isActive: payload.isActive,
         defaultVariant: {
           sku: payload.sku,
-          barcode: payload.barcode,
+          manufacturerBarcode: payload.barcode,
           retailPrice: payload.retailPrice,
           isActive: payload.isActive,
         },
@@ -327,7 +329,7 @@ export const ProductDataQueuePage = () => {
       setSaving(true);
       await apiPatch(`/api/variants/${editForm.variantId}`, {
         sku: payload.sku,
-        barcode: payload.barcode ?? null,
+        manufacturerBarcode: payload.barcode ?? null,
         retailPrice: payload.retailPrice,
         isActive: payload.isActive,
       });
@@ -538,7 +540,7 @@ export const ProductDataQueuePage = () => {
                     <th>Row</th>
                     <th>Name</th>
                     <th>SKU</th>
-                    <th>Barcode</th>
+                    <th>Manufacturer barcode</th>
                     <th>Retail</th>
                     <th>Cost</th>
                     <th>Stock</th>
@@ -635,11 +637,11 @@ export const ProductDataQueuePage = () => {
             />
           </label>
           <label>
-            Barcode
+            Manufacturer barcode
             <input
               value={createForm.barcode}
               onChange={(event) => setCreateForm((current) => ({ ...current, barcode: event.target.value }))}
-              placeholder="Optional"
+              placeholder="Optional supplier/manufacturer code"
             />
           </label>
           <label>
@@ -673,6 +675,10 @@ export const ProductDataQueuePage = () => {
             </select>
           </label>
         </div>
+
+        <p className="muted-text">
+          If you leave the manufacturer barcode blank, CorePOS will assign an internal fallback barcode and use that for label printing and scanning.
+        </p>
 
         <div className="actions-inline">
           <button type="button" className="primary" onClick={() => void createProduct()} disabled={saving}>
@@ -712,7 +718,7 @@ export const ProductDataQueuePage = () => {
               />
             </label>
             <label>
-              Barcode
+              Manufacturer barcode
               <input
                 value={editForm.barcode}
                 onChange={(event) => setEditForm((current) => current ? { ...current, barcode: event.target.value } : current)}
@@ -747,6 +753,10 @@ export const ProductDataQueuePage = () => {
               </select>
             </label>
           </div>
+
+          <p className="muted-text">
+            Clearing the manufacturer barcode keeps the current internal fallback barcode as the preferred operational barcode.
+          </p>
 
           <div className="actions-inline">
             <button type="button" className="primary" onClick={() => void saveEdit()} disabled={saving}>
@@ -824,6 +834,9 @@ export const ProductDataQueuePage = () => {
                   <td>
                     <div className="actions-inline">
                       <button type="button" onClick={() => startEdit(variant)}>Edit</button>
+                      <Link className="button-link button-link-compact" to={`/inventory/${variant.id}/label`}>
+                        Print label
+                      </Link>
                     </div>
                   </td>
                 </tr>

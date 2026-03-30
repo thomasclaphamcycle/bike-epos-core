@@ -706,6 +706,9 @@ const cleanup = async (state) => {
   }
 
   if (productIds.length > 0) {
+    await prisma.barcode.deleteMany({
+      where: { variant: { productId: { in: productIds } } },
+    });
     await prisma.variant.deleteMany({
       where: { productId: { in: productIds } },
     });

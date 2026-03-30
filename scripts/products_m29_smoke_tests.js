@@ -200,6 +200,8 @@ const run = async () => {
     const [variantRes] = createdVariantsRes.json.variants;
     state.variantIds.add(variantRes.id);
     assert.equal(variantRes.product.category, "Components");
+    assert.equal(variantRes.manufacturerBarcode, variantRes.barcode);
+    assert.equal(variantRes.internalBarcode, null);
     const barcode = variantRes.barcode;
 
     const seedRes = await fetchJson("/api/inventory/movements", {
@@ -248,6 +250,48 @@ const run = async () => {
       (row) => row.id === variantRes.id,
     );
     assert.ok(rowByBarcode, "Expected barcode search row");
+
+    const fallbackProductRes = await fetchJson("/api/products", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        name: `M29 Fallback Product ${uniqueRef()}`,
+        category: "Accessories",
+        defaultVariant: {
+          sku: `M29-FALLBACK-${uniqueRef()}`,
+          retailPricePence: 2499,
+          isActive: true,
+        },
+      }),
+    });
+    assert.equal(fallbackProductRes.status, 201, JSON.stringify(fallbackProductRes.json));
+    state.productIds.add(fallbackProductRes.json.id);
+
+    const fallbackVariantsRes = await fetchJson(
+      `/api/variants?productId=${encodeURIComponent(fallbackProductRes.json.id)}&take=10&skip=0`,
+      {
+        method: "GET",
+        headers: managerHeaders,
+      },
+    );
+    assert.equal(fallbackVariantsRes.status, 200, JSON.stringify(fallbackVariantsRes.json));
+    const [fallbackVariant] = fallbackVariantsRes.json.variants;
+    state.variantIds.add(fallbackVariant.id);
+    assert.match(fallbackVariant.internalBarcode, /^CP-\d{6}$/);
+    assert.equal(fallbackVariant.barcode, fallbackVariant.internalBarcode);
+    assert.equal(fallbackVariant.manufacturerBarcode, null);
+
+    const fallbackBarcodeSearchRes = await fetchJson(
+      `/api/products/search?barcode=${encodeURIComponent(fallbackVariant.internalBarcode)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(fallbackBarcodeSearchRes.status, 200, JSON.stringify(fallbackBarcodeSearchRes.json));
+    assert.ok(
+      fallbackBarcodeSearchRes.json.rows.some((row) => row.id === fallbackVariant.id),
+      "Expected internal fallback barcode search row",
+    );
 
     const addToBasketRes = await fetchJson(`/api/baskets/${basketId}/lines`, {
       method: "POST",

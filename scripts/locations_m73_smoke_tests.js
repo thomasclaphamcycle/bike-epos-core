@@ -270,6 +270,13 @@ const run = async () => {
           },
         },
       });
+      await prisma.barcode.deleteMany({
+        where: {
+          variantId: {
+            in: created.variantIds,
+          },
+        },
+      });
       await prisma.variant.deleteMany({
         where: {
           id: {

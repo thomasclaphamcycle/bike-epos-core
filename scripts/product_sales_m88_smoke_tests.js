@@ -45,6 +45,7 @@ const cleanup = async (state) => {
     await prisma.sale.deleteMany({ where: { id: { in: state.saleIds } } });
   }
   if (state.variantIds.length) {
+    await prisma.barcode.deleteMany({ where: { variantId: { in: state.variantIds } } });
     await prisma.variant.deleteMany({ where: { id: { in: state.variantIds } } });
   }
   if (state.productIds.length) {

@@ -1,7 +1,13 @@
-import { BarcodeType, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 import { resolveInventoryStockLocationIdTx } from "./locationService";
+import {
+  ensureBarcodeCodeAvailableTx,
+  generateNextInternalBarcodeTx,
+  getPreferredVariantBarcode,
+  syncVariantBarcodeRegistryTx,
+} from "./barcodeService";
 
 type CreateProductInput = {
   name?: string;
@@ -12,6 +18,7 @@ type CreateProductInput = {
   defaultVariant?: {
     sku?: string;
     barcode?: string;
+    manufacturerBarcode?: string;
     retailPrice?: string | number;
     retailPricePence?: number;
     isActive?: boolean;
@@ -30,6 +37,7 @@ type CreateVariantInput = {
   productId?: string;
   sku?: string;
   barcode?: string;
+  manufacturerBarcode?: string;
   name?: string;
   option?: string;
   retailPrice?: string | number;
@@ -44,6 +52,7 @@ type CreateImportedProductRowInput = {
   category?: string | null;
   sku: string;
   barcode?: string | null;
+  manufacturerBarcode?: string | null;
   retailPrice: string | number;
   costPricePence?: number | null;
   openingStockQty?: number;
@@ -55,6 +64,7 @@ type UpdateVariantInput = {
   productId?: string;
   sku?: string;
   barcode?: string | null;
+  manufacturerBarcode?: string | null;
   name?: string;
   option?: string;
   retailPrice?: string | number;
@@ -127,6 +137,11 @@ const normalizeOptionalNullableText = (value: string | undefined | null): string
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+
+const normalizePreferredManufacturerBarcodeInput = (
+  manufacturerBarcode: string | undefined | null,
+  barcode: string | undefined | null,
+) => normalizeOptionalNullableText(manufacturerBarcode) ?? normalizeOptionalNullableText(barcode);
 
 const toNormalizedTake = (take: number | undefined): number | undefined => {
   if (take === undefined) {
@@ -263,6 +278,8 @@ const toVariantResponse = (variant: {
   productId: string;
   sku: string;
   barcode: string | null;
+  manufacturerBarcode: string | null;
+  internalBarcode: string | null;
   name: string | null;
   option: string | null;
   retailPrice: Prisma.Decimal;
@@ -284,6 +301,8 @@ const toVariantResponse = (variant: {
     productId: variant.productId,
     sku: variant.sku,
     barcode: variant.barcode,
+    manufacturerBarcode: variant.manufacturerBarcode,
+    internalBarcode: variant.internalBarcode,
     name: variant.name,
     option: variant.option,
     retailPrice: variant.retailPrice.toFixed(2),
@@ -337,86 +356,35 @@ const ensureSkuAvailable = async (
   }
 };
 
-const ensureBarcodeAvailable = async (
-  tx: Prisma.TransactionClient | typeof prisma,
-  code: string,
-  exceptVariantId?: string,
-) => {
-  const existingVariantBarcode = await tx.variant.findFirst({
-    where: {
-      barcode: code,
-      ...(exceptVariantId
-        ? {
-            NOT: {
-              id: exceptVariantId,
-            },
-          }
-        : {}),
-    },
-    select: { id: true },
-  });
-
-  if (existingVariantBarcode) {
-    throw new HttpError(409, "Barcode already exists", "BARCODE_EXISTS");
-  }
-
-  const existingBarcode = await tx.barcode.findUnique({
-    where: { code },
-    select: {
-      variantId: true,
-    },
-  });
-
-  if (existingBarcode && existingBarcode.variantId !== exceptVariantId) {
-    throw new HttpError(409, "Barcode already exists", "BARCODE_EXISTS");
-  }
-};
-
-const upsertPrimaryBarcodeForVariant = async (
+const resolveVariantBarcodeStateTx = async (
   tx: Prisma.TransactionClient,
-  variantId: string,
-  code: string,
+  input: {
+    manufacturerBarcode: string | null;
+    existingInternalBarcode?: string | null;
+    existingManufacturerBarcode?: string | null;
+    variantId?: string;
+  },
 ) => {
-  const primaryBarcode = await tx.barcode.findFirst({
-    where: {
-      variantId,
-      isPrimary: true,
-    },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (primaryBarcode) {
-    if (primaryBarcode.code === code) {
-      return;
-    }
-
-    await tx.barcode.update({
-      where: { id: primaryBarcode.id },
-      data: { code },
-    });
-    return;
+  if (
+    input.manufacturerBarcode
+    && input.manufacturerBarcode !== (input.existingManufacturerBarcode ?? null)
+  ) {
+    await ensureBarcodeCodeAvailableTx(tx, input.manufacturerBarcode, input.variantId);
   }
 
-  await tx.barcode.create({
-    data: {
-      variantId,
-      code,
-      type: BarcodeType.INTERNAL,
-      isPrimary: true,
-    },
-  });
-};
+  let internalBarcode = input.existingInternalBarcode ?? null;
+  if (!input.manufacturerBarcode && !internalBarcode) {
+    internalBarcode = await generateNextInternalBarcodeTx(tx, input.variantId);
+  }
 
-const clearPrimaryBarcodeForVariant = async (
-  tx: Prisma.TransactionClient,
-  variantId: string,
-) => {
-  await tx.barcode.deleteMany({
-    where: {
-      variantId,
-      isPrimary: true,
-    },
-  });
+  return {
+    manufacturerBarcode: input.manufacturerBarcode,
+    internalBarcode,
+    barcode: getPreferredVariantBarcode({
+      manufacturerBarcode: input.manufacturerBarcode,
+      internalBarcode,
+    }),
+  };
 };
 
 const toVariantConflictError = (
@@ -430,7 +398,11 @@ const toVariantConflictError = (
     return new HttpError(409, "SKU already exists", "SKU_EXISTS");
   }
 
-  if (target.includes("barcode")) {
+  if (
+    target.includes("barcode")
+    || target.includes("manufacturerBarcode")
+    || target.includes("internalBarcode")
+  ) {
     return new HttpError(409, "Barcode already exists", "BARCODE_EXISTS");
   }
 
@@ -501,7 +473,10 @@ export const createProduct = async (input: CreateProductInput) => {
 
     if (hasDefaultVariant) {
       const sku = normalizeOptionalText(input.defaultVariant?.sku);
-      const barcode = normalizeOptionalText(input.defaultVariant?.barcode);
+      const manufacturerBarcode = normalizePreferredManufacturerBarcodeInput(
+        input.defaultVariant?.manufacturerBarcode,
+        input.defaultVariant?.barcode,
+      ) ?? null;
 
       if (!sku) {
         throw new HttpError(400, "defaultVariant.sku is required", "INVALID_PRODUCT");
@@ -517,25 +492,28 @@ export const createProduct = async (input: CreateProductInput) => {
       );
 
       await ensureSkuAvailable(tx, sku);
-
-      if (barcode) {
-        await ensureBarcodeAvailable(tx, barcode);
-      }
+      const barcodeState = await resolveVariantBarcodeStateTx(tx, {
+        manufacturerBarcode,
+      });
 
       const variant = await tx.variant.create({
         data: {
           productId: product.id,
           sku,
-          barcode,
+          barcode: barcodeState.barcode,
+          manufacturerBarcode: barcodeState.manufacturerBarcode,
+          internalBarcode: barcodeState.internalBarcode,
           retailPrice: parsedRetailPrice.retailPrice,
           retailPricePence: parsedRetailPrice.retailPricePence,
           isActive: input.defaultVariant?.isActive ?? input.isActive ?? true,
         },
       });
 
-      if (barcode) {
-        await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
-      }
+      await syncVariantBarcodeRegistryTx(tx, variant.id, {
+        manufacturerBarcode: barcodeState.manufacturerBarcode,
+        internalBarcode: barcodeState.internalBarcode,
+        preferredBarcode: barcodeState.barcode,
+      });
     }
 
     return toProductResponse(product);
@@ -546,7 +524,10 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
   const name = normalizeOptionalText(input.name);
   const category = normalizeOptionalNullableText(input.category);
   const sku = normalizeOptionalText(input.sku);
-  const barcode = normalizeOptionalNullableText(input.barcode);
+  const manufacturerBarcode = normalizePreferredManufacturerBarcodeInput(
+    input.manufacturerBarcode,
+    input.barcode,
+  ) ?? null;
   const createdByStaffId = normalizeOptionalNullableText(input.createdByStaffId);
   const importReferenceId = normalizeOptionalText(input.importReferenceId) ?? sku ?? "PRODUCT_IMPORT";
   const openingStockQty = input.openingStockQty ?? 0;
@@ -587,10 +568,9 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
 
   return prisma.$transaction(async (tx) => {
     await ensureSkuAvailable(tx, sku);
-
-    if (barcode) {
-      await ensureBarcodeAvailable(tx, barcode);
-    }
+    const barcodeState = await resolveVariantBarcodeStateTx(tx, {
+      manufacturerBarcode,
+    });
 
     const product = await tx.product.create({
       data: {
@@ -604,7 +584,9 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
       data: {
         productId: product.id,
         sku,
-        barcode,
+        barcode: barcodeState.barcode,
+        manufacturerBarcode: barcodeState.manufacturerBarcode,
+        internalBarcode: barcodeState.internalBarcode,
         retailPrice: parsedRetailPrice.retailPrice,
         retailPricePence: parsedRetailPrice.retailPricePence,
         costPricePence: input.costPricePence ?? null,
@@ -612,9 +594,11 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
       },
     });
 
-    if (barcode) {
-      await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
-    }
+    await syncVariantBarcodeRegistryTx(tx, variant.id, {
+      manufacturerBarcode: barcodeState.manufacturerBarcode,
+      internalBarcode: barcodeState.internalBarcode,
+      preferredBarcode: barcodeState.barcode,
+    });
 
     if (openingStockQty > 0) {
       const defaultStockLocation = await getOrCreateDefaultStockLocationTx(tx);
@@ -754,8 +738,17 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
             OR: [
               { sku: { contains: normalizedQuery, mode: "insensitive" } },
               { barcode: { contains: normalizedQuery, mode: "insensitive" } },
+              { manufacturerBarcode: { contains: normalizedQuery, mode: "insensitive" } },
+              { internalBarcode: { contains: normalizedQuery, mode: "insensitive" } },
               { name: { contains: normalizedQuery, mode: "insensitive" } },
               { option: { contains: normalizedQuery, mode: "insensitive" } },
+              {
+                barcodes: {
+                  some: {
+                    code: { contains: normalizedQuery, mode: "insensitive" },
+                  },
+                },
+              },
               {
                 product: {
                   category: { contains: normalizedQuery, mode: "insensitive" },
@@ -830,7 +823,31 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
                 },
               },
               {
+                manufacturerBarcode: {
+                  equals: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+              {
+                internalBarcode: {
+                  equals: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+              {
                 barcode: {
+                  contains: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+              {
+                manufacturerBarcode: {
+                  contains: normalizedBarcode,
+                  mode: "insensitive",
+                },
+              },
+              {
+                internalBarcode: {
                   contains: normalizedBarcode,
                   mode: "insensitive",
                 },
@@ -859,6 +876,18 @@ export const searchProducts = async (filters: SearchProductsInput = {}) => {
               },
               {
                 barcode: {
+                  contains: normalizedQ,
+                  mode: "insensitive",
+                },
+              },
+              {
+                manufacturerBarcode: {
+                  contains: normalizedQ,
+                  mode: "insensitive",
+                },
+              },
+              {
+                internalBarcode: {
                   contains: normalizedQ,
                   mode: "insensitive",
                 },
@@ -992,6 +1021,18 @@ export const getProductByBarcode = async (barcode: string, locationId?: string) 
             },
           },
           {
+            manufacturerBarcode: {
+              equals: normalizedBarcode,
+              mode: "insensitive",
+            },
+          },
+          {
+            internalBarcode: {
+              equals: normalizedBarcode,
+              mode: "insensitive",
+            },
+          },
+          {
             barcodes: {
               some: {
                 code: {
@@ -1054,7 +1095,10 @@ export const getProductByBarcode = async (barcode: string, locationId?: string) 
 export const createVariant = async (input: CreateVariantInput) => {
   const productId = normalizeOptionalText(input.productId);
   const sku = normalizeOptionalText(input.sku);
-  const barcode = normalizeOptionalText(input.barcode);
+  const manufacturerBarcode = normalizePreferredManufacturerBarcodeInput(
+    input.manufacturerBarcode,
+    input.barcode,
+  ) ?? null;
   const name = normalizeOptionalText(input.name);
   const option = normalizeOptionalText(input.option);
   const taxCode = normalizeOptionalText(input.taxCode);
@@ -1090,17 +1134,18 @@ export const createVariant = async (input: CreateVariantInput) => {
   return prisma.$transaction(async (tx) => {
     await ensureProductExists(tx, productId);
     await ensureSkuAvailable(tx, sku);
-
-    if (barcode) {
-      await ensureBarcodeAvailable(tx, barcode);
-    }
+    const barcodeState = await resolveVariantBarcodeStateTx(tx, {
+      manufacturerBarcode,
+    });
 
     try {
       const variant = await tx.variant.create({
         data: {
           productId,
           sku,
-          barcode,
+          barcode: barcodeState.barcode,
+          manufacturerBarcode: barcodeState.manufacturerBarcode,
+          internalBarcode: barcodeState.internalBarcode,
           name,
           option,
           retailPrice: parsedRetailPrice.retailPrice,
@@ -1111,9 +1156,11 @@ export const createVariant = async (input: CreateVariantInput) => {
         },
       });
 
-      if (barcode) {
-        await upsertPrimaryBarcodeForVariant(tx, variant.id, barcode);
-      }
+      await syncVariantBarcodeRegistryTx(tx, variant.id, {
+        manufacturerBarcode: barcodeState.manufacturerBarcode,
+        internalBarcode: barcodeState.internalBarcode,
+        preferredBarcode: barcodeState.barcode,
+      });
 
       return toVariantResponse(variant);
     } catch (error) {
@@ -1161,6 +1208,7 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
     Object.prototype.hasOwnProperty.call(input, "productId") ||
     Object.prototype.hasOwnProperty.call(input, "sku") ||
     Object.prototype.hasOwnProperty.call(input, "barcode") ||
+    Object.prototype.hasOwnProperty.call(input, "manufacturerBarcode") ||
     Object.prototype.hasOwnProperty.call(input, "name") ||
     Object.prototype.hasOwnProperty.call(input, "option") ||
     Object.prototype.hasOwnProperty.call(input, "retailPrice") ||
@@ -1206,13 +1254,29 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
     }
 
     const hasBarcodeField = Object.prototype.hasOwnProperty.call(input, "barcode");
-    let normalizedBarcode: string | null | undefined;
-    if (hasBarcodeField) {
-      normalizedBarcode = normalizeOptionalNullableText(input.barcode);
-      if (normalizedBarcode) {
-        await ensureBarcodeAvailable(tx, normalizedBarcode, variantId);
-      }
-      data.barcode = normalizedBarcode;
+    const hasManufacturerBarcodeField = Object.prototype.hasOwnProperty.call(input, "manufacturerBarcode");
+    let nextBarcodeState:
+      | {
+          barcode: string | null;
+          manufacturerBarcode: string | null;
+          internalBarcode: string | null;
+        }
+      | null = null;
+    if (hasBarcodeField || hasManufacturerBarcodeField) {
+      const normalizedManufacturerBarcode =
+        normalizePreferredManufacturerBarcodeInput(
+          hasManufacturerBarcodeField ? input.manufacturerBarcode : undefined,
+          hasBarcodeField ? input.barcode : undefined,
+        ) ?? null;
+      nextBarcodeState = await resolveVariantBarcodeStateTx(tx, {
+        manufacturerBarcode: normalizedManufacturerBarcode,
+        existingManufacturerBarcode: variant.manufacturerBarcode,
+        existingInternalBarcode: variant.internalBarcode,
+        variantId,
+      });
+      data.barcode = nextBarcodeState.barcode;
+      data.manufacturerBarcode = nextBarcodeState.manufacturerBarcode;
+      data.internalBarcode = nextBarcodeState.internalBarcode;
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "name")) {
@@ -1262,12 +1326,12 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
         data,
       });
 
-      if (hasBarcodeField) {
-        if (normalizedBarcode) {
-          await upsertPrimaryBarcodeForVariant(tx, variantId, normalizedBarcode);
-        } else {
-          await clearPrimaryBarcodeForVariant(tx, variantId);
-        }
+      if (nextBarcodeState) {
+        await syncVariantBarcodeRegistryTx(tx, variantId, {
+          manufacturerBarcode: nextBarcodeState.manufacturerBarcode,
+          internalBarcode: nextBarcodeState.internalBarcode,
+          preferredBarcode: nextBarcodeState.barcode,
+        });
       }
 
       return toVariantResponse(updated);

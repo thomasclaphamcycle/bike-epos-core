@@ -9,6 +9,8 @@ type VariantDetail = {
   productId: string;
   sku: string;
   barcode: string | null;
+  manufacturerBarcode: string | null;
+  internalBarcode: string | null;
   name: string | null;
   option: string | null;
   retailPrice: string;
@@ -515,6 +517,7 @@ export const InventoryItemPage = () => {
             <Link to="/management/reordering">Reordering</Link>
             <Link to="/management/inventory">Inventory intel</Link>
             <Link to="/inventory/stocktakes">Stocktake sessions</Link>
+            <Link to={`/inventory/${variantId}/label`}>Print label</Link>
             <Link to={`/inventory/${variantId}?mode=count`}>Cycle count</Link>
             <Link to="/inventory">Back to Inventory</Link>
           </div>
@@ -529,7 +532,9 @@ export const InventoryItemPage = () => {
               <div><strong>Brand:</strong> {variant.product?.brand || "-"}</div>
               <div><strong>Variant:</strong> {variant.name || variant.option || "-"}</div>
               <div><strong>SKU:</strong> <span className="mono-text">{variant.sku}</span></div>
-              <div><strong>Barcode:</strong> <span className="mono-text">{variant.barcode || "-"}</span></div>
+              <div><strong>Preferred barcode:</strong> <span className="mono-text">{variant.barcode || "-"}</span></div>
+              <div><strong>Manufacturer barcode:</strong> <span className="mono-text">{variant.manufacturerBarcode || "-"}</span></div>
+              <div><strong>Internal barcode:</strong> <span className="mono-text">{variant.internalBarcode || "-"}</span></div>
               <div><strong>Retail:</strong> {formatMoney(variant.retailPricePence)}</div>
               <div><strong>Cost:</strong> {formatMoney(variant.costPricePence)}</div>
               <div>

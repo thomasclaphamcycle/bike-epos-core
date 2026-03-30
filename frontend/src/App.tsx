@@ -45,6 +45,7 @@ import {
   PosPage,
   PricingExceptionsPage,
   ProductDataQueuePage,
+  ProductLabelPrintPage,
   ProductSalesAnalyticsPage,
   PublicWorkshopBookingManagePage,
   PublicWorkshopBookingPage,
@@ -745,6 +746,14 @@ export const App = () => {
         <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
         <Route path="/site/contact" element={<CustomerSitePage variant="contact" />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/inventory/:variantId/label"
+          element={(
+            <ProtectedRoute>
+              <ProductLabelPrintPage />
+            </ProtectedRoute>
+          )}
+        />
         <Route path="*" element={<AuthedApp />} />
       </Routes>
     </Suspense>

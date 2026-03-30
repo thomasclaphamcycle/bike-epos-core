@@ -46,6 +46,10 @@ export const InventoryItemPage = lazyPage(
   () => import("./pages/InventoryItemPage"),
   "InventoryItemPage",
 );
+export const ProductLabelPrintPage = lazyPage(
+  () => import("./pages/ProductLabelPrintPage"),
+  "ProductLabelPrintPage",
+);
 export const InventoryLocationsPage = lazyPage(
   () => import("./pages/InventoryLocationsPage"),
   "InventoryLocationsPage",
