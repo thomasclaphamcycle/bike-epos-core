@@ -2467,10 +2467,7 @@ export const WorkshopSchedulerScreen = ({
       return;
     }
 
-    const createSlot =
-      hoveredCreateSlot?.dateKey === day.date
-        ? hoveredCreateSlot
-        : buildHoveredCreateSlot(day, event.clientY, event.currentTarget);
+    const createSlot = buildHoveredCreateSlot(day, event.clientY, event.currentTarget);
     if (!createSlot) {
       return;
     }

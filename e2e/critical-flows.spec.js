@@ -1140,17 +1140,17 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
       );
 
     const preferredOffsets = [
-      Math.max(40, trackRect.height * 0.25),
-      Math.max(56, trackRect.height * 0.45),
-      Math.max(72, trackRect.height * 0.65),
-      Math.max(88, trackRect.height * 0.82),
+      Math.floor(Math.max(40, trackRect.height * 0.25)),
+      Math.floor(Math.max(56, trackRect.height * 0.45)),
+      Math.floor(Math.max(72, trackRect.height * 0.65)),
+      Math.floor(Math.max(88, trackRect.height * 0.82)),
     ];
     const preferredXOffsets = [
-      trackRect.width * 0.5,
-      trackRect.width * 0.25,
-      trackRect.width * 0.75,
-      trackRect.width * 0.125,
-      trackRect.width * 0.875,
+      Math.floor(trackRect.width * 0.5),
+      Math.floor(trackRect.width * 0.25),
+      Math.floor(trackRect.width * 0.75),
+      Math.floor(trackRect.width * 0.125),
+      Math.floor(trackRect.width * 0.875),
     ];
 
     for (const yOffset of preferredOffsets) {
@@ -1183,7 +1183,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
       }
     }
 
-    const fallbackY = Math.max(48, trackRect.height - 60);
+    const fallbackY = Math.floor(Math.max(48, trackRect.height - 60));
     const pointerMinutes = timelineOpenMinutes + (fallbackY / pxPerMinute);
     const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
     const startMinutes = Math.max(
@@ -1191,7 +1191,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
       Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
     );
     const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
-    return { x: trackRect.width * 0.5, y: fallbackY, expectedTime };
+    return { x: Math.floor(trackRect.width * 0.5), y: fallbackY, expectedTime };
   });
 
   const trackBox = await todayTrack.boundingBox();
