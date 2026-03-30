@@ -62,6 +62,7 @@ export const createVariantHandler = async (req: Request, res: Response) => {
     productId?: string;
     sku?: string;
     barcode?: string;
+    manufacturerBarcode?: string;
     name?: string;
     option?: string;
     retailPrice?: string | number;
@@ -79,6 +80,9 @@ export const createVariantHandler = async (req: Request, res: Response) => {
   }
   if (body.barcode !== undefined && typeof body.barcode !== "string") {
     throw new HttpError(400, "barcode must be a string", "INVALID_VARIANT");
+  }
+  if (body.manufacturerBarcode !== undefined && typeof body.manufacturerBarcode !== "string") {
+    throw new HttpError(400, "manufacturerBarcode must be a string", "INVALID_VARIANT");
   }
   if (body.name !== undefined && typeof body.name !== "string") {
     throw new HttpError(400, "name must be a string", "INVALID_VARIANT");
@@ -108,6 +112,7 @@ export const createVariantForProductHandler = async (req: Request, res: Response
   const body = (req.body ?? {}) as {
     sku?: string;
     barcode?: string;
+    manufacturerBarcode?: string;
     name?: string;
     option?: string;
     retailPrice?: string | number;
@@ -122,6 +127,9 @@ export const createVariantForProductHandler = async (req: Request, res: Response
   }
   if (body.barcode !== undefined && typeof body.barcode !== "string") {
     throw new HttpError(400, "barcode must be a string", "INVALID_VARIANT");
+  }
+  if (body.manufacturerBarcode !== undefined && typeof body.manufacturerBarcode !== "string") {
+    throw new HttpError(400, "manufacturerBarcode must be a string", "INVALID_VARIANT");
   }
   if (body.name !== undefined && typeof body.name !== "string") {
     throw new HttpError(400, "name must be a string", "INVALID_VARIANT");
@@ -160,6 +168,7 @@ export const patchVariantHandler = async (req: Request, res: Response) => {
     productId?: string;
     sku?: string;
     barcode?: string | null;
+    manufacturerBarcode?: string | null;
     name?: string;
     option?: string;
     retailPrice?: string | number;
@@ -177,6 +186,13 @@ export const patchVariantHandler = async (req: Request, res: Response) => {
   }
   if (body.barcode !== undefined && body.barcode !== null && typeof body.barcode !== "string") {
     throw new HttpError(400, "barcode must be a string or null", "INVALID_VARIANT_UPDATE");
+  }
+  if (
+    body.manufacturerBarcode !== undefined
+    && body.manufacturerBarcode !== null
+    && typeof body.manufacturerBarcode !== "string"
+  ) {
+    throw new HttpError(400, "manufacturerBarcode must be a string or null", "INVALID_VARIANT_UPDATE");
   }
   if (body.name !== undefined && typeof body.name !== "string") {
     throw new HttpError(400, "name must be a string", "INVALID_VARIANT_UPDATE");

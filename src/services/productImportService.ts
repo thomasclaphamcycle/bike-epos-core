@@ -40,7 +40,7 @@ const REQUIRED_FIELDS: ProductImportField[] = ["name", "sku", "retailPrice"];
 const FIELD_LABELS: Record<ProductImportField, string> = {
   name: "Name",
   sku: "SKU",
-  barcode: "Barcode",
+  barcode: "Manufacturer barcode",
   retailPrice: "Retail price",
   cost: "Cost",
   stockQuantity: "Stock quantity",
@@ -245,7 +245,7 @@ const buildPreview = async (csvText: string) => {
     const stockQuantity = toStockQuantity(source.stockQuantity, errors);
 
     if (!barcode) {
-      warnings.push("Barcode is missing");
+      warnings.push("Manufacturer barcode is missing. CorePOS will generate an internal barcode on import");
     }
     if (!category) {
       warnings.push("Category is missing");
@@ -307,11 +307,29 @@ const buildPreview = async (csvText: string) => {
     barcodes.length > 0
       ? prisma.variant.findMany({
           where: {
-            barcode: {
-              in: barcodes,
-            },
+            OR: [
+              {
+                barcode: {
+                  in: barcodes,
+                },
+              },
+              {
+                manufacturerBarcode: {
+                  in: barcodes,
+                },
+              },
+              {
+                internalBarcode: {
+                  in: barcodes,
+                },
+              },
+            ],
           },
-          select: { barcode: true },
+          select: {
+            barcode: true,
+            manufacturerBarcode: true,
+            internalBarcode: true,
+          },
         })
       : Promise.resolve([]),
     barcodes.length > 0
@@ -329,6 +347,8 @@ const buildPreview = async (csvText: string) => {
   const existingSkuSet = new Set(existingSkus.map((row) => row.sku));
   const existingBarcodeSet = new Set([
     ...existingVariantBarcodes.map((row) => row.barcode).filter(Boolean),
+    ...existingVariantBarcodes.map((row) => row.manufacturerBarcode).filter(Boolean),
+    ...existingVariantBarcodes.map((row) => row.internalBarcode).filter(Boolean),
     ...existingBarcodeRows.map((row) => row.code),
   ]);
 

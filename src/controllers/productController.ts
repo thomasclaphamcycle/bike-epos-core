@@ -99,6 +99,7 @@ export const createProductHandler = async (req: Request, res: Response) => {
     defaultVariant?: {
       sku?: string;
       barcode?: string;
+      manufacturerBarcode?: string;
       retailPrice?: string | number;
       retailPricePence?: number;
       isActive?: boolean;
@@ -128,6 +129,12 @@ export const createProductHandler = async (req: Request, res: Response) => {
   }
   if (body.defaultVariant?.barcode !== undefined && typeof body.defaultVariant.barcode !== "string") {
     throw new HttpError(400, "defaultVariant.barcode must be a string", "INVALID_PRODUCT");
+  }
+  if (
+    body.defaultVariant?.manufacturerBarcode !== undefined
+    && typeof body.defaultVariant.manufacturerBarcode !== "string"
+  ) {
+    throw new HttpError(400, "defaultVariant.manufacturerBarcode must be a string", "INVALID_PRODUCT");
   }
   if (
     body.defaultVariant?.retailPrice !== undefined &&

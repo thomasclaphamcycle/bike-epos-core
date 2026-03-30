@@ -249,6 +249,7 @@ const run = async () => {
     if (created.variantId) {
       await prisma.stockLedgerEntry.deleteMany({ where: { variantId: created.variantId } });
       await prisma.inventoryMovement.deleteMany({ where: { variantId: created.variantId } });
+      await prisma.barcode.deleteMany({ where: { variantId: created.variantId } });
       await prisma.variant.deleteMany({ where: { id: created.variantId } });
     }
     if (created.productId) {

@@ -637,6 +637,8 @@ const seedDemoProducts = async () => {
         name: product.name,
         option: "Default",
         barcode: product.barcode,
+        manufacturerBarcode: product.barcode,
+        internalBarcode: null,
         retailPrice,
         retailPricePence: product.retailPricePence,
         costPricePence: product.costPricePence,
@@ -648,6 +650,8 @@ const seedDemoProducts = async () => {
         name: product.name,
         option: "Default",
         barcode: product.barcode,
+        manufacturerBarcode: product.barcode,
+        internalBarcode: null,
         retailPrice,
         retailPricePence: product.retailPricePence,
         costPricePence: product.costPricePence,
@@ -669,7 +673,7 @@ const seedDemoProducts = async () => {
       create: {
         variantId: variant.id,
         code: product.barcode,
-        type: "INTERNAL",
+        type: "EAN",
         isPrimary: true,
       },
     });

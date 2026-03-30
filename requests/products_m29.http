@@ -24,7 +24,7 @@ X-Staff-Id: demo-manager
   "isActive": true,
   "defaultVariant": {
     "sku": "SHIM-B05S",
-    "barcode": "1234567890123",
+    "manufacturerBarcode": "1234567890123",
     "retailPrice": "14.99",
     "isActive": true
   }

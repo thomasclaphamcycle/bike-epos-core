@@ -106,6 +106,8 @@ model Variant {
   productId        String
   sku              String  @unique
   barcode          String? @unique
+  manufacturerBarcode String? @unique
+  internalBarcode  String? @unique
   name             String?
   option           String?
   retailPrice      Decimal @default(0) @db.Decimal(12, 2)

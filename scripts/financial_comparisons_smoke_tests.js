@@ -117,6 +117,7 @@ const cleanup = async (state) => {
 
   if (state.variantId) {
     await prisma.$executeRaw`DELETE FROM "SaleItem" WHERE "variantId" = ${state.variantId}`;
+    await prisma.barcode.deleteMany({ where: { variantId: state.variantId } });
     await prisma.variant.deleteMany({
       where: {
         id: state.variantId,
