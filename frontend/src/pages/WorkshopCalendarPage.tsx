@@ -2895,10 +2895,7 @@ export const WorkshopSchedulerScreen = ({
                           height: `${hoveredCreateSlot.height}px`,
                         }}
                       >
-                        <span className="workshop-scheduler-create-slot-preview__badge">+ New job</span>
-                        <span className="workshop-scheduler-create-slot-preview__time">
-                          {buildBlockTimeLabel(hoveredCreateSlot.startMinutes, hoveredCreateSlot.durationMinutes)}
-                        </span>
+                        <span className="workshop-scheduler-create-slot-preview__plus">+</span>
                       </div>
                     ) : null}
 

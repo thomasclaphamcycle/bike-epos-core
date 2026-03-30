@@ -1154,7 +1154,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
   }
 
   await page.mouse.move(trackBox.x + emptyPoint.x, trackBox.y + emptyPoint.y);
-  const preview = todayTrack.locator(".workshop-scheduler-create-slot-preview__time");
+  const preview = todayTrack.locator(".workshop-scheduler-create-slot-preview__plus");
   await expect(preview).toBeVisible();
 
   await todayTrack.dblclick({
