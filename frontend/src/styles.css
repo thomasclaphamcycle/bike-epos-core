@@ -3400,6 +3400,18 @@ button.primary.workshop-status-action {
   opacity: 0.92;
 }
 
+.workshop-scheduler-block__signal--live {
+  width: 14px;
+  height: 14px;
+  color: #1f8f74;
+  opacity: 0.98;
+}
+
+.workshop-scheduler-block__signal--live .workshop-scheduler-block__signal-glyph {
+  font-size: 1.1rem;
+  transform: translateY(-0.25px);
+}
+
 .workshop-scheduler-block__signal--cancelled {
   width: 14px;
   height: 14px;

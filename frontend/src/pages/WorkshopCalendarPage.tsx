@@ -5,6 +5,7 @@ import { useToasts } from "../components/ToastProvider";
 import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
 import {
   getWorkshopDisplayStatus,
+  isWorkshopBeingWorkedOn,
   workshopRawStatusSurfaceClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -543,9 +544,9 @@ const getBookingServiceLabel = (job: CalendarJob) => {
   return trimmed;
 };
 
-type SchedulerSignalKey = "approval" | "approved" | "arrived" | "cancelled" | "parts" | "overdue" | "ready";
+type SchedulerSignalKey = "approval" | "approved" | "arrived" | "cancelled" | "live" | "parts" | "overdue" | "ready";
 
-const SIGNAL_PRIORITY: SchedulerSignalKey[] = ["overdue", "cancelled", "approval", "arrived", "parts", "approved", "ready"];
+const SIGNAL_PRIORITY: SchedulerSignalKey[] = ["overdue", "live", "cancelled", "approval", "arrived", "parts", "approved", "ready"];
 
 const buildSchedulerSignals = (
   job: CalendarJob,
@@ -557,6 +558,9 @@ const buildSchedulerSignals = (
 
   if (isOverdueJob(job, todayKey, timeZone)) {
     signals.add("overdue");
+  }
+  if (isWorkshopBeingWorkedOn(job)) {
+    signals.add("live");
   }
   if (displayStatus === "WAITING_FOR_PARTS") {
     signals.add("parts");
@@ -592,6 +596,12 @@ const renderSchedulerSignalIcon = (signal: SchedulerSignalKey) => {
       return (
         <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
           £
+        </span>
+      );
+    case "live":
+      return (
+        <span className="workshop-scheduler-block__signal-glyph" aria-hidden="true">
+          ●
         </span>
       );
     case "parts":
@@ -635,6 +645,8 @@ const schedulerSignalLabel = (signal: SchedulerSignalKey) => {
       return "Approval needed";
     case "approved":
       return "Approved estimate";
+    case "live":
+      return "Being worked on now";
     case "parts":
       return "Waiting for parts";
     case "cancelled":
@@ -651,8 +663,10 @@ const schedulerSignalLabel = (signal: SchedulerSignalKey) => {
 };
 
 const SchedulerSignals = ({
+  jobId,
   signals,
 }: {
+  jobId: string;
   signals: SchedulerSignalKey[];
 }) => {
   if (signals.length === 0) {
@@ -666,6 +680,7 @@ const SchedulerSignals = ({
           key={signal}
           className={`workshop-scheduler-block__signal workshop-scheduler-block__signal--${signal}`}
           aria-label={schedulerSignalLabel(signal)}
+          {...(signal === "live" ? { "data-testid": `workshop-scheduler-job-live-${jobId}` } : {})}
         >
           {renderSchedulerSignalIcon(signal)}
         </span>
@@ -688,6 +703,9 @@ const getBookingTooltip = (job: CalendarJob, timeZone?: string) => {
 
   details.push(job.assignedStaffName ? `Technician: ${job.assignedStaffName}` : "Technician: Unassigned");
   details.push(`Status: ${workshopRawStatusLabel(job)}`);
+  if (isWorkshopBeingWorkedOn(job)) {
+    details.push("Now: Being worked on");
+  }
   if (job.scheduledDate) {
     details.push(`Promise date: ${formatPromiseDate(job.scheduledDate)}`);
   }
@@ -1329,7 +1347,7 @@ const renderSchedulerBlockContent = ({
           {metaLabel}
         </div>
       ) : null}
-      <SchedulerSignals signals={signals} />
+      <SchedulerSignals jobId={job.id} signals={signals} />
     </>
   );
 };

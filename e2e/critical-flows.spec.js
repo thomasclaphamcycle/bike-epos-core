@@ -119,6 +119,33 @@ const getLondonDateKey = (date = new Date()) => {
   return `${lookup("year")}-${lookup("month")}-${lookup("day")}`;
 };
 
+const freezeBrowserClock = async (page, isoValue) => {
+  await page.addInitScript(({ isoValue: fixedIso }) => {
+    const fixedTime = new Date(fixedIso).getTime();
+    const RealDate = Date;
+
+    class FrozenDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length === 0 ? [fixedTime] : args));
+      }
+
+      static now() {
+        return fixedTime;
+      }
+    }
+
+    Object.defineProperty(FrozenDate, "parse", {
+      value: RealDate.parse,
+    });
+    Object.defineProperty(FrozenDate, "UTC", {
+      value: RealDate.UTC,
+    });
+
+    window.Date = FrozenDate;
+    globalThis.Date = FrozenDate;
+  }, { isoValue });
+};
+
 const parseDateKeyAtNoon = (dateKey) => new Date(`${dateKey}T12:00:00`);
 
 const addDaysToDateKey = (dateKey, days) => {
@@ -1209,6 +1236,106 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
 
   await page.getByTestId(`workshop-scheduler-job-${seededJob.id}`).dblclick();
   await expect(page.locator(".workshop-checkin-modal")).toHaveCount(0);
+});
+
+test("Workshop scheduler shows a live work indicator only for jobs active right now", async ({ page, request }) => {
+  const frozenNowIso = "2026-01-15T10:15:00.000Z";
+  const todayKey = getLondonDateKey(new Date(frozenNowIso));
+  await freezeBrowserClock(page, frozenNowIso);
+
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-live-work",
+  });
+  const token = uniqueToken("workshop-live-work");
+
+  const activeJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Live Work Active ${token}`,
+      bikeDescription: `Active bike ${token}`,
+      status: "BOOKED",
+    },
+  });
+  const futureJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Live Work Future ${token}`,
+      bikeDescription: `Future bike ${token}`,
+      status: "BOOKED",
+    },
+  });
+  const readyJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Live Work Ready ${token}`,
+      bikeDescription: `Ready bike ${token}`,
+      status: "BOOKED",
+    },
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "PATCH",
+    `/api/workshop/jobs/${encodeURIComponent(activeJob.id)}/schedule`,
+    "MANAGER",
+    {
+      data: {
+        scheduledStartAt: `${todayKey}T10:00:00`,
+        durationMinutes: 60,
+      },
+    },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "PATCH",
+    `/api/workshop/jobs/${encodeURIComponent(futureJob.id)}/schedule`,
+    "MANAGER",
+    {
+      data: {
+        scheduledStartAt: `${todayKey}T12:00:00`,
+        durationMinutes: 30,
+      },
+    },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "PATCH",
+    `/api/workshop/jobs/${encodeURIComponent(readyJob.id)}/schedule`,
+    "MANAGER",
+    {
+      data: {
+        scheduledStartAt: `${todayKey}T10:00:00`,
+        durationMinutes: 60,
+      },
+    },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(readyJob.id)}/status`,
+    "MANAGER",
+    {
+      data: {
+        status: "READY_FOR_COLLECTION",
+      },
+    },
+  );
+
+  await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
+
+  await expect(page.getByTestId(`workshop-scheduler-job-${activeJob.id}`)).toBeVisible();
+  await expect(page.getByTestId(`workshop-scheduler-job-${futureJob.id}`)).toBeVisible();
+  await expect(page.getByTestId(`workshop-scheduler-job-${readyJob.id}`)).toBeVisible();
+
+  await expect(page.getByTestId(`workshop-scheduler-job-live-${activeJob.id}`)).toBeVisible();
+  await expect(page.getByTestId(`workshop-scheduler-job-live-${futureJob.id}`)).toHaveCount(0);
+  await expect(page.getByTestId(`workshop-scheduler-job-live-${readyJob.id}`)).toHaveCount(0);
+
+  await page.getByTestId(`workshop-scheduler-job-${activeJob.id}`).click();
+  await expect(page.getByTestId("workshop-job-live-status")).toHaveText("Now: Being worked on");
+  await page.getByLabel("Close job card").click();
+  await expect(page.getByTestId("workshop-job-live-status")).toHaveCount(0);
+
+  await page.getByTestId(`workshop-scheduler-job-${readyJob.id}`).click();
+  await expect(page.getByTestId("workshop-job-live-status")).toHaveCount(0);
 });
 
 test("Rota planner supports row drag-copy and Fill Mon-Fri without spilling into another staff row", async ({

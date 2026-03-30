@@ -55,6 +55,22 @@ export type WorkshopStatusSource = {
   status?: string | null;
 };
 
+export type WorkshopLiveWorkSource = WorkshopStatusSource & {
+  assignedStaffId?: string | null;
+  assignedStaffName?: string | null;
+  scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  durationMinutes?: number | null;
+  completedAt?: string | null;
+  closedAt?: string | null;
+};
+
+const LIVE_WORK_ACTIVE_DISPLAY_STATUSES = new Set<WorkshopDisplayStatus>([
+  "BOOKED",
+  "BIKE_ARRIVED",
+  "APPROVED",
+]);
+
 const getNormalizedWorkshopStatusSourceValue = (
   source: WorkshopStatusSource | string | null | undefined,
 ) => {
@@ -359,6 +375,54 @@ const formatScheduleLabel = (scheduledStartAt?: string | null, scheduledDate?: s
     : parsed.toLocaleDateString([], {
         dateStyle: "medium",
       });
+};
+
+const parseWorkshopDateTime = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  const timestamp = parsed.getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+export const isWorkshopBeingWorkedOn = (
+  source: WorkshopLiveWorkSource | null | undefined,
+  now = new Date(),
+) => {
+  if (!source) {
+    return false;
+  }
+
+  if (source.completedAt || source.closedAt) {
+    return false;
+  }
+
+  const displayStatus = getWorkshopDisplayStatus(source);
+  if (!displayStatus || !LIVE_WORK_ACTIVE_DISPLAY_STATUSES.has(displayStatus)) {
+    return false;
+  }
+
+  const startTime = parseWorkshopDateTime(source.scheduledStartAt);
+  if (startTime === null) {
+    return false;
+  }
+
+  const endTime = parseWorkshopDateTime(source.scheduledEndAt)
+    ?? (Number.isInteger(source.durationMinutes) && (source.durationMinutes ?? 0) > 0
+      ? startTime + ((source.durationMinutes ?? 0) * 60_000)
+      : null);
+  if (endTime === null || endTime <= startTime) {
+    return false;
+  }
+
+  const nowTime = now.getTime();
+  if (Number.isNaN(nowTime)) {
+    return false;
+  }
+
+  return nowTime >= startTime && nowTime < endTime;
 };
 
 export const getWorkshopTechnicianWorkflowSummary = (

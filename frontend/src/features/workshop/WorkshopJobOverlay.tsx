@@ -8,6 +8,7 @@ import {
   getWorkshopRawStatusValue,
   getWorkshopStatusTimeline,
   getWorkshopTechnicianWorkflowSummary,
+  isWorkshopBeingWorkedOn,
   workshopRawStatusActionClass,
   workshopRawStatusClass,
   workshopRawStatusLabel,
@@ -1477,6 +1478,17 @@ export const WorkshopJobOverlay = ({
     hasSale: Boolean(overlayJob?.sale || summary?.sale),
     hasBasket: Boolean(overlayJob?.finalizedBasketId || summary?.finalizedBasketId),
   });
+  const isBeingWorkedOn = isWorkshopBeingWorkedOn({
+    rawStatus: rawOverlayStatus,
+    status: displayStatus,
+    assignedStaffId: overlayJob?.assignedStaffId || summary?.assignedStaffId || null,
+    assignedStaffName: overlayJob?.assignedStaffName || summary?.assignedStaffName || null,
+    scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
+    scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
+    durationMinutes: overlayJob?.durationMinutes || summary?.durationMinutes || null,
+    completedAt: overlayJob?.completedAt || null,
+    closedAt: overlayJob?.closedAt || null,
+  });
   const urgency = getUrgency(overlayJob?.scheduledDate || summary?.scheduledDate, rawOverlayStatus);
   const lines = details?.lines ?? [];
   const labourLines = lines.filter((line) => line.type === "LABOUR");
@@ -2492,6 +2504,11 @@ export const WorkshopJobOverlay = ({
       <div className="workshop-os-overview-header__signals">
         <span className={workshopRawStatusClass(displayStatus)}>{workshopRawStatusLabel(displayStatus)}</span>
         <span className={displayWorkflowSummary.className}>{displayWorkflowSummary.label}</span>
+        {isBeingWorkedOn ? (
+          <span className="status-badge status-info">
+            Now: Being worked on
+          </span>
+        ) : null}
         {overviewMode === "planning" ? <span className="status-badge">Needs booking</span> : null}
         {urgency ? <span className={urgency.className}>{urgency.label}</span> : null}
       </div>
@@ -3139,6 +3156,13 @@ export const WorkshopJobOverlay = ({
                       </button>
                     );
                   })}
+                </div>
+              ) : null}
+              {isBeingWorkedOn ? (
+                <div className="workshop-os-drawer__badges">
+                  <span className="status-badge status-info" data-testid="workshop-job-live-status">
+                    Now: Being worked on
+                  </span>
                 </div>
               ) : null}
               <div className="workshop-job-status-timeline workshop-os-modal-status__timeline" aria-label="Workshop progress">
