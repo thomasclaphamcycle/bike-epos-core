@@ -558,6 +558,7 @@ export const WorkshopPage = () => {
               {effectiveCalendarView === "week" ? (
                 <button
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", -1))}
                 >
                   - Day
@@ -573,6 +574,7 @@ export const WorkshopPage = () => {
               {effectiveCalendarView === "week" ? (
                 <button
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => setAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, effectiveCalendarView, "operational", 1))}
                 >
                   + Day

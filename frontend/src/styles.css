@@ -2844,6 +2844,7 @@ button.primary.workshop-status-action {
 .workshop-scheduler-scroll {
   overflow-x: auto;
   padding-bottom: 2px;
+  overflow-anchor: none;
 }
 
 .workshop-scheduler-board--standalone .workshop-scheduler-scroll {
