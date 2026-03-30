@@ -68,6 +68,21 @@ export const ProductLabelPrintPage = () => {
     };
   }, [variant]);
 
+  useEffect(() => {
+    document.body.classList.add("product-label-print-body");
+
+    const style = document.createElement("style");
+    style.setAttribute("media", "print");
+    style.dataset.productLabelPageSize = "true";
+    style.textContent = "@page { size: 57mm 32mm; margin: 0; }";
+    document.head.appendChild(style);
+
+    return () => {
+      document.body.classList.remove("product-label-print-body");
+      style.remove();
+    };
+  }, []);
+
   if (!variantId) {
     return <div className="page-shell"><p>Missing product label id.</p></div>;
   }
@@ -84,7 +99,7 @@ export const ProductLabelPrintPage = () => {
       <div className="product-label-print-page__copy">
         <h1>Product Label</h1>
         <p className="muted-text">
-          Prints the preferred operational barcode. Manufacturer barcodes stay preferred when present; CorePOS internal barcodes are only used as fallback.
+          Prints the preferred operational barcode as a live Code 128 label. Manufacturer barcodes stay preferred when present; CorePOS internal barcodes are only used as fallback.
         </p>
       </div>
 
