@@ -1656,20 +1656,49 @@ test("Purchase order receiving shortcuts populate remaining quantities without a
   await loginViaUi(page, credentials, `/purchasing/${purchaseOrder.id}`, { surface: "frontend" });
   await expect(page.getByRole("heading", { name: "Purchase Order", exact: true })).toBeVisible();
   await expect(page.getByTestId("po-receive-location")).not.toHaveValue("");
+  const receiveLocationId = await page.getByTestId("po-receive-location").inputValue();
 
   await page.getByTestId(`po-receive-fill-${firstLine.id}`).click();
   await expect(page.getByTestId(`po-receive-qty-${firstLine.id}`)).toHaveValue("3");
   await expect(page.getByTestId(`po-receive-qty-${secondLine.id}`)).toHaveValue("");
 
-  await Promise.all([
-    page.waitForResponse((response) => (
-      response.url().includes(`/api/purchase-orders/${purchaseOrder.id}/receive`)
-      && response.request().method() === "POST"
-      && response.status() === 200
-    )),
-    page.getByTestId(`po-receive-submit-${firstLine.id}`).click(),
-  ]);
+  const firstReceiveRequestPromise = page.waitForRequest((pendingRequest) => (
+    pendingRequest.url().includes(`/api/purchase-orders/${purchaseOrder.id}/receive`)
+    && pendingRequest.method() === "POST"
+  ));
+  await page.getByTestId(`po-receive-submit-${firstLine.id}`).click();
+  const firstReceiveRequest = await firstReceiveRequestPromise;
+  expect(firstReceiveRequest.postDataJSON()).toEqual({
+    locationId: receiveLocationId,
+    lines: [
+      {
+        purchaseOrderItemId: firstLine.id,
+        quantity: 3,
+        unitCostPence: 1200,
+      },
+    ],
+  });
   await expect(page.locator(".restricted-panel").filter({ hasText: `Received 3 units for ${firstVariant.product.name}.` })).toBeVisible();
+
+  await expect.poll(async () => {
+    const afterReceive = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`,
+      "MANAGER",
+    );
+    const currentFirstLine = afterReceive.items.find((item) => item.id === firstLine.id);
+    const currentSecondLine = afterReceive.items.find((item) => item.id === secondLine.id);
+    return JSON.stringify({
+      status: afterReceive.status,
+      firstRemaining: currentFirstLine?.quantityRemaining ?? null,
+      secondRemaining: currentSecondLine?.quantityRemaining ?? null,
+    });
+  }).toBe(JSON.stringify({
+    status: "PARTIALLY_RECEIVED",
+    firstRemaining: 0,
+    secondRemaining: 2,
+  }));
 
   const afterFirstReceive = await apiJsonWithHeaderBypass(
     request,
@@ -1688,14 +1717,38 @@ test("Purchase order receiving shortcuts populate remaining quantities without a
   await expect(page.getByTestId(`po-receive-qty-${firstLine.id}`)).toBeDisabled();
   await expect(page.getByTestId(`po-receive-qty-${secondLine.id}`)).toHaveValue("2");
 
-  await Promise.all([
-    page.waitForResponse((response) => (
-      response.url().includes(`/api/purchase-orders/${purchaseOrder.id}/receive`)
-      && response.request().method() === "POST"
-      && response.status() === 200
-    )),
-    page.getByTestId(`po-receive-submit-${secondLine.id}`).click(),
-  ]);
+  const secondReceiveRequestPromise = page.waitForRequest((pendingRequest) => (
+    pendingRequest.url().includes(`/api/purchase-orders/${purchaseOrder.id}/receive`)
+    && pendingRequest.method() === "POST"
+  ));
+  await page.getByTestId(`po-receive-submit-${secondLine.id}`).click();
+  const secondReceiveRequest = await secondReceiveRequestPromise;
+  expect(secondReceiveRequest.postDataJSON()).toEqual({
+    locationId: receiveLocationId,
+    lines: [
+      {
+        purchaseOrderItemId: secondLine.id,
+        quantity: 2,
+        unitCostPence: 900,
+      },
+    ],
+  });
+
+  await expect.poll(async () => {
+    const finalReceive = await apiJsonWithHeaderBypass(
+      request,
+      "GET",
+      `/api/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`,
+      "MANAGER",
+    );
+    return JSON.stringify({
+      status: finalReceive.status,
+      quantityRemaining: finalReceive.totals.quantityRemaining,
+    });
+  }).toBe(JSON.stringify({
+    status: "RECEIVED",
+    quantityRemaining: 0,
+  }));
 
   const finalPurchaseOrder = await apiJsonWithHeaderBypass(
     request,
