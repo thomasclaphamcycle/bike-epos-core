@@ -242,8 +242,8 @@ type SchedulerLaneState = {
   endMinutes: number;
 };
 
-const DEFAULT_OPEN_MINUTES = 9 * 60;
-const DEFAULT_CLOSE_MINUTES = 18 * 60;
+const DEFAULT_OPEN_MINUTES = 8 * 60;
+const DEFAULT_CLOSE_MINUTES = 19 * 60;
 const TIME_AXIS_WIDTH = 60;
 const WEEK_DAY_WIDTH = 118;
 const STANDALONE_WEEK_DAY_WIDTH = 98;
@@ -267,9 +267,9 @@ const SCHEDULER_ZOOM_OPTIONS: ReadonlyArray<{
   label: string;
   pxPerMinute: number;
 }> = [
-  { value: "compact", label: "Compact", pxPerMinute: 1.2 },
-  { value: "standard", label: "Standard", pxPerMinute: 1.5 },
-  { value: "comfortable", label: "Comfortable", pxPerMinute: 1.9 },
+  { value: "compact", label: "Compact", pxPerMinute: 1.0 },
+  { value: "standard", label: "Standard", pxPerMinute: 1.2 },
+  { value: "comfortable", label: "Comfortable", pxPerMinute: 1.6 },
 ];
 
 const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -2759,11 +2759,17 @@ export const WorkshopSchedulerScreen = ({
               })}
 
               <div className="workshop-scheduler-grid__time-axis" style={{ height: `${trackHeight}px` }}>
-                {timeLabels.map((minutes) => (
+                {timeLabels.map((minutes, index) => (
                   <div
                     key={minutes}
                     className="workshop-scheduler-grid__time-label mono-text"
-                    style={{ top: `${(minutes - timeline.openMinutes) * pxPerMinute}px` }}
+                    style={{
+                      top: `${index === 0
+                        ? 12
+                        : index === timeLabels.length - 1
+                          ? Math.max(12, trackHeight - 12)
+                          : (minutes - timeline.openMinutes) * pxPerMinute}px`,
+                    }}
                   >
                     {formatClockLabel(minutes)}
                   </div>
