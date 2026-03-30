@@ -2718,7 +2718,10 @@ button.primary.workshop-status-action {
 .workshop-scheduler-screen--embedded {
   display: grid;
   gap: 0;
+  height: clamp(780px, calc(100dvh - 172px), 1180px);
   min-height: clamp(780px, calc(100dvh - 172px), 1180px);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: stretch;
 }
 
 .workshop-scheduler-toolbar {
@@ -2795,9 +2798,11 @@ button.primary.workshop-status-action {
 
 .workshop-scheduler-layout--embedded {
   grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 8px;
-  min-height: inherit;
+  min-height: 0;
   align-items: stretch;
+  height: 100%;
 }
 
 .workshop-scheduler-board,
@@ -2807,8 +2812,9 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-board--embedded {
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
-  min-height: inherit;
+  min-height: 0;
 }
 
 .workshop-scheduler-board--standalone {
@@ -2823,10 +2829,13 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-panel--embedded {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
   padding: 8px 9px;
   border: 1px solid #dde5ed;
   border-radius: 14px;
   background: rgba(251, 253, 255, 0.94);
+  overflow: hidden;
 }
 
 .workshop-scheduler-board__header {
@@ -2844,6 +2853,7 @@ button.primary.workshop-status-action {
 .workshop-scheduler-scroll {
   overflow-x: auto;
   padding-bottom: 2px;
+  overflow-anchor: none;
 }
 
 .workshop-scheduler-board--standalone .workshop-scheduler-scroll {
@@ -2857,6 +2867,7 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-grid {
+  --workshop-scheduler-header-height: 92px;
   display: grid;
   align-items: start;
   gap: 0;
@@ -2873,7 +2884,9 @@ button.primary.workshop-status-action {
   position: sticky;
   top: 0;
   z-index: 3;
-  min-height: 74px;
+  box-sizing: border-box;
+  height: var(--workshop-scheduler-header-height);
+  min-height: var(--workshop-scheduler-header-height);
   padding: 7px 8px;
   border-bottom: 1px solid #dbe5ef;
   background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
@@ -2896,6 +2909,10 @@ button.primary.workshop-status-action {
   border-right: 1px solid #dbe5ef;
 }
 
+.workshop-scheduler-grid__day-header > * {
+  min-width: 0;
+}
+
 .workshop-scheduler-grid__day-header--today {
   border-right-color: #b8cff1;
   border-bottom-color: #b8cff1;
@@ -2907,12 +2924,18 @@ button.primary.workshop-status-action {
   font-size: 0.84rem;
   color: var(--cp-navy);
   line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-grid__day-header span {
   font-size: 0.68rem;
   line-height: 1.1;
   color: #526071;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-grid__day-header-availability,
@@ -2944,6 +2967,8 @@ button.primary.workshop-status-action {
   font-weight: 800;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workshop-scheduler-grid__day-header-utilisation::before {
@@ -3621,7 +3646,10 @@ button.primary.workshop-status-action {
 }
 
 .workshop-scheduler-rail--embedded {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  min-height: 0;
+  height: 100%;
 }
 
 .workshop-scheduler-editor,
@@ -3642,6 +3670,14 @@ button.primary.workshop-status-action {
 .workshop-scheduler-queue {
   display: grid;
   gap: 4px;
+}
+
+.workshop-scheduler-panel--embedded .workshop-scheduler-queue {
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+  overflow-anchor: none;
+  padding-right: 2px;
 }
 
 .workshop-scheduler-queue-card {
@@ -3892,7 +3928,7 @@ button.primary.workshop-status-action {
 
   .workshop-scheduler-grid__corner,
   .workshop-scheduler-grid__day-header {
-    min-height: 88px;
+    --workshop-scheduler-header-height: 104px;
     padding: 10px 12px;
   }
 
@@ -3927,6 +3963,7 @@ button.primary.workshop-status-action {
   gap: 12px;
   box-sizing: border-box;
   padding: 0 18px 0;
+  overflow-anchor: none;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.95) 0%, transparent 26%),
     radial-gradient(circle at top right, rgba(227, 236, 246, 0.52) 0%, transparent 24%),
@@ -4259,6 +4296,7 @@ button.primary.workshop-status-action {
 }
 
 .workshop-primary-surface > .workshop-scheduler-screen--embedded {
+  height: clamp(780px, calc(100dvh - 172px), 1180px);
   min-height: clamp(780px, calc(100dvh - 172px), 1180px);
 }
 

@@ -337,6 +337,8 @@ export const StaffRotaPage = () => {
   const floatingMenuRef = useRef<HTMLDivElement | null>(null);
   const dragCopyStateRef = useRef<DragCopyState | null>(null);
   const suppressCellClickRef = useRef(false);
+  const loadOverviewRequestIdRef = useRef(0);
+  const loadHolidayRequestsRequestIdRef = useRef(0);
 
   const selectedPeriodId = searchParams.get("periodId") ?? undefined;
   const staffScope = searchParams.get("staffScope") === "assigned" ? "assigned" : "all";
@@ -356,6 +358,7 @@ export const StaffRotaPage = () => {
   };
 
   const loadOverview = async (periodId?: string, silent = false) => {
+    const requestId = ++loadOverviewRequestIdRef.current;
     if (silent) {
       setRefreshing(true);
     } else {
@@ -377,16 +380,25 @@ export const StaffRotaPage = () => {
         query.set("search", searchFilter.trim());
       }
       const payload = await apiGet<RotaOverviewResponse>(`/api/rota${query.toString() ? `?${query.toString()}` : ""}`);
+      if (requestId !== loadOverviewRequestIdRef.current) {
+        return;
+      }
       setOverview(payload);
     } catch (loadError) {
+      if (requestId !== loadOverviewRequestIdRef.current) {
+        return;
+      }
       error(loadError instanceof Error ? loadError.message : "Failed to load staff rota");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === loadOverviewRequestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   const loadHolidayRequests = async (silent = false) => {
+    const requestId = ++loadHolidayRequestsRequestIdRef.current;
     if (!silent) {
       setHolidayRequestsLoading(true);
     }
@@ -397,11 +409,19 @@ export const StaffRotaPage = () => {
         status: holidayRequestFilter,
       });
       const payload = await apiGet<HolidayRequestsPayload>(`/api/rota/holiday-requests?${query.toString()}`);
+      if (requestId !== loadHolidayRequestsRequestIdRef.current) {
+        return;
+      }
       setHolidayRequests(payload.requests ?? []);
     } catch (loadError) {
+      if (requestId !== loadHolidayRequestsRequestIdRef.current) {
+        return;
+      }
       error(loadError instanceof Error ? loadError.message : "Failed to load holiday requests");
     } finally {
-      setHolidayRequestsLoading(false);
+      if (requestId === loadHolidayRequestsRequestIdRef.current) {
+        setHolidayRequestsLoading(false);
+      }
     }
   };
 
@@ -425,6 +445,11 @@ export const StaffRotaPage = () => {
     void loadOverview(selectedPeriodId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriodId, staffScope, roleFilter, searchFilter]);
+
+  useEffect(() => () => {
+    loadOverviewRequestIdRef.current += 1;
+    loadHolidayRequestsRequestIdRef.current += 1;
+  }, []);
 
   useEffect(() => {
     void loadHolidayRequests();

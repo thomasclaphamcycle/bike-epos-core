@@ -786,8 +786,12 @@ const buildTimelineRange = (days: CalendarResponse["days"]) => {
     .map((day) => parseClockMinutes(day.closesAt))
     .filter((value): value is number => value !== null);
 
-  const openMinutes = openCandidates.length ? Math.min(...openCandidates) : DEFAULT_OPEN_MINUTES;
-  const closeMinutes = closeCandidates.length ? Math.max(...closeCandidates) : DEFAULT_CLOSE_MINUTES;
+  const openMinutes = openCandidates.length
+    ? Math.min(DEFAULT_OPEN_MINUTES, ...openCandidates)
+    : DEFAULT_OPEN_MINUTES;
+  const closeMinutes = closeCandidates.length
+    ? Math.max(DEFAULT_CLOSE_MINUTES, ...closeCandidates)
+    : DEFAULT_CLOSE_MINUTES;
   const normalizedClose = closeMinutes > openMinutes ? closeMinutes : openMinutes + 60;
 
   return {
@@ -1360,6 +1364,14 @@ export const WorkshopSchedulerScreen = ({
   const suppressClickJobIdRef = useRef<string | null>(null);
   const technicianPickerRef = useRef<HTMLDivElement | null>(null);
   const pendingBookingRef = useRef<HTMLButtonElement | null>(null);
+  const previousAnchorDateKeyRef = useRef<string | null>(null);
+  const lastWindowScrollYRef = useRef(0);
+  const lastSchedulerScrollTopRef = useRef(0);
+  const pendingViewportRestoreRef = useRef<{
+    windowScrollY: number;
+    schedulerScrollTop: number;
+  } | null>(null);
+  const pendingViewportRestoreFrameRef = useRef<number | null>(null);
 
   const updateDragState = (nextState: DragState | null) => {
     dragStateRef.current = nextState;
@@ -1501,6 +1513,86 @@ export const WorkshopSchedulerScreen = ({
 
     return `${TIME_AXIS_WIDTH}px repeat(${Math.max(days.length, 1)}, ${dayColumnWidth}px)`;
   }, [dayColumnWidth, days.length, standaloneOverview, view]);
+
+  useEffect(() => {
+    const node = schedulerScrollRef.current;
+
+    const captureViewport = () => {
+      lastWindowScrollYRef.current = window.scrollY;
+      lastSchedulerScrollTopRef.current = node?.scrollTop ?? 0;
+    };
+
+    captureViewport();
+    window.addEventListener("scroll", captureViewport, { passive: true });
+    node?.addEventListener("scroll", captureViewport, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", captureViewport);
+      node?.removeEventListener("scroll", captureViewport);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (pendingViewportRestoreFrameRef.current !== null) {
+      cancelAnimationFrame(pendingViewportRestoreFrameRef.current);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    if (previousAnchorDateKeyRef.current === null) {
+      previousAnchorDateKeyRef.current = anchorDateKey;
+      return;
+    }
+
+    if (previousAnchorDateKeyRef.current === anchorDateKey) {
+      return;
+    }
+
+    pendingViewportRestoreRef.current = {
+      windowScrollY: lastWindowScrollYRef.current,
+      schedulerScrollTop: lastSchedulerScrollTopRef.current,
+    };
+    previousAnchorDateKeyRef.current = anchorDateKey;
+  }, [anchorDateKey]);
+
+  useLayoutEffect(() => {
+    const pendingViewportRestore = pendingViewportRestoreRef.current;
+    const node = schedulerScrollRef.current;
+
+    if (!pendingViewportRestore || !node) {
+      return;
+    }
+
+    const restoreViewport = () => {
+      const activeScrollNode = schedulerScrollRef.current;
+      if (activeScrollNode && activeScrollNode.scrollTop !== pendingViewportRestore.schedulerScrollTop) {
+        activeScrollNode.scrollTop = pendingViewportRestore.schedulerScrollTop;
+      }
+
+      if (window.scrollY !== pendingViewportRestore.windowScrollY) {
+        window.scrollTo({ top: pendingViewportRestore.windowScrollY, left: window.scrollX });
+      }
+    };
+
+    restoreViewport();
+
+    if (pendingViewportRestoreFrameRef.current !== null) {
+      cancelAnimationFrame(pendingViewportRestoreFrameRef.current);
+    }
+
+    pendingViewportRestoreFrameRef.current = requestAnimationFrame(() => {
+      restoreViewport();
+      pendingViewportRestoreFrameRef.current = null;
+
+      if (
+        !loading
+        && calendar?.range.from === requestedRange.from
+        && calendar?.range.to === requestedRange.to
+      ) {
+        pendingViewportRestoreRef.current = null;
+      }
+    });
+  }, [anchorDateKey, calendar?.range.from, calendar?.range.to, loading, requestedRange.from, requestedRange.to, trackHeight]);
 
   useEffect(() => {
     const node = schedulerScrollRef.current;
@@ -2343,6 +2435,7 @@ export const WorkshopSchedulerScreen = ({
               {view === "week" && weekRangeMode !== "calendar" ? (
                 <button
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => changeAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, view, weekRangeMode, -1))}
                 >
                   - Day
@@ -2358,6 +2451,7 @@ export const WorkshopSchedulerScreen = ({
               {view === "week" && weekRangeMode !== "calendar" ? (
                 <button
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => changeAnchorDateKey(shiftWorkshopVisibleWindowDateKey(anchorDateKey, view, weekRangeMode, 1))}
                 >
                   + Day
@@ -2484,6 +2578,9 @@ export const WorkshopSchedulerScreen = ({
                 );
                 const visibleDayJobs = jobsByDay.get(day.date)?.length ?? 0;
                 const isToday = day.date === todayKey;
+                const capacitySummaryLabel = dayCapacity.totalMinutes
+                  ? `${visibleDayJobs} jobs · ${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
+                  : `${visibleDayJobs} jobs · Capacity unavailable`;
 
                 return (
                   <div
@@ -2508,11 +2605,11 @@ export const WorkshopSchedulerScreen = ({
                     >
                       {dayUtilisation.label}
                     </span>
-                    <span className="workshop-scheduler-grid__day-header-summary">
-                      {visibleDayJobs} jobs · {" "}
-                      {dayCapacity.totalMinutes
-                        ? `${dayCapacity.bookedMinutes} / ${dayCapacity.totalMinutes} mins booked`
-                        : "Capacity unavailable"}
+                    <span
+                      className="workshop-scheduler-grid__day-header-summary"
+                      title={capacitySummaryLabel}
+                    >
+                      {capacitySummaryLabel}
                     </span>
                   </div>
                 );
