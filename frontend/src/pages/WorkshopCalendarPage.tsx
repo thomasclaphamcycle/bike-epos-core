@@ -1194,6 +1194,9 @@ const getScheduledDurationMinutes = (job: CalendarJob, timeZone?: string) => {
 const snapMinutesToGrid = (minutes: number, intervalMinutes: number) =>
   Math.round(minutes / intervalMinutes) * intervalMinutes;
 
+const snapMinutesDownToGrid = (minutes: number, intervalMinutes: number) =>
+  Math.floor(minutes / intervalMinutes) * intervalMinutes;
+
 const buildBlockTimeLabel = (startMinutes: number, durationMinutes: number) =>
   `${formatClockLabel(startMinutes)} - ${formatClockLabel(startMinutes + durationMinutes)}`;
 
@@ -2392,7 +2395,7 @@ export const WorkshopSchedulerScreen = ({
       bounds.closeMinutes - DEFAULT_INTAKE_DURATION_MINUTES,
     );
     const startMinutes = clamp(
-      snapMinutesToGrid(pointerMinutes, DRAG_SNAP_MINUTES),
+      snapMinutesDownToGrid(pointerMinutes, DRAG_SNAP_MINUTES),
       bounds.openMinutes,
       maxStartMinutes,
     );
@@ -2468,7 +2471,10 @@ export const WorkshopSchedulerScreen = ({
       return;
     }
 
-    const createSlot = buildHoveredCreateSlot(day, event.clientY, event.currentTarget);
+    const createSlot =
+      hoveredCreateSlot?.dateKey === day.date
+        ? hoveredCreateSlot
+        : buildHoveredCreateSlot(day, event.clientY, event.currentTarget);
     if (!createSlot) {
       return;
     }

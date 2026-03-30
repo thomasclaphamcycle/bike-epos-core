@@ -1156,6 +1156,51 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
   await page.mouse.move(trackBox.x + emptyPoint.x, trackBox.y + emptyPoint.y);
   const preview = todayTrack.locator(".workshop-scheduler-create-slot-preview__plus");
   await expect(preview).toBeVisible();
+  const initialPreviewBox = await preview.boundingBox();
+  if (!initialPreviewBox) {
+    throw new Error("Expected scheduler create preview to render a bounding box.");
+  }
+
+  const lowerPoint = await todayTrack.evaluate((track, currentYOffset) => {
+    const trackRect = track.getBoundingClientRect();
+    const blockers = Array.from(
+      track.querySelectorAll(".workshop-scheduler-block, .workshop-scheduler-timeoff"),
+    )
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top - trackRect.top,
+          bottom: rect.bottom - trackRect.top,
+        };
+      })
+      .sort((left, right) => left.top - right.top);
+
+    const isClear = (offset) =>
+      offset > 24
+      && offset < trackRect.height - 24
+      && blockers.every((blocker) => offset < blocker.top || offset > blocker.bottom);
+
+    for (let offset = Math.max(currentYOffset + 48, trackRect.height * 0.55); offset < trackRect.height - 40; offset += 18) {
+      if (isClear(offset)) {
+        return { x: trackRect.width / 2, y: offset };
+      }
+    }
+
+    return null;
+  }, emptyPoint.y);
+
+  if (lowerPoint) {
+    await page.mouse.move(trackBox.x + lowerPoint.x, trackBox.y + lowerPoint.y);
+    await expect(preview).toBeVisible();
+    const movedPreviewBox = await preview.boundingBox();
+    if (!movedPreviewBox) {
+      throw new Error("Expected moved scheduler create preview to render a bounding box.");
+    }
+    expect(movedPreviewBox.y).toBeGreaterThan(initialPreviewBox.y + 8);
+
+    await page.mouse.move(trackBox.x + emptyPoint.x, trackBox.y + emptyPoint.y);
+    await expect(preview).toBeVisible();
+  }
 
   await todayTrack.dblclick({
     position: {
