@@ -3040,6 +3040,7 @@ button.primary.workshop-status-action {
   border-right: 1px solid #dbe5ef;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 253, 0.98) 100%);
+  cursor: cell;
 }
 
 .workshop-scheduler-grid__day-track--today {
@@ -3126,6 +3127,37 @@ button.primary.workshop-status-action {
 .workshop-scheduler-timeoff--staff {
   background: rgba(255, 241, 199, 0.96);
   color: #875f00;
+}
+
+.workshop-scheduler-create-slot-preview {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(61, 108, 154, 0.44);
+  border-radius: 12px;
+  background: rgba(226, 239, 250, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+  color: #315273;
+  pointer-events: none;
+}
+
+.workshop-scheduler-create-slot-preview__badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.workshop-scheduler-create-slot-preview__time {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.1;
 }
 
 .workshop-scheduler-block {
@@ -6139,6 +6171,33 @@ button.primary.workshop-status-action {
   min-width: 0;
 }
 
+.workshop-checkin-schedule-card {
+  border: 1px solid rgba(137, 170, 203, 0.36);
+  background: linear-gradient(180deg, rgba(245, 249, 253, 0.98) 0%, rgba(238, 245, 252, 0.98) 100%);
+}
+
+.workshop-checkin-schedule-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workshop-checkin-schedule-card__header strong {
+  display: block;
+  margin-top: 2px;
+  color: #17324d;
+}
+
+.workshop-checkin-schedule-card__eyebrow {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #527190;
+}
+
 .workshop-checkin-review-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr);
@@ -6327,6 +6386,14 @@ button.primary.workshop-status-action {
   line-height: 1.35;
 }
 
+.workshop-checkin-review-summary-row--schedule {
+  margin-top: 10px;
+}
+
+.workshop-checkin-review-schedule-grid {
+  margin-top: 12px;
+}
+
 .workshop-checkin-review-helper-copy {
   margin-top: 0;
   font-size: 0.84rem;
@@ -6429,6 +6496,11 @@ button.primary.workshop-status-action {
   .workshop-checkin-review-hero,
   .workshop-checkin-review-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workshop-checkin-schedule-card__header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

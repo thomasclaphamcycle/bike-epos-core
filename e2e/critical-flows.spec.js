@@ -1074,6 +1074,119 @@ test("Workshop page highlights today and keeps the live schedule range today-awa
   await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");
 });
 
+test("Workshop scheduler double click opens intake with a prefilled 30 minute slot", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-double-click",
+  });
+  const token = uniqueToken("workshop-double-click");
+  const todayKey = getLondonDateKey();
+  const seededJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Double Click Existing ${token}`,
+      bikeDescription: `Existing bike ${token}`,
+      status: "BOOKED",
+    },
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "PATCH",
+    `/api/workshop/jobs/${encodeURIComponent(seededJob.id)}/schedule`,
+    "MANAGER",
+    {
+      data: {
+        scheduledStartAt: `${todayKey}T10:00:00`,
+        durationMinutes: 60,
+      },
+    },
+  );
+
+  await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
+
+  const todayTrack = page.getByTestId(`workshop-scheduler-day-track-${todayKey}`);
+  await expect(todayTrack).toBeVisible();
+
+  const emptyPoint = await todayTrack.evaluate((track) => {
+    const trackRect = track.getBoundingClientRect();
+    const blockers = Array.from(
+      track.querySelectorAll(".workshop-scheduler-block, .workshop-scheduler-timeoff"),
+    )
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          top: rect.top - trackRect.top,
+          bottom: rect.bottom - trackRect.top,
+        };
+      })
+      .sort((left, right) => left.top - right.top);
+
+    const isClear = (offset) =>
+      offset > 24
+      && offset < trackRect.height - 24
+      && blockers.every((blocker) => offset < blocker.top || offset > blocker.bottom);
+
+    const preferredOffsets = [
+      Math.max(40, trackRect.height * 0.25),
+      Math.max(56, trackRect.height * 0.45),
+      Math.max(72, trackRect.height * 0.65),
+      Math.max(88, trackRect.height * 0.82),
+    ];
+
+    for (const offset of preferredOffsets) {
+      if (isClear(offset)) {
+        return { x: trackRect.width / 2, y: offset };
+      }
+    }
+
+    for (let offset = 40; offset < trackRect.height - 40; offset += 18) {
+      if (isClear(offset)) {
+        return { x: trackRect.width / 2, y: offset };
+      }
+    }
+
+    return { x: trackRect.width / 2, y: Math.max(48, trackRect.height - 60) };
+  });
+
+  const trackBox = await todayTrack.boundingBox();
+  if (!trackBox) {
+    throw new Error("Expected today track to have a bounding box.");
+  }
+
+  await page.mouse.move(trackBox.x + emptyPoint.x, trackBox.y + emptyPoint.y);
+  const preview = todayTrack.locator(".workshop-scheduler-create-slot-preview__time");
+  await expect(preview).toBeVisible();
+
+  await todayTrack.dblclick({
+    position: {
+      x: emptyPoint.x,
+      y: emptyPoint.y,
+    },
+  });
+
+  const intakeDialog = page.locator(".workshop-checkin-modal").last();
+  await expect(intakeDialog).toBeVisible();
+  await expect(intakeDialog.getByTestId("workshop-checkin-planned-slot-summary")).toContainText("30 min");
+
+  await intakeDialog.getByText("Use walk-in name", { exact: true }).click();
+  await intakeDialog.getByPlaceholder("Walk-in customer or quick manual entry").fill(`Double Click Intake ${token}`);
+  await intakeDialog.getByText("Next", { exact: true }).click();
+  await intakeDialog.getByPlaceholder("e.g. Trek road bike, blue, 56cm").fill(`Scheduler Bike ${token}`);
+  await intakeDialog.getByText("Next", { exact: true }).click();
+  await intakeDialog.getByPlaceholder("Describe the problem or requested work").fill("Scheduler double click check");
+  await intakeDialog.getByText("Next", { exact: true }).click();
+
+  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-date")).toHaveValue(todayKey);
+  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-time")).toHaveValue(/^\d{2}:\d{2}$/);
+  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-duration")).toHaveValue("30");
+
+  await intakeDialog.getByLabel("Close new job modal").click();
+  await expect(intakeDialog).toHaveCount(0);
+
+  await page.getByTestId(`workshop-scheduler-job-${seededJob.id}`).dblclick();
+  await expect(page.locator(".workshop-checkin-modal")).toHaveCount(0);
+});
+
 test("Rota planner supports row drag-copy and Fill Mon-Fri without spilling into another staff row", async ({
   page,
   request,

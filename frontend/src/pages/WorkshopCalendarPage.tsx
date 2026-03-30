@@ -1,5 +1,5 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
@@ -145,9 +145,15 @@ type WorkshopSchedulerScreenProps = {
   visibleJobIds?: ReadonlySet<string> | null;
   requestedOverlayJobId?: string | null;
   onRequestedOverlayJobHandled?: () => void;
+  onRequestCreateAtSlot?: (draft: WorkshopIntakeScheduleDraft) => void;
 };
 
 export type CalendarViewMode = "week" | "day";
+export type WorkshopIntakeScheduleDraft = {
+  dateKey: string;
+  startTime: string;
+  durationMinutes: number;
+};
 
 type WorkshopOverlayTechnicianOption = {
   id: string;
@@ -211,6 +217,14 @@ type TimeOffBlock = {
   label: string;
 };
 
+type HoveredCreateSlotState = {
+  dateKey: string;
+  top: number;
+  height: number;
+  startMinutes: number;
+  durationMinutes: number;
+};
+
 type SchedulerLayoutEntry = {
   job: CalendarJob;
   startMinutes: number;
@@ -240,6 +254,7 @@ const COMPACT_BOOKING_BLOCK_HEIGHT = 96;
 const DURATION_PRESETS = [30, 45, 60, 90, 120, 180];
 const DRAG_SNAP_MINUTES = 15;
 const MIN_SCHEDULE_DURATION_MINUTES = 15;
+const DEFAULT_INTAKE_DURATION_MINUTES = 30;
 const DRAG_START_THRESHOLD_PX = 6;
 const TECHNICIAN_PICKER_WIDTH = 204;
 const TECHNICIAN_PICKER_MIN_HEIGHT = 156;
@@ -1342,8 +1357,10 @@ export const WorkshopSchedulerScreen = ({
   visibleJobIds,
   requestedOverlayJobId,
   onRequestedOverlayJobHandled,
+  onRequestCreateAtSlot,
 }: WorkshopSchedulerScreenProps) => {
   const { success, error } = useToasts();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1357,6 +1374,7 @@ export const WorkshopSchedulerScreen = ({
   const [pendingTechnicianPickerHeight, setPendingTechnicianPickerHeight] = useState(TECHNICIAN_PICKER_MIN_HEIGHT);
   const [schedulerViewportWidth, setSchedulerViewportWidth] = useState(0);
   const [schedulerZoom, setSchedulerZoom] = useState<SchedulerZoomLevel>(() => readStoredSchedulerZoomLevel());
+  const [hoveredCreateSlot, setHoveredCreateSlot] = useState<HoveredCreateSlotState | null>(null);
   const dayTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const schedulerScrollRef = useRef<HTMLDivElement | null>(null);
   const loadCalendarRequestIdRef = useRef(0);
@@ -2352,6 +2370,125 @@ export const WorkshopSchedulerScreen = ({
     openJobOverlay(job);
   };
 
+  const buildHoveredCreateSlot = (
+    day: CalendarResponse["days"][number],
+    clientY: number,
+    track: HTMLDivElement,
+  ): HoveredCreateSlotState | null => {
+    if (day.isClosed) {
+      return null;
+    }
+
+    const bounds = getDayScheduleBounds(dayByDate.get(day.date), timeline);
+    if (bounds.isClosed) {
+      return null;
+    }
+
+    const pointerMinutes =
+      timeline.openMinutes
+      + ((clientY - track.getBoundingClientRect().top) / pxPerMinute);
+    const maxStartMinutes = Math.max(
+      bounds.openMinutes,
+      bounds.closeMinutes - DEFAULT_INTAKE_DURATION_MINUTES,
+    );
+    const startMinutes = clamp(
+      snapMinutesToGrid(pointerMinutes, DRAG_SNAP_MINUTES),
+      bounds.openMinutes,
+      maxStartMinutes,
+    );
+
+    return {
+      dateKey: day.date,
+      top: (startMinutes - timeline.openMinutes) * pxPerMinute,
+      height: Math.max(minBookingBlockHeight, DEFAULT_INTAKE_DURATION_MINUTES * pxPerMinute),
+      startMinutes,
+      durationMinutes: DEFAULT_INTAKE_DURATION_MINUTES,
+    };
+  };
+
+  const clearHoveredCreateSlot = (dateKey?: string) => {
+    setHoveredCreateSlot((current) => {
+      if (!current) {
+        return null;
+      }
+      if (dateKey && current.dateKey !== dateKey) {
+        return current;
+      }
+      return null;
+    });
+  };
+
+  const handleDayTrackPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    day: CalendarResponse["days"][number],
+  ) => {
+    if (dragStateRef.current || dragSavingJobId) {
+      clearHoveredCreateSlot(day.date);
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (
+      !event.currentTarget
+      || target?.closest(".workshop-scheduler-block, .workshop-scheduler-timeoff")
+    ) {
+      clearHoveredCreateSlot(day.date);
+      return;
+    }
+
+    const nextHoveredSlot = buildHoveredCreateSlot(day, event.clientY, event.currentTarget);
+    setHoveredCreateSlot((current) => {
+      if (
+        current
+        && nextHoveredSlot
+        && current.dateKey === nextHoveredSlot.dateKey
+        && current.top === nextHoveredSlot.top
+        && current.height === nextHoveredSlot.height
+      ) {
+        return current;
+      }
+      return nextHoveredSlot;
+    });
+  };
+
+  const handleDayTrackClick = (
+    event: ReactMouseEvent<HTMLDivElement>,
+    day: CalendarResponse["days"][number],
+  ) => {
+    if (event.detail < 2) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (
+      dragStateRef.current
+      || dragSavingJobId
+      || target?.closest(".workshop-scheduler-block, .workshop-scheduler-timeoff")
+    ) {
+      return;
+    }
+
+    const createSlot = buildHoveredCreateSlot(day, event.clientY, event.currentTarget);
+    if (!createSlot) {
+      return;
+    }
+
+    const draft: WorkshopIntakeScheduleDraft = {
+      dateKey: createSlot.dateKey,
+      startTime: formatClockLabel(createSlot.startMinutes),
+      durationMinutes: createSlot.durationMinutes,
+    };
+
+    if (onRequestCreateAtSlot) {
+      onRequestCreateAtSlot(draft);
+      return;
+    }
+
+    navigate(
+      `/workshop/check-in?scheduledDate=${encodeURIComponent(draft.dateKey)}&scheduledTime=${encodeURIComponent(draft.startTime)}&durationMinutes=${encodeURIComponent(String(draft.durationMinutes))}`,
+    );
+  };
+
   const toolbarLeadingAction: ReactNode = !standaloneOverview && backLinkTo ? (
     <Link to={backLinkTo} className="button-link">Back to Operating System</Link>
   ) : null;
@@ -2649,6 +2786,9 @@ export const WorkshopSchedulerScreen = ({
                     className={`workshop-scheduler-grid__day-track${isToday ? " workshop-scheduler-grid__day-track--today" : ""}${day.isClosed ? " workshop-scheduler-grid__day-track--closed" : ""}${previewBlock ? " workshop-scheduler-grid__day-track--drag-active" : ""}`}
                     data-testid={`workshop-scheduler-day-track-${day.date}`}
                     style={{ height: `${trackHeight}px` }}
+                    onPointerMove={(event) => handleDayTrackPointerMove(event, day)}
+                    onPointerLeave={() => clearHoveredCreateSlot(day.date)}
+                    onClick={(event) => handleDayTrackClick(event, day)}
                   >
                     {timeLabels.map((minutes) => (
                       <span
@@ -2690,7 +2830,11 @@ export const WorkshopSchedulerScreen = ({
                             height: `${height}px`,
                           }}
                           onPointerDown={(event) => handleJobBlockPointerDown(event, job, day.date, top, height, left, width)}
-                          onClick={() => handleJobBlockClick(job)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleJobBlockClick(job);
+                            }}
+                          onDoubleClick={(event) => event.stopPropagation()}
                           disabled={dragSavingJobId === job.id}
                         >
                           <span
@@ -2742,6 +2886,22 @@ export const WorkshopSchedulerScreen = ({
                       </div>
                     ) : null}
 
+                    {hoveredCreateSlot?.dateKey === day.date && !previewBlock ? (
+                      <div
+                        aria-hidden="true"
+                        className="workshop-scheduler-create-slot-preview"
+                        style={{
+                          top: `${hoveredCreateSlot.top}px`,
+                          height: `${hoveredCreateSlot.height}px`,
+                        }}
+                      >
+                        <span className="workshop-scheduler-create-slot-preview__badge">+ New job</span>
+                        <span className="workshop-scheduler-create-slot-preview__time">
+                          {buildBlockTimeLabel(hoveredCreateSlot.startMinutes, hoveredCreateSlot.durationMinutes)}
+                        </span>
+                      </div>
+                    ) : null}
+
                     {pendingPrompt && !isDraggingPendingTechnicianPrompt ? (
                       <>
                         {pendingDensity ? (
@@ -2757,6 +2917,7 @@ export const WorkshopSchedulerScreen = ({
                             height: `${pendingPrompt.height}px`,
                           }}
                           onPointerDown={(event) => handlePendingPromptPointerDown(event, pendingPrompt)}
+                          onDoubleClick={(event) => event.stopPropagation()}
                         >
                           {renderSchedulerBlockContent({
                             job: pendingPrompt.job,
@@ -2811,7 +2972,10 @@ export const WorkshopSchedulerScreen = ({
                 <button
                   type="button"
                   className="button-link"
-                  onClick={() => setPendingTechnicianPrompt(null)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setPendingTechnicianPrompt(null);
+                }}
                   disabled={dragSavingJobId === pendingTechnicianPrompt.job.id}
                 >
                   Cancel

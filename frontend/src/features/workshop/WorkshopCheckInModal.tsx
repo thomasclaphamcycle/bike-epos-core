@@ -1,16 +1,21 @@
 import { useEffect } from "react";
-import { WorkshopCheckInPage } from "../../pages/WorkshopCheckInPage";
+import {
+  WorkshopCheckInPage,
+  type WorkshopCheckInScheduleDraft,
+} from "../../pages/WorkshopCheckInPage";
 
 type WorkshopCheckInModalProps = {
   open: boolean;
   onClose: () => void;
   onCreated: (jobId: string) => Promise<void> | void;
+  initialScheduleDraft?: WorkshopCheckInScheduleDraft | null;
 };
 
 export const WorkshopCheckInModal = ({
   open,
   onClose,
   onCreated,
+  initialScheduleDraft = null,
 }: WorkshopCheckInModalProps) => {
   useEffect(() => {
     if (!open) {
@@ -62,7 +67,12 @@ export const WorkshopCheckInModal = ({
         </div>
 
         <div className="workshop-os-modal__content workshop-checkin-modal__content">
-          <WorkshopCheckInPage embedded onClose={onClose} onCreated={onCreated} />
+          <WorkshopCheckInPage
+            embedded
+            onClose={onClose}
+            onCreated={onCreated}
+            initialScheduleDraft={initialScheduleDraft}
+          />
         </div>
       </aside>
     </div>
