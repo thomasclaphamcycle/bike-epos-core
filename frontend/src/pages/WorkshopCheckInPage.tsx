@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api/client";
+import { apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
@@ -337,10 +337,54 @@ const appendProblemWorkSnippet = (currentValue: string, snippet: string) => {
   return `${currentValue.trimEnd()}${separator}${snippet}`;
 };
 
+const DEFAULT_SCHEDULE_DURATION_MINUTES = 30;
+
+const parseInitialDurationMinutes = (value: string | number | null | undefined) => {
+  const numeric = typeof value === "number" ? value : Number.parseInt(value ?? "", 10);
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    return DEFAULT_SCHEDULE_DURATION_MINUTES;
+  }
+  return numeric;
+};
+
+const normalizeScheduleDateKey = (value: string | null | undefined) => {
+  const trimmed = value?.trim() ?? "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
+};
+
+const normalizeScheduleTimeValue = (value: string | null | undefined) => {
+  const trimmed = value?.trim() ?? "";
+  return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : "";
+};
+
+const formatScheduleSlotLabel = (dateKey: string, startTime: string, durationMinutes: number) => {
+  if (!dateKey || !startTime) {
+    return "Unscheduled";
+  }
+
+  const startAt = new Date(`${dateKey}T${startTime}:00`);
+  if (Number.isNaN(startAt.getTime())) {
+    return `${dateKey} · ${startTime}`;
+  }
+
+  return `${startAt.toLocaleDateString([], {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })} · ${startTime} · ${durationMinutes} min`;
+};
+
 type WorkshopCheckInPageProps = {
   embedded?: boolean;
   onClose?: () => void;
   onCreated?: (jobId: string) => Promise<void> | void;
+  initialScheduleDraft?: WorkshopCheckInScheduleDraft | null;
+};
+
+export type WorkshopCheckInScheduleDraft = {
+  dateKey: string;
+  startTime: string;
+  durationMinutes: number;
 };
 
 const renderStepIndicators = (step: number, onStepSelect?: (index: number) => void): ReactNode => (
@@ -382,6 +426,7 @@ export const WorkshopCheckInPage = ({
   embedded = false,
   onClose,
   onCreated,
+  initialScheduleDraft = null,
 }: WorkshopCheckInPageProps = {}) => {
   const { success, error } = useToasts();
   const customerOptionRefs = useRef<Array<HTMLElement | null>>([]);
@@ -392,6 +437,24 @@ export const WorkshopCheckInPage = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCustomerId = searchParams.get("customerId");
   const initialBikeId = searchParams.get("bikeId");
+  const initialScheduledDateFromParams = searchParams.get("scheduledDate");
+  const initialScheduledTimeFromParams = searchParams.get("scheduledTime");
+  const initialDurationFromParams = searchParams.get("durationMinutes");
+  const initialScheduleState = useMemo(
+    () => ({
+      dateKey: normalizeScheduleDateKey(initialScheduleDraft?.dateKey ?? initialScheduledDateFromParams),
+      startTime: normalizeScheduleTimeValue(initialScheduleDraft?.startTime ?? initialScheduledTimeFromParams),
+      durationMinutes: parseInitialDurationMinutes(
+        initialScheduleDraft?.durationMinutes ?? initialDurationFromParams,
+      ),
+    }),
+    [
+      initialDurationFromParams,
+      initialScheduledDateFromParams,
+      initialScheduledTimeFromParams,
+      initialScheduleDraft,
+    ],
+  );
 
   const [step, setStep] = useState(0);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -438,6 +501,12 @@ export const WorkshopCheckInPage = ({
     printJobTicket: true,
     sendCustomerConfirmationEmail: true,
   });
+  const [scheduledDateKey, setScheduledDateKey] = useState(initialScheduleState.dateKey);
+  const [scheduledStartTime, setScheduledStartTime] = useState(initialScheduleState.startTime);
+  const [scheduledDurationMinutes, setScheduledDurationMinutes] = useState(
+    initialScheduleState.durationMinutes,
+  );
+  const [scheduledDurationTouched, setScheduledDurationTouched] = useState(false);
 
   const resolvedCustomerName = useMemo(() => {
     if (selectedCustomer) {
@@ -511,6 +580,14 @@ export const WorkshopCheckInPage = ({
 
     return "";
   }, [problemWork, selectedTemplate]);
+  const hasScheduledSuggestion = Boolean(scheduledDateKey && scheduledStartTime);
+  const normalizedScheduledDurationMinutes = Number.isInteger(scheduledDurationMinutes) && scheduledDurationMinutes > 0
+    ? scheduledDurationMinutes
+    : DEFAULT_SCHEDULE_DURATION_MINUTES;
+  const scheduleSlotSummary = useMemo(
+    () => formatScheduleSlotLabel(scheduledDateKey, scheduledStartTime, normalizedScheduledDurationMinutes),
+    [normalizedScheduledDurationMinutes, scheduledDateKey, scheduledStartTime],
+  );
   const canCreateBikeRecord = Boolean(selectedCustomer || createCustomerInline);
   const bikeDraftDisplayName = useMemo(
     () =>
@@ -833,6 +910,14 @@ export const WorkshopCheckInPage = ({
       error("Problem / Work is required.");
       return;
     }
+    if ((scheduledDateKey && !scheduledStartTime) || (!scheduledDateKey && scheduledStartTime)) {
+      error("Choose both a scheduled date and time, or leave both blank.");
+      return;
+    }
+    if (hasScheduledSuggestion && normalizedScheduledDurationMinutes <= 0) {
+      error("Scheduled duration must be at least 1 minute.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -880,9 +965,10 @@ export const WorkshopCheckInPage = ({
       });
 
       setCreatedJobId(created.id);
+      let applyResponse: WorkshopServiceTemplateApplyResponse | null = null;
       if (selectedTemplateId) {
         try {
-          const applyResponse = await apiPost<WorkshopServiceTemplateApplyResponse>(
+          applyResponse = await apiPost<WorkshopServiceTemplateApplyResponse>(
             `/api/workshop/jobs/${encodeURIComponent(created.id)}/templates/apply`,
             {
               templateId: selectedTemplateId,
@@ -906,13 +992,46 @@ export const WorkshopCheckInPage = ({
           );
           return;
         }
-      } else {
-        success(
-          postCreateActions.printJobTicket || postCreateActions.sendCustomerConfirmationEmail
+      }
+
+      if (hasScheduledSuggestion) {
+        const scheduledStartAt = `${scheduledDateKey}T${scheduledStartTime}:00`;
+        const plannedDurationMinutes = (
+          !scheduledDurationTouched
+          && applyResponse?.durationEffect.durationUpdated
+          && applyResponse.durationEffect.appliedDurationMinutes
+        )
+          ? applyResponse.durationEffect.appliedDurationMinutes
+          : normalizedScheduledDurationMinutes;
+
+        try {
+          await apiPatch(`/api/workshop/jobs/${encodeURIComponent(created.id)}/schedule`, {
+            scheduledStartAt,
+            durationMinutes: plannedDurationMinutes,
+          });
+        } catch (scheduleError) {
+          error(
+            scheduleError instanceof Error
+              ? `Workshop check-in created, but the planned slot could not be saved: ${scheduleError.message}`
+              : "Workshop check-in created, but the planned slot could not be saved.",
+          );
+          return;
+        }
+      }
+
+      success(
+        applyResponse
+          ? applyResponse.pricingEffect.fixedPriceActivated
+            ? `Workshop check-in created, fixed-price template applied, and labour will rebalance to ${formatWorkshopTemplateMoney(applyResponse.pricingEffect.targetTotalPricePence ?? 0)}`
+            : applyResponse.durationEffect.durationUpdated
+              ? `Workshop check-in created, template applied, and planning duration set to ${applyResponse.durationEffect.appliedDurationMinutes} min`
+              : postCreateActions.printJobTicket || postCreateActions.sendCustomerConfirmationEmail
+                ? "Workshop check-in created and template applied"
+                : "Workshop check-in created and template applied. Post-create actions are switched off for this intake"
+          : postCreateActions.printJobTicket || postCreateActions.sendCustomerConfirmationEmail
             ? "Workshop check-in created"
             : "Workshop check-in created. Post-create actions are switched off for this intake",
-        );
-      }
+      );
 
       if (onCreated) {
         try {
@@ -1180,6 +1299,23 @@ export const WorkshopCheckInPage = ({
       onSubmit={submitCheckIn}
       onKeyDown={handleFlowKeyDown}
     >
+        <section className="card workshop-checkin-schedule-card">
+          <div
+            className="workshop-checkin-schedule-card__header"
+            data-testid="workshop-checkin-planned-slot-summary"
+          >
+            <div>
+              <span className="workshop-checkin-schedule-card__eyebrow">Planned slot</span>
+              <strong>{hasScheduledSuggestion ? scheduleSlotSummary : "No slot selected yet"}</strong>
+            </div>
+            <span className="table-secondary">
+              {hasScheduledSuggestion
+                ? "This will prefill the new job timing and can still be adjusted before create."
+                : "Optional. Double-click a scheduler slot to prefill this automatically."}
+            </span>
+          </div>
+        </section>
+
         {step === 0 ? (
           <section className="card">
             <h2>Customer</h2>
@@ -1802,6 +1938,54 @@ export const WorkshopCheckInPage = ({
                     {reviewWorkDetail}
                   </div>
                 ) : null}
+              </section>
+
+              <section className="workshop-checkin-review-panel">
+                <div className="workshop-checkin-review-panel__header">
+                  <span className="workshop-checkin-review-panel__eyebrow">Scheduler</span>
+                  <strong>Planned timing</strong>
+                </div>
+                <div className="table-secondary workshop-checkin-review-helper-copy">
+                  Leave the date and time blank if you want to create the job unscheduled.
+                </div>
+                <div className="job-meta-grid workshop-checkin-review-schedule-grid">
+                  <label>
+                    Date
+                    <input
+                      type="date"
+                      data-testid="workshop-checkin-scheduled-date"
+                      value={scheduledDateKey}
+                      onChange={(event) => setScheduledDateKey(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Start time
+                    <input
+                      type="time"
+                      data-testid="workshop-checkin-scheduled-time"
+                      value={scheduledStartTime}
+                      onChange={(event) => setScheduledStartTime(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Duration (minutes)
+                    <input
+                      type="number"
+                      data-testid="workshop-checkin-scheduled-duration"
+                      min="1"
+                      step="15"
+                      value={scheduledDurationMinutes}
+                      onChange={(event) => {
+                        setScheduledDurationTouched(true);
+                        setScheduledDurationMinutes(parseInitialDurationMinutes(event.target.value));
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="workshop-checkin-review-summary-row workshop-checkin-review-summary-row--schedule">
+                  <span>Current slot</span>
+                  <strong>{hasScheduledSuggestion ? scheduleSlotSummary : "Unscheduled"}</strong>
+                </div>
               </section>
 
               <section className="workshop-checkin-review-panel workshop-checkin-review-panel--actions">

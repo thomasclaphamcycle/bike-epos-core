@@ -20,6 +20,7 @@ import {
   workshopRawStatusLabel,
 } from "../features/workshop/status";
 import { WorkshopCheckInModal } from "../features/workshop/WorkshopCheckInModal";
+import { type WorkshopCheckInScheduleDraft } from "./WorkshopCheckInPage";
 
 const statusOptions = [
   "",
@@ -312,6 +313,7 @@ export const WorkshopPage = () => {
   const [loading, setLoading] = useState(false);
   const [schedulerRefreshToken, setSchedulerRefreshToken] = useState(0);
   const [isIntakeOpen, setIsIntakeOpen] = useState(false);
+  const [intakeScheduleDraft, setIntakeScheduleDraft] = useState<WorkshopCheckInScheduleDraft | null>(null);
   const [postCreateJobId, setPostCreateJobId] = useState<string | null>(null);
   const [selectedListJobId, setSelectedListJobId] = useState<string | null>(null);
   const loadJobsRequestIdRef = useRef(0);
@@ -499,6 +501,21 @@ export const WorkshopPage = () => {
     void loadJobs(buildDashboardQuery({}));
   };
 
+  const closeIntake = () => {
+    setIsIntakeOpen(false);
+    setIntakeScheduleDraft(null);
+  };
+
+  const openBlankIntake = () => {
+    setIntakeScheduleDraft(null);
+    setIsIntakeOpen(true);
+  };
+
+  const handleCreateAtScheduleSlot = (draft: WorkshopCheckInScheduleDraft) => {
+    setIntakeScheduleDraft(draft);
+    setIsIntakeOpen(true);
+  };
+
   return (
     <div className="page-shell page-shell-workspace workshop-primary-page">
       <section className="workshop-primary-topbar">
@@ -540,7 +557,7 @@ export const WorkshopPage = () => {
             <button
               type="button"
               className="primary workshop-primary-new-job-button"
-              onClick={() => setIsIntakeOpen(true)}
+              onClick={openBlankIntake}
             >
               <span className="workshop-primary-new-job-button__icon" aria-hidden="true">
                 +
@@ -885,6 +902,7 @@ export const WorkshopPage = () => {
               visibleJobIds={visibleJobIds}
               requestedOverlayJobId={postCreateJobId}
               onRequestedOverlayJobHandled={() => setPostCreateJobId(null)}
+              onRequestCreateAtSlot={handleCreateAtScheduleSlot}
             />
           )}
         </section>
@@ -892,8 +910,9 @@ export const WorkshopPage = () => {
 
       <WorkshopCheckInModal
         open={isIntakeOpen}
-        onClose={() => setIsIntakeOpen(false)}
+        onClose={closeIntake}
         onCreated={handleIntakeCreated}
+        initialScheduleDraft={intakeScheduleDraft}
       />
     </div>
   );
