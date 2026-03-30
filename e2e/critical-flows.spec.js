@@ -1111,6 +1111,8 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
     const trackRect = track.getBoundingClientRect();
     const timelineOpenMinutes = 8 * 60;
     const timelineCloseMinutes = 19 * 60;
+    const schedulerSlotMinutes = 30;
+    const slotSafeOffsetMinutes = 8;
     const defaultDurationMinutes = 30;
     const pxPerMinute = trackRect.height / (timelineCloseMinutes - timelineOpenMinutes);
     const blockers = Array.from(
@@ -1139,12 +1141,6 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
         || xOffset > blocker.right,
       );
 
-    const preferredOffsets = [
-      Math.floor(Math.max(40, trackRect.height * 0.25)),
-      Math.floor(Math.max(56, trackRect.height * 0.45)),
-      Math.floor(Math.max(72, trackRect.height * 0.65)),
-      Math.floor(Math.max(88, trackRect.height * 0.82)),
-    ];
     const preferredXOffsets = [
       Math.floor(trackRect.width * 0.5),
       Math.floor(trackRect.width * 0.25),
@@ -1152,46 +1148,32 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
       Math.floor(trackRect.width * 0.125),
       Math.floor(trackRect.width * 0.875),
     ];
+    const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
+    const preferredSlotStarts = [];
 
-    for (const yOffset of preferredOffsets) {
+    for (let startMinutes = 12 * 60; startMinutes <= maxStartMinutes; startMinutes += schedulerSlotMinutes) {
+      preferredSlotStarts.push(startMinutes);
+    }
+
+    for (let startMinutes = timelineOpenMinutes; startMinutes < 12 * 60; startMinutes += schedulerSlotMinutes) {
+      preferredSlotStarts.push(startMinutes);
+    }
+
+    for (const startMinutes of preferredSlotStarts) {
+      const yOffset = Math.floor((startMinutes + slotSafeOffsetMinutes - timelineOpenMinutes) * pxPerMinute);
+      if (yOffset <= 24 || yOffset >= trackRect.height - 24) {
+        continue;
+      }
+
       for (const xOffset of preferredXOffsets) {
         if (isClear(xOffset, yOffset)) {
-          const pointerMinutes = timelineOpenMinutes + (yOffset / pxPerMinute);
-          const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
-          const startMinutes = Math.max(
-            timelineOpenMinutes,
-            Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
-          );
           const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
           return { x: xOffset, y: yOffset, expectedTime };
         }
       }
     }
 
-    for (let yOffset = 40; yOffset < trackRect.height - 40; yOffset += 18) {
-      for (let xOffset = 24; xOffset < trackRect.width - 24; xOffset += 18) {
-        if (isClear(xOffset, yOffset)) {
-          const pointerMinutes = timelineOpenMinutes + (yOffset / pxPerMinute);
-          const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
-          const startMinutes = Math.max(
-            timelineOpenMinutes,
-            Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
-          );
-          const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
-          return { x: xOffset, y: yOffset, expectedTime };
-        }
-      }
-    }
-
-    const fallbackY = Math.floor(Math.max(48, trackRect.height - 60));
-    const pointerMinutes = timelineOpenMinutes + (fallbackY / pxPerMinute);
-    const maxStartMinutes = timelineCloseMinutes - defaultDurationMinutes;
-    const startMinutes = Math.max(
-      timelineOpenMinutes,
-      Math.min(maxStartMinutes, Math.floor(pointerMinutes / 15) * 15),
-    );
-    const expectedTime = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(startMinutes % 60).padStart(2, "0")}`;
-    return { x: Math.floor(trackRect.width * 0.5), y: fallbackY, expectedTime };
+    throw new Error("Expected to find a clear scheduler slot away from slot boundaries.");
   });
 
   const trackBox = await todayTrack.boundingBox();
