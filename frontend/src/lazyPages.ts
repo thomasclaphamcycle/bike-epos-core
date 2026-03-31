@@ -50,6 +50,10 @@ export const ProductLabelPrintPage = lazyPage(
   () => import("./pages/ProductLabelPrintPage"),
   "ProductLabelPrintPage",
 );
+export const SalesReceiptPrintPage = lazyPage(
+  () => import("./pages/SalesReceiptPrintPage"),
+  "SalesReceiptPrintPage",
+);
 export const InventoryLocationsPage = lazyPage(
   () => import("./pages/InventoryLocationsPage"),
   "InventoryLocationsPage",
