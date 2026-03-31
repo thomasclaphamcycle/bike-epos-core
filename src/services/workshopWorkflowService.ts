@@ -448,10 +448,14 @@ export const addWorkshopJobNote = async (
 
   const authorStaffId = normalizeText(input.authorStaffId) ?? null;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const job = await tx.workshopJob.findUnique({
       where: { id: workshopJobId },
-      select: { id: true },
+      select: {
+        id: true,
+        customerId: true,
+        bikeId: true,
+      },
     });
 
     if (!job) {
@@ -517,8 +521,28 @@ export const addWorkshopJobNote = async (
             }
           : null,
       },
+      eventContext: {
+        customerId: job.customerId,
+        bikeId: job.bikeId,
+      },
     };
   });
+
+  emitEvent("workshop.note.added", {
+    id: result.note.id,
+    type: "workshop.note.added",
+    timestamp: result.note.createdAt.toISOString(),
+    workshopJobId: result.note.workshopJobId,
+    workshopJobNoteId: result.note.id,
+    visibility: result.note.visibility,
+    customerId: result.eventContext.customerId,
+    bikeId: result.eventContext.bikeId,
+    actorStaffId: result.note.authorStaffId ?? auditActor?.actorId,
+  });
+
+  return {
+    note: result.note,
+  };
 };
 
 export const getWorkshopJobNotes = async (workshopJobId: string) => {
@@ -712,6 +736,21 @@ export const changeWorkshopJobStatus = async (
     idempotent: result.idempotent,
     completedAt: result.job.completedAt?.toISOString(),
   });
+
+  if (!result.idempotent && result.fromStatus !== result.toStatus) {
+    emitEvent("workshop.job.status_changed", {
+      id: result.job.id,
+      type: "workshop.job.status_changed",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      fromStatus: result.fromStatus,
+      toStatus: result.toStatus,
+      customerId: result.job.customerId,
+      bikeId: result.job.bikeId,
+      saleId: result.saleId ?? null,
+      actorStaffId: auditActor?.actorId,
+    });
+  }
 
   if (!result.idempotent && result.stageChanged && result.emittedStage === "COMPLETED") {
     emitEvent("workshop.job.completed", {

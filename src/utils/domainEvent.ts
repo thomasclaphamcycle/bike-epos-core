@@ -26,7 +26,10 @@ type AnyCoreEventPayload = CoreEventMap[CoreEventName];
 type SaleCompletedEvent = CoreEventMap["sale.completed"];
 type WorkshopCompletedEvent = CoreEventMap["workshop.job.completed"];
 type WorkshopQuoteReadyEvent = CoreEventMap["workshop.quote.ready"];
+type WorkshopEstimateDecidedEvent = CoreEventMap["workshop.estimate.decided"];
+type WorkshopStatusChangedEvent = CoreEventMap["workshop.job.status_changed"];
 type WorkshopReadyForCollectionEvent = CoreEventMap["workshop.job.ready_for_collection"];
+type WorkshopNoteAddedEvent = CoreEventMap["workshop.note.added"];
 type WorkshopPortalMessageEvent = CoreEventMap["workshop.portal_message.ready"];
 type StockAdjustedEvent = CoreEventMap["stock.adjusted"];
 
@@ -78,6 +81,27 @@ const buildPersistedEventTarget = (
         workshopJobId: workshopPayload.workshopJobId,
       };
     }
+    case "workshop.estimate.decided": {
+      const workshopPayload = payload as WorkshopEstimateDecidedEvent;
+      return {
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopPayload.workshopJobId,
+        customerId: workshopPayload.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? null,
+        workshopJobId: workshopPayload.workshopJobId,
+      };
+    }
+    case "workshop.job.status_changed": {
+      const workshopPayload = payload as WorkshopStatusChangedEvent;
+      return {
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopPayload.workshopJobId,
+        customerId: workshopPayload.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? null,
+        workshopJobId: workshopPayload.workshopJobId,
+        saleId: workshopPayload.saleId ?? null,
+      };
+    }
     case "workshop.job.ready_for_collection": {
       const workshopPayload = payload as WorkshopReadyForCollectionEvent;
       return {
@@ -87,6 +111,16 @@ const buildPersistedEventTarget = (
         bikeId: workshopPayload.bikeId ?? null,
         workshopJobId: workshopPayload.workshopJobId,
         saleId: workshopPayload.saleId ?? null,
+      };
+    }
+    case "workshop.note.added": {
+      const workshopPayload = payload as WorkshopNoteAddedEvent;
+      return {
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopPayload.workshopJobId,
+        customerId: workshopPayload.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? null,
+        workshopJobId: workshopPayload.workshopJobId,
       };
     }
     case "workshop.portal_message.ready": {
@@ -150,12 +184,18 @@ const enrichPersistedEventTarget = async (
     }
     case "workshop.job.completed":
     case "workshop.quote.ready":
+    case "workshop.estimate.decided":
+    case "workshop.job.status_changed":
     case "workshop.job.ready_for_collection":
+    case "workshop.note.added":
     case "workshop.portal_message.ready": {
       const workshopPayload = payload as
         | WorkshopCompletedEvent
         | WorkshopQuoteReadyEvent
+        | WorkshopEstimateDecidedEvent
+        | WorkshopStatusChangedEvent
         | WorkshopReadyForCollectionEvent
+        | WorkshopNoteAddedEvent
         | WorkshopPortalMessageEvent;
       const workshopJobId = workshopPayload.workshopJobId;
       const hasCustomerLink = workshopPayload.customerId !== undefined;
@@ -203,7 +243,10 @@ export const shouldPersist = (
     case "sale.completed":
     case "workshop.job.completed":
     case "workshop.quote.ready":
+    case "workshop.estimate.decided":
+    case "workshop.job.status_changed":
     case "workshop.job.ready_for_collection":
+    case "workshop.note.added":
     case "workshop.portal_message.ready":
     case "stock.adjusted":
       return true;

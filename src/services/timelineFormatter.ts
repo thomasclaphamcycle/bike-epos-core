@@ -3,6 +3,7 @@ import { getRecentDiagnosticEvents } from "../core/eventSubscribers";
 import { CORE_EVENT_NAMES, type CoreEventMap, type CoreEventName } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { logger } from "../utils/logger";
+import { getWorkshopDisplayStatusOrFallback } from "./workshopStatusService";
 
 export const TIMELINE_ENTITY_TYPES = [
   "BIKE",
@@ -40,6 +41,11 @@ type TimelineEventRecord<TEventName extends CoreEventName = CoreEventName> = {
 type TimelineEntityRef = {
   entityType: TimelineEntityType;
   entityId: string;
+};
+
+type TimelineDisplayContext = {
+  actorNames: Map<string, string>;
+  saleReceiptNumbers: Map<string, string | null>;
 };
 
 const formatMoney = (pence: number) => `GBP ${(pence / 100).toFixed(2)}`;
@@ -118,7 +124,10 @@ const toTimelineEntityRefs = (
       break;
     case "workshop.job.completed":
     case "workshop.quote.ready":
+    case "workshop.estimate.decided":
+    case "workshop.job.status_changed":
     case "workshop.job.ready_for_collection":
+    case "workshop.note.added":
     case "workshop.portal_message.ready":
       refs.push({
         entityType: "WORKSHOP_JOB",
@@ -190,9 +199,34 @@ const resolveTimelineEntity = (
   return toTimelineEntityRefs(event)[0] ?? null;
 };
 
+const getActorName = (
+  event: TimelineEventRecord,
+  displayContext: TimelineDisplayContext,
+) => (event.actorStaffId ? displayContext.actorNames.get(event.actorStaffId) ?? null : null);
+
+const formatActorSuffix = (
+  event: TimelineEventRecord,
+  displayContext: TimelineDisplayContext,
+) => {
+  const actorName = getActorName(event, displayContext);
+  return actorName ? ` by ${actorName}` : "";
+};
+
+const formatSaleReference = (
+  saleId: string,
+  displayContext: TimelineDisplayContext,
+) => {
+  const receiptNumber = displayContext.saleReceiptNumbers.get(saleId) ?? null;
+  return receiptNumber ? `receipt ${receiptNumber}` : `sale ${saleId.slice(0, 8).toUpperCase()}`;
+};
+
 export const formatTimelineEvent = (
   event: TimelineEventRecord,
   requestedEntity?: TimelineEntityRef,
+  displayContext: TimelineDisplayContext = {
+    actorNames: new Map(),
+    saleReceiptNumbers: new Map(),
+  },
 ): TimelineItem | null => {
   const entity = resolveTimelineEntity(event, requestedEntity);
   if (!entity) {
@@ -208,7 +242,7 @@ export const formatTimelineEvent = (
         entityId: entity.entityId,
         occurredAt: event.payload.timestamp,
         label: "Signed in",
-        description: `Staff login succeeded via ${event.payload.authMethod}.`,
+        description: `Staff login succeeded via ${event.payload.authMethod}${formatActorSuffix(event, displayContext)}.`,
       };
     case "payments.intent.created":
       return {
@@ -219,8 +253,8 @@ export const formatTimelineEvent = (
         occurredAt: event.payload.timestamp,
         label: "Payment intent created",
         description: event.payload.provider
-          ? `Payment intent was prepared with ${event.payload.provider}.`
-          : "Payment intent was prepared for checkout.",
+          ? `Payment intent was prepared with ${event.payload.provider}${formatActorSuffix(event, displayContext)}.`
+          : `Payment intent was prepared for checkout${formatActorSuffix(event, displayContext)}.`,
       };
     case "payments.refund.recorded":
       return {
@@ -232,8 +266,8 @@ export const formatTimelineEvent = (
         label: "Refund recorded",
         description:
           event.payload.resultStatus === "idempotent"
-            ? "Refund replay returned the existing result without creating a duplicate."
-            : "Refund was recorded successfully.",
+            ? `Refund replay returned the existing result without creating a duplicate${formatActorSuffix(event, displayContext)}.`
+            : `Refund was recorded successfully${formatActorSuffix(event, displayContext)}.`,
       };
     case "sale.completed":
       return {
@@ -245,8 +279,8 @@ export const formatTimelineEvent = (
         label: "Sale completed",
         description:
           event.payload.totalPence !== undefined
-            ? `Sale completed for ${formatMoney(event.payload.totalPence)}.`
-            : "Sale completed successfully.",
+            ? `Finalized checkout completed for ${formatMoney(event.payload.totalPence)} on ${formatSaleReference(event.payload.saleId, displayContext)}${formatActorSuffix(event, displayContext)}.`
+            : `Finalized checkout completed on ${formatSaleReference(event.payload.saleId, displayContext)}${formatActorSuffix(event, displayContext)}.`,
       };
     case "purchaseOrder.received":
       return {
@@ -267,8 +301,8 @@ export const formatTimelineEvent = (
         occurredAt: event.payload.timestamp,
         label: "Job completed",
         description: event.payload.saleId
-          ? `Workshop handoff completed and linked to sale ${event.payload.saleId.slice(0, 8)}.`
-          : "Workshop job moved into the completed stage.",
+          ? `Workshop handoff completed and linked to ${formatSaleReference(event.payload.saleId, displayContext)}${formatActorSuffix(event, displayContext)}.`
+          : `Workshop job moved into the completed stage${formatActorSuffix(event, displayContext)}.`,
       };
     case "workshop.quote.ready":
       return {
@@ -278,7 +312,36 @@ export const formatTimelineEvent = (
         entityId: entity.entityId,
         occurredAt: event.payload.timestamp,
         label: "Quote ready",
-        description: `Estimate v${event.payload.estimateVersion} is ready for customer approval.`,
+        description: `Estimate v${event.payload.estimateVersion} is ready for customer approval${formatActorSuffix(event, displayContext)}.`,
+      };
+    case "workshop.estimate.decided": {
+      const decisionVerb = event.payload.decisionStatus === "APPROVED" ? "approved" : "rejected";
+      const actorName = getActorName(event, displayContext);
+      const decisionContext =
+        event.payload.decisionSource === "CUSTOMER"
+          ? "by the customer through the secure quote link"
+          : actorName
+            ? `by ${actorName}`
+            : "with the workshop";
+      return {
+        id: `${event.eventName}:${event.payload.id}:${event.payload.timestamp}`,
+        eventName: event.eventName,
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        occurredAt: event.payload.timestamp,
+        label: event.payload.decisionStatus === "APPROVED" ? "Quote approved" : "Quote rejected",
+        description: `Estimate v${event.payload.estimateVersion} was ${decisionVerb} ${decisionContext}.`,
+      };
+    }
+    case "workshop.job.status_changed":
+      return {
+        id: `${event.eventName}:${event.payload.id}:${event.payload.timestamp}`,
+        eventName: event.eventName,
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        occurredAt: event.payload.timestamp,
+        label: "Status updated",
+        description: `Status changed from ${getWorkshopDisplayStatusOrFallback(event.payload.fromStatus)} to ${getWorkshopDisplayStatusOrFallback(event.payload.toStatus)}${formatActorSuffix(event, displayContext)}.`,
       };
     case "workshop.job.ready_for_collection":
       return {
@@ -288,7 +351,20 @@ export const formatTimelineEvent = (
         entityId: entity.entityId,
         occurredAt: event.payload.timestamp,
         label: "Ready for collection",
-        description: "Workshop job reached the ready-for-collection stage.",
+        description: `Workshop job reached the ready-for-collection stage${formatActorSuffix(event, displayContext)}.`,
+      };
+    case "workshop.note.added":
+      return {
+        id: `${event.eventName}:${event.payload.id}:${event.payload.timestamp}`,
+        eventName: event.eventName,
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        occurredAt: event.payload.timestamp,
+        label: event.payload.visibility === "CUSTOMER" ? "Customer note added" : "Workshop note added",
+        description:
+          event.payload.visibility === "CUSTOMER"
+            ? `Customer-visible workshop note added${formatActorSuffix(event, displayContext)}.`
+            : `Internal workshop note added${formatActorSuffix(event, displayContext)}.`,
       };
     case "workshop.portal_message.ready":
       return {
@@ -298,7 +374,7 @@ export const formatTimelineEvent = (
         entityId: entity.entityId,
         occurredAt: event.payload.timestamp,
         label: "Customer message posted",
-        description: "A customer-visible workshop portal message was added to the conversation.",
+        description: `A customer-visible workshop portal message was added to the conversation${formatActorSuffix(event, displayContext)}.`,
       };
     case "stock.adjusted":
       return {
@@ -477,9 +553,66 @@ const loadPersistedTimelineEvents = async (input: {
   }
 };
 
+const loadTimelineDisplayContext = async (
+  events: TimelineEventRecord[],
+): Promise<TimelineDisplayContext> => {
+  const actorIds = [...new Set(events.flatMap((event) => (event.actorStaffId ? [event.actorStaffId] : [])))];
+  const saleIds = [
+    ...new Set(
+      events.flatMap((event) => {
+        switch (event.eventName) {
+          case "sale.completed":
+            return [event.payload.saleId];
+          case "workshop.job.completed":
+          case "workshop.job.status_changed":
+          case "workshop.job.ready_for_collection":
+            return event.payload.saleId ? [event.payload.saleId] : [];
+          default:
+            return [];
+        }
+      }),
+    ),
+  ];
+
+  const [users, sales] = await Promise.all([
+    actorIds.length > 0
+      ? prisma.user.findMany({
+          where: { id: { in: actorIds } },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        })
+      : Promise.resolve([]),
+    saleIds.length > 0
+      ? prisma.sale.findMany({
+          where: { id: { in: saleIds } },
+          select: {
+            id: true,
+            receiptNumber: true,
+            receipt: {
+              select: {
+                receiptNumber: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    actorNames: new Map(users.map((user) => [user.id, user.name ?? user.username])),
+    saleReceiptNumbers: new Map(
+      sales.map((sale) => [sale.id, sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null]),
+    ),
+  };
+};
+
 const toTimelineItems = (
   events: TimelineEventRecord[],
   requestedEntity: TimelineEntityRef,
+  displayContext: TimelineDisplayContext,
 ) =>
   events
     .map((event) => {
@@ -493,7 +626,7 @@ const toTimelineItems = (
         return null;
       }
 
-      return formatTimelineEvent(event, matchingEntity);
+      return formatTimelineEvent(event, matchingEntity, displayContext);
     })
     .filter((item): item is TimelineItem => item !== null);
 
@@ -516,10 +649,15 @@ export const listTimelineEvents = async (input: {
     }),
     Promise.resolve(getRecentDiagnosticEvents().map(toDiagnosticTimelineEvent)),
   ]);
+  const displayContext = await loadTimelineDisplayContext([...persistedEvents, ...inMemoryEvents]);
 
   const uniqueItems = new Map<string, TimelineItem>();
 
-  for (const item of toTimelineItems([...persistedEvents, ...inMemoryEvents], requestedEntity)
+  for (const item of toTimelineItems(
+    [...persistedEvents, ...inMemoryEvents],
+    requestedEntity,
+    displayContext,
+  )
     .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))) {
     const key = buildTimelineEventKey(item);
     if (!uniqueItems.has(key)) {

@@ -1,4 +1,4 @@
-import { Prisma, WorkshopJobStatus } from "@prisma/client";
+import { Prisma, SaleTenderMethod, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
@@ -155,9 +155,49 @@ const customerBikeWorkshopJobSelect = Prisma.validator<Prisma.WorkshopJobSelect>
   sale: {
     select: {
       id: true,
+      subtotalPence: true,
+      taxPence: true,
       totalPence: true,
+      changeDuePence: true,
       createdAt: true,
       completedAt: true,
+      receiptNumber: true,
+      createdByStaff: {
+        select: {
+          id: true,
+          username: true,
+          name: true,
+        },
+      },
+      receipt: {
+        select: {
+          receiptNumber: true,
+          issuedAt: true,
+          issuedByStaff: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+      tenders: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          method: true,
+          amountPence: true,
+          createdAt: true,
+          createdByStaff: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
     },
   },
   lines: {
@@ -182,8 +222,16 @@ const customerBikeWorkshopJobSelect = Prisma.validator<Prisma.WorkshopJobSelect>
       approvedAt: true,
       rejectedAt: true,
       supersededAt: true,
+      decisionSource: true,
       createdAt: true,
       updatedAt: true,
+      decisionByStaff: {
+        select: {
+          id: true,
+          username: true,
+          name: true,
+        },
+      },
     },
   },
   jobNotes: {
@@ -217,6 +265,8 @@ type CustomerBikeHistoryRecord = Prisma.CustomerBikeGetPayload<{
 type CustomerBikeWorkshopJobRecord = Prisma.WorkshopJobGetPayload<{
   select: typeof customerBikeWorkshopJobSelect;
 }>;
+
+type CustomerBikeSaleRecord = NonNullable<CustomerBikeWorkshopJobRecord["sale"]>;
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -408,6 +458,64 @@ const buildPrimaryMoneySummary = (input: {
   return {
     totalPence: input.liveSubtotalPence,
     source: "LIVE_TOTAL" as const,
+  };
+};
+
+const SALE_TENDER_METHOD_LABELS: Record<SaleTenderMethod, string> = {
+  CASH: "Cash",
+  CARD: "Card",
+  BANK_TRANSFER: "Bank transfer",
+  VOUCHER: "Voucher",
+};
+
+const buildStaffSummary = (
+  staff:
+    | {
+        id: string;
+        username: string;
+        name: string | null;
+      }
+    | null
+    | undefined,
+) => (
+  staff
+    ? {
+        id: staff.id,
+        name: staff.name ?? staff.username,
+      }
+    : null
+);
+
+const buildTenderSummary = (tenders: CustomerBikeSaleRecord["tenders"]) => {
+  if (tenders.length === 0) {
+    return null;
+  }
+
+  const breakdown = new Map<SaleTenderMethod, number>();
+  for (const tender of tenders) {
+    breakdown.set(tender.method, (breakdown.get(tender.method) ?? 0) + tender.amountPence);
+  }
+
+  const methods = [...breakdown.entries()].map(([method, amountPence]) => ({
+    method,
+    label: SALE_TENDER_METHOD_LABELS[method],
+    amountPence,
+  }))
+    .sort((left, right) => {
+      const amountDelta = right.amountPence - left.amountPence;
+      if (amountDelta !== 0) {
+        return amountDelta;
+      }
+
+      return left.label.localeCompare(right.label);
+    });
+
+  return {
+    totalTenderedPence: methods.reduce((sum, method) => sum + method.amountPence, 0),
+    methods,
+    summaryText: methods
+      .map((method) => `${method.label} £${(method.amountPence / 100).toFixed(2)}`)
+      .join(" + "),
   };
 };
 
@@ -615,17 +723,32 @@ const serializeBikeWorkshopHistoryEntry = (
           approvedAt: latestEstimate.approvedAt,
           rejectedAt: latestEstimate.rejectedAt,
           supersededAt: latestEstimate.supersededAt,
+          decisionSource: latestEstimate.decisionSource,
           createdAt: latestEstimate.createdAt,
           updatedAt: latestEstimate.updatedAt,
           isCurrent: latestEstimate.supersededAt === null,
+          decisionByStaff: buildStaffSummary(latestEstimate.decisionByStaff),
         }
       : null,
     sale: job.sale
       ? {
           id: job.sale.id,
+          subtotalPence: job.sale.subtotalPence,
+          taxPence: job.sale.taxPence,
           totalPence: job.sale.totalPence,
+          changeDuePence: job.sale.changeDuePence,
           createdAt: job.sale.createdAt,
           completedAt: job.sale.completedAt,
+          receiptNumber: job.sale.receipt?.receiptNumber ?? job.sale.receiptNumber ?? null,
+          receiptUrl: (job.sale.receipt?.receiptNumber ?? job.sale.receiptNumber)
+            ? `/r/${encodeURIComponent(job.sale.receipt?.receiptNumber ?? job.sale.receiptNumber ?? "")}`
+            : null,
+          issuedAt: job.sale.receipt?.issuedAt ?? null,
+          checkoutStaff:
+            buildStaffSummary(job.sale.receipt?.issuedByStaff)
+            ?? buildStaffSummary(job.sale.createdByStaff)
+            ?? buildStaffSummary(job.sale.tenders[0]?.createdByStaff),
+          paymentSummary: buildTenderSummary(job.sale.tenders),
         }
       : null,
   };
