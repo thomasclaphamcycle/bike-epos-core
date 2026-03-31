@@ -1,4 +1,6 @@
+import { useState } from "react";
 import CorePosLogo from "../../components/branding/CorePosLogo";
+import { BarcodeGraphic } from "./BarcodeGraphic";
 
 type ProductLabelProps = {
   shopName?: string;
@@ -21,18 +23,30 @@ export const ProductLabel = ({
   pricePence,
   barcode,
 }: ProductLabelProps) => {
+  const [showLogo, setShowLogo] = useState(true);
   const title = [productName, variantName].filter(Boolean).join(" · ") || productName;
-  const secondaryLine = brand || sku || "Preferred operational barcode";
+  const secondaryLine = [brand, sku].filter(Boolean).join(" · ") || "Preferred operational barcode";
   const barcodeText = barcode || "Barcode pending";
 
   return (
     <article className="product-label" data-testid="product-label">
       <div className="product-label__header">
         <div className="product-label__brand-block">
-          <CorePosLogo variant="icon" size={26} className="product-label__logo" />
+          {showLogo ? (
+            <CorePosLogo
+              variant="icon"
+              size={24}
+              className="product-label__logo"
+              onError={() => setShowLogo(false)}
+            />
+          ) : (
+            <div className="product-label__logo-fallback" aria-hidden="true">
+              CP
+            </div>
+          )}
           <div className="product-label__brand-copy">
             <span className="product-label__brand-name">{shopName}</span>
-            <span className="product-label__brand-subtitle">Product label</span>
+            <span className="product-label__brand-subtitle">57 x 32 label</span>
           </div>
         </div>
         <div className="product-label__price">{formatMoney(pricePence)}</div>
@@ -44,9 +58,7 @@ export const ProductLabel = ({
       </div>
 
       <div className="product-label__barcode">
-        <div className="product-label__barcode-art" aria-hidden="true">
-          {barcodeText}
-        </div>
+        <BarcodeGraphic value={barcode} className="product-label__barcode-art" />
         <div className="product-label__barcode-number mono-text">{barcodeText}</div>
       </div>
     </article>
