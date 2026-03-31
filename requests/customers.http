@@ -18,6 +18,9 @@ GET {{baseUrl}}/api/customers/{{customerId}}
 ### Customer domain-event timeline
 GET {{baseUrl}}/api/events?entityType=CUSTOMER&entityId={{customerId}}
 
+### Customer relationship timeline
+GET {{baseUrl}}/api/customers/{{customerId}}/timeline
+
 ### Search customers by name/email/phone
 GET {{baseUrl}}/api/customers?query=jane
 

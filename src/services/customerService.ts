@@ -1,3 +1,4 @@
+import { WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import {
@@ -6,6 +7,8 @@ import {
   normalizeNamePart,
   parseCombinedCustomerName,
 } from "../utils/customerName";
+import { buildCustomerBikeDisplayName } from "./customerBikeService";
+import { listTimelineEvents } from "./timelineFormatter";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type CreateCustomerInput = {
@@ -60,6 +63,142 @@ const parseOptionalTake = (value: number | undefined): number | undefined => {
     );
   }
   return value;
+};
+
+const ACTIVE_WORKSHOP_JOB_STATUSES = new Set<WorkshopJobStatus>([
+  "BOOKED",
+  "BIKE_ARRIVED",
+  "IN_PROGRESS",
+  "WAITING_FOR_APPROVAL",
+  "WAITING_FOR_PARTS",
+  "ON_HOLD",
+  "READY_FOR_COLLECTION",
+]);
+
+const getStaffDisplayName = (input: { name?: string | null; username?: string | null } | null | undefined) =>
+  input?.name?.trim() || input?.username?.trim() || null;
+
+const buildReceiptUrl = (receiptNumber: string | null | undefined) =>
+  receiptNumber ? `/r/${encodeURIComponent(receiptNumber)}` : null;
+
+const formatTenderMethod = (value: string) => {
+  switch (value) {
+    case "BANK_TRANSFER":
+      return "Bank transfer";
+    case "CARD":
+      return "Card";
+    case "CASH":
+      return "Cash";
+    case "VOUCHER":
+      return "Voucher";
+    default:
+      return value.replaceAll("_", " ").toLowerCase();
+  }
+};
+
+const buildPaymentSummary = (
+  tenders: Array<{ method: string; amountPence: number }>,
+) => {
+  if (tenders.length === 0) {
+    return null;
+  }
+
+  return tenders
+    .slice()
+    .sort((left, right) => right.amountPence - left.amountPence)
+    .map((tender) => `${formatTenderMethod(tender.method)} £${(tender.amountPence / 100).toFixed(2)}`)
+    .join(" • ");
+};
+
+const buildCustomerSummary = async (
+  customerId: string,
+  customerCreatedAt: Date,
+) => {
+  const [
+    completedSalesCount,
+    finalizedSpend,
+    activeWorkshopJobsCount,
+    linkedBikeCount,
+    latestSale,
+    latestWorkshop,
+    latestBike,
+  ] = await Promise.all([
+    prisma.sale.count({
+      where: {
+        customerId,
+        completedAt: {
+          not: null,
+        },
+      },
+    }),
+    prisma.sale.aggregate({
+      where: {
+        customerId,
+        completedAt: {
+          not: null,
+        },
+      },
+      _sum: {
+        totalPence: true,
+      },
+    }),
+    prisma.workshopJob.count({
+      where: {
+        customerId,
+        status: {
+          in: [...ACTIVE_WORKSHOP_JOB_STATUSES],
+        },
+      },
+    }),
+    prisma.customerBike.count({
+      where: { customerId },
+    }),
+    prisma.sale.findFirst({
+      where: {
+        customerId,
+        completedAt: {
+          not: null,
+        },
+      },
+      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        completedAt: true,
+      },
+    }),
+    prisma.workshopJob.findFirst({
+      where: { customerId },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        updatedAt: true,
+      },
+    }),
+    prisma.customerBike.findFirst({
+      where: { customerId },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        updatedAt: true,
+      },
+    }),
+  ]);
+
+  const mostRecentActivityAt = [
+    latestSale?.completedAt ?? null,
+    latestWorkshop?.updatedAt ?? null,
+    latestBike?.updatedAt ?? null,
+    customerCreatedAt,
+  ]
+    .filter((value): value is Date => Boolean(value))
+    .sort((left, right) => right.getTime() - left.getTime())[0];
+
+  return {
+    completedSalesCount,
+    finalizedSpendPence: finalizedSpend._sum.totalPence ?? 0,
+    activeWorkshopJobsCount,
+    linkedBikeCount,
+    mostRecentActivityAt,
+    lastSaleAt: latestSale?.completedAt ?? null,
+    lastWorkshopActivityAt: latestWorkshop?.updatedAt ?? null,
+  };
 };
 
 const toCustomerResponse = (customer: {
@@ -157,7 +296,10 @@ export const createCustomer = async (input: CreateCustomerInput) => {
 
 export const getCustomerById = async (customerId: string) => {
   const customer = await assertCustomerExists(customerId);
-  return toCustomerResponse(customer);
+  return {
+    ...toCustomerResponse(customer),
+    summary: await buildCustomerSummary(customerId, customer.createdAt),
+  };
 };
 
 export const updateCustomerCommunicationPreferences = async (
@@ -213,9 +355,39 @@ export const listCustomerSales = async (input: {
       },
     },
     include: {
+      createdByStaff: {
+        select: {
+          username: true,
+          name: true,
+        },
+      },
       receipt: {
         select: {
           receiptNumber: true,
+          issuedByStaff: {
+            select: {
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+      tenders: {
+        select: {
+          method: true,
+          amountPence: true,
+          createdByStaff: {
+            select: {
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+      workshopJob: {
+        select: {
+          id: true,
+          bikeId: true,
         },
       },
     },
@@ -233,7 +405,22 @@ export const listCustomerSales = async (input: {
       createdAt: sale.createdAt,
       completedAt: sale.completedAt,
       receiptNumber: sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null,
-      receiptUrl: sale.receipt?.receiptNumber ? `/r/${sale.receipt.receiptNumber}` : null,
+      receiptUrl: buildReceiptUrl(sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null),
+      paymentSummary: buildPaymentSummary(sale.tenders),
+      tenderBreakdown: sale.tenders
+        .slice()
+        .sort((left, right) => right.amountPence - left.amountPence)
+        .map((tender) => ({
+          method: tender.method,
+          amountPence: tender.amountPence,
+        })),
+      checkoutStaffName:
+        getStaffDisplayName(sale.receipt?.issuedByStaff)
+        ?? getStaffDisplayName(sale.createdByStaff)
+        ?? getStaffDisplayName(sale.tenders[0]?.createdByStaff)
+        ?? null,
+      workshopJobId: sale.workshopJob?.id ?? null,
+      bikeId: sale.workshopJob?.bikeId ?? null,
     })),
   };
 };
@@ -270,6 +457,77 @@ export const listCustomerWorkshopJobs = async (input: {
       createdAt: true,
       updatedAt: true,
       completedAt: true,
+      jobNotes: {
+        orderBy: [{ createdAt: "desc" }],
+        take: 1,
+        select: {
+          id: true,
+          note: true,
+          visibility: true,
+          createdAt: true,
+          authorStaff: {
+            select: {
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+      estimates: {
+        orderBy: [{ version: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: {
+          id: true,
+          version: true,
+          status: true,
+          subtotalPence: true,
+          approvedAt: true,
+          rejectedAt: true,
+          decisionByStaff: {
+            select: {
+              username: true,
+              name: true,
+            },
+          },
+        },
+      },
+      sale: {
+        select: {
+          id: true,
+          totalPence: true,
+          completedAt: true,
+          receiptNumber: true,
+          createdByStaff: {
+            select: {
+              username: true,
+              name: true,
+            },
+          },
+          receipt: {
+            select: {
+              receiptNumber: true,
+              issuedByStaff: {
+                select: {
+                  username: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          tenders: {
+            select: {
+              method: true,
+              amountPence: true,
+              createdByStaff: {
+                select: {
+                  username: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -285,6 +543,41 @@ export const listCustomerWorkshopJobs = async (input: {
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     completedAt: job.completedAt,
+    latestNote: job.jobNotes[0]
+      ? {
+          id: job.jobNotes[0].id,
+          note: job.jobNotes[0].note,
+          visibility: job.jobNotes[0].visibility,
+          createdAt: job.jobNotes[0].createdAt,
+          authorName: getStaffDisplayName(job.jobNotes[0].authorStaff),
+        }
+      : null,
+    estimate: job.estimates[0]
+      ? {
+          id: job.estimates[0].id,
+          version: job.estimates[0].version,
+          status: job.estimates[0].status,
+          subtotalPence: job.estimates[0].subtotalPence,
+          approvedAt: job.estimates[0].approvedAt,
+          rejectedAt: job.estimates[0].rejectedAt,
+          decisionByStaffName: getStaffDisplayName(job.estimates[0].decisionByStaff),
+        }
+      : null,
+    sale: job.sale
+      ? {
+          id: job.sale.id,
+          totalPence: job.sale.totalPence,
+          completedAt: job.sale.completedAt,
+          receiptNumber: job.sale.receipt?.receiptNumber ?? job.sale.receiptNumber ?? null,
+          receiptUrl: buildReceiptUrl(job.sale.receipt?.receiptNumber ?? job.sale.receiptNumber ?? null),
+          paymentSummary: buildPaymentSummary(job.sale.tenders),
+          checkoutStaffName:
+            getStaffDisplayName(job.sale.receipt?.issuedByStaff)
+            ?? getStaffDisplayName(job.sale.createdByStaff)
+            ?? getStaffDisplayName(job.sale.tenders[0]?.createdByStaff)
+            ?? null,
+        }
+      : null,
   }));
 
   return {
@@ -300,63 +593,69 @@ type CustomerTimelineEntry = {
     | "CUSTOMER_CREATED"
     | "SALE_COMPLETED"
     | "WORKSHOP_CREATED"
+    | "WORKSHOP_STATUS_CHANGED"
     | "WORKSHOP_COMPLETED"
+    | "ESTIMATE_UPDATE"
     | "WORKSHOP_NOTE"
+    | "CUSTOMER_COMMUNICATION"
+    | "BIKE_LINKED"
     | "CREDIT_ENTRY";
   occurredAt: Date;
   title: string;
   summary: string;
-  entityType: "CUSTOMER" | "SALE" | "WORKSHOP_JOB" | "CREDIT_ACCOUNT";
+  entityType: "CUSTOMER" | "SALE" | "WORKSHOP_JOB" | "CREDIT_ACCOUNT" | "BIKE";
   entityId: string;
   amountPence?: number;
-  meta?: Record<string, unknown>;
+  meta?: {
+    actorName?: string | null;
+    authorName?: string | null;
+    bikeDisplayName?: string | null;
+    category?: string | null;
+    checkoutStaffName?: string | null;
+    paymentSummary?: string | null;
+    receiptNumber?: string | null;
+    receiptUrl?: string | null;
+    sourceRef?: string | null;
+    sourceType?: string | null;
+    visibility?: string | null;
+  };
 };
 
 export const getCustomerTimeline = async (customerId: string) => {
   const customer = await assertCustomerExists(customerId);
 
-  const [sales, workshopJobs, creditAccounts] = await Promise.all([
-    prisma.sale.findMany({
-      where: { customerId },
-      include: {
-        receipt: {
-          select: {
-            receiptNumber: true,
-          },
-        },
-      },
-      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+  const [eventTimeline, salesPayload, workshopPayload, bikes, creditAccounts, summary] = await Promise.all([
+    listTimelineEvents({
+      entityType: "CUSTOMER",
+      entityId: customerId,
+      limit: 100,
+    }),
+    listCustomerSales({
+      customerId,
       take: 100,
     }),
-    prisma.workshopJob.findMany({
+    listCustomerWorkshopJobs({
+      customerId,
+      take: 100,
+    }),
+    prisma.customerBike.findMany({
       where: { customerId },
+      orderBy: [{ createdAt: "desc" }],
       select: {
         id: true,
-        status: true,
-        bikeDescription: true,
-        notes: true,
+        label: true,
+        make: true,
+        model: true,
+        year: true,
+        bikeType: true,
+        colour: true,
+        wheelSize: true,
+        frameSize: true,
+        groupset: true,
+        motorBrand: true,
+        motorModel: true,
         createdAt: true,
-        updatedAt: true,
-        completedAt: true,
-        jobNotes: {
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            note: true,
-            visibility: true,
-            createdAt: true,
-            authorStaff: {
-              select: {
-                id: true,
-                username: true,
-                name: true,
-              },
-            },
-          },
-        },
       },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      take: 100,
     }),
     prisma.creditAccount.findMany({
       where: { customerId },
@@ -376,6 +675,7 @@ export const getCustomerTimeline = async (customerId: string) => {
       },
       take: 10,
     }),
+    buildCustomerSummary(customerId, customer.createdAt),
   ]);
 
   const timeline: CustomerTimelineEntry[] = [
@@ -389,69 +689,254 @@ export const getCustomerTimeline = async (customerId: string) => {
       entityId: customer.id,
     },
   ];
+  const fallbackKeys = new Set<string>();
 
-  for (const sale of sales) {
-    const occurredAt = sale.completedAt ?? sale.createdAt;
-    timeline.push({
+  const pushTimelineEntry = (key: string, entry: CustomerTimelineEntry) => {
+    if (fallbackKeys.has(key)) {
+      return;
+    }
+    fallbackKeys.add(key);
+    timeline.push(entry);
+  };
+
+  for (const item of eventTimeline) {
+    switch (item.eventName) {
+      case "sale.completed":
+        pushTimelineEntry(`sale:${item.entityId}`, {
+          id: item.id,
+          type: "SALE_COMPLETED",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            category: item.category,
+            actorName: item.metadata?.actorName ?? null,
+            checkoutStaffName: item.metadata?.checkoutStaffName ?? null,
+            paymentSummary: item.metadata?.paymentSummary ?? null,
+            receiptNumber: item.metadata?.receiptNumber ?? null,
+            receiptUrl: item.metadata?.receiptUrl ?? null,
+          },
+        });
+        break;
+      case "workshop.job.created":
+        pushTimelineEntry(`workshop-created:${item.entityId}`, {
+          id: item.id,
+          type: "WORKSHOP_CREATED",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            bikeDisplayName: item.metadata?.bikeDisplayName ?? item.metadata?.bikeDescription ?? null,
+            category: item.category,
+          },
+        });
+        break;
+      case "workshop.job.status_changed":
+      case "workshop.job.ready_for_collection":
+        pushTimelineEntry(`workshop-status:${item.id}`, {
+          id: item.id,
+          type: "WORKSHOP_STATUS_CHANGED",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            bikeDisplayName: item.metadata?.bikeDescription ?? null,
+            category: item.category,
+          },
+        });
+        break;
+      case "workshop.job.completed":
+        pushTimelineEntry(`workshop-completed:${item.entityId}`, {
+          id: item.id,
+          type: "WORKSHOP_COMPLETED",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            category: item.category,
+            paymentSummary: item.metadata?.paymentSummary ?? null,
+            receiptNumber: item.metadata?.receiptNumber ?? null,
+            receiptUrl: item.metadata?.receiptUrl ?? null,
+          },
+        });
+        break;
+      case "workshop.quote.ready":
+      case "workshop.estimate.decided":
+        pushTimelineEntry(`estimate:${item.id}`, {
+          id: item.id,
+          type: "ESTIMATE_UPDATE",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            bikeDisplayName: item.metadata?.bikeDescription ?? null,
+            category: item.category,
+          },
+        });
+        break;
+      case "workshop.note.added":
+        pushTimelineEntry(`workshop-note:${item.id}`, {
+          id: item.id,
+          type: "WORKSHOP_NOTE",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            category: item.category,
+            visibility: item.metadata?.noteVisibility ?? null,
+          },
+        });
+        break;
+      case "workshop.portal_message.ready":
+      case "workshop.portal_message.received":
+        pushTimelineEntry(`communication:${item.id}`, {
+          id: item.id,
+          type: "CUSTOMER_COMMUNICATION",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            category: item.category,
+          },
+        });
+        break;
+      case "customer.bike.created":
+        pushTimelineEntry(`bike:${item.entityId}`, {
+          id: item.id,
+          type: "BIKE_LINKED",
+          occurredAt: new Date(item.occurredAt),
+          title: item.label,
+          summary: item.description,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          meta: {
+            actorName: item.metadata?.actorName ?? null,
+            bikeDisplayName: item.metadata?.bikeDisplayName ?? null,
+            category: item.category,
+          },
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  for (const sale of salesPayload.sales) {
+    pushTimelineEntry(`sale:${sale.id}`, {
       id: `sale-${sale.id}`,
       type: "SALE_COMPLETED",
-      occurredAt,
+      occurredAt: new Date(sale.completedAt ?? sale.createdAt),
       title: "Sale completed",
-      summary: `Sale total £${(sale.totalPence / 100).toFixed(2)}`,
+      summary: [
+        `Finalized sale for £${(sale.totalPence / 100).toFixed(2)}`,
+        sale.receiptNumber ? `Receipt ${sale.receiptNumber}` : null,
+        sale.paymentSummary ?? null,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join(" • "),
       entityType: "SALE",
       entityId: sale.id,
       amountPence: sale.totalPence,
       meta: {
-        receiptNumber: sale.receipt?.receiptNumber ?? sale.receiptNumber ?? null,
+        checkoutStaffName: sale.checkoutStaffName,
+        paymentSummary: sale.paymentSummary,
+        receiptNumber: sale.receiptNumber,
+        receiptUrl: sale.receiptUrl,
       },
     });
   }
 
-  for (const job of workshopJobs) {
-    timeline.push({
+  for (const job of workshopPayload.workshopJobs) {
+    pushTimelineEntry(`workshop-created:${job.id}`, {
       id: `workshop-created-${job.id}`,
       type: "WORKSHOP_CREATED",
-      occurredAt: job.createdAt,
+      occurredAt: new Date(job.createdAt),
       title: "Workshop job created",
-      summary: job.bikeDescription ? `Job opened for ${job.bikeDescription}` : "Workshop job opened",
+      summary: job.bikeDescription ? `Workshop opened for ${job.bikeDescription}` : "Workshop job opened",
       entityType: "WORKSHOP_JOB",
       entityId: job.id,
       meta: {
-        status: job.status,
+        bikeDisplayName: job.bikeDescription,
       },
     });
 
     if (job.completedAt) {
-      timeline.push({
+      pushTimelineEntry(`workshop-completed:${job.id}`, {
         id: `workshop-completed-${job.id}`,
         type: "WORKSHOP_COMPLETED",
-        occurredAt: job.completedAt,
+        occurredAt: new Date(job.completedAt),
         title: "Workshop job completed",
-        summary: job.bikeDescription ? `${job.bikeDescription} completed` : "Workshop job completed",
+        summary: job.sale
+          ? [
+              job.bikeDescription ? `${job.bikeDescription} completed` : "Workshop job completed",
+              job.sale.receiptNumber ? `Receipt ${job.sale.receiptNumber}` : null,
+              job.sale.paymentSummary ?? null,
+            ]
+              .filter((value): value is string => Boolean(value))
+              .join(" • ")
+          : job.bikeDescription
+            ? `${job.bikeDescription} completed`
+            : "Workshop job completed",
         entityType: "WORKSHOP_JOB",
         entityId: job.id,
         meta: {
-          status: job.status,
+          paymentSummary: job.sale?.paymentSummary ?? null,
+          receiptNumber: job.sale?.receiptNumber ?? null,
+          receiptUrl: job.sale?.receiptUrl ?? null,
         },
       });
     }
 
-    for (const note of job.jobNotes) {
-      timeline.push({
-        id: `workshop-note-${note.id}`,
+    if (job.latestNote) {
+      pushTimelineEntry(`workshop-note:${job.latestNote.id}`, {
+        id: `workshop-note-${job.latestNote.id}`,
         type: "WORKSHOP_NOTE",
-        occurredAt: note.createdAt,
-        title: note.visibility === "CUSTOMER" ? "Customer-visible workshop note" : "Workshop note",
-        summary: note.note,
+        occurredAt: new Date(job.latestNote.createdAt),
+        title: job.latestNote.visibility === "CUSTOMER" ? "Customer-visible workshop note" : "Workshop note",
+        summary: job.latestNote.note,
         entityType: "WORKSHOP_JOB",
         entityId: job.id,
         meta: {
-          noteId: note.id,
-          visibility: note.visibility,
-          authorName: note.authorStaff?.name ?? note.authorStaff?.username ?? null,
+          authorName: job.latestNote.authorName,
+          visibility: job.latestNote.visibility,
         },
       });
     }
+  }
+
+  for (const bike of bikes) {
+    pushTimelineEntry(`bike:${bike.id}`, {
+      id: `bike-${bike.id}`,
+      type: "BIKE_LINKED",
+      occurredAt: bike.createdAt,
+      title: "Bike added",
+      summary: `Bike added to customer record: ${buildCustomerBikeDisplayName(bike)}.`,
+      entityType: "BIKE",
+      entityId: bike.id,
+      meta: {
+        bikeDisplayName: buildCustomerBikeDisplayName(bike),
+      },
+    });
   }
 
   for (const account of creditAccounts) {
@@ -479,7 +964,10 @@ export const getCustomerTimeline = async (customerId: string) => {
   ));
 
   return {
-    customer: toCustomerResponse(customer),
+    customer: {
+      ...toCustomerResponse(customer),
+      summary,
+    },
     timeline: timeline.map((entry) => ({
       ...entry,
       occurredAt: entry.occurredAt,

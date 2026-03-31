@@ -12108,6 +12108,34 @@ body.rota-row-drag-copy-active {
   gap: 12px;
 }
 
+.customer-relationship-profile {
+  display: grid;
+  gap: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 122, 0, 0.08), transparent 34%),
+    linear-gradient(180deg, #fdfaf6 0%, #f5f8fb 100%);
+}
+
+.customer-relationship-profile__identity {
+  display: grid;
+  gap: 8px;
+  min-width: min(100%, 560px);
+}
+
+.customer-relationship-overview {
+  display: grid;
+  gap: 18px;
+}
+
+.customer-relationship-overview__section {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-timeline-card {
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fafc 100%);
+}
+
 .bike-service-profile {
   display: grid;
   gap: 18px;

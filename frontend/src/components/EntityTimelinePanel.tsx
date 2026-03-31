@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../api/client";
 import { useToasts } from "./ToastProvider";
+import { toBackendUrl } from "../utils/backendUrl";
 
 export type EntityTimelineEvent = {
   id: string;
   occurredAt: string;
   label: string;
   description: string;
+  metadata?: {
+    actorName?: string | null;
+    bikeDisplayName?: string | null;
+    bikeDescription?: string | null;
+    checkoutStaffName?: string | null;
+    notePreview?: string | null;
+    noteVisibility?: string | null;
+    paymentSummary?: string | null;
+    receiptNumber?: string | null;
+    receiptUrl?: string | null;
+  };
 };
 
 type EntityTimelineResponse = {
@@ -100,6 +112,26 @@ export const EntityTimelinePanel = ({
                   <span className="table-secondary">{new Date(event.occurredAt).toLocaleString()}</span>
                 </div>
                 <p>{event.description}</p>
+                {event.metadata ? (
+                  <div className="table-secondary">
+                    {[
+                      event.metadata.actorName ? `By ${event.metadata.actorName}` : null,
+                      event.metadata.checkoutStaffName ? `Checkout ${event.metadata.checkoutStaffName}` : null,
+                      event.metadata.receiptNumber ? `Receipt ${event.metadata.receiptNumber}` : null,
+                      event.metadata.paymentSummary ?? null,
+                    ]
+                      .filter((value): value is string => Boolean(value))
+                      .join(" • ")}
+                    {event.metadata.receiptUrl ? (
+                      <>
+                        {" "}
+                        <a href={toBackendUrl(event.metadata.receiptUrl)} target="_blank" rel="noreferrer">
+                          Open receipt
+                        </a>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </li>
           ))}

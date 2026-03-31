@@ -842,7 +842,7 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
     ? parseWorkshopExecutionStatus(input.status)
     : ("BOOKED" as WorkshopExecutionStatus);
 
-  return prisma.$transaction(async (tx) => {
+  const job = await prisma.$transaction(async (tx) => {
     const scheduleResolution = await resolveWorkshopSchedulePatch(
       {
         scheduledStartAt: input.scheduledStartAt,
@@ -935,6 +935,19 @@ export const createWorkshopJob = async (input: CreateWorkshopJobInput) => {
 
     return toJobResponse(job);
   });
+
+  emitEvent("workshop.job.created", {
+    id: job.id,
+    type: "workshop.job.created",
+    timestamp: new Date().toISOString(),
+    workshopJobId: job.id,
+    status: job.rawStatus,
+    customerId: job.customerId,
+    bikeId: job.bikeId,
+    bikeDescription: job.bikeDescription,
+  });
+
+  return job;
 };
 
 export const listWorkshopJobs = async (filters: ListWorkshopJobsInput = {}) => {
