@@ -94,6 +94,7 @@ Workshop collection is now treated as a sale-linked handoff rather than a manual
 
 - ready jobs should move into POS through the existing workshop finalize-to-basket flow or the explicit workshop checkout flow
 - POS checkout for a finalized workshop basket must preserve the workshop linkage on the resulting sale
+- workshop checkout now persists a single `WorkshopCheckoutOutcome` snapshot so concurrent idempotent retries replay one authoritative result instead of reconstructing success from sale/payment side effects
 - ready jobs cannot be manually marked collected or closed unless a linked sale already exists
 - `workshop.job.completed` should only represent actual completion, which keeps reminder-candidate generation aligned with real completed jobs
 
