@@ -242,6 +242,34 @@ const getManageableWorkshopJobOrThrow = async (
   return booking;
 };
 
+const lockWorkshopJobByManageTokenTx = async (
+  tx: Prisma.TransactionClient,
+  token: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "WorkshopJob" WHERE "manageToken" = ${token} FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Booking not found", "BOOKING_NOT_FOUND");
+  }
+};
+
+const getExistingDepositPaymentTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+) =>
+  tx.payment.findFirst({
+    where: {
+      workshopJobId,
+      purpose: "DEPOSIT",
+      amountPence: {
+        gt: 0,
+      },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+
 const getOrCreateCustomerForOnlineBooking = async (
   tx: Prisma.TransactionClient,
   input: {
@@ -455,19 +483,13 @@ export const payWorkshopBookingDepositByManageToken = async (
   }
 
   return prisma.$transaction(async (tx) => {
+    await lockWorkshopJobByManageTokenTx(tx, normalizedToken);
     const booking = await getManageableWorkshopJobOrThrow(tx, normalizedToken);
     const configuredDepositAmount =
       booking.depositRequiredPence > 0
         ? booking.depositRequiredPence
         : (await getBookingSettings(tx)).defaultDepositPence;
-    const existingDepositPayment = await tx.payment.findFirst({
-      where: {
-        workshopJobId: booking.id,
-        purpose: "DEPOSIT",
-        amountPence: configuredDepositAmount,
-      },
-      orderBy: { createdAt: "asc" },
-    });
+    const existingDepositPayment = await getExistingDepositPaymentTx(tx, booking.id);
 
     if (booking.depositStatus === "PAID") {
       if (!existingDepositPayment) {
@@ -515,16 +537,48 @@ export const payWorkshopBookingDepositByManageToken = async (
       };
     }
 
-    const payment = await tx.payment.create({
-      data: {
-        workshopJobId: booking.id,
-        method: input.method ?? "CARD",
-        purpose: "DEPOSIT",
-        status: "COMPLETED",
-        amountPence: configuredDepositAmount,
-        providerRef: input.providerRef,
-      },
-    });
+    let payment: NonNullable<Awaited<ReturnType<typeof getExistingDepositPaymentTx>>>;
+    try {
+      payment = await tx.payment.create({
+        data: {
+          workshopJobId: booking.id,
+          method: input.method ?? "CARD",
+          purpose: "DEPOSIT",
+          status: "COMPLETED",
+          amountPence: configuredDepositAmount,
+          providerRef: input.providerRef,
+        },
+      });
+    } catch (error) {
+      const prismaError = error as { code?: string };
+      if (prismaError.code === "P2002") {
+        const recoveredPayment = await getExistingDepositPaymentTx(tx, booking.id);
+        if (recoveredPayment) {
+          await tx.workshopJob.update({
+            where: { id: booking.id },
+            data: {
+              depositRequiredPence: configuredDepositAmount,
+              depositStatus: "PAID",
+            },
+          });
+
+          return {
+            workshopJobId: booking.id,
+            depositStatus: "PAID",
+            payment: {
+              id: recoveredPayment.id,
+              amountPence: recoveredPayment.amountPence,
+              method: recoveredPayment.method,
+              providerRef: recoveredPayment.providerRef,
+              createdAt: recoveredPayment.createdAt,
+            },
+            idempotent: true,
+          };
+        }
+      }
+
+      throw error;
+    }
 
     await createAuditEventTx(
       tx,
