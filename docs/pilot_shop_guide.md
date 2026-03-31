@@ -20,7 +20,7 @@ For a local pilot or trial setup, prepare:
 
 Recommended local URLs:
 
-- backend: `http://localhost:3000`
+- backend: `http://localhost:3100`
 - React frontend: `http://localhost:5173`
 
 ## 2. Installing CorePOS
@@ -72,7 +72,7 @@ npm run db:seed:dev
 
 The current seed is intentionally small and evaluation-friendly. It creates:
 
-- 3 role-based users
+- no demo auth users
 - 7 products with opening stock in `Main Stock`
 - 4 customers
 - 3 workshop jobs

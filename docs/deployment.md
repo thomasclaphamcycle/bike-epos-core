@@ -66,7 +66,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
-The React app proxies `/api` to `http://localhost:3000` in development and is the recommended trial/evaluation surface on `http://localhost:5173/login`.
+The React app proxies `/api` to `http://localhost:3100` in development and is the recommended trial/evaluation surface on `http://localhost:5173/login`.
 
 5. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 

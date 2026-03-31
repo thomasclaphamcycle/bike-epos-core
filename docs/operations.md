@@ -7,13 +7,14 @@ For operator-managed database backup and restore in local or non-production envi
 - `npm run db:backup`
 - `npm run db:restore`
 
-These scripts wrap the repo backup helpers under `scripts/backup_database.sh` and `scripts/db_restore.sh`.
+These scripts wrap the repo backup helpers under `scripts/backup_database.sh` and `scripts/restore_database.sh`.
 
 Safety notes:
 
-- they refuse production-like `DATABASE_URL` targets unless you explicitly set `CONFIRM_PROD=true`
-- set `BACKUP_FILE=...` or pass a path argument to `npm run db:restore -- ./backups/file.sql`
+- `npm run db:restore` expects a PostgreSQL custom-format dump created by `scripts/backup_database.sh`
+- set `COREPOS_CONFIRM_RESTORE=1` before running the restore command because it is destructive
 - keep using the Export Hub for CSV/data handoff; use the DB backup scripts for full-instance recovery points
+- `scripts/db_restore.sh` remains only as the legacy plain-SQL restore helper for deliberate older workflows
 
 ## Management Pages
 

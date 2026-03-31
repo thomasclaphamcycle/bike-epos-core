@@ -1,5 +1,5 @@
 ### M127 Inventory Investigations
 
-GET http://localhost:3000/api/reports/inventory/investigations
+GET http://localhost:3100/api/reports/inventory/investigations
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager

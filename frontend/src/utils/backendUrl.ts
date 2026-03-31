@@ -1,6 +1,6 @@
 export const getBackendOrigin = () => {
   if (import.meta.env.DEV) {
-    return "http://localhost:3000";
+    return import.meta.env.VITE_API_PROXY_TARGET?.trim() || "http://localhost:3100";
   }
   if (typeof window !== "undefined") {
     return window.location.origin;

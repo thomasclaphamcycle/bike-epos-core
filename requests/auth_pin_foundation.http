@@ -1,8 +1,8 @@
 ### Active users for PIN login selection (`hasPin` shows whether PIN login is available)
-GET http://localhost:3000/api/auth/active-users
+GET http://localhost:3100/api/auth/active-users
 
 ### Password login (existing path remains active and pairs with the `/login` password fallback UI)
-POST http://localhost:3000/api/auth/login
+POST http://localhost:3100/api/auth/login
 Content-Type: application/json
 
 {
@@ -11,10 +11,10 @@ Content-Type: application/json
 }
 
 ### PIN status for current user
-GET http://localhost:3000/api/auth/pin-status
+GET http://localhost:3100/api/auth/pin-status
 
 ### Set PIN for current user
-POST http://localhost:3000/api/auth/pin
+POST http://localhost:3100/api/auth/pin
 Content-Type: application/json
 
 {
@@ -22,7 +22,7 @@ Content-Type: application/json
 }
 
 ### Change PIN for current user
-PATCH http://localhost:3000/api/auth/pin
+PATCH http://localhost:3100/api/auth/pin
 Content-Type: application/json
 
 {
@@ -31,7 +31,7 @@ Content-Type: application/json
 }
 
 ### PIN login
-POST http://localhost:3000/api/auth/pin-login
+POST http://localhost:3100/api/auth/pin-login
 Content-Type: application/json
 
 {
@@ -40,10 +40,10 @@ Content-Type: application/json
 }
 
 ### Manager/admin reset another user's PIN
-POST http://localhost:3000/api/admin/users/replace-with-user-id/reset-pin
+POST http://localhost:3100/api/admin/users/replace-with-user-id/reset-pin
 
 ### Manager/admin set another user's PIN directly
-POST http://localhost:3000/api/admin/users/replace-with-user-id/set-pin
+POST http://localhost:3100/api/admin/users/replace-with-user-id/set-pin
 Content-Type: application/json
 
 {

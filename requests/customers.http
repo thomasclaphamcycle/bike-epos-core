@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000
+@baseUrl = http://localhost:3100
 
 ### Create customer
 POST {{baseUrl}}/api/customers

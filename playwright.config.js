@@ -1,6 +1,7 @@
 const { defineConfig } = require("@playwright/test");
+const { applyTestEnvDefaults } = require("./scripts/test_env_defaults");
 
-const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
+const baseUrl = applyTestEnvDefaults(process.env).TEST_BASE_URL;
 const backendWebServer = {
   command: "node scripts/start_test_server.js",
   url: `${baseUrl}/health`,

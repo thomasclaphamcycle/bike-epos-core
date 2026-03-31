@@ -13,7 +13,6 @@ const MANAGED_COMMAND_MARKERS = [
   "vite",
   "node_modules/@playwright/test/cli.js",
   "scripts/run_smoke_test.js",
-  "npm run dev",
   "frontend run dev",
 ];
 const SIGNAL_EXIT_CODES = {
@@ -327,14 +326,14 @@ const classifyManagedRepoProcess = (processInfo, root = repoRoot) => {
   ) {
     return "frontend";
   }
-  if (command.includes("node_modules/@playwright/test/cli.js")) {
+  if (
+    command.includes("node_modules/@playwright/test/cli.js") &&
+    !command.includes("test-server")
+  ) {
     return "playwright";
   }
   if (command.includes("scripts/run_smoke_test.js")) {
     return "smoke-wrapper";
-  }
-  if (cwd === root && command.includes("npm run dev")) {
-    return "backend";
   }
 
   return null;

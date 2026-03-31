@@ -1,5 +1,5 @@
 ### M38: Login (real auth)
-POST http://localhost:3000/api/auth/login
+POST http://localhost:3100/api/auth/login
 Content-Type: application/json
 
 {
@@ -8,16 +8,16 @@ Content-Type: application/json
 }
 
 ### M38: Authenticated default route
-GET http://localhost:3000/
+GET http://localhost:3100/
 
 ### M38: Protected page redirects to login when unauthenticated
-GET http://localhost:3000/pos
+GET http://localhost:3100/pos
 
 ### M38: Not authorized page (requires auth)
-GET http://localhost:3000/not-authorized?required=ADMIN
+GET http://localhost:3100/not-authorized?required=ADMIN
 
 ### M38: Logout
-POST http://localhost:3000/api/auth/logout
+POST http://localhost:3100/api/auth/logout
 Content-Type: application/json
 
 {}

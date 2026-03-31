@@ -8,7 +8,7 @@ CSV exports now use server endpoints from M22 (not client-side CSV generation):
 Both control-row and section-header `Export CSV` actions use the same server endpoints and validation rules.
 
 ## Prerequisites
-- Server running on `http://localhost:3000`.
+- Server running on `http://localhost:3100`.
 - Use manager headers (temporary auth pattern):
   - `X-Staff-Role: MANAGER` or `ADMIN`
   - Optional: `X-Staff-Id: <id>`

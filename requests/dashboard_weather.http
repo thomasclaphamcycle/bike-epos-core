@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000
+@baseUrl = http://localhost:3100
 
 ### Get dashboard weather (STAFF+)
 GET {{baseUrl}}/api/dashboard/weather

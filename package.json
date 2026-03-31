@@ -1,10 +1,15 @@
 {
   "name": "bike-epos-core",
-  "version": "1.1.109",
+  "version": "1.1.110",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:start": "bash scripts/dev_start_local.sh",
+    "dev:stop": "bash scripts/dev_stop_local.sh",
+    "dev:guard": "bash scripts/dev_codex_guard.sh",
+    "dev:status": "node scripts/dev_status.js",
+    "dev:reset": "node scripts/dev_reset.js",
     "prisma:generate": "npx prisma generate",
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:frontend",
@@ -16,7 +21,7 @@
     "db:seed:test": "node scripts/run_with_test_env.js ts-node --transpile-only scripts/seed_demo_data.ts",
     "dev:create-thomas": "ts-node --transpile-only scripts/dev/create_thomas_admin.ts",
     "db:backup": "bash scripts/backup_database.sh",
-    "db:restore": "bash scripts/db_restore.sh",
+    "db:restore": "bash scripts/restore_database.sh",
     "import:rota-spreadsheet": "ts-node --transpile-only scripts/import_rota_spreadsheet.ts",
     "typecheck:reports": "tsc -p tsconfig.reports.json --noEmit",
     "test:db:migrate": "node scripts/ensure_test_db_schema.js",
@@ -100,9 +105,11 @@
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
-    "verify": "npm run prisma:generate && NODE_ENV=test npm test && npm run build && NODE_ENV=test npm run e2e && NODE_ENV=test npm run test:m38 && NODE_ENV=test npm run test:m24 && NODE_ENV=test npm run test:m27 && NODE_ENV=test npm run test:m30 && NODE_ENV=test npm run test:m83 && npm run db:seed:dev",
+    "verify:postflight": "node scripts/verify_postflight.js",
+    "verify": "node scripts/run_verify.js",
     "roadmap": "node scripts/roadmap/report.js",
     "roadmap:json": "node scripts/roadmap/report.js --json",
+    "roadmap:chart": "node scripts/roadmap/chart.js",
     "roadmap1": "node scripts/roadmap/chart.js"
   },
   "repository": {

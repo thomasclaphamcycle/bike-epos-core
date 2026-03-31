@@ -4,7 +4,7 @@ require("dotenv/config");
 const assert = require("node:assert/strict");
 const { createSmokeServerController } = require("./smoke_server_helper");
 
-const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
+const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {

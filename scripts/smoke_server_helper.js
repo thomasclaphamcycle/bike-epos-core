@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 require("dotenv/config");
 
+const { applyTestEnvDefaults } = require("./test_env_defaults");
 const {
   installSignalHandlers,
   listListeningPidsForPort,
@@ -257,14 +258,15 @@ const createSmokeServerController = ({
       }
 
       log(`Starting API server with ${startup.command} ${startup.args.join(" ")}`);
+      const startupEnv = applyTestEnvDefaults({
+        ...process.env,
+        NODE_ENV: "test",
+        ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
+        ...envOverrides,
+      });
       serverProcess = spawnManagedProcess(startup.command, startup.args, {
         stdio: captureStartupLog ? ["ignore", "pipe", "pipe"] : "ignore",
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
-          ...envOverrides,
-        },
+        env: startupEnv,
       });
       if (captureStartupLog) {
         const appendStartupLog = (chunk) => {

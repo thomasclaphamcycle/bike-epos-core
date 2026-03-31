@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000
+@baseUrl = http://localhost:3100
 @managerRole = MANAGER
 @staffId = demo-staff
 @variantId = REPLACE_VARIANT_ID

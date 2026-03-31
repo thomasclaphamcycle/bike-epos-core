@@ -1,15 +1,15 @@
 ### Rota overview
-GET http://localhost:3000/api/rota
+GET http://localhost:3100/api/rota
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Rota overview (all active staff, filtered)
-GET http://localhost:3000/api/rota?staffScope=all&role=STAFF&search=Casey
+GET http://localhost:3100/api/rota?staffScope=all&role=STAFF&search=Casey
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Create six-week rota period
-POST http://localhost:3000/api/rota/periods
+POST http://localhost:3100/api/rota/periods
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
@@ -20,27 +20,27 @@ X-Staff-Id: rota-manager
 }
 
 ### Bank holiday sync status
-GET http://localhost:3000/api/rota/bank-holidays/status
+GET http://localhost:3100/api/rota/bank-holidays/status
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Download rota template
-GET http://localhost:3000/api/rota/template?startsOn=2026-03-09
+GET http://localhost:3100/api/rota/template?startsOn=2026-03-09
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Export rota period
-GET http://localhost:3000/api/rota/periods/{{rotaPeriodId}}/export
+GET http://localhost:3100/api/rota/periods/{{rotaPeriodId}}/export
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Sync UK bank holidays
-POST http://localhost:3000/api/rota/bank-holidays/sync
+POST http://localhost:3100/api/rota/bank-holidays/sync
 X-Staff-Role: ADMIN
 X-Staff-Id: rota-admin
 
 ### Save rota assignment
-POST http://localhost:3000/api/rota/assignments
+POST http://localhost:3100/api/rota/assignments
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
@@ -53,7 +53,7 @@ X-Staff-Id: rota-manager
 }
 
 ### Bulk save rota assignments
-POST http://localhost:3000/api/rota/assignments/bulk
+POST http://localhost:3100/api/rota/assignments/bulk
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
@@ -74,27 +74,27 @@ X-Staff-Id: rota-manager
 }
 
 ### Clear rota assignment
-DELETE http://localhost:3000/api/rota/assignments/{{assignmentId}}
+DELETE http://localhost:3100/api/rota/assignments/{{assignmentId}}
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Holiday requests list (mine)
-GET http://localhost:3000/api/rota/holiday-requests?scope=mine
+GET http://localhost:3100/api/rota/holiday-requests?scope=mine
 X-Staff-Role: STAFF
 X-Staff-Id: rota-alex-id
 
 ### Holiday requests list (mine, approved only)
-GET http://localhost:3000/api/rota/holiday-requests?scope=mine&status=APPROVED
+GET http://localhost:3100/api/rota/holiday-requests?scope=mine&status=APPROVED
 X-Staff-Role: STAFF
 X-Staff-Id: rota-alex-id
 
 ### Holiday requests list (all)
-GET http://localhost:3000/api/rota/holiday-requests?scope=all
+GET http://localhost:3100/api/rota/holiday-requests?scope=all
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
 ### Submit holiday request
-POST http://localhost:3000/api/rota/holiday-requests
+POST http://localhost:3100/api/rota/holiday-requests
 Content-Type: application/json
 X-Staff-Role: STAFF
 X-Staff-Id: rota-alex-id
@@ -106,7 +106,7 @@ X-Staff-Id: rota-alex-id
 }
 
 ### Approve holiday request
-POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/approve
+POST http://localhost:3100/api/rota/holiday-requests/{{holidayRequestId}}/approve
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
@@ -116,7 +116,7 @@ X-Staff-Id: rota-manager
 }
 
 ### Reject holiday request
-POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/reject
+POST http://localhost:3100/api/rota/holiday-requests/{{holidayRequestId}}/reject
 Content-Type: application/json
 X-Staff-Role: ADMIN
 X-Staff-Id: rota-admin
@@ -126,12 +126,12 @@ X-Staff-Id: rota-admin
 }
 
 ### Cancel holiday request
-POST http://localhost:3000/api/rota/holiday-requests/{{holidayRequestId}}/cancel
+POST http://localhost:3100/api/rota/holiday-requests/{{holidayRequestId}}/cancel
 X-Staff-Role: STAFF
 X-Staff-Id: rota-alex-id
 
 ### Rota import preview
-POST http://localhost:3000/api/rota/import/preview
+POST http://localhost:3100/api/rota/import/preview
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
@@ -142,7 +142,7 @@ X-Staff-Id: rota-manager
 }
 
 ### Rota import confirm
-POST http://localhost:3000/api/rota/import/confirm
+POST http://localhost:3100/api/rota/import/confirm
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager

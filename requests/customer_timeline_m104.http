@@ -1,5 +1,5 @@
 ### M104 Customer Timeline
-# @baseUrl http://localhost:3000
+# @baseUrl http://localhost:3100
 # @customerId replace-me
 
 GET {{baseUrl}}/api/customers/{{customerId}}/timeline

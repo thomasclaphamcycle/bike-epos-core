@@ -87,7 +87,7 @@ CorePOS roadmap progress is now computed from real repo evidence rather than mai
 
 - `npm run roadmap` prints the current per-phase completion table
 - `npm run roadmap:json` prints the explainable JSON breakdown
-- `npm run roadmap1` writes `docs/roadmap-progress.png`
+- `npm run roadmap:chart` writes `docs/roadmap-progress.png`
 
 See [docs/roadmap_progress.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/roadmap_progress.md) for the scoring model, evidence rules, and maintenance guidance.
 
@@ -179,13 +179,17 @@ If you keep the normal local inspection servers running while you work, Codex or
 - `scripts/dev_start_local.sh` starts the normal backend and frontend again in detached background sessions, writes repo-local logs under `tmp/dev-local/`, and waits for basic backend/frontend readiness before returning.
 - `scripts/dev_codex_guard.sh <command>` is the preferred wrapper for Codex or long local workflows because it stops the normal inspection servers first, runs the command, and restores the stopped servers afterward with a trap even if the command fails.
 
-Manual examples:
+Package entry points:
 
 ```bash
-scripts/dev_stop_local.sh
-scripts/dev_start_local.sh
-scripts/dev_codex_guard.sh npm run verify
+npm run dev:stop
+npm run dev:start
+npm run dev:status
+npm run dev:reset
+npm run dev:guard -- npm run verify
 ```
+
+`npm run verify` now always ends with a repo-scoped postflight check for verification leftovers, even if an earlier verify step fails, so the preferred recovery path after an interrupted local run is `npm run dev:reset` followed by `npm run dev:status`.
 
 6. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 
