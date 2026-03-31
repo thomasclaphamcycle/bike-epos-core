@@ -2,9 +2,9 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const INITIAL_BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -52,6 +52,17 @@ const portFromBaseUrl = () => {
   const url = new URL(activeBaseUrl);
   return url.port || (url.protocol === "https:" ? "443" : "80");
 };
+
+const createServerController = () =>
+  createSmokeServerController({
+    label: "m84-smoke",
+    baseUrl: activeBaseUrl,
+    databaseUrl: DATABASE_URL,
+    captureStartupLog: true,
+    envOverrides: {
+      PORT: portFromBaseUrl(),
+    },
+  });
 
 const buildAlternateBaseUrl = () => {
   const url = new URL(activeBaseUrl);
@@ -145,8 +156,7 @@ const run = async () => {
     userIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
+  let serverController = createServerController();
 
   const runTest = async (name, fn, results) => {
     try {
@@ -162,7 +172,8 @@ const run = async () => {
 
   try {
     setActiveBaseUrl(INITIAL_BASE_URL);
-    const existing = await serverIsHealthy();
+    serverController = createServerController();
+    const existing = await serverController.probeHealthyBaseUrl();
     if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
       throw new Error(
         "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
@@ -180,40 +191,11 @@ const run = async () => {
           `[m84-smoke] Existing server on ${INITIAL_BASE_URL} does not accept test header auth. Starting isolated test server on ${alternateBaseUrl}.`,
         );
         setActiveBaseUrl(alternateBaseUrl);
+        serverController = createServerController();
       }
     }
 
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: portFromBaseUrl(),
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
-
-    if (existing && !(await serverIsHealthy())) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: portFromBaseUrl(),
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const managerUser = await prisma.user.create({
       data: {
@@ -435,12 +417,7 @@ const run = async () => {
         cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
       );
     });
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(500);
-    }
-
+    await serverController.stop();
     await prisma.$disconnect();
   }
 };

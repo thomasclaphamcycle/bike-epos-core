@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { execSync } from "node:child_process";
+import type { Server as HttpServer } from "node:http";
 import express from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -295,6 +296,96 @@ app.use("/", tillUiRouter);
 app.use(errorHandler);
 
 const port = Number(process.env.PORT || 3000);
+const shutdownTimeoutMs = Number(process.env.SERVER_SHUTDOWN_TIMEOUT_MS || 5000);
+let httpServer: HttpServer | null = null;
+let shutdownPromise: Promise<void> | null = null;
+
+const closeHttpServer = async () => {
+  if (!httpServer) {
+    return;
+  }
+
+  const serverToClose = httpServer;
+  httpServer = null;
+  serverToClose.closeIdleConnections?.();
+
+  await new Promise<void>((resolve, reject) => {
+    serverToClose.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+};
+
+const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+
+  logCorePosEvent(
+    "process.signal",
+    {
+      resultStatus: "received",
+      signal,
+      pid: process.pid,
+    },
+    "warn",
+  );
+
+  shutdownPromise = (async () => {
+    const forceExitTimer = setTimeout(() => {
+      if (httpServer?.closeAllConnections) {
+        httpServer.closeAllConnections();
+      }
+      logCorePosEvent(
+        "server.shutdown.force_exit",
+        {
+          resultStatus: "timeout",
+          signal,
+          pid: process.pid,
+          timeoutMs: shutdownTimeoutMs,
+        },
+        "error",
+      );
+      process.exit(1);
+    }, shutdownTimeoutMs);
+    forceExitTimer.unref();
+
+    try {
+      await closeHttpServer();
+      await prisma.$disconnect();
+      clearTimeout(forceExitTimer);
+      logCorePosEvent(
+        "server.shutdown.complete",
+        {
+          resultStatus: "completed",
+          signal,
+          pid: process.pid,
+        },
+        "warn",
+      );
+      process.exit(0);
+    } catch (error) {
+      clearTimeout(forceExitTimer);
+      logCorePosError(
+        "server.shutdown.failed",
+        error,
+        {
+          resultStatus: "failed",
+          signal,
+          pid: process.pid,
+        },
+        "error",
+      );
+      process.exit(1);
+    }
+  })();
+
+  return shutdownPromise;
+};
 
 const registerRuntimeDiagnostics = () => {
   process.on("unhandledRejection", (reason) => {
@@ -322,15 +413,7 @@ const registerRuntimeDiagnostics = () => {
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      logCorePosEvent(
-        "process.signal",
-        {
-          resultStatus: "received",
-          signal,
-          pid: process.pid,
-        },
-        "warn",
-      );
+      void shutdownServer(signal);
     });
   }
 };
@@ -396,7 +479,7 @@ const startServer = async () => {
     );
   }
 
-  app.listen(port, () => {
+  httpServer = app.listen(port, () => {
     logCorePosEvent("server.listening", {
       ...startupPayload,
       resultStatus: "succeeded",

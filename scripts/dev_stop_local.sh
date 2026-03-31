@@ -15,6 +15,10 @@ stop_component() {
   local label="$2"
   local port="$3"
   local pid
+  local pid_file
+  local recorded_pid
+  local recorded_alive=0
+  local -a orphan_pids=()
 
   classify_component_listeners "$component" "$port"
 
@@ -26,22 +30,41 @@ stop_component() {
     return
   fi
 
-  if (( ${#CLASSIFIED_MATCHING_PIDS[@]} == 0 )); then
-    dev_log "No CorePOS ${label} listener found on port ${port}"
+  orphan_pids=()
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    orphan_pids+=("$pid")
+  done < <(list_component_orphan_pids "$component")
+  pid_file="$(component_pid_file "$component")"
+  recorded_pid=""
+  if [[ -f "$pid_file" ]]; then
+    recorded_pid="$(tr -d '[:space:]' <"$pid_file")"
+    if [[ -n "$recorded_pid" ]] && pid_exists "$recorded_pid"; then
+      recorded_alive=1
+    fi
+  fi
+
+  if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
+    if [[ "$component" == "backend" ]]; then
+      backend_was_running=1
+    else
+      frontend_was_running=1
+    fi
+  fi
+
+  if (( ${#CLASSIFIED_MATCHING_PIDS[@]} == 0 && ${#orphan_pids[@]} == 0 && recorded_alive == 0 )); then
+    dev_log "No CorePOS ${label} listener or orphaned process found on port ${port}"
+    rm -f "$pid_file"
     return
   fi
 
-  if [[ "$component" == "backend" ]]; then
-    backend_was_running=1
-  else
-    frontend_was_running=1
+  if (( ${#CLASSIFIED_MATCHING_PIDS[@]} == 0 )) && (( ${#orphan_pids[@]} > 0 )); then
+    dev_warn "Found ${#orphan_pids[@]} orphaned CorePOS ${label} process(es) without an active listener on port ${port}"
   fi
 
-  for pid in "${CLASSIFIED_MATCHING_PIDS[@]}"; do
-    if ! stop_pid_for_port "$label" "$pid" "$port" "$component"; then
-      had_error=1
-    fi
-  done
+  if ! stop_component_processes "$component" "$label" "$port"; then
+    had_error=1
+  fi
 }
 
 ensure_dev_state_dir

@@ -175,8 +175,8 @@ npm --prefix frontend run dev
 
 If you keep the normal local inspection servers running while you work, Codex or long-running local verification can leave those servers stopped or collide with manual cleanup steps. CorePOS now ships three small scripts to make that workflow explicit and reversible:
 
-- `scripts/dev_stop_local.sh` stops the normal backend on `http://localhost:3100` and frontend on `http://localhost:5173` when they are clearly the local CorePOS dev servers.
-- `scripts/dev_start_local.sh` starts the normal backend and frontend again in the background, writes repo-local logs under `tmp/dev-local/`, and waits for basic backend/frontend readiness before returning.
+- `scripts/dev_stop_local.sh` stops the normal backend on `http://localhost:3100` and frontend on `http://localhost:5173`, prefers managed detached-process cleanup when possible, and sweeps orphaned CorePOS backend/frontend dev processes before they can leak into later verification runs.
+- `scripts/dev_start_local.sh` starts the normal backend and frontend again in detached background sessions, writes repo-local logs under `tmp/dev-local/`, and waits for basic backend/frontend readiness before returning.
 - `scripts/dev_codex_guard.sh <command>` is the preferred wrapper for Codex or long local workflows because it stops the normal inspection servers first, runs the command, and restores the stopped servers afterward with a trap even if the command fails.
 
 Manual examples:
