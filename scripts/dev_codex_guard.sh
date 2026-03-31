@@ -72,7 +72,9 @@ if ! COREPOS_LOCAL_DEV_STATE_FILE="$STATE_FILE" "$SCRIPT_DIR/dev_stop_local.sh";
 fi
 
 dev_log "Running guarded command: $*"
-if ! "$@"; then
+if "$@"; then
+  guard_status=0
+else
   guard_status=$?
   exit "$guard_status"
 fi

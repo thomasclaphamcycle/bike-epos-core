@@ -26,13 +26,15 @@ Accepted headers:
 
 - `X-Staff-Role`
 - `X-Staff-Id`
-- optional `X-Internal-Auth` if `INTERNAL_AUTH_SHARED_SECRET` is set
+- optional `X-Internal-Auth` in tests
+- required `X-Internal-Auth` when using header auth outside `NODE_ENV=test`
 
 Safety rules:
 
 - Existing real users are never mutated by header auth input.
 - In production, header-only auth is rejected.
 - `AUTH_MODE=header` is blocked unless `NODE_ENV=test` or `ALLOW_HEADER_AUTH=1`.
+- Any non-test header-auth bypass now requires `INTERNAL_AUTH_SHARED_SECRET`.
 
 ## Environment Variables
 
@@ -40,7 +42,8 @@ Safety rules:
 - `AUTH_JWT_SECRET` (required in production)
 - `AUTH_TOKEN_TTL_SECONDS` (optional, default 12h)
 - `ALLOW_HEADER_AUTH=1` (optional local non-test bypass)
-- `INTERNAL_AUTH_SHARED_SECRET` (optional extra protection for header fallback)
+- `INTERNAL_AUTH_SHARED_SECRET` (required when using header auth outside `NODE_ENV=test`)
+- `ALLOW_INITIAL_ADMIN_BOOTSTRAP=1` (required only if you intentionally want bootstrap available in production)
 
 ## Initial Admin Setup
 
@@ -78,6 +81,8 @@ Option 2: bootstrap endpoint (only when DB has no users)
 POST /api/auth/bootstrap
 { "name": "Admin User", "email": "admin@example.com", "password": "ChangeMe123!" }
 ```
+
+In production, this endpoint is disabled unless `ALLOW_INITIAL_ADMIN_BOOTSTRAP=1` is set deliberately for the initial setup window.
 
 ## Local Login Flow
 

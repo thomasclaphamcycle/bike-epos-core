@@ -11,6 +11,7 @@ import {
   upsertPurchaseOrderItems,
 } from "../services/purchasingService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const parsePurchaseOrderStatus = (
   value: string | undefined,
@@ -38,22 +39,6 @@ const parsePurchaseOrderStatus = (
   return normalized as PurchaseOrderStatus;
 };
 
-const parseOptionalIntQuery = (
-  value: string | undefined,
-  field: "take" | "skip",
-): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_PURCHASE_ORDER_QUERY");
-  }
-
-  return parsed;
-};
-
 export const listPurchaseOrdersHandler = async (req: Request, res: Response) => {
   const result = await listPurchaseOrders({
     status: parsePurchaseOrderStatus(
@@ -64,8 +49,14 @@ export const listPurchaseOrdersHandler = async (req: Request, res: Response) => 
     q: typeof req.query.q === "string" ? req.query.q : undefined,
     from: typeof req.query.from === "string" ? req.query.from : undefined,
     to: typeof req.query.to === "string" ? req.query.to : undefined,
-    take: parseOptionalIntQuery(typeof req.query.take === "string" ? req.query.take : undefined, "take"),
-    skip: parseOptionalIntQuery(typeof req.query.skip === "string" ? req.query.skip : undefined, "skip"),
+    take: parseOptionalIntegerQuery(req.query.take, {
+      code: "INVALID_PURCHASE_ORDER_QUERY",
+      message: "take must be an integer",
+    }),
+    skip: parseOptionalIntegerQuery(req.query.skip, {
+      code: "INVALID_PURCHASE_ORDER_QUERY",
+      message: "skip must be an integer",
+    }),
   });
 
   res.json(result);

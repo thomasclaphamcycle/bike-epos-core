@@ -93,6 +93,7 @@ const frontendIndexFile = path.join(frontendDistDir, "index.html");
 const uploadsDir = path.join(projectRoot, "uploads");
 const serveFrontendSpa =
   process.env.NODE_ENV === "production" && fs.existsSync(frontendIndexFile);
+const isDevelopmentEnvironment = process.env.NODE_ENV === "development";
 
 const isLegacyPrintableRoute = (requestPath: string) =>
   /^\/r\/[^/]+$/.test(requestPath) ||
@@ -103,7 +104,7 @@ const isLegacyPrintableRoute = (requestPath: string) =>
 app.post("/auth/bootstrap", bootstrapHandler);
 
 app.post("/dev/product", async (req, res) => {
-  if (process.env.NODE_ENV === "production") {
+  if (!isDevelopmentEnvironment) {
     return res.status(404).json({ error: "Not found" });
   }
 
@@ -119,7 +120,7 @@ app.post("/dev/product", async (req, res) => {
 });
 
 app.post("/dev/seed-tube", async (req, res) => {
-  if (process.env.NODE_ENV === "production") {
+  if (!isDevelopmentEnvironment) {
     return res.status(404).json({ error: "Not found" });
   }
 

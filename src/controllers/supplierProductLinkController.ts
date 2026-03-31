@@ -5,6 +5,7 @@ import {
   updateSupplierProductLink,
 } from "../services/supplierProductLinkService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const parseBooleanQuery = (
   value: unknown,
@@ -34,21 +35,6 @@ const parseBooleanQuery = (
     `${field} must be 1 or 0`,
     "INVALID_SUPPLIER_PRODUCT_LINK_FILTER",
   );
-};
-
-const parseOptionalIntQuery = (value: unknown, field: "take" | "skip"): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_SUPPLIER_PRODUCT_LINK_FILTER");
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_SUPPLIER_PRODUCT_LINK_FILTER");
-  }
-  return parsed;
 };
 
 const parseVariantIdsQuery = (value: unknown): string[] | undefined => {
@@ -81,8 +67,14 @@ export const listSupplierProductLinksHandler = async (req: Request, res: Respons
   const variantIds = parseVariantIdsQuery(req.query.variantIds);
   const isActive = parseBooleanQuery(req.query.active, "active");
   const preferredSupplier = parseBooleanQuery(req.query.preferred, "preferred");
-  const take = parseOptionalIntQuery(req.query.take, "take");
-  const skip = parseOptionalIntQuery(req.query.skip, "skip");
+  const take = parseOptionalIntegerQuery(req.query.take, {
+    code: "INVALID_SUPPLIER_PRODUCT_LINK_FILTER",
+    message: "take must be an integer",
+  });
+  const skip = parseOptionalIntegerQuery(req.query.skip, {
+    code: "INVALID_SUPPLIER_PRODUCT_LINK_FILTER",
+    message: "skip must be an integer",
+  });
 
   const supplierProductLinks = await listSupplierProductLinks({
     supplierId,

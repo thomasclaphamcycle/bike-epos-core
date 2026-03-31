@@ -38,7 +38,7 @@ stop_component() {
   fi
 
   for pid in "${CLASSIFIED_MATCHING_PIDS[@]}"; do
-    if ! stop_pid_for_port "$label" "$pid" "$port"; then
+    if ! stop_pid_for_port "$label" "$pid" "$port" "$component"; then
       had_error=1
     fi
   done

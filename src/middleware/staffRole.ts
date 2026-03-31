@@ -33,6 +33,9 @@ const AUTH_MODE = parseAuthModeOrThrow();
 const INTERNAL_AUTH_SHARED_SECRET = process.env.INTERNAL_AUTH_SHARED_SECRET?.trim() || undefined;
 const HEADER_AUTH_BYPASS_ALLOWED =
   process.env.NODE_ENV === "test" || process.env.ALLOW_HEADER_AUTH === "1";
+const NON_TEST_HEADER_AUTH_ENABLED =
+  process.env.NODE_ENV !== "test" &&
+  (AUTH_MODE === "header" || process.env.ALLOW_HEADER_AUTH === "1");
 
 if (AUTH_MODE === "header" && process.env.NODE_ENV === "production") {
   throw new Error("Header auth mode is not allowed in production");
@@ -41,6 +44,12 @@ if (AUTH_MODE === "header" && process.env.NODE_ENV === "production") {
 if (AUTH_MODE === "header" && !HEADER_AUTH_BYPASS_ALLOWED) {
   throw new Error(
     "AUTH_MODE=header requires NODE_ENV=test or ALLOW_HEADER_AUTH=1",
+  );
+}
+
+if (NON_TEST_HEADER_AUTH_ENABLED && !INTERNAL_AUTH_SHARED_SECRET) {
+  throw new Error(
+    "Header auth outside test requires INTERNAL_AUTH_SHARED_SECRET",
   );
 }
 

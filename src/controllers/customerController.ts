@@ -22,6 +22,7 @@ import {
   updateBikeServiceSchedule,
 } from "../services/bikeServiceScheduleService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const assertOptionalBikeString = (
   value: unknown,
@@ -155,42 +156,21 @@ export const updateCustomerCommunicationPreferencesHandler = async (
 };
 
 const parseSearchTake = (value: unknown) => {
-  if (value === undefined) {
-    return 20;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(400, "take must be an integer", "INVALID_CUSTOMER_SEARCH");
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-    throw new HttpError(
-      400,
-      "take must be an integer between 1 and 100",
-      "INVALID_CUSTOMER_SEARCH",
-    );
-  }
-  return parsed;
+  return parseOptionalIntegerQuery(value, {
+    code: "INVALID_CUSTOMER_SEARCH",
+    message: "take must be an integer between 1 and 100",
+    min: 1,
+    max: 100,
+  }) ?? 20;
 };
 
 const parseOptionalFilterTake = (value: unknown): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(400, "take must be an integer", "INVALID_CUSTOMER_FILTER");
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 200) {
-    throw new HttpError(
-      400,
-      "take must be an integer between 1 and 200",
-      "INVALID_CUSTOMER_FILTER",
-    );
-  }
-
-  return parsed;
+  return parseOptionalIntegerQuery(value, {
+    code: "INVALID_CUSTOMER_FILTER",
+    message: "take must be an integer between 1 and 200",
+    min: 1,
+    max: 200,
+  });
 };
 
 export const searchCustomersHandler = async (req: Request, res: Response) => {
