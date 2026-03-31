@@ -13,7 +13,10 @@ import {
 } from "../lib/operationalLogger";
 import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx } from "./auditService";
-import { listStoreInfoSettings } from "./configurationService";
+import {
+  getNotificationSettings,
+  listStoreInfoSettings,
+} from "./configurationService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { sendEmailMessage } from "./emailService";
 import { sendSmsMessage } from "./smsService";
@@ -391,7 +394,30 @@ const isFalseLike = (value: string | null | undefined) => {
   return normalized === "0" || normalized === "false" || normalized === "off" || normalized === "no";
 };
 
-const isNotificationChannelEnabled = (channel: WorkshopNotificationChannel) => {
+const isConfiguredNotificationChannelEnabled = (
+  channel: WorkshopNotificationChannel,
+  settings: Awaited<ReturnType<typeof getNotificationSettings>>,
+) => {
+  switch (channel) {
+    case "EMAIL":
+      return settings.workshopEmailEnabled;
+    case "SMS":
+      return settings.workshopSmsEnabled;
+    case "WHATSAPP":
+      return settings.workshopWhatsappEnabled;
+    default:
+      return true;
+  }
+};
+
+const isNotificationChannelAvailable = (
+  channel: WorkshopNotificationChannel,
+  settings: Awaited<ReturnType<typeof getNotificationSettings>>,
+) => {
+  if (!isConfiguredNotificationChannelEnabled(channel, settings)) {
+    return false;
+  }
+
   const envKey =
     channel === "EMAIL"
       ? "WORKSHOP_NOTIFICATION_EMAIL_ENABLED"
@@ -404,6 +430,9 @@ const isNotificationChannelEnabled = (channel: WorkshopNotificationChannel) => {
 
 const buildChannelDisabledReasonMessage = (channel: WorkshopNotificationChannel) =>
   `${notificationChannelLabel(channel)} notifications are disabled, so this delivery path was skipped.`;
+
+const buildAutomationDisabledReasonMessage = () =>
+  "Automatic workshop notifications are disabled in system settings, so this delivery path was skipped.";
 
 const isCustomerChannelAllowed = (
   customer: NotificationCustomerPreferences | null | undefined,
@@ -1397,15 +1426,17 @@ const sendWorkshopNotification = async (
   decision: NotificationChannelDecision,
   options: {
     forceUniqueAttempt?: boolean;
+    notificationSettings?: Awaited<ReturnType<typeof getNotificationSettings>>;
   } = {},
 ) => {
+  const notificationSettings = options.notificationSettings ?? await getNotificationSettings();
   const rawAttemptDecision = {
     ...decision,
     dedupeKey: buildNotificationAttemptDedupeKey(decision.dedupeKey, options),
   };
   const attemptDecision =
     rawAttemptDecision.action === "send" &&
-    !isNotificationChannelEnabled(rawAttemptDecision.channel)
+    !isNotificationChannelAvailable(rawAttemptDecision.channel, notificationSettings)
       ? buildDerivedSkipDecision(rawAttemptDecision, {
           reasonCode: "CHANNEL_DISABLED",
           reasonMessage: buildChannelDisabledReasonMessage(rawAttemptDecision.channel),
@@ -1538,6 +1569,7 @@ const sendWorkshopNotification = async (
 export const deliverWorkshopNotificationEvent = async (
   input: WorkshopNotificationEventInput,
 ) => {
+  const notificationSettings = await getNotificationSettings();
   const decisions =
     input.type === "QUOTE_READY"
       ? await buildQuoteReadyDecisions(input.workshopJobId, input.workshopEstimateId)
@@ -1562,7 +1594,12 @@ export const deliverWorkshopNotificationEvent = async (
 
   for (const decision of [...decisions].sort((left, right) => left.strategyRank - right.strategyRank)) {
     const automaticDecision =
-      deliveredChannel && decision.action === "send"
+      !notificationSettings.workshopAutoSendEnabled && decision.action === "send"
+        ? buildDerivedSkipDecision(decision, {
+            reasonCode: "AUTOMATION_DISABLED",
+            reasonMessage: buildAutomationDisabledReasonMessage(),
+          })
+        : deliveredChannel && decision.action === "send"
         ? buildDerivedSkipDecision(decision, {
             reasonCode: "FALLBACK_NOT_REQUIRED",
             reasonMessage: buildFallbackNotRequiredReasonMessage(
@@ -1576,6 +1613,7 @@ export const deliverWorkshopNotificationEvent = async (
       input.workshopJobId,
       eventType,
       automaticDecision,
+      { notificationSettings },
     );
     results.push(result);
 
@@ -1617,6 +1655,7 @@ export const resendWorkshopNotificationForJob = async (
   input: ResendWorkshopNotificationInput,
 ) => {
   const job = await ensureWorkshopJobExists(workshopJobId);
+  const notificationSettings = await getNotificationSettings();
 
   const delivery =
     input.eventType === "QUOTE_READY"
@@ -1647,6 +1686,7 @@ export const resendWorkshopNotificationForJob = async (
 
           return sendWorkshopNotification(workshopJobId, "QUOTE_READY", emailDecision, {
             forceUniqueAttempt: true,
+            notificationSettings,
           });
         })()
       : await (async () => {
@@ -1667,6 +1707,7 @@ export const resendWorkshopNotificationForJob = async (
             emailDecision,
             {
               forceUniqueAttempt: true,
+              notificationSettings,
             },
           );
         })();

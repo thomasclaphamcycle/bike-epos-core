@@ -65,7 +65,15 @@ const SETTINGS_KEYS = [
   "pos.barcodeSearchAutoFocus",
   "workshop.defaultJobDurationMinutes",
   "workshop.defaultDepositPence",
+  "workshop.maxBookingsPerDay",
+  "workshop.manageTokenTtlDays",
+  "workshop.requestTimingMessage",
+  "notifications.workshopAutoSendEnabled",
+  "notifications.workshopEmailEnabled",
+  "notifications.workshopSmsEnabled",
+  "notifications.workshopWhatsappEnabled",
   "operations.lowStockThreshold",
+  "operations.dashboardWeatherEnabled",
 ];
 
 const fetchJson = async (path, options = {}) => {
@@ -110,18 +118,79 @@ const run = async () => {
     assert.equal(defaultRes.json.settings.store.latitude, null);
     assert.equal(defaultRes.json.settings.store.longitude, null);
     assert.equal(defaultRes.json.settings.pos.defaultTaxRatePercent, 20);
+    assert.equal(defaultRes.json.settings.workshop.defaultJobDurationMinutes, 60);
     assert.equal(defaultRes.json.settings.workshop.defaultDepositPence, 1000);
+    assert.equal(defaultRes.json.settings.workshop.maxBookingsPerDay, 8);
+    assert.equal(defaultRes.json.settings.workshop.manageTokenTtlDays, 30);
+    assert.equal(
+      defaultRes.json.settings.workshop.requestTimingMessage,
+      "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.",
+    );
+    assert.equal(defaultRes.json.settings.notifications.workshopAutoSendEnabled, true);
+    assert.equal(defaultRes.json.settings.notifications.workshopEmailEnabled, true);
+    assert.equal(defaultRes.json.settings.notifications.workshopSmsEnabled, true);
+    assert.equal(defaultRes.json.settings.notifications.workshopWhatsappEnabled, true);
     assert.equal(defaultRes.json.settings.operations.lowStockThreshold, 3);
+    assert.equal(defaultRes.json.settings.operations.dashboardWeatherEnabled, true);
 
     const publicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
     assert.equal(publicConfigRes.status, 200, JSON.stringify(publicConfigRes.json));
     assert.equal(publicConfigRes.json.config.store.name, "Bike EPOS");
     assert.equal(publicConfigRes.json.config.store.defaultCurrency, "GBP");
     assert.equal(publicConfigRes.json.config.workshop.defaultDepositPence, 1000);
+    assert.equal(publicConfigRes.json.config.workshop.maxBookingsPerDay, 8);
+    assert.equal(publicConfigRes.json.config.operations.dashboardWeatherEnabled, true);
     assert.equal("vatNumber" in publicConfigRes.json.config.store, false);
     assert.equal("companyNumber" in publicConfigRes.json.config.store, false);
     assert.equal("latitude" in publicConfigRes.json.config.store, false);
     assert.equal("longitude" in publicConfigRes.json.config.store, false);
+    assert.equal("manageTokenTtlDays" in publicConfigRes.json.config.workshop, false);
+    assert.equal("notifications" in publicConfigRes.json.config, false);
+
+    await prisma.receiptSettings.upsert({
+      where: { id: 1 },
+      create: {
+        id: 1,
+        shopName: "Legacy Workshop Name",
+        shopAddress: "99 Legacy Lane",
+        vatNumber: "GBLEGACY123",
+        footerText: "Legacy footer",
+      },
+      update: {
+        shopName: "Legacy Workshop Name",
+        shopAddress: "99 Legacy Lane",
+        vatNumber: "GBLEGACY123",
+        footerText: "Legacy footer",
+      },
+    });
+    await prisma.bookingSettings.upsert({
+      where: { id: 1 },
+      create: {
+        id: 1,
+        minBookableDate: new Date("2026-01-01T00:00:00.000Z"),
+        maxBookingsPerDay: 11,
+        defaultDepositPence: 1750,
+      },
+      update: {
+        maxBookingsPerDay: 11,
+        defaultDepositPence: 1750,
+      },
+    });
+
+    const legacyFallbackRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
+    assert.equal(legacyFallbackRes.status, 200, JSON.stringify(legacyFallbackRes.json));
+    assert.equal(legacyFallbackRes.json.settings.store.name, "Legacy Workshop Name");
+    assert.equal(legacyFallbackRes.json.settings.store.businessName, "Legacy Workshop Name");
+    assert.equal(legacyFallbackRes.json.settings.store.vatNumber, "GBLEGACY123");
+    assert.equal(legacyFallbackRes.json.settings.store.footerText, "Legacy footer");
+    assert.equal(legacyFallbackRes.json.settings.workshop.defaultDepositPence, 1750);
+    assert.equal(legacyFallbackRes.json.settings.workshop.maxBookingsPerDay, 11);
+
+    const legacyPublicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
+    assert.equal(legacyPublicConfigRes.status, 200, JSON.stringify(legacyPublicConfigRes.json));
+    assert.equal(legacyPublicConfigRes.json.config.store.name, "Legacy Workshop Name");
+    assert.equal(legacyPublicConfigRes.json.config.workshop.defaultDepositPence, 1750);
+    assert.equal(legacyPublicConfigRes.json.config.workshop.maxBookingsPerDay, 11);
 
     const patchRes = await fetchJson("/api/settings", {
       method: "PATCH",
@@ -167,9 +236,19 @@ const run = async () => {
         workshop: {
           defaultJobDurationMinutes: 75,
           defaultDepositPence: 1500,
+          maxBookingsPerDay: 9,
+          manageTokenTtlDays: 45,
+          requestTimingMessage: "Pick a preferred workshop date and we will confirm the final slot after review.",
+        },
+        notifications: {
+          workshopAutoSendEnabled: false,
+          workshopEmailEnabled: true,
+          workshopSmsEnabled: false,
+          workshopWhatsappEnabled: true,
         },
         operations: {
           lowStockThreshold: 6,
+          dashboardWeatherEnabled: false,
         },
       }),
     });
@@ -200,22 +279,41 @@ const run = async () => {
     assert.equal(patchRes.json.settings.pos.barcodeSearchAutoFocus, false);
     assert.equal(patchRes.json.settings.workshop.defaultJobDurationMinutes, 75);
     assert.equal(patchRes.json.settings.workshop.defaultDepositPence, 1500);
+    assert.equal(patchRes.json.settings.workshop.maxBookingsPerDay, 9);
+    assert.equal(patchRes.json.settings.workshop.manageTokenTtlDays, 45);
+    assert.equal(
+      patchRes.json.settings.workshop.requestTimingMessage,
+      "Pick a preferred workshop date and we will confirm the final slot after review.",
+    );
+    assert.equal(patchRes.json.settings.notifications.workshopAutoSendEnabled, false);
+    assert.equal(patchRes.json.settings.notifications.workshopEmailEnabled, true);
+    assert.equal(patchRes.json.settings.notifications.workshopSmsEnabled, false);
+    assert.equal(patchRes.json.settings.notifications.workshopWhatsappEnabled, true);
     assert.equal(patchRes.json.settings.operations.lowStockThreshold, 6);
+    assert.equal(patchRes.json.settings.operations.dashboardWeatherEnabled, false);
 
     const bookingSettings = await prisma.bookingSettings.findUnique({
       where: { id: 1 },
     });
     assert.ok(bookingSettings, "Expected workshop booking settings compatibility record to exist");
     assert.equal(bookingSettings.defaultDepositPence, 1500);
+    assert.equal(bookingSettings.maxBookingsPerDay, 9);
 
     const persistedRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(persistedRes.status, 200, JSON.stringify(persistedRes.json));
     assert.equal(persistedRes.json.settings.store.name, "CorePOS Cycles");
+    assert.equal(persistedRes.json.settings.notifications.workshopAutoSendEnabled, false);
 
     const persistedPublicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
     assert.equal(persistedPublicConfigRes.status, 200, JSON.stringify(persistedPublicConfigRes.json));
     assert.equal(persistedPublicConfigRes.json.config.store.name, "CorePOS Cycles");
     assert.equal(persistedPublicConfigRes.json.config.workshop.defaultDepositPence, 1500);
+    assert.equal(persistedPublicConfigRes.json.config.workshop.maxBookingsPerDay, 9);
+    assert.equal(
+      persistedPublicConfigRes.json.config.workshop.requestTimingMessage,
+      "Pick a preferred workshop date and we will confirm the final slot after review.",
+    );
+    assert.equal(persistedPublicConfigRes.json.config.operations.dashboardWeatherEnabled, false);
 
     const storeInfoRes = await fetchJson("/api/settings/store-info", { headers: ADMIN_HEADERS });
     assert.equal(storeInfoRes.status, 200, JSON.stringify(storeInfoRes.json));

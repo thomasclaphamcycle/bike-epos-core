@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 
 type VariantRow = {
   id: string;
@@ -121,8 +122,6 @@ type ProductImportConfirmResponse = {
   }>;
 };
 
-const LOW_STOCK_THRESHOLD = 3;
-
 type CatalogueForm = {
   productId?: string;
   variantId?: string;
@@ -158,17 +157,17 @@ const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 const formatDate = (value: string) => new Date(value).toLocaleDateString();
 const formatOptionalMoney = (pence: number | null) => (pence === null ? "-" : formatMoney(pence));
 
-const getStockStateLabel = (onHand: number) => {
+const getStockStateLabel = (onHand: number, lowStockThreshold: number) => {
   if (onHand < 0) return "Negative";
   if (onHand === 0) return "Zero Stock";
-  if (onHand <= LOW_STOCK_THRESHOLD) return "Low Stock";
+  if (onHand <= lowStockThreshold) return "Low Stock";
   return "In Stock";
 };
 
-const getStockStateClass = (onHand: number) => {
+const getStockStateClass = (onHand: number, lowStockThreshold: number) => {
   if (onHand < 0) return "stock-badge stock-state-negative";
   if (onHand === 0) return "stock-badge stock-state-zero";
-  if (onHand <= LOW_STOCK_THRESHOLD) return "stock-badge stock-state-low";
+  if (onHand <= lowStockThreshold) return "stock-badge stock-state-low";
   return "stock-badge stock-state-positive";
 };
 
@@ -185,6 +184,7 @@ const getImportStatusClass = (row: ProductImportPreviewItem) => {
 };
 
 export const ProductDataQueuePage = () => {
+  const appConfig = useAppConfig();
   const { error, success } = useToasts();
   const [variants, setVariants] = useState<VariantRow[]>([]);
   const [stockByVariantId, setStockByVariantId] = useState<Record<string, number>>({});
@@ -201,6 +201,7 @@ export const ProductDataQueuePage = () => {
   const [importCsvText, setImportCsvText] = useState("");
   const [importPreview, setImportPreview] = useState<ProductImportPreviewResponse | null>(null);
   const [importResult, setImportResult] = useState<ProductImportConfirmResponse | null>(null);
+  const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const loadVariants = async () => {
     setLoading(true);
@@ -246,14 +247,14 @@ export const ProductDataQueuePage = () => {
   }), [variants]);
 
   const stockSummary = useMemo(() => ({
-    inStock: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) > LOW_STOCK_THRESHOLD).length,
+    inStock: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) > lowStockThreshold).length,
     low: variants.filter((variant) => {
       const onHand = stockByVariantId[variant.id] ?? 0;
-      return onHand > 0 && onHand <= LOW_STOCK_THRESHOLD;
+      return onHand > 0 && onHand <= lowStockThreshold;
     }).length,
     zero: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) === 0).length,
     negative: variants.filter((variant) => (stockByVariantId[variant.id] ?? 0) < 0).length,
-  }), [stockByVariantId, variants]);
+  }), [lowStockThreshold, stockByVariantId, variants]);
 
   const startEdit = (variant: VariantRow) => {
     setEditForm({
@@ -887,7 +888,7 @@ export const ProductDataQueuePage = () => {
           <div className="metric-card">
             <span className="metric-label">Low stock</span>
             <strong className="metric-value">{stockSummary.low}</strong>
-            <span className="dashboard-metric-detail">On hand greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}</span>
+            <span className="dashboard-metric-detail">On hand greater than 0 and less than or equal to {lowStockThreshold}</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Zero stock</span>
@@ -942,7 +943,7 @@ export const ProductDataQueuePage = () => {
                     <td className="mono-text">{variant.sku}</td>
                     <td className="numeric-cell">{onHand}</td>
                     <td>
-                      <span className={getStockStateClass(onHand)}>{getStockStateLabel(onHand)}</span>
+                      <span className={getStockStateClass(onHand, lowStockThreshold)}>{getStockStateLabel(onHand, lowStockThreshold)}</span>
                     </td>
                     <td>
                       <div className="actions-inline">

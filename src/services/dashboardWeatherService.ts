@@ -1,4 +1,7 @@
-import { listShopSettings } from "./configurationService";
+import {
+  getOperationsSettings,
+  listStoreInfoSettings,
+} from "./configurationService";
 
 type WeatherStatus = "ready" | "missing_location" | "unavailable";
 
@@ -78,6 +81,7 @@ type ResolvedStoreLocation = {
 
 type StoreLocationResolution =
   | { status: "ready"; location: ResolvedStoreLocation }
+  | { status: "disabled" }
   | { status: "missing" }
   | { status: "unresolvable" };
 
@@ -402,8 +406,32 @@ const resolveGeocodedLocation = async (query: string): Promise<ResolvedStoreLoca
 };
 
 const resolveStoreLocation = async (): Promise<StoreLocationResolution> => {
-  const settings = await listShopSettings();
-  const postcode = normalizePostcode(settings.store.postcode);
+  const [operationsSettings, store] = await Promise.all([
+    getOperationsSettings(),
+    listStoreInfoSettings(),
+  ]);
+
+  if (!operationsSettings.dashboardWeatherEnabled) {
+    return { status: "disabled" };
+  }
+
+  if (store.latitude !== null && store.longitude !== null) {
+    return {
+      status: "ready",
+      location: {
+        latitude: store.latitude,
+        longitude: store.longitude,
+        label:
+          buildLocationLabel(
+            store.name || store.businessName || "Store",
+            store.city || store.region || undefined,
+            store.country || undefined,
+          ) || "Store",
+      },
+    };
+  }
+
+  const postcode = normalizePostcode(store.postcode);
 
   if (!postcode) {
     return { status: "missing" };
@@ -436,6 +464,12 @@ const buildMissingLocationResponse = (): DashboardWeatherResponse => ({
   message: "Weather unavailable. Set the store postcode in Settings.",
 });
 
+const buildDisabledWeatherResponse = (): DashboardWeatherResponse => ({
+  status: "unavailable",
+  source: "open-meteo",
+  message: "Weather is disabled in system settings.",
+});
+
 const buildUnresolvableLocationResponse = (): DashboardWeatherResponse => ({
   status: "unavailable",
   source: "open-meteo",
@@ -444,6 +478,9 @@ const buildUnresolvableLocationResponse = (): DashboardWeatherResponse => ({
 
 const getStubWeather = async (): Promise<DashboardWeatherResponse> => {
   const resolution = await resolveStoreLocation();
+  if (resolution.status === "disabled") {
+    return buildDisabledWeatherResponse();
+  }
   if (resolution.status === "missing") {
     return buildMissingLocationResponse();
   }
@@ -518,6 +555,9 @@ export const getDashboardWeather = async (): Promise<DashboardWeatherResponse> =
 
   try {
     const resolution = await resolveStoreLocation();
+    if (resolution.status === "disabled") {
+      return buildDisabledWeatherResponse();
+    }
     if (resolution.status === "missing") {
       return buildMissingLocationResponse();
     }

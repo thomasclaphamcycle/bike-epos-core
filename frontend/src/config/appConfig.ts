@@ -38,9 +38,12 @@ export type AppConfig = {
   workshop: {
     defaultJobDurationMinutes: number;
     defaultDepositPence: number;
+    maxBookingsPerDay: number;
+    requestTimingMessage: string;
   };
   operations: {
     lowStockThreshold: number;
+    dashboardWeatherEnabled: boolean;
   };
 };
 
@@ -84,9 +87,13 @@ const DEFAULT_APP_CONFIG: AppConfig = {
   workshop: {
     defaultJobDurationMinutes: 60,
     defaultDepositPence: 1000,
+    maxBookingsPerDay: 8,
+    requestTimingMessage:
+      "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.",
   },
   operations: {
     lowStockThreshold: 3,
+    dashboardWeatherEnabled: true,
   },
 };
 

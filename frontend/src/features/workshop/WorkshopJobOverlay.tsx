@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client";
 import { useToasts } from "../../components/ToastProvider";
+import { useAppConfig } from "../../config/appConfig";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
   getWorkshopDisplayStatus,
@@ -1070,12 +1071,14 @@ const createScheduleDraft = ({
   scheduledEndAt,
   durationMinutes,
   timeZone,
+  fallbackDurationMinutes,
 }: {
   scheduledDate: string | null | undefined;
   scheduledStartAt: string | null | undefined;
   scheduledEndAt: string | null | undefined;
   durationMinutes?: number | null | undefined;
   timeZone?: string;
+  fallbackDurationMinutes: number;
 }): WorkshopJobOverlayScheduleDraft => {
   const startTime = toTimeInputValue(scheduledStartAt, timeZone) || "10:00";
   const defaultDurationMinutes = getPreferredScheduleDurationMinutes({
@@ -1083,6 +1086,7 @@ const createScheduleDraft = ({
     scheduledStartAt,
     scheduledEndAt,
     timeZone,
+    fallbackMinutes: fallbackDurationMinutes,
   });
 
   return {
@@ -1156,6 +1160,7 @@ export const WorkshopJobOverlay = ({
   technicianOptions = [],
   onJobChanged,
 }: WorkshopJobOverlayProps) => {
+  const appConfig = useAppConfig();
   const { success, error } = useToasts();
   const resolvedInitialTab = resolveWorkshopOverlayInitialTab({
     fullJobPath,
@@ -1199,6 +1204,7 @@ export const WorkshopJobOverlay = ({
       scheduledEndAt: summary?.scheduledEndAt || null,
       durationMinutes: summary?.durationMinutes || null,
       timeZone,
+      fallbackDurationMinutes: appConfig.workshop.defaultJobDurationMinutes,
     }),
   );
   const [collapsedSections, setCollapsedSections] = useState<Record<JobWorkspaceSectionKey, boolean>>(
@@ -1315,9 +1321,11 @@ export const WorkshopJobOverlay = ({
         scheduledEndAt: details?.job.scheduledEndAt || summary?.scheduledEndAt || null,
         durationMinutes: details?.job.durationMinutes || summary?.durationMinutes || null,
         timeZone,
+        fallbackDurationMinutes: appConfig.workshop.defaultJobDurationMinutes,
       }),
     );
   }, [
+    appConfig.workshop.defaultJobDurationMinutes,
     details?.job.scheduledDate,
     details?.job.scheduledStartAt,
     details?.job.scheduledEndAt,
@@ -1462,12 +1470,14 @@ export const WorkshopJobOverlay = ({
     scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
     durationMinutes: overlayJob?.durationMinutes || summary?.durationMinutes || null,
     timeZone,
+    fallbackDurationMinutes: appConfig.workshop.defaultJobDurationMinutes,
   });
   const scheduleAutoDurationMinutes = getPreferredScheduleDurationMinutes({
     durationMinutes: overlayJob?.durationMinutes || summary?.durationMinutes || null,
     scheduledStartAt: overlayJob?.scheduledStartAt || summary?.scheduledStartAt || null,
     scheduledEndAt: overlayJob?.scheduledEndAt || summary?.scheduledEndAt || null,
     timeZone,
+    fallbackMinutes: appConfig.workshop.defaultJobDurationMinutes,
   });
   const displayWorkflowSummary = getWorkshopTechnicianWorkflowSummary({
     rawStatus: rawOverlayStatus,
@@ -1748,6 +1758,7 @@ export const WorkshopJobOverlay = ({
           scheduledEndAt: response.job.scheduledEndAt,
           durationMinutes: response.job.durationMinutes,
           timeZone,
+          fallbackDurationMinutes: appConfig.workshop.defaultJobDurationMinutes,
         }),
       );
       setIsEditingSchedule(false);

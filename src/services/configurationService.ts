@@ -47,9 +47,19 @@ export type ShopSettings = {
   workshop: {
     defaultJobDurationMinutes: number;
     defaultDepositPence: number;
+    maxBookingsPerDay: number;
+    manageTokenTtlDays: number;
+    requestTimingMessage: string;
+  };
+  notifications: {
+    workshopAutoSendEnabled: boolean;
+    workshopEmailEnabled: boolean;
+    workshopSmsEnabled: boolean;
+    workshopWhatsappEnabled: boolean;
   };
   operations: {
     lowStockThreshold: number;
+    dashboardWeatherEnabled: boolean;
   };
 };
 
@@ -58,6 +68,9 @@ export type ShopSettingsPatch = Partial<{
 }>;
 
 export type StoreInfoSettings = ShopSettings["store"];
+export type WorkshopSettings = ShopSettings["workshop"];
+export type NotificationSettings = ShopSettings["notifications"];
+export type OperationsSettings = ShopSettings["operations"];
 export type PublicShopConfig = {
   store: Pick<
     StoreInfoSettings,
@@ -79,13 +92,34 @@ export type PublicShopConfig = {
     | "openingHours"
   >;
   pos: ShopSettings["pos"];
-  workshop: ShopSettings["workshop"];
-  operations: ShopSettings["operations"];
+  workshop: Pick<
+    WorkshopSettings,
+    | "defaultJobDurationMinutes"
+    | "defaultDepositPence"
+    | "maxBookingsPerDay"
+    | "requestTimingMessage"
+  >;
+  operations: OperationsSettings;
 };
 
 const DEFAULT_RECEIPT_SHOP_ADDRESS = "123 Service Lane";
 const DEFAULT_RECEIPT_FOOTER_TEXT = "Thank you for your custom.";
 const DEFAULT_MAX_BOOKINGS_PER_DAY = 8;
+const DEFAULT_WORKSHOP_MANAGE_TOKEN_TTL_DAYS = 30;
+const DEFAULT_WORKSHOP_REQUEST_TIMING_MESSAGE =
+  "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.";
+
+type LegacySettingsFallbacks = {
+  receiptSettings?: {
+    shopName: string;
+    vatNumber: string | null;
+    footerText: string | null;
+  } | null;
+  bookingSettings?: {
+    maxBookingsPerDay: number;
+    defaultDepositPence: number;
+  } | null;
+};
 
 const normalizeTextSetting = (
   value: unknown,
@@ -420,31 +454,94 @@ const SETTINGS_DEFINITIONS = {
     validate: (value: unknown) =>
       normalizeIntegerSetting(value, "workshop.defaultDepositPence", { min: 0, max: 100000 }),
   },
+  "workshop.maxBookingsPerDay": {
+    key: "workshop.maxBookingsPerDay",
+    defaultValue: DEFAULT_MAX_BOOKINGS_PER_DAY,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "workshop.maxBookingsPerDay", { min: 1, max: 200 }),
+  },
+  "workshop.manageTokenTtlDays": {
+    key: "workshop.manageTokenTtlDays",
+    defaultValue: DEFAULT_WORKSHOP_MANAGE_TOKEN_TTL_DAYS,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "workshop.manageTokenTtlDays", { min: 1, max: 365 }),
+  },
+  "workshop.requestTimingMessage": {
+    key: "workshop.requestTimingMessage",
+    defaultValue: DEFAULT_WORKSHOP_REQUEST_TIMING_MESSAGE,
+    validate: (value: unknown) =>
+      normalizeTextSetting(value, "workshop.requestTimingMessage", { allowEmpty: false, maxLength: 400 }),
+  },
+  "notifications.workshopAutoSendEnabled": {
+    key: "notifications.workshopAutoSendEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "notifications.workshopAutoSendEnabled"),
+  },
+  "notifications.workshopEmailEnabled": {
+    key: "notifications.workshopEmailEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "notifications.workshopEmailEnabled"),
+  },
+  "notifications.workshopSmsEnabled": {
+    key: "notifications.workshopSmsEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "notifications.workshopSmsEnabled"),
+  },
+  "notifications.workshopWhatsappEnabled": {
+    key: "notifications.workshopWhatsappEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "notifications.workshopWhatsappEnabled"),
+  },
   "operations.lowStockThreshold": {
     key: "operations.lowStockThreshold",
     defaultValue: 3,
     validate: (value: unknown) =>
       normalizeIntegerSetting(value, "operations.lowStockThreshold", { min: 0, max: 1000 }),
   },
+  "operations.dashboardWeatherEnabled": {
+    key: "operations.dashboardWeatherEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "operations.dashboardWeatherEnabled"),
+  },
 } satisfies Record<string, SettingDefinition<unknown>>;
 
-const getSettingValue = <T>(rowValue: Prisma.JsonValue | undefined, definition: SettingDefinition<T>): T => {
+const getSettingValue = <T>(
+  rowValue: Prisma.JsonValue | undefined,
+  definition: SettingDefinition<T>,
+  legacyValue?: unknown,
+): T => {
   if (rowValue === undefined) {
+    if (legacyValue !== undefined) {
+      try {
+        return definition.validate(legacyValue);
+      } catch {
+        return definition.defaultValue;
+      }
+    }
+
     return definition.defaultValue;
   }
 
   return definition.validate(rowValue);
 };
 
-const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }>): ShopSettings => {
+const toSettingsSnapshot = (
+  rows: Array<{ key: string; value: Prisma.JsonValue }>,
+  legacyFallbacks: LegacySettingsFallbacks = {},
+): ShopSettings => {
   const valueByKey = new Map(rows.map((row) => [row.key, row.value]));
 
   return {
     store: {
-      name: getSettingValue(valueByKey.get("store.name"), SETTINGS_DEFINITIONS["store.name"]),
+      name: getSettingValue(
+        valueByKey.get("store.name"),
+        SETTINGS_DEFINITIONS["store.name"],
+        legacyFallbacks.receiptSettings?.shopName,
+      ),
       businessName: getSettingValue(
         valueByKey.get("store.businessName"),
         SETTINGS_DEFINITIONS["store.businessName"],
+        legacyFallbacks.receiptSettings?.shopName,
       ),
       email: getSettingValue(valueByKey.get("store.email"), SETTINGS_DEFINITIONS["store.email"]),
       phone: getSettingValue(valueByKey.get("store.phone"), SETTINGS_DEFINITIONS["store.phone"]),
@@ -465,7 +562,11 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
         valueByKey.get("store.openingHours"),
         SETTINGS_DEFINITIONS["store.openingHours"],
       ),
-      vatNumber: getSettingValue(valueByKey.get("store.vatNumber"), SETTINGS_DEFINITIONS["store.vatNumber"]),
+      vatNumber: getSettingValue(
+        valueByKey.get("store.vatNumber"),
+        SETTINGS_DEFINITIONS["store.vatNumber"],
+        legacyFallbacks.receiptSettings?.vatNumber,
+      ),
       companyNumber: getSettingValue(
         valueByKey.get("store.companyNumber"),
         SETTINGS_DEFINITIONS["store.companyNumber"],
@@ -476,7 +577,11 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
       ),
       timeZone: getSettingValue(valueByKey.get("store.timeZone"), SETTINGS_DEFINITIONS["store.timeZone"]),
       logoUrl: getSettingValue(valueByKey.get("store.logoUrl"), SETTINGS_DEFINITIONS["store.logoUrl"]),
-      footerText: getSettingValue(valueByKey.get("store.footerText"), SETTINGS_DEFINITIONS["store.footerText"]),
+      footerText: getSettingValue(
+        valueByKey.get("store.footerText"),
+        SETTINGS_DEFINITIONS["store.footerText"],
+        legacyFallbacks.receiptSettings?.footerText,
+      ),
       latitude: getSettingValue(valueByKey.get("store.latitude"), SETTINGS_DEFINITIONS["store.latitude"]),
       longitude: getSettingValue(valueByKey.get("store.longitude"), SETTINGS_DEFINITIONS["store.longitude"]),
     },
@@ -498,12 +603,48 @@ const toSettingsSnapshot = (rows: Array<{ key: string; value: Prisma.JsonValue }
       defaultDepositPence: getSettingValue(
         valueByKey.get("workshop.defaultDepositPence"),
         SETTINGS_DEFINITIONS["workshop.defaultDepositPence"],
+        legacyFallbacks.bookingSettings?.defaultDepositPence,
+      ),
+      maxBookingsPerDay: getSettingValue(
+        valueByKey.get("workshop.maxBookingsPerDay"),
+        SETTINGS_DEFINITIONS["workshop.maxBookingsPerDay"],
+        legacyFallbacks.bookingSettings?.maxBookingsPerDay,
+      ),
+      manageTokenTtlDays: getSettingValue(
+        valueByKey.get("workshop.manageTokenTtlDays"),
+        SETTINGS_DEFINITIONS["workshop.manageTokenTtlDays"],
+      ),
+      requestTimingMessage: getSettingValue(
+        valueByKey.get("workshop.requestTimingMessage"),
+        SETTINGS_DEFINITIONS["workshop.requestTimingMessage"],
+      ),
+    },
+    notifications: {
+      workshopAutoSendEnabled: getSettingValue(
+        valueByKey.get("notifications.workshopAutoSendEnabled"),
+        SETTINGS_DEFINITIONS["notifications.workshopAutoSendEnabled"],
+      ),
+      workshopEmailEnabled: getSettingValue(
+        valueByKey.get("notifications.workshopEmailEnabled"),
+        SETTINGS_DEFINITIONS["notifications.workshopEmailEnabled"],
+      ),
+      workshopSmsEnabled: getSettingValue(
+        valueByKey.get("notifications.workshopSmsEnabled"),
+        SETTINGS_DEFINITIONS["notifications.workshopSmsEnabled"],
+      ),
+      workshopWhatsappEnabled: getSettingValue(
+        valueByKey.get("notifications.workshopWhatsappEnabled"),
+        SETTINGS_DEFINITIONS["notifications.workshopWhatsappEnabled"],
       ),
     },
     operations: {
       lowStockThreshold: getSettingValue(
         valueByKey.get("operations.lowStockThreshold"),
         SETTINGS_DEFINITIONS["operations.lowStockThreshold"],
+      ),
+      dashboardWeatherEnabled: getSettingValue(
+        valueByKey.get("operations.dashboardWeatherEnabled"),
+        SETTINGS_DEFINITIONS["operations.dashboardWeatherEnabled"],
       ),
     },
   };
@@ -576,36 +717,57 @@ const syncLegacyReceiptSettingsTx = async (
 
 const syncLegacyWorkshopBookingSettingsTx = async (
   tx: Prisma.TransactionClient,
-  workshop: ShopSettings["workshop"],
+  workshop: WorkshopSettings,
 ) => {
   await tx.bookingSettings.upsert({
     where: { id: 1 },
     create: {
       id: 1,
       minBookableDate: startOfUtcDay(new Date()),
-      maxBookingsPerDay: DEFAULT_MAX_BOOKINGS_PER_DAY,
+      maxBookingsPerDay: workshop.maxBookingsPerDay,
       defaultDepositPence: workshop.defaultDepositPence,
     },
     update: {
+      maxBookingsPerDay: workshop.maxBookingsPerDay,
       defaultDepositPence: workshop.defaultDepositPence,
     },
   });
 };
 
 export const listShopSettings = async (db: SettingsClient = prisma): Promise<ShopSettings> => {
-  const rows = await db.appConfig.findMany({
-    where: {
-      key: {
-        in: Object.keys(SETTINGS_DEFINITIONS),
+  const [rows, receiptSettings, bookingSettings] = await Promise.all([
+    db.appConfig.findMany({
+      where: {
+        key: {
+          in: Object.keys(SETTINGS_DEFINITIONS),
+        },
       },
-    },
-    select: {
-      key: true,
-      value: true,
-    },
-  });
+      select: {
+        key: true,
+        value: true,
+      },
+    }),
+    db.receiptSettings.findUnique({
+      where: { id: 1 },
+      select: {
+        shopName: true,
+        vatNumber: true,
+        footerText: true,
+      },
+    }),
+    db.bookingSettings.findUnique({
+      where: { id: 1 },
+      select: {
+        maxBookingsPerDay: true,
+        defaultDepositPence: true,
+      },
+    }),
+  ]);
 
-  return toSettingsSnapshot(rows);
+  return toSettingsSnapshot(rows, {
+    receiptSettings,
+    bookingSettings,
+  });
 };
 
 export const listPublicShopConfig = async (
@@ -632,7 +794,12 @@ export const listPublicShopConfig = async (
       openingHours: settings.store.openingHours,
     },
     pos: settings.pos,
-    workshop: settings.workshop,
+    workshop: {
+      defaultJobDurationMinutes: settings.workshop.defaultJobDurationMinutes,
+      defaultDepositPence: settings.workshop.defaultDepositPence,
+      maxBookingsPerDay: settings.workshop.maxBookingsPerDay,
+      requestTimingMessage: settings.workshop.requestTimingMessage,
+    },
     operations: settings.operations,
   };
 };
@@ -643,6 +810,27 @@ export const getStoreLocaleSettings = async (db: SettingsClient = prisma) => {
     currency: settings.store.defaultCurrency,
     timeZone: settings.store.timeZone,
   };
+};
+
+export const getWorkshopSettings = async (
+  db: SettingsClient = prisma,
+): Promise<WorkshopSettings> => {
+  const settings = await listShopSettings(db);
+  return settings.workshop;
+};
+
+export const getNotificationSettings = async (
+  db: SettingsClient = prisma,
+): Promise<NotificationSettings> => {
+  const settings = await listShopSettings(db);
+  return settings.notifications;
+};
+
+export const getOperationsSettings = async (
+  db: SettingsClient = prisma,
+): Promise<OperationsSettings> => {
+  const settings = await listShopSettings(db);
+  return settings.operations;
 };
 
 export const updateShopSettings = async (
