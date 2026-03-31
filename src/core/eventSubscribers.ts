@@ -39,6 +39,25 @@ const toLogSummary = <TEventName extends DiagnosticEventName>(
   payload: CoreEventMap[TEventName],
 ) => {
   switch (eventName) {
+    case "auth.login.succeeded":
+      return {
+        userId: payload.userId,
+        authMethod: payload.authMethod,
+        resultStatus: payload.resultStatus,
+      };
+    case "payments.intent.created":
+      return {
+        paymentIntentId: payload.paymentIntentId,
+        saleId: payload.saleId ?? null,
+        provider: payload.provider ?? null,
+        resultStatus: payload.resultStatus,
+      };
+    case "payments.refund.recorded":
+      return {
+        paymentId: payload.paymentId,
+        refundId: payload.refundId,
+        resultStatus: payload.resultStatus,
+      };
     case "sale.completed":
       return {
         saleId: payload.saleId,
@@ -69,6 +88,11 @@ const toLogSummary = <TEventName extends DiagnosticEventName>(
         workshopJobId: payload.workshopJobId,
         status: payload.status,
       };
+    case "workshop.portal_message.ready":
+      return {
+        workshopJobId: payload.workshopJobId,
+        workshopMessageId: payload.workshopMessageId,
+      };
     case "stock.adjusted":
       return {
         variantId: payload.variantId,
@@ -88,6 +112,18 @@ export const registerInternalEventSubscribers = () => {
   registerReminderSubscribers();
   registerNotificationSubscribers();
 
+  on("auth.login.succeeded", (payload) => {
+    recordDiagnosticEvent("auth.login.succeeded", payload);
+  });
+
+  on("payments.intent.created", (payload) => {
+    recordDiagnosticEvent("payments.intent.created", payload);
+  });
+
+  on("payments.refund.recorded", (payload) => {
+    recordDiagnosticEvent("payments.refund.recorded", payload);
+  });
+
   on("sale.completed", (payload) => {
     recordDiagnosticEvent("sale.completed", payload);
   });
@@ -106,6 +142,10 @@ export const registerInternalEventSubscribers = () => {
 
   on("workshop.job.ready_for_collection", (payload) => {
     recordDiagnosticEvent("workshop.job.ready_for_collection", payload);
+  });
+
+  on("workshop.portal_message.ready", (payload) => {
+    recordDiagnosticEvent("workshop.portal_message.ready", payload);
   });
 
   on("stock.adjusted", (payload) => {

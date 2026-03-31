@@ -1,8 +1,8 @@
 import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
-import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
+import { emitEvent } from "../utils/domainEvent";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { ensureDefaultLocationTx } from "./locationService";
 import {
@@ -50,8 +50,11 @@ const emitSaleCompletedEvent = (payload: {
   completedAt: Date;
   totalPence?: number;
   changeDuePence?: number;
+  customerId?: string | null;
+  workshopJobId?: string | null;
+  bikeId?: string | null;
 }) => {
-  emit("sale.completed", {
+  emitEvent("sale.completed", {
     id: payload.saleId,
     type: "sale.completed",
     timestamp: new Date().toISOString(),
@@ -59,6 +62,9 @@ const emitSaleCompletedEvent = (payload: {
     completedAt: payload.completedAt.toISOString(),
     ...(payload.totalPence !== undefined ? { totalPence: payload.totalPence } : {}),
     ...(payload.changeDuePence !== undefined ? { changeDuePence: payload.changeDuePence } : {}),
+    ...(payload.customerId !== undefined ? { customerId: payload.customerId } : {}),
+    ...(payload.workshopJobId !== undefined ? { workshopJobId: payload.workshopJobId } : {}),
+    ...(payload.bikeId !== undefined ? { bikeId: payload.bikeId } : {}),
   });
 };
 
@@ -190,6 +196,7 @@ const getWorkshopJobForBasketTx = async (
     select: {
       id: true,
       customerId: true,
+      bikeId: true,
       locationId: true,
       status: true,
       completedAt: true,
@@ -657,7 +664,14 @@ export const completeSaleIfEligibleTx = async (
       changeDuePence: true,
       completedAt: true,
       receiptNumber: true,
+      customerId: true,
+      workshopJobId: true,
       createdByStaffId: true,
+      workshopJob: {
+        select: {
+          bikeId: true,
+        },
+      },
     },
   });
 
@@ -678,6 +692,9 @@ export const completeSaleIfEligibleTx = async (
       saleId: sale.id,
       completedAt: sale.completedAt,
       changeDuePence: sale.changeDuePence,
+      customerId: sale.customerId,
+      workshopJobId: sale.workshopJobId,
+      bikeId: sale.workshopJob?.bikeId ?? null,
     };
   }
 
@@ -725,6 +742,9 @@ export const completeSaleIfEligibleTx = async (
     completedAt,
     changeDuePence: updatedSale.changeDuePence,
     totalPence: sale.totalPence,
+    customerId: sale.customerId,
+    workshopJobId: sale.workshopJobId,
+    bikeId: sale.workshopJob?.bikeId ?? null,
     didComplete: true,
   };
 };
@@ -1129,19 +1149,23 @@ export const checkoutBasketToSale = async (
       created: true,
       emittedWorkshopCompletion,
       workshopJobId: workshopJob?.id ?? null,
+      customerId: sale.customerId ?? workshopJob?.customerId ?? null,
+      bikeId: workshopJob?.bikeId ?? null,
       workshopCompletedAt,
     };
   });
 
   const response = await toSaleResponse(txResult.saleId);
   if (txResult.emittedWorkshopCompletion && txResult.workshopJobId && txResult.workshopCompletedAt) {
-    emit("workshop.job.completed", {
+    emitEvent("workshop.job.completed", {
       id: txResult.workshopJobId,
       type: "workshop.job.completed",
       timestamp: new Date().toISOString(),
       workshopJobId: txResult.workshopJobId,
       status: "COMPLETED",
       completedAt: txResult.workshopCompletedAt.toISOString(),
+      ...(txResult.customerId !== undefined ? { customerId: txResult.customerId } : {}),
+      ...(txResult.bikeId !== undefined ? { bikeId: txResult.bikeId } : {}),
     });
   }
 

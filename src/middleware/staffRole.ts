@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { updateRequestContext } from "../lib/requestContext";
 import { parseCookieHeader } from "../utils/cookies";
 import { HttpError } from "../utils/http";
 import type { AuditActor } from "../services/auditService";
@@ -144,6 +145,16 @@ const toAuthenticatedUser = (
   authSource,
 });
 
+const applyResolvedUserToRequest = (req: Request, user: AuthenticatedUser) => {
+  req.user = user;
+  const actorStaffId =
+    user.authSource === "header" && user.id === "__header_anonymous__"
+      ? null
+      : user.id;
+  updateRequestContext(actorStaffId ? { actorStaffId } : {});
+  return user;
+};
+
 const resolveUserFromSession = async (req: Request): Promise<AuthenticatedUser | null> => {
   const cookies = parseCookieHeader(req.header("cookie"));
   const token = cookies[AUTH_COOKIE_NAME];
@@ -237,19 +248,22 @@ const resolveHeaderFallbackUser = async (req: Request): Promise<AuthenticatedUse
 
 const resolveAuthenticatedUser = async (req: Request): Promise<AuthenticatedUser | null> => {
   if (req.user) {
+    const actorStaffId =
+      req.user.authSource === "header" && req.user.id === "__header_anonymous__"
+        ? null
+        : req.user.id;
+    updateRequestContext(actorStaffId ? { actorStaffId } : {});
     return req.user;
   }
 
   const sessionUser = await resolveUserFromSession(req);
   if (sessionUser) {
-    req.user = sessionUser;
-    return sessionUser;
+    return applyResolvedUserToRequest(req, sessionUser);
   }
 
   const headerUser = await resolveHeaderFallbackUser(req);
   if (headerUser) {
-    req.user = headerUser;
-    return headerUser;
+    return applyResolvedUserToRequest(req, headerUser);
   }
 
   return null;

@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
+import { emitEvent } from "../utils/domainEvent";
+import { createRequestLogger } from "../utils/logger";
 import {
   authenticateWithPin,
   authenticateWithEmailPassword,
@@ -52,6 +54,7 @@ const assertBootstrapAllowed = () => {
 };
 
 export const loginHandler = async (req: Request, res: Response) => {
+  const requestLogger = createRequestLogger(req);
   const body = (req.body ?? {}) as { email?: unknown; password?: unknown };
 
   if (body.email !== undefined && typeof body.email !== "string") {
@@ -68,12 +71,27 @@ export const loginHandler = async (req: Request, res: Response) => {
   });
 
   res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
+  requestLogger.info("auth.login.succeeded", {
+    resultStatus: "succeeded",
+    userId: user.id,
+    authMethod: "password",
+  });
+  emitEvent("auth.login.succeeded", {
+    id: user.id,
+    type: "auth.login.succeeded",
+    timestamp: new Date().toISOString(),
+    actorStaffId: user.id,
+    userId: user.id,
+    authMethod: "password",
+    resultStatus: "succeeded",
+  });
   res.status(200).json({
     user,
   });
 };
 
 export const pinLoginHandler = async (req: Request, res: Response) => {
+  const requestLogger = createRequestLogger(req);
   const body = (req.body ?? {}) as { userId?: unknown; pin?: unknown };
 
   if (body.userId !== undefined && typeof body.userId !== "string") {
@@ -95,6 +113,20 @@ export const pinLoginHandler = async (req: Request, res: Response) => {
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
+    requestLogger.info("auth.login.succeeded", {
+      resultStatus: "succeeded",
+      userId: user.id,
+      authMethod: "pin",
+    });
+    emitEvent("auth.login.succeeded", {
+      id: user.id,
+      type: "auth.login.succeeded",
+      timestamp: new Date().toISOString(),
+      actorStaffId: user.id,
+      userId: user.id,
+      authMethod: "pin",
+      resultStatus: "succeeded",
+    });
     res.status(200).json({ user });
   } catch (error) {
     if (error instanceof HttpError && error.status === 401) {

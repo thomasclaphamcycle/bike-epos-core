@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
+import { EntityTimelinePanel } from "../components/EntityTimelinePanel";
 import { useToasts } from "../components/ToastProvider";
 import {
   BIKE_SERVICE_SCHEDULE_TYPE_OPTIONS,
@@ -343,6 +344,7 @@ export const CustomerProfilePage = () => {
   const [bikeForm, setBikeForm] = useState<BikeProfileFormState>(() => createEmptyBikeForm());
   const [bikeFormError, setBikeFormError] = useState<string | null>(null);
   const [savingBikeProfile, setSavingBikeProfile] = useState(false);
+  const [activityTab, setActivityTab] = useState<"overview" | "timeline">("overview");
   const [scheduleEditorMode, setScheduleEditorMode] = useState<"create" | "edit" | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [scheduleForm, setScheduleForm] = useState<BikeServiceScheduleFormState>(
@@ -1520,6 +1522,63 @@ export const CustomerProfilePage = () => {
             </div>
           </div>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Customer Activity</h2>
+            <p className="muted-text">
+              Keep the durable customer-linked domain timeline close to the sales and workshop summary.
+            </p>
+          </div>
+          <div className="workshop-job-status-panel__tabs" role="tablist" aria-label="Customer activity views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activityTab === "overview"}
+              className={`workshop-job-status-panel__tab${activityTab === "overview" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActivityTab("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activityTab === "timeline"}
+              className={`workshop-job-status-panel__tab${activityTab === "timeline" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActivityTab("timeline")}
+            >
+              Timeline
+            </button>
+          </div>
+        </div>
+
+        {activityTab === "overview" ? (
+          <>
+            <div className="job-meta-grid">
+              <div><strong>Customer:</strong> {customer?.name || "-"}</div>
+              <div><strong>Bike Records:</strong> {bikes.length}</div>
+              <div><strong>Sales Recorded:</strong> {sales.length}</div>
+              <div><strong>Workshop Jobs:</strong> {jobs.length}</div>
+              <div><strong>Latest Sale:</strong> {formatOptionalDateTime(sales[0]?.completedAt ?? sales[0]?.createdAt)}</div>
+              <div><strong>Latest Workshop Update:</strong> {formatOptionalDateTime(jobs[0]?.updatedAt)}</div>
+            </div>
+            <div className="actions-inline" style={{ marginTop: "10px" }}>
+              <Link to={`/customers/${id}/timeline`}>Open full legacy timeline</Link>
+              <span className="muted-text">
+                Domain events persist sales completion and workshop lifecycle activity linked to this customer.
+              </span>
+            </div>
+          </>
+        ) : (
+          <EntityTimelinePanel
+            entityType="CUSTOMER"
+            entityId={id}
+            hint="Persistent domain events for this customer, including linked workshop and sales milestones."
+            emptyState="No persistent domain events have been recorded for this customer yet."
+          />
+        )}
       </section>
 
       <section className="card">

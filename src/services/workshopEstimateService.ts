@@ -9,10 +9,10 @@ import {
   WorkshopJobStatus,
   WorkshopNotificationEventType,
 } from "@prisma/client";
-import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
+import { emitEvent } from "../utils/domainEvent";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { buildWorkshopStatusAuditMetadata } from "./workshopStatusService";
 import { buildCustomerBikeDisplayName } from "./customerBikeService";
@@ -1032,6 +1032,7 @@ const ensureWorkshopJobWithLinesTx = async (
     where: { id: workshopJobId },
     select: {
       id: true,
+      customerId: true,
       bikeId: true,
       bikeDescription: true,
       assignedStaffId: true,
@@ -1538,6 +1539,8 @@ export const setWorkshopEstimateStatus = async (
         estimate: toEstimateResponse(created),
         job: {
           id: workshopJobId,
+          customerId: job.customerId,
+          bikeId: job.bikeId,
           status: toJobStatus,
         },
         idempotent: false,
@@ -1554,6 +1557,8 @@ export const setWorkshopEstimateStatus = async (
           estimate: toEstimateResponse(currentEstimate),
           job: {
             id: workshopJobId,
+            customerId: job.customerId,
+            bikeId: job.bikeId,
             status: job.status,
           },
           idempotent: true,
@@ -1583,6 +1588,8 @@ export const setWorkshopEstimateStatus = async (
           estimate: toEstimateResponse(currentEstimate),
           job: {
             id: workshopJobId,
+            customerId: job.customerId,
+            bikeId: job.bikeId,
             status: job.status,
           },
           idempotent: true,
@@ -1611,6 +1618,8 @@ export const setWorkshopEstimateStatus = async (
           estimate: toEstimateResponse(currentEstimate),
           job: {
             id: workshopJobId,
+            customerId: job.customerId,
+            bikeId: job.bikeId,
             status: job.status,
           },
           idempotent: true,
@@ -1650,6 +1659,8 @@ export const setWorkshopEstimateStatus = async (
       estimate: toEstimateResponse(nextEstimate),
       job: {
         id: workshopJobId,
+        customerId: job.customerId,
+        bikeId: job.bikeId,
         status: toJobStatus,
       },
       idempotent: false,
@@ -1657,13 +1668,15 @@ export const setWorkshopEstimateStatus = async (
   });
 
   if (!result.idempotent && targetStatus === "PENDING_APPROVAL") {
-    emit("workshop.quote.ready", {
+    emitEvent("workshop.quote.ready", {
       id: result.estimate.id,
       type: "workshop.quote.ready",
       timestamp: new Date().toISOString(),
       workshopJobId: result.job.id,
       workshopEstimateId: result.estimate.id,
       estimateVersion: result.estimate.version,
+      customerId: result.job.customerId,
+      bikeId: result.job.bikeId,
       ...(result.estimate.customerQuote?.publicPath
         ? { quotePublicPath: result.estimate.customerQuote.publicPath }
         : {}),

@@ -33,6 +33,7 @@ const baselineSteps = [
   "test:m77",
   "test:m78",
   "test:m83",
+  "test:domain-events",
   "test:security",
   "test:sale-customer-capture",
   // Current management-reporting surfaces

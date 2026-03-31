@@ -1,7 +1,7 @@
 import { Prisma, WorkshopJobNoteVisibility, WorkshopJobStatus } from "@prisma/client";
-import { emit } from "../core/events";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { setWorkshopEstimateStatus } from "./workshopEstimateService";
@@ -609,6 +609,8 @@ export const changeWorkshopJobStatus = async (
       return {
         job: {
           id: job.id,
+          customerId: job.customerId,
+          bikeId: job.bikeId,
           status: job.status,
           rawStatus: job.status,
           cancelledAt: job.cancelledAt,
@@ -620,6 +622,7 @@ export const changeWorkshopJobStatus = async (
         idempotent: true,
         emittedStage: targetStage,
         stageChanged: false,
+        saleId: job.sale?.id ?? null,
       };
     }
 
@@ -682,6 +685,8 @@ export const changeWorkshopJobStatus = async (
     return {
       job: {
         id: updated.id,
+        customerId: updated.customerId,
+        bikeId: updated.bikeId,
         status: updated.status,
         rawStatus: updated.status,
         cancelledAt: updated.cancelledAt,
@@ -693,6 +698,7 @@ export const changeWorkshopJobStatus = async (
       idempotent: false,
       emittedStage: targetStage,
       stageChanged: fromStage !== targetStage,
+      saleId: job.sale?.id ?? null,
     };
   });
 
@@ -708,23 +714,29 @@ export const changeWorkshopJobStatus = async (
   });
 
   if (!result.idempotent && result.stageChanged && result.emittedStage === "COMPLETED") {
-    emit("workshop.job.completed", {
+    emitEvent("workshop.job.completed", {
       id: result.job.id,
       type: "workshop.job.completed",
       timestamp: new Date().toISOString(),
       workshopJobId: result.job.id,
       status: result.job.status,
       ...(result.job.completedAt ? { completedAt: result.job.completedAt.toISOString() } : {}),
+      customerId: result.job.customerId,
+      bikeId: result.job.bikeId,
+      saleId: result.saleId ?? null,
     });
   }
 
   if (!result.idempotent && result.stageChanged && result.emittedStage === "READY") {
-    emit("workshop.job.ready_for_collection", {
+    emitEvent("workshop.job.ready_for_collection", {
       id: result.job.id,
       type: "workshop.job.ready_for_collection",
       timestamp: new Date().toISOString(),
       workshopJobId: result.job.id,
       status: result.job.status,
+      customerId: result.job.customerId,
+      bikeId: result.job.bikeId,
+      saleId: result.saleId ?? null,
     });
   }
 

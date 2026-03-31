@@ -10222,6 +10222,116 @@ body.rota-row-drag-copy-active {
   line-height: 1.35;
 }
 
+.workshop-job-status-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.workshop-job-status-panel__tabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eef3f8;
+}
+
+.workshop-job-status-panel__tab {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #476073;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.workshop-job-status-panel__tab:hover {
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.workshop-job-status-panel__tab--active {
+  background: #ffffff;
+  color: #173042;
+  box-shadow: 0 6px 16px rgba(19, 39, 58, 0.08);
+}
+
+.workshop-job-event-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-job-event-timeline__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.workshop-job-event-timeline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 6px;
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-job-event-timeline__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.workshop-job-event-timeline__item::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 18px;
+  bottom: -14px;
+  width: 2px;
+  border-radius: 999px;
+  background: #d9e3ed;
+}
+
+.workshop-job-event-timeline__item:last-child::before {
+  display: none;
+}
+
+.workshop-job-event-timeline__marker {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 999px;
+  border: 2px solid #8ea7bc;
+  background: #f8fbfd;
+  box-shadow: 0 0 0 4px rgba(226, 235, 243, 0.65);
+}
+
+.workshop-job-event-timeline__content {
+  display: grid;
+  gap: 6px;
+  padding: 0 0 8px;
+}
+
+.workshop-job-event-timeline__content p {
+  margin: 0;
+  color: #4f6070;
+  line-height: 1.4;
+}
+
+.workshop-job-event-timeline__item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
 .job-workflow-panel {
   margin-bottom: 12px;
 }

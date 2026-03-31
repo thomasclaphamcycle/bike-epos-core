@@ -59,12 +59,14 @@ import { staffDirectoryRouter } from "./routes/staffDirectoryRoutes";
 import { publicCustomerCaptureRouter } from "./routes/publicCustomerCaptureRoutes";
 import { publicWorkshopQuoteRouter } from "./routes/publicWorkshopQuoteRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
+import { eventRouter } from "./routes/eventRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
+import { requestContextMiddleware } from "./middleware/requestContext";
 import { requestLoggingMiddleware } from "./middleware/requestLogging";
 import { enforceAuthMode, requireRoleAtLeast } from "./middleware/staffRole";
-import { isCorePosDebugEnabled, logCorePosDebug, logCorePosError, logCorePosEvent } from "./lib/operationalLogger";
 import { HttpError } from "./utils/http";
+import { logger } from "./utils/logger";
 import { bootstrapHandler } from "./controllers/authController";
 import { registerInternalEventSubscribers } from "./core/eventSubscribers";
 
@@ -84,6 +86,7 @@ const resolveVersion = () => {
 const app = express();
 const appVersion = resolveVersion();
 registerInternalEventSubscribers();
+app.use(requestContextMiddleware);
 app.use(requestLoggingMiddleware);
 app.use(express.json({ limit: "12mb" }));
 app.use(enforceAuthMode);
@@ -254,6 +257,7 @@ app.use("/api/management/cash", managementCashRouter);
 app.use("/api/public", publicReceiptUploadRouter);
 app.use("/api/public", publicCustomerCaptureRouter);
 app.use("/api/public", publicWorkshopQuoteRouter);
+app.use("/api/events", eventRouter);
 app.use("/api/workshop", workshopRouter);
 app.use("/api/workshop-jobs", workshopJobPartRouter);
 app.use("/api/workshop-bookings", workshopBookingRouter);
@@ -325,14 +329,13 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
     return shutdownPromise;
   }
 
-  logCorePosEvent(
+  logger.warn(
     "process.signal",
     {
       resultStatus: "received",
       signal,
       pid: process.pid,
     },
-    "warn",
   );
 
   shutdownPromise = (async () => {
@@ -340,15 +343,15 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
       if (httpServer?.closeAllConnections) {
         httpServer.closeAllConnections();
       }
-      logCorePosEvent(
+      logger.error(
         "server.shutdown.force_exit",
+        new Error("Server shutdown timed out"),
         {
           resultStatus: "timeout",
           signal,
           pid: process.pid,
           timeoutMs: shutdownTimeoutMs,
         },
-        "error",
       );
       process.exit(1);
     }, shutdownTimeoutMs);
@@ -358,19 +361,18 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
       await closeHttpServer();
       await prisma.$disconnect();
       clearTimeout(forceExitTimer);
-      logCorePosEvent(
+      logger.warn(
         "server.shutdown.complete",
         {
           resultStatus: "completed",
           signal,
           pid: process.pid,
         },
-        "warn",
       );
       process.exit(0);
     } catch (error) {
       clearTimeout(forceExitTimer);
-      logCorePosError(
+      logger.error(
         "server.shutdown.failed",
         error,
         {
@@ -378,7 +380,6 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
           signal,
           pid: process.pid,
         },
-        "error",
       );
       process.exit(1);
     }
@@ -389,25 +390,23 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
 
 const registerRuntimeDiagnostics = () => {
   process.on("unhandledRejection", (reason) => {
-    logCorePosError(
+    logger.error(
       "process.unhandled_rejection",
       reason,
       {
         resultStatus: "unhandled",
       },
-      "error",
     );
   });
 
   process.on("uncaughtExceptionMonitor", (error, origin) => {
-    logCorePosError(
+    logger.error(
       "process.uncaught_exception",
       error,
       {
         resultStatus: "unhandled",
         origin,
       },
-      "error",
     );
   });
 
@@ -451,14 +450,12 @@ const startServer = async () => {
     startupPayload.migrationStatus =
       typeof migrationCheck?.status === "string" ? migrationCheck.status : "unknown";
 
-    if (isCorePosDebugEnabled()) {
-      logCorePosDebug("server.startup.preflight", {
-        ...startupPayload,
-        checks,
-      });
-    }
+    logger.debug("server.startup.preflight", {
+      ...startupPayload,
+      checks,
+    });
 
-    logCorePosEvent("server.startup.preflight", {
+    logger.info("server.startup.preflight", {
       ...startupPayload,
       resultStatus:
         startupPayload.databaseStatus === "ok" && startupPayload.migrationStatus === "ok"
@@ -468,19 +465,18 @@ const startServer = async () => {
   } catch (error) {
     startupPayload.databaseStatus = "error";
     startupPayload.migrationStatus = "error";
-    logCorePosError(
+    logger.error(
       "server.startup.preflight_failed",
       error,
       {
         ...startupPayload,
         resultStatus: "failed",
       },
-      "error",
     );
   }
 
   httpServer = app.listen(port, () => {
-    logCorePosEvent("server.listening", {
+    logger.info("server.listening", {
       ...startupPayload,
       resultStatus: "succeeded",
       url: `http://localhost:${port}`,

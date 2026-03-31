@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
-import { emit } from "../core/events";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
 import { assertNonNegativeProjectedStockTx } from "./inventoryLedgerService";
 import { ensureVariantExistsById } from "./productService";
@@ -327,7 +327,7 @@ export const createStockAdjustmentTx = async (
 };
 
 export const emitStockAdjusted = (result: StockAdjustmentResult) => {
-  emit("stock.adjusted", {
+  emitEvent("stock.adjusted", {
     id: result.entry.id,
     type: "stock.adjusted",
     timestamp: result.entry.createdAt.toISOString(),
