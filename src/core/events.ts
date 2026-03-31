@@ -56,12 +56,36 @@ export type CoreEventMap = {
     customerId?: string | null;
     bikeId?: string | null;
   };
+  "workshop.estimate.decided": CoreEventEnvelope<"workshop.estimate.decided"> & {
+    workshopJobId: string;
+    workshopEstimateId: string;
+    estimateVersion: number;
+    decisionStatus: "APPROVED" | "REJECTED";
+    decisionSource?: "STAFF" | "CUSTOMER" | null;
+    customerId?: string | null;
+    bikeId?: string | null;
+  };
+  "workshop.job.status_changed": CoreEventEnvelope<"workshop.job.status_changed"> & {
+    workshopJobId: string;
+    fromStatus: string;
+    toStatus: string;
+    customerId?: string | null;
+    bikeId?: string | null;
+    saleId?: string | null;
+  };
   "workshop.job.ready_for_collection": CoreEventEnvelope<"workshop.job.ready_for_collection"> & {
     workshopJobId: string;
     status: string;
     customerId?: string | null;
     bikeId?: string | null;
     saleId?: string | null;
+  };
+  "workshop.note.added": CoreEventEnvelope<"workshop.note.added"> & {
+    workshopJobId: string;
+    workshopJobNoteId: string;
+    visibility: "INTERNAL" | "CUSTOMER";
+    customerId?: string | null;
+    bikeId?: string | null;
   };
   "workshop.portal_message.ready": CoreEventEnvelope<"workshop.portal_message.ready"> & {
     workshopJobId: string;
@@ -88,7 +112,10 @@ export const CORE_EVENT_NAMES = [
   "purchaseOrder.received",
   "workshop.job.completed",
   "workshop.quote.ready",
+  "workshop.estimate.decided",
+  "workshop.job.status_changed",
   "workshop.job.ready_for_collection",
+  "workshop.note.added",
   "workshop.portal_message.ready",
   "stock.adjusted",
 ] as const satisfies readonly CoreEventName[];

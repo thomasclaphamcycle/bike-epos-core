@@ -12293,6 +12293,34 @@ body.rota-row-drag-copy-active {
   border-color: #c5d8eb;
 }
 
+.bike-service-job-card__preview {
+  color: #344b5d;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.bike-service-job-card__commercial {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  color: #365061;
+  font-size: 0.9rem;
+}
+
+.bike-service-job-card__commercial-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #e5f4ea;
+  color: #1f6848;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .bike-service-job-card__details {
   border-top: 1px solid #e1e8ef;
   padding-top: 10px;

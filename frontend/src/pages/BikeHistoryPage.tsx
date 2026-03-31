@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { EntityTimelinePanel } from "../components/EntityTimelinePanel";
 import { useToasts } from "../components/ToastProvider";
+import { toBackendUrl } from "../utils/backendUrl";
 import {
   bikeServiceScheduleDueStatusClass,
   bikeServiceScheduleDueStatusLabel,
@@ -107,15 +108,39 @@ type BikeHistoryEntry = {
     approvedAt: string | null;
     rejectedAt: string | null;
     supersededAt: string | null;
+    decisionSource: "STAFF" | "CUSTOMER" | null;
     createdAt: string;
     updatedAt: string;
     isCurrent: boolean;
+    decisionByStaff: {
+      id: string;
+      name: string;
+    } | null;
   } | null;
   sale: {
     id: string;
+    subtotalPence: number;
+    taxPence: number;
     totalPence: number;
+    changeDuePence: number;
     createdAt: string;
     completedAt: string | null;
+    receiptNumber: string | null;
+    receiptUrl: string | null;
+    issuedAt: string | null;
+    checkoutStaff: {
+      id: string;
+      name: string;
+    } | null;
+    paymentSummary: {
+      totalTenderedPence: number;
+      methods: Array<{
+        method: "CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER";
+        label: string;
+        amountPence: number;
+      }>;
+      summaryText: string;
+    } | null;
   } | null;
 };
 
@@ -230,9 +255,43 @@ const buildEstimateSummary = (entry: BikeHistoryEntry) => {
   return `Estimate v${entry.estimate.version} ${workshopEstimateStatusLabel(entry.estimate.status)} · ${formatMoney(entry.estimate.subtotalPence)} · ${scope}`;
 };
 
+const buildEstimateDecisionSummary = (entry: BikeHistoryEntry) => {
+  if (!entry.estimate) {
+    return "No estimate saved";
+  }
+
+  if (entry.estimate.status === "APPROVED") {
+    if (entry.estimate.decisionByStaff?.name) {
+      return `Approved by ${entry.estimate.decisionByStaff.name}`;
+    }
+    if (entry.estimate.decisionSource === "CUSTOMER") {
+      return "Approved through secure quote link";
+    }
+    return "Approved";
+  }
+
+  if (entry.estimate.status === "REJECTED") {
+    if (entry.estimate.decisionByStaff?.name) {
+      return `Rejected by ${entry.estimate.decisionByStaff.name}`;
+    }
+    if (entry.estimate.decisionSource === "CUSTOMER") {
+      return "Rejected through secure quote link";
+    }
+    return "Rejected";
+  }
+
+  return workshopEstimateStatusLabel(entry.estimate.status);
+};
+
 const buildJobOutcomeSummary = (entry: BikeHistoryEntry) => {
   if (entry.sale) {
-    return `Final sale ${entry.sale.id.slice(0, 8)} completed for ${formatMoney(entry.sale.totalPence)}.`;
+    const receiptContext = entry.sale.receiptNumber
+      ? `Receipt ${entry.sale.receiptNumber}`
+      : `Sale ${entry.sale.id.slice(0, 8).toUpperCase()}`;
+    const paymentContext = entry.sale.paymentSummary?.summaryText
+      ? ` via ${entry.sale.paymentSummary.summaryText}`
+      : "";
+    return `${receiptContext} completed for ${formatMoney(entry.sale.totalPence)}${paymentContext}.`;
   }
 
   if (entry.status === "READY") {
@@ -371,6 +430,20 @@ const buildJobDetailPreview = (entry: BikeHistoryEntry) => {
   return entry.serviceSummaryText;
 };
 
+const buildCommercialSummary = (entry: BikeHistoryEntry) => {
+  if (!entry.sale) {
+    return null;
+  }
+
+  const parts = [
+    entry.sale.receiptNumber ? `Receipt ${entry.sale.receiptNumber}` : `Sale ${entry.sale.id.slice(0, 8).toUpperCase()}`,
+    entry.sale.paymentSummary?.summaryText ?? null,
+    entry.sale.checkoutStaff?.name ? `Checked out by ${entry.sale.checkoutStaff.name}` : null,
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+};
+
 const JobCard = ({
   entry,
   mode,
@@ -416,11 +489,28 @@ const JobCard = ({
       </div>
     </div>
 
+    <div className="bike-service-job-card__preview">
+      {buildJobDetailPreview(entry)}
+    </div>
+
+    {mode === "history" ? (
+      <div className="bike-service-job-card__commercial">
+        {entry.sale ? (
+          <>
+            <span className="bike-service-job-card__commercial-badge">Finalized sale</span>
+            <span>{buildCommercialSummary(entry)}</span>
+          </>
+        ) : (
+          <span className="table-secondary">Completed workshop record without a finalized linked sale.</span>
+        )}
+      </div>
+    ) : null}
+
     <div className="bike-history-entry__meta">
       <div><strong>Workflow:</strong> {workshopRawStatusLabel(entry.rawStatus)}</div>
       <div><strong>Technician:</strong> {entry.assignedTechnician?.name || "Unassigned"}</div>
       <div><strong>Booking:</strong> {formatOptionalDateTime(entry.scheduledStartAt || entry.scheduledDate)}</div>
-      <div><strong>Estimate:</strong> {entry.estimate ? workshopEstimateStatusLabel(entry.estimate.status) : "No estimate saved"}</div>
+      <div><strong>Estimate:</strong> {buildEstimateDecisionSummary(entry)}</div>
     </div>
 
     <details className="bike-service-job-card__details">
@@ -434,11 +524,22 @@ const JobCard = ({
             Latest note by {entry.notes.latestNote.authorName || "Staff"} on {formatOptionalDateTime(entry.notes.latestNote.createdAt)}
           </p>
         ) : null}
+        {entry.sale?.checkoutStaff?.name ? (
+          <p className="table-secondary">
+            Finalized by {entry.sale.checkoutStaff.name}
+            {entry.sale.issuedAt ? ` on ${formatOptionalDateTime(entry.sale.issuedAt)}` : ""}
+          </p>
+        ) : null}
       </div>
     </details>
 
     <div className="actions-inline">
       <Link to={entry.jobPath}>Open workshop job</Link>
+      {mode === "history" && entry.sale?.receiptUrl ? (
+        <a href={toBackendUrl(entry.sale.receiptUrl)} target="_blank" rel="noreferrer">
+          View receipt
+        </a>
+      ) : null}
       {mode === "history" ? (
         <span className="table-secondary">Completed {formatOptionalDateTime(entry.completedAt)}</span>
       ) : (

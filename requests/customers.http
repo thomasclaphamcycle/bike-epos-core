@@ -72,7 +72,7 @@ Content-Type: application/json
   "batterySerial": "BAT-67890"
 }
 
-### Get reusable bike profile with metrics, completed history, and open work
+### Get reusable bike profile with metrics, completed history, open work, and finalized sale/receipt context
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
 
 ### Bike domain-event timeline

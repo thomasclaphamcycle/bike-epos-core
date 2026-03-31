@@ -503,6 +503,34 @@ const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
     : null,
 });
 
+const emitWorkshopEstimateDecisionEvent = (input: {
+  estimate: ReturnType<typeof toEstimateResponse>;
+  job: {
+    id: string;
+    customerId: string | null;
+    bikeId: string | null;
+  };
+  actorStaffId?: string;
+}) => {
+  if (input.estimate.status !== "APPROVED" && input.estimate.status !== "REJECTED") {
+    return;
+  }
+
+  emitEvent("workshop.estimate.decided", {
+    id: input.estimate.id,
+    type: "workshop.estimate.decided",
+    timestamp: input.estimate.updatedAt.toISOString(),
+    workshopJobId: input.job.id,
+    workshopEstimateId: input.estimate.id,
+    estimateVersion: input.estimate.version,
+    decisionStatus: input.estimate.status,
+    decisionSource: input.estimate.decisionSource ?? null,
+    customerId: input.job.customerId,
+    bikeId: input.job.bikeId,
+    ...(input.actorStaffId ? { actorStaffId: input.actorStaffId } : {}),
+  });
+};
+
 const buildCustomerDisplayName = (customer: {
   firstName: string;
   lastName: string;
@@ -1683,6 +1711,14 @@ export const setWorkshopEstimateStatus = async (
     });
   }
 
+  if (!result.idempotent && (targetStatus === "APPROVED" || targetStatus === "REJECTED")) {
+    emitWorkshopEstimateDecisionEvent({
+      estimate: result.estimate,
+      job: result.job,
+      actorStaffId: input.actor?.actorId,
+    });
+  }
+
   return result;
 };
 
@@ -1742,7 +1778,7 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
 
   const targetStatus = parsePublicEstimateDecisionStatus(input.status);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const context = await getPublicWorkshopPortalContextTx(tx, token);
     const estimate = context.estimate;
 
@@ -1762,13 +1798,17 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
     if (estimate.status === targetStatus) {
       const currentPortalEstimate = await getCurrentWorkshopEstimatePublicTx(tx, estimate.workshopJobId);
 
-      return toPublicQuoteResponse(estimate, {
-        accessStatus: "ACTIVE",
-        canApprove: false,
-        canReject: false,
-        idempotent: true,
-        currentEstimate: currentPortalEstimate,
-      });
+      return {
+        response: toPublicQuoteResponse(estimate, {
+          accessStatus: "ACTIVE",
+          canApprove: false,
+          canReject: false,
+          idempotent: true,
+          currentEstimate: currentPortalEstimate,
+        }),
+        emittedEstimate: null,
+        emittedJob: null,
+      };
     }
 
     if (estimate.status !== "PENDING_APPROVAL") {
@@ -1825,14 +1865,31 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
 
     const currentPortalEstimate = await getCurrentWorkshopEstimatePublicTx(tx, refreshed.workshopJobId);
 
-    return toPublicQuoteResponse(refreshed, {
-      accessStatus: "ACTIVE",
-      canApprove: false,
-      canReject: false,
-      idempotent: false,
-      currentEstimate: currentPortalEstimate,
-    });
+    return {
+      response: toPublicQuoteResponse(refreshed, {
+        accessStatus: "ACTIVE",
+        canApprove: false,
+        canReject: false,
+        idempotent: false,
+        currentEstimate: currentPortalEstimate,
+      }),
+      emittedEstimate: toEstimateResponse(nextEstimate),
+      emittedJob: {
+        id: estimate.workshopJobId,
+        customerId: job.customerId,
+        bikeId: job.bikeId,
+      },
+    };
   });
+
+  if (result.emittedEstimate && result.emittedJob) {
+    emitWorkshopEstimateDecisionEvent({
+      estimate: result.emittedEstimate,
+      job: result.emittedJob,
+    });
+  }
+
+  return result.response;
 };
 
 export const getWorkshopJobEstimateData = async (workshopJobId: string) => {

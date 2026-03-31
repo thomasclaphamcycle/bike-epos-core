@@ -624,6 +624,7 @@ const patchWorkshopJobSchedule = async (jobId, body, headers = MANAGER_HEADERS) 
 
 const cleanup = async (state) => {
   const workshopJobIds = Array.from(state.workshopJobIds);
+  const saleIds = Array.from(state.saleIds);
   const customerIds = Array.from(state.customerIds);
   const userIds = Array.from(state.userIds);
   const workingHoursIds = Array.from(state.workingHoursIds);
@@ -638,6 +639,16 @@ const cleanup = async (state) => {
       OR: [
         { actorId: { in: [STAFF_USER_ID, MANAGER_USER_ID] } },
         workshopJobIds.length > 0 ? { entityId: { in: workshopJobIds } } : undefined,
+      ].filter(Boolean),
+    },
+  });
+
+  await prisma.domainEvent.deleteMany({
+    where: {
+      OR: [
+        { actorStaffId: { in: [STAFF_USER_ID, MANAGER_USER_ID] } },
+        workshopJobIds.length > 0 ? { workshopJobId: { in: workshopJobIds } } : undefined,
+        saleIds.length > 0 ? { saleId: { in: saleIds } } : undefined,
       ].filter(Boolean),
     },
   });
@@ -666,6 +677,24 @@ const cleanup = async (state) => {
     });
     await prisma.workshopJob.deleteMany({
       where: { id: { in: workshopJobIds } },
+    });
+  }
+
+  if (saleIds.length > 0) {
+    await prisma.receipt.deleteMany({
+      where: { saleId: { in: saleIds } },
+    });
+    await prisma.saleTender.deleteMany({
+      where: { saleId: { in: saleIds } },
+    });
+    await prisma.paymentIntent.deleteMany({
+      where: { saleId: { in: saleIds } },
+    });
+    await prisma.payment.deleteMany({
+      where: { saleId: { in: saleIds } },
+    });
+    await prisma.sale.deleteMany({
+      where: { id: { in: saleIds } },
     });
   }
 
@@ -727,6 +756,7 @@ const cleanup = async (state) => {
 const run = async () => {
   const state = {
     workshopJobIds: new Set(),
+    saleIds: new Set(),
     customerIds: new Set(),
     userIds: new Set(),
     workingHoursIds: new Set(),
@@ -1265,6 +1295,52 @@ const run = async () => {
         },
       });
 
+      const saleLocation = await prisma.location.findFirst({
+        select: { id: true },
+      });
+      assert.ok(saleLocation, "Expected at least one location for finalized bike sale coverage");
+
+      const receiptNumber = `M83-${uniqueRef()}`;
+      const completedSale = await prisma.sale.create({
+        data: {
+          workshopJobId: completedJob.id,
+          customerId: customer.id,
+          locationId: saleLocation.id,
+          subtotalPence: 6200,
+          taxPence: 0,
+          totalPence: 6200,
+          changeDuePence: 0,
+          completedAt: new Date("2026-03-15T10:45:00.000Z"),
+          receiptNumber,
+          createdByStaffId: managerUser.id,
+          tenders: {
+            create: [
+              {
+                method: "CARD",
+                amountPence: 5000,
+                createdByStaffId: managerUser.id,
+              },
+              {
+                method: "VOUCHER",
+                amountPence: 1200,
+                createdByStaffId: managerUser.id,
+              },
+            ],
+          },
+          receipt: {
+            create: {
+              receiptNumber,
+              issuedAt: new Date("2026-03-15T10:46:00.000Z"),
+              issuedByStaffId: managerUser.id,
+              shopName: "CorePOS Test Bikes",
+              shopAddress: "1 Workshop Lane",
+              footerText: "Thanks for choosing CorePOS",
+            },
+          },
+        },
+      });
+      state.saleIds.add(completedSale.id);
+
       const { job: legacyJob } = await createJob(state, {
         customerId: customer.id,
         customerName: undefined,
@@ -1293,8 +1369,8 @@ const run = async () => {
       assert.equal(history.json.metrics.totalJobs, 2);
       assert.equal(history.json.metrics.completedJobs, 1);
       assert.equal(history.json.metrics.openJobs, 1);
-      assert.equal(history.json.metrics.lifetimeWorkshopSpendPence, 0);
-      assert.equal(history.json.metrics.finalizedSaleCount, 0);
+      assert.equal(history.json.metrics.lifetimeWorkshopSpendPence, 6200);
+      assert.equal(history.json.metrics.finalizedSaleCount, 1);
       assert.equal(history.json.openWork.length, 1);
       assert.equal(history.json.completedHistory.length, 1);
       assert.equal(history.json.openWork[0].id, linkedJob.id);
@@ -1312,6 +1388,12 @@ const run = async () => {
       assert.equal(history.json.completedHistory[0].moneySummary.labourTotalPence, 6200);
       assert.equal(history.json.completedHistory[0].status, "COLLECTED");
       assert.equal(history.json.completedHistory[0].reference, completedJob.id.slice(0, 8).toUpperCase());
+      assert.equal(history.json.completedHistory[0].sale.receiptNumber, receiptNumber);
+      assert.equal(history.json.completedHistory[0].sale.receiptUrl, `/r/${receiptNumber}`);
+      assert.equal(history.json.completedHistory[0].sale.checkoutStaff.name, managerUser.name);
+      assert.equal(history.json.completedHistory[0].sale.paymentSummary.summaryText, "Card £50.00 + Voucher £12.00");
+      assert.equal(history.json.completedHistory[0].sale.paymentSummary.totalTenderedPence, 6200);
+      assert.equal(history.json.completedHistory[0].sale.paymentSummary.methods.length, 2);
       assert.ok(
         history.json.limitations[0].includes("Legacy free-text workshop jobs without a bike link"),
         JSON.stringify(history.json),
@@ -1320,6 +1402,26 @@ const run = async () => {
       assert.equal(history.json.workshopStartContext.defaults.bikeId, bike.id);
       assert.match(history.json.workshopStartContext.defaults.bikeDescription, /History bike/);
       assert.equal(history.json.workshopStartContext.startPath, `/workshop/check-in?bikeId=${bike.id}`);
+
+      const bikeTimeline = await fetchJson(
+        `/api/events?entityType=BIKE&entityId=${encodeURIComponent(bike.id)}`,
+        {
+          headers: STAFF_HEADERS,
+        },
+      );
+      assert.equal(bikeTimeline.status, 200, JSON.stringify(bikeTimeline.json));
+      assert.ok(
+        bikeTimeline.json.events.some(
+          (event) => event.label === "Quote ready" && /M83 Staff/.test(event.description),
+        ),
+        JSON.stringify(bikeTimeline.json),
+      );
+      assert.ok(
+        bikeTimeline.json.events.some(
+          (event) => event.label === "Workshop note added" && /M83 Manager/.test(event.description),
+        ),
+        JSON.stringify(bikeTimeline.json),
+      );
     }, results);
 
     await runTest("bike workshop-start context returns safe defaults and mismatched customer-bike creation is rejected", async () => {
