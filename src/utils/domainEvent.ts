@@ -24,13 +24,16 @@ type PersistedEventTarget = {
 
 type AnyCoreEventPayload = CoreEventMap[CoreEventName];
 type SaleCompletedEvent = CoreEventMap["sale.completed"];
+type CustomerBikeCreatedEvent = CoreEventMap["customer.bike.created"];
+type WorkshopCreatedEvent = CoreEventMap["workshop.job.created"];
+type WorkshopStatusChangedEvent = CoreEventMap["workshop.job.status_changed"];
 type WorkshopCompletedEvent = CoreEventMap["workshop.job.completed"];
 type WorkshopQuoteReadyEvent = CoreEventMap["workshop.quote.ready"];
 type WorkshopEstimateDecidedEvent = CoreEventMap["workshop.estimate.decided"];
-type WorkshopStatusChangedEvent = CoreEventMap["workshop.job.status_changed"];
 type WorkshopReadyForCollectionEvent = CoreEventMap["workshop.job.ready_for_collection"];
 type WorkshopNoteAddedEvent = CoreEventMap["workshop.note.added"];
 type WorkshopPortalMessageEvent = CoreEventMap["workshop.portal_message.ready"];
+type WorkshopPortalMessageReceivedEvent = CoreEventMap["workshop.portal_message.received"];
 type StockAdjustedEvent = CoreEventMap["stock.adjusted"];
 
 const isCoreEventName = (value: string): value is CoreEventName =>
@@ -58,6 +61,36 @@ const buildPersistedEventTarget = (
         bikeId: salePayload.bikeId ?? null,
         workshopJobId: salePayload.workshopJobId ?? null,
         saleId: salePayload.saleId,
+      };
+    }
+    case "customer.bike.created": {
+      const bikePayload = payload as CustomerBikeCreatedEvent;
+      return {
+        entityType: "BIKE",
+        entityId: bikePayload.bikeId,
+        customerId: bikePayload.customerId,
+        bikeId: bikePayload.bikeId,
+      };
+    }
+    case "workshop.job.created": {
+      const workshopPayload = payload as WorkshopCreatedEvent;
+      return {
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopPayload.workshopJobId,
+        customerId: workshopPayload.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? null,
+        workshopJobId: workshopPayload.workshopJobId,
+      };
+    }
+    case "workshop.job.status_changed": {
+      const workshopPayload = payload as WorkshopStatusChangedEvent;
+      return {
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopPayload.workshopJobId,
+        customerId: workshopPayload.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? null,
+        workshopJobId: workshopPayload.workshopJobId,
+        saleId: workshopPayload.saleId ?? null,
       };
     }
     case "workshop.job.completed": {
@@ -91,17 +124,6 @@ const buildPersistedEventTarget = (
         workshopJobId: workshopPayload.workshopJobId,
       };
     }
-    case "workshop.job.status_changed": {
-      const workshopPayload = payload as WorkshopStatusChangedEvent;
-      return {
-        entityType: "WORKSHOP_JOB",
-        entityId: workshopPayload.workshopJobId,
-        customerId: workshopPayload.customerId ?? null,
-        bikeId: workshopPayload.bikeId ?? null,
-        workshopJobId: workshopPayload.workshopJobId,
-        saleId: workshopPayload.saleId ?? null,
-      };
-    }
     case "workshop.job.ready_for_collection": {
       const workshopPayload = payload as WorkshopReadyForCollectionEvent;
       return {
@@ -125,6 +147,16 @@ const buildPersistedEventTarget = (
     }
     case "workshop.portal_message.ready": {
       const workshopPayload = payload as WorkshopPortalMessageEvent;
+      return {
+        entityType: "WORKSHOP_JOB",
+        entityId: workshopPayload.workshopJobId,
+        customerId: workshopPayload.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? null,
+        workshopJobId: workshopPayload.workshopJobId,
+      };
+    }
+    case "workshop.portal_message.received": {
+      const workshopPayload = payload as WorkshopPortalMessageReceivedEvent;
       return {
         entityType: "WORKSHOP_JOB",
         entityId: workshopPayload.workshopJobId,
@@ -182,18 +214,20 @@ const enrichPersistedEventTarget = async (
         bikeId: salePayload.bikeId ?? sale?.workshopJob?.bikeId ?? null,
       };
     }
+    case "workshop.job.created":
+    case "workshop.job.status_changed":
     case "workshop.job.completed":
     case "workshop.quote.ready":
     case "workshop.estimate.decided":
-    case "workshop.job.status_changed":
     case "workshop.job.ready_for_collection":
     case "workshop.note.added":
     case "workshop.portal_message.ready": {
       const workshopPayload = payload as
+        | WorkshopCreatedEvent
+        | WorkshopStatusChangedEvent
         | WorkshopCompletedEvent
         | WorkshopQuoteReadyEvent
         | WorkshopEstimateDecidedEvent
-        | WorkshopStatusChangedEvent
         | WorkshopReadyForCollectionEvent
         | WorkshopNoteAddedEvent
         | WorkshopPortalMessageEvent;
@@ -230,6 +264,27 @@ const enrichPersistedEventTarget = async (
           ?? null,
       };
     }
+    case "workshop.portal_message.received": {
+      const workshopPayload = payload as WorkshopPortalMessageReceivedEvent;
+      const workshopJobId = workshopPayload.workshopJobId;
+      if (workshopPayload.customerId !== undefined && workshopPayload.bikeId !== undefined) {
+        return target;
+      }
+
+      const job = await prisma.workshopJob.findUnique({
+        where: { id: workshopJobId },
+        select: {
+          customerId: true,
+          bikeId: true,
+        },
+      });
+
+      return {
+        ...target,
+        customerId: workshopPayload.customerId ?? job?.customerId ?? null,
+        bikeId: workshopPayload.bikeId ?? job?.bikeId ?? null,
+      };
+    }
     default:
       return target;
   }
@@ -241,13 +296,16 @@ export const shouldPersist = (
 ) => {
   switch (eventName) {
     case "sale.completed":
+    case "customer.bike.created":
+    case "workshop.job.created":
+    case "workshop.job.status_changed":
     case "workshop.job.completed":
     case "workshop.quote.ready":
     case "workshop.estimate.decided":
-    case "workshop.job.status_changed":
     case "workshop.job.ready_for_collection":
     case "workshop.note.added":
     case "workshop.portal_message.ready":
+    case "workshop.portal_message.received":
     case "stock.adjusted":
       return true;
     default:

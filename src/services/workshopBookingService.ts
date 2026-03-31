@@ -1,6 +1,7 @@
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { listPublicShopConfig } from "./configurationService";
@@ -323,7 +324,7 @@ export const createOnlineWorkshopBooking = async (
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  const booking = await prisma.$transaction(async (tx) => {
     const availability = await assertDateIsBookable(tx, scheduledDate);
     const settings = await getBookingSettings(tx);
     let serviceLabel: string | undefined;
@@ -429,6 +430,18 @@ export const createOnlineWorkshopBooking = async (
       updatedAt: workshopJob.updatedAt,
     };
   });
+
+  emitEvent("workshop.job.created", {
+    id: booking.id,
+    type: "workshop.job.created",
+    timestamp: new Date().toISOString(),
+    workshopJobId: booking.id,
+    status: booking.status,
+    customerId: booking.customer.id,
+    bikeDescription: booking.bookingRequest.bikeDescription,
+  });
+
+  return booking;
 };
 
 export const payWorkshopBookingDepositByManageToken = async (

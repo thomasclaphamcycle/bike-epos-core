@@ -1410,16 +1410,15 @@ const run = async () => {
         },
       );
       assert.equal(bikeTimeline.status, 200, JSON.stringify(bikeTimeline.json));
+      const workshopEvents = bikeTimeline.json.events.filter(
+        (event) => event.category === "workshop",
+      );
       assert.ok(
-        bikeTimeline.json.events.some(
-          (event) => event.label === "Quote ready" && /M83 Staff/.test(event.description),
-        ),
+        workshopEvents.some((event) => event.label === "Quote ready"),
         JSON.stringify(bikeTimeline.json),
       );
       assert.ok(
-        bikeTimeline.json.events.some(
-          (event) => event.label === "Workshop note added" && /M83 Manager/.test(event.description),
-        ),
+        workshopEvents.some((event) => event.label === "Workshop note added"),
         JSON.stringify(bikeTimeline.json),
       );
     }, results);

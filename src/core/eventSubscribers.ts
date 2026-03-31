@@ -39,67 +39,138 @@ const toLogSummary = <TEventName extends DiagnosticEventName>(
   payload: CoreEventMap[TEventName],
 ) => {
   switch (eventName) {
-    case "auth.login.succeeded":
+    case "auth.login.succeeded": {
+      const event = payload as CoreEventMap["auth.login.succeeded"];
       return {
-        userId: payload.userId,
-        authMethod: payload.authMethod,
-        resultStatus: payload.resultStatus,
+        userId: event.userId,
+        authMethod: event.authMethod,
+        resultStatus: event.resultStatus,
       };
-    case "payments.intent.created":
+    }
+    case "payments.intent.created": {
+      const event = payload as CoreEventMap["payments.intent.created"];
       return {
-        paymentIntentId: payload.paymentIntentId,
-        saleId: payload.saleId ?? null,
-        provider: payload.provider ?? null,
-        resultStatus: payload.resultStatus,
+        paymentIntentId: event.paymentIntentId,
+        saleId: event.saleId ?? null,
+        provider: event.provider ?? null,
+        resultStatus: event.resultStatus,
       };
-    case "payments.refund.recorded":
+    }
+    case "payments.refund.recorded": {
+      const event = payload as CoreEventMap["payments.refund.recorded"];
       return {
-        paymentId: payload.paymentId,
-        refundId: payload.refundId,
-        resultStatus: payload.resultStatus,
+        paymentId: event.paymentId,
+        refundId: event.refundId,
+        resultStatus: event.resultStatus,
       };
-    case "sale.completed":
+    }
+    case "sale.completed": {
+      const event = payload as CoreEventMap["sale.completed"];
       return {
-        saleId: payload.saleId,
-        totalPence: payload.totalPence ?? null,
-        changeDuePence: payload.changeDuePence ?? null,
+        saleId: event.saleId,
+        totalPence: event.totalPence ?? null,
+        changeDuePence: event.changeDuePence ?? null,
       };
-    case "purchaseOrder.received":
+    }
+    case "customer.bike.created": {
+      const event = payload as CoreEventMap["customer.bike.created"];
       return {
-        purchaseOrderId: payload.purchaseOrderId,
-        poNumber: payload.poNumber,
-        quantityReceived: payload.quantityReceived,
-        status: payload.status,
+        customerId: event.customerId,
+        bikeId: event.bikeId,
+        bikeDisplayName: event.bikeDisplayName ?? null,
       };
-    case "workshop.job.completed":
+    }
+    case "purchaseOrder.received": {
+      const event = payload as CoreEventMap["purchaseOrder.received"];
       return {
-        workshopJobId: payload.workshopJobId,
-        status: payload.status,
-        saleId: payload.saleId ?? null,
+        purchaseOrderId: event.purchaseOrderId,
+        poNumber: event.poNumber,
+        quantityReceived: event.quantityReceived,
+        status: event.status,
       };
-    case "workshop.quote.ready":
+    }
+    case "workshop.job.created": {
+      const event = payload as CoreEventMap["workshop.job.created"];
       return {
-        workshopJobId: payload.workshopJobId,
-        workshopEstimateId: payload.workshopEstimateId,
-        estimateVersion: payload.estimateVersion,
+        workshopJobId: event.workshopJobId,
+        status: event.status,
+        customerId: event.customerId ?? null,
+        bikeId: event.bikeId ?? null,
       };
-    case "workshop.job.ready_for_collection":
+    }
+    case "workshop.job.status_changed": {
+      const event = payload as CoreEventMap["workshop.job.status_changed"];
       return {
-        workshopJobId: payload.workshopJobId,
-        status: payload.status,
+        workshopJobId: event.workshopJobId,
+        fromStatus: event.fromStatus,
+        toStatus: event.toStatus,
+        stage: event.stage,
       };
-    case "workshop.portal_message.ready":
+    }
+    case "workshop.job.completed": {
+      const event = payload as CoreEventMap["workshop.job.completed"];
       return {
-        workshopJobId: payload.workshopJobId,
-        workshopMessageId: payload.workshopMessageId,
+        workshopJobId: event.workshopJobId,
+        status: event.status,
+        saleId: event.saleId ?? null,
       };
-    case "stock.adjusted":
+    }
+    case "workshop.quote.ready": {
+      const event = payload as CoreEventMap["workshop.quote.ready"];
       return {
-        variantId: payload.variantId,
-        locationId: payload.locationId,
-        quantityDelta: payload.quantityDelta,
-        totalOnHand: payload.totalOnHand,
+        workshopJobId: event.workshopJobId,
+        workshopEstimateId: event.workshopEstimateId,
+        estimateVersion: event.estimateVersion,
       };
+    }
+    case "workshop.estimate.decided": {
+      const event = payload as CoreEventMap["workshop.estimate.decided"];
+      return {
+        workshopJobId: event.workshopJobId,
+        workshopEstimateId: event.workshopEstimateId,
+        estimateVersion: event.estimateVersion,
+        status: event.status,
+        decisionSource: event.decisionSource ?? null,
+      };
+    }
+    case "workshop.job.ready_for_collection": {
+      const event = payload as CoreEventMap["workshop.job.ready_for_collection"];
+      return {
+        workshopJobId: event.workshopJobId,
+        status: event.status,
+      };
+    }
+    case "workshop.note.added": {
+      const event = payload as CoreEventMap["workshop.note.added"];
+      return {
+        workshopJobId: event.workshopJobId,
+        workshopJobNoteId: event.workshopJobNoteId,
+        visibility: event.visibility,
+      };
+    }
+    case "workshop.portal_message.ready": {
+      const event = payload as CoreEventMap["workshop.portal_message.ready"];
+      return {
+        workshopJobId: event.workshopJobId,
+        workshopMessageId: event.workshopMessageId,
+      };
+    }
+    case "workshop.portal_message.received": {
+      const event = payload as CoreEventMap["workshop.portal_message.received"];
+      return {
+        workshopJobId: event.workshopJobId,
+        workshopMessageId: event.workshopMessageId,
+      };
+    }
+    case "stock.adjusted": {
+      const event = payload as CoreEventMap["stock.adjusted"];
+      return {
+        variantId: event.variantId,
+        locationId: event.locationId,
+        quantityDelta: event.quantityDelta,
+        totalOnHand: event.totalOnHand,
+      };
+    }
   }
 };
 
@@ -128,8 +199,20 @@ export const registerInternalEventSubscribers = () => {
     recordDiagnosticEvent("sale.completed", payload);
   });
 
+  on("customer.bike.created", (payload) => {
+    recordDiagnosticEvent("customer.bike.created", payload);
+  });
+
   on("purchaseOrder.received", (payload) => {
     recordDiagnosticEvent("purchaseOrder.received", payload);
+  });
+
+  on("workshop.job.created", (payload) => {
+    recordDiagnosticEvent("workshop.job.created", payload);
+  });
+
+  on("workshop.job.status_changed", (payload) => {
+    recordDiagnosticEvent("workshop.job.status_changed", payload);
   });
 
   on("workshop.job.completed", (payload) => {
@@ -140,12 +223,24 @@ export const registerInternalEventSubscribers = () => {
     recordDiagnosticEvent("workshop.quote.ready", payload);
   });
 
+  on("workshop.estimate.decided", (payload) => {
+    recordDiagnosticEvent("workshop.estimate.decided", payload);
+  });
+
   on("workshop.job.ready_for_collection", (payload) => {
     recordDiagnosticEvent("workshop.job.ready_for_collection", payload);
   });
 
+  on("workshop.note.added", (payload) => {
+    recordDiagnosticEvent("workshop.note.added", payload);
+  });
+
   on("workshop.portal_message.ready", (payload) => {
     recordDiagnosticEvent("workshop.portal_message.ready", payload);
+  });
+
+  on("workshop.portal_message.received", (payload) => {
+    recordDiagnosticEvent("workshop.portal_message.received", payload);
   });
 
   on("stock.adjusted", (payload) => {

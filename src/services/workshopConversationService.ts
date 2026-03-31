@@ -408,8 +408,24 @@ export const postPublicWorkshopConversationReply = async (
       conversation: refreshed,
       accessStatus: context.accessStatus,
       canReply: context.canReply,
+      messageId: refreshed.messages[0]?.id ?? null,
+      customerId: job.customerId ?? null,
+      bikeId: job.bikeId ?? null,
+      workshopJobId: job.id,
     };
   });
+
+  if (result.messageId) {
+    emitEvent("workshop.portal_message.received", {
+      id: result.messageId,
+      type: "workshop.portal_message.received",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.workshopJobId,
+      workshopMessageId: result.messageId,
+      customerId: result.customerId,
+      bikeId: result.bikeId,
+    });
+  }
 
   return toPublicConversationResponse(result.conversation, {
     accessStatus: result.accessStatus,

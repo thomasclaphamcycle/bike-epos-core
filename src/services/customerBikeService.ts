@@ -1,5 +1,6 @@
 import { Prisma, SaleTenderMethod, WorkshopJobStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
 import {
@@ -932,7 +933,7 @@ export const createCustomerBike = async (
     registrationNumber,
   });
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await assertCustomerExistsTx(tx, customerId);
 
     const bike = await tx.customerBike.create({
@@ -962,6 +963,17 @@ export const createCustomerBike = async (
       bike: toCustomerBikeResponse(bike),
     };
   });
+
+  emitEvent("customer.bike.created", {
+    id: result.bike.id,
+    type: "customer.bike.created",
+    timestamp: new Date().toISOString(),
+    customerId,
+    bikeId: result.bike.id,
+    bikeDisplayName: result.bike.displayName,
+  });
+
+  return result;
 };
 
 export const updateCustomerBike = async (

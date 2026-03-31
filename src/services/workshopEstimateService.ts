@@ -503,34 +503,6 @@ const toEstimateResponse = (estimate: WorkshopEstimateRecord) => ({
     : null,
 });
 
-const emitWorkshopEstimateDecisionEvent = (input: {
-  estimate: ReturnType<typeof toEstimateResponse>;
-  job: {
-    id: string;
-    customerId: string | null;
-    bikeId: string | null;
-  };
-  actorStaffId?: string;
-}) => {
-  if (input.estimate.status !== "APPROVED" && input.estimate.status !== "REJECTED") {
-    return;
-  }
-
-  emitEvent("workshop.estimate.decided", {
-    id: input.estimate.id,
-    type: "workshop.estimate.decided",
-    timestamp: input.estimate.updatedAt.toISOString(),
-    workshopJobId: input.job.id,
-    workshopEstimateId: input.estimate.id,
-    estimateVersion: input.estimate.version,
-    decisionStatus: input.estimate.status,
-    decisionSource: input.estimate.decisionSource ?? null,
-    customerId: input.job.customerId,
-    bikeId: input.job.bikeId,
-    ...(input.actorStaffId ? { actorStaffId: input.actorStaffId } : {}),
-  });
-};
-
 const buildCustomerDisplayName = (customer: {
   firstName: string;
   lastName: string;
@@ -1712,10 +1684,18 @@ export const setWorkshopEstimateStatus = async (
   }
 
   if (!result.idempotent && (targetStatus === "APPROVED" || targetStatus === "REJECTED")) {
-    emitWorkshopEstimateDecisionEvent({
-      estimate: result.estimate,
-      job: result.job,
-      actorStaffId: input.actor?.actorId,
+    emitEvent("workshop.estimate.decided", {
+      id: result.estimate.id,
+      type: "workshop.estimate.decided",
+      timestamp: new Date().toISOString(),
+      workshopJobId: result.job.id,
+      workshopEstimateId: result.estimate.id,
+      estimateVersion: result.estimate.version,
+      status: targetStatus,
+      decisionSource: decisionSource ?? null,
+      customerId: result.job.customerId,
+      bikeId: result.job.bikeId,
+      ...(input.actor?.actorId ? { actorStaffId: input.actor.actorId } : {}),
     });
   }
 
@@ -1778,7 +1758,7 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
 
   const targetStatus = parsePublicEstimateDecisionStatus(input.status);
 
-  const result = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const context = await getPublicWorkshopPortalContextTx(tx, token);
     const estimate = context.estimate;
 
@@ -1798,17 +1778,13 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
     if (estimate.status === targetStatus) {
       const currentPortalEstimate = await getCurrentWorkshopEstimatePublicTx(tx, estimate.workshopJobId);
 
-      return {
-        response: toPublicQuoteResponse(estimate, {
-          accessStatus: "ACTIVE",
-          canApprove: false,
-          canReject: false,
-          idempotent: true,
-          currentEstimate: currentPortalEstimate,
-        }),
-        emittedEstimate: null,
-        emittedJob: null,
-      };
+      return toPublicQuoteResponse(estimate, {
+        accessStatus: "ACTIVE",
+        canApprove: false,
+        canReject: false,
+        idempotent: true,
+        currentEstimate: currentPortalEstimate,
+      });
     }
 
     if (estimate.status !== "PENDING_APPROVAL") {
@@ -1865,31 +1841,14 @@ export const submitPublicWorkshopEstimateQuoteDecision = async (
 
     const currentPortalEstimate = await getCurrentWorkshopEstimatePublicTx(tx, refreshed.workshopJobId);
 
-    return {
-      response: toPublicQuoteResponse(refreshed, {
-        accessStatus: "ACTIVE",
-        canApprove: false,
-        canReject: false,
-        idempotent: false,
-        currentEstimate: currentPortalEstimate,
-      }),
-      emittedEstimate: toEstimateResponse(nextEstimate),
-      emittedJob: {
-        id: estimate.workshopJobId,
-        customerId: job.customerId,
-        bikeId: job.bikeId,
-      },
-    };
-  });
-
-  if (result.emittedEstimate && result.emittedJob) {
-    emitWorkshopEstimateDecisionEvent({
-      estimate: result.emittedEstimate,
-      job: result.emittedJob,
+    return toPublicQuoteResponse(refreshed, {
+      accessStatus: "ACTIVE",
+      canApprove: false,
+      canReject: false,
+      idempotent: false,
+      currentEstimate: currentPortalEstimate,
     });
-  }
-
-  return result.response;
+  });
 };
 
 export const getWorkshopJobEstimateData = async (workshopJobId: string) => {

@@ -33,6 +33,15 @@ type Customer = {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  summary?: {
+    completedSalesCount: number;
+    finalizedSpendPence: number;
+    activeWorkshopJobsCount: number;
+    linkedBikeCount: number;
+    mostRecentActivityAt: string;
+    lastSaleAt: string | null;
+    lastWorkshopActivityAt: string | null;
+  };
 };
 
 type CustomerCommunicationPreferences = Pick<
@@ -43,10 +52,21 @@ type CustomerCommunicationPreferences = Pick<
 type CustomerSales = {
   sales: Array<{
     id: string;
+    subtotalPence: number;
+    taxPence: number;
     totalPence: number;
     createdAt: string;
     completedAt: string | null;
     receiptNumber: string | null;
+    receiptUrl: string | null;
+    paymentSummary: string | null;
+    tenderBreakdown: Array<{
+      method: string;
+      amountPence: number;
+    }>;
+    checkoutStaffName: string | null;
+    workshopJobId: string | null;
+    bikeId: string | null;
   }>;
 };
 
@@ -55,12 +75,38 @@ type CustomerWorkshopJob = {
   bikeId: string | null;
   status: string;
   rawStatus: string;
+  customerName: string | null;
   bikeDescription: string | null;
   notes: string | null;
   scheduledDate: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  latestNote: {
+    id: string;
+    note: string;
+    visibility: "INTERNAL" | "CUSTOMER";
+    createdAt: string;
+    authorName: string | null;
+  } | null;
+  estimate: {
+    id: string;
+    version: number;
+    status: string;
+    subtotalPence: number;
+    approvedAt: string | null;
+    rejectedAt: string | null;
+    decisionByStaffName: string | null;
+  } | null;
+  sale: {
+    id: string;
+    totalPence: number;
+    completedAt: string | null;
+    receiptNumber: string | null;
+    receiptUrl: string | null;
+    paymentSummary: string | null;
+    checkoutStaffName: string | null;
+  } | null;
 };
 
 type CustomerWorkshopJobs = {
@@ -195,6 +241,9 @@ const formatOptionalDateTime = (value: string | null | undefined) =>
 
 const formatOptionalDate = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleDateString() : "-";
+
+const truncateText = (value: string, limit = 120) =>
+  value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
 
 const createEmptyBikeForm = (): BikeProfileFormState => ({
   label: "",
@@ -371,6 +420,11 @@ export const CustomerProfilePage = () => {
     [editingBike, refreshingScheduleId],
   );
   const showEBikeFields = shouldShowEBikeFields(bikeForm, editingBike);
+  const recentSales = useMemo(() => sales.slice(0, 3), [sales]);
+  const activeWorkshopJobs = useMemo(
+    () => jobs.filter((job) => job.status === "BOOKED" || job.status === "IN_PROGRESS" || job.status === "READY").slice(0, 3),
+    [jobs],
+  );
 
   const loadProfile = async () => {
     if (!id) {
@@ -832,11 +886,77 @@ export const CustomerProfilePage = () => {
 
         {customer ? (
           <>
-            <div className="job-meta-grid">
-              <div><strong>Name:</strong> {customer.name}</div>
-              <div><strong>Email:</strong> {customer.email || "-"}</div>
-              <div><strong>Phone:</strong> {customer.phone || "-"}</div>
-              <div><strong>Notes:</strong> {customer.notes || "-"}</div>
+            <div className="customer-relationship-profile">
+              <div className="customer-relationship-profile__hero">
+                <div className="customer-relationship-profile__identity">
+                  <span className="bike-service-profile__eyebrow">Customer workspace</span>
+                  <div className="bike-service-profile__title-row">
+                    <h2 style={{ margin: 0 }}>{customer.name}</h2>
+                    <span className="bike-service-profile__status bike-service-profile__status--calm">
+                      Relationship history
+                    </span>
+                  </div>
+                  <div className="bike-service-profile__highlights">
+                    <span>{customer.email || "No email recorded"}</span>
+                    <span>{customer.phone || "No phone recorded"}</span>
+                    <span>
+                      Last activity {formatOptionalDate(customer.summary?.mostRecentActivityAt ?? customer.updatedAt)}
+                    </span>
+                  </div>
+                  <p className="bike-service-profile__status-detail">
+                    {customer.notes || "Keep finalized sales, active workshop work, bikes, and customer communication history in one place."}
+                  </p>
+                </div>
+                <div className="bike-service-profile__actions">
+                  <div className="actions-inline">
+                    <button type="button" onClick={attachToActiveSale} disabled={!activeSaleId}>
+                      Attach To Active POS Sale
+                    </button>
+                    <Link to={`/customers/${customer.id}/timeline`} className="button-link">
+                      Open Timeline
+                    </Link>
+                  </div>
+                  <p className="muted-text" style={{ margin: "10px 0 0" }}>
+                    {activeSaleId ? `Active sale: ${activeSaleId.slice(0, 8)}` : "No active POS sale in this browser."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bike-service-profile__metrics">
+                <div className="customer-booking-summary-card customer-booking-summary-card--highlight">
+                  <span>Completed sales</span>
+                  <strong>{customer.summary?.completedSalesCount ?? sales.length}</strong>
+                  <p>Finalized customer-linked sales only.</p>
+                </div>
+                <div className="customer-booking-summary-card">
+                  <span>Finalized spend</span>
+                  <strong>{formatMoney(customer.summary?.finalizedSpendPence ?? 0)}</strong>
+                  <p>Conservative total from completed sales only.</p>
+                </div>
+                <div className="customer-booking-summary-card">
+                  <span>Active workshop</span>
+                  <strong>{customer.summary?.activeWorkshopJobsCount ?? activeWorkshopJobs.length}</strong>
+                  <p>Booked, in progress, or ready-for-collection jobs.</p>
+                </div>
+                <div className="customer-booking-summary-card">
+                  <span>Linked bikes</span>
+                  <strong>{customer.summary?.linkedBikeCount ?? bikes.length}</strong>
+                  <p>Reusable bike records attached to this customer.</p>
+                </div>
+                <div className="customer-booking-summary-card">
+                  <span>Most recent activity</span>
+                  <strong className="bike-service-profile__metric-value--compact">
+                    {formatOptionalDate(customer.summary?.mostRecentActivityAt ?? customer.updatedAt)}
+                  </strong>
+                  <p>
+                    {customer.summary?.lastSaleAt
+                      ? `Last sale ${formatOptionalDate(customer.summary.lastSaleAt)}`
+                      : customer.summary?.lastWorkshopActivityAt
+                        ? `Workshop updated ${formatOptionalDate(customer.summary.lastWorkshopActivityAt)}`
+                        : "No completed sales or workshop updates yet."}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {communicationPreferences ? (
@@ -902,18 +1022,6 @@ export const CustomerProfilePage = () => {
                 </div>
               </div>
             ) : null}
-
-            <div className="actions-inline" style={{ marginTop: "10px" }}>
-              <button type="button" onClick={attachToActiveSale} disabled={!activeSaleId}>
-                Attach To Active POS Sale
-              </button>
-              <Link to={`/customers/${customer.id}/timeline`} className="button-link">
-                Open Timeline
-              </Link>
-              <span className="muted-text">
-                {activeSaleId ? `Active sale: ${activeSaleId.slice(0, 8)}` : "No active POS sale in this browser."}
-              </span>
-            </div>
           </>
         ) : null}
       </section>
@@ -1376,7 +1484,7 @@ export const CustomerProfilePage = () => {
                           }
                           disabled={savingSchedule}
                         >
-                          {BIKE_SERVICE_SCHEDULE_TYPE_OPTIONS.map((option) => (
+                          {BIKE_SERVICE_SCHEDULE_TYPE_OPTIONS.map((option: { value: BikeServiceScheduleType; label: string }) => (
                             <option key={option.value} value={option.value}>
                               {option.label}
                             </option>
@@ -1556,16 +1664,108 @@ export const CustomerProfilePage = () => {
 
         {activityTab === "overview" ? (
           <>
-            <div className="job-meta-grid">
-              <div><strong>Customer:</strong> {customer?.name || "-"}</div>
-              <div><strong>Bike Records:</strong> {bikes.length}</div>
-              <div><strong>Sales Recorded:</strong> {sales.length}</div>
-              <div><strong>Workshop Jobs:</strong> {jobs.length}</div>
-              <div><strong>Latest Sale:</strong> {formatOptionalDateTime(sales[0]?.completedAt ?? sales[0]?.createdAt)}</div>
-              <div><strong>Latest Workshop Update:</strong> {formatOptionalDateTime(jobs[0]?.updatedAt)}</div>
+            <div className="customer-relationship-overview">
+              <div className="customer-relationship-overview__section">
+                <div className="card-header-row">
+                  <div>
+                    <h3 style={{ margin: 0 }}>Recent finalized sales</h3>
+                    <p className="muted-text" style={{ margin: "6px 0 0" }}>
+                      Receipt and payment context stays conservative and only appears when backed by a completed sale.
+                    </p>
+                  </div>
+                </div>
+                <div className="timeline-list">
+                  {recentSales.length ? recentSales.map((sale) => (
+                    <article key={sale.id} className="timeline-card">
+                      <div className="card-header-row">
+                        <div>
+                          <strong>Sale {sale.id.slice(0, 8)}</strong>
+                          <div className="table-secondary">
+                            {formatOptionalDateTime(sale.completedAt ?? sale.createdAt)}
+                          </div>
+                        </div>
+                        <span className="status-badge">{formatMoney(sale.totalPence)}</span>
+                      </div>
+                      <div className="job-meta-grid">
+                        <div><strong>Receipt:</strong> {sale.receiptNumber || "-"}</div>
+                        <div><strong>Payment:</strong> {sale.paymentSummary || "No tender summary recorded"}</div>
+                        <div><strong>Checkout staff:</strong> {sale.checkoutStaffName || "-"}</div>
+                        <div><strong>Workshop link:</strong> {sale.workshopJobId ? sale.workshopJobId.slice(0, 8) : "-"}</div>
+                      </div>
+                      <div className="actions-inline">
+                        {sale.workshopJobId ? <Link to={`/workshop/${sale.workshopJobId}`}>Open linked workshop job</Link> : null}
+                        {sale.receiptUrl ? (
+                          <a href={toBackendUrl(sale.receiptUrl)} target="_blank" rel="noreferrer">
+                            Open receipt
+                          </a>
+                        ) : null}
+                      </div>
+                    </article>
+                  )) : (
+                    <div className="restricted-panel info-panel">
+                      No finalized customer-linked sales yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="customer-relationship-overview__section">
+                <div className="card-header-row">
+                  <div>
+                    <h3 style={{ margin: 0 }}>Active workshop work</h3>
+                    <p className="muted-text" style={{ margin: "6px 0 0" }}>
+                      Keep the current operational picture separate from historic timeline entries.
+                    </p>
+                  </div>
+                </div>
+                <div className="timeline-list">
+                  {activeWorkshopJobs.length ? activeWorkshopJobs.map((job) => (
+                    <article key={job.id} className="timeline-card">
+                      <div className="card-header-row">
+                        <div>
+                          <strong>{job.bikeDescription || `Workshop ${job.id.slice(0, 8)}`}</strong>
+                          <div className="table-secondary">
+                            Updated {formatOptionalDateTime(job.updatedAt)}
+                          </div>
+                        </div>
+                        <span className={workshopExecutionStatusClass(job.status, job.rawStatus)}>
+                          {workshopExecutionStatusLabel(job.status)}
+                        </span>
+                      </div>
+                      <div className="job-meta-grid">
+                        <div><strong>Raw status:</strong> {workshopRawStatusLabel(job.rawStatus)}</div>
+                        <div><strong>Scheduled:</strong> {formatOptionalDate(job.scheduledDate)}</div>
+                        <div>
+                          <strong>Estimate:</strong>{" "}
+                          {job.estimate
+                            ? `${job.estimate.status} · ${formatMoney(job.estimate.subtotalPence)}`
+                            : "No saved estimate"}
+                        </div>
+                        <div>
+                          <strong>Latest note:</strong>{" "}
+                          {job.latestNote ? truncateText(job.latestNote.note, 80) : "No note yet"}
+                        </div>
+                      </div>
+                      <div className="actions-inline">
+                        <Link to={`/workshop/${job.id}`}>Open workshop job</Link>
+                        {job.bikeId ? <Link to={`/customers/bikes/${job.bikeId}`}>Open bike record</Link> : null}
+                        {job.sale?.receiptUrl ? (
+                          <a href={toBackendUrl(job.sale.receiptUrl)} target="_blank" rel="noreferrer">
+                            Open receipt
+                          </a>
+                        ) : null}
+                      </div>
+                    </article>
+                  )) : (
+                    <div className="restricted-panel info-panel">
+                      No active workshop jobs for this customer right now.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="actions-inline" style={{ marginTop: "10px" }}>
-              <Link to={`/customers/${id}/timeline`}>Open full legacy timeline</Link>
+              <Link to={`/customers/${id}/timeline`}>Open full timeline</Link>
               <span className="muted-text">
                 Domain events persist sales completion and workshop lifecycle activity linked to this customer.
               </span>
@@ -1588,7 +1788,7 @@ export const CustomerProfilePage = () => {
             <thead>
               <tr>
                 <th>Sale</th>
-                <th>Total</th>
+                <th>Commercial</th>
                 <th>Completed</th>
                 <th>Receipt</th>
               </tr>
@@ -1601,8 +1801,19 @@ export const CustomerProfilePage = () => {
               ) : (
                 sales.map((sale) => (
                   <tr key={sale.id}>
-                    <td>{sale.id.slice(0, 8)}</td>
-                    <td>{formatMoney(sale.totalPence)}</td>
+                    <td>
+                      <div className="table-primary">{sale.id.slice(0, 8)}</div>
+                      <div className="table-secondary">
+                        {sale.workshopJobId ? `Linked workshop ${sale.workshopJobId.slice(0, 8)}` : "Standalone sale"}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="table-primary">{formatMoney(sale.totalPence)}</div>
+                      <div className="table-secondary">{sale.paymentSummary || "No tender summary recorded"}</div>
+                      <div className="table-secondary">
+                        Checkout {sale.checkoutStaffName || "not captured"}
+                      </div>
+                    </td>
                     <td>{sale.completedAt ? new Date(sale.completedAt).toLocaleString() : "-"}</td>
                     <td>
                       {sale.receiptNumber ? (
@@ -1633,13 +1844,14 @@ export const CustomerProfilePage = () => {
                 <th>Job</th>
                 <th>Status</th>
                 <th>Bike</th>
+                <th>Detail</th>
                 <th>Updated</th>
               </tr>
             </thead>
             <tbody>
               {jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No workshop jobs found.</td>
+                  <td colSpan={5}>No workshop jobs found.</td>
                 </tr>
               ) : (
                 jobs.map((job) => (
@@ -1659,6 +1871,25 @@ export const CustomerProfilePage = () => {
                       ) : (
                         job.bikeDescription || "-"
                       )}
+                    </td>
+                    <td>
+                      <div className="table-secondary">
+                        {job.estimate
+                          ? `Estimate ${job.estimate.status} · ${formatMoney(job.estimate.subtotalPence)}`
+                          : "No saved estimate"}
+                      </div>
+                      <div className="table-secondary">
+                        {job.latestNote
+                          ? `${job.latestNote.visibility === "CUSTOMER" ? "Customer note" : "Internal note"} by ${job.latestNote.authorName || "Staff"}`
+                          : "No note yet"}
+                      </div>
+                      <div className="table-secondary">
+                        {job.sale?.receiptNumber
+                          ? `Final sale receipt ${job.sale.receiptNumber}`
+                          : job.sale
+                            ? `Final sale ${formatMoney(job.sale.totalPence)}`
+                            : "No finalized sale yet"}
+                      </div>
                     </td>
                     <td>{new Date(job.updatedAt).toLocaleString()}</td>
                   </tr>

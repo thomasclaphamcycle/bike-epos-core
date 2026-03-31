@@ -506,6 +506,8 @@ export const addWorkshopJobNote = async (
     );
 
     return {
+      customerId: job.customerId,
+      bikeId: job.bikeId,
       note: {
         id: created.id,
         workshopJobId: created.workshopJobId,
@@ -521,23 +523,20 @@ export const addWorkshopJobNote = async (
             }
           : null,
       },
-      eventContext: {
-        customerId: job.customerId,
-        bikeId: job.bikeId,
-      },
     };
   });
 
   emitEvent("workshop.note.added", {
     id: result.note.id,
     type: "workshop.note.added",
-    timestamp: result.note.createdAt.toISOString(),
-    workshopJobId: result.note.workshopJobId,
+    timestamp: new Date().toISOString(),
+    workshopJobId,
     workshopJobNoteId: result.note.id,
     visibility: result.note.visibility,
-    customerId: result.eventContext.customerId,
-    bikeId: result.eventContext.bikeId,
-    actorStaffId: result.note.authorStaffId ?? auditActor?.actorId,
+    notePreview: result.note.note.slice(0, 160),
+    customerId: result.customerId,
+    bikeId: result.bikeId,
+    ...(result.note.authorStaffId ? { actorStaffId: result.note.authorStaffId } : {}),
   });
 
   return {
@@ -745,10 +744,10 @@ export const changeWorkshopJobStatus = async (
       workshopJobId: result.job.id,
       fromStatus: result.fromStatus,
       toStatus: result.toStatus,
+      stage: result.emittedStage,
       customerId: result.job.customerId,
       bikeId: result.job.bikeId,
       saleId: result.saleId ?? null,
-      actorStaffId: auditActor?.actorId,
     });
   }
 
