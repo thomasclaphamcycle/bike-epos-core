@@ -1,6 +1,6 @@
 import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus, WorkshopServicePricingMode } from "@prisma/client";
-import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
 import { createAuditEventTx, type AuditActor } from "./auditService";
@@ -1225,13 +1225,15 @@ export const updateWorkshopJob = async (workshopJobId: string, input: UpdateWork
   });
 
   if (result.emittedCompletion && result.completedAt) {
-    emit("workshop.job.completed", {
+    emitEvent("workshop.job.completed", {
       id: result.job.id,
       type: "workshop.job.completed",
       timestamp: new Date().toISOString(),
       workshopJobId: result.job.id,
       status: "COMPLETED",
       completedAt: result.completedAt.toISOString(),
+      customerId: result.job.customerId,
+      bikeId: result.job.bikeId,
     });
   }
 

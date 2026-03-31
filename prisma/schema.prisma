@@ -1583,6 +1583,34 @@ model AuditEvent {
   @@index([action, createdAt])
 }
 
+model DomainEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  eventId       String
+  eventName     String
+  entityType    String
+  entityId      String
+  customerId    String?  @db.Uuid
+  bikeId        String?  @db.Uuid
+  workshopJobId String?  @db.Uuid
+  saleId        String?  @db.Uuid
+  variantId     String?
+  requestId     String?
+  actorStaffId  String?
+  payload       Json
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([eventName, occurredAt])
+  @@index([entityType, entityId, occurredAt])
+  @@index([customerId, occurredAt])
+  @@index([bikeId, occurredAt])
+  @@index([workshopJobId, occurredAt])
+  @@index([saleId, occurredAt])
+  @@index([variantId, occurredAt])
+  @@index([actorStaffId, occurredAt])
+  @@index([requestId])
+}
+
 enum UserRole {
   STAFF
   MANAGER

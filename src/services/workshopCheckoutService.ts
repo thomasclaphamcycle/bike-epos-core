@@ -1,7 +1,7 @@
 import { PaymentMethod, Prisma } from "@prisma/client";
-import { emit } from "../core/events";
 import { logCorePosError, logCorePosEvent, logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import { getWorkshopJobUsedPartsTotalPenceTx } from "./workshopPartService";
@@ -31,6 +31,7 @@ type WorkshopCheckoutResult = {
     id: string;
     workshopJobId: string | null;
     customerId: string | null;
+    bikeId: string | null;
     totalPence: number;
     createdAt: Date;
   };
@@ -146,6 +147,7 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promis
       select: {
         id: true,
         status: true,
+        bikeId: true,
         completedAt: true,
       },
     }),
@@ -203,6 +205,7 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promis
       id: existingSale.id,
       workshopJobId: existingSale.workshopJobId,
       customerId: existingSale.customerId,
+      bikeId: workshopJob.bikeId,
       totalPence: existingSale.totalPence,
       createdAt: existingSale.createdAt,
     },
@@ -251,7 +254,7 @@ const toWorkshopCheckoutResponse = (
   result: WorkshopCheckoutResult,
 ) => {
   if (result.emittedWorkshopCompletion) {
-    emit("workshop.job.completed", {
+    emitEvent("workshop.job.completed", {
       id: workshopJobId,
       type: "workshop.job.completed",
       timestamp: new Date().toISOString(),
@@ -259,6 +262,8 @@ const toWorkshopCheckoutResponse = (
       status: result.workshopJobStatus,
       completedAt: result.workshopCompletedAt.toISOString(),
       saleId: result.sale.id,
+      customerId: result.sale.customerId,
+      bikeId: result.sale.bikeId,
     });
   }
 
@@ -367,6 +372,7 @@ export const checkoutWorkshopJobToSale = async (
           select: {
             id: true,
             customerId: true,
+            bikeId: true,
             locationId: true,
             source: true,
             depositStatus: true,
@@ -535,6 +541,7 @@ export const checkoutWorkshopJobToSale = async (
             id: sale.id,
             workshopJobId: sale.workshopJobId,
             customerId: sale.customerId,
+            bikeId: workshopJob.bikeId,
             totalPence: sale.totalPence,
             createdAt: sale.createdAt,
           },

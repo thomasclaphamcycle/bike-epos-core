@@ -1,17 +1,38 @@
+type CoreEventEnvelope<TType extends string> = {
+  id: string;
+  type: TType;
+  timestamp: string;
+  requestId?: string;
+  actorStaffId?: string;
+};
+
 export type CoreEventMap = {
-  "sale.completed": {
-    id: string;
-    type: "sale.completed";
-    timestamp: string;
+  "auth.login.succeeded": CoreEventEnvelope<"auth.login.succeeded"> & {
+    userId: string;
+    authMethod: "password" | "pin";
+    resultStatus: "succeeded";
+  };
+  "payments.intent.created": CoreEventEnvelope<"payments.intent.created"> & {
+    paymentIntentId: string;
+    saleId?: string | null;
+    provider?: string | null;
+    resultStatus: "succeeded";
+  };
+  "payments.refund.recorded": CoreEventEnvelope<"payments.refund.recorded"> & {
+    paymentId: string;
+    refundId: string;
+    resultStatus: "idempotent" | "succeeded";
+  };
+  "sale.completed": CoreEventEnvelope<"sale.completed"> & {
     saleId: string;
     completedAt: string;
     totalPence?: number;
     changeDuePence?: number;
+    customerId?: string | null;
+    workshopJobId?: string | null;
+    bikeId?: string | null;
   };
-  "purchaseOrder.received": {
-    id: string;
-    type: "purchaseOrder.received";
-    timestamp: string;
+  "purchaseOrder.received": CoreEventEnvelope<"purchaseOrder.received"> & {
     purchaseOrderId: string;
     poNumber: string;
     locationId: string;
@@ -19,42 +40,36 @@ export type CoreEventMap = {
     quantityReceived: number;
     status: string;
   };
-  "workshop.job.completed": {
-    id: string;
-    type: "workshop.job.completed";
-    timestamp: string;
+  "workshop.job.completed": CoreEventEnvelope<"workshop.job.completed"> & {
     workshopJobId: string;
     status: string;
     completedAt?: string;
     saleId?: string;
+    customerId?: string | null;
+    bikeId?: string | null;
   };
-  "workshop.quote.ready": {
-    id: string;
-    type: "workshop.quote.ready";
-    timestamp: string;
+  "workshop.quote.ready": CoreEventEnvelope<"workshop.quote.ready"> & {
     workshopJobId: string;
     workshopEstimateId: string;
     estimateVersion: number;
     quotePublicPath?: string;
+    customerId?: string | null;
+    bikeId?: string | null;
   };
-  "workshop.job.ready_for_collection": {
-    id: string;
-    type: "workshop.job.ready_for_collection";
-    timestamp: string;
+  "workshop.job.ready_for_collection": CoreEventEnvelope<"workshop.job.ready_for_collection"> & {
     workshopJobId: string;
     status: string;
+    customerId?: string | null;
+    bikeId?: string | null;
+    saleId?: string | null;
   };
-  "workshop.portal_message.ready": {
-    id: string;
-    type: "workshop.portal_message.ready";
-    timestamp: string;
+  "workshop.portal_message.ready": CoreEventEnvelope<"workshop.portal_message.ready"> & {
     workshopJobId: string;
     workshopMessageId: string;
+    customerId?: string | null;
+    bikeId?: string | null;
   };
-  "stock.adjusted": {
-    id: string;
-    type: "stock.adjusted";
-    timestamp: string;
+  "stock.adjusted": CoreEventEnvelope<"stock.adjusted"> & {
     variantId: string;
     locationId: string;
     quantityDelta: number;
@@ -63,6 +78,20 @@ export type CoreEventMap = {
     referenceId: string;
   };
 };
+
+export type CoreEventName = keyof CoreEventMap;
+export const CORE_EVENT_NAMES = [
+  "auth.login.succeeded",
+  "payments.intent.created",
+  "payments.refund.recorded",
+  "sale.completed",
+  "purchaseOrder.received",
+  "workshop.job.completed",
+  "workshop.quote.ready",
+  "workshop.job.ready_for_collection",
+  "workshop.portal_message.ready",
+  "stock.adjusted",
+] as const satisfies readonly CoreEventName[];
 
 type EventHandler<T = unknown> = (payload: T) => void | Promise<void>;
 

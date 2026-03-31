@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
+import { EntityTimelinePanel } from "../components/EntityTimelinePanel";
 import { useToasts } from "../components/ToastProvider";
 import {
   bikeServiceScheduleDueStatusClass,
@@ -302,6 +303,7 @@ export const BikeHistoryPage = () => {
 
   const [payload, setPayload] = useState<BikeHistoryPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activityTab, setActivityTab] = useState<"overview" | "timeline">("overview");
 
   useEffect(() => {
     if (!bikeId) {
@@ -411,6 +413,65 @@ export const BikeHistoryPage = () => {
             ) : null}
           </>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Bike Activity</h2>
+            <p className="muted-text">
+              Keep the bike-linked service timeline visible alongside the broader workshop history.
+            </p>
+          </div>
+          <div className="workshop-job-status-panel__tabs" role="tablist" aria-label="Bike activity views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activityTab === "overview"}
+              className={`workshop-job-status-panel__tab${activityTab === "overview" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActivityTab("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activityTab === "timeline"}
+              className={`workshop-job-status-panel__tab${activityTab === "timeline" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActivityTab("timeline")}
+            >
+              Timeline
+            </button>
+          </div>
+        </div>
+
+        {activityTab === "overview" ? (
+          payload ? (
+            <>
+              <div className="job-meta-grid">
+                <div><strong>Bike:</strong> {payload.bike.displayName}</div>
+                <div><strong>Customer:</strong> {payload.customer.name}</div>
+                <div><strong>Linked Jobs:</strong> {payload.serviceSummary.linkedJobCount}</div>
+                <div><strong>Completed Jobs:</strong> {payload.serviceSummary.completedJobCount}</div>
+                <div><strong>Open Jobs:</strong> {payload.serviceSummary.openJobCount}</div>
+                <div><strong>Latest Completed Service:</strong> {formatOptionalDateTime(payload.serviceSummary.latestCompletedAt)}</div>
+              </div>
+              <div className="actions-inline" style={{ marginTop: "10px" }}>
+                <Link to={`/customers/${payload.customer.id}/timeline`}>Open customer legacy timeline</Link>
+                <span className="muted-text">
+                  Persistent workshop milestones for this bike appear in the local timeline tab.
+                </span>
+              </div>
+            </>
+          ) : null
+        ) : (
+          <EntityTimelinePanel
+            entityType="BIKE"
+            entityId={bikeId}
+            hint="Persistent domain events linked to this bike, ordered newest first."
+            emptyState="No persistent domain events have been recorded for this bike yet."
+          />
+        )}
       </section>
 
       <section className="card">

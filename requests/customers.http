@@ -15,6 +15,9 @@ Content-Type: application/json
 ### Get customer by id
 GET {{baseUrl}}/api/customers/{{customerId}}
 
+### Customer domain-event timeline
+GET {{baseUrl}}/api/events?entityType=CUSTOMER&entityId={{customerId}}
+
 ### Search customers by name/email/phone
 GET {{baseUrl}}/api/customers?query=jane
 
@@ -71,6 +74,9 @@ Content-Type: application/json
 
 ### Get reusable bike profile and linked service history timeline
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
+
+### Bike domain-event timeline
+GET {{baseUrl}}/api/events?entityType=BIKE&entityId={{bikeId}}
 
 ### List bike service schedules
 GET {{baseUrl}}/api/customers/bikes/{{bikeId}}/service-schedules?includeInactive=true

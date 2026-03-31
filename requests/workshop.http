@@ -22,6 +22,11 @@ GET {{baseUrl}}/api/workshop/dashboard?limit=20&staffDate=2026-03-10
 X-Staff-Role: {{managerRole}}
 X-Staff-Id: demo-manager
 
+### Workshop job domain-event timeline (persistent + recent in-memory fallback)
+GET {{baseUrl}}/api/events?entityType=WORKSHOP_JOB&entityId={{bookingId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: demo-staff
+
 ### Workshop dashboard filters (M14)
 ### assignedTo, unassigned, hasNotes
 GET {{baseUrl}}/api/workshop/dashboard?assignedTo=demo-staff-id&hasNotes=true&limit=50

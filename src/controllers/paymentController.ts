@@ -8,7 +8,9 @@ import {
   createPaymentIntent,
   listPaymentIntents,
 } from "../services/paymentIntentService";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError } from "../utils/http";
+import { createRequestLogger } from "../utils/logger";
 
 const parseRefundStatus = (value: string | undefined): RefundStatus | undefined => {
   if (value === undefined) {
@@ -32,6 +34,7 @@ const parseRefundStatus = (value: string | undefined): RefundStatus | undefined 
 };
 
 export const refundPaymentHandler = async (req: Request, res: Response) => {
+  const requestLogger = createRequestLogger(req);
   const body = (req.body ?? {}) as {
     amountPence?: number;
     reason?: string;
@@ -61,6 +64,19 @@ export const refundPaymentHandler = async (req: Request, res: Response) => {
     idempotencyKey: body.idempotencyKey,
   }, getRequestAuditActor(req));
 
+  requestLogger.info("payments.refund.recorded", {
+    resultStatus: result.idempotent ? "idempotent" : "succeeded",
+    paymentId: req.params.id,
+    refundId: result.refund.id,
+  });
+  emitEvent("payments.refund.recorded", {
+    id: result.refund.id,
+    type: "payments.refund.recorded",
+    timestamp: new Date().toISOString(),
+    paymentId: req.params.id,
+    refundId: result.refund.id,
+    resultStatus: result.idempotent ? "idempotent" : "succeeded",
+  });
   res.status(result.idempotent ? 200 : 201).json(result);
 };
 
@@ -70,6 +86,7 @@ export const getPaymentHandler = async (req: Request, res: Response) => {
 };
 
 export const createPaymentIntentHandler = async (req: Request, res: Response) => {
+  const requestLogger = createRequestLogger(req);
   const body = (req.body ?? {}) as {
     saleId?: string;
     amountPence?: number;
@@ -91,6 +108,21 @@ export const createPaymentIntentHandler = async (req: Request, res: Response) =>
   }
 
   const result = await createPaymentIntent(body, getRequestStaffActorId(req));
+  requestLogger.info("payments.intent.created", {
+    resultStatus: "succeeded",
+    paymentIntentId: result.id,
+    saleId: result.saleId,
+    provider: result.provider,
+  });
+  emitEvent("payments.intent.created", {
+    id: result.id,
+    type: "payments.intent.created",
+    timestamp: new Date().toISOString(),
+    paymentIntentId: result.id,
+    saleId: result.saleId,
+    provider: result.provider,
+    resultStatus: "succeeded",
+  });
   res.status(201).json(result);
 };
 

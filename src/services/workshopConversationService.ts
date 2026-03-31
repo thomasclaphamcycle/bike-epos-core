@@ -3,8 +3,8 @@ import {
   Prisma,
   WorkshopMessageChannel,
 } from "@prisma/client";
-import { emit } from "../core/events";
 import { prisma } from "../lib/prisma";
+import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
 import {
@@ -93,6 +93,7 @@ const ensureWorkshopJobExistsTx = async (
     select: {
       id: true,
       customerId: true,
+      bikeId: true,
       customerName: true,
     },
   });
@@ -322,15 +323,19 @@ export const postWorkshopConversationMessageForJob = async (
     return {
       conversation: refreshed,
       messageId: created.id,
+      customerId: job.customerId ?? null,
+      bikeId: job.bikeId ?? null,
     };
   });
 
-  emit("workshop.portal_message.ready", {
+  emitEvent("workshop.portal_message.ready", {
     id: crypto.randomUUID(),
     type: "workshop.portal_message.ready",
     timestamp: new Date().toISOString(),
     workshopJobId,
     workshopMessageId: result.messageId,
+    customerId: result.customerId,
+    bikeId: result.bikeId,
   });
 
   return toStaffConversationResponse(result.conversation);

@@ -273,6 +273,19 @@ type WorkshopConversationResponse = {
   messages: WorkshopConversationMessage[];
 };
 
+type WorkshopTimelineEvent = {
+  id: string;
+  occurredAt: string;
+  label: string;
+  description: string;
+};
+
+type WorkshopTimelineResponse = {
+  entityType: "WORKSHOP_JOB";
+  entityId: string;
+  events: WorkshopTimelineEvent[];
+};
+
 type WorkshopAttachmentRecord = {
   id: string;
   workshopJobId: string;
@@ -444,12 +457,14 @@ export const WorkshopJobPage = () => {
   const [attachmentsPayload, setAttachmentsPayload] = useState<WorkshopAttachmentsResponse | null>(null);
   const [notifications, setNotifications] = useState<WorkshopNotificationRecord[]>([]);
   const [partsPayload, setPartsPayload] = useState<WorkshopPartsResponse | null>(null);
+  const [timelinePayload, setTimelinePayload] = useState<WorkshopTimelineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [partsLoading, setPartsLoading] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const [customerBikes, setCustomerBikes] = useState<CustomerBikeRecord[]>([]);
   const [customerBikesLoading, setCustomerBikesLoading] = useState(false);
 
@@ -497,6 +512,7 @@ export const WorkshopJobPage = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedOptionalTemplateLineIds, setSelectedOptionalTemplateLineIds] = useState<string[]>([]);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [statusPanelTab, setStatusPanelTab] = useState<"progress" | "timeline">("progress");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
@@ -647,6 +663,25 @@ export const WorkshopJobPage = () => {
     }
   };
 
+  const loadTimeline = async () => {
+    if (!id) {
+      return;
+    }
+
+    setTimelineLoading(true);
+    try {
+      const response = await apiGet<WorkshopTimelineResponse>(
+        `/api/events?entityType=WORKSHOP_JOB&entityId=${encodeURIComponent(id)}`,
+      );
+      setTimelinePayload(response);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Failed to load workshop timeline";
+      error(message);
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
+
   const loadTemplates = async () => {
     setLoadingTemplates(true);
     try {
@@ -668,6 +703,7 @@ export const WorkshopJobPage = () => {
       loadAttachments(),
       loadNotifications(),
       loadParts(),
+      loadTimeline(),
       loadTemplates(),
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1357,6 +1393,7 @@ export const WorkshopJobPage = () => {
 
   const statusTimeline = useMemo(() => getWorkshopStatusTimeline(displayStatus), [displayStatus]);
   const canManuallyUpdateStatus = !["COMPLETED", "CANCELLED"].includes(displayStatus);
+  const timelineEvents = timelinePayload?.events ?? [];
 
   const customerNotes = useMemo(
     () => notes.filter((note) => note.visibility === "CUSTOMER"),
@@ -1439,7 +1476,29 @@ export const WorkshopJobPage = () => {
           </div>
 
           <div className="workshop-job-status-panel" ref={statusMenuRef}>
-            <span className="table-secondary">Workshop status</span>
+            <div className="workshop-job-status-panel__header">
+              <span className="table-secondary">Workshop activity</span>
+              <div className="workshop-job-status-panel__tabs" role="tablist" aria-label="Workshop activity views">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={statusPanelTab === "progress"}
+                  className={`workshop-job-status-panel__tab${statusPanelTab === "progress" ? " workshop-job-status-panel__tab--active" : ""}`}
+                  onClick={() => setStatusPanelTab("progress")}
+                >
+                  Progress
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={statusPanelTab === "timeline"}
+                  className={`workshop-job-status-panel__tab${statusPanelTab === "timeline" ? " workshop-job-status-panel__tab--active" : ""}`}
+                  onClick={() => setStatusPanelTab("timeline")}
+                >
+                  Timeline
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               className={`workshop-job-status-trigger ${workshopRawStatusActionClass(displayStatus)}`}
@@ -1486,23 +1545,61 @@ export const WorkshopJobPage = () => {
               </div>
             ) : null}
 
-            <div className="workshop-job-status-timeline" aria-label="Workshop progress">
-              {statusTimeline.map((step) => (
-                <div
-                  key={step.status}
-                  className={`workshop-job-status-timeline__step workshop-job-status-timeline__step--${step.state}`}
-                >
-                  <span className="workshop-job-status-timeline__dot" />
-                  <span className="workshop-job-status-timeline__label">{step.label}</span>
+            {statusPanelTab === "progress" ? (
+              <>
+                <div className="workshop-job-status-timeline" aria-label="Workshop progress">
+                  {statusTimeline.map((step) => (
+                    <div
+                      key={step.status}
+                      className={`workshop-job-status-timeline__step workshop-job-status-timeline__step--${step.state}`}
+                    >
+                      <span className="workshop-job-status-timeline__dot" />
+                      <span className="workshop-job-status-timeline__label">{step.label}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            <p className="workshop-job-status-panel__hint">
-              {canManuallyUpdateStatus
-                ? "Automatic workshop updates still apply. Manual changes save immediately and are audited."
-                : "Completed and cancelled jobs stay locked so handoff history remains trustworthy."}
-            </p>
+                <p className="workshop-job-status-panel__hint">
+                  {canManuallyUpdateStatus
+                    ? "Automatic workshop updates still apply. Manual changes save immediately and are audited."
+                    : "Completed and cancelled jobs stay locked so handoff history remains trustworthy."}
+                </p>
+              </>
+            ) : (
+              <div className="workshop-job-event-timeline">
+                <div className="workshop-job-event-timeline__header">
+                  <p className="workshop-job-status-panel__hint">
+                    Persistent domain-event activity for this job, with recent in-memory events merged in during active work.
+                  </p>
+                  <button type="button" className="button-link" onClick={() => void loadTimeline()} disabled={timelineLoading}>
+                    {timelineLoading ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+
+                {timelineEvents.length ? (
+                  <ol className="workshop-job-event-timeline__list">
+                    {timelineEvents.map((event) => (
+                      <li key={event.id} className="workshop-job-event-timeline__item">
+                        <div className="workshop-job-event-timeline__marker" />
+                        <div className="workshop-job-event-timeline__content">
+                          <div className="workshop-job-event-timeline__item-header">
+                            <strong>{event.label}</strong>
+                            <span className="table-secondary">{new Date(event.occurredAt).toLocaleString()}</span>
+                          </div>
+                          <p>{event.description}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="restricted-panel info-panel">
+                    {timelineLoading
+                      ? "Loading workshop timeline..."
+                      : "No domain events have been recorded for this workshop job yet."}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="actions-inline workshop-job-header__actions">

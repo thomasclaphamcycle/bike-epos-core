@@ -48,6 +48,7 @@ const withRequestContext = (payload: OperationalLogPayload) => {
 
   return {
     requestId: requestContext.requestId,
+    actorStaffId: requestContext.actorStaffId ?? null,
     method: requestContext.method,
     route: requestContext.route,
     ...payload,
