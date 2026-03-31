@@ -21,6 +21,104 @@ import {
   type WorkshopExecutionStatus,
 } from "../features/workshop/status";
 
+type BikeServiceScheduleRecord = {
+  id: string;
+  bikeId: string;
+  type: BikeServiceScheduleType;
+  typeLabel: string;
+  title: string;
+  description: string | null;
+  intervalMonths: number | null;
+  intervalMileage: number | null;
+  lastServiceAt: string | null;
+  lastServiceMileage: number | null;
+  nextDueAt: string | null;
+  nextDueMileage: number | null;
+  isActive: boolean;
+  dueStatus: BikeServiceScheduleDueStatus;
+  dueSummaryText: string;
+  cadenceSummaryText: string;
+  lastServiceSummaryText: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type BikeHistoryEntry = {
+  id: string;
+  reference: string;
+  title: string;
+  jobPath: string;
+  customerId: string | null;
+  customerName: string | null;
+  bikeDescription: string | null;
+  serviceSummaryText: string;
+  status: WorkshopExecutionStatus;
+  rawStatus: string;
+  scheduledDate: string | null;
+  scheduledStartAt: string | null;
+  scheduledEndAt: string | null;
+  durationMinutes: number | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  closedAt: string | null;
+  depositRequiredPence: number;
+  depositStatus: string;
+  finalizedBasketId: string | null;
+  assignedTechnician: {
+    id: string | null;
+    name: string | null;
+  } | null;
+  notes: {
+    jobNotes: string | null;
+    noteCount: number;
+    latestNote: {
+      id: string;
+      note: string;
+      visibility: "INTERNAL" | "CUSTOMER";
+      createdAt: string;
+      authorName: string | null;
+    } | null;
+  };
+  liveTotals: {
+    lineCount: number;
+    labourTotalPence: number;
+    partsTotalPence: number;
+    subtotalPence: number;
+  };
+  moneySummary: {
+    labourTotalPence: number;
+    partsTotalPence: number;
+    liveSubtotalPence: number;
+    estimateSubtotalPence: number | null;
+    finalTotalPence: number | null;
+    primaryTotalPence: number;
+    primaryTotalSource: "FINAL_SALE" | "ESTIMATE" | "LIVE_TOTAL";
+  };
+  estimate: {
+    id: string;
+    version: number;
+    status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "SUPERSEDED";
+    labourTotalPence: number;
+    partsTotalPence: number;
+    subtotalPence: number;
+    lineCount: number;
+    requestedAt: string | null;
+    approvedAt: string | null;
+    rejectedAt: string | null;
+    supersededAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+    isCurrent: boolean;
+  } | null;
+  sale: {
+    id: string;
+    totalPence: number;
+    createdAt: string;
+    completedAt: string | null;
+  } | null;
+};
+
 type BikeHistoryPayload = {
   bike: {
     id: string;
@@ -69,129 +167,32 @@ type BikeHistoryPayload = {
     latestJobAt: string | null;
     latestCompletedAt: string | null;
   };
-  serviceSchedules: Array<{
-    id: string;
-    bikeId: string;
-    type: BikeServiceScheduleType;
-    typeLabel: string;
-    title: string;
-    description: string | null;
-    intervalMonths: number | null;
-    intervalMileage: number | null;
+  metrics: {
+    totalJobs: number;
+    completedJobs: number;
+    openJobs: number;
     lastServiceAt: string | null;
-    lastServiceMileage: number | null;
-    nextDueAt: string | null;
-    nextDueMileage: number | null;
-    isActive: boolean;
-    dueStatus: BikeServiceScheduleDueStatus;
-    dueSummaryText: string;
-    cadenceSummaryText: string;
-    lastServiceSummaryText: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+    lifetimeWorkshopSpendPence: number;
+    finalizedSaleCount: number;
+    lastActivityAt: string | null;
+  };
+  serviceSchedules: BikeServiceScheduleRecord[];
   serviceScheduleSummary: {
     activeCount: number;
     inactiveCount: number;
     dueCount: number;
     overdueCount: number;
     upcomingCount: number;
-    primarySchedule: {
-      id: string;
-      bikeId: string;
-      type: BikeServiceScheduleType;
-      typeLabel: string;
-      title: string;
-      description: string | null;
-      intervalMonths: number | null;
-      intervalMileage: number | null;
-      lastServiceAt: string | null;
-      lastServiceMileage: number | null;
-      nextDueAt: string | null;
-      nextDueMileage: number | null;
-      isActive: boolean;
-      dueStatus: BikeServiceScheduleDueStatus;
-      dueSummaryText: string;
-      cadenceSummaryText: string;
-      lastServiceSummaryText: string;
-      createdAt: string;
-      updatedAt: string;
-    } | null;
+    primarySchedule: BikeServiceScheduleRecord | null;
   };
   limitations: string[];
-  history: Array<{
-    id: string;
-    jobPath: string;
-    customerId: string | null;
-    customerName: string | null;
-    bikeDescription: string | null;
-    serviceSummaryText: string;
-    status: WorkshopExecutionStatus;
-    rawStatus: string;
-    scheduledDate: string | null;
-    createdAt: string;
-    updatedAt: string;
-    completedAt: string | null;
-    closedAt: string | null;
-    depositRequiredPence: number;
-    depositStatus: string;
-    finalizedBasketId: string | null;
-    assignedTechnician: {
-      id: string | null;
-      name: string | null;
-    } | null;
-    notes: {
-      jobNotes: string | null;
-      noteCount: number;
-      latestNote: {
-        id: string;
-        note: string;
-        visibility: "INTERNAL" | "CUSTOMER";
-        createdAt: string;
-        authorName: string | null;
-      } | null;
-    };
-    liveTotals: {
-      lineCount: number;
-      labourTotalPence: number;
-      partsTotalPence: number;
-      subtotalPence: number;
-    };
-    moneySummary: {
-      labourTotalPence: number;
-      partsTotalPence: number;
-      liveSubtotalPence: number;
-      estimateSubtotalPence: number | null;
-      finalTotalPence: number | null;
-      primaryTotalPence: number;
-      primaryTotalSource: "FINAL_SALE" | "ESTIMATE" | "LIVE_TOTAL";
-    };
-    estimate: {
-      id: string;
-      version: number;
-      status: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "SUPERSEDED";
-      labourTotalPence: number;
-      partsTotalPence: number;
-      subtotalPence: number;
-      lineCount: number;
-      requestedAt: string | null;
-      approvedAt: string | null;
-      rejectedAt: string | null;
-      supersededAt: string | null;
-      createdAt: string;
-      updatedAt: string;
-      isCurrent: boolean;
-    } | null;
-    sale: {
-      id: string;
-      totalPence: number;
-      createdAt: string;
-      completedAt: string | null;
-    } | null;
-  }>;
+  completedHistory: BikeHistoryEntry[];
+  openWork: BikeHistoryEntry[];
+  history: BikeHistoryEntry[];
 };
 
-const formatMoney = (pence: number) => `GBP ${(pence / 100).toFixed(2)}`;
+type BikeHistoryTab = "history" | "timeline" | "openWork" | "details";
+
 const BIKE_TYPE_LABELS: Record<string, string> = {
   ROAD: "Road",
   MTB: "Mountain bike",
@@ -206,31 +207,32 @@ const BIKE_TYPE_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
 const formatOptionalDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
 
-const truncateText = (value: string, limit = 140) =>
+const formatOptionalDate = (value: string | null | undefined) =>
+  value ? new Date(value).toLocaleDateString() : "-";
+
+const truncateText = (value: string, limit = 180) =>
   value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
 
 const formatBikeType = (value: string | null | undefined) =>
   value ? BIKE_TYPE_LABELS[value] ?? value : "-";
 
-const buildEstimateSummary = (
-  estimate: BikeHistoryPayload["history"][number]["estimate"],
-) => {
-  if (!estimate) {
+const buildEstimateSummary = (entry: BikeHistoryEntry) => {
+  if (!entry.estimate) {
     return "No saved estimate snapshot";
   }
 
-  const scope = estimate.isCurrent ? "current" : "latest saved";
-  return `v${estimate.version} ${workshopEstimateStatusLabel(estimate.status)} · ${formatMoney(estimate.subtotalPence)} · ${scope}`;
+  const scope = entry.estimate.isCurrent ? "current" : "latest saved";
+  return `Estimate v${entry.estimate.version} ${workshopEstimateStatusLabel(entry.estimate.status)} · ${formatMoney(entry.estimate.subtotalPence)} · ${scope}`;
 };
 
-const buildOutcomeSummary = (
-  entry: BikeHistoryPayload["history"][number],
-) => {
+const buildJobOutcomeSummary = (entry: BikeHistoryEntry) => {
   if (entry.sale) {
-    return `Sale ${entry.sale.id.slice(0, 8)} completed for ${formatMoney(entry.sale.totalPence)}.`;
+    return `Final sale ${entry.sale.id.slice(0, 8)} completed for ${formatMoney(entry.sale.totalPence)}.`;
   }
 
   if (entry.status === "READY") {
@@ -247,55 +249,207 @@ const buildOutcomeSummary = (
     return "Cancelled before completion.";
   }
 
-  return "No sale outcome recorded yet.";
+  return "No final sale has been captured yet.";
 };
 
-const buildHistoryDateSummary = (
-  entry: BikeHistoryPayload["history"][number],
-) => {
-  if (entry.scheduledDate) {
-    return `Scheduled ${formatOptionalDateTime(entry.scheduledDate)}`;
-  }
-
+const buildHistoryDateSummary = (entry: BikeHistoryEntry) => {
   if (entry.completedAt) {
-    return `Completed ${formatOptionalDateTime(entry.completedAt)}`;
+    return `Completed ${formatOptionalDate(entry.completedAt)}`;
   }
 
-  return `Created ${formatOptionalDateTime(entry.createdAt)}`;
+  if (entry.scheduledStartAt) {
+    return `Booked ${formatOptionalDate(entry.scheduledStartAt)}`;
+  }
+
+  if (entry.scheduledDate) {
+    return `Booked ${formatOptionalDate(entry.scheduledDate)}`;
+  }
+
+  return `Created ${formatOptionalDate(entry.createdAt)}`;
 };
 
-const buildHistoryMoneySummary = (
-  entry: BikeHistoryPayload["history"][number],
-) => {
-  const totals = [
-    `Labour ${formatMoney(entry.moneySummary.labourTotalPence)}`,
-    `Parts ${formatMoney(entry.moneySummary.partsTotalPence)}`,
-  ];
-
-  if (entry.moneySummary.primaryTotalSource === "FINAL_SALE") {
-    totals.push(`Final ${formatMoney(entry.moneySummary.primaryTotalPence)}`);
-  } else if (entry.moneySummary.primaryTotalSource === "ESTIMATE") {
-    totals.push(`Estimate ${formatMoney(entry.moneySummary.primaryTotalPence)}`);
-  } else {
-    totals.push(`Current ${formatMoney(entry.moneySummary.primaryTotalPence)}`);
+const buildOpenWorkDateSummary = (entry: BikeHistoryEntry) => {
+  if (entry.status === "READY") {
+    return `Ready since ${formatOptionalDateTime(entry.updatedAt)}`;
   }
 
-  return totals.join(" · ");
+  if (entry.scheduledStartAt) {
+    return `Booked ${formatOptionalDateTime(entry.scheduledStartAt)}`;
+  }
+
+  if (entry.scheduledDate) {
+    return `Booked ${formatOptionalDate(entry.scheduledDate)}`;
+  }
+
+  return `Updated ${formatOptionalDateTime(entry.updatedAt)}`;
 };
 
-const buildHistoryCommercialSummary = (
-  entry: BikeHistoryPayload["history"][number],
-) => {
-  if (entry.sale) {
-    return `Final sale ${entry.sale.id.slice(0, 8)} completed for ${formatMoney(entry.sale.totalPence)}.`;
+const buildHeaderStatus = (payload: BikeHistoryPayload) => {
+  if (payload.openWork.some((entry) => entry.status === "READY")) {
+    return {
+      label: "Ready for collection",
+      tone: "active",
+      detail: `${payload.openWork.filter((entry) => entry.status === "READY").length} bike-linked job${payload.openWork.filter((entry) => entry.status === "READY").length === 1 ? "" : "s"} waiting to be handed back.`,
+    };
   }
 
-  if (entry.estimate) {
-    return buildEstimateSummary(entry.estimate);
+  if (payload.openWork.length > 0) {
+    return {
+      label: "In workshop",
+      tone: "active",
+      detail: `${payload.openWork.length} active bike-linked job${payload.openWork.length === 1 ? "" : "s"} currently being worked.`,
+    };
   }
 
-  return `${entry.liveTotals.lineCount} live workshop line${entry.liveTotals.lineCount === 1 ? "" : "s"} recorded.`;
+  if (payload.serviceScheduleSummary.overdueCount > 0) {
+    return {
+      label: "Service overdue",
+      tone: "attention",
+      detail: `${payload.serviceScheduleSummary.overdueCount} care-plan item${payload.serviceScheduleSummary.overdueCount === 1 ? "" : "s"} is overdue.`,
+    };
+  }
+
+  if (payload.serviceScheduleSummary.dueCount > 0) {
+    return {
+      label: "Service due",
+      tone: "attention",
+      detail: `${payload.serviceScheduleSummary.dueCount} care-plan item${payload.serviceScheduleSummary.dueCount === 1 ? "" : "s"} is currently due.`,
+    };
+  }
+
+  if (payload.metrics.lastServiceAt) {
+    return {
+      label: "History current",
+      tone: "calm",
+      detail: `Last completed service recorded on ${formatOptionalDate(payload.metrics.lastServiceAt)}.`,
+    };
+  }
+
+  return {
+    label: "History building",
+    tone: "neutral",
+    detail: "This bike does not have a completed linked workshop history yet.",
+  };
 };
+
+const buildPrimaryIdentityLine = (payload: BikeHistoryPayload) => {
+  const fragments = [
+    [payload.bike.make, payload.bike.model].filter(Boolean).join(" ").trim() || null,
+    payload.bike.year ? `${payload.bike.year}` : null,
+    formatBikeType(payload.bike.bikeType) !== "-" ? formatBikeType(payload.bike.bikeType) : null,
+    payload.bike.colour,
+  ].filter(Boolean);
+
+  return fragments.length > 0 ? fragments.join(" · ") : "Structured bike profile";
+};
+
+const buildServiceScheduleSummary = (payload: BikeHistoryPayload) => {
+  const parts = [
+    payload.serviceScheduleSummary.activeCount > 0
+      ? `${payload.serviceScheduleSummary.activeCount} active schedule${payload.serviceScheduleSummary.activeCount === 1 ? "" : "s"}`
+      : null,
+    payload.serviceScheduleSummary.dueCount > 0
+      ? `${payload.serviceScheduleSummary.dueCount} due`
+      : null,
+    payload.serviceScheduleSummary.overdueCount > 0
+      ? `${payload.serviceScheduleSummary.overdueCount} overdue`
+      : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : "No active care plan";
+};
+
+const buildJobDetailPreview = (entry: BikeHistoryEntry) => {
+  if (entry.notes.latestNote) {
+    return `${entry.notes.latestNote.visibility === "CUSTOMER" ? "Customer-visible" : "Internal"} note: ${truncateText(entry.notes.latestNote.note)}`;
+  }
+
+  if (entry.notes.jobNotes) {
+    return `Check-in note: ${truncateText(entry.notes.jobNotes)}`;
+  }
+
+  return entry.serviceSummaryText;
+};
+
+const JobCard = ({
+  entry,
+  mode,
+}: {
+  entry: BikeHistoryEntry;
+  mode: "history" | "open";
+}) => (
+  <article className={`timeline-card bike-service-job-card bike-service-job-card--${mode}`}>
+    <div className="bike-service-job-card__header">
+      <div>
+        <div className="bike-history-entry__date">
+          {mode === "history" ? buildHistoryDateSummary(entry) : buildOpenWorkDateSummary(entry)}
+        </div>
+        <strong>
+          <Link to={entry.jobPath}>Workshop Job {entry.reference}</Link>
+        </strong>
+        <div className="table-secondary">{entry.title}</div>
+      </div>
+      <div className="actions-inline">
+        <span className={workshopExecutionStatusClass(entry.status, entry.rawStatus)}>
+          {workshopExecutionStatusLabel(entry.status)}
+        </span>
+        {entry.estimate ? (
+          <span className={workshopEstimateStatusClass(entry.estimate.status)}>
+            {workshopEstimateStatusLabel(entry.estimate.status)}
+          </span>
+        ) : null}
+      </div>
+    </div>
+
+    <div className="bike-service-job-card__totals">
+      <div className="bike-service-job-card__total">
+        <span className="metric-label">Labour</span>
+        <strong>{formatMoney(entry.moneySummary.labourTotalPence)}</strong>
+      </div>
+      <div className="bike-service-job-card__total">
+        <span className="metric-label">Parts</span>
+        <strong>{formatMoney(entry.moneySummary.partsTotalPence)}</strong>
+      </div>
+      <div className="bike-service-job-card__total bike-service-job-card__total--primary">
+        <span className="metric-label">{mode === "history" && entry.sale ? "Final" : "Current"}</span>
+        <strong>{formatMoney(entry.moneySummary.primaryTotalPence)}</strong>
+      </div>
+    </div>
+
+    <div className="bike-history-entry__meta">
+      <div><strong>Workflow:</strong> {workshopRawStatusLabel(entry.rawStatus)}</div>
+      <div><strong>Technician:</strong> {entry.assignedTechnician?.name || "Unassigned"}</div>
+      <div><strong>Booking:</strong> {formatOptionalDateTime(entry.scheduledStartAt || entry.scheduledDate)}</div>
+      <div><strong>Estimate:</strong> {entry.estimate ? workshopEstimateStatusLabel(entry.estimate.status) : "No estimate saved"}</div>
+    </div>
+
+    <details className="bike-service-job-card__details">
+      <summary>Notes & summary</summary>
+      <div className="bike-service-job-card__details-body">
+        <p>{buildJobDetailPreview(entry)}</p>
+        <p>{buildJobOutcomeSummary(entry)}</p>
+        {entry.estimate ? <p>{buildEstimateSummary(entry)}</p> : null}
+        {entry.notes.latestNote ? (
+          <p className="table-secondary">
+            Latest note by {entry.notes.latestNote.authorName || "Staff"} on {formatOptionalDateTime(entry.notes.latestNote.createdAt)}
+          </p>
+        ) : null}
+      </div>
+    </details>
+
+    <div className="actions-inline">
+      <Link to={entry.jobPath}>Open workshop job</Link>
+      {mode === "history" ? (
+        <span className="table-secondary">Completed {formatOptionalDateTime(entry.completedAt)}</span>
+      ) : (
+        <span className="table-secondary">Updated {formatOptionalDateTime(entry.updatedAt)}</span>
+      )}
+      <span className={workshopRawStatusClass(entry.rawStatus)}>
+        {workshopRawStatusLabel(entry.rawStatus)}
+      </span>
+    </div>
+  </article>
+);
 
 export const BikeHistoryPage = () => {
   const { bikeId } = useParams<{ bikeId: string }>();
@@ -303,7 +457,7 @@ export const BikeHistoryPage = () => {
 
   const [payload, setPayload] = useState<BikeHistoryPayload | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activityTab, setActivityTab] = useState<"overview" | "timeline">("overview");
+  const [activeTab, setActiveTab] = useState<BikeHistoryTab>("history");
 
   useEffect(() => {
     if (!bikeId) {
@@ -346,6 +500,10 @@ export const BikeHistoryPage = () => {
     () => payload?.limitations?.[0] ?? null,
     [payload?.limitations],
   );
+  const headerStatus = useMemo(
+    () => (payload ? buildHeaderStatus(payload) : null),
+    [payload],
+  );
 
   if (!bikeId) {
     return <div className="page-shell"><p>Missing bike id.</p></div>;
@@ -353,24 +511,45 @@ export const BikeHistoryPage = () => {
 
   return (
     <div className="page-shell">
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h1>Bike Service History</h1>
-            <p className="muted-text">
-              Review the linked workshop record for this bike while keeping older free-text-only jobs clearly separate.
-            </p>
+      <section className="card bike-service-profile">
+        <div className="bike-service-profile__hero">
+          <div className="bike-service-profile__identity">
+            <div className="bike-service-profile__eyebrow">Bike service history</div>
+            {payload ? (
+              <>
+                <div className="bike-service-profile__title-row">
+                  <h1>{payload.bike.displayName}</h1>
+                  {headerStatus ? (
+                    <span className={`bike-service-profile__status bike-service-profile__status--${headerStatus.tone}`}>
+                      {headerStatus.label}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="muted-text">{buildPrimaryIdentityLine(payload)}</p>
+                {headerStatus ? (
+                  <p className="bike-service-profile__status-detail">{headerStatus.detail}</p>
+                ) : null}
+                <div className="bike-service-profile__highlights">
+                  <span><strong>Owner:</strong> <Link to={`/customers/${payload.customer.id}`}>{payload.customer.name}</Link></span>
+                  <span><strong>Identifiers:</strong> {[payload.bike.registrationNumber, payload.bike.frameNumber, payload.bike.serialNumber].filter(Boolean).join(" · ") || "Not recorded"}</span>
+                  <span><strong>Care plan:</strong> {buildServiceScheduleSummary(payload)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <h1>Bike Service History</h1>
+                <p className="muted-text">Loading bike profile...</p>
+              </>
+            )}
           </div>
+
           {payload ? (
-            <div className="actions-inline">
+            <div className="actions-inline bike-service-profile__actions">
               <Link to={payload.workshopStartContext.startPath} className="button-link">
                 Start Workshop Job
               </Link>
               <Link to={`/customers/${payload.customer.id}`} className="button-link">
                 Customer Profile
-              </Link>
-              <Link to={`/customers/${payload.customer.id}/timeline`} className="button-link">
-                Open Timeline
               </Link>
             </div>
           ) : null}
@@ -379,239 +558,245 @@ export const BikeHistoryPage = () => {
         {loading ? <p>Loading...</p> : null}
 
         {payload ? (
-          <>
-            <div className="job-meta-grid">
-              <div><strong>Bike:</strong> {payload.bike.displayName}</div>
-              <div>
-                <strong>Customer:</strong>{" "}
-                <Link to={`/customers/${payload.customer.id}`}>{payload.customer.name}</Link>
-              </div>
-              <div><strong>Make / Model:</strong> {[payload.bike.make, payload.bike.model].filter(Boolean).join(" ") || "-"}</div>
-              <div><strong>Year / Type:</strong> {payload.bike.year ? `${payload.bike.year} · ${formatBikeType(payload.bike.bikeType)}` : formatBikeType(payload.bike.bikeType)}</div>
-              <div><strong>Colour:</strong> {payload.bike.colour || "-"}</div>
-              <div><strong>Wheel / Frame:</strong> {[payload.bike.wheelSize, payload.bike.frameSize].filter(Boolean).join(" · ") || "-"}</div>
-              <div><strong>Groupset:</strong> {payload.bike.groupset || "-"}</div>
-              <div><strong>Frame #:</strong> {payload.bike.frameNumber || "-"}</div>
-              <div><strong>Serial #:</strong> {payload.bike.serialNumber || "-"}</div>
-              <div><strong>Registration:</strong> {payload.bike.registrationNumber || "-"}</div>
-              <div><strong>E-bike:</strong> {[payload.bike.motorBrand, payload.bike.motorModel, payload.bike.batterySerial].filter(Boolean).join(" · ") || "-"}</div>
-              <div><strong>Bike Notes:</strong> {payload.bike.notes || "-"}</div>
-              <div><strong>Linked Jobs:</strong> {payload.serviceSummary.linkedJobCount}</div>
-              <div><strong>Open Jobs:</strong> {payload.serviceSummary.openJobCount}</div>
-              <div><strong>Completed Jobs:</strong> {payload.serviceSummary.completedJobCount}</div>
-              <div><strong>Latest Completed Service:</strong> {formatOptionalDateTime(payload.serviceSummary.latestCompletedAt)}</div>
-              <div>
-                <strong>Workshop Intake:</strong>{" "}
-                <Link to={payload.workshopStartContext.startPath}>Start a new job for this bike</Link>
-              </div>
-            </div>
+          <div className="bike-service-profile__metrics">
+            <article className="summary-card">
+              <span className="metric-label">Total jobs</span>
+              <strong className="metric-value">{payload.metrics.totalJobs}</strong>
+              <span className="table-secondary">{payload.metrics.completedJobs} completed linked jobs</span>
+            </article>
+            <article className="summary-card">
+              <span className="metric-label">Last service</span>
+              <strong className="metric-value bike-service-profile__metric-value--compact">
+                {payload.metrics.lastServiceAt ? formatOptionalDate(payload.metrics.lastServiceAt) : "Not yet recorded"}
+              </strong>
+              <span className="table-secondary">
+                Last activity {formatOptionalDate(payload.metrics.lastActivityAt)}
+              </span>
+            </article>
+            <article className="summary-card">
+              <span className="metric-label">Open work</span>
+              <strong className="metric-value">{payload.metrics.openJobs}</strong>
+              <span className="table-secondary">
+                {payload.openWork.some((entry) => entry.status === "READY")
+                  ? "Includes ready-for-collection work"
+                  : "Active bike-linked workshop jobs"}
+              </span>
+            </article>
+            <article className="summary-card">
+              <span className="metric-label">Lifetime workshop spend</span>
+              <strong className="metric-value bike-service-profile__metric-value--compact">
+                {payload.metrics.finalizedSaleCount > 0
+                  ? formatMoney(payload.metrics.lifetimeWorkshopSpendPence)
+                  : "Not yet captured"}
+              </strong>
+              <span className="table-secondary">
+                {payload.metrics.finalizedSaleCount > 0
+                  ? `From ${payload.metrics.finalizedSaleCount} finalized bike-linked sale${payload.metrics.finalizedSaleCount === 1 ? "" : "s"}`
+                  : "Shown only where finalized linked sales exist"}
+              </span>
+            </article>
+          </div>
+        ) : null}
 
-            {latestLimitation ? (
-              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-                {latestLimitation}
-              </div>
-            ) : null}
-          </>
+        {latestLimitation ? (
+          <div className="restricted-panel info-panel bike-service-profile__limitation">
+            {latestLimitation}
+          </div>
         ) : null}
       </section>
 
       <section className="card">
         <div className="card-header-row">
           <div>
-            <h2>Bike Activity</h2>
+            <h2>Bike service record</h2>
             <p className="muted-text">
-              Keep the bike-linked service timeline visible alongside the broader workshop history.
+              Keep completed history, operational timeline, live workshop activity, and bike details clearly separated.
             </p>
           </div>
-          <div className="workshop-job-status-panel__tabs" role="tablist" aria-label="Bike activity views">
+          <div className="workshop-job-status-panel__tabs" role="tablist" aria-label="Bike service history views">
             <button
               type="button"
               role="tab"
-              aria-selected={activityTab === "overview"}
-              className={`workshop-job-status-panel__tab${activityTab === "overview" ? " workshop-job-status-panel__tab--active" : ""}`}
-              onClick={() => setActivityTab("overview")}
+              aria-selected={activeTab === "history"}
+              className={`workshop-job-status-panel__tab${activeTab === "history" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActiveTab("history")}
             >
-              Overview
+              History
             </button>
             <button
               type="button"
               role="tab"
-              aria-selected={activityTab === "timeline"}
-              className={`workshop-job-status-panel__tab${activityTab === "timeline" ? " workshop-job-status-panel__tab--active" : ""}`}
-              onClick={() => setActivityTab("timeline")}
+              aria-selected={activeTab === "timeline"}
+              className={`workshop-job-status-panel__tab${activeTab === "timeline" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActiveTab("timeline")}
             >
               Timeline
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "openWork"}
+              className={`workshop-job-status-panel__tab${activeTab === "openWork" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActiveTab("openWork")}
+            >
+              Open Work
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "details"}
+              className={`workshop-job-status-panel__tab${activeTab === "details" ? " workshop-job-status-panel__tab--active" : ""}`}
+              onClick={() => setActiveTab("details")}
+            >
+              Details
+            </button>
           </div>
         </div>
 
-        {activityTab === "overview" ? (
-          payload ? (
-            <>
-              <div className="job-meta-grid">
-                <div><strong>Bike:</strong> {payload.bike.displayName}</div>
-                <div><strong>Customer:</strong> {payload.customer.name}</div>
-                <div><strong>Linked Jobs:</strong> {payload.serviceSummary.linkedJobCount}</div>
-                <div><strong>Completed Jobs:</strong> {payload.serviceSummary.completedJobCount}</div>
-                <div><strong>Open Jobs:</strong> {payload.serviceSummary.openJobCount}</div>
-                <div><strong>Latest Completed Service:</strong> {formatOptionalDateTime(payload.serviceSummary.latestCompletedAt)}</div>
-              </div>
-              <div className="actions-inline" style={{ marginTop: "10px" }}>
-                <Link to={`/customers/${payload.customer.id}/timeline`}>Open customer legacy timeline</Link>
-                <span className="muted-text">
-                  Persistent workshop milestones for this bike appear in the local timeline tab.
-                </span>
-              </div>
-            </>
-          ) : null
-        ) : (
+        {!payload ? null : activeTab === "history" ? (
+          payload.completedHistory.length > 0 ? (
+            <div className="timeline-list bike-history-list">
+              {payload.completedHistory.map((entry) => (
+                <JobCard key={entry.id} entry={entry} mode="history" />
+              ))}
+            </div>
+          ) : (
+            <div className="restricted-panel bike-service-empty">
+              <strong>No completed service history yet.</strong>
+              <p>
+                This bike is linked and ready, but it does not yet have a completed workshop job on record.
+              </p>
+            </div>
+          )
+        ) : null}
+
+        {!payload ? null : activeTab === "timeline" ? (
           <EntityTimelinePanel
             entityType="BIKE"
             entityId={bikeId}
-            hint="Persistent domain events linked to this bike, ordered newest first."
-            emptyState="No persistent domain events have been recorded for this bike yet."
+            hint="Operational domain events for this bike, newest first."
+            emptyState="No operational timeline events have been recorded for this bike yet."
           />
-        )}
-      </section>
+        ) : null}
 
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Service Lifecycle</h2>
-            <p className="muted-text">
-              Keep the next planned service visible on the bike itself, not just in past workshop history.
-            </p>
-          </div>
-          {payload ? (
-            <div className="actions-inline">
-              <Link to={`/customers/${payload.customer.id}`}>Manage on customer profile</Link>
-              <span className="table-secondary">
-                {payload.serviceScheduleSummary.activeCount} active · {payload.serviceScheduleSummary.dueCount} due · {payload.serviceScheduleSummary.overdueCount} overdue
-              </span>
+        {!payload ? null : activeTab === "openWork" ? (
+          payload.openWork.length > 0 ? (
+            <div className="bike-service-open-work">
+              <div className="bike-service-open-work__summary">
+                <strong>{payload.openWork.length} active job{payload.openWork.length === 1 ? "" : "s"}</strong>
+                <span className="table-secondary">
+                  {payload.openWork.some((entry) => entry.status === "READY")
+                    ? "Ready work is surfaced first so collection handoffs are obvious."
+                    : "Booked and in-progress work stays separate from the completed service record."}
+                </span>
+              </div>
+              <div className="timeline-list bike-history-list">
+                {payload.openWork.map((entry) => (
+                  <JobCard key={entry.id} entry={entry} mode="open" />
+                ))}
+              </div>
             </div>
-          ) : null}
-        </div>
-
-        {!payload ? null : payload.serviceSchedules.length === 0 ? (
-          <div className="restricted-panel">
-            No bike service schedules yet. Add one from the customer profile to start tracking what this bike is due for next.
-          </div>
-        ) : (
-          <div className="bike-service-schedule-list">
-            {payload.serviceSchedules.map((schedule) => (
-              <article key={schedule.id} className="bike-service-schedule-card">
-                <div className="card-header-row">
-                  <div>
-                    <div className="actions-inline">
-                      <strong>{schedule.title}</strong>
-                      <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
-                        {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
-                      </span>
-                    </div>
-                    <div className="table-secondary">
-                      {schedule.typeLabel} · {schedule.cadenceSummaryText}
-                    </div>
-                  </div>
-                  <div className="table-secondary">
-                    Updated {formatOptionalDateTime(schedule.updatedAt)}
-                  </div>
-                </div>
-
-                <div className="bike-service-schedule-card__meta">
-                  <div><strong>Next due:</strong> {schedule.dueSummaryText}</div>
-                  <div><strong>Last service:</strong> {schedule.lastServiceSummaryText}</div>
-                  <div><strong>State:</strong> {schedule.isActive ? "Active" : "Inactive"}</div>
-                  <div>
-                    <strong>Next due date:</strong> {schedule.nextDueAt ? formatOptionalDate(schedule.nextDueAt) : "-"}
-                  </div>
-                </div>
-
-                {schedule.description ? (
-                  <div className="table-secondary">{schedule.description}</div>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Workshop History</h2>
-            <p className="muted-text">
-              Most recent linked workshop jobs first, with execution progress shown separately from quote state.
-            </p>
-          </div>
-          {payload ? (
-            <div className="table-secondary">
-              {payload.history.length} linked job{payload.history.length === 1 ? "" : "s"}
+          ) : (
+            <div className="restricted-panel bike-service-empty">
+              <strong>No open workshop work for this bike.</strong>
+              <p>
+                The active queue is clear. Start a new linked workshop job when this bike comes back in.
+              </p>
+              <div className="actions-inline">
+                <Link to={payload.workshopStartContext.startPath}>Start workshop job</Link>
+              </div>
             </div>
-          ) : null}
-        </div>
+          )
+        ) : null}
 
-        {!payload ? null : payload.history.length === 0 ? (
-          <div className="restricted-panel">
-            No linked workshop jobs yet. This bike record will start building service history as soon as jobs are linked to it.
-          </div>
-        ) : (
-          <div className="timeline-list bike-history-list">
-            {payload.history.map((entry) => (
-              <article key={entry.id} className="timeline-card bike-history-entry">
-                <div className="bike-history-entry__header">
-                  <div>
-                    <div className="bike-history-entry__date">{buildHistoryDateSummary(entry)}</div>
-                    <strong>
-                      <Link to={entry.jobPath}>Workshop Job {entry.id.slice(0, 8)}</Link>
-                    </strong>
-                    <div className="table-secondary">
-                      {entry.bikeDescription || payload.bike.displayName}
-                    </div>
-                  </div>
-                  <div className="actions-inline">
-                    <span className={workshopExecutionStatusClass(entry.status, entry.rawStatus)}>
-                      {workshopExecutionStatusLabel(entry.status)}
-                    </span>
-                    {entry.estimate ? (
-                      <span className={workshopEstimateStatusClass(entry.estimate.status)}>
-                        {workshopEstimateStatusLabel(entry.estimate.status)}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="bike-history-entry__summary">{entry.serviceSummaryText}</div>
-
-                <div className="bike-history-entry__meta">
-                  <div><strong>Money:</strong> {buildHistoryMoneySummary(entry)}</div>
-                  <div><strong>Commercial state:</strong> {buildHistoryCommercialSummary(entry)}</div>
-                  <div><strong>Technician:</strong> {entry.assignedTechnician?.name || "Unassigned"}</div>
-                  <div><strong>Workflow detail:</strong> {workshopRawStatusLabel(entry.rawStatus)}</div>
-                </div>
-
-                {entry.notes.latestNote ? (
-                  <div className="table-secondary">
-                    Latest note: {truncateText(entry.notes.latestNote.note)} ({entry.notes.latestNote.visibility.toLowerCase()}, {formatOptionalDateTime(entry.notes.latestNote.createdAt)})
-                  </div>
-                ) : entry.notes.jobNotes ? (
-                  <div className="table-secondary">Check-in note: {truncateText(entry.notes.jobNotes)}</div>
-                ) : null}
-
-                <div className="actions-inline">
-                  <Link to={entry.jobPath}>Open workshop job</Link>
-                  {entry.completedAt ? (
-                    <span className="table-secondary">Completed {formatOptionalDateTime(entry.completedAt)}</span>
-                  ) : (
-                    <span className="table-secondary">Updated {formatOptionalDateTime(entry.updatedAt)}</span>
-                  )}
-                  <span className={workshopRawStatusClass(entry.rawStatus)}>
-                    {workshopRawStatusLabel(entry.rawStatus)}
-                  </span>
+        {!payload ? null : activeTab === "details" ? (
+          <div className="bike-service-details">
+            <div className="bike-service-details__grid">
+              <article className="timeline-card bike-service-details__card">
+                <h3>Bike details</h3>
+                <div className="bike-service-details__table">
+                  <div><strong>Owner</strong><span><Link to={`/customers/${payload.customer.id}`}>{payload.customer.name}</Link></span></div>
+                  <div><strong>Label</strong><span>{payload.bike.label || "-"}</span></div>
+                  <div><strong>Make / Model</strong><span>{[payload.bike.make, payload.bike.model].filter(Boolean).join(" ") || "-"}</span></div>
+                  <div><strong>Year / Type</strong><span>{payload.bike.year ? `${payload.bike.year} · ${formatBikeType(payload.bike.bikeType)}` : formatBikeType(payload.bike.bikeType)}</span></div>
+                  <div><strong>Colour</strong><span>{payload.bike.colour || "-"}</span></div>
+                  <div><strong>Wheel / Frame</strong><span>{[payload.bike.wheelSize, payload.bike.frameSize].filter(Boolean).join(" · ") || "-"}</span></div>
+                  <div><strong>Groupset</strong><span>{payload.bike.groupset || "-"}</span></div>
+                  <div><strong>E-bike kit</strong><span>{[payload.bike.motorBrand, payload.bike.motorModel, payload.bike.batterySerial].filter(Boolean).join(" · ") || "-"}</span></div>
                 </div>
               </article>
-            ))}
+
+              <article className="timeline-card bike-service-details__card">
+                <h3>Identifiers</h3>
+                <div className="bike-service-details__table">
+                  <div><strong>Registration</strong><span>{payload.bike.registrationNumber || "-"}</span></div>
+                  <div><strong>Frame number</strong><span>{payload.bike.frameNumber || "-"}</span></div>
+                  <div><strong>Serial number</strong><span>{payload.bike.serialNumber || "-"}</span></div>
+                  <div><strong>Created</strong><span>{formatOptionalDateTime(payload.bike.createdAt)}</span></div>
+                  <div><strong>Last updated</strong><span>{formatOptionalDateTime(payload.bike.updatedAt)}</span></div>
+                  <div><strong>Workshop intake</strong><span><Link to={payload.workshopStartContext.startPath}>Start a new linked job</Link></span></div>
+                </div>
+              </article>
+            </div>
+
+            <article className="timeline-card bike-service-details__card">
+              <div className="card-header-row">
+                <div>
+                  <h3>Bike care plan</h3>
+                  <p className="muted-text">
+                    Service schedules stay with the bike record so future work is visible before the next check-in.
+                  </p>
+                </div>
+                <div className="table-secondary">{buildServiceScheduleSummary(payload)}</div>
+              </div>
+
+              {payload.serviceSchedules.length > 0 ? (
+                <div className="bike-service-schedule-list">
+                  {payload.serviceSchedules.map((schedule) => (
+                    <article key={schedule.id} className="bike-service-schedule-card">
+                      <div className="card-header-row">
+                        <div>
+                          <div className="actions-inline">
+                            <strong>{schedule.title}</strong>
+                            <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
+                              {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
+                            </span>
+                          </div>
+                          <div className="table-secondary">
+                            {schedule.typeLabel} · {schedule.cadenceSummaryText}
+                          </div>
+                        </div>
+                        <div className="table-secondary">
+                          Updated {formatOptionalDateTime(schedule.updatedAt)}
+                        </div>
+                      </div>
+
+                      <div className="bike-service-schedule-card__meta">
+                        <div><strong>Next due:</strong> {schedule.dueSummaryText}</div>
+                        <div><strong>Last service:</strong> {schedule.lastServiceSummaryText}</div>
+                        <div><strong>State:</strong> {schedule.isActive ? "Active" : "Inactive"}</div>
+                        <div><strong>Next due date:</strong> {schedule.nextDueAt ? formatOptionalDate(schedule.nextDueAt) : "-"}</div>
+                      </div>
+
+                      {schedule.description ? (
+                        <div className="table-secondary">{schedule.description}</div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="restricted-panel">
+                  No service schedules yet. Add one from the customer profile to turn this into a true long-term bike record.
+                </div>
+              )}
+            </article>
+
+            <article className="timeline-card bike-service-details__card">
+              <h3>Record notes</h3>
+              <p>{payload.bike.notes || "No bike-level notes recorded yet."}</p>
+            </article>
           </div>
-        )}
+        ) : null}
       </section>
     </div>
   );

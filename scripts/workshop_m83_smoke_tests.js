@@ -1238,6 +1238,33 @@ const run = async () => {
         },
       });
 
+      const { job: completedJob } = await createJob(state, {
+        customerId: customer.id,
+        bikeId: bike.id,
+        customerName: undefined,
+        bikeDescription: undefined,
+      });
+
+      const completedJobLine = await fetchJson(`/api/workshop/jobs/${completedJob.id}/lines`, {
+        method: "POST",
+        headers: STAFF_HEADERS,
+        body: JSON.stringify({
+          type: "LABOUR",
+          description: "Completed bike service labour",
+          qty: 1,
+          unitPricePence: 6200,
+        }),
+      });
+      assert.equal(completedJobLine.status, 201, JSON.stringify(completedJobLine.json));
+
+      await prisma.workshopJob.update({
+        where: { id: completedJob.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date("2026-03-15T10:30:00.000Z"),
+        },
+      });
+
       const { job: legacyJob } = await createJob(state, {
         customerId: customer.id,
         customerName: undefined,
@@ -1251,7 +1278,9 @@ const run = async () => {
       assert.equal(bikeList.status, 200, JSON.stringify(bikeList.json));
       const listedBike = bikeList.json.bikes.find((row) => row.id === bike.id);
       assert.ok(listedBike, JSON.stringify(bikeList.json));
-      assert.equal(listedBike.serviceSummary.linkedJobCount, 1);
+      assert.equal(listedBike.serviceSummary.linkedJobCount, 2);
+      assert.equal(listedBike.serviceSummary.completedJobCount, 1);
+      assert.equal(listedBike.serviceSummary.openJobCount, 1);
 
       const history = await fetchJson(`/api/customers/bikes/${bike.id}`, {
         headers: STAFF_HEADERS,
@@ -1259,19 +1288,30 @@ const run = async () => {
       assert.equal(history.status, 200, JSON.stringify(history.json));
       assert.equal(history.json.bike.id, bike.id);
       assert.equal(history.json.customer.id, customer.id);
-      assert.equal(history.json.serviceSummary.linkedJobCount, 1);
-      assert.equal(history.json.history.length, 1);
-      assert.equal(history.json.history[0].id, linkedJob.id);
-      assert.equal(history.json.history[0].jobPath, `/workshop/${linkedJob.id}`);
-      assert.equal(history.json.history[0].assignedTechnician.name, managerUser.name);
-      assert.equal(history.json.history[0].liveTotals.subtotalPence, 4800);
-      assert.equal(history.json.history[0].moneySummary.labourTotalPence, 4800);
-      assert.equal(history.json.history[0].moneySummary.partsTotalPence, 0);
-      assert.equal(history.json.history[0].moneySummary.primaryTotalPence, 4800);
-      assert.equal(history.json.history[0].moneySummary.primaryTotalSource, "ESTIMATE");
-      assert.equal(history.json.history[0].estimate.status, "PENDING_APPROVAL");
-      assert.match(history.json.history[0].serviceSummaryText, /Bike history inspection note|quote|line/i);
-      assert.match(history.json.history[0].notes.latestNote.note, /Bike history inspection note/);
+      assert.equal(history.json.serviceSummary.linkedJobCount, 2);
+      assert.equal(history.json.history.length, 2);
+      assert.equal(history.json.metrics.totalJobs, 2);
+      assert.equal(history.json.metrics.completedJobs, 1);
+      assert.equal(history.json.metrics.openJobs, 1);
+      assert.equal(history.json.metrics.lifetimeWorkshopSpendPence, 0);
+      assert.equal(history.json.metrics.finalizedSaleCount, 0);
+      assert.equal(history.json.openWork.length, 1);
+      assert.equal(history.json.completedHistory.length, 1);
+      assert.equal(history.json.openWork[0].id, linkedJob.id);
+      assert.equal(history.json.openWork[0].jobPath, `/workshop/${linkedJob.id}`);
+      assert.equal(history.json.openWork[0].assignedTechnician.name, managerUser.name);
+      assert.equal(history.json.openWork[0].liveTotals.subtotalPence, 4800);
+      assert.equal(history.json.openWork[0].moneySummary.labourTotalPence, 4800);
+      assert.equal(history.json.openWork[0].moneySummary.partsTotalPence, 0);
+      assert.equal(history.json.openWork[0].moneySummary.primaryTotalPence, 4800);
+      assert.equal(history.json.openWork[0].moneySummary.primaryTotalSource, "ESTIMATE");
+      assert.equal(history.json.openWork[0].estimate.status, "PENDING_APPROVAL");
+      assert.match(history.json.openWork[0].serviceSummaryText, /Bike history inspection note|quote|line/i);
+      assert.match(history.json.openWork[0].notes.latestNote.note, /Bike history inspection note/);
+      assert.equal(history.json.completedHistory[0].id, completedJob.id);
+      assert.equal(history.json.completedHistory[0].moneySummary.labourTotalPence, 6200);
+      assert.equal(history.json.completedHistory[0].status, "COLLECTED");
+      assert.equal(history.json.completedHistory[0].reference, completedJob.id.slice(0, 8).toUpperCase());
       assert.ok(
         history.json.limitations[0].includes("Legacy free-text workshop jobs without a bike link"),
         JSON.stringify(history.json),

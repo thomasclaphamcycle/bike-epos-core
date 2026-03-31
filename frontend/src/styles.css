@@ -12108,6 +12108,110 @@ body.rota-row-drag-copy-active {
   gap: 12px;
 }
 
+.bike-service-profile {
+  display: grid;
+  gap: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(29, 91, 143, 0.1), transparent 30%),
+    linear-gradient(180deg, #f6fafc 0%, #eef4f8 100%);
+}
+
+.bike-service-profile__hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.bike-service-profile__identity {
+  display: grid;
+  gap: 8px;
+  min-width: min(100%, 520px);
+}
+
+.bike-service-profile__eyebrow {
+  color: #526a7c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bike-service-profile__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bike-service-profile__title-row h1 {
+  margin: 0;
+}
+
+.bike-service-profile__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.bike-service-profile__status--active {
+  background: #dff3ea;
+  color: #176144;
+}
+
+.bike-service-profile__status--attention {
+  background: #fff2d9;
+  color: #8a5a0e;
+}
+
+.bike-service-profile__status--calm {
+  background: #e7f0fb;
+  color: #1c5688;
+}
+
+.bike-service-profile__status--neutral {
+  background: #ebf0f5;
+  color: #4f6172;
+}
+
+.bike-service-profile__status-detail {
+  margin: 0;
+  color: #304554;
+  font-weight: 600;
+}
+
+.bike-service-profile__highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  color: #476073;
+  font-size: 0.92rem;
+}
+
+.bike-service-profile__actions {
+  align-self: flex-start;
+}
+
+.bike-service-profile__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.bike-service-profile__metric-value--compact {
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.bike-service-profile__limitation {
+  margin-top: -4px;
+}
+
 .timeline-card {
   border: 1px solid #d7e0ea;
   border-radius: 12px;
@@ -12153,7 +12257,137 @@ body.rota-row-drag-copy-active {
   gap: 8px 12px;
 }
 
+.bike-service-job-card {
+  gap: 14px;
+}
+
+.bike-service-job-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.bike-service-job-card__totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.bike-service-job-card__total {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d6e0ea;
+  background: #f7fbfe;
+}
+
+.bike-service-job-card__total strong {
+  font-size: 1.05rem;
+}
+
+.bike-service-job-card__total--primary {
+  background: linear-gradient(180deg, #e9f4ff 0%, #f6fbff 100%);
+  border-color: #c5d8eb;
+}
+
+.bike-service-job-card__details {
+  border-top: 1px solid #e1e8ef;
+  padding-top: 10px;
+}
+
+.bike-service-job-card__details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #244256;
+}
+
+.bike-service-job-card__details-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bike-service-job-card__details-body p {
+  margin: 0;
+  color: #42596b;
+}
+
+.bike-service-open-work {
+  display: grid;
+  gap: 14px;
+}
+
+.bike-service-open-work__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bike-service-empty {
+  display: grid;
+  gap: 8px;
+}
+
+.bike-service-empty p {
+  margin: 0;
+}
+
+.bike-service-details {
+  display: grid;
+  gap: 14px;
+}
+
+.bike-service-details__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.bike-service-details__card {
+  gap: 12px;
+}
+
+.bike-service-details__card h3 {
+  margin: 0;
+}
+
+.bike-service-details__table {
+  display: grid;
+  gap: 10px;
+}
+
+.bike-service-details__table div {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.bike-service-details__table strong {
+  color: #526071;
+}
+
 @media (max-width: 900px) {
+  .bike-service-profile__hero,
+  .bike-service-open-work__summary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bike-service-details__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bike-service-details__table div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
   .selected-customer-panel,
   .customer-search-panel {
     flex-direction: column;
