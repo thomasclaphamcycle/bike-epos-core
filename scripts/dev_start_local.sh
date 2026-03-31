@@ -43,21 +43,11 @@ cleanup_started_components() {
   trap - EXIT
 
   if (( started_frontend == 1 )) && [[ -f "$COREPOS_DEV_FRONTEND_PID_FILE" ]]; then
-    classify_component_listeners "frontend" "$COREPOS_DEV_FRONTEND_PORT"
-    if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
-      stop_pid_for_port "frontend" "${CLASSIFIED_MATCHING_PIDS[0]}" "$COREPOS_DEV_FRONTEND_PORT" "frontend" || true
-    else
-      kill "$(cat "$COREPOS_DEV_FRONTEND_PID_FILE")" 2>/dev/null || true
-    fi
+    stop_component_processes "frontend" "frontend" "$COREPOS_DEV_FRONTEND_PORT" || true
   fi
 
   if (( started_backend == 1 )) && [[ -f "$COREPOS_DEV_BACKEND_PID_FILE" ]]; then
-    classify_component_listeners "backend" "$COREPOS_DEV_BACKEND_PORT"
-    if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
-      stop_pid_for_port "backend" "${CLASSIFIED_MATCHING_PIDS[0]}" "$COREPOS_DEV_BACKEND_PORT" "backend" || true
-    else
-      kill "$(cat "$COREPOS_DEV_BACKEND_PID_FILE")" 2>/dev/null || true
-    fi
+    stop_component_processes "backend" "backend" "$COREPOS_DEV_BACKEND_PORT" || true
   fi
 }
 
@@ -77,6 +67,7 @@ fi
 
 start_backend() {
   local pid
+  local -a orphan_pids=()
 
   classify_component_listeners "backend" "$COREPOS_DEV_BACKEND_PORT"
 
@@ -87,9 +78,20 @@ start_backend() {
 
   if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
     pid="${CLASSIFIED_MATCHING_PIDS[0]}"
-    printf '%s\n' "$pid" >"$COREPOS_DEV_BACKEND_PID_FILE"
+    rm -f "$COREPOS_DEV_BACKEND_PID_FILE"
     dev_log "Backend already running on ${COREPOS_DEV_BACKEND_URL} (${pid})"
     return 0
+  fi
+
+  orphan_pids=()
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    orphan_pids+=("$pid")
+  done < <(list_component_orphan_pids "backend")
+  if (( ${#orphan_pids[@]} > 0 )); then
+    dev_warn "Found orphaned CorePOS backend process(es) before startup; cleaning them first"
+    stop_component_processes "backend" "backend" "$COREPOS_DEV_BACKEND_PORT"
+    classify_component_listeners "backend" "$COREPOS_DEV_BACKEND_PORT"
   fi
 
   : >"$COREPOS_DEV_BACKEND_LOG"
@@ -105,16 +107,11 @@ start_backend() {
     'cd "$COREPOS_REPO_ROOT" && exec npm run dev'
   started_backend=1
   pid="$(cat "$COREPOS_DEV_BACKEND_PID_FILE")"
-  dev_log "Backend started in background with PID ${pid}; log: ${COREPOS_DEV_BACKEND_LOG}"
+  dev_log "Backend started in detached background session pid=${pid} port=${COREPOS_DEV_BACKEND_PORT}; log: ${COREPOS_DEV_BACKEND_LOG}"
 
   if ! wait_for_url "$COREPOS_DEV_BACKEND_HEALTH_URL" "Backend"; then
     tail_log_file "$COREPOS_DEV_BACKEND_LOG" "backend"
     return 1
-  fi
-
-  classify_component_listeners "backend" "$COREPOS_DEV_BACKEND_PORT"
-  if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
-    printf '%s\n' "${CLASSIFIED_MATCHING_PIDS[0]}" >"$COREPOS_DEV_BACKEND_PID_FILE"
   fi
 
   return 0
@@ -122,6 +119,7 @@ start_backend() {
 
 start_frontend() {
   local pid
+  local -a orphan_pids=()
 
   classify_component_listeners "frontend" "$COREPOS_DEV_FRONTEND_PORT"
 
@@ -132,9 +130,20 @@ start_frontend() {
 
   if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
     pid="${CLASSIFIED_MATCHING_PIDS[0]}"
-    printf '%s\n' "$pid" >"$COREPOS_DEV_FRONTEND_PID_FILE"
+    rm -f "$COREPOS_DEV_FRONTEND_PID_FILE"
     dev_log "Frontend already running on ${COREPOS_DEV_FRONTEND_URL} (${pid})"
     return 0
+  fi
+
+  orphan_pids=()
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    orphan_pids+=("$pid")
+  done < <(list_component_orphan_pids "frontend")
+  if (( ${#orphan_pids[@]} > 0 )); then
+    dev_warn "Found orphaned CorePOS frontend process(es) before startup; cleaning them first"
+    stop_component_processes "frontend" "frontend" "$COREPOS_DEV_FRONTEND_PORT"
+    classify_component_listeners "frontend" "$COREPOS_DEV_FRONTEND_PORT"
   fi
 
   : >"$COREPOS_DEV_FRONTEND_LOG"
@@ -150,16 +159,11 @@ start_frontend() {
     'cd "$COREPOS_REPO_ROOT" && exec npm --prefix frontend run dev -- --host localhost --port "$COREPOS_DEV_FRONTEND_PORT" --strictPort'
   started_frontend=1
   pid="$(cat "$COREPOS_DEV_FRONTEND_PID_FILE")"
-  dev_log "Frontend started in background with PID ${pid}; log: ${COREPOS_DEV_FRONTEND_LOG}"
+  dev_log "Frontend started in detached background session pid=${pid} port=${COREPOS_DEV_FRONTEND_PORT}; log: ${COREPOS_DEV_FRONTEND_LOG}"
 
   if ! wait_for_url "$COREPOS_DEV_FRONTEND_HEALTH_URL" "Frontend"; then
     tail_log_file "$COREPOS_DEV_FRONTEND_LOG" "frontend"
     return 1
-  fi
-
-  classify_component_listeners "frontend" "$COREPOS_DEV_FRONTEND_PORT"
-  if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
-    printf '%s\n' "${CLASSIFIED_MATCHING_PIDS[0]}" >"$COREPOS_DEV_FRONTEND_PID_FILE"
   fi
 
   return 0

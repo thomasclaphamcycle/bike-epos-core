@@ -2,10 +2,10 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
@@ -32,6 +32,12 @@ console.log(`[m19_1-regression] DATABASE_URL=${safeDbUrl}`);
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+const serverController = createSmokeServerController({
+  label: "m19_1-regression",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -170,31 +176,8 @@ const run = async () => {
     customerIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const ref = uniqueRef();
     const locationId = await ensureMainLocationId();
@@ -292,16 +275,8 @@ const run = async () => {
       console.error("Cleanup failed:", error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
     });
-
+    await serverController.stop();
     await prisma.$disconnect();
-
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-      await sleep(300);
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
-      }
-    }
   }
 };
 

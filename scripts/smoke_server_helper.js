@@ -1,12 +1,57 @@
 #!/usr/bin/env node
 require("dotenv/config");
 
-const { execFileSync, spawn } = require("node:child_process");
+const {
+  installSignalHandlers,
+  listListeningPidsForPort,
+  signalCodeToExitCode,
+  spawnManagedProcess,
+  terminateChildProcess,
+} = require("./process_lifecycle");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const activeStopHandlers = new Set();
+let releaseCleanupSignalHandlers = null;
+let signalCleanupInFlight = false;
+
 const trimLog = (value, maxChars) =>
   value.length > maxChars ? value.slice(value.length - maxChars) : value;
+
+const registerActiveStopHandler = (stopHandler) => {
+  activeStopHandlers.add(stopHandler);
+
+  if (!releaseCleanupSignalHandlers) {
+    releaseCleanupSignalHandlers = installSignalHandlers(async (signal) => {
+      if (signalCleanupInFlight) {
+        return;
+      }
+      signalCleanupInFlight = true;
+
+      try {
+        await Promise.allSettled(
+          Array.from(activeStopHandlers).map((handler) => handler()),
+        );
+      } finally {
+        if (releaseCleanupSignalHandlers) {
+          releaseCleanupSignalHandlers();
+          releaseCleanupSignalHandlers = null;
+        }
+        signalCleanupInFlight = false;
+        process.exit(signalCodeToExitCode(signal));
+      }
+    });
+  }
+
+  return () => {
+    activeStopHandlers.delete(stopHandler);
+    if (activeStopHandlers.size === 0 && releaseCleanupSignalHandlers) {
+      releaseCleanupSignalHandlers();
+      releaseCleanupSignalHandlers = null;
+      signalCleanupInFlight = false;
+    }
+  };
+};
 
 const createSmokeServerController = ({
   label,
@@ -90,38 +135,6 @@ const createSmokeServerController = ({
     return Boolean(healthyBaseUrl);
   };
 
-  const waitForProcessExit = (child, timeoutMs) =>
-    new Promise((resolve, reject) => {
-      if (!child || child.exitCode !== null || child.signalCode !== null) {
-        resolve();
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error(`Child process did not exit within ${timeoutMs}ms`));
-      }, timeoutMs);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        child.removeListener("exit", handleExit);
-        child.removeListener("error", handleError);
-      };
-
-      const handleExit = () => {
-        cleanup();
-        resolve();
-      };
-
-      const handleError = (error) => {
-        cleanup();
-        reject(error);
-      };
-
-      child.once("exit", handleExit);
-      child.once("error", handleError);
-    });
-
   const waitForServerReady = async (child) => {
     for (let attempt = 0; attempt < startupChecks; attempt += 1) {
       if (child && child.exitCode !== null) {
@@ -166,30 +179,6 @@ const createSmokeServerController = ({
     throw new Error(`Server still responded on /health after ${shutdownTimeoutMs}ms`);
   };
 
-  const listListeningPidsForPort = (port) => {
-    try {
-      const output = execFileSync(
-        "lsof",
-        ["-tiTCP:" + String(port), "-sTCP:LISTEN"],
-        { encoding: "utf8" },
-      ).trim();
-
-      if (!output) {
-        return [];
-      }
-
-      return output
-        .split(/\s+/)
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0 && value !== process.pid);
-    } catch (error) {
-      if (error && typeof error === "object" && error.status === 1) {
-        return [];
-      }
-      throw error;
-    }
-  };
-
   const listLingeringServerPids = () =>
     Array.from(
       new Set(
@@ -197,32 +186,10 @@ const createSmokeServerController = ({
       ),
     );
 
-  const useProcessGroup = process.platform !== "win32";
-  const resolvedCommand =
-    process.platform === "win32" && startup.command === "npm"
-      ? "npm.cmd"
-      : process.platform === "win32" && startup.command === "npx"
-        ? "npx.cmd"
-        : startup.command;
-
-  const sendSignal = (child, signal) => {
-    if (!child?.pid) {
-      return;
-    }
-
-    const target = useProcessGroup ? -child.pid : child.pid;
-    try {
-      process.kill(target, signal);
-    } catch (error) {
-      if (error && typeof error === "object" && error.code === "ESRCH") {
-        return;
-      }
-      throw error;
-    }
-  };
-
   let serverProcess = null;
   let startedServer = false;
+  let stopPromise = null;
+  let unregisterStopHandler = null;
 
   const terminatePid = (pid, signal) => {
     try {
@@ -262,7 +229,7 @@ const createSmokeServerController = ({
     return true;
   };
 
-  return {
+  const controller = {
     log,
     getBaseUrl() {
       return activeBaseUrl;
@@ -290,9 +257,8 @@ const createSmokeServerController = ({
       }
 
       log(`Starting API server with ${startup.command} ${startup.args.join(" ")}`);
-      serverProcess = spawn(resolvedCommand, startup.args, {
+      serverProcess = spawnManagedProcess(startup.command, startup.args, {
         stdio: captureStartupLog ? ["ignore", "pipe", "pipe"] : "ignore",
-        detached: useProcessGroup,
         env: {
           ...process.env,
           NODE_ENV: "test",
@@ -307,43 +273,66 @@ const createSmokeServerController = ({
         serverProcess.stdout?.on("data", appendStartupLog);
         serverProcess.stderr?.on("data", appendStartupLog);
       }
+      unregisterStopHandler = registerActiveStopHandler(() => controller.stop());
       startedServer = true;
+      log(
+        `Spawned API server pid=${serverProcess.pid} ports=${listenPorts.join(", ")} base=${defaultBaseUrl}`,
+      );
       await waitForServerReady(serverProcess);
       return true;
     },
     async stop() {
-      if (!startedServer || !serverProcess) {
-        return;
+      if (stopPromise) {
+        return stopPromise;
       }
 
-      log("Starting API server cleanup");
-
-      try {
-        log(`Sending SIGTERM to ${useProcessGroup ? "process group" : "server process"} ${serverProcess.pid}`);
-        sendSignal(serverProcess, "SIGTERM");
-        await waitForProcessExit(serverProcess, 5000);
-        log("Server process exited after SIGTERM");
-      } catch (error) {
-        log(`SIGTERM cleanup did not finish cleanly: ${error.message}`);
-        log(`Sending SIGKILL to ${useProcessGroup ? "process group" : "server process"} ${serverProcess.pid}`);
-        sendSignal(serverProcess, "SIGKILL");
-        await waitForProcessExit(serverProcess, 2000);
-        log("Server process exited after SIGKILL");
-      }
-
-      let shutdownMs;
-      try {
-        shutdownMs = await waitForServerShutdown();
-      } catch (error) {
-        const cleanedLingeringListeners = await cleanupLingeringServerListeners();
-        if (!cleanedLingeringListeners) {
-          throw error;
+      stopPromise = (async () => {
+        if (!startedServer || !serverProcess) {
+          if (unregisterStopHandler) {
+            unregisterStopHandler();
+            unregisterStopHandler = null;
+          }
+          return;
         }
-        shutdownMs = await waitForServerShutdown();
+
+        log("Starting API server cleanup");
+
+        try {
+          await terminateChildProcess(serverProcess, {
+            label: "API server",
+            log,
+          });
+          log("Server process exited");
+        } finally {
+          if (unregisterStopHandler) {
+            unregisterStopHandler();
+            unregisterStopHandler = null;
+          }
+        }
+
+        let shutdownMs;
+        try {
+          shutdownMs = await waitForServerShutdown();
+        } catch (error) {
+          const cleanedLingeringListeners = await cleanupLingeringServerListeners();
+          if (!cleanedLingeringListeners) {
+            throw error;
+          }
+          shutdownMs = await waitForServerShutdown();
+        }
+        log(`API server shutdown confirmed after cleanup (${shutdownMs}ms)`);
+      })();
+
+      try {
+        await stopPromise;
+      } finally {
+        serverProcess = null;
+        startedServer = false;
       }
-      log(`API server shutdown confirmed after cleanup (${shutdownMs}ms)`);
     },
   };
+
+  return controller;
 };
 
 module.exports = {

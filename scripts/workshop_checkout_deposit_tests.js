@@ -66,10 +66,10 @@ const serverController = createSmokeServerController({
   label: "m11-smoke",
   baseUrls: appBaseUrlCandidates,
   databaseUrl: DATABASE_URL,
-  startup: {
-    command: "npx",
-    args: ["ts-node", "--transpile-only", "src/server.ts"],
-  },
+      startup: {
+        command: "node",
+        args: ["scripts/start_test_server.js"],
+      },
   captureStartupLog: true,
   startupReadyPattern: /Server running on http:\/\/localhost:\d+/i,
   envOverrides: {

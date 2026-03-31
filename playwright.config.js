@@ -2,7 +2,7 @@ const { defineConfig } = require("@playwright/test");
 
 const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
 const backendWebServer = {
-  command: "node scripts/run_with_test_env.js npx ts-node --transpile-only src/server.ts",
+  command: "node scripts/start_test_server.js",
   url: `${baseUrl}/health`,
   reuseExistingServer: !process.env.CI,
   timeout: 120_000,

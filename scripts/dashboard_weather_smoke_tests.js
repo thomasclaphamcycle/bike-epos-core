@@ -152,8 +152,8 @@ const run = async () => {
       baseUrl: BASE_URL,
       databaseUrl: DATABASE_URL,
       startup: {
-        command: "npx",
-        args: ["ts-node", "--transpile-only", "src/server.ts"],
+        command: "node",
+        args: ["scripts/start_test_server.js"],
       },
       envOverrides: {
         PORT: new URL(BASE_URL).port || "3100",

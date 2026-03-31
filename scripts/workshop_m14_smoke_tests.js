@@ -2,10 +2,10 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { ensureMainLocationId } = require("./default_location_helper");
+const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const HEALTH_URL = `${BASE_URL}/health`;
@@ -37,6 +37,12 @@ console.log(`[m14-smoke] DATABASE_URL=${safeDbUrl}`);
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
+});
+const serverController = createSmokeServerController({
+  label: "m14-smoke",
+  baseUrl: BASE_URL,
+  databaseUrl: DATABASE_URL,
+  captureStartupLog: true,
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -179,9 +185,6 @@ const run = async () => {
     userIds: new Set(),
   };
 
-  let startedServer = false;
-  let serverProcess = null;
-
   const runTest = async (name, fn, results) => {
     try {
       await fn();
@@ -195,28 +198,7 @@ const run = async () => {
   };
 
   try {
-    const existing = await serverIsHealthy();
-    if (existing && process.env.ALLOW_EXISTING_SERVER !== "1") {
-      throw new Error(
-        "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
-      );
-    }
-
-    if (!existing) {
-      serverProcess = spawn("npm", ["run", "dev"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          NODE_ENV: "test",
-          DATABASE_URL,
-          PORT: portFromBaseUrl(),
-        },
-      });
-      serverProcess.stdout.on("data", () => {});
-      serverProcess.stderr.on("data", () => {});
-      startedServer = true;
-      await waitForServer();
-    }
+    await serverController.startIfNeeded();
 
     const staffUser = await prisma.user.create({
       data: {
@@ -572,9 +554,7 @@ const run = async () => {
   } finally {
     await cleanup(state);
     await prisma.$disconnect();
-    if (startedServer && serverProcess) {
-      serverProcess.kill("SIGTERM");
-    }
+    await serverController.stop();
   }
 };
 

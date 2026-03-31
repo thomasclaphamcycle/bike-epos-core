@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.1.108",
+  "version": "1.1.109",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "import:rota-spreadsheet": "ts-node --transpile-only scripts/import_rota_spreadsheet.ts",
     "typecheck:reports": "tsc -p tsconfig.reports.json --noEmit",
     "test:db:migrate": "node scripts/ensure_test_db_schema.js",
-    "test": "npm run test:db:migrate && npm run typecheck:reports && npm run test:smoke",
+    "test": "npm run test:db:migrate && npm run typecheck:reports && npm run test:process-lifecycle && npm run test:smoke",
+    "test:process-lifecycle": "node scripts/process_lifecycle_regression_tests.js",
     "test:smoke": "node scripts/run_smoke_suite.js",
     "db:sync:test": "node scripts/run_with_test_env.js npx prisma db push --force-reset --accept-data-loss",
     "test:db:up": "bash scripts/test_db_up.sh",

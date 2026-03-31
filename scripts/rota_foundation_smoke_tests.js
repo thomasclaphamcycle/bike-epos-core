@@ -40,10 +40,10 @@ const serverController = createSmokeServerController({
   label: "rota-foundation-smoke",
   baseUrl: BASE_URL,
   databaseUrl: DATABASE_URL,
-  startup: {
-    command: "npx",
-    args: ["ts-node", "--transpile-only", "src/server.ts"],
-  },
+      startup: {
+        command: "node",
+        args: ["scripts/start_test_server.js"],
+      },
   envOverrides: {
     PORT: new URL(BASE_URL).port || "3100",
   },
