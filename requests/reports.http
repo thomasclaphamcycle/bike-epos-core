@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000
+@baseUrl = http://localhost:3100
 
 ### Reports UI page (MANAGER+ via header guard)
 GET {{baseUrl}}/reports

@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000
+@baseUrl = http://localhost:3100
 
 ### Open cash session (MANAGER+)
 POST {{baseUrl}}/api/till/sessions/open

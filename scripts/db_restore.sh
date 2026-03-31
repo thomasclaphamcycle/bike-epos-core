@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "WARNING: scripts/db_restore.sh is the legacy plain-SQL restore helper." >&2
+echo "For backups created by scripts/backup_database.sh, use scripts/restore_database.sh or npm run db:restore." >&2
+
 if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL is required."
   exit 1

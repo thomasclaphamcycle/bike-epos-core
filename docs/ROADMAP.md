@@ -38,7 +38,7 @@ Use the computed roadmap commands instead:
 
 - `npm run roadmap`
 - `npm run roadmap:json`
-- `npm run roadmap1`
+- `npm run roadmap:chart`
 
 ---
 

@@ -15,7 +15,7 @@ Use it alongside:
   - prints item-level scoring and matched / unmatched evidence signals
 - `npm run roadmap:json`
   - prints the full computed roadmap state as JSON
-- `npm run roadmap1`
+- `npm run roadmap:chart`
   - writes a PNG chart to `docs/roadmap-progress.png`
 
 ## Source Of Truth
@@ -117,7 +117,7 @@ When CorePOS evolves:
    - a placeholder signal should be replaced by real feature evidence
 3. rerun:
    - `npm run roadmap`
-   - `npm run roadmap1`
+   - `npm run roadmap:chart`
 
 Prefer stronger evidence over weaker evidence:
 

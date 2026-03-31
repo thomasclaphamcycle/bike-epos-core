@@ -93,7 +93,7 @@ In production, this endpoint is disabled unless `ALLOW_INITIAL_ADMIN_BOOTSTRAP=1
 5. If the account is password-only or its PIN has been reset, use the password fallback form on the same `/login` screen.
 6. On successful login, navigate through `/home` to the authorized area based on role.
 
-If the React frontend is not running, the backend-only login surface remains available on `http://localhost:3000/login`, but the current trial/evaluator path is the React SPA on `http://localhost:5173`.
+If the React frontend is not running, the backend-only login surface remains available on `http://localhost:3100/login`, but the current trial/evaluator path is the React SPA on `http://localhost:5173`.
 
 ## Local Login Accounts
 

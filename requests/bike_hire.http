@@ -1,10 +1,10 @@
 ### List hire assets
-GET http://localhost:3000/api/hire/assets
+GET http://localhost:3100/api/hire/assets
 X-Staff-Role: MANAGER
 X-Staff-Id: request-manager
 
 ### Create hire asset
-POST http://localhost:3000/api/hire/assets
+POST http://localhost:3100/api/hire/assets
 Content-Type: application/json
 X-Staff-Role: MANAGER
 X-Staff-Id: request-manager
@@ -17,12 +17,12 @@ X-Staff-Id: request-manager
 }
 
 ### List hire bookings
-GET http://localhost:3000/api/hire/bookings
+GET http://localhost:3100/api/hire/bookings
 X-Staff-Role: MANAGER
 X-Staff-Id: request-manager
 
 ### Create hire booking
-POST http://localhost:3000/api/hire/bookings
+POST http://localhost:3100/api/hire/bookings
 Content-Type: application/json
 X-Staff-Role: STAFF
 X-Staff-Id: request-staff
@@ -38,7 +38,7 @@ X-Staff-Id: request-staff
 }
 
 ### Checkout hire booking
-POST http://localhost:3000/api/hire/bookings/{{hireBookingId}}/checkout
+POST http://localhost:3100/api/hire/bookings/{{hireBookingId}}/checkout
 Content-Type: application/json
 X-Staff-Role: STAFF
 X-Staff-Id: request-staff
@@ -48,7 +48,7 @@ X-Staff-Id: request-staff
 }
 
 ### Return hire booking
-POST http://localhost:3000/api/hire/bookings/{{hireBookingId}}/return
+POST http://localhost:3100/api/hire/bookings/{{hireBookingId}}/return
 Content-Type: application/json
 X-Staff-Role: STAFF
 X-Staff-Id: request-staff
@@ -58,6 +58,6 @@ X-Staff-Id: request-staff
 }
 
 ### Cancel reserved hire booking
-POST http://localhost:3000/api/hire/bookings/{{hireBookingId}}/cancel
+POST http://localhost:3100/api/hire/bookings/{{hireBookingId}}/cancel
 X-Staff-Role: STAFF
 X-Staff-Id: request-staff

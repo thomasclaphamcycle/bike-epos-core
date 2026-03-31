@@ -6,7 +6,7 @@ const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { createSmokeServerController } = require("./smoke_server_helper");
 
-const INITIAL_BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
+const INITIAL_BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {

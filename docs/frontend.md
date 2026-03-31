@@ -7,7 +7,8 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-Backend should be running on `http://localhost:3000`.
+Backend should be running on `http://localhost:3100`.
+If you need a different local backend origin, set `VITE_API_PROXY_TARGET` before starting the frontend dev server so API proxying and backend print/receipt links stay aligned.
 
 ## POS (M76)
 

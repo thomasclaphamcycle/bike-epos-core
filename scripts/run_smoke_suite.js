@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 require("dotenv").config({ path: ".env.test" });
 
-const { spawnSync } = require("node:child_process");
+const { applyTestEnvDefaults } = require("./test_env_defaults");
+const {
+  cleanupNewManagedRepoProcesses,
+  installSignalHandlers,
+  signalCodeToExitCode,
+  snapshotManagedRepoProcesses,
+  spawnManagedProcess,
+  terminateChildProcess,
+} = require("./process_lifecycle");
 
 const baselineSteps = [
   // Core historical baseline
@@ -49,37 +57,11 @@ const baselineSteps = [
   "test:financial-reports",
 ];
 
-const env = {
+const env = applyTestEnvDefaults({
   ...process.env,
-  NODE_ENV: process.env.NODE_ENV || "test",
   AUTH_MODE: process.env.AUTH_MODE || "real",
   ALLOW_EXISTING_SERVER: process.env.ALLOW_EXISTING_SERVER || "0",
-};
-
-if (!env.DATABASE_URL && env.TEST_DATABASE_URL) {
-  env.DATABASE_URL = env.TEST_DATABASE_URL;
-}
-if (!env.TEST_BASE_URL) {
-  env.TEST_BASE_URL = "http://localhost:3100";
-}
-
-if (
-  env.ALLOW_EXISTING_SERVER !== "1" &&
-  /^http:\/\/localhost:3000\/?$/i.test(env.TEST_BASE_URL)
-) {
-  env.TEST_BASE_URL = "http://localhost:3100";
-}
-
-if (!env.PORT) {
-  try {
-    const parsed = new URL(env.TEST_BASE_URL);
-    if (parsed.port) {
-      env.PORT = parsed.port;
-    }
-  } catch {
-    // Keep default server port behavior if TEST_BASE_URL is not a valid URL.
-  }
-}
+});
 
 const HEALTH_URL = `${env.TEST_BASE_URL.replace(/\/$/, "")}/health`;
 const WAIT_INTERVAL_MS = Number.parseInt(process.env.SMOKE_SERVER_WAIT_INTERVAL_MS || "500", 10);
@@ -144,6 +126,7 @@ const waitForServerShutdown = async (step) => {
 };
 
 const main = async () => {
+  const beforeSnapshot = snapshotManagedRepoProcesses();
   const existing = await serverIsHealthy();
   if (existing && env.ALLOW_EXISTING_SERVER !== "1") {
     throw new Error(
@@ -151,16 +134,103 @@ const main = async () => {
     );
   }
 
-  for (const step of baselineSteps) {
-    log(`Starting ${step}`);
-    const result = spawnSync("npm", ["run", step], {
+  let currentChild = null;
+  let currentStep = null;
+  let finishPromise = null;
+  let releaseSignalHandlers = () => {};
+  let requestedExitCode = null;
+  const keepAliveTimer = setInterval(() => {}, 1000);
+
+  const finish = async (initialCode) => {
+    if (finishPromise) {
+      return finishPromise;
+    }
+
+    finishPromise = (async () => {
+      clearInterval(keepAliveTimer);
+      releaseSignalHandlers();
+
+      let finalCode = requestedExitCode ?? initialCode;
+      const leakResult = await cleanupNewManagedRepoProcesses(beforeSnapshot, {
+        label: "run_smoke_suite",
+        log,
+      });
+
+      if (leakResult.leaked.length > 0) {
+        if (leakResult.remaining.length > 0) {
+          log(
+            `Smoke suite leaked ${leakResult.remaining.length} managed repo process(es) after cleanup.`,
+          );
+        } else {
+          log(
+            `Smoke suite leaked ${leakResult.cleaned.length} managed repo process(es); cleanup recovered them.`,
+          );
+        }
+        if (finalCode === 0) {
+          finalCode = 1;
+        }
+      }
+
+      return finalCode;
+    })();
+
+    return finishPromise;
+  };
+
+  const runStep = async (step) => {
+    currentStep = step;
+    currentChild = spawnManagedProcess("npm", ["run", step], {
       stdio: "inherit",
       env,
-      shell: process.platform === "win32",
     });
 
-    if ((result.status ?? 1) !== 0) {
-      process.exit(result.status ?? 1);
+    return new Promise((resolve) => {
+      currentChild.once("error", (error) => {
+        console.error(error);
+        resolve(1);
+      });
+
+      currentChild.once("exit", (code, signal) => {
+        currentChild = null;
+        currentStep = null;
+        if (signal) {
+          resolve(signalCodeToExitCode(signal));
+          return;
+        }
+        resolve(code ?? 1);
+      });
+    });
+  };
+
+  releaseSignalHandlers = installSignalHandlers(async (signal) => {
+    requestedExitCode = signalCodeToExitCode(signal);
+
+    if (currentChild && currentStep) {
+      log(`Received ${signal}; cleaning up ${currentStep}.`);
+      try {
+        await terminateChildProcess(currentChild, {
+          label: currentStep,
+          termSignal: signal,
+          log,
+        });
+      } catch (error) {
+        log(
+          `Cleanup after ${signal} failed for ${currentStep}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    process.exit(await finish(requestedExitCode));
+  });
+
+  for (const step of baselineSteps) {
+    log(`Starting ${step}`);
+    const exitCode = await runStep(step);
+
+    if (exitCode !== 0) {
+      process.exit(await finish(exitCode));
     }
 
     log(`Completed ${step}`);
@@ -169,6 +239,8 @@ const main = async () => {
       await waitForServerShutdown(step);
     }
   }
+
+  process.exit(await finish(0));
 };
 
 main().catch((error) => {

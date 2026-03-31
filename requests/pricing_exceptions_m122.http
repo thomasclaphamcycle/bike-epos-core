@@ -1,5 +1,5 @@
 ### M122 Pricing Exceptions
 
-GET http://localhost:3000/api/reports/pricing/exceptions
+GET http://localhost:3100/api/reports/pricing/exceptions
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager

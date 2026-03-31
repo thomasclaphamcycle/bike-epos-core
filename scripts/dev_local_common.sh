@@ -138,7 +138,7 @@ component_matches_pid() {
     if [[ "$command" == *"node_modules/ts-node-dev"* || "$command" == node*ts-node-dev* ]]; then
       return 0
     fi
-    if [[ "$command" == *"npm run dev"* && "$command" == *"npm"* ]]; then
+    if [[ ( "$command" == *"npm run dev" || "$command" == *"npm run dev "* ) && "$command" == *"npm"* ]]; then
       return 0
     fi
     if [[ "$command" == *"ts-node --transpile-only src/server.ts"* && "$command" == *"node"* ]]; then
@@ -152,10 +152,10 @@ component_matches_pid() {
   fi
 
   [[ "$cwd" == "$COREPOS_REPO_ROOT" || "$cwd" == "$COREPOS_REPO_ROOT/frontend" ]] || return 1
-  if [[ "$command" == *"frontend run dev"* && "$command" == *"npm"* ]]; then
+  if [[ ( "$command" == *"frontend run dev" || "$command" == *"frontend run dev "* ) && "$command" == *"npm"* ]]; then
     return 0
   fi
-  if [[ "$command" == *"npm --prefix frontend run dev"* && "$command" == *"npm"* ]]; then
+  if [[ ( "$command" == *"npm --prefix frontend run dev" || "$command" == *"npm --prefix frontend run dev "* ) && "$command" == *"npm"* ]]; then
     return 0
   fi
   [[ "$command" == *"vite"* && ( "$command" == node* || "$command" == *"/node "* || "$command" == *"npm"* ) ]]
