@@ -16,15 +16,9 @@ export type WorkshopCheckoutInput = {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const WORKSHOP_CHECKOUT_RECOVERY_POLL_MS = 100;
 const WORKSHOP_CHECKOUT_TRANSACTION_RETRIES = 4;
 const WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS = 15_000;
 const WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS = 15_000;
-const WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS = 15_000;
-const WORKSHOP_CHECKOUT_FINAL_RECOVERY_MAX_WAIT_MS =
-  WORKSHOP_CHECKOUT_TRANSACTION_MAX_WAIT_MS +
-  WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS +
-  WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS;
 
 type WorkshopCheckoutResult = {
   sale: {
@@ -53,16 +47,6 @@ type WorkshopCheckoutResult = {
   workshopJobStatus: string;
   workshopCompletedAt: Date;
 };
-
-type ExistingWorkshopCheckoutMarker = {
-  kind: "existing-sale";
-  saleId: string;
-};
-
-const isExistingWorkshopCheckoutMarker = (
-  value: WorkshopCheckoutResult | ExistingWorkshopCheckoutMarker,
-): value is ExistingWorkshopCheckoutMarker =>
-  "kind" in value && value.kind === "existing-sale";
 
 const isRecoverableWorkshopCheckoutRace = (error: unknown) => {
   if (
@@ -105,26 +89,45 @@ const withWorkshopCheckoutTransaction = <T>(
     timeout: WORKSHOP_CHECKOUT_TRANSACTION_TIMEOUT_MS,
   });
 
-const getWorkshopJobUsedPartsTotalPence = async (workshopJobId: string) => {
-  const usedParts = await prisma.workshopJobPart.findMany({
-    where: {
-      workshopJobId,
-      status: "USED",
-    },
+const lockWorkshopJobForCheckoutTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+  }
+
+  const workshopJob = await tx.workshopJob.findUnique({
+    where: { id: workshopJobId },
     select: {
-      quantity: true,
-      unitPriceAtTime: true,
+      id: true,
+      customerId: true,
+      bikeId: true,
+      locationId: true,
+      source: true,
+      depositStatus: true,
+      depositRequiredPence: true,
+      status: true,
+      completedAt: true,
     },
   });
 
-  return usedParts.reduce(
-    (sum, part) => sum + part.quantity * part.unitPriceAtTime,
-    0,
-  );
+  if (!workshopJob) {
+    throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+  }
+
+  return workshopJob;
 };
 
-const getDepositPaidPenceForWorkshopJob = async (workshopJobId: string) => {
-  const depositPayments = await prisma.payment.findMany({
+const listWorkshopDepositPaymentsTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJobId: string,
+) =>
+  tx.payment.findMany({
     where: {
       workshopJobId,
       purpose: "DEPOSIT",
@@ -132,73 +135,87 @@ const getDepositPaidPenceForWorkshopJob = async (workshopJobId: string) => {
         gt: 0,
       },
     },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
+      id: true,
       amountPence: true,
+      saleId: true,
     },
   });
 
-  return depositPayments.reduce((sum, payment) => sum + payment.amountPence, 0);
+const markWorkshopJobCompletedForCheckoutTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJob: Awaited<ReturnType<typeof lockWorkshopJobForCheckoutTx>>,
+) => {
+  if (workshopJob.status === "COMPLETED" || workshopJob.status === "CANCELLED") {
+    return {
+      emittedWorkshopCompletion: false,
+      workshopJobStatus: workshopJob.status,
+      workshopCompletedAt: workshopJob.completedAt ?? new Date(),
+    };
+  }
+
+  const workshopCompletedAt = workshopJob.completedAt ?? new Date();
+  await tx.workshopJob.update({
+    where: { id: workshopJob.id },
+    data: {
+      status: "COMPLETED",
+      ...(workshopJob.completedAt ? {} : { completedAt: workshopCompletedAt }),
+    },
+  });
+
+  return {
+    emittedWorkshopCompletion: true,
+    workshopJobStatus: "COMPLETED",
+    workshopCompletedAt,
+  };
 };
 
-const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promise<WorkshopCheckoutResult | null> => {
-  const [workshopJob, existingSale] = await Promise.all([
-    prisma.workshopJob.findUnique({
-      where: { id: workshopJobId },
-      select: {
-        id: true,
-        status: true,
-        bikeId: true,
-        completedAt: true,
-      },
-    }),
-    prisma.sale.findUnique({
-      where: { workshopJobId },
-    }),
-  ]);
+const loadExistingWorkshopCheckoutResultTx = async (
+  tx: Prisma.TransactionClient,
+  workshopJob: Awaited<ReturnType<typeof lockWorkshopJobForCheckoutTx>>,
+): Promise<WorkshopCheckoutResult | null> => {
+  const existingSale = await tx.sale.findUnique({
+    where: { workshopJobId: workshopJob.id },
+    select: {
+      id: true,
+      workshopJobId: true,
+      customerId: true,
+      totalPence: true,
+      createdAt: true,
+    },
+  });
 
-  if (!workshopJob || !existingSale) {
+  if (!existingSale) {
     return null;
   }
 
-  const [partsTotalPence, depositPaidPence] = await Promise.all([
-    getWorkshopJobUsedPartsTotalPence(workshopJobId),
-    getDepositPaidPenceForWorkshopJob(workshopJobId),
+  const [partsTotalPence, depositPayments, finalPayment, completion] = await Promise.all([
+    getWorkshopJobUsedPartsTotalPenceTx(tx, workshopJob.id),
+    listWorkshopDepositPaymentsTx(tx, workshopJob.id),
+    tx.payment.findFirst({
+      where: {
+        saleId: existingSale.id,
+        purpose: "FINAL",
+        amountPence: {
+          gt: 0,
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        method: true,
+        amountPence: true,
+        providerRef: true,
+        createdAt: true,
+      },
+    }),
+    markWorkshopJobCompletedForCheckoutTx(tx, workshopJob),
   ]);
 
+  const depositPaidPence = depositPayments.reduce((sum, payment) => sum + payment.amountPence, 0);
   const creditPence = Math.max(0, depositPaidPence - existingSale.totalPence);
   const outstandingPence = Math.max(0, existingSale.totalPence - depositPaidPence);
-
-  let completedAt = workshopJob.completedAt;
-  let emittedWorkshopCompletion = false;
-
-  if (workshopJob.status !== "COMPLETED" && workshopJob.status !== "CANCELLED") {
-    completedAt = completedAt ?? new Date();
-
-    const updateResult = await prisma.workshopJob.updateMany({
-      where: {
-        id: workshopJob.id,
-        status: {
-          notIn: ["COMPLETED", "CANCELLED"],
-        },
-      },
-      data: {
-        status: "COMPLETED",
-        ...(workshopJob.completedAt ? {} : { completedAt }),
-      },
-    });
-
-    emittedWorkshopCompletion = updateResult.count > 0;
-
-    if (!emittedWorkshopCompletion) {
-      const refreshedWorkshopJob = await prisma.workshopJob.findUnique({
-        where: { id: workshopJob.id },
-        select: {
-          completedAt: true,
-        },
-      });
-      completedAt = refreshedWorkshopJob?.completedAt ?? completedAt;
-    }
-  }
 
   return {
     sale: {
@@ -215,39 +232,28 @@ const loadExistingWorkshopCheckoutResult = async (workshopJobId: string): Promis
     depositPaidPence,
     creditPence,
     outstandingPence,
-    payment: null,
+    payment: finalPayment
+      ? {
+          id: finalPayment.id,
+          method: finalPayment.method,
+          amountPence: finalPayment.amountPence,
+          providerRef: finalPayment.providerRef,
+          createdAt: finalPayment.createdAt,
+        }
+      : null,
     idempotent: true,
-    emittedWorkshopCompletion,
-    workshopJobStatus: workshopJob.status !== "CANCELLED" ? "COMPLETED" : workshopJob.status,
-    workshopCompletedAt: completedAt ?? new Date(),
+    emittedWorkshopCompletion: completion.emittedWorkshopCompletion,
+    workshopJobStatus:
+      completion.workshopJobStatus !== "CANCELLED" ? "COMPLETED" : completion.workshopJobStatus,
+    workshopCompletedAt: completion.workshopCompletedAt,
   };
 };
 
-const recoverWorkshopCheckoutRace = async (
-  workshopJobId: string,
-  maxWaitMs = WORKSHOP_CHECKOUT_RECOVERY_MAX_WAIT_MS,
-) => {
-  const deadline = Date.now() + maxWaitMs;
-
-  while (Date.now() <= deadline) {
-    try {
-      const recovered = await loadExistingWorkshopCheckoutResult(workshopJobId);
-      if (recovered) {
-        return recovered;
-      }
-    } catch (error) {
-      if (!isRecoverableWorkshopCheckoutRace(error)) {
-        throw error;
-      }
-    }
-
-    if (Date.now() < deadline) {
-      await sleep(WORKSHOP_CHECKOUT_RECOVERY_POLL_MS);
-    }
-  }
-
-  return null;
-};
+const recoverWorkshopCheckoutRace = async (workshopJobId: string) =>
+  withWorkshopCheckoutTransaction(async (tx) => {
+    const workshopJob = await lockWorkshopJobForCheckoutTx(tx, workshopJobId);
+    return loadExistingWorkshopCheckoutResultTx(tx, workshopJob);
+  });
 
 const toWorkshopCheckoutResponse = (
   workshopJobId: string,
@@ -328,62 +334,17 @@ export const checkoutWorkshopJobToSale = async (
     throw new HttpError(400, "amountPence must be a non-negative integer", "INVALID_PAYMENT");
   }
 
-  const existingCheckout = await loadExistingWorkshopCheckoutResult(workshopJobId);
-  if (existingCheckout) {
-    logCorePosEvent("workshop.checkout.reused_existing_sale", {
-      resultStatus: "reused",
-      workshopJobId,
-      saleId: existingCheckout.sale.id,
-    });
-    logWorkshopCheckoutResult(workshopJobId, existingCheckout, null);
-    return toWorkshopCheckoutResponse(workshopJobId, existingCheckout);
-  }
-
   let result: WorkshopCheckoutResult | undefined;
   let lastRecoverableError: unknown;
 
   for (let attempt = 0; attempt < WORKSHOP_CHECKOUT_TRANSACTION_RETRIES; attempt += 1) {
     try {
       const transactionResult = await withWorkshopCheckoutTransaction(async (tx) => {
-        // Serialize checkout attempts per workshop job to prevent unique-key races
-        // on Sale(workshopJobId) and keep idempotent behavior deterministic.
-        const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT id FROM "WorkshopJob" WHERE id = ${workshopJobId} FOR UPDATE
-        `;
+        const workshopJob = await lockWorkshopJobForCheckoutTx(tx, workshopJobId);
+        const existingCheckout = await loadExistingWorkshopCheckoutResultTx(tx, workshopJob);
 
-        if (lockedRows.length === 0) {
-          throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
-        }
-
-        const existingSale = await tx.sale.findUnique({
-          where: { workshopJobId },
-          select: { id: true },
-        });
-
-        if (existingSale) {
-          return {
-            kind: "existing-sale",
-            saleId: existingSale.id,
-          };
-        }
-
-        const workshopJob = await tx.workshopJob.findUnique({
-          where: { id: workshopJobId },
-          select: {
-            id: true,
-            customerId: true,
-            bikeId: true,
-            locationId: true,
-            source: true,
-            depositStatus: true,
-            depositRequiredPence: true,
-            status: true,
-            completedAt: true,
-          },
-        });
-
-        if (!workshopJob) {
-          throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
+        if (existingCheckout) {
+          return existingCheckout;
         }
 
         if (workshopJob.status === "CANCELLED") {
@@ -410,16 +371,7 @@ export const checkoutWorkshopJobToSale = async (
         const serviceTotalPence = input.saleTotalPence;
         const saleTotalPence = serviceTotalPence + partsTotalPence;
 
-        const depositPayments = await tx.payment.findMany({
-          where: {
-            workshopJobId,
-            purpose: "DEPOSIT",
-            amountPence: {
-              gt: 0,
-            },
-          },
-          orderBy: { createdAt: "asc" },
-        });
+        const depositPayments = await listWorkshopDepositPaymentsTx(tx, workshopJobId);
 
         const depositPaidPence = depositPayments.reduce((sum, p) => sum + p.amountPence, 0);
         const creditPence = Math.max(0, depositPaidPence - saleTotalPence);
@@ -559,25 +511,16 @@ export const checkoutWorkshopJobToSale = async (
         };
       });
 
-      if (isExistingWorkshopCheckoutMarker(transactionResult)) {
-        const recoveredExistingCheckout = await loadExistingWorkshopCheckoutResult(workshopJobId);
-        if (!recoveredExistingCheckout) {
-          throw new Error(
-            `Workshop checkout detected existing sale ${transactionResult.saleId} but could not reload the checkout result`,
-          );
-        }
-
+      if (transactionResult.idempotent) {
         logCorePosEvent("workshop.checkout.reused_existing_sale_after_lock", {
           resultStatus: "reused",
           workshopJobId,
           attempt: attempt + 1,
-          saleId: transactionResult.saleId,
+          saleId: transactionResult.sale.id,
         });
-        result = recoveredExistingCheckout;
-      } else {
-        result = transactionResult;
       }
 
+      result = transactionResult;
       lastRecoverableError = undefined;
       break;
     } catch (error) {
@@ -622,21 +565,6 @@ export const checkoutWorkshopJobToSale = async (
       );
       lastRecoverableError = error;
       if (attempt === WORKSHOP_CHECKOUT_TRANSACTION_RETRIES - 1) {
-        const extendedRecovered = await recoverWorkshopCheckoutRace(
-          workshopJobId,
-          WORKSHOP_CHECKOUT_FINAL_RECOVERY_MAX_WAIT_MS,
-        );
-        if (extendedRecovered) {
-          logCorePosEvent("workshop.checkout.recovered_after_extended_wait", {
-            resultStatus: "recovered",
-            workshopJobId,
-            attempt: attempt + 1,
-            saleId: extendedRecovered.sale.id,
-          });
-          result = extendedRecovered;
-          lastRecoverableError = undefined;
-          break;
-        }
         logCorePosError(
           "workshop.checkout.recovery_exhausted",
           error,

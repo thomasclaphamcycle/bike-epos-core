@@ -312,22 +312,14 @@ const run = async () => {
       assert.equal(second.json.payment?.id, first.json.payment.id);
     });
 
-    await runTest("checkout concurrent requests are idempotent", async () => {
+    await runTest("pay-deposit concurrent requests are idempotent", async () => {
       const booking = await createOnlineBooking(scheduledDate);
       trackBooking(booking);
 
-      const deposit = await payDeposit(booking.manageToken, `dep-concurrent-${uniqueRef()}`);
-      assert.equal(deposit.status, 201, JSON.stringify(deposit.json));
-
-      const payload = {
-        saleTotalPence: 6999,
-        paymentMethod: "CARD",
-        amountPence: 5999,
-        providerRef: `final-concurrent-${uniqueRef()}`,
-      };
-
       const responses = await Promise.all(
-        Array.from({ length: 6 }, () => checkoutWorkshopJob(booking.id, payload)),
+        Array.from({ length: 6 }, (_, index) =>
+          payDeposit(booking.manageToken, `dep-concurrent-${index}-${uniqueRef()}`),
+        ),
       );
 
       for (const response of responses) {
@@ -335,16 +327,98 @@ const run = async () => {
           response.status === 200 || response.status === 201,
           `unexpected status ${response.status}: ${JSON.stringify(response.json)}`,
         );
-        trackCheckout(response);
       }
 
       const created = responses.filter((response) => response.status === 201);
       const idempotent = responses.filter((response) => response.status === 200);
-      assert.equal(created.length, 1, "expected exactly one created checkout");
-      assert.ok(idempotent.length >= 1, "expected idempotent checkout responses");
+      assert.equal(created.length, 1, "expected exactly one created deposit payment");
+      assert.ok(idempotent.length >= 1, "expected idempotent deposit responses");
 
-      const saleIds = new Set(responses.map((response) => response.json.sale?.id));
-      assert.equal(saleIds.size, 1, "all checkout responses must reference same sale");
+      const paymentIds = new Set(responses.map((response) => response.json.payment?.id));
+      assert.equal(paymentIds.size, 1, "all deposit responses must reference same payment");
+
+      const persistedDepositPayments = await prisma.payment.findMany({
+        where: {
+          workshopJobId: booking.id,
+          purpose: "DEPOSIT",
+          amountPence: { gt: 0 },
+        },
+        select: { id: true },
+      });
+      assert.equal(
+        persistedDepositPayments.length,
+        1,
+        `expected exactly one persisted deposit payment: ${JSON.stringify(persistedDepositPayments)}`,
+      );
+    });
+
+    await runTest("checkout concurrent requests are idempotent", async () => {
+      for (let round = 1; round <= 3; round += 1) {
+        const booking = await createOnlineBooking(scheduledDate);
+        trackBooking(booking);
+
+        const deposit = await payDeposit(booking.manageToken, `dep-concurrent-${round}-${uniqueRef()}`);
+        assert.equal(deposit.status, 201, JSON.stringify(deposit.json));
+
+        const payload = {
+          saleTotalPence: 6999,
+          paymentMethod: "CARD",
+          amountPence: 5999,
+          providerRef: `final-concurrent-${round}-${uniqueRef()}`,
+        };
+
+        const responses = await Promise.all(
+          Array.from({ length: 6 }, () => checkoutWorkshopJob(booking.id, payload)),
+        );
+
+        for (const response of responses) {
+          assert.ok(
+            response.status === 200 || response.status === 201,
+            `unexpected status ${response.status}: ${JSON.stringify(response.json)}`,
+          );
+          trackCheckout(response);
+        }
+
+        const created = responses.filter((response) => response.status === 201);
+        const idempotent = responses.filter((response) => response.status === 200);
+        assert.equal(created.length, 1, `expected exactly one created checkout in round ${round}`);
+        assert.ok(idempotent.length >= 1, `expected idempotent checkout responses in round ${round}`);
+
+        const saleIds = new Set(responses.map((response) => response.json.sale?.id));
+        assert.equal(saleIds.size, 1, `all checkout responses must reference same sale in round ${round}`);
+
+        const persistedSales = await prisma.sale.findMany({
+          where: { workshopJobId: booking.id },
+          select: { id: true },
+        });
+        assert.equal(
+          persistedSales.length,
+          1,
+          `expected exactly one persisted sale in round ${round}: ${JSON.stringify(persistedSales)}`,
+        );
+
+        const persistedFinalPayments = await prisma.payment.findMany({
+          where: {
+            workshopJobId: booking.id,
+            purpose: "FINAL",
+            amountPence: { gt: 0 },
+          },
+          select: {
+            id: true,
+            saleId: true,
+          },
+        });
+        assert.equal(
+          persistedFinalPayments.length,
+          1,
+          `expected exactly one persisted final payment in round ${round}: ${JSON.stringify(persistedFinalPayments)}`,
+        );
+        assert.equal(
+          persistedFinalPayments[0].saleId,
+          persistedSales[0].id,
+          `expected final payment to attach to the single sale in round ${round}`,
+        );
+      }
     });
 
     await runTest("checkout with required unpaid deposit returns 409", async () => {
