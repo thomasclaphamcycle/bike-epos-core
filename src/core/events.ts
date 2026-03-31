@@ -32,6 +32,11 @@ export type CoreEventMap = {
     workshopJobId?: string | null;
     bikeId?: string | null;
   };
+  "customer.bike.created": CoreEventEnvelope<"customer.bike.created"> & {
+    customerId: string;
+    bikeId: string;
+    bikeDisplayName?: string | null;
+  };
   "purchaseOrder.received": CoreEventEnvelope<"purchaseOrder.received"> & {
     purchaseOrderId: string;
     poNumber: string;
@@ -40,11 +45,27 @@ export type CoreEventMap = {
     quantityReceived: number;
     status: string;
   };
+  "workshop.job.created": CoreEventEnvelope<"workshop.job.created"> & {
+    workshopJobId: string;
+    status: string;
+    customerId?: string | null;
+    bikeId?: string | null;
+    bikeDescription?: string | null;
+  };
+  "workshop.job.status_changed": CoreEventEnvelope<"workshop.job.status_changed"> & {
+    workshopJobId: string;
+    fromStatus: string;
+    toStatus: string;
+    stage: string;
+    customerId?: string | null;
+    bikeId?: string | null;
+    saleId?: string | null;
+  };
   "workshop.job.completed": CoreEventEnvelope<"workshop.job.completed"> & {
     workshopJobId: string;
     status: string;
     completedAt?: string;
-    saleId?: string;
+    saleId?: string | null;
     customerId?: string | null;
     bikeId?: string | null;
   };
@@ -60,18 +81,10 @@ export type CoreEventMap = {
     workshopJobId: string;
     workshopEstimateId: string;
     estimateVersion: number;
-    decisionStatus: "APPROVED" | "REJECTED";
-    decisionSource?: "STAFF" | "CUSTOMER" | null;
+    status: "APPROVED" | "REJECTED";
+    decisionSource?: string | null;
     customerId?: string | null;
     bikeId?: string | null;
-  };
-  "workshop.job.status_changed": CoreEventEnvelope<"workshop.job.status_changed"> & {
-    workshopJobId: string;
-    fromStatus: string;
-    toStatus: string;
-    customerId?: string | null;
-    bikeId?: string | null;
-    saleId?: string | null;
   };
   "workshop.job.ready_for_collection": CoreEventEnvelope<"workshop.job.ready_for_collection"> & {
     workshopJobId: string;
@@ -84,10 +97,17 @@ export type CoreEventMap = {
     workshopJobId: string;
     workshopJobNoteId: string;
     visibility: "INTERNAL" | "CUSTOMER";
+    notePreview?: string | null;
     customerId?: string | null;
     bikeId?: string | null;
   };
   "workshop.portal_message.ready": CoreEventEnvelope<"workshop.portal_message.ready"> & {
+    workshopJobId: string;
+    workshopMessageId: string;
+    customerId?: string | null;
+    bikeId?: string | null;
+  };
+  "workshop.portal_message.received": CoreEventEnvelope<"workshop.portal_message.received"> & {
     workshopJobId: string;
     workshopMessageId: string;
     customerId?: string | null;
@@ -109,14 +129,17 @@ export const CORE_EVENT_NAMES = [
   "payments.intent.created",
   "payments.refund.recorded",
   "sale.completed",
+  "customer.bike.created",
   "purchaseOrder.received",
+  "workshop.job.created",
+  "workshop.job.status_changed",
   "workshop.job.completed",
   "workshop.quote.ready",
   "workshop.estimate.decided",
-  "workshop.job.status_changed",
   "workshop.job.ready_for_collection",
   "workshop.note.added",
   "workshop.portal_message.ready",
+  "workshop.portal_message.received",
   "stock.adjusted",
 ] as const satisfies readonly CoreEventName[];
 
