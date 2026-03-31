@@ -56,6 +56,7 @@ import {
   ReorderSuggestionsPage,
   SalesAnalyticsPage,
   SavedViewsPage,
+  SalesReceiptPrintPage,
   ServiceRemindersPage,
   StaffManagementPage,
   StaffPerformancePage,
@@ -751,6 +752,14 @@ export const App = () => {
           element={(
             <ProtectedRoute>
               <ProductLabelPrintPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/sales/:saleId/receipt/print"
+          element={(
+            <ProtectedRoute>
+              <SalesReceiptPrintPage />
             </ProtectedRoute>
           )}
         />

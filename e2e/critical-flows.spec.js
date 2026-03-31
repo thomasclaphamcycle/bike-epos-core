@@ -509,6 +509,56 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   expect(completedSale.sale.customer?.name).toBe(secondCustomer.name);
 });
 
+test("React POS checkout opens a printable thermal receipt page", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "react-pos-receipt-print",
+  });
+  const firstVariant = await seedCatalogVariant(request, {
+    prefix: "react-pos-receipt-print-one",
+    retailPricePence: 1299,
+  });
+  const secondVariant = await seedCatalogVariant(request, {
+    prefix: "react-pos-receipt-print-two",
+    retailPricePence: 2599,
+  });
+  await ensureOpenRegisterSession(request);
+
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+  await expect(page.getByRole("heading", { name: "POS" })).toBeVisible();
+
+  await page.getByTestId("pos-product-search").fill(firstVariant.product.name);
+  await expect(page.getByTestId(`pos-product-add-${firstVariant.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${firstVariant.variant.id}`).click();
+  await expect(page.getByTestId("pos-product-search")).toHaveValue("");
+
+  await page.getByTestId("pos-product-search").fill(secondVariant.product.name);
+  await expect(page.getByTestId(`pos-product-add-${secondVariant.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${secondVariant.variant.id}`).click();
+  await expect(page.getByTestId("pos-product-search")).toHaveValue("");
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await page.getByTestId("pos-complete-sale").click();
+  await expect(page.getByText("Sale complete.")).toBeVisible();
+
+  const printReceiptLink = page.getByTestId("pos-print-receipt-link");
+  await expect(printReceiptLink).toBeVisible();
+  const printReceiptHref = await printReceiptLink.getAttribute("href");
+  expect(printReceiptHref).toBeTruthy();
+
+  await page.goto(`${frontendBaseUrl}${printReceiptHref}`);
+  await expect(page.getByTestId("sales-receipt")).toBeVisible();
+  await expect(page.getByTestId("sales-receipt")).toContainText(firstVariant.product.name);
+  await expect(page.getByTestId("sales-receipt")).toContainText(secondVariant.product.name);
+  await expect(page.getByRole("button", { name: "Print receipt" })).toBeVisible();
+  await expect(page.locator(".app-sidebar")).toHaveCount(0);
+
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator(".sales-receipt-print-page__actions")).toBeHidden();
+  await expect(page.getByTestId("sales-receipt")).toBeVisible();
+  await page.emulateMedia({ media: "screen" });
+});
+
 test("React POS product search supports keyboard navigation and quick add quantity 2", async ({
   page,
   request,

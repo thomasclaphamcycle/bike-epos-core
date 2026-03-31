@@ -570,6 +570,208 @@ body {
   }
 }
 
+.sales-receipt-print-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  background:
+    linear-gradient(180deg, #eef3f8 0%, #dfe8f1 100%);
+}
+
+.sales-receipt-print-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.sales-receipt-print-page__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.sales-receipt-print-page__copy h1,
+.sales-receipt-print-page__copy p {
+  margin: 0;
+}
+
+.sales-receipt-print-page__sheet {
+  display: grid;
+  place-items: start center;
+}
+
+.sales-receipt {
+  width: 80mm;
+  background: #fff;
+  color: #111;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 16px 32px rgba(17, 24, 39, 0.12);
+  padding: 5mm 4mm 4mm;
+  font-family: "SFMono-Regular", "ui-monospace", "Menlo", "Monaco", "Cascadia Mono", "Roboto Mono", monospace;
+  display: grid;
+  gap: 3mm;
+}
+
+.sales-receipt__header,
+.sales-receipt__section,
+.sales-receipt__footer {
+  display: grid;
+  gap: 1.5mm;
+}
+
+.sales-receipt__header {
+  text-align: center;
+}
+
+.sales-receipt__shop-name {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sales-receipt__shop-address,
+.sales-receipt__meta-line,
+.sales-receipt__footer {
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.sales-receipt__meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2mm 4mm;
+}
+
+.sales-receipt__meta-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.6mm;
+}
+
+.sales-receipt__meta-label,
+.sales-receipt__section-title,
+.sales-receipt__item-bottomline {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4b5563;
+}
+
+.sales-receipt__divider {
+  border-top: 1px dashed #111;
+}
+
+.sales-receipt__item-list {
+  display: grid;
+  gap: 2mm;
+}
+
+.sales-receipt__item {
+  display: grid;
+  gap: 0.8mm;
+}
+
+.sales-receipt__item-topline,
+.sales-receipt__item-bottomline,
+.sales-receipt__totals-row,
+.sales-receipt__payment-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3mm;
+  align-items: end;
+}
+
+.sales-receipt__item-name {
+  font-size: 0.82rem;
+  line-height: 1.25;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sales-receipt__item-line-total,
+.sales-receipt__totals-row strong,
+.sales-receipt__payment-row strong {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.sales-receipt__item-bottomline {
+  column-gap: 2mm;
+}
+
+.sales-receipt__section--totals {
+  gap: 1mm;
+}
+
+.sales-receipt__totals-row {
+  font-size: 0.82rem;
+}
+
+.sales-receipt__totals-row--grand {
+  font-size: 0.96rem;
+  padding-top: 1mm;
+  border-top: 1px solid #111;
+}
+
+.sales-receipt__payments {
+  display: grid;
+  gap: 1mm;
+}
+
+.sales-receipt__payment-row {
+  font-size: 0.78rem;
+}
+
+.sales-receipt__footer {
+  text-align: center;
+  border-top: 1px dashed #111;
+  padding-top: 2mm;
+}
+
+.sales-receipt__footer p {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .sales-receipt-print-page {
+    padding: 16px;
+  }
+
+  .sales-receipt-print-page__actions {
+    align-items: stretch;
+  }
+
+  .sales-receipt {
+    width: min(80mm, 100%);
+  }
+}
+
+@media print {
+  .sales-receipt-print-page {
+    min-height: auto;
+    padding: 0;
+    background: #fff;
+  }
+
+  .sales-receipt-print-page__actions,
+  .sales-receipt-print-page__copy {
+    display: none;
+  }
+
+  .sales-receipt-print-page__sheet {
+    place-items: start;
+  }
+
+  .sales-receipt {
+    border: 0;
+    box-shadow: none;
+    padding: 4mm 3.5mm 3mm;
+  }
+}
+
 a {
   color: var(--cp-blue);
 }

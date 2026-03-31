@@ -1610,6 +1610,14 @@ export const PosPage = () => {
                     <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
                       New sale
                     </button>
+                    <a
+                      href={`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="pos-print-receipt-link"
+                    >
+                      Print receipt
+                    </a>
                     <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
                       Open receipt
                     </a>
