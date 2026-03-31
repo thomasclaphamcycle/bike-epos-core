@@ -38,6 +38,19 @@ const clearAuthCookieOptions = () => ({
   path: "/",
 });
 
+const assertBootstrapAllowed = () => {
+  if (
+    process.env.NODE_ENV === "production"
+    && process.env.ALLOW_INITIAL_ADMIN_BOOTSTRAP !== "1"
+  ) {
+    throw new HttpError(
+      403,
+      "Bootstrap disabled in production unless ALLOW_INITIAL_ADMIN_BOOTSTRAP=1",
+      "BOOTSTRAP_DISABLED",
+    );
+  }
+};
+
 export const loginHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as { email?: unknown; password?: unknown };
 
@@ -171,6 +184,8 @@ export const changePinHandler = async (req: Request, res: Response) => {
 };
 
 export const bootstrapHandler = async (req: Request, res: Response) => {
+  assertBootstrapAllowed();
+
   const body = (req.body ?? {}) as {
     name?: unknown;
     email?: unknown;

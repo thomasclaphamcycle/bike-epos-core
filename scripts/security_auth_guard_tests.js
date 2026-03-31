@@ -191,6 +191,17 @@ const run = async () => {
     const adminHeaders = headersWithRole("ADMIN");
 
     expectStatus(
+      "dev product route disabled outside development",
+      await request({ path: "/dev/product", method: "POST" }),
+      404,
+    );
+    expectStatus(
+      "dev seed tube route disabled outside development",
+      await request({ path: "/dev/seed-tube", method: "POST" }),
+      404,
+    );
+
+    expectStatus(
       "staff workshop parts",
       await request({
         path: `/api/workshop-jobs/${fixtures.workshopJobId}/parts`,
@@ -255,6 +266,39 @@ const run = async () => {
       "staff metrics forbidden",
       await request({ path: "/metrics", headers: staffHeaders }),
       403,
+    );
+
+    expectStatus(
+      "reject malformed product pagination",
+      await request({
+        path: "/api/products?take=10foo",
+        headers: staffHeaders,
+      }),
+      400,
+    );
+    expectStatus(
+      "reject malformed purchase order pagination",
+      await request({
+        path: "/api/purchase-orders?skip=1.5",
+        headers: staffHeaders,
+      }),
+      400,
+    );
+    expectStatus(
+      "reject malformed report take filter",
+      await request({
+        path: "/api/reports/sales/products?from=2026-01-01&to=2026-12-31&take=10foo",
+        headers: managerHeaders,
+      }),
+      400,
+    );
+    expectStatus(
+      "reject malformed report integer filter",
+      await request({
+        path: "/api/reports/customers/reminders?dueSoonDays=7days",
+        headers: managerHeaders,
+      }),
+      400,
     );
 
     expectStatus(

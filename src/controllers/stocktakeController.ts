@@ -14,6 +14,7 @@ import {
   upsertStocktakeLine,
 } from "../services/stocktakeService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const parseBooleanQuery = (value: string | undefined): boolean | undefined => {
   if (value === undefined) {
@@ -48,35 +49,19 @@ const parseStocktakeStatusQuery = (value: string | undefined): StocktakeStatus |
   return normalized as StocktakeStatus;
 };
 
-const parseOptionalIntQuery = (
-  value: string | undefined,
-  field: "take" | "skip",
-): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_STOCKTAKE_QUERY");
-  }
-
-  return parsed;
-};
-
 export const listStocktakesHandler = async (req: Request, res: Response) => {
   const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
   const status = parseStocktakeStatusQuery(
     typeof req.query.status === "string" ? req.query.status : undefined,
   );
-  const take = parseOptionalIntQuery(
-    typeof req.query.take === "string" ? req.query.take : undefined,
-    "take",
-  );
-  const skip = parseOptionalIntQuery(
-    typeof req.query.skip === "string" ? req.query.skip : undefined,
-    "skip",
-  );
+  const take = parseOptionalIntegerQuery(req.query.take, {
+    code: "INVALID_STOCKTAKE_QUERY",
+    message: "take must be an integer",
+  });
+  const skip = parseOptionalIntegerQuery(req.query.skip, {
+    code: "INVALID_STOCKTAKE_QUERY",
+    message: "skip must be an integer",
+  });
 
   const result = await listStocktakes({ locationId, status, take, skip });
   res.json(result);

@@ -11,6 +11,7 @@ import {
   returnHireBooking,
 } from "../services/bikeHireService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const parseHireAssetStatus = (value: unknown): HireAssetStatus | undefined => {
   if (value === undefined) {
@@ -63,22 +64,6 @@ const parseHireBookingStatus = (value: unknown): HireBookingStatus | undefined =
   return normalized as HireBookingStatus;
 };
 
-const parseOptionalIntQuery = (value: unknown, field: "take" | "skip") => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_HIRE_QUERY");
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_HIRE_QUERY");
-  }
-
-  return parsed;
-};
-
 export const listHireAssetsHandler = async (req: Request, res: Response) => {
   const result = await listHireAssets({
     status: parseHireAssetStatus(req.query.status),
@@ -88,8 +73,14 @@ export const listHireAssetsHandler = async (req: Request, res: Response) => {
         : typeof req.query.query === "string"
           ? req.query.query
           : undefined,
-    take: parseOptionalIntQuery(req.query.take, "take"),
-    skip: parseOptionalIntQuery(req.query.skip, "skip"),
+    take: parseOptionalIntegerQuery(req.query.take, {
+      code: "INVALID_HIRE_QUERY",
+      message: "take must be an integer",
+    }),
+    skip: parseOptionalIntegerQuery(req.query.skip, {
+      code: "INVALID_HIRE_QUERY",
+      message: "skip must be an integer",
+    }),
   });
 
   res.json(result);
@@ -132,8 +123,14 @@ export const createHireAssetHandler = async (req: Request, res: Response) => {
 export const listHireBookingsHandler = async (req: Request, res: Response) => {
   const result = await listHireBookings({
     status: parseHireBookingStatus(req.query.status),
-    take: parseOptionalIntQuery(req.query.take, "take"),
-    skip: parseOptionalIntQuery(req.query.skip, "skip"),
+    take: parseOptionalIntegerQuery(req.query.take, {
+      code: "INVALID_HIRE_QUERY",
+      message: "take must be an integer",
+    }),
+    skip: parseOptionalIntegerQuery(req.query.skip, {
+      code: "INVALID_HIRE_QUERY",
+      message: "skip must be an integer",
+    }),
   });
 
   res.json(result);

@@ -40,6 +40,7 @@ import {
 } from "../services/reminderCandidateService";
 import { toCsv } from "../utils/csv";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
 
 const getDateRangeQuery = (req: Request) => {
@@ -55,22 +56,17 @@ const getAsOfQuery = (req: Request) =>
   (typeof req.query.asOf === "string" ? req.query.asOf : undefined);
 
 const getTakeQuery = (req: Request) => {
-  if (req.query.take === undefined) {
-    return undefined;
-  }
-
-  const value = Number(req.query.take);
-  return Number.isNaN(value) ? undefined : value;
+  return parseOptionalIntegerQuery(req.query.take, {
+    code: "INVALID_REPORT_FILTER",
+    message: "take must be an integer",
+  });
 };
 
 const getIntQuery = (req: Request, key: string) => {
-  if (req.query[key] === undefined) {
-    return undefined;
-  }
-
-  const raw = req.query[key];
-  const value = typeof raw === "string" ? Number(raw) : Number.NaN;
-  return Number.isNaN(value) ? undefined : value;
+  return parseOptionalIntegerQuery(req.query[key], {
+    code: "INVALID_REPORT_FILTER",
+    message: `${key} must be an integer`,
+  });
 };
 
 const getBooleanQuery = (req: Request, key: string) => {

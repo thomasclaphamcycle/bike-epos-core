@@ -10,6 +10,7 @@ import {
   sendStockTransfer,
 } from "../services/stockTransferService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const parseStockTransferStatus = (value: string | undefined): StockTransferStatus | undefined => {
   if (value === undefined) {
@@ -33,19 +34,6 @@ const parseStockTransferStatus = (value: string | undefined): StockTransferStatu
   return normalized as StockTransferStatus;
 };
 
-const parseOptionalIntQuery = (value: string | undefined, field: "take" | "skip") => {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_STOCK_TRANSFER_QUERY");
-  }
-
-  return parsed;
-};
-
 export const listStockTransfersHandler = async (req: Request, res: Response) => {
   const result = await listStockTransfers({
     status: parseStockTransferStatus(
@@ -53,8 +41,14 @@ export const listStockTransfersHandler = async (req: Request, res: Response) => 
     ),
     fromLocationId: typeof req.query.fromLocationId === "string" ? req.query.fromLocationId : undefined,
     toLocationId: typeof req.query.toLocationId === "string" ? req.query.toLocationId : undefined,
-    take: parseOptionalIntQuery(typeof req.query.take === "string" ? req.query.take : undefined, "take"),
-    skip: parseOptionalIntQuery(typeof req.query.skip === "string" ? req.query.skip : undefined, "skip"),
+    take: parseOptionalIntegerQuery(req.query.take, {
+      code: "INVALID_STOCK_TRANSFER_QUERY",
+      message: "take must be an integer",
+    }),
+    skip: parseOptionalIntegerQuery(req.query.skip, {
+      code: "INVALID_STOCK_TRANSFER_QUERY",
+      message: "skip must be an integer",
+    }),
   });
 
   res.json(result);

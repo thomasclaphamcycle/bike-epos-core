@@ -12,6 +12,7 @@ import {
 } from "../services/inventoryLedgerService";
 import { resolveRequestLocation } from "../services/locationService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const LOCATION_CODE_HEADER = "x-location-code";
 
@@ -220,20 +221,6 @@ export const getInventoryOnHandHandler = async (req: Request, res: Response) => 
   res.json(response);
 };
 
-const parseOptionalIntQuery = (value: unknown): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(400, "take/skip must be an integer", "INVALID_ON_HAND_QUERY");
-  }
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, "take/skip must be an integer", "INVALID_ON_HAND_QUERY");
-  }
-  return parsed;
-};
-
 export const listInventoryOnHandHandler = async (req: Request, res: Response) => {
   const q =
     typeof req.query.q === "string"
@@ -253,8 +240,14 @@ export const listInventoryOnHandHandler = async (req: Request, res: Response) =>
     }
   }
 
-  const take = parseOptionalIntQuery(req.query.take);
-  const skip = parseOptionalIntQuery(req.query.skip);
+  const take = parseOptionalIntegerQuery(req.query.take, {
+    code: "INVALID_ON_HAND_QUERY",
+    message: "take/skip must be an integer",
+  });
+  const skip = parseOptionalIntegerQuery(req.query.skip, {
+    code: "INVALID_ON_HAND_QUERY",
+    message: "take/skip must be an integer",
+  });
   const explicitLocationId =
     typeof req.query.locationId === "string" ? req.query.locationId : undefined;
   const requestLocation =

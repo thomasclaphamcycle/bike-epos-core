@@ -6,6 +6,7 @@ import {
   updateVariantById,
 } from "../services/productService";
 import { HttpError } from "../utils/http";
+import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
 const parseActiveQuery = (value: unknown): boolean | undefined => {
   if (value === undefined) {
@@ -24,23 +25,6 @@ const parseActiveQuery = (value: unknown): boolean | undefined => {
   throw new HttpError(400, "active must be 1 or 0", "INVALID_VARIANT_FILTER");
 };
 
-const parseOptionalIntQuery = (
-  value: unknown,
-  field: "take" | "skip",
-): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_VARIANT_FILTER");
-  }
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) {
-    throw new HttpError(400, `${field} must be an integer`, "INVALID_VARIANT_FILTER");
-  }
-  return parsed;
-};
-
 export const listVariantsHandler = async (req: Request, res: Response) => {
   const productId = typeof req.query.productId === "string" ? req.query.productId : undefined;
   const q =
@@ -50,8 +34,14 @@ export const listVariantsHandler = async (req: Request, res: Response) => {
         ? req.query.query
         : undefined;
   const isActive = parseActiveQuery(req.query.active);
-  const take = parseOptionalIntQuery(req.query.take, "take");
-  const skip = parseOptionalIntQuery(req.query.skip, "skip");
+  const take = parseOptionalIntegerQuery(req.query.take, {
+    code: "INVALID_VARIANT_FILTER",
+    message: "take must be an integer",
+  });
+  const skip = parseOptionalIntegerQuery(req.query.skip, {
+    code: "INVALID_VARIANT_FILTER",
+    message: "skip must be an integer",
+  });
 
   const variants = await listVariants({ q, isActive, take, skip, productId });
   res.json(variants);

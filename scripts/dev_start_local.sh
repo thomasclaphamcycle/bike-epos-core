@@ -45,7 +45,7 @@ cleanup_started_components() {
   if (( started_frontend == 1 )) && [[ -f "$COREPOS_DEV_FRONTEND_PID_FILE" ]]; then
     classify_component_listeners "frontend" "$COREPOS_DEV_FRONTEND_PORT"
     if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
-      stop_pid_for_port "frontend" "${CLASSIFIED_MATCHING_PIDS[0]}" "$COREPOS_DEV_FRONTEND_PORT" || true
+      stop_pid_for_port "frontend" "${CLASSIFIED_MATCHING_PIDS[0]}" "$COREPOS_DEV_FRONTEND_PORT" "frontend" || true
     else
       kill "$(cat "$COREPOS_DEV_FRONTEND_PID_FILE")" 2>/dev/null || true
     fi
@@ -54,7 +54,7 @@ cleanup_started_components() {
   if (( started_backend == 1 )) && [[ -f "$COREPOS_DEV_BACKEND_PID_FILE" ]]; then
     classify_component_listeners "backend" "$COREPOS_DEV_BACKEND_PORT"
     if (( ${#CLASSIFIED_MATCHING_PIDS[@]} > 0 )); then
-      stop_pid_for_port "backend" "${CLASSIFIED_MATCHING_PIDS[0]}" "$COREPOS_DEV_BACKEND_PORT" || true
+      stop_pid_for_port "backend" "${CLASSIFIED_MATCHING_PIDS[0]}" "$COREPOS_DEV_BACKEND_PORT" "backend" || true
     else
       kill "$(cat "$COREPOS_DEV_BACKEND_PID_FILE")" 2>/dev/null || true
     fi

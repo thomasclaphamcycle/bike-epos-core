@@ -160,6 +160,10 @@ stop_pid_for_port() {
   local label="$1"
   local pid="$2"
   local port="$3"
+  local component="${4:-}"
+  local kill_wait=0
+  local lingering_pid
+  local -a matching_pids=()
 
   dev_log "Stopping ${label} (${pid}) on port ${port}"
   kill "$pid" 2>/dev/null || true
@@ -169,13 +173,33 @@ stop_pid_for_port() {
     return 0
   fi
 
-  dev_warn "${label} did not stop after SIGTERM; sending SIGKILL to ${pid}"
-  kill -9 "$pid" 2>/dev/null || true
+  dev_warn "${label} did not stop after SIGTERM; checking for lingering listeners on port ${port}"
 
-  if wait_for_port_free "$port" "$COREPOS_DEV_STOP_WAIT_SECONDS"; then
-    dev_log "${label} stopped after SIGKILL"
-    return 0
-  fi
+  while (( kill_wait < COREPOS_DEV_STOP_WAIT_SECONDS )); do
+    if [[ -z "$(list_listening_pids_for_port "$port")" ]]; then
+      dev_log "${label} stopped after SIGKILL"
+      return 0
+    fi
+
+    if [[ -n "$component" ]]; then
+      classify_component_listeners "$component" "$port"
+      matching_pids=("${CLASSIFIED_MATCHING_PIDS[@]}")
+    else
+      mapfile -t matching_pids < <(list_listening_pids_for_port "$port")
+    fi
+
+    if (( ${#matching_pids[@]} == 0 )); then
+      matching_pids=("$pid")
+    fi
+
+    for lingering_pid in "${matching_pids[@]}"; do
+      dev_warn "Sending SIGKILL to lingering ${label} listener ${lingering_pid} on port ${port}"
+      kill -9 "$lingering_pid" 2>/dev/null || true
+    done
+
+    sleep 1
+    kill_wait=$((kill_wait + 1))
+  done
 
   dev_error "${label} still appears to be listening on port ${port}"
   return 1
