@@ -132,6 +132,92 @@ const customerBikeHistorySelect = Prisma.validator<Prisma.CustomerBikeSelect>()(
   },
 });
 
+const customerBikeWorkshopJobSelect = Prisma.validator<Prisma.WorkshopJobSelect>()({
+  id: true,
+  customerId: true,
+  customerName: true,
+  bikeDescription: true,
+  assignedStaffId: true,
+  assignedStaffName: true,
+  status: true,
+  scheduledDate: true,
+  scheduledStartAt: true,
+  scheduledEndAt: true,
+  durationMinutes: true,
+  notes: true,
+  depositRequiredPence: true,
+  depositStatus: true,
+  finalizedBasketId: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+  closedAt: true,
+  sale: {
+    select: {
+      id: true,
+      totalPence: true,
+      createdAt: true,
+      completedAt: true,
+    },
+  },
+  lines: {
+    select: {
+      id: true,
+      type: true,
+      qty: true,
+      unitPricePence: true,
+    },
+  },
+  estimates: {
+    orderBy: [{ version: "desc" }],
+    select: {
+      id: true,
+      version: true,
+      status: true,
+      labourTotalPence: true,
+      partsTotalPence: true,
+      subtotalPence: true,
+      lineCount: true,
+      requestedAt: true,
+      approvedAt: true,
+      rejectedAt: true,
+      supersededAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  jobNotes: {
+    take: 1,
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      note: true,
+      visibility: true,
+      createdAt: true,
+      authorStaff: {
+        select: {
+          id: true,
+          username: true,
+          name: true,
+        },
+      },
+    },
+  },
+  _count: {
+    select: {
+      jobNotes: true,
+    },
+  },
+});
+
+type CustomerBikeHistoryRecord = Prisma.CustomerBikeGetPayload<{
+  select: typeof customerBikeHistorySelect;
+}>;
+
+type CustomerBikeWorkshopJobRecord = Prisma.WorkshopJobGetPayload<{
+  select: typeof customerBikeWorkshopJobSelect;
+}>;
+
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
@@ -426,6 +512,184 @@ const buildBikeServiceSummary = (
   };
 };
 
+const isOpenWorkshopExecutionStatus = (
+  status: ReturnType<typeof toWorkshopExecutionStatus>,
+) => status === "BOOKED" || status === "IN_PROGRESS" || status === "READY";
+
+const sortByNewestTimestamp = (left: Date | null, right: Date | null) =>
+  (right?.getTime() ?? 0) - (left?.getTime() ?? 0);
+
+const serializeBikeWorkshopHistoryEntry = (
+  job: CustomerBikeWorkshopJobRecord,
+  bike: CustomerBikeHistoryRecord,
+) => {
+  const latestEstimate = job.estimates[0] ?? null;
+  const latestNote = job.jobNotes[0] ?? null;
+  const labourTotalPence = job.lines
+    .filter((line) => line.type === "LABOUR")
+    .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
+  const partsTotalPence = job.lines
+    .filter((line) => line.type === "PART")
+    .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
+  const liveSubtotalPence = labourTotalPence + partsTotalPence;
+  const primaryMoney = buildPrimaryMoneySummary({
+    saleTotalPence: job.sale?.totalPence,
+    estimateSubtotalPence: latestEstimate?.subtotalPence ?? null,
+    liveSubtotalPence,
+  });
+  const executionStatus = toWorkshopExecutionStatus(job);
+  const serviceSummaryText = buildBikeHistorySummaryText({
+    bikeDescription: job.bikeDescription,
+    jobNotes: job.notes,
+    latestNote: latestNote?.note,
+    estimateLineCount: latestEstimate?.lineCount,
+    liveLineCount: job.lines.length,
+  });
+
+  return {
+    id: job.id,
+    reference: job.id.slice(0, 8).toUpperCase(),
+    title: serviceSummaryText,
+    jobPath: `/workshop/${job.id}`,
+    customerId: job.customerId,
+    customerName: job.customerName,
+    bikeDescription: job.bikeDescription ?? buildCustomerBikeDisplayName(bike),
+    serviceSummaryText,
+    status: executionStatus,
+    rawStatus: job.status,
+    scheduledDate: job.scheduledDate,
+    scheduledStartAt: job.scheduledStartAt,
+    scheduledEndAt: job.scheduledEndAt,
+    durationMinutes: job.durationMinutes,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
+    closedAt: job.closedAt,
+    depositRequiredPence: job.depositRequiredPence,
+    depositStatus: job.depositStatus,
+    finalizedBasketId: job.finalizedBasketId,
+    assignedTechnician: job.assignedStaffId || job.assignedStaffName
+      ? {
+          id: job.assignedStaffId,
+          name: job.assignedStaffName,
+        }
+      : null,
+    notes: {
+      jobNotes: job.notes,
+      noteCount: job._count.jobNotes,
+      latestNote: latestNote
+        ? {
+            id: latestNote.id,
+            note: latestNote.note,
+            visibility: latestNote.visibility,
+            createdAt: latestNote.createdAt,
+            authorName: latestNote.authorStaff?.name ?? latestNote.authorStaff?.username ?? null,
+          }
+        : null,
+    },
+    liveTotals: {
+      lineCount: job.lines.length,
+      labourTotalPence,
+      partsTotalPence,
+      subtotalPence: liveSubtotalPence,
+    },
+    moneySummary: {
+      labourTotalPence,
+      partsTotalPence,
+      liveSubtotalPence,
+      estimateSubtotalPence: latestEstimate?.subtotalPence ?? null,
+      finalTotalPence: job.sale?.totalPence ?? null,
+      primaryTotalPence: primaryMoney.totalPence,
+      primaryTotalSource: primaryMoney.source,
+    },
+    estimate: latestEstimate
+      ? {
+          id: latestEstimate.id,
+          version: latestEstimate.version,
+          status: latestEstimate.status,
+          labourTotalPence: latestEstimate.labourTotalPence,
+          partsTotalPence: latestEstimate.partsTotalPence,
+          subtotalPence: latestEstimate.subtotalPence,
+          lineCount: latestEstimate.lineCount,
+          requestedAt: latestEstimate.requestedAt,
+          approvedAt: latestEstimate.approvedAt,
+          rejectedAt: latestEstimate.rejectedAt,
+          supersededAt: latestEstimate.supersededAt,
+          createdAt: latestEstimate.createdAt,
+          updatedAt: latestEstimate.updatedAt,
+          isCurrent: latestEstimate.supersededAt === null,
+        }
+      : null,
+    sale: job.sale
+      ? {
+          id: job.sale.id,
+          totalPence: job.sale.totalPence,
+          createdAt: job.sale.createdAt,
+          completedAt: job.sale.completedAt,
+        }
+      : null,
+  };
+};
+
+type BikeWorkshopHistoryEntry = ReturnType<typeof serializeBikeWorkshopHistoryEntry>;
+
+const buildBikeHistoryMetrics = (
+  entries: BikeWorkshopHistoryEntry[],
+  serviceSummary: ReturnType<typeof buildBikeServiceSummary>,
+) => {
+  const completedHistory = entries
+    .filter((entry) => entry.completedAt !== null)
+    .sort((left, right) => sortByNewestTimestamp(left.completedAt, right.completedAt));
+  const openWork = entries
+    .filter((entry) => isOpenWorkshopExecutionStatus(entry.status))
+    .sort((left, right) => {
+      const statusRank = (entry: BikeWorkshopHistoryEntry) => {
+        switch (entry.status) {
+          case "READY":
+            return 0;
+          case "IN_PROGRESS":
+            return 1;
+          case "BOOKED":
+            return 2;
+          default:
+            return 3;
+        }
+      };
+
+      const rankDelta = statusRank(left) - statusRank(right);
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+
+      return sortByNewestTimestamp(
+        left.scheduledStartAt ?? left.scheduledDate ?? left.updatedAt,
+        right.scheduledStartAt ?? right.scheduledDate ?? right.updatedAt,
+      );
+    });
+  const finalizedSpendEntries = completedHistory.filter(
+    (entry) => typeof entry.sale?.totalPence === "number",
+  );
+
+  return {
+    completedHistory,
+    openWork,
+    metrics: {
+      totalJobs: serviceSummary.linkedJobCount,
+      completedJobs: serviceSummary.completedJobCount,
+      openJobs: serviceSummary.openJobCount,
+      lastServiceAt: serviceSummary.latestCompletedAt,
+      lifetimeWorkshopSpendPence: finalizedSpendEntries.reduce(
+        (sum, entry) => sum + (entry.sale?.totalPence ?? 0),
+        0,
+      ),
+      finalizedSaleCount: finalizedSpendEntries.length,
+      lastActivityAt: entries
+        .map((entry) => entry.completedAt ?? entry.scheduledStartAt ?? entry.scheduledDate ?? entry.updatedAt)
+        .sort(sortByNewestTimestamp)[0] ?? null,
+    },
+  };
+};
+
 const assertCustomerExistsTx = async (
   tx: Prisma.TransactionClient | typeof prisma,
   customerId: string,
@@ -703,81 +967,12 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
   const workshopJobs = await prisma.workshopJob.findMany({
     where: { bikeId: customerBikeId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: {
-      id: true,
-      customerId: true,
-      customerName: true,
-      bikeDescription: true,
-      assignedStaffId: true,
-      assignedStaffName: true,
-      status: true,
-      scheduledDate: true,
-      notes: true,
-      depositRequiredPence: true,
-      depositStatus: true,
-      finalizedBasketId: true,
-      createdAt: true,
-      updatedAt: true,
-      completedAt: true,
-      closedAt: true,
-      sale: {
-        select: {
-          id: true,
-          totalPence: true,
-          createdAt: true,
-          completedAt: true,
-        },
-      },
-      lines: {
-        select: {
-          id: true,
-          type: true,
-          qty: true,
-          unitPricePence: true,
-        },
-      },
-      estimates: {
-        orderBy: [{ version: "desc" }],
-        select: {
-          id: true,
-          version: true,
-          status: true,
-          labourTotalPence: true,
-          partsTotalPence: true,
-          subtotalPence: true,
-          lineCount: true,
-          requestedAt: true,
-          approvedAt: true,
-          rejectedAt: true,
-          supersededAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
-      jobNotes: {
-        take: 1,
-        orderBy: [{ createdAt: "desc" }],
-        select: {
-          id: true,
-          note: true,
-          visibility: true,
-          createdAt: true,
-          authorStaff: {
-            select: {
-              id: true,
-              username: true,
-              name: true,
-            },
-          },
-        },
-      },
-      _count: {
-        select: {
-          jobNotes: true,
-        },
-      },
-    },
+    select: customerBikeWorkshopJobSelect,
   });
+
+  const serviceSummary = buildBikeServiceSummary(workshopJobs);
+  const history = workshopJobs.map((job) => serializeBikeWorkshopHistoryEntry(job, bike));
+  const shapedHistory = buildBikeHistoryMetrics(history, serviceSummary);
 
   return {
     bike: toCustomerBikeResponse(bike),
@@ -791,115 +986,17 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
       bike,
       customer: bike.customer,
     }),
-    serviceSummary: buildBikeServiceSummary(workshopJobs),
+    serviceSummary,
+    metrics: shapedHistory.metrics,
     serviceSchedules: bike.serviceSchedules.map((schedule) => serializeBikeServiceSchedule(schedule)),
     serviceScheduleSummary: summarizeBikeServiceSchedules(bike.serviceSchedules),
     historyScope: "LINKED_BIKE_JOBS_ONLY",
     limitations: [
       "Only workshop jobs linked directly to this bike record are included. Legacy free-text workshop jobs without a bike link remain outside formal bike history.",
     ],
-    history: workshopJobs.map((job) => {
-      const latestEstimate = job.estimates[0] ?? null;
-      const latestNote = job.jobNotes[0] ?? null;
-      const labourTotalPence = job.lines
-        .filter((line) => line.type === "LABOUR")
-        .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
-      const partsTotalPence = job.lines
-        .filter((line) => line.type === "PART")
-        .reduce((sum, line) => sum + (line.qty * line.unitPricePence), 0);
-      const liveSubtotalPence = labourTotalPence + partsTotalPence;
-      const primaryMoney = buildPrimaryMoneySummary({
-        saleTotalPence: job.sale?.totalPence,
-        estimateSubtotalPence: latestEstimate?.subtotalPence ?? null,
-        liveSubtotalPence,
-      });
-      const serviceSummaryText = buildBikeHistorySummaryText({
-        bikeDescription: job.bikeDescription,
-        jobNotes: job.notes,
-        latestNote: latestNote?.note,
-        estimateLineCount: latestEstimate?.lineCount,
-        liveLineCount: job.lines.length,
-      });
-
-      return {
-        id: job.id,
-        jobPath: `/workshop/${job.id}`,
-        customerId: job.customerId,
-        customerName: job.customerName,
-        bikeDescription: job.bikeDescription ?? buildCustomerBikeDisplayName(bike),
-        serviceSummaryText,
-        status: toWorkshopExecutionStatus(job),
-        rawStatus: job.status,
-        scheduledDate: job.scheduledDate,
-        createdAt: job.createdAt,
-        updatedAt: job.updatedAt,
-        completedAt: job.completedAt,
-        closedAt: job.closedAt,
-        depositRequiredPence: job.depositRequiredPence,
-        depositStatus: job.depositStatus,
-        finalizedBasketId: job.finalizedBasketId,
-        assignedTechnician: job.assignedStaffId || job.assignedStaffName
-          ? {
-              id: job.assignedStaffId,
-              name: job.assignedStaffName,
-            }
-          : null,
-        notes: {
-          jobNotes: job.notes,
-          noteCount: job._count.jobNotes,
-          latestNote: latestNote
-            ? {
-                id: latestNote.id,
-                note: latestNote.note,
-                visibility: latestNote.visibility,
-                createdAt: latestNote.createdAt,
-                authorName: latestNote.authorStaff?.name ?? latestNote.authorStaff?.username ?? null,
-              }
-            : null,
-        },
-        liveTotals: {
-          lineCount: job.lines.length,
-          labourTotalPence,
-          partsTotalPence,
-          subtotalPence: liveSubtotalPence,
-        },
-        moneySummary: {
-          labourTotalPence,
-          partsTotalPence,
-          liveSubtotalPence,
-          estimateSubtotalPence: latestEstimate?.subtotalPence ?? null,
-          finalTotalPence: job.sale?.totalPence ?? null,
-          primaryTotalPence: primaryMoney.totalPence,
-          primaryTotalSource: primaryMoney.source,
-        },
-        estimate: latestEstimate
-          ? {
-              id: latestEstimate.id,
-              version: latestEstimate.version,
-              status: latestEstimate.status,
-              labourTotalPence: latestEstimate.labourTotalPence,
-              partsTotalPence: latestEstimate.partsTotalPence,
-              subtotalPence: latestEstimate.subtotalPence,
-              lineCount: latestEstimate.lineCount,
-              requestedAt: latestEstimate.requestedAt,
-              approvedAt: latestEstimate.approvedAt,
-              rejectedAt: latestEstimate.rejectedAt,
-              supersededAt: latestEstimate.supersededAt,
-              createdAt: latestEstimate.createdAt,
-              updatedAt: latestEstimate.updatedAt,
-              isCurrent: latestEstimate.supersededAt === null,
-            }
-          : null,
-        sale: job.sale
-          ? {
-              id: job.sale.id,
-              totalPence: job.sale.totalPence,
-              createdAt: job.sale.createdAt,
-              completedAt: job.sale.completedAt,
-            }
-          : null,
-      };
-    }),
+    completedHistory: shapedHistory.completedHistory,
+    openWork: shapedHistory.openWork,
+    history,
   };
 };
 
