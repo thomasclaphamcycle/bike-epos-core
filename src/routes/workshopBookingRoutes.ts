@@ -7,11 +7,12 @@ import {
   payWorkshopBookingDepositByManageTokenHandler,
   updateWorkshopBookingByManageTokenHandler,
 } from "../controllers/workshopController";
+import { attachCustomerAccountIfPresent } from "../middleware/customerAccountAuth";
 
 export const workshopBookingRouter = Router();
 
 workshopBookingRouter.get("/public-form", getPublicWorkshopBookingFormOptionsHandler);
-workshopBookingRouter.post("/", createOnlineWorkshopBookingHandler);
+workshopBookingRouter.post("/", attachCustomerAccountIfPresent, createOnlineWorkshopBookingHandler);
 workshopBookingRouter.get("/manage/:token", getWorkshopBookingByManageTokenHandler);
 workshopBookingRouter.patch("/manage/:token", updateWorkshopBookingByManageTokenHandler);
 workshopBookingRouter.post(

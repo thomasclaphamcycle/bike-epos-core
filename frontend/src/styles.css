@@ -120,10 +120,31 @@
   flex-wrap: wrap;
 }
 
+.public-site-account-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .public-site-login-link {
   color: #35506a;
   font-weight: 700;
   text-decoration: none;
+}
+
+.public-site-logout-button {
+  border: 0;
+  background: rgba(16, 33, 50, 0.08);
+  color: #204464;
+  border-radius: 999px;
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button-link.button-link-secondary {
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .public-site-trust-strip {
@@ -11169,6 +11190,182 @@ body.rota-row-drag-copy-active {
   gap: 14px;
 }
 
+.success-text,
+.error-text {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.success-text {
+  background: #eef9f1;
+  border: 1px solid rgba(24, 85, 59, 0.16);
+  color: #1b5c3d;
+}
+
+.error-text {
+  background: #fff3f1;
+  border: 1px solid rgba(176, 64, 46, 0.16);
+  color: #944133;
+}
+
+.customer-account-card {
+  gap: 18px;
+}
+
+.customer-account-form {
+  gap: 12px;
+}
+
+.customer-account-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.customer-account-dev-preview,
+.customer-account-inline-banner,
+.customer-account-next-action {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%);
+}
+
+.customer-account-inline-banner,
+.customer-account-dev-preview {
+  align-items: start;
+}
+
+.customer-account-inline-banner p,
+.customer-account-dev-preview p,
+.customer-account-next-action p {
+  margin: 0;
+  color: #536171;
+}
+
+.customer-account-inline-banner--soft {
+  background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+}
+
+.customer-account-inline-banner--error {
+  background: linear-gradient(180deg, #fff3f1 0%, #ffffff 100%);
+}
+
+.customer-account-next-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  background: linear-gradient(180deg, #ecf5ff 0%, #f8fbff 100%);
+  border-color: rgba(46, 124, 246, 0.18);
+}
+
+.customer-account-summary-card strong {
+  font-size: 1.35rem;
+}
+
+.customer-account-job-grid,
+.customer-account-bike-grid,
+.customer-account-history-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.customer-account-job-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.customer-account-bike-grid,
+.customer-account-history-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.customer-account-job-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+}
+
+.customer-account-job-card-header {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: start;
+}
+
+.customer-account-job-card-header h3,
+.customer-account-bike-card h3,
+.customer-account-history-card h3 {
+  margin: 0;
+}
+
+.customer-account-job-headline {
+  margin: 0;
+  font-weight: 700;
+  color: #16324a;
+}
+
+.customer-account-job-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.customer-account-job-meta div {
+  display: grid;
+  gap: 4px;
+}
+
+.customer-account-job-meta dt {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a6a7b;
+}
+
+.customer-account-job-meta dd {
+  margin: 0;
+  color: #203547;
+}
+
+.customer-account-message-preview {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid rgba(46, 124, 246, 0.12);
+}
+
+.customer-account-message-preview p {
+  margin: 0;
+}
+
+.customer-account-job-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.customer-account-job-actions a:not(.button-link),
+.customer-account-dev-preview a,
+.customer-account-actions a {
+  color: #1f4d86;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.customer-account-access-card {
+  width: min(760px, 100%);
+}
+
 .logout-button {
   font-weight: 600;
   background: #eef3f8;
@@ -13769,6 +13966,11 @@ body.rota-row-drag-copy-active {
   .customer-site-action-band,
   .customer-booking-hero,
   .customer-booking-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-account-next-action,
+  .customer-account-job-meta {
     grid-template-columns: 1fr;
   }
 

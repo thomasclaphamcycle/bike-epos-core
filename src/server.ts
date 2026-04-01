@@ -58,6 +58,8 @@ import { holidayRequestRouter } from "./routes/holidayRequestRoutes";
 import { staffDirectoryRouter } from "./routes/staffDirectoryRoutes";
 import { publicCustomerCaptureRouter } from "./routes/publicCustomerCaptureRoutes";
 import { publicWorkshopQuoteRouter } from "./routes/publicWorkshopQuoteRoutes";
+import { customerAuthRouter } from "./routes/customerAuthRoutes";
+import { customerAccountRouter } from "./routes/customerAccountRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
 import { eventRouter } from "./routes/eventRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
@@ -227,6 +229,8 @@ app.get("/scan/:code", async (req, res) => {
 
 app.use("/api/baskets", basketRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/customer-auth", customerAuthRouter);
+app.use("/api/customer-account", customerAccountRouter);
 app.use("/api/sales", salesRouter);
 app.use("/api/receipts", receiptRouter);
 app.use("/api/customers", customerRouter);

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { PublicSiteLayout } from "../components/PublicSiteLayout";
+import { useCustomerAccount } from "../customerAccount/CustomerAccountContext";
 import {
   publicSitePaths,
   secureCustomerTouchpoints,
@@ -178,7 +179,9 @@ const getBookingStatusCopy = (status: string) => {
 };
 
 export const PublicWorkshopBookingManagePage = () => {
+  const location = useLocation();
   const { token } = useParams();
+  const { session } = useCustomerAccount();
   const [searchParams] = useSearchParams();
   const [payload, setPayload] = useState<ManageBookingResponse | null>(null);
   const [availability, setAvailability] = useState<WorkshopAvailabilityDay[]>([]);
@@ -244,6 +247,15 @@ export const PublicWorkshopBookingManagePage = () => {
     () => getBookingStatusCopy(payload?.status ?? "BOOKED"),
     [payload?.status],
   );
+  const accountAccessHref = useMemo(() => {
+    const params = new URLSearchParams();
+    const customerEmail = payload?.customer?.email || "";
+    if (customerEmail) {
+      params.set("email", customerEmail);
+    }
+    params.set("returnTo", location.pathname + location.search);
+    return `${publicSitePaths.accountLogin}?${params.toString()}`;
+  }, [location.pathname, location.search, payload?.customer?.email]);
 
   const canReschedule = payload?.status === "BOOKED" || payload?.status === "OPEN";
 
@@ -316,6 +328,27 @@ export const PublicWorkshopBookingManagePage = () => {
               </article>
             ))}
           </section>
+
+          {session.authenticated && session.account?.email === payload?.customer?.email ? (
+            <div className="customer-account-inline-banner customer-account-inline-banner--soft">
+              <strong>This booking is linked to your customer account.</strong>
+              <p>It will stay visible from your account dashboard alongside approvals, progress updates, and saved bikes.</p>
+              <Link className="button-link" to={publicSitePaths.account}>
+                Open customer account
+              </Link>
+            </div>
+          ) : payload?.customer?.email ? (
+            <div className="customer-account-inline-banner customer-account-inline-banner--soft">
+              <strong>Want a persistent workshop login as well?</strong>
+              <p>
+                You can keep using this secure booking link, and you can also add customer account access for the
+                same email address so the wider workshop journey stays together.
+              </p>
+              <Link className="button-link" to={accountAccessHref}>
+                Set up customer access
+              </Link>
+            </div>
+          ) : null}
 
           {payload ? (
             <section className="customer-booking-journey" data-testid="customer-booking-manage-journey">

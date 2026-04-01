@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { PublicSiteLayout } from "../components/PublicSiteLayout";
+import { useCustomerAccount } from "../customerAccount/CustomerAccountContext";
 import {
   customerBookingSteps,
   publicSitePaths,
@@ -91,6 +92,7 @@ const BOOKING_PREP_CARDS = [
 
 export const PublicWorkshopBookingPage = () => {
   const navigate = useNavigate();
+  const { session } = useCustomerAccount();
   const [meta, setMeta] = useState<PublicWorkshopBookingMeta | null>(null);
   const [availability, setAvailability] = useState<WorkshopAvailabilityDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +103,7 @@ export const PublicWorkshopBookingPage = () => {
     lastName: "",
     email: "",
     phone: "",
+    bikeId: "",
     bikeDescription: "",
     serviceTemplateId: "",
     serviceRequest: "",
@@ -157,6 +160,25 @@ export const PublicWorkshopBookingPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session.authenticated) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      firstName: current.firstName || session.customer?.firstName || "",
+      lastName: current.lastName || session.customer?.lastName || "",
+      email: current.email || session.account?.email || "",
+      phone: current.phone || session.customer?.phone || "",
+      bikeDescription:
+        current.bikeDescription
+        || (current.bikeId
+          ? session.bikes?.find((bike) => bike.id === current.bikeId)?.displayName ?? ""
+          : ""),
+    }));
+  }, [session]);
+
   const selectedService = useMemo(
     () =>
       meta?.serviceOptions.find((option) => option.id === form.serviceTemplateId) ?? null,
@@ -178,6 +200,7 @@ export const PublicWorkshopBookingPage = () => {
     try {
       const booking = await apiPost<CreateBookingResponse>("/api/workshop-bookings", {
         ...form,
+        bikeId: form.bikeId || undefined,
         serviceTemplateId: form.serviceTemplateId || undefined,
         email: form.email || undefined,
         notes: form.notes || undefined,
@@ -258,6 +281,30 @@ export const PublicWorkshopBookingPage = () => {
 
           {!loading && meta ? (
             <form className="customer-booking-form" onSubmit={handleSubmit}>
+              {session.authenticated ? (
+                <div className="customer-account-inline-banner customer-account-inline-banner--soft">
+                  <strong>{session.customer?.displayName || "Customer account linked"}</strong>
+                  <p>
+                    This booking can stay attached to your customer account, and any saved bikes linked to that
+                    account can be reused below.
+                  </p>
+                  <Link className="button-link" to={publicSitePaths.account}>
+                    Open customer account
+                  </Link>
+                </div>
+              ) : (
+                <div className="customer-account-inline-banner customer-account-inline-banner--soft">
+                  <strong>Prefer a persistent workshop login?</strong>
+                  <p>
+                    After booking, you can also request secure customer access so active jobs and saved bikes stay
+                    easier to revisit between updates.
+                  </p>
+                  <Link className="button-link" to={publicSitePaths.accountLogin}>
+                    Set up customer access
+                  </Link>
+                </div>
+              )}
+
               <section className="customer-booking-section">
                 <div className="customer-booking-section-header">
                   <div>
@@ -314,6 +361,34 @@ export const PublicWorkshopBookingPage = () => {
                     <p>Give us enough detail to recognise the bike at drop-off.</p>
                   </div>
                 </div>
+
+                {session.authenticated && session.bikes && session.bikes.length > 0 ? (
+                  <label className="customer-booking-field customer-booking-field--full">
+                    <span>Saved bike</span>
+                    <select
+                      value={form.bikeId}
+                      onChange={(event) => {
+                        const nextBikeId = event.target.value;
+                        const selectedBike = session.bikes?.find((bike) => bike.id === nextBikeId) ?? null;
+                        setForm((current) => ({
+                          ...current,
+                          bikeId: nextBikeId,
+                          bikeDescription:
+                            nextBikeId.length > 0
+                              ? selectedBike?.displayName ?? current.bikeDescription
+                              : current.bikeDescription,
+                        }));
+                      }}
+                    >
+                      <option value="">Use a different bike or describe it manually</option>
+                      {session.bikes.map((bike) => (
+                        <option key={bike.id} value={bike.id}>
+                          {bike.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
 
                 <label className="customer-booking-field customer-booking-field--full">
                   <span>Bike description</span>

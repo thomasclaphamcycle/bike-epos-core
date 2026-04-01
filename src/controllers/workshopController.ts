@@ -522,6 +522,7 @@ export const createOnlineWorkshopBookingHandler = async (
     email?: string;
     phone?: string;
     scheduledDate?: string;
+    bikeId?: string;
     bikeDescription?: string;
     serviceTemplateId?: string;
     preferredTime?: string;
@@ -544,6 +545,9 @@ export const createOnlineWorkshopBookingHandler = async (
   if (body.scheduledDate !== undefined && typeof body.scheduledDate !== "string") {
     throw new HttpError(400, "scheduledDate must be a string", "INVALID_BOOKING");
   }
+  if (body.bikeId !== undefined && typeof body.bikeId !== "string") {
+    throw new HttpError(400, "bikeId must be a string", "INVALID_BOOKING");
+  }
   if (body.bikeDescription !== undefined && typeof body.bikeDescription !== "string") {
     throw new HttpError(400, "bikeDescription must be a string", "INVALID_BOOKING");
   }
@@ -560,7 +564,10 @@ export const createOnlineWorkshopBookingHandler = async (
     throw new HttpError(400, "notes must be a string", "INVALID_BOOKING");
   }
 
-  const booking = await createOnlineWorkshopBooking(body);
+  const booking = await createOnlineWorkshopBooking({
+    ...body,
+    authenticatedCustomerId: req.customerAccount?.customerId,
+  });
   res.status(201).json(booking);
 };
 
