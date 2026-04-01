@@ -1736,6 +1736,104 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
   expect(createRequests).toHaveLength(0);
 });
 
+test("Workshop job page surfaces commercial prompts from linked bike history", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-commercial",
+  });
+  const token = uniqueToken("workshop-commercial");
+  const customer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: `Commercial Customer ${token}`,
+      email: `${token}@example.com`,
+      phone: `07111${Math.floor(Math.random() * 90000) + 10000}`,
+    },
+  });
+
+  const bike = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/customers/${encodeURIComponent(customer.id)}/bikes`,
+    "MANAGER",
+    {
+      data: {
+        label: "Daily e-bike",
+        make: "Specialized",
+        model: `Turbo Vado ${token.slice(-4)}`,
+        bikeType: "E_BIKE",
+        motorBrand: "Bosch",
+        motorModel: "Performance Line",
+        colour: "Green",
+      },
+    },
+  );
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/customers/bikes/${encodeURIComponent(bike.bike.id)}/service-schedules`,
+    "MANAGER",
+    {
+      data: {
+        type: "BRAKES",
+        title: "Brake service",
+        description: "Check brake pads, braking surface, and setup.",
+        intervalMonths: 6,
+        lastServiceAt: "2025-08-01T10:00:00.000Z",
+        nextDueAt: "2026-02-01T10:00:00.000Z",
+        isActive: true,
+      },
+    },
+  );
+
+  await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/service-templates", "MANAGER", {
+    data: {
+      name: "Brake service package",
+      category: "Brakes",
+      description: "Pads, cables, caliper setup, and brake health check.",
+      defaultDurationMinutes: 60,
+      lines: [
+        {
+          type: "LABOUR",
+          description: "Brake service labour",
+          qty: 1,
+          unitPricePence: 6500,
+          sortOrder: 0,
+        },
+      ],
+    },
+  });
+
+  const workshopJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerId: customer.id,
+      bikeId: bike.bike.id,
+      status: "BOOKED",
+      notes: "Customer reports general handling concerns.",
+    },
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(workshopJob.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "LABOUR",
+        description: "Wheel true and general workshop assessment",
+        qty: 1,
+        unitPricePence: 5200,
+      },
+    },
+  );
+
+  await loginViaUi(page, credentials, `/workshop/${workshopJob.id}`, { surface: "frontend" });
+  await expect(page.getByTestId("workshop-job-commercial-insights")).toContainText("Offer brake service while the bike is in");
+  await expect(page.getByTestId("workshop-job-commercial-insights")).toContainText("Brake service package");
+  await expect(page.getByTestId("workshop-job-commercial-insights")).toContainText("Bosch");
+});
+
 test("Login then workshop add labour and checkout marks job as collected", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",

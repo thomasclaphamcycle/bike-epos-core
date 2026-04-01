@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.1.122",
+  "version": "1.1.123",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -97,6 +97,7 @@
     "test:m128": "node scripts/run_smoke_test.js scripts/reminder_candidates_m128_smoke_tests.js",
     "test:sale-customer-capture": "npm run prisma:generate && node scripts/run_smoke_test.js scripts/sale_customer_capture_smoke_tests.js",
     "test:customer-accounts": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/customer_account_identity_smoke_tests.js",
+    "test:workshop-commercial-intelligence": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/workshop_commercial_intelligence_smoke_tests.js",
     "test:health-monitoring": "node scripts/run_smoke_test.js scripts/health_monitoring_smoke_tests.js",
     "test:supplier-product-links": "node scripts/run_smoke_test.js scripts/supplier_product_links_smoke_tests.js",
     "test:product-import": "node scripts/run_smoke_test.js scripts/product_csv_import_smoke_tests.js",

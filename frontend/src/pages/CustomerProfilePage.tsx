@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
 import { EntityTimelinePanel } from "../components/EntityTimelinePanel";
 import { useToasts } from "../components/ToastProvider";
+import { WorkshopCommercialInsightsPanel } from "../components/WorkshopCommercialInsightsPanel";
 import {
   BIKE_SERVICE_SCHEDULE_TYPE_OPTIONS,
   bikeServiceScheduleDueStatusClass,
@@ -16,6 +17,7 @@ import {
   workshopExecutionStatusLabel,
   workshopRawStatusLabel,
 } from "../features/workshop/status";
+import { type WorkshopCommercialInsights } from "../features/workshop/commercialInsights";
 import { toBackendUrl } from "../utils/backendUrl";
 
 const ACTIVE_SALE_KEY = "corepos.activeSaleId";
@@ -144,6 +146,7 @@ type CustomerBikeRecord = {
   };
   serviceSchedules: BikeServiceScheduleRecord[];
   serviceScheduleSummary: BikeServiceScheduleSummary;
+  commercialInsights?: WorkshopCommercialInsights;
 };
 
 type BikeServiceScheduleRecord = {
@@ -1102,6 +1105,16 @@ export const CustomerProfilePage = () => {
                       <div className="table-secondary">
                         {bike.serviceScheduleSummary.activeCount} active · {bike.serviceScheduleSummary.dueCount} due · {bike.serviceScheduleSummary.overdueCount} overdue
                       </div>
+                      {bike.commercialInsights ? (
+                        <WorkshopCommercialInsightsPanel
+                          insights={bike.commercialInsights}
+                          title="Service prompt"
+                          description=""
+                          maxItems={1}
+                          compact
+                          dataTestId={`customer-bike-commercial-insights-${bike.id}`}
+                        />
+                      ) : null}
                     </td>
                     <td>
                       {bike.serviceSummary.linkedJobCount}

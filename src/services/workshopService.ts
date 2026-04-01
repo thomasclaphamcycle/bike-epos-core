@@ -13,6 +13,11 @@ import { getOrCreateDefaultLocationTx } from "./locationService";
 import { toPosLineItemType, WORKSHOP_LABOUR_VARIANT_SKU } from "./posLineItemType";
 import { getWorkshopJobEstimateData, invalidateCurrentWorkshopEstimateTx } from "./workshopEstimateService";
 import {
+  buildWorkshopCommercialInsights,
+  getWorkshopCommercialBikeContext,
+  getWorkshopCommercialSupportData,
+} from "./workshopCommercialIntelligenceService";
+import {
   assertWorkshopScheduleAllowed,
   resolveWorkshopSchedulePatch,
 } from "./workshopCalendarService";
@@ -1059,13 +1064,51 @@ export const getWorkshopJobById = async (workshopJobId: string) => {
     throw new HttpError(404, "Workshop job not found", "WORKSHOP_JOB_NOT_FOUND");
   }
 
-  const [partsOverview, estimateData] = await Promise.all([
+  const [partsOverview, estimateData, commercialSupportData, commercialBikeContext] = await Promise.all([
     getWorkshopJobPartsOverview(workshopJobId),
     getWorkshopJobEstimateData(workshopJobId),
+    getWorkshopCommercialSupportData(),
+    job.bikeId ? getWorkshopCommercialBikeContext(job.bikeId) : Promise.resolve(null),
   ]);
+
+  const currentWorkDescriptions = [
+    ...job.lines.map((line) => line.description),
+    job.notes ?? "",
+  ]
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  const commercialInsights = buildWorkshopCommercialInsights(
+    commercialBikeContext
+      ? {
+          ...commercialBikeContext,
+          currentWorkDescriptions,
+        }
+      : {
+          bike: null,
+          serviceSchedules: [],
+          serviceSummary: {
+            linkedJobCount: 0,
+            openJobCount: 0,
+            completedJobCount: 0,
+            firstJobAt: null,
+            latestJobAt: null,
+            latestCompletedAt: null,
+          },
+          currentWorkDescriptions,
+          customerId: job.customerId,
+          bikeDescription: job.bikeDescription,
+          allowLinkBikeRecordPrompt: true,
+        },
+    {
+      workshopSettings: commercialSupportData.workshopSettings,
+      templates: commercialSupportData.templates,
+    },
+  );
 
   return {
     job: toJobResponse(job),
+    commercialInsights,
     lines: job.lines.map((line) => toLineResponse(line)),
     partsOverview,
     ...estimateData,

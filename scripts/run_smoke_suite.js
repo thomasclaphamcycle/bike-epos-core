@@ -37,6 +37,7 @@ const baselineSteps = [
   "test:security",
   "test:sale-customer-capture",
   "test:customer-accounts",
+  "test:workshop-commercial-intelligence",
   // Current management-reporting surfaces
   "test:m119",
   "test:m120",
