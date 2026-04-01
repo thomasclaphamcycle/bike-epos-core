@@ -45,6 +45,8 @@ const STAFF_HEADERS = {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const APP_REQUEST_RETRIES = 8;
+const CHECKOUT_CONCURRENT_REQUESTS = 8;
+const CHECKOUT_CONCURRENT_ROUNDS = 10;
 const appBaseUrlCandidates = (() => {
   const primary = new URL(BASE_URL).toString().replace(/\/$/, "");
   const urls = [primary];
@@ -353,7 +355,7 @@ const run = async () => {
     });
 
     await runTest("checkout concurrent requests are idempotent", async () => {
-      for (let round = 1; round <= 3; round += 1) {
+      for (let round = 1; round <= CHECKOUT_CONCURRENT_ROUNDS; round += 1) {
         const booking = await createOnlineBooking(scheduledDate);
         trackBooking(booking);
 
@@ -368,7 +370,14 @@ const run = async () => {
         };
 
         const responses = await Promise.all(
-          Array.from({ length: 6 }, () => checkoutWorkshopJob(booking.id, payload)),
+          Array.from({ length: CHECKOUT_CONCURRENT_REQUESTS }, () => checkoutWorkshopJob(booking.id, payload)),
+        );
+
+        const failedResponses = responses.filter((response) => response.status >= 500);
+        assert.equal(
+          failedResponses.length,
+          0,
+          `expected zero 500 responses in round ${round}: ${JSON.stringify(failedResponses)}`,
         );
 
         for (const response of responses) {
@@ -417,6 +426,38 @@ const run = async () => {
           persistedFinalPayments[0].saleId,
           persistedSales[0].id,
           `expected final payment to attach to the single sale in round ${round}`,
+        );
+
+        const persistedCheckoutOutcomes = await prisma.workshopCheckoutOutcome.findMany({
+          where: { workshopJobId: booking.id },
+          select: {
+            saleId: true,
+            finalPaymentId: true,
+          },
+        });
+        assert.equal(
+          persistedCheckoutOutcomes.length,
+          1,
+          `expected exactly one authoritative checkout outcome in round ${round}: ${JSON.stringify(persistedCheckoutOutcomes)}`,
+        );
+        assert.equal(
+          persistedCheckoutOutcomes[0].saleId,
+          persistedSales[0].id,
+          `expected authoritative checkout outcome to reference the single sale in round ${round}`,
+        );
+        assert.equal(
+          persistedCheckoutOutcomes[0].finalPaymentId,
+          persistedFinalPayments[0].id,
+          `expected authoritative checkout outcome to reference the single final payment in round ${round}`,
+        );
+
+        const replay = await checkoutWorkshopJob(booking.id, payload);
+        assert.equal(replay.status, 200, JSON.stringify(replay.json));
+        assert.equal(replay.json.idempotent, true, JSON.stringify(replay.json));
+        assert.equal(
+          replay.json.sale.id,
+          persistedSales[0].id,
+          `expected replay to return the authoritative sale in round ${round}`,
         );
       }
     });

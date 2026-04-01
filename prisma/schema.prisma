@@ -568,6 +568,7 @@ model Sale {
   refunds                 Refund[]
   customerCaptureSessions SaleCustomerCaptureSession[]
   cashMovements           CashMovement[]               @relation("CashMovementSale")
+  workshopCheckoutOutcome WorkshopCheckoutOutcome?
 
   @@index([customerId])
   @@index([workshopJobId])
@@ -852,9 +853,42 @@ model Payment {
   workshopJob   WorkshopJob?        @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
   refunds       PaymentRefund[]
   creditEntries CreditLedgerEntry[]
+  workshopCheckoutOutcomeFinalPayment WorkshopCheckoutOutcome? @relation("WorkshopCheckoutOutcomeFinalPayment")
 
   @@index([workshopJobId])
   @@index([purpose, createdAt])
+}
+
+model WorkshopCheckoutOutcome {
+  id                      String            @id @default(uuid()) @db.Uuid
+  workshopJobId           String            @unique @db.Uuid
+  saleId                  String            @unique @db.Uuid
+  customerId              String?           @db.Uuid
+  bikeId                  String?           @db.Uuid
+  saleCreatedAt           DateTime
+  serviceTotalPence       Int
+  partsTotalPence         Int
+  saleTotalPence          Int
+  depositPaidPence        Int
+  creditPence             Int
+  outstandingPence        Int
+  finalPaymentId          String?           @unique @db.Uuid
+  finalPaymentMethod      PaymentMethod?
+  finalPaymentAmountPence Int?
+  finalPaymentProviderRef String?
+  finalPaymentCreatedAt   DateTime?
+  workshopJobStatus       WorkshopJobStatus
+  workshopCompletedAt     DateTime
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  workshopJob  WorkshopJob @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
+  sale         Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  finalPayment Payment?    @relation("WorkshopCheckoutOutcomeFinalPayment", fields: [finalPaymentId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([bikeId])
+  @@index([workshopCompletedAt])
 }
 
 model PaymentIntent {
@@ -1147,6 +1181,7 @@ model WorkshopJob {
   reminderCandidates ReminderCandidate[]
   conversation       WorkshopConversation?
   attachments        WorkshopAttachment[]
+  checkoutOutcome    WorkshopCheckoutOutcome?
 
   @@index([scheduledDate])
   @@index([scheduledStartAt])
