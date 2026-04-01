@@ -9,3 +9,15 @@ export type AuthenticatedUser = {
   isActive: boolean;
   authSource: "session" | "header";
 };
+
+export type AuthenticatedCustomerAccount = {
+  id: string;
+  customerId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  status: "ACTIVE" | "DISABLED";
+  lastLoginAt: Date | null;
+  authSource: "session";
+};

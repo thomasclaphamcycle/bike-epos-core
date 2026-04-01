@@ -1,0 +1,29 @@
+@baseUrl = http://localhost:3100
+@customerEmail = account.customer@example.com
+@customerAccessToken = paste-magic-link-token
+@customerCookie = bike_epos_customer=paste-session-cookie
+
+### Request a passwordless customer access link
+POST {{baseUrl}}/api/customer-auth/request-link
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "returnTo": "/account"
+}
+
+### Consume a customer access link
+POST {{baseUrl}}/api/customer-auth/consume
+Content-Type: application/json
+
+{
+  "token": "{{customerAccessToken}}"
+}
+
+### Read the current customer session
+GET {{baseUrl}}/api/customer-auth/session
+Cookie: {{customerCookie}}
+
+### Read the customer account dashboard
+GET {{baseUrl}}/api/customer-account/dashboard
+Cookie: {{customerCookie}}

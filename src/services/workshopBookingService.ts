@@ -2,8 +2,10 @@ import { PaymentMethod, Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma";
 import { emitEvent } from "../utils/domainEvent";
-import { HttpError } from "../utils/http";
+import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { ensureCustomerAccountForCustomerTx } from "./customerAccountService";
+import { buildCustomerBikeDisplayName } from "./customerBikeService";
 import { getWorkshopSettings, listPublicShopConfig } from "./configurationService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { assertDateIsBookable } from "./workshopAvailabilityService";
@@ -16,11 +18,13 @@ type CreateOnlineWorkshopBookingInput = {
   email?: string;
   phone?: string;
   scheduledDate?: string;
+  bikeId?: string;
   bikeDescription?: string;
   serviceTemplateId?: string;
   preferredTime?: string;
   serviceRequest?: string;
   notes?: string;
+  authenticatedCustomerId?: string;
 };
 
 type ManageWorkshopBookingPatchInput = {
@@ -328,6 +332,7 @@ export const createOnlineWorkshopBooking = async (
   const lastName = normalizeText(input.lastName);
   const phone = normalizeText(input.phone);
   const email = normalizeText(input.email)?.toLowerCase();
+  const bikeId = normalizeText(input.bikeId);
   const bikeDescription = normalizeOptionalBookingText(input.bikeDescription, "bikeDescription", 160);
   const serviceRequest = normalizeOptionalBookingText(input.serviceRequest, "serviceRequest", 1000);
   const preferredTime = parsePreferredTime(input.preferredTime);
@@ -384,6 +389,72 @@ export const createOnlineWorkshopBooking = async (
       phone,
       notes: additionalNotes,
     });
+    await ensureCustomerAccountForCustomerTx(tx, {
+      customerId: customer.id,
+      email: customer.email,
+    });
+
+    let selectedBike:
+      | {
+          id: string;
+          label: string | null;
+          make: string | null;
+          model: string | null;
+          year: number | null;
+          bikeType: string | null;
+          colour: string | null;
+          wheelSize: string | null;
+          frameSize: string | null;
+          groupset: string | null;
+          motorBrand: string | null;
+          motorModel: string | null;
+        }
+      | null = null;
+
+    if (bikeId) {
+      if (!input.authenticatedCustomerId) {
+        throw new HttpError(
+          401,
+          "Sign in to reuse a saved bike from your customer account",
+          "CUSTOMER_ACCOUNT_REQUIRED",
+        );
+      }
+      if (!isUuid(bikeId)) {
+        throw new HttpError(400, "bikeId must be a valid bike id", "INVALID_BOOKING");
+      }
+      if (customer.id !== input.authenticatedCustomerId) {
+        throw new HttpError(
+          403,
+          "Saved bikes can only be used when the booking stays on your own customer account",
+          "CUSTOMER_BIKE_ACCOUNT_MISMATCH",
+        );
+      }
+
+      selectedBike = await tx.customerBike.findFirst({
+        where: {
+          id: bikeId,
+          customerId: input.authenticatedCustomerId,
+        },
+        select: {
+          id: true,
+          label: true,
+          make: true,
+          model: true,
+          year: true,
+          bikeType: true,
+          colour: true,
+          wheelSize: true,
+          frameSize: true,
+          groupset: true,
+          motorBrand: true,
+          motorModel: true,
+        },
+      });
+
+      if (!selectedBike) {
+        throw new HttpError(404, "Saved bike not found", "CUSTOMER_BIKE_NOT_FOUND");
+      }
+    }
     const location = await getOrCreateDefaultLocationTx(tx);
 
     const manageTokenExpiresAt = resolveManageTokenExpiryDate(workshopSettings.manageTokenTtlDays);
@@ -402,7 +473,8 @@ export const createOnlineWorkshopBooking = async (
             depositRequiredPence: settings.defaultDepositPence,
             depositStatus: "REQUIRED",
             locationId: location.id,
-            bikeDescription,
+            bikeId: selectedBike?.id ?? null,
+            bikeDescription: bikeDescription ?? (selectedBike ? buildCustomerBikeDisplayName(selectedBike) : null),
             manageToken: generateManageToken(),
             manageTokenExpiresAt,
             notes,
@@ -433,7 +505,10 @@ export const createOnlineWorkshopBooking = async (
       depositStatus: workshopJob.depositStatus,
       notes: workshopJob.notes,
       bookingRequest: {
-        bikeDescription,
+        bikeDescription:
+          workshopJob.bikeDescription
+          ?? (selectedBike ? buildCustomerBikeDisplayName(selectedBike) : bikeDescription)
+          ?? null,
         serviceLabel: serviceLabel ?? null,
         preferredTime: preferredTime ?? null,
         serviceRequest: serviceRequest ?? null,

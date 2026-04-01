@@ -1896,6 +1896,81 @@ test("Public workshop site guides customers from landing page into the secure bo
   await expect(page.getByText("How quotes and updates arrive")).toBeVisible();
 });
 
+test("Customer account access keeps workshop updates persistent beyond one-off links", async ({ page, request }) => {
+  const token = uniqueToken("customer-account");
+  const email = `${token}@example.com`;
+  const bookingMeta = await apiJson(request, "GET", "/api/workshop-bookings/public-form");
+  const bookingWindowStart = bookingMeta.booking.minBookableDate.slice(0, 10);
+  const bookingWindowEnd = addDaysToDateKey(bookingWindowStart, 14);
+  const availability = await apiJson(
+    request,
+    "GET",
+    `/api/workshop/availability?from=${encodeURIComponent(bookingWindowStart)}&to=${encodeURIComponent(bookingWindowEnd)}`,
+  );
+  const requestedDate = availability.find((day) => day.isBookable)?.date;
+  if (!requestedDate) {
+    throw new Error("Expected a bookable workshop date for the customer account test.");
+  }
+
+  await apiJson(request, "POST", "/api/workshop-bookings", {
+    data: {
+      firstName: "Avery",
+      lastName: "Rider",
+      email,
+      phone: `07123${Math.floor(Math.random() * 90000) + 10000}`,
+      scheduledDate: requestedDate,
+      bikeDescription: `Customer Account Bike ${token}`,
+      serviceRequest: "Brake rub and shifting under load",
+    },
+  });
+
+  const access = await apiJson(request, "POST", "/api/customer-auth/request-link", {
+    data: {
+      email,
+      returnTo: "/account",
+    },
+  });
+
+  expect(access.ok).toBe(true);
+  expect(access.devMagicLinkUrl).toBeTruthy();
+  const accessToken = new URL(access.devMagicLinkUrl).pathname.split("/").pop();
+  if (!accessToken) {
+    throw new Error("Expected customer access token in preview link.");
+  }
+
+  const consumeResponse = await request.fetch("/api/customer-auth/consume", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    data: {
+      token: accessToken,
+    },
+  });
+  expect(consumeResponse.ok()).toBe(true);
+  const setCookie = consumeResponse.headers()["set-cookie"];
+  if (!setCookie) {
+    throw new Error("Expected customer auth cookie from consume response.");
+  }
+  const [cookiePair] = setCookie.split(";");
+  const separatorIndex = cookiePair.indexOf("=");
+  const cookieName = cookiePair.slice(0, separatorIndex);
+  const cookieValue = cookiePair.slice(separatorIndex + 1);
+  await page.context().addCookies([
+    {
+      name: cookieName,
+      value: cookieValue,
+      url: frontendBaseUrl,
+    },
+  ]);
+
+  await page.goto(`${frontendBaseUrl}/account`);
+  await expect(page.getByRole("heading", { name: "Avery Rider" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Active workshop jobs" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: new RegExp(`Customer Account Bike ${token}`) })).toBeVisible();
+  await expect(page.getByText("Awaiting your approval").first()).toBeVisible();
+});
+
 test("Login then inventory adjust page can increment on-hand quantity", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",

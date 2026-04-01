@@ -1016,6 +1016,7 @@ model Customer {
 
   sales                   Sale[]
   customerCaptureSessions SaleCustomerCaptureSession[]
+  account                 CustomerAccount?
   workshopJobs            WorkshopJob[]
   bikes                   CustomerBike[]
   creditAccounts          CreditAccount[]
@@ -1027,6 +1028,45 @@ model Customer {
   @@index([firstName])
   @@index([lastName])
   @@index([phone])
+}
+
+enum CustomerAccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+model CustomerAccount {
+  id                   String                @id @default(uuid()) @db.Uuid
+  customerId           String                @unique @db.Uuid
+  email                String                @unique
+  status               CustomerAccountStatus @default(ACTIVE)
+  lastAccessLinkSentAt DateTime?
+  lastLoginAt          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  customer     Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  accessTokens CustomerAccessToken[]
+
+  @@index([status, email])
+}
+
+model CustomerAccessToken {
+  id                String   @id @default(uuid()) @db.Uuid
+  customerAccountId String   @db.Uuid
+  tokenHash         String   @unique
+  tokenLastEight    String?
+  redirectPath      String?
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  revokedAt         DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customerAccount CustomerAccount @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+
+  @@index([customerAccountId, expiresAt])
+  @@index([expiresAt])
 }
 
 model CustomerBike {

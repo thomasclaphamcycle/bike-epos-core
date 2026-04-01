@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
 import { PublicSiteLayout } from "../components/PublicSiteLayout";
+import { useCustomerAccount } from "../customerAccount/CustomerAccountContext";
 import { publicSitePaths } from "../features/publicSite/siteContent";
 import {
   workshopEstimateStatusClass,
@@ -631,7 +632,9 @@ const buildLatestActivitySummary = (
 };
 
 export const WorkshopQuotePage = () => {
+  const location = useLocation();
   const { token: routeToken } = useParams();
+  const { session } = useCustomerAccount();
   const [searchParams] = useSearchParams();
   const token = routeToken?.trim() || searchParams.get("token")?.trim() || null;
   const [payload, setPayload] = useState<PublicWorkshopPortalPayload | null>(null);
@@ -793,6 +796,11 @@ export const WorkshopQuotePage = () => {
   const progressStepIndex = payload ? portalProgressStepIndex(payload.customerProgress.stage) : 0;
   const waitingSummary = payload ? buildWaitingSummary(payload) : null;
   const actionSummary = payload ? buildPortalActionSummary(payload) : null;
+  const customerAccountHref = useMemo(
+    () =>
+      `${publicSitePaths.accountLogin}?returnTo=${encodeURIComponent(location.pathname + location.search)}`,
+    [location.pathname, location.search],
+  );
   const latestActivity = payload ? buildLatestActivitySummary(payload, conversationMessages) : null;
   const latestMessage = conversationMessages[conversationMessages.length - 1] ?? null;
   const workSummaryMatchesEstimate = Boolean(
@@ -857,6 +865,30 @@ export const WorkshopQuotePage = () => {
             <a href="#collection-section">Collection</a>
             <a href="#messages-section">Messages</a>
           </div>
+
+          {session.authenticated ? (
+            <div className="customer-account-inline-banner customer-account-inline-banner--soft">
+              <strong>Use your customer account as the home base.</strong>
+              <p>
+                Secure quote and message links still work as before, and your account now gives you one place to
+                return to between updates and repeat workshop visits.
+              </p>
+              <Link className="button-link" to={publicSitePaths.account}>
+                Open customer account
+              </Link>
+            </div>
+          ) : (
+            <div className="customer-account-inline-banner customer-account-inline-banner--soft">
+              <strong>Prefer a reusable customer login too?</strong>
+              <p>
+                Keep using this secure update link, or add a customer account so your active jobs, bikes, and
+                workshop follow-up are easier to revisit later.
+              </p>
+              <Link className="button-link" to={customerAccountHref}>
+                Set up customer access
+              </Link>
+            </div>
+          )}
 
           {loading ? <p>Loading workshop update...</p> : null}
 

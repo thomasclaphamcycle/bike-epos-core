@@ -314,6 +314,18 @@ export const CustomerCapturePage = lazyPage(
   () => import("./pages/CustomerCapturePage"),
   "CustomerCapturePage",
 );
+export const CustomerAccountLoginPage = lazyPage(
+  () => import("./pages/CustomerAccountLoginPage"),
+  "CustomerAccountLoginPage",
+);
+export const CustomerAccountAccessPage = lazyPage(
+  () => import("./pages/CustomerAccountAccessPage"),
+  "CustomerAccountAccessPage",
+);
+export const CustomerAccountDashboardPage = lazyPage(
+  () => import("./pages/CustomerAccountDashboardPage"),
+  "CustomerAccountDashboardPage",
+);
 export const WorkshopQuotePage = lazyPage(
   () => import("./pages/WorkshopQuotePage"),
   "WorkshopQuotePage",
