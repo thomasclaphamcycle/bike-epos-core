@@ -78,15 +78,23 @@ CorePOS now includes a small persisted configuration layer for operational defau
   - stores additive key/value settings using a simple JSON payload per key
   - is intended for gradual expansion rather than a large one-shot settings schema
 - backend service `src/services/configurationService.ts`
-  - centralizes setting defaults and validation
-  - exposes a typed manager-facing snapshot instead of scattering raw config lookups
+  - centralizes typed setting defaults, sanitization, and legacy fallback compatibility
+  - exposes section-level backend accessors for store, workshop, notifications, and operations config instead of scattering raw config lookups
+  - treats `AppConfig` as the primary source for shared settings while still syncing receipt and workshop-booking compatibility rows
 - manager API surface
   - `GET /api/settings`
   - `PATCH /api/settings`
 - manager UI surface
   - `/management/settings`
 
-This foundation is intentionally narrow. Existing specialist settings models such as receipt settings and workshop booking settings remain in place, while future operational defaults can move into the shared configuration layer gradually.
+Current high-value domains in this shared configuration layer are intentionally narrow:
+
+- store identity, trading profile, and opening hours
+- workshop booking defaults such as deposit amount, max bookings per day, manage-token TTL, and customer timing copy
+- notification automation and per-channel global workshop-delivery toggles
+- operational defaults such as low-stock threshold and dashboard weather enablement
+
+This foundation still stays intentionally pragmatic. Existing specialist models such as receipt settings and workshop booking settings remain in place as compatibility surfaces while future operational defaults can move into the shared configuration layer gradually.
 
 ## Workshop Handoff Safety
 

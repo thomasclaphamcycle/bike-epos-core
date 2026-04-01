@@ -33,6 +33,7 @@ const WEATHER_KEYS = [
   "store.postcode",
   "store.latitude",
   "store.longitude",
+  "operations.dashboardWeatherEnabled",
 ];
 
 const assertDailyWeatherSnapshot = (snapshot, label) => {
@@ -178,6 +179,25 @@ const run = async () => {
     assert.equal(missingRes.json.weather.message, "Weather unavailable. Set the store postcode in Settings.");
 
     await prisma.appConfig.upsert({
+      where: { key: "operations.dashboardWeatherEnabled" },
+      create: { key: "operations.dashboardWeatherEnabled", value: false },
+      update: { value: false },
+    });
+
+    const disabledRes = await fetchJson("/api/dashboard/weather", { headers: STAFF_HEADERS });
+    assert.equal(disabledRes.status, 200, JSON.stringify(disabledRes.json));
+    assert.equal(disabledRes.json.weather.status, "unavailable");
+    assert.equal(disabledRes.json.weather.message, "Weather is disabled in system settings.");
+
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: ["operations.dashboardWeatherEnabled"],
+        },
+      },
+    });
+
+    await prisma.appConfig.upsert({
       where: { key: "store.postcode" },
       create: { key: "store.postcode", value: " sw11   1jd " },
       update: { value: " sw11   1jd " },
@@ -213,6 +233,13 @@ const run = async () => {
 
     console.log("[dashboard-weather-smoke] dashboard weather endpoint passed");
   } finally {
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: WEATHER_KEYS,
+        },
+      },
+    });
     await prisma.$disconnect();
     if (serverController) {
       await serverController.stop();

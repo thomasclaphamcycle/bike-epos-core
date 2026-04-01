@@ -35,7 +35,8 @@ Optional workshop notification delivery settings:
 - set `EMAIL_DELIVERY_MODE=smtp` plus `SMTP_URL` when you want real email delivery
 - set `SMS_DELIVERY_MODE=twilio` plus `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `SMS_FROM` when you want real SMS delivery
 - set `WHATSAPP_DELIVERY_MODE=twilio` plus `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `WHATSAPP_FROM` when you want real WhatsApp delivery
-- set `WORKSHOP_NOTIFICATION_EMAIL_ENABLED=0`, `WORKSHOP_NOTIFICATION_SMS_ENABLED=0`, or `WORKSHOP_NOTIFICATION_WHATSAPP_ENABLED=0` if you need to disable a channel and force smart fallback onto the remaining enabled paths
+- use `/api/settings` for persisted workshop notification automation defaults and global channel toggles; env flags remain available as hard overrides when you need to force-disable a delivery path at deployment level
+- set `WORKSHOP_NOTIFICATION_EMAIL_ENABLED=0`, `WORKSHOP_NOTIFICATION_SMS_ENABLED=0`, or `WORKSHOP_NOTIFICATION_WHATSAPP_ENABLED=0` if you need to disable a channel and force smart fallback onto the remaining enabled paths regardless of persisted settings
 - set `PUBLIC_APP_URL` so customer quote emails use the correct externally reachable URL
 - optionally set `EMAIL_FROM` and `EMAIL_FROM_NAME` to override the sender identity
 - customer-level operational communication permissions are managed in the staff customer profile and can disable email, SMS, or WhatsApp delivery per customer without changing the global channel configuration

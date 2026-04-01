@@ -56,10 +56,20 @@ X-Staff-Id: demo-manager
   },
   "workshop": {
     "defaultJobDurationMinutes": 90,
-    "defaultDepositPence": 1500
+    "defaultDepositPence": 1500,
+    "maxBookingsPerDay": 10,
+    "manageTokenTtlDays": 45,
+    "requestTimingMessage": "Choose a preferred workshop date and the shop will confirm the final timing."
+  },
+  "notifications": {
+    "workshopAutoSendEnabled": true,
+    "workshopEmailEnabled": true,
+    "workshopSmsEnabled": false,
+    "workshopWhatsappEnabled": true
   },
   "operations": {
-    "lowStockThreshold": 5
+    "lowStockThreshold": 5,
+    "dashboardWeatherEnabled": true
   }
 }
 

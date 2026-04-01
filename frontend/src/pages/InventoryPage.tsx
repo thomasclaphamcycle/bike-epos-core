@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 type InventoryRow = {
@@ -24,51 +25,50 @@ type InventorySearchResponse = {
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-const LOW_STOCK_THRESHOLD = 3;
 
 type StockStateFilter = "" | "negative" | "zero" | "low" | "in_stock";
 type SortOption = "productAsc" | "onHandAsc" | "onHandDesc" | "skuAsc";
 
-const getStockState = (onHand: number): StockStateFilter => {
+const getStockState = (onHand: number, lowStockThreshold: number): StockStateFilter => {
   if (onHand < 0) {
     return "negative";
   }
   if (onHand === 0) {
     return "zero";
   }
-  if (onHand <= LOW_STOCK_THRESHOLD) {
+  if (onHand <= lowStockThreshold) {
     return "low";
   }
   return "in_stock";
 };
 
-const getStockStateLabel = (onHand: number) => {
+const getStockStateLabel = (onHand: number, lowStockThreshold: number) => {
   if (onHand < 0) {
     return "Negative";
   }
   if (onHand === 0) {
     return "Zero Stock";
   }
-  if (onHand <= LOW_STOCK_THRESHOLD) {
+  if (onHand <= lowStockThreshold) {
     return "Low Stock";
   }
   return "In Stock";
 };
 
-const getStockStateClass = (onHand: number) => {
+const getStockStateClass = (onHand: number, lowStockThreshold: number) => {
   if (onHand < 0) {
     return "stock-badge stock-state-negative";
   }
   if (onHand === 0) {
     return "stock-badge stock-state-zero";
   }
-  if (onHand <= LOW_STOCK_THRESHOLD) {
+  if (onHand <= lowStockThreshold) {
     return "stock-badge stock-state-low";
   }
   return "stock-badge stock-state-positive";
 };
 
-const getAttentionSummary = (row: InventoryRow) => {
+const getAttentionSummary = (row: InventoryRow, lowStockThreshold: number) => {
   if (!row.isActive) {
     return "Inactive variant. Review it before counting or buying more stock.";
   }
@@ -78,13 +78,14 @@ const getAttentionSummary = (row: InventoryRow) => {
   if (row.onHand === 0) {
     return "Out of stock. Confirm whether stock is already on order or needs a new purchase order.";
   }
-  if (row.onHand <= LOW_STOCK_THRESHOLD) {
+  if (row.onHand <= lowStockThreshold) {
     return "Low remaining cover. Review reordering before the next sale or workshop use.";
   }
   return "Healthy cover right now. Open the variant for locations, adjustments, and movement history.";
 };
 
 export const InventoryPage = () => {
+  const appConfig = useAppConfig();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { error } = useToasts();
@@ -99,6 +100,7 @@ export const InventoryPage = () => {
 
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -201,7 +203,7 @@ export const InventoryPage = () => {
       if (!stockState) {
         return true;
       }
-      return getStockState(row.onHand) === stockState;
+      return getStockState(row.onHand, lowStockThreshold) === stockState;
     });
 
     const sorted = [...filtered];
@@ -226,7 +228,7 @@ export const InventoryPage = () => {
     });
 
     return sorted;
-  }, [rows, sort, stockState]);
+  }, [lowStockThreshold, rows, sort, stockState]);
 
   const totalUnits = useMemo(
     () => visibleRows.reduce((sum, row) => sum + row.onHand, 0),
@@ -235,12 +237,12 @@ export const InventoryPage = () => {
 
   const stockSummary = useMemo(
     () => ({
-      inStock: visibleRows.filter((row) => row.onHand > LOW_STOCK_THRESHOLD).length,
-      low: visibleRows.filter((row) => row.onHand > 0 && row.onHand <= LOW_STOCK_THRESHOLD).length,
+      inStock: visibleRows.filter((row) => row.onHand > lowStockThreshold).length,
+      low: visibleRows.filter((row) => row.onHand > 0 && row.onHand <= lowStockThreshold).length,
       zero: visibleRows.filter((row) => row.onHand === 0).length,
       negative: visibleRows.filter((row) => row.onHand < 0).length,
     }),
-    [visibleRows],
+    [lowStockThreshold, visibleRows],
   );
 
   return (
@@ -365,7 +367,7 @@ export const InventoryPage = () => {
         </div>
 
         <p className="muted-text">
-          Low stock currently means on-hand stock greater than 0 and less than or equal to {LOW_STOCK_THRESHOLD}.
+          Low stock currently means on-hand stock greater than 0 and less than or equal to {lowStockThreshold}.
           Zero and negative rows need immediate review. Use reordering for buying decisions, inventory intel for slower
           stock, and the variant detail page for location counts, movements, adjustments, or a stocktake.
         </p>
@@ -415,8 +417,8 @@ export const InventoryPage = () => {
                     <td>{formatMoney(row.retailPricePence)}</td>
                     <td className="numeric-cell">{row.onHand}</td>
                     <td>
-                      <span className={getStockStateClass(row.onHand)}>
-                        {getStockStateLabel(row.onHand)}
+                      <span className={getStockStateClass(row.onHand, lowStockThreshold)}>
+                        {getStockStateLabel(row.onHand, lowStockThreshold)}
                       </span>
                     </td>
                     <td>
@@ -425,7 +427,7 @@ export const InventoryPage = () => {
                       </span>
                     </td>
                     <td>
-                      <div className="table-primary">{getAttentionSummary(row)}</div>
+                      <div className="table-primary">{getAttentionSummary(row, lowStockThreshold)}</div>
                       <div className="table-secondary">
                         {row.onHand < 0 ? (
                           <Link
@@ -434,7 +436,7 @@ export const InventoryPage = () => {
                           >
                             Open cycle count
                           </Link>
-                        ) : row.onHand <= LOW_STOCK_THRESHOLD ? (
+                        ) : row.onHand <= lowStockThreshold ? (
                           <Link
                             to="/management/reordering"
                             onClick={(event) => event.stopPropagation()}

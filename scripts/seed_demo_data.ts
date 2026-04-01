@@ -197,6 +197,22 @@ const DEMO_STORE_PROFILE = {
 const DEMO_BOOKING_DEFAULTS = {
   maxBookingsPerDay: 8,
   defaultDepositPence: 1000,
+  defaultJobDurationMinutes: 60,
+  manageTokenTtlDays: 30,
+  requestTimingMessage:
+    "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.",
+} as const;
+
+const DEMO_NOTIFICATION_DEFAULTS = {
+  workshopAutoSendEnabled: true,
+  workshopEmailEnabled: true,
+  workshopSmsEnabled: true,
+  workshopWhatsappEnabled: true,
+} as const;
+
+const DEMO_OPERATIONS_DEFAULTS = {
+  lowStockThreshold: 3,
+  dashboardWeatherEnabled: true,
 } as const;
 
 const DEMO_RECEIPT_ADDRESS = [
@@ -227,7 +243,17 @@ const DEMO_APP_CONFIG_ROWS: Array<{ key: string; value: Prisma.InputJsonValue }>
   { key: "store.timeZone", value: DEMO_STORE_PROFILE.timeZone },
   { key: "store.logoUrl", value: DEMO_STORE_PROFILE.logoUrl },
   { key: "store.footerText", value: DEMO_STORE_PROFILE.footerText },
+  { key: "workshop.defaultJobDurationMinutes", value: DEMO_BOOKING_DEFAULTS.defaultJobDurationMinutes },
   { key: "workshop.defaultDepositPence", value: DEMO_BOOKING_DEFAULTS.defaultDepositPence },
+  { key: "workshop.maxBookingsPerDay", value: DEMO_BOOKING_DEFAULTS.maxBookingsPerDay },
+  { key: "workshop.manageTokenTtlDays", value: DEMO_BOOKING_DEFAULTS.manageTokenTtlDays },
+  { key: "workshop.requestTimingMessage", value: DEMO_BOOKING_DEFAULTS.requestTimingMessage },
+  { key: "notifications.workshopAutoSendEnabled", value: DEMO_NOTIFICATION_DEFAULTS.workshopAutoSendEnabled },
+  { key: "notifications.workshopEmailEnabled", value: DEMO_NOTIFICATION_DEFAULTS.workshopEmailEnabled },
+  { key: "notifications.workshopSmsEnabled", value: DEMO_NOTIFICATION_DEFAULTS.workshopSmsEnabled },
+  { key: "notifications.workshopWhatsappEnabled", value: DEMO_NOTIFICATION_DEFAULTS.workshopWhatsappEnabled },
+  { key: "operations.lowStockThreshold", value: DEMO_OPERATIONS_DEFAULTS.lowStockThreshold },
+  { key: "operations.dashboardWeatherEnabled", value: DEMO_OPERATIONS_DEFAULTS.dashboardWeatherEnabled },
 ];
 
 const LEGACY_REMOVED_USERS = [

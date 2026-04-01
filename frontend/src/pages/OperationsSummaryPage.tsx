@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 
 type SalesDailyRow = {
   date: string;
@@ -112,6 +113,7 @@ const WORKSHOP_IN_PROGRESS_STATUSES = new Set([
 ]);
 
 export const OperationsSummaryPage = () => {
+  const appConfig = useAppConfig();
   const { error } = useToasts();
 
   const [salesRow, setSalesRow] = useState<SalesDailyRow | null>(null);
@@ -121,6 +123,7 @@ export const OperationsSummaryPage = () => {
   const [lowestStockRows, setLowestStockRows] = useState<InventoryRow[]>([]);
   const [recentActivity, setRecentActivity] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const loadSummary = async () => {
     setLoading(true);
@@ -216,7 +219,7 @@ export const OperationsSummaryPage = () => {
     [openPurchaseOrders],
   );
 
-  const lowStockCount = lowestStockRows.filter((row) => row.onHand <= 2).length;
+  const lowStockCount = lowestStockRows.filter((row) => row.onHand <= lowStockThreshold).length;
   const criticalStockCount = lowestStockRows.filter((row) => row.onHand <= 0).length;
   const workshopInProgressCount = useMemo(
     () => workshopDashboard?.jobs.filter((job) => WORKSHOP_IN_PROGRESS_STATUSES.has(job.status)).length ?? 0,

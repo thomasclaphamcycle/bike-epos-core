@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
+import { useAppConfig } from "../config/appConfig";
 
 type VariantDetail = {
   id: string;
@@ -88,8 +89,6 @@ const MOVEMENT_TYPE_OPTIONS = [
   "RETURN",
   "TRANSFER",
 ] as const;
-
-const LOW_STOCK_THRESHOLD = 3;
 
 const formatReasonLabel = (value: string | null) =>
   value
@@ -183,33 +182,34 @@ const getMovementStory = (movement: MovementResponse["movements"][number]) => {
   return movement.note || "Inventory movement recorded.";
 };
 
-const getStockStateLabel = (onHand: number) => {
+const getStockStateLabel = (onHand: number, lowStockThreshold: number) => {
   if (onHand < 0) {
     return "Negative";
   }
   if (onHand === 0) {
     return "Zero";
   }
-  if (onHand <= LOW_STOCK_THRESHOLD) {
+  if (onHand <= lowStockThreshold) {
     return "Low";
   }
   return "Positive";
 };
 
-const getStockStateClass = (onHand: number) => {
+const getStockStateClass = (onHand: number, lowStockThreshold: number) => {
   if (onHand < 0) {
     return "stock-badge stock-state-negative";
   }
   if (onHand === 0) {
     return "stock-badge stock-state-zero";
   }
-  if (onHand <= LOW_STOCK_THRESHOLD) {
+  if (onHand <= lowStockThreshold) {
     return "stock-badge stock-state-low";
   }
   return "stock-badge stock-state-positive";
 };
 
 export const InventoryItemPage = () => {
+  const appConfig = useAppConfig();
   const { variantId } = useParams<{ variantId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
@@ -231,6 +231,7 @@ export const InventoryItemPage = () => {
   const [countedQuantity, setCountedQuantity] = useState("");
   const [countNote, setCountNote] = useState("");
   const [submittingCount, setSubmittingCount] = useState(false);
+  const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const canViewMovements = useMemo(() => isManagerPlus(user?.role), [user?.role]);
   const canAdjustStock = useMemo(() => isManagerPlus(user?.role), [user?.role]);
@@ -408,14 +409,14 @@ export const InventoryItemPage = () => {
     if (onHand === 0) {
       return "This variant is out of stock. Confirm open purchase orders or raise a new reorder before it is promised again.";
     }
-    if (onHand <= LOW_STOCK_THRESHOLD) {
+    if (onHand <= lowStockThreshold) {
       return "Stock is low. Review reorder suggestions and recent workshop use before the next busy trading day.";
     }
     if (workshopUseQty > 0) {
       return `Workshop use is visible in the movement history. ${workshopUseQty} unit${workshopUseQty === 1 ? "" : "s"} have been consumed by workshop jobs in the current view.`;
     }
     return "Stock level is currently healthy. Use movements and location counts to confirm where the remaining stock is sitting.";
-  }, [stock?.onHand, workshopUseQty]);
+  }, [lowStockThreshold, stock?.onHand, workshopUseQty]);
 
   const submitAdjustment = async (event: FormEvent) => {
     event.preventDefault();
@@ -553,8 +554,8 @@ export const InventoryItemPage = () => {
               <div className="metric-card">
                 <span className="metric-label">Stock State</span>
                 <strong className="metric-value">
-                  <span className={getStockStateClass(stock?.onHand ?? 0)}>
-                    {getStockStateLabel(stock?.onHand ?? 0)}
+                  <span className={getStockStateClass(stock?.onHand ?? 0, lowStockThreshold)}>
+                    {getStockStateLabel(stock?.onHand ?? 0, lowStockThreshold)}
                   </span>
                 </strong>
               </div>
@@ -603,7 +604,7 @@ export const InventoryItemPage = () => {
                 <span className="metric-label">Resulting On Hand</span>
                 <strong className="metric-value">
                   {projectedOnHand === null ? "-" : (
-                    <span className={getStockStateClass(projectedOnHand)}>
+                    <span className={getStockStateClass(projectedOnHand, lowStockThreshold)}>
                       {projectedOnHand}
                     </span>
                   )}
@@ -699,7 +700,7 @@ export const InventoryItemPage = () => {
                 <span className="metric-label">Resulting Stock</span>
                 <strong className="metric-value">
                   {parsedCountedQuantity === null || Number.isNaN(parsedCountedQuantity) ? "-" : (
-                    <span className={getStockStateClass(parsedCountedQuantity)}>
+                    <span className={getStockStateClass(parsedCountedQuantity, lowStockThreshold)}>
                       {parsedCountedQuantity}
                     </span>
                   )}

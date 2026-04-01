@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma";
 import { emitEvent } from "../utils/domainEvent";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
-import { listPublicShopConfig } from "./configurationService";
+import { getWorkshopSettings, listPublicShopConfig } from "./configurationService";
 import { getOrCreateDefaultLocationTx } from "./locationService";
 import { assertDateIsBookable } from "./workshopAvailabilityService";
 import { listWorkshopServiceTemplates } from "./workshopServiceTemplateService";
@@ -34,8 +34,6 @@ type PayDepositInput = {
   providerRef?: string;
 };
 
-const DEFAULT_MANAGE_TOKEN_TTL_DAYS = 30;
-
 const normalizeText = (value: string | undefined): string | undefined => {
   if (value === undefined) {
     return undefined;
@@ -45,14 +43,7 @@ const normalizeText = (value: string | undefined): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const resolveManageTokenExpiryDate = (): Date => {
-  const envValue = process.env.WORKSHOP_MANAGE_TOKEN_DAYS;
-  const parsed = envValue ? Number(envValue) : NaN;
-  const ttlDays =
-    Number.isFinite(parsed) && parsed > 0
-      ? Math.floor(parsed)
-      : DEFAULT_MANAGE_TOKEN_TTL_DAYS;
-
+const resolveManageTokenExpiryDate = (ttlDays: number): Date => {
   const now = new Date();
   const expiresAt = new Date(now);
   expiresAt.setUTCDate(expiresAt.getUTCDate() + ttlDays);
@@ -355,6 +346,7 @@ export const createOnlineWorkshopBooking = async (
   const booking = await prisma.$transaction(async (tx) => {
     const availability = await assertDateIsBookable(tx, scheduledDate);
     const settings = await getBookingSettings(tx);
+    const workshopSettings = await getWorkshopSettings(tx);
     let serviceLabel: string | undefined;
 
     if (serviceTemplateId) {
@@ -394,7 +386,7 @@ export const createOnlineWorkshopBooking = async (
     });
     const location = await getOrCreateDefaultLocationTx(tx);
 
-    const manageTokenExpiresAt = resolveManageTokenExpiryDate();
+    const manageTokenExpiresAt = resolveManageTokenExpiryDate(workshopSettings.manageTokenTtlDays);
     let workshopJob:
       | Awaited<ReturnType<typeof tx.workshopJob.create>>
       | undefined;
@@ -631,9 +623,10 @@ export const getWorkshopBookingByManageToken = async (token: string) => {
 };
 
 export const getPublicWorkshopBookingFormOptions = async () => {
-  const [config, bookingSettings, templates] = await Promise.all([
+  const [config, bookingSettings, workshopSettings, templates] = await Promise.all([
     listPublicShopConfig(),
     getBookingSettings(),
+    getWorkshopSettings(),
     listWorkshopServiceTemplates(),
   ]);
 
@@ -644,8 +637,7 @@ export const getPublicWorkshopBookingFormOptions = async () => {
       maxBookingsPerDay: bookingSettings.maxBookingsPerDay,
       defaultDepositPence: bookingSettings.defaultDepositPence,
       timingMode: "REQUESTED_DATE",
-      timingMessage:
-        "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.",
+      timingMessage: workshopSettings.requestTimingMessage,
     },
     serviceOptions: templates.templates.map((template) => ({
       id: template.id,

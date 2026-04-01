@@ -1,11 +1,8 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import { listShopSettings } from "./configurationService";
+import { getWorkshopSettings } from "./configurationService";
 
 type BookingSettingsClient = Prisma.TransactionClient | PrismaClient;
-
-const DEFAULT_MAX_BOOKINGS_PER_DAY = 8;
-const DEFAULT_DEPOSIT_PENCE = 1000;
 
 const startOfUtcDay = (date: Date): Date => {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -14,8 +11,7 @@ const startOfUtcDay = (date: Date): Date => {
 export const getBookingSettings = async (
   db: BookingSettingsClient = prisma,
 ) => {
-  const appSettings = await listShopSettings(db);
-  const configuredDefaultDepositPence = appSettings.workshop.defaultDepositPence || DEFAULT_DEPOSIT_PENCE;
+  const workshopSettings = await getWorkshopSettings(db);
   const existing = await db.bookingSettings.findUnique({
     where: { id: 1 },
   });
@@ -25,20 +21,24 @@ export const getBookingSettings = async (
       data: {
         id: 1,
         minBookableDate: startOfUtcDay(new Date()),
-        maxBookingsPerDay: DEFAULT_MAX_BOOKINGS_PER_DAY,
-        defaultDepositPence: configuredDefaultDepositPence,
+        maxBookingsPerDay: workshopSettings.maxBookingsPerDay,
+        defaultDepositPence: workshopSettings.defaultDepositPence,
       },
     });
   }
 
-  if (existing.defaultDepositPence === configuredDefaultDepositPence) {
+  if (
+    existing.defaultDepositPence === workshopSettings.defaultDepositPence
+    && existing.maxBookingsPerDay === workshopSettings.maxBookingsPerDay
+  ) {
     return existing;
   }
 
   return db.bookingSettings.update({
     where: { id: 1 },
     data: {
-      defaultDepositPence: configuredDefaultDepositPence,
+      defaultDepositPence: workshopSettings.defaultDepositPence,
+      maxBookingsPerDay: workshopSettings.maxBookingsPerDay,
     },
   });
 };

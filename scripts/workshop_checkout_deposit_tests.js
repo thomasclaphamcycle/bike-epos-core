@@ -274,14 +274,24 @@ const run = async () => {
       create: {
         id: 1,
         minBookableDate: todayUtc(),
-        maxBookingsPerDay: 999,
+        maxBookingsPerDay: 200,
         defaultDepositPence: 1000,
       },
       update: {
         minBookableDate: todayUtc(),
-        maxBookingsPerDay: 999,
+        maxBookingsPerDay: 200,
         defaultDepositPence: 1000,
       },
+    });
+    await prisma.appConfig.upsert({
+      where: { key: "workshop.maxBookingsPerDay" },
+      create: { key: "workshop.maxBookingsPerDay", value: 200 },
+      update: { value: 200 },
+    });
+    await prisma.appConfig.upsert({
+      where: { key: "workshop.defaultDepositPence" },
+      create: { key: "workshop.defaultDepositPence", value: 1000 },
+      update: { value: 1000 },
     });
 
     const scheduledDate = formatDateOnly(addDays(todayUtc(), 30));
