@@ -11,8 +11,7 @@ import {
   getWorkshopTechnicianWorkflowSummary,
   getWorkshopStatusTimeline,
   workshopRawStatusActionClass,
-  workshopExecutionStatusClass,
-  workshopExecutionStatusLabel,
+  workshopRawStatusClass,
   workshopRawStatusLabel,
   workshopTechnicianWorkflowClass,
   workshopTechnicianWorkflowLabel,
@@ -353,6 +352,33 @@ type EditableLine = {
   unitPricePence: number;
 };
 
+type WorkshopJobSignal = {
+  label: string;
+  detail: string;
+  className: string;
+};
+
+type WorkshopJobNextAction =
+  | {
+      title: string;
+      detail: string;
+      highlights: string[];
+      actionKind: "saveEstimate" | "prepareQuote" | "moveToBench" | "openPosHandoff" | "jumpToBuild" | "jumpToParts";
+      actionLabel: string;
+    }
+  | {
+      title: string;
+      detail: string;
+      highlights: string[];
+      actionKind: null;
+      actionLabel: null;
+    };
+
+type WorkshopJobActivityHighlight = {
+  label: string;
+  detail: string;
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const formatFileSize = (bytes: number) => {
@@ -421,6 +447,21 @@ const truncateText = (value: string, limit = 96) =>
 const formatOptionalDateTime = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "-";
 
+const timestampValue = (value: string | null | undefined) => {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+};
+
+const getMostRecentEntry = <T,>(
+  items: T[],
+  getValue: (item: T) => string | null | undefined,
+) =>
+  [...items].sort((left, right) => timestampValue(getValue(right)) - timestampValue(getValue(left)))[0] ?? null;
+
 const notificationActionLabel = (
   eventType: WorkshopNotificationRecord["eventType"],
 ) =>
@@ -444,6 +485,21 @@ const canPersistApprovalStatus = (status: string | null | undefined) =>
   ["BOOKED", "BIKE_ARRIVED", "APPROVED", "WAITING_FOR_APPROVAL", "ON_HOLD"].includes(
     getWorkshopDisplayStatus(status) ?? "",
   );
+
+const formatWorkshopDepositState = (
+  depositStatus: string | null | undefined,
+  depositRequiredPence: number,
+) => {
+  if (!depositRequiredPence || depositStatus === "NOT_REQUIRED") {
+    return "No deposit required";
+  }
+
+  if (depositStatus === "PAID") {
+    return `Deposit paid (${formatMoney(depositRequiredPence)})`;
+  }
+
+  return `Deposit outstanding (${formatMoney(depositRequiredPence)})`;
+};
 
 export const WorkshopJobPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -1369,6 +1425,10 @@ export const WorkshopJobPage = () => {
   const displayStatus = useMemo(() => getWorkshopDisplayStatus(payload?.job) ?? "BOOKED", [payload?.job]);
   const currentEstimate = payload?.currentEstimate ?? null;
   const estimateHistory = payload?.estimateHistory ?? [];
+  const latestSavedEstimate = useMemo(
+    () => currentEstimate ?? estimateHistory[0] ?? null,
+    [currentEstimate, estimateHistory],
+  );
   const canResendQuoteNotification = currentEstimate?.status === "PENDING_APPROVAL";
   const canResendReadyNotification = displayStatus === "BIKE_READY";
   const portalConversationAccess = conversationPayload?.conversation.portalAccess ?? null;
@@ -1428,25 +1488,6 @@ export const WorkshopJobPage = () => {
       rawStatus,
     ],
   );
-  const collectionSummary = useMemo(() => {
-    if (!payload) {
-      return null;
-    }
-
-    if (payload.job.sale) {
-      return `Sale ${payload.job.sale.id.slice(0, 8)} linked for ${formatMoney(payload.job.sale.totalPence)}.`;
-    }
-
-    if (payload.job.finalizedBasketId) {
-      return `POS basket ${payload.job.finalizedBasketId.slice(0, 8)} is ready for collection handoff.`;
-    }
-
-    if (displayStatus === "BIKE_READY") {
-      return "Ready for collection, but the POS handoff has not been opened yet.";
-    }
-
-    return null;
-  }, [displayStatus, payload]);
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
@@ -1457,6 +1498,335 @@ export const WorkshopJobPage = () => {
   const workshopCalendarPath = payload?.job.scheduledDate
     ? `/workshop/calendar?date=${payload.job.scheduledDate.slice(0, 10)}`
     : "/workshop/calendar";
+  const latestTimelineEvent = useMemo(
+    () => getMostRecentEntry(timelineEvents, (event) => event.occurredAt),
+    [timelineEvents],
+  );
+  const latestConversationMessage = useMemo(
+    () => getMostRecentEntry(
+      conversationMessages,
+      (message) => message.sentAt ?? message.receivedAt ?? message.createdAt,
+    ),
+    [conversationMessages],
+  );
+  const liveEstimateChanged = Boolean(
+    payload
+    && currentEstimate
+    && (
+      currentEstimate.subtotalPence !== subtotalPence
+      || currentEstimate.lineCount !== payload.lines.length
+    ),
+  );
+  const estimateNeedsRefresh = Boolean(
+    (currentEstimate?.status === "APPROVED" && liveEstimateChanged)
+    || (!currentEstimate && latestSavedEstimate?.status === "APPROVED" && payload?.lines.length)
+    || portalConversationAccess?.hasUpdatedEstimate,
+  );
+  const depositPaidPence = payload?.job.depositStatus === "PAID" ? payload.job.depositRequiredPence : 0;
+  const estimatedRemainingPence = Math.max(subtotalPence - depositPaidPence, 0);
+  const estimateSignal = useMemo<WorkshopJobSignal>(() => {
+    if (!payload || payload.lines.length === 0) {
+      return {
+        label: "No quote yet",
+        detail: "Add labour or parts before the workshop can send, approve, or bill a meaningful estimate.",
+        className: "status-badge",
+      };
+    }
+
+    if (!currentEstimate && latestSavedEstimate?.status === "APPROVED" && payload.lines.length > 0) {
+      return {
+        label: "Changed after approval",
+        detail: `The last approved quote was ${formatMoney(latestSavedEstimate.subtotalPence)}, but the live job now totals ${formatMoney(subtotalPence)} and needs a fresh version.`,
+        className: "status-badge status-warning",
+      };
+    }
+
+    if (!currentEstimate) {
+      return {
+        label: "Live work not saved",
+        detail: `Current lines total ${formatMoney(subtotalPence)}, but no quote snapshot exists yet.`,
+        className: "status-badge status-info",
+      };
+    }
+
+    if (currentEstimate.status === "APPROVED" && estimateNeedsRefresh) {
+      return {
+        label: "Changed after approval",
+        detail: `Approved quote was ${formatMoney(currentEstimate.subtotalPence)} and the live job is now ${formatMoney(subtotalPence)}. Save a new version before continuing or collecting.`,
+        className: "status-badge status-warning",
+      };
+    }
+
+    if (currentEstimate.status === "PENDING_APPROVAL") {
+      return {
+        label: "Awaiting approval",
+        detail: currentEstimate.requestedAt
+          ? `Quote sent ${formatOptionalDateTime(currentEstimate.requestedAt)} and still needs a decision.`
+          : "The current quote still needs customer approval before work moves on.",
+        className: "status-badge status-warning",
+      };
+    }
+
+    if (currentEstimate.status === "APPROVED") {
+      return {
+        label: "Approved to proceed",
+        detail: currentEstimate.approvedAt
+          ? `Customer approval recorded ${formatOptionalDateTime(currentEstimate.approvedAt)}.`
+          : "The current quote is already approved.",
+        className: "status-badge status-complete",
+      };
+    }
+
+    if (currentEstimate.status === "REJECTED") {
+      return {
+        label: "Quote rejected",
+        detail: currentEstimate.rejectedAt
+          ? `Latest quote was rejected ${formatOptionalDateTime(currentEstimate.rejectedAt)} and should be revised before more work starts.`
+          : "The current quote was rejected and needs revision.",
+        className: "status-badge status-cancelled",
+      };
+    }
+
+    return {
+      label: "Draft quote",
+      detail: `Version ${(currentEstimate ?? latestSavedEstimate)?.version ?? "-"} is saved, but it has not been sent for approval yet.`,
+      className: "status-badge status-info",
+    };
+  }, [currentEstimate, estimateNeedsRefresh, latestSavedEstimate, payload, subtotalPence]);
+  const collectionSignal = useMemo<WorkshopJobSignal>(() => {
+    if (!payload) {
+      return {
+        label: "Collection unavailable",
+        detail: "Load the job before collection handoff can be assessed.",
+        className: "status-badge",
+      };
+    }
+
+    if (payload.job.sale) {
+      return {
+        label: "Sale linked",
+        detail: `Sale ${payload.job.sale.id.slice(0, 8)} is already linked for ${formatMoney(payload.job.sale.totalPence)}.`,
+        className: "status-badge status-complete",
+      };
+    }
+
+    if (payload.job.finalizedBasketId) {
+      return {
+        label: "POS handoff ready",
+        detail: `Basket ${payload.job.finalizedBasketId.slice(0, 8)} is prepared and can be opened in POS.`,
+        className: "status-badge status-info",
+      };
+    }
+
+    if (displayStatus === "BIKE_READY") {
+      return {
+        label: "Needs POS handoff",
+        detail: "The bike is ready, but staff still need to open the checkout path in POS before collection.",
+        className: "status-badge status-warning",
+      };
+    }
+
+    return {
+      label: "Not ready for collection",
+      detail: "Collection state will become actionable once bench work, estimate state, and bike readiness all line up.",
+      className: "status-badge",
+    };
+  }, [displayStatus, payload]);
+  const latestActivityHighlights = useMemo<WorkshopJobActivityHighlight[]>(() => {
+    const highlights: WorkshopJobActivityHighlight[] = [
+      latestTimelineEvent
+        ? {
+            label: "Latest system event",
+            detail: `${latestTimelineEvent.label} · ${formatOptionalDateTime(latestTimelineEvent.occurredAt)}`,
+          }
+        : {
+            label: "Latest system event",
+            detail: "No domain-event activity has been recorded yet.",
+          },
+      latestConversationMessage
+        ? {
+            label: "Latest customer contact",
+            detail: `${latestConversationMessage.direction === "OUTBOUND" ? "Workshop message" : "Customer reply"} · ${formatOptionalDateTime(latestConversationMessage.sentAt ?? latestConversationMessage.receivedAt ?? latestConversationMessage.createdAt)}`,
+          }
+        : latestCustomerNote
+          ? {
+              label: "Latest customer note",
+              detail: `${truncateText(latestCustomerNote.note, 88)} · ${formatOptionalDateTime(latestCustomerNote.createdAt)}`,
+            }
+          : {
+              label: "Latest customer contact",
+              detail: "No customer-facing message or note has been recorded yet.",
+            },
+      latestInternalNote
+        ? {
+            label: "Latest internal note",
+            detail: `${truncateText(latestInternalNote.note, 88)} · ${formatOptionalDateTime(latestInternalNote.createdAt)}`,
+          }
+        : {
+            label: "Latest internal note",
+            detail: "No internal workshop notes have been added yet.",
+          },
+    ];
+
+    return highlights;
+  }, [latestConversationMessage, latestCustomerNote, latestInternalNote, latestTimelineEvent]);
+  const nextAction = useMemo<WorkshopJobNextAction>(() => {
+    if (!payload || payload.lines.length === 0) {
+      return {
+        title: "Build the first estimate",
+        detail: "This job has context, but no chargeable work has been added yet.",
+        highlights: [
+          payload?.job.notes ? truncateText(payload.job.notes, 96) : "Capture the first labour or parts line.",
+          workflowSummary.assignmentSummary,
+          payload?.job.scheduledDate ? `Promise date ${formatOptionalDateTime(payload.job.scheduledDate)}` : "No promise date set",
+        ],
+        actionKind: "jumpToBuild",
+        actionLabel: "Jump to labour & parts",
+      };
+    }
+
+    if (!currentEstimate && latestSavedEstimate?.status === "APPROVED") {
+      return {
+        title: "Re-issue the quote",
+        detail: "The last approved version no longer matches the live work, so staff should save and resend a revised estimate before carrying on.",
+        highlights: [
+          `Last approved ${formatMoney(latestSavedEstimate.subtotalPence)}`,
+          `Live total ${formatMoney(subtotalPence)}`,
+          workflowSummary.assignmentSummary,
+        ],
+        actionKind: "saveEstimate",
+        actionLabel: "Save revised quote",
+      };
+    }
+
+    if (!currentEstimate) {
+      return {
+        title: "Capture the current quote",
+        detail: "The live line set is ready, but it has not been saved as an auditable estimate version yet.",
+        highlights: [
+          `Current total ${formatMoney(subtotalPence)}`,
+          `${payload.lines.length} live line${payload.lines.length === 1 ? "" : "s"} ready to snapshot`,
+          workflowSummary.assignmentSummary,
+        ],
+        actionKind: "saveEstimate",
+        actionLabel: "Save quote snapshot",
+      };
+    }
+
+    if (currentEstimate.status === "APPROVED" && estimateNeedsRefresh) {
+      return {
+        title: "Re-issue the quote",
+        detail: "Work changed after approval, so the workshop should save and resend a fresh version before bench work or collection continues.",
+        highlights: [
+          `Approved ${formatMoney(currentEstimate.subtotalPence)}`,
+          `Live total ${formatMoney(subtotalPence)}`,
+          portalConversationAccess?.hasUpdatedEstimate ? "Portal link is tied to an older estimate version" : "Approval record no longer matches the live work",
+        ],
+        actionKind: "saveEstimate",
+        actionLabel: "Save revised quote",
+      };
+    }
+
+    if (currentEstimate.status === "DRAFT" || currentEstimate.status === "REJECTED") {
+      return {
+        title: currentEstimate.status === "REJECTED" ? "Revise and resend the quote" : "Send the quote for approval",
+        detail: currentEstimate.status === "REJECTED"
+          ? "The latest quote was declined, so the next best step is to prepare an updated customer-facing version."
+          : "The job is commercially ready, but staff still need to send or share the quote with the customer.",
+        highlights: [
+          `Current version v${currentEstimate.version}`,
+          `Live total ${formatMoney(subtotalPence)}`,
+          workflowSummary.assignmentSummary,
+        ],
+        actionKind: "prepareQuote",
+        actionLabel: currentEstimate.customerQuote?.status === "ACTIVE" ? "Copy customer quote link" : "Prepare customer quote link",
+      };
+    }
+
+    if (currentEstimate.status === "PENDING_APPROVAL") {
+      return {
+        title: "Review customer approval",
+        detail: "Bench work should stay aligned with the current approval state and portal access.",
+        highlights: [
+          currentEstimate.requestedAt ? `Quote sent ${formatOptionalDateTime(currentEstimate.requestedAt)}` : "Approval request already sent",
+          portalConversationAccess?.publicPath ? "Portal access is live for customer replies" : "No active portal link yet",
+          workflowSummary.assignmentSummary,
+        ],
+        actionKind: "prepareQuote",
+        actionLabel: currentEstimate.customerQuote?.status === "ACTIVE" ? "Copy customer quote link" : "Prepare customer quote link",
+      };
+    }
+
+    if ((displayStatus === "BOOKED" || displayStatus === "BIKE_ARRIVED" || displayStatus === "APPROVED") && currentEstimate.status === "APPROVED") {
+      return {
+        title: "Move work onto the bench",
+        detail: "Customer approval is in place, so the next operational step is to start the repair and keep the board truthful.",
+        highlights: [
+          workflowSummary.assignmentSummary,
+          payload.job.scheduledStartAt ? `Scheduled ${formatOptionalDateTime(payload.job.scheduledStartAt)}` : "No timed slot yet",
+          partsOverview?.summary.partsStatus === "SHORT" ? "Parts are still short for this job" : "Parts state is not currently blocking bench work",
+        ],
+        actionKind: "moveToBench",
+        actionLabel: "Move to bench",
+      };
+    }
+
+    if (displayStatus === "WAITING_FOR_PARTS") {
+      return {
+        title: "Resolve the parts blocker",
+        detail: "The job is operationally blocked on stock or allocation rather than estimate state.",
+        highlights: [
+          `${partsOverview?.summary.missingQty ?? 0} missing item${partsOverview?.summary.missingQty === 1 ? "" : "s"}`,
+          `${partsOverview?.summary.outstandingQty ?? 0} still outstanding`,
+          workflowSummary.assignmentSummary,
+        ],
+        actionKind: "jumpToParts",
+        actionLabel: "Review parts allocation",
+      };
+    }
+
+    if (displayStatus === "BIKE_READY") {
+      return {
+        title: "Complete the collection handoff",
+        detail: "Bench work is done. Staff now need to open or reuse the POS path so payment and collection finish cleanly.",
+        highlights: [
+          collectionSignal.label,
+          formatWorkshopDepositState(payload.job.depositStatus, payload.job.depositRequiredPence),
+          estimatedRemainingPence > 0 ? `Estimated remaining ${formatMoney(estimatedRemainingPence)}` : "No remaining balance estimated from the current quote",
+        ],
+        actionKind: "openPosHandoff",
+        actionLabel: payload.job.sale ? "Open linked sale" : payload.job.finalizedBasketId ? "Open POS handoff" : "Start POS handoff",
+      };
+    }
+
+    return {
+      title: workflowSummary.label,
+      detail: workflowSummary.detail,
+      highlights: [
+        workflowSummary.nextStep,
+        workflowSummary.assignmentSummary,
+        collectionSignal.detail,
+      ],
+      actionKind: null,
+      actionLabel: null,
+    };
+  }, [
+    collectionSignal.detail,
+    collectionSignal.label,
+    currentEstimate,
+    displayStatus,
+    estimateNeedsRefresh,
+    estimatedRemainingPence,
+    latestSavedEstimate,
+    partsOverview?.summary.missingQty,
+    partsOverview?.summary.outstandingQty,
+    partsOverview?.summary.partsStatus,
+    payload,
+    portalConversationAccess?.hasUpdatedEstimate,
+    portalConversationAccess?.publicPath,
+    subtotalPence,
+    workflowSummary,
+  ]);
 
   if (!id) {
     return <div className="page-shell"><p>Missing workshop job id.</p></div>;
@@ -1464,15 +1834,36 @@ export const WorkshopJobPage = () => {
 
   return (
     <div className="page-shell">
-      <section className="card">
+      <section className="card" id="workshop-job-overview">
         <div className="workshop-job-header">
           <div className="workshop-job-header__identity">
+            <div className="actions-inline workshop-job-header__breadcrumbs">
+              <Link to="/workshop" className="button-link button-link-compact">
+                Workshop board
+              </Link>
+              <Link to="/workshop/collection" className="button-link button-link-compact">
+                Collection queue
+              </Link>
+            </div>
             <span className="table-secondary">Workshop job {id.slice(0, 8)}</span>
             <h1>{payload?.job.customerName || "Workshop Job"}</h1>
             <p className="muted-text">
               {payload?.job.bikeDescription || "Bike details still to be confirmed"}
               {payload?.job.assignedStaffName ? ` · ${payload.job.assignedStaffName}` : ""}
             </p>
+            {payload ? (
+              <div className="workshop-job-header__badges">
+                <span className={workshopRawStatusClass(displayStatus)}>{workshopRawStatusLabel(displayStatus)}</span>
+                <span className={workshopTechnicianWorkflowClass(workflowSummary.stage)}>
+                  {workshopTechnicianWorkflowLabel(workflowSummary.stage)}
+                </span>
+                <span className={estimateSignal.className}>{estimateSignal.label}</span>
+                <span className={partsStatusClass(partsOverview?.summary.partsStatus)}>
+                  Parts {partsOverview?.summary.partsStatus ?? "OK"}
+                </span>
+                <span className={collectionSignal.className}>{collectionSignal.label}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="workshop-job-status-panel" ref={statusMenuRef}>
@@ -1612,7 +2003,7 @@ export const WorkshopJobPage = () => {
               </Link>
             ) : null}
             {payload && !["COMPLETED", "CANCELLED"].includes(displayStatus) ? (
-              <button type="button" className="primary" onClick={openPosHandoff}>
+              <button type="button" className="primary" onClick={openPosHandoff} data-testid="workshop-job-open-pos">
                 {payload.job.sale
                   ? "Open sale"
                   : payload.job.finalizedBasketId
@@ -1635,190 +2026,332 @@ export const WorkshopJobPage = () => {
 
         {payload ? (
           <>
-            <div className="restricted-panel info-panel job-workflow-panel">
-              <div className="job-workflow-highlight-grid">
-                <div className="job-workflow-highlight">
-                  <span className="table-secondary">Bench workflow</span>
-                  <strong>
-                    <span className={workshopTechnicianWorkflowClass(workflowSummary.stage)}>
-                      {workshopTechnicianWorkflowLabel(workflowSummary.stage)}
-                    </span>
-                  </strong>
-                  <p className="muted-text">{workflowSummary.detail}</p>
-                </div>
-                <div className="job-workflow-highlight">
-                  <span className="table-secondary">Technician coverage</span>
-                  <strong>{workflowSummary.assignmentSummary}</strong>
-                  <p className="muted-text">Keep assignment and timing aligned with the calendar so the bench queue stays trustworthy.</p>
-                </div>
-                <div className="job-workflow-highlight">
-                  <span className="table-secondary">Current blocker</span>
-                  <strong>
+            <nav className="workshop-job-anchor-nav" aria-label="Workshop job sections">
+              <a href="#workshop-job-estimate" className="button-link button-link-compact">Estimate</a>
+              <a href="#workshop-job-parts" className="button-link button-link-compact">Parts</a>
+              <a href="#workshop-job-progress" className="button-link button-link-compact">Progress</a>
+              <a href="#workshop-job-conversation" className="button-link button-link-compact">Customer updates</a>
+              <a href="#workshop-job-build" className="button-link button-link-compact">Build work</a>
+            </nav>
+
+            <div className="workshop-job-hub">
+              <div className="workshop-job-hub__main">
+                <section className="workshop-job-priority-card" data-testid="workshop-job-next-action">
+                  <span className="ui-page-eyebrow">Next action</span>
+                  <div className="workshop-job-priority-card__headline">
+                    <div>
+                      <h2>{nextAction.title}</h2>
+                      <p className="muted-text">{nextAction.detail}</p>
+                    </div>
                     <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
-                  </strong>
-                  <p className="muted-text">Customer-facing status stays broad, but the bench queue should use this internal state.</p>
-                </div>
-                <div className="job-workflow-highlight">
-                  <span className="table-secondary">Next bench step</span>
-                  <strong>{workflowSummary.nextStep}</strong>
-                  <p className="muted-text">Use the status control above to keep the workshop board, calendar, and handoff flow aligned.</p>
-                </div>
-              </div>
-            </div>
+                  </div>
 
-            <div className="job-meta-grid">
-              <div><strong>Customer:</strong> {payload.job.customerName || "-"}</div>
-              <div><strong>Bike:</strong> {payload.job.bikeDescription || "-"}</div>
-              <div>
-                <strong>Linked Bike Record:</strong>{" "}
-                {payload.job.bike ? (
-                  <Link to={`/customers/bikes/${payload.job.bike.id}`}>{payload.job.bike.displayName}</Link>
-                ) : (
-                  "No linked bike record"
-                )}
-              </div>
-              <div><strong>Assigned Technician:</strong> {payload.job.assignedStaffName || "Unassigned"}</div>
-              <div><strong>Technician Coverage:</strong> {workflowSummary.assignmentSummary}</div>
-              <div><strong>Scheduled:</strong> {formatOptionalDateTime(payload.job.scheduledStartAt || payload.job.scheduledDate)}</div>
-              <div>
-                <strong>Execution Stage:</strong>{" "}
-                <span className={workshopExecutionStatusClass(payload.job.status, rawStatus)}>
-                  {workshopExecutionStatusLabel(payload.job.status)}
-                </span>
-              </div>
-              <div>
-                <strong>Current Blocker:</strong>{" "}
-                <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
-              </div>
-              <div>
-                <strong>Quote Status:</strong>{" "}
-                <span className={workshopEstimateStatusClass(currentEstimate?.status)}>
-                  {workshopEstimateStatusLabel(currentEstimate?.status)}
-                </span>
-              </div>
-              <div>
-                <strong>Customer Quote:</strong>{" "}
-                {currentEstimate?.customerQuote ? (
-                  <span className={currentEstimate.customerQuote.status === "ACTIVE" ? "status-badge status-complete" : "status-badge status-warning"}>
-                    {workshopCustomerQuoteLinkStatusLabel(currentEstimate.customerQuote.status)}
-                  </span>
-                ) : (
-                  "Not prepared"
-                )}
-              </div>
-              <div>
-                <strong>Parts State:</strong>{" "}
-                <span className={partsStatusClass(partsOverview?.summary.partsStatus)}>
-                  {partsOverview?.summary.partsStatus ?? "OK"}
-                </span>
-              </div>
-              <div><strong>Next Bench Step:</strong> {workflowSummary.nextStep}</div>
-              <div><strong>Check-in Notes:</strong> {payload.job.notes || "-"}</div>
-              <div><strong>Collection Handoff:</strong> {collectionSummary ?? "Not ready for collection yet."}</div>
-              <div><strong>Updated:</strong> {new Date(payload.job.updatedAt).toLocaleString()}</div>
-              <div>
-                <strong>Parts Location:</strong> {partsOverview?.stockLocation.name ?? "-"}
-              </div>
-            </div>
+                  <div className="workshop-job-priority-card__highlights">
+                    {nextAction.highlights.map((highlight) => (
+                      <div key={highlight} className="workshop-job-priority-card__highlight">
+                        {highlight}
+                      </div>
+                    ))}
+                  </div>
 
-            <div className="job-action-groups">
-              <div className="job-action-group">
-                <div>
-                  <strong>Quote Actions</strong>
-                  <p className="muted-text">Use estimate actions for customer approval states instead of forcing quote stages through the bench workflow.</p>
-                </div>
-                <div className="action-wrap">
-                  {canPersistApprovalStatus(displayStatus) ? (
-                    <>
+                  <div className="actions-inline">
+                    {nextAction.actionKind === "saveEstimate" ? (
                       <button
                         type="button"
+                        className="primary"
                         onClick={() => void saveEstimateSnapshot()}
                         disabled={savingEstimate || payload.lines.length === 0}
                       >
-                        {savingEstimate ? "Saving Snapshot..." : "Save Quote Snapshot"}
+                        {savingEstimate ? "Saving Snapshot..." : nextAction.actionLabel}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void updateApprovalStatus("WAITING_FOR_APPROVAL")}
-                        disabled={currentEstimate?.status === "PENDING_APPROVAL" || payload.lines.length === 0}
-                      >
-                        Send Quote
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void updateApprovalStatus("APPROVED")}
-                        disabled={currentEstimate?.status === "APPROVED" || payload.lines.length === 0}
-                      >
-                        Mark Quote Approved
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void updateApprovalStatus("REJECTED")}
-                        disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
-                      >
-                        Mark Quote Rejected
-                      </button>
+                    ) : null}
+                    {nextAction.actionKind === "prepareQuote" ? (
                       <button
                         type="button"
                         className="primary"
                         onClick={() => void prepareCustomerQuoteLink()}
                         disabled={preparingCustomerQuote || payload.lines.length === 0}
                       >
-                        {preparingCustomerQuote
-                          ? "Preparing Quote Link..."
-                          : currentEstimate?.customerQuote?.status === "ACTIVE"
-                            ? "Copy Customer Quote Link"
-                            : "Prepare Customer Quote Link"}
+                        {preparingCustomerQuote ? "Preparing Quote Link..." : nextAction.actionLabel}
                       </button>
-                    </>
-                  ) : (
-                    <span className="muted-text">Quote state is locked to the current lifecycle stage for this job.</span>
-                  )}
+                    ) : null}
+                    {nextAction.actionKind === "moveToBench" ? (
+                      <button type="button" className="primary" onClick={() => void updateStageStatus("IN_PROGRESS")} disabled={updatingStatus}>
+                        {nextAction.actionLabel}
+                      </button>
+                    ) : null}
+                    {nextAction.actionKind === "openPosHandoff" ? (
+                      <button type="button" className="primary" onClick={openPosHandoff}>
+                        {nextAction.actionLabel}
+                      </button>
+                    ) : null}
+                    {nextAction.actionKind === "jumpToBuild" ? (
+                      <a href="#workshop-job-build" className="button-link">
+                        {nextAction.actionLabel}
+                      </a>
+                    ) : null}
+                    {nextAction.actionKind === "jumpToParts" ? (
+                      <a href="#workshop-job-parts" className="button-link">
+                        {nextAction.actionLabel}
+                      </a>
+                    ) : null}
+                    <a href="#workshop-job-progress" className="button-link">
+                      Review progress
+                    </a>
+                  </div>
+                </section>
+
+                <div className="workshop-job-signal-grid">
+                  <article className="workshop-job-signal-card workshop-job-signal-card--estimate" data-testid="workshop-job-estimate-state">
+                    <div className="workshop-job-signal-card__header">
+                      <div>
+                        <span className="table-secondary">Estimate & approval</span>
+                        <h3>{estimateSignal.label}</h3>
+                      </div>
+                      <span className={estimateSignal.className}>{estimateSignal.label}</span>
+                    </div>
+                    <p className="muted-text">{estimateSignal.detail}</p>
+
+                    <div className="workshop-job-signal-card__meta">
+                      <div>
+                        <span className="metric-label">Live total</span>
+                        <strong>{formatMoney(subtotalPence)}</strong>
+                      </div>
+                      <div>
+                        <span className="metric-label">Current version</span>
+                        <strong>{latestSavedEstimate ? `v${latestSavedEstimate.version}` : "Not saved"}</strong>
+                      </div>
+                      <div>
+                        <span className="metric-label">Saved total</span>
+                        <strong>{latestSavedEstimate ? formatMoney(latestSavedEstimate.subtotalPence) : "-"}</strong>
+                      </div>
+                      <div>
+                        <span className="metric-label">Portal</span>
+                        <strong>
+                          {currentEstimate?.customerQuote
+                            ? workshopCustomerQuoteLinkStatusLabel(currentEstimate.customerQuote.status)
+                            : "Not prepared"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="workshop-job-signal-card__stack">
+                      <div className="actions-inline">
+                        {canPersistApprovalStatus(displayStatus) ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void saveEstimateSnapshot()}
+                              disabled={savingEstimate || payload.lines.length === 0}
+                            >
+                              {savingEstimate ? "Saving Snapshot..." : "Save quote snapshot"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void updateApprovalStatus("WAITING_FOR_APPROVAL")}
+                              disabled={currentEstimate?.status === "PENDING_APPROVAL" || payload.lines.length === 0}
+                            >
+                              Send quote
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void updateApprovalStatus("APPROVED")}
+                              disabled={currentEstimate?.status === "APPROVED" || payload.lines.length === 0}
+                            >
+                              Mark approved
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void updateApprovalStatus("REJECTED")}
+                              disabled={currentEstimate?.status === "REJECTED" || payload.lines.length === 0}
+                            >
+                              Mark rejected
+                            </button>
+                            <button
+                              type="button"
+                              className="primary"
+                              onClick={() => void prepareCustomerQuoteLink()}
+                              disabled={preparingCustomerQuote || payload.lines.length === 0}
+                            >
+                              {preparingCustomerQuote
+                                ? "Preparing Quote Link..."
+                                : currentEstimate?.customerQuote?.status === "ACTIVE"
+                                  ? "Copy customer quote link"
+                                  : "Prepare customer quote link"}
+                            </button>
+                          </>
+                        ) : (
+                          <span className="muted-text">Quote actions are limited by the current lifecycle state.</span>
+                        )}
+                      </div>
+
+                      <div className="workshop-job-summary-list">
+                        <div>
+                          <span className="metric-label">Approval decision</span>
+                          <strong>{estimateDecisionSourceLabel(latestSavedEstimate?.decisionSource)}</strong>
+                        </div>
+                        <div>
+                          <span className="metric-label">Requested</span>
+                          <strong>{formatOptionalDateTime(latestSavedEstimate?.requestedAt)}</strong>
+                        </div>
+                        <div>
+                          <span className="metric-label">Approved</span>
+                          <strong>{formatOptionalDateTime(latestSavedEstimate?.approvedAt)}</strong>
+                        </div>
+                        <div>
+                          <span className="metric-label">Rejected</span>
+                          <strong>{formatOptionalDateTime(latestSavedEstimate?.rejectedAt)}</strong>
+                        </div>
+                        <div>
+                          <span className="metric-label">Portal expiry</span>
+                          <strong>{formatOptionalDateTime(latestSavedEstimate?.customerQuote?.expiresAt ?? null)}</strong>
+                        </div>
+                        <div>
+                          <span className="metric-label">Quote drift</span>
+                          <strong>{estimateNeedsRefresh ? "Needs refresh" : "Aligned"}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {currentEstimateQuoteUrl ? (
+                      <div className="actions-inline">
+                        <a href={currentEstimateQuoteUrl} target="_blank" rel="noreferrer" className="button-link button-link-compact">
+                          Open customer portal
+                        </a>
+                        <code>{currentEstimateQuoteUrl}</code>
+                      </div>
+                    ) : null}
+                  </article>
+
+                  <article className="workshop-job-signal-card" data-testid="workshop-job-activity-summary">
+                    <div className="workshop-job-signal-card__header">
+                      <div>
+                        <span className="table-secondary">Progress narrative</span>
+                        <h3>Latest meaningful activity</h3>
+                      </div>
+                      <button type="button" className="button-link" onClick={() => void loadTimeline()} disabled={timelineLoading}>
+                        {timelineLoading ? "Refreshing..." : "Refresh timeline"}
+                      </button>
+                    </div>
+                    <p className="muted-text">
+                      Internal notes, customer contact, and domain events are separated here so staff can see the most important recent movement without scanning every section below.
+                    </p>
+                    <div className="workshop-job-highlight-list">
+                      {latestActivityHighlights.map((highlight) => (
+                        <div key={highlight.label} className="workshop-job-highlight-list__item">
+                          <span className="metric-label">{highlight.label}</span>
+                          <strong>{highlight.detail}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="actions-inline">
+                      <a href="#workshop-job-progress" className="button-link">Open notes</a>
+                      <a href="#workshop-job-conversation" className="button-link">Open customer updates</a>
+                    </div>
+                  </article>
                 </div>
               </div>
+
+              <aside className="workshop-job-hub__side">
+                <article className="workshop-job-signal-card" data-testid="workshop-job-collection-state">
+                  <div className="workshop-job-signal-card__header">
+                    <div>
+                      <span className="table-secondary">Collection & handoff</span>
+                      <h3>{collectionSignal.label}</h3>
+                    </div>
+                    <span className={collectionSignal.className}>{collectionSignal.label}</span>
+                  </div>
+                  <p className="muted-text">{collectionSignal.detail}</p>
+                  <div className="workshop-job-summary-list">
+                    <div>
+                      <span className="metric-label">Deposit</span>
+                      <strong>{formatWorkshopDepositState(payload.job.depositStatus, payload.job.depositRequiredPence)}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Estimated remaining</span>
+                      <strong>{formatMoney(estimatedRemainingPence)}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Sale / basket</span>
+                      <strong>{payload.job.sale ? `Sale ${payload.job.sale.id.slice(0, 8)}` : payload.job.finalizedBasketId ? `Basket ${payload.job.finalizedBasketId.slice(0, 8)}` : "None yet"}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Customer pickup note</span>
+                      <strong>{latestCustomerNote ? truncateText(latestCustomerNote.note, 72) : "No customer pickup note"}</strong>
+                    </div>
+                  </div>
+                  <div className="actions-inline">
+                    {(payload.job.sale || payload.job.finalizedBasketId || displayStatus === "BIKE_READY") ? (
+                      <button type="button" className="primary" onClick={openPosHandoff}>
+                        {payload.job.sale ? "Open linked sale" : payload.job.finalizedBasketId ? "Open POS handoff" : "Start POS handoff"}
+                      </button>
+                    ) : null}
+                    <Link to="/workshop/collection" className="button-link">
+                      Open collection queue
+                    </Link>
+                  </div>
+                </article>
+
+                <article className="workshop-job-signal-card">
+                  <div className="workshop-job-signal-card__header">
+                    <div>
+                      <span className="table-secondary">Service snapshot</span>
+                      <h3>Customer, bike, timing, and blocker</h3>
+                    </div>
+                    <span className={workflowSummary.blockerClassName}>{workflowSummary.blockerLabel}</span>
+                  </div>
+                  <div className="workshop-job-summary-list">
+                    <div>
+                      <span className="metric-label">Customer</span>
+                      <strong>{payload.job.customerName || "Customer pending"}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Bike</span>
+                      <strong>{payload.job.bikeDescription || "Bike details pending"}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Linked bike record</span>
+                      <strong>
+                        {payload.job.bike ? (
+                          <Link to={`/customers/bikes/${payload.job.bike.id}`}>{payload.job.bike.displayName}</Link>
+                        ) : "No linked bike record"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Technician</span>
+                      <strong>{payload.job.assignedStaffName || "Unassigned"}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Scheduled</span>
+                      <strong>{formatOptionalDateTime(payload.job.scheduledStartAt || payload.job.scheduledDate)}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Parts state</span>
+                      <strong>{partsOverview?.summary.partsStatus ?? "OK"}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Next bench step</span>
+                      <strong>{workflowSummary.nextStep}</strong>
+                    </div>
+                    <div>
+                      <span className="metric-label">Updated</span>
+                      <strong>{new Date(payload.job.updatedAt).toLocaleString()}</strong>
+                    </div>
+                  </div>
+                  {payload.job.notes ? (
+                    <div className="restricted-panel">
+                      <strong>Check-in summary</strong>
+                      <p className="muted-text" style={{ marginBottom: 0 }}>{payload.job.notes}</p>
+                    </div>
+                  ) : null}
+                </article>
+              </aside>
             </div>
-
-            {latestInternalNote || latestCustomerNote ? (
-              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-                <div className="job-meta-grid">
-                  <div>
-                    <strong>Latest internal note:</strong>{" "}
-                    {latestInternalNote ? truncateText(latestInternalNote.note) : "No internal notes yet."}
-                  </div>
-                  <div>
-                    <strong>Latest customer note:</strong>{" "}
-                    {latestCustomerNote ? truncateText(latestCustomerNote.note) : "No customer-visible notes yet."}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {displayStatus === "BIKE_READY" ? (
-              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-                Collection is completed through POS checkout. Use the POS handoff button above instead of
-                manually marking the job collected.
-              </div>
-            ) : null}
-
-            {collectionSummary ? (
-              <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-                <strong>Collection Summary</strong>
-                <div className="job-meta-grid" style={{ marginTop: "8px" }}>
-                  <div><strong>Estimate total:</strong> {formatMoney(subtotalPence)}</div>
-                  <div><strong>Parts fitted:</strong> {partsOverview?.summary.consumedQty ?? 0}</div>
-                  <div><strong>Outstanding parts:</strong> {partsOverview?.summary.outstandingQty ?? 0}</div>
-                  <div>
-                    <strong>Customer note for pickup:</strong>{" "}
-                    {latestCustomerNote ? truncateText(latestCustomerNote.note) : "No customer-visible note recorded."}
-                  </div>
-                </div>
-              </div>
-            ) : null}
           </>
         ) : null}
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-bike">
         <div className="card-header-row">
           <div>
             <h2>Bike Record</h2>
@@ -1963,7 +2496,7 @@ export const WorkshopJobPage = () => {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-estimate">
         <div className="card-header-row">
           <div>
             <h2>Estimate</h2>
@@ -2231,7 +2764,7 @@ export const WorkshopJobPage = () => {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-conversation">
         <div className="card-header-row">
           <div>
             <h2>Customer Conversation</h2>
@@ -2364,7 +2897,7 @@ export const WorkshopJobPage = () => {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-notifications">
         <div className="card-header-row">
           <div>
             <h2>Notifications</h2>
@@ -2462,7 +2995,7 @@ export const WorkshopJobPage = () => {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-attachments">
         <div className="card-header-row">
           <div>
             <h2>Attachments &amp; Photos</h2>
@@ -2576,7 +3109,7 @@ export const WorkshopJobPage = () => {
         ) : null}
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-parts">
         <div className="card-header-row">
           <div>
             <h2>Parts Allocation</h2>
@@ -2786,7 +3319,7 @@ export const WorkshopJobPage = () => {
         )}
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-progress">
         <div className="card-header-row">
           <div>
             <h2>Progress & Notes</h2>
@@ -2871,7 +3404,7 @@ export const WorkshopJobPage = () => {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card" id="workshop-job-build">
         <h2>Add Labour</h2>
         <div className="filter-row">
           <label className="grow">
