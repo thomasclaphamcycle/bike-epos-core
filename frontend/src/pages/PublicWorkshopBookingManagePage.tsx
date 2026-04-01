@@ -56,6 +56,51 @@ const formatDateLabel = (value: string | null | undefined) => {
   });
 };
 
+const formatDateTimeLabel = (value: string | null | undefined) => {
+  if (!value) {
+    return "Not set";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
+const BOOKING_JOURNEY_STEPS = [
+  "Request sent",
+  "Workshop confirms timing",
+  "Bike in workshop",
+  "Ready to collect",
+  "Collected",
+];
+
+const getBookingJourneyIndex = (status: string) => {
+  switch (status) {
+    case "OPEN":
+    case "BOOKED":
+      return 1;
+    case "BIKE_ARRIVED":
+    case "IN_PROGRESS":
+    case "WAITING_FOR_APPROVAL":
+    case "WAITING_FOR_PARTS":
+    case "ON_HOLD":
+      return 2;
+    case "READY_FOR_COLLECTION":
+      return 3;
+    case "COMPLETED":
+    case "CLOSED":
+      return 4;
+    default:
+      return 0;
+  }
+};
+
 const getBookingStatusCopy = (status: string) => {
   switch (status) {
     case "OPEN":
@@ -215,13 +260,16 @@ export const PublicWorkshopBookingManagePage = () => {
             <h1>Workshop booking details</h1>
             <p className="customer-booking-intro">
               Check the request details, see what happens next, and update the requested date if the booking has not
-              been confirmed yet.
+              been confirmed yet. This secure page keeps the workshop request, next step, and booking-safe updates in one place.
             </p>
           </div>
           <div className="customer-booking-hero-card">
             <strong>{statusCopy.label}</strong>
             <p>{statusCopy.detail}</p>
             {payload ? <p>{payload.bookingRequest.timingExpectation}</p> : null}
+            {payload?.manageTokenExpiresAt ? (
+              <p>Secure link valid until {formatDateTimeLabel(payload.manageTokenExpiresAt)}</p>
+            ) : null}
           </div>
         </div>
 
@@ -229,6 +277,27 @@ export const PublicWorkshopBookingManagePage = () => {
           <Link to="/site/workshop">Workshop information</Link>
           <Link to="/site/book-workshop">New booking request</Link>
         </div>
+
+        {payload ? (
+          <section className="customer-booking-journey" data-testid="customer-booking-manage-journey">
+            {BOOKING_JOURNEY_STEPS.map((label, index) => {
+              const active = index === getBookingJourneyIndex(payload.status);
+              const complete = index < getBookingJourneyIndex(payload.status);
+              return (
+                <article
+                  key={label}
+                  className={`customer-booking-journey-step${active ? " customer-booking-journey-step--active" : ""}${complete ? " customer-booking-journey-step--complete" : ""}`}
+                >
+                  <span className="customer-booking-journey-number">{index + 1}</span>
+                  <div>
+                    <strong>{label}</strong>
+                    {active ? <p>{statusCopy.detail}</p> : null}
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        ) : null}
 
         {loading ? <p>Loading booking…</p> : null}
         {success ? <p className="success-text">{success}</p> : null}
@@ -246,7 +315,7 @@ export const PublicWorkshopBookingManagePage = () => {
 
               <div className="customer-booking-summary-grid">
                 <article className="customer-booking-summary-card customer-booking-summary-card--highlight">
-                  <span>Status</span>
+                  <span>What happens now</span>
                   <strong>{statusCopy.label}</strong>
                   <p>{statusCopy.detail}</p>
                 </article>
@@ -256,12 +325,12 @@ export const PublicWorkshopBookingManagePage = () => {
                   <p>{payload.bookingRequest.preferredTime || "Any time"}</p>
                 </article>
                 <article className="customer-booking-summary-card">
-                  <span>Service</span>
+                  <span>Service request</span>
                   <strong>{payload.bookingRequest.serviceLabel || "General workshop request"}</strong>
                   <p>{payload.bookingRequest.serviceRequest || "The workshop team will review the request details."}</p>
                 </article>
                 <article className="customer-booking-summary-card">
-                  <span>Deposit</span>
+                  <span>Deposit and secure link</span>
                   <strong>
                     {payload.depositRequiredPence > 0 ? formatMoney(payload.depositRequiredPence) : "No deposit"}
                   </strong>
@@ -269,6 +338,10 @@ export const PublicWorkshopBookingManagePage = () => {
                     {payload.depositStatus === "PAID"
                       ? "Deposit received."
                       : "If a deposit is needed, the shop will confirm how to pay it."}
+                    {" "}
+                    {payload.manageTokenExpiresAt
+                      ? `This secure link stays active until ${formatDateTimeLabel(payload.manageTokenExpiresAt)}.`
+                      : ""}
                   </p>
                 </article>
               </div>
@@ -292,7 +365,16 @@ export const PublicWorkshopBookingManagePage = () => {
                 </article>
                 <article className="customer-booking-detail-card">
                   <h3>What happens next</h3>
-                  <p>The shop will review the request, confirm the timing if needed, and contact you with updates.</p>
+                  <p>The shop will review the request, confirm timing if needed, and keep you updated if approval or collection details become important.</p>
+                </article>
+                <article className="customer-booking-detail-card">
+                  <h3>How quotes and updates arrive</h3>
+                  <p>If the workshop needs your approval for extra work, they will send a separate secure workshop link so you can review the quote clearly before they continue.</p>
+                </article>
+                <article className="customer-booking-detail-card">
+                  <h3>Last booking activity</h3>
+                  <p>Created {formatDateTimeLabel(payload.createdAt)}</p>
+                  <p>Last updated {formatDateTimeLabel(payload.updatedAt)}</p>
                 </article>
               </div>
             </section>

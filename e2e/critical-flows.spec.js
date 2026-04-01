@@ -1789,6 +1789,106 @@ test("Login then workshop add labour and checkout marks job as collected", async
   await expect(page.locator("#jobs-wrap")).toContainText("COLLECTED");
 });
 
+test("Public workshop portal shows clear approval and quote-change guidance", async ({ page, request }) => {
+  const token = uniqueToken("public-workshop");
+  const customer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: `Portal Customer ${token}`,
+      email: `${token}@example.com`,
+      phone: `07111${Math.floor(Math.random() * 90000) + 10000}`,
+    },
+  });
+
+  const workshopJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerId: customer.id,
+      bikeDescription: `Portal Bike ${token}`,
+      status: "BOOKED",
+      notes: `Portal notes ${token}`,
+    },
+  });
+
+  const line = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(workshopJob.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "LABOUR",
+        description: "Brake service and safety check",
+        qty: 1,
+        unitPricePence: 6500,
+      },
+    },
+  );
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(workshopJob.id)}/approval`,
+    "MANAGER",
+    {
+      data: {
+        status: "WAITING_FOR_APPROVAL",
+      },
+    },
+  );
+
+  const link = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(workshopJob.id)}/customer-quote-link`,
+    "MANAGER",
+    { data: {} },
+  );
+  const quoteToken = link.customerQuote.publicPath.split("/").pop();
+  if (!quoteToken) {
+    throw new Error("Expected customer quote token in public path.");
+  }
+
+  await page.goto(`${frontendBaseUrl}/public/workshop/${encodeURIComponent(quoteToken)}`);
+  await expect(page.getByTestId("workshop-portal-action-summary")).toContainText("Action needed");
+  await expect(page.getByTestId("workshop-portal-action-summary")).toContainText("Approve quote");
+  await expect(page.getByTestId("workshop-portal-collection-summary")).toContainText("Approval outstanding");
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "PATCH",
+    `/api/workshop/jobs/${encodeURIComponent(workshopJob.id)}/lines/${encodeURIComponent(line.line.id)}`,
+    "MANAGER",
+    {
+      data: {
+        description: "Brake service, cable swap, and safety check",
+        qty: 1,
+        unitPricePence: 7800,
+      },
+    },
+  );
+
+  await page.reload();
+  await expect(page.getByTestId("workshop-portal-action-summary")).toContainText("Quote updated");
+  await expect(page.getByTestId("workshop-portal-estimate-changes")).toContainText("Total change: +£13.00");
+  await expect(page.getByTestId("workshop-portal-estimate-changes")).toContainText("Brake service, cable swap, and safety check");
+});
+
+test("Public workshop booking flow keeps the secure customer journey visible", async ({ page }) => {
+  await page.goto(`${frontendBaseUrl}/site/book-workshop`);
+
+  await expect(page.getByTestId("customer-booking-journey")).toContainText("Approve extra work if needed");
+  await page.getByLabel("What would you like us to do?").fill("Front brake rub and gear indexing");
+  await page.getByLabel("Bike description").fill("Blue commuter bike with pannier rack");
+  await page.getByLabel("First name").fill("Casey");
+  await page.getByLabel("Last name").fill("Rider");
+  await page.getByLabel("Phone").fill("07111222333");
+  await page.getByRole("button", { name: "Send booking request" }).click();
+
+  await expect(page).toHaveURL(/\/site\/bookings\//);
+  await expect(page.getByText("Your workshop request has been sent.")).toBeVisible();
+  await expect(page.getByTestId("customer-booking-manage-journey")).toContainText("Workshop confirms timing");
+  await expect(page.getByText("How quotes and updates arrive")).toBeVisible();
+});
+
 test("Login then inventory adjust page can increment on-hand quantity", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",

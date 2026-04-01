@@ -69,6 +69,25 @@ const PREFERRED_TIME_OPTIONS = [
   { value: "ANYTIME", label: "Any time" },
 ];
 
+const CUSTOMER_BOOKING_STEPS = [
+  {
+    title: "Send your request",
+    detail: "Tell the shop what the bike needs and which date would suit you best.",
+  },
+  {
+    title: "Workshop confirms timing",
+    detail: "The team reviews the request and confirms the final drop-off plan with you.",
+  },
+  {
+    title: "Approve extra work if needed",
+    detail: "If the repair changes, you will get a secure quote link before the workshop continues.",
+  },
+  {
+    title: "Collect when ready",
+    detail: "You keep getting customer-safe updates until the bike is ready to collect.",
+  },
+];
+
 export const PublicWorkshopBookingPage = () => {
   const navigate = useNavigate();
   const [meta, setMeta] = useState<PublicWorkshopBookingMeta | null>(null);
@@ -182,7 +201,7 @@ export const PublicWorkshopBookingPage = () => {
             <h1>Book a workshop visit</h1>
             <p className="customer-booking-intro">
               Tell us about the bike, the work you need, and the date that would suit you best. We will confirm the
-              final timing after we review the request.
+              final timing after we review the request, and you will keep a secure link for follow-up updates.
             </p>
           </div>
           <div className="customer-booking-hero-card">
@@ -191,6 +210,7 @@ export const PublicWorkshopBookingPage = () => {
             <p>
               {meta ? `Typical booking deposit: ${formatMoney(meta.booking.defaultDepositPence)}` : "Deposit details will be confirmed if needed."}
             </p>
+            <p>You will receive a secure manage link after submitting this request.</p>
           </div>
         </div>
 
@@ -198,6 +218,18 @@ export const PublicWorkshopBookingPage = () => {
           <Link to="/site/workshop">Workshop information</Link>
           <Link to="/site/contact">Contact the shop</Link>
         </div>
+
+        <section className="customer-booking-journey" data-testid="customer-booking-journey">
+          {CUSTOMER_BOOKING_STEPS.map((step, index) => (
+            <article key={step.title} className="customer-booking-journey-step">
+              <span className="customer-booking-journey-number">{index + 1}</span>
+              <div>
+                <strong>{step.title}</strong>
+                <p>{step.detail}</p>
+              </div>
+            </article>
+          ))}
+        </section>
 
         {loading ? <p>Loading workshop booking details…</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
@@ -384,10 +416,18 @@ export const PublicWorkshopBookingPage = () => {
                   <dd>{PREFERRED_TIME_OPTIONS.find((option) => option.value === form.preferredTime)?.label || "Any time"}</dd>
                 </div>
                 <div>
+                  <dt>Secure follow-up</dt>
+                  <dd>You will get a secure manage link as soon as the request is sent.</dd>
+                </div>
+                <div>
                   <dt>What happens next</dt>
-                  <dd>The workshop will review this request and confirm the next step using your contact details.</dd>
+                  <dd>The workshop reviews this request, confirms timing, and sends updates if approval or collection details are needed.</dd>
                 </div>
               </dl>
+              <div className="customer-booking-info-callout">
+                <strong>This page starts the customer journey.</strong>
+                <p>Quotes, workshop updates, and ready-to-collect messages stay tied to the secure follow-up flow so you always know the next step.</p>
+              </div>
               <button className="primary" type="submit" disabled={submitting || !form.scheduledDate}>
                 {submitting ? "Sending request…" : "Send booking request"}
               </button>

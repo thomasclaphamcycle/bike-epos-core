@@ -107,6 +107,63 @@
   border-color: rgba(24, 85, 59, 0.18);
 }
 
+.workshop-portal-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 248, 245, 0.95) 100%);
+}
+
+.workshop-portal-action--action {
+  border-color: rgba(46, 124, 246, 0.2);
+  background: linear-gradient(180deg, rgba(240, 247, 255, 0.98) 0%, rgba(248, 251, 255, 0.98) 100%);
+}
+
+.workshop-portal-action--warning {
+  border-color: rgba(180, 83, 9, 0.2);
+  background: linear-gradient(180deg, rgba(255, 248, 236, 0.98) 0%, rgba(255, 252, 245, 0.98) 100%);
+}
+
+.workshop-portal-action--success,
+.workshop-portal-action--ready {
+  border-color: rgba(24, 85, 59, 0.18);
+  background: linear-gradient(180deg, rgba(236, 247, 239, 0.98) 0%, rgba(250, 252, 246, 0.98) 100%);
+}
+
+.workshop-portal-action-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-portal-action-eyebrow {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4b5d70;
+}
+
+.workshop-portal-action-title {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #0f172a;
+}
+
+.workshop-portal-action-detail,
+.workshop-portal-action-next {
+  margin: 0;
+  color: #415264;
+}
+
+.workshop-portal-action-next {
+  font-weight: 600;
+}
+
 .workshop-portal-summary-label {
   font-size: 0.78rem;
   font-weight: 700;
@@ -146,10 +203,41 @@
   margin: 0;
 }
 
+.workshop-portal-panel--accent {
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f8fd 100%);
+}
+
 .workshop-portal-bike-name {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
+}
+
+.workshop-portal-section-lead {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.workshop-portal-callout,
+.workshop-portal-inline-note {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.workshop-portal-callout p,
+.workshop-portal-inline-note p {
+  margin: 0;
+}
+
+.workshop-portal-key-grid {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .workshop-portal-detail-list {
@@ -251,6 +339,34 @@
   margin: 4px 0 0;
 }
 
+.workshop-portal-change-list,
+.workshop-portal-message-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.workshop-portal-change-card,
+.workshop-portal-message-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.workshop-portal-change-card p,
+.workshop-portal-message-summary-card p {
+  margin: 0;
+  color: #536171;
+}
+
+.workshop-portal-change-amount {
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .workshop-portal-timeline {
   list-style: none;
   margin: 0;
@@ -297,6 +413,10 @@
 
   .workshop-portal-cta {
     align-items: stretch;
+  }
+
+  .workshop-portal-action {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -10560,6 +10680,50 @@ body.rota-row-drag-copy-active {
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
+}
+
+.customer-booking-journey {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.customer-booking-journey-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fbfdff;
+}
+
+.customer-booking-journey-step--active {
+  border-color: rgba(46, 124, 246, 0.24);
+  background: linear-gradient(180deg, #eef6ff 0%, #f8fbff 100%);
+}
+
+.customer-booking-journey-step--complete {
+  border-color: rgba(24, 85, 59, 0.16);
+  background: linear-gradient(180deg, #f1f8f3 0%, #fbfdfb 100%);
+}
+
+.customer-booking-journey-step p {
+  margin: 6px 0 0;
+  color: #536171;
+}
+
+.customer-booking-journey-number {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #dce6f4;
+  color: #16324a;
+  font-weight: 700;
 }
 
 .customer-booking-form,
