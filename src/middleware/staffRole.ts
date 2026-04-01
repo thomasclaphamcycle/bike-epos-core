@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { UserRole } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { updateRequestContext } from "../lib/requestContext";
 import { parseCookieHeader } from "../utils/cookies";
@@ -221,27 +221,48 @@ const resolveHeaderFallbackUser = async (req: Request): Promise<AuthenticatedUse
     };
   }
 
-  const user = await prisma.user.upsert({
+  const userSelect = {
+    id: true,
+    username: true,
+    email: true,
+    name: true,
+    role: true,
+    isActive: true,
+  } satisfies Prisma.UserSelect;
+
+  const existingUser = await prisma.user.findUnique({
     where: { id: actorId },
-    create: {
-      id: actorId,
-      username: toHeaderUserName(actorId),
-      name: actorId,
-      passwordHash: "__header_actor__",
-      role: requestedRole,
-      isActive: true,
-    },
-    // Never mutate existing users from auth headers.
-    update: {},
-    select: {
-      id: true,
-      username: true,
-      email: true,
-      name: true,
-      role: true,
-      isActive: true,
-    },
+    select: userSelect,
   });
+
+  if (existingUser) {
+    return toAuthenticatedUser(existingUser, "header");
+  }
+
+  // Header-auth actor bootstrap must be duplicate-safe because smoke tests
+  // and other internal callers can arrive concurrently with the same actor id.
+  await prisma.user.createMany({
+    data: [
+      {
+        id: actorId,
+        username: toHeaderUserName(actorId),
+        name: actorId,
+        passwordHash: "__header_actor__",
+        role: requestedRole,
+        isActive: true,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  const user = await prisma.user.findUnique({
+    where: { id: actorId },
+    select: userSelect,
+  });
+
+  if (!user) {
+    throw new Error(`Header-auth actor ${actorId} could not be resolved after bootstrap`);
+  }
 
   return toAuthenticatedUser(user, "header");
 };
