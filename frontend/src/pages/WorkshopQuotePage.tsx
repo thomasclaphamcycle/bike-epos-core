@@ -39,6 +39,25 @@ type PublicWorkshopPortalPayload = {
     nextStep: string;
     needsCustomerAction: boolean;
   };
+  collection: {
+    state:
+      | "AWAITING_APPROVAL"
+      | "IN_WORKSHOP"
+      | "READY_PENDING_CHECKOUT"
+      | "READY_PAYMENT_DUE"
+      | "READY_TO_COLLECT"
+      | "COLLECTED"
+      | "CLOSED";
+    headline: string;
+    detail: string;
+    nextStep: string;
+    totalPence: number | null;
+    outstandingPence: number | null;
+    paidPence: number;
+    depositPaidPence: number;
+    depositRequiredPence: number;
+    depositStatus: "NOT_REQUIRED" | "REQUIRED" | "PAID";
+  };
   job: {
     status: "BOOKED" | "IN_PROGRESS" | "READY" | "COLLECTED" | "CLOSED";
     statusLabel: string;
@@ -95,6 +114,25 @@ type PublicWorkshopPortalPayload = {
       productName: string | null;
       variantName: string | null;
       variantSku: string | null;
+    }>;
+  } | null;
+  estimateChangeSummary: {
+    previousVersion: number;
+    currentVersion: number | null;
+    previousSubtotalPence: number;
+    currentSubtotalPence: number;
+    differencePence: number;
+    changes: Array<{
+      changeType: "ADDED" | "REMOVED" | "UPDATED";
+      type: "LABOUR" | "PART";
+      description: string;
+      meta: string | null;
+      previousQty: number | null;
+      currentQty: number | null;
+      previousUnitPricePence: number | null;
+      currentUnitPricePence: number | null;
+      previousLineTotalPence: number | null;
+      currentLineTotalPence: number | null;
     }>;
   } | null;
   workSummary: {
@@ -161,7 +199,34 @@ type PublicWorkshopAttachmentsResponse = {
   }>;
 };
 
+type WorkshopPortalActionSummary = {
+  tone: "action" | "info" | "warning" | "success" | "ready";
+  eyebrow: string;
+  title: string;
+  detail: string;
+  nextStep: string;
+  primaryLink?: {
+    href: string;
+    label: string;
+  };
+  secondaryLink?: {
+    href: string;
+    label: string;
+  };
+};
+
+type PublicWorkshopEstimateChange = NonNullable<PublicWorkshopPortalPayload["estimateChangeSummary"]>;
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const formatSignedMoney = (pence: number) => `${pence >= 0 ? "+" : "-"}${formatMoney(Math.abs(pence))}`;
+
+const truncateText = (value: string, maxLength = 100) => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength - 1).trimEnd()}...`;
+};
 
 const formatFileSize = (bytes: number) => {
   if (bytes < 1024) {
@@ -242,11 +307,51 @@ const customerProgressClass = (
   }
 };
 
+const collectionStatusClass = (
+  state: PublicWorkshopPortalPayload["collection"]["state"],
+) => {
+  switch (state) {
+    case "AWAITING_APPROVAL":
+      return "status-badge status-warning";
+    case "READY_PENDING_CHECKOUT":
+    case "READY_PAYMENT_DUE":
+    case "READY_TO_COLLECT":
+      return "status-badge status-ready";
+    case "COLLECTED":
+      return "status-badge status-complete";
+    case "CLOSED":
+      return "status-badge status-cancelled";
+    default:
+      return "status-badge status-info";
+  }
+};
+
+const collectionStatusLabel = (
+  state: PublicWorkshopPortalPayload["collection"]["state"],
+) => {
+  switch (state) {
+    case "AWAITING_APPROVAL":
+      return "Approval outstanding";
+    case "READY_PENDING_CHECKOUT":
+      return "Ready to collect";
+    case "READY_PAYMENT_DUE":
+      return "Payment due at collection";
+    case "READY_TO_COLLECT":
+      return "Nothing left to pay";
+    case "COLLECTED":
+      return "Collected";
+    case "CLOSED":
+      return "Closed";
+    default:
+      return "In workshop";
+  }
+};
+
 const portalProgressStepLabels = [
-  "Booked",
-  "Quote",
-  "Workshop",
-  "Ready",
+  "Booked in",
+  "Review quote",
+  "In workshop",
+  "Ready to collect",
   "Collected",
 ];
 
@@ -278,18 +383,250 @@ const buildBikeDetails = (bike: PublicWorkshopPortalPayload["bike"]) =>
     bike.make ? { label: "Make", value: bike.make } : null,
     bike.model ? { label: "Model", value: bike.model } : null,
     bike.year ? { label: "Year", value: `${bike.year}` } : null,
-    bike.bikeTypeLabel ? { label: "Bike Type", value: bike.bikeTypeLabel } : null,
+    bike.bikeTypeLabel ? { label: "Bike type", value: bike.bikeTypeLabel } : null,
     bike.colour ? { label: "Colour", value: bike.colour } : null,
-    bike.wheelSize ? { label: "Wheel Size", value: bike.wheelSize } : null,
-    bike.frameSize ? { label: "Frame Size", value: bike.frameSize } : null,
+    bike.wheelSize ? { label: "Wheel size", value: bike.wheelSize } : null,
+    bike.frameSize ? { label: "Frame size", value: bike.frameSize } : null,
     bike.groupset ? { label: "Groupset", value: bike.groupset } : null,
-    bike.motorBrand ? { label: "Motor Brand", value: bike.motorBrand } : null,
-    bike.motorModel ? { label: "Motor Model", value: bike.motorModel } : null,
+    bike.motorBrand ? { label: "Motor brand", value: bike.motorBrand } : null,
+    bike.motorModel ? { label: "Motor model", value: bike.motorModel } : null,
   ].filter((item): item is { label: string; value: string } => item !== null);
 
 const renderLineMeta = (
   line: PublicWorkshopPortalPayload["workSummary"]["lines"][number],
 ) => [line.productName, line.variantName, line.variantSku].filter(Boolean).join(" · ");
+
+const doLineSummariesMatch = (
+  left: Array<PublicWorkshopPortalPayload["workSummary"]["lines"][number]>,
+  right: Array<PublicWorkshopPortalPayload["workSummary"]["lines"][number]>,
+) =>
+  left.length === right.length
+  && left.every((line, index) => {
+    const comparison = right[index];
+    return comparison
+      && line.type === comparison.type
+      && line.description === comparison.description
+      && line.qty === comparison.qty
+      && line.unitPricePence === comparison.unitPricePence
+      && line.lineTotalPence === comparison.lineTotalPence
+      && line.productName === comparison.productName
+      && line.variantName === comparison.variantName
+      && line.variantSku === comparison.variantSku;
+  });
+
+const buildWaitingSummary = (payload: PublicWorkshopPortalPayload) => {
+  if (payload.portal.canApprove) {
+    return {
+      label: "Waiting on you",
+      detail: "The workshop is paused until you approve the latest quote or tell them not to continue.",
+    };
+  }
+
+  switch (payload.collection.state) {
+    case "READY_PENDING_CHECKOUT":
+    case "READY_PAYMENT_DUE":
+    case "READY_TO_COLLECT":
+      return {
+        label: "Waiting on collection",
+        detail: "The repair is finished and the next move is handover or collection timing.",
+      };
+    case "COLLECTED":
+      return {
+        label: "Complete",
+        detail: "The bike has already been handed back.",
+      };
+    case "CLOSED":
+      return {
+        label: "Closed",
+        detail: "This secure link is now only for reference.",
+      };
+    default:
+      break;
+  }
+
+  if (payload.customerProgress.stage === "WAITING") {
+    return {
+      label: payload.customerProgress.label,
+      detail: payload.customerProgress.detail,
+    };
+  }
+
+  if (payload.customerProgress.stage === "IN_PROGRESS") {
+    return {
+      label: "Workshop at work",
+      detail: "The mechanics are progressing the job and will contact you if anything changes.",
+    };
+  }
+
+  return {
+    label: "Workshop update",
+    detail: payload.customerProgress.detail,
+  };
+};
+
+const buildPortalActionSummary = (
+  payload: PublicWorkshopPortalPayload,
+): WorkshopPortalActionSummary => {
+  if (payload.portal.accessStatus === "SUPERSEDED") {
+    const difference = payload.estimateChangeSummary?.differencePence ?? 0;
+    return {
+      tone: "warning",
+      eyebrow: "Quote updated",
+      title: "The workshop changed the estimate after this link was first shared",
+      detail: payload.estimateChangeSummary
+        ? `Version ${payload.estimateChangeSummary.previousVersion} moved to ${payload.estimateChangeSummary.currentVersion !== null ? `version ${payload.estimateChangeSummary.currentVersion}` : "the current live job"} (${formatSignedMoney(
+            difference,
+          )}). Review the updated work before replying to the shop.`
+        : "The workshop has saved a newer quote than the one tied to this link.",
+      nextStep:
+        "Use the updated quote below as your reference, then ask the workshop to resend a fresh approval link if they still need a decision.",
+      primaryLink: { href: "#quote-section", label: "Review latest quote" },
+      secondaryLink: { href: "#messages-section", label: "Message the workshop" },
+    };
+  }
+
+  if (payload.portal.accessStatus === "EXPIRED") {
+    return {
+      tone: "warning",
+      eyebrow: "Link expired",
+      title: "You can still review the job, but approval controls are locked",
+      detail:
+        "This secure approval link has expired. The quote and progress history stay visible here so you can still see where the job stands.",
+      nextStep:
+        "Contact the shop if they still need your decision or if you want them to resend a current approval link.",
+      primaryLink: { href: "#quote-section", label: "Review current quote" },
+      secondaryLink: { href: "#messages-section", label: "Ask a question" },
+    };
+  }
+
+  if (payload.portal.canApprove) {
+    return {
+      tone: "action",
+      eyebrow: "Action needed",
+      title: "Review and approve the latest quote",
+      detail: payload.estimate
+        ? `The workshop is waiting for your decision on ${formatMoney(
+            payload.estimate.subtotalPence,
+          )} before they continue.`
+        : "The workshop is waiting for your decision before they continue.",
+      nextStep:
+        "Approve to let the workshop continue, or reject if you want them to pause and speak with you first.",
+      secondaryLink: { href: "#messages-section", label: "Ask the workshop a question" },
+    };
+  }
+
+  if (payload.estimate?.status === "APPROVED") {
+    return {
+      tone: "success",
+      eyebrow: "Approved",
+      title: "The workshop has the go-ahead to continue",
+      detail:
+        payload.estimate.decisionSource === "CUSTOMER"
+          ? "Your approval was recorded from this secure page."
+          : "The workshop has already recorded approval with you.",
+      nextStep: payload.customerProgress.nextStep,
+      primaryLink: { href: "#messages-section", label: "Message the workshop" },
+    };
+  }
+
+  if (payload.estimate?.status === "REJECTED") {
+    return {
+      tone: "warning",
+      eyebrow: "Quote declined",
+      title: "This quote has been declined",
+      detail: "The workshop should now pause and confirm the next plan with you before more work happens.",
+      nextStep: "Use the message thread if you want to explain what you would like the shop to do next.",
+      primaryLink: { href: "#messages-section", label: "Message the workshop" },
+      secondaryLink: { href: "#quote-section", label: "Review quote again" },
+    };
+  }
+
+  if (
+    payload.collection.state === "READY_PENDING_CHECKOUT"
+    || payload.collection.state === "READY_PAYMENT_DUE"
+    || payload.collection.state === "READY_TO_COLLECT"
+  ) {
+    return {
+      tone: "ready",
+      eyebrow: "Collection",
+      title: payload.collection.headline,
+      detail: payload.collection.detail,
+      nextStep: payload.collection.nextStep,
+      primaryLink: { href: "#collection-section", label: "Review collection details" },
+      secondaryLink: { href: "#messages-section", label: "Message the workshop" },
+    };
+  }
+
+  return {
+    tone: "info",
+    eyebrow: "Current status",
+    title: payload.customerProgress.headline,
+    detail: payload.customerProgress.detail,
+    nextStep: payload.customerProgress.nextStep,
+    primaryLink: { href: "#messages-section", label: "Open message thread" },
+    secondaryLink: { href: "#collection-section", label: "See collection status" },
+  };
+};
+
+const describeEstimateChange = (
+  change: PublicWorkshopEstimateChange["changes"][number],
+) => {
+  switch (change.changeType) {
+    case "ADDED":
+      return `Added ${formatMoney(change.currentLineTotalPence ?? 0)}`;
+    case "REMOVED":
+      return `Removed ${formatMoney(change.previousLineTotalPence ?? 0)}`;
+    default:
+      if (
+        change.previousLineTotalPence !== null
+        && change.currentLineTotalPence !== null
+        && change.previousLineTotalPence !== change.currentLineTotalPence
+      ) {
+        return `${formatMoney(change.previousLineTotalPence)} to ${formatMoney(change.currentLineTotalPence)}`;
+      }
+      return "Updated";
+  }
+};
+
+const buildLatestActivitySummary = (
+  payload: PublicWorkshopPortalPayload,
+  messages: PublicWorkshopConversationResponse["messages"],
+) => {
+  const latestMessage = messages[messages.length - 1] ?? null;
+  const latestTimelineEvent = payload.timeline[payload.timeline.length - 1] ?? null;
+
+  const latestMessageAt = latestMessage
+    ? new Date(latestMessage.sentAt ?? latestMessage.receivedAt ?? latestMessage.createdAt)
+    : null;
+  const latestTimelineAt = latestTimelineEvent ? new Date(latestTimelineEvent.occurredAt) : null;
+
+  if (
+    latestMessage
+    && latestMessageAt
+    && !Number.isNaN(latestMessageAt.getTime())
+    && (!latestTimelineAt || latestMessageAt.getTime() >= latestTimelineAt.getTime())
+  ) {
+    return {
+      label: latestMessage.direction === "OUTBOUND" ? "Latest workshop message" : "Your latest reply",
+      value: formatOptionalDateTime(latestMessage.sentAt ?? latestMessage.receivedAt ?? latestMessage.createdAt),
+      detail: truncateText(latestMessage.body, 120),
+    };
+  }
+
+  if (latestTimelineEvent) {
+    return {
+      label: "Latest workshop milestone",
+      value: formatOptionalDateTime(latestTimelineEvent.occurredAt),
+      detail: latestTimelineEvent.detail ?? latestTimelineEvent.label,
+    };
+  }
+
+  return {
+    label: "Latest activity",
+    value: formatOptionalDateTime(payload.job.updatedAt),
+    detail: "The workshop has not published a customer-facing message or milestone yet.",
+  };
+};
 
 export const WorkshopQuotePage = () => {
   const { token: routeToken } = useParams();
@@ -451,8 +788,17 @@ export const WorkshopQuotePage = () => {
   const workLines = payload?.workSummary.lines ?? [];
   const conversationMessages = conversationPayload?.messages ?? [];
   const attachments = attachmentsPayload?.attachments ?? [];
-  const latestTimelineEvent = payload?.timeline[payload.timeline.length - 1] ?? null;
   const progressStepIndex = payload ? portalProgressStepIndex(payload.customerProgress.stage) : 0;
+  const waitingSummary = payload ? buildWaitingSummary(payload) : null;
+  const actionSummary = payload ? buildPortalActionSummary(payload) : null;
+  const latestActivity = payload ? buildLatestActivitySummary(payload, conversationMessages) : null;
+  const latestMessage = conversationMessages[conversationMessages.length - 1] ?? null;
+  const workSummaryMatchesEstimate = Boolean(
+    payload?.estimate
+    && payload.estimate.subtotalPence === payload.workSummary.subtotalPence
+    && payload.estimate.lineCount === payload.workSummary.lineCount
+    && doLineSummariesMatch(payload.estimate.lines, payload.workSummary.lines),
+  );
 
   return (
     <div className="workshop-portal-shell">
@@ -474,16 +820,21 @@ export const WorkshopQuotePage = () => {
                 {workshopEstimateStatusLabel(payload.estimate.status, "customer")}
               </span>
             ) : null}
+            {payload ? (
+              <span className={collectionStatusClass(payload.collection.state)}>
+                {collectionStatusLabel(payload.collection.state)}
+              </span>
+            ) : null}
           </div>
           <p className="workshop-portal-kicker">Secure workshop portal</p>
           <h1>{pageTitle}</h1>
           <p className="workshop-portal-headline">
-            {payload?.customerProgress.headline ??
-              "Follow your repair progress, review quoted work, and reply to the workshop team here."}
+            {payload?.customerProgress.headline
+              ?? "Follow your repair progress, review quoted work, and reply to the workshop team here."}
           </p>
           <p className="muted-text">
-            {payload?.customerProgress.detail ??
-              "Use this secure page to follow your bike job, review any quoted work, and read or send workshop updates."}
+            {payload?.customerProgress.detail
+              ?? "Use this secure page to see what the shop is waiting for, what happens next, and how close the bike is to collection."}
           </p>
         </div>
 
@@ -504,79 +855,91 @@ export const WorkshopQuotePage = () => {
           </div>
         ) : null}
 
-        {!loading && !loadError && payload ? (
+        {!loading && !loadError && payload && actionSummary ? (
           <>
             <div className="workshop-portal-summary-grid">
               <section className="workshop-portal-summary-card workshop-portal-summary-card--highlight">
-                <span className="workshop-portal-summary-label">What happens next</span>
-                <strong className="workshop-portal-summary-value">{payload.customerProgress.nextStep}</strong>
-                <p className="workshop-portal-summary-detail">
-                  {payload.customerProgress.needsCustomerAction
-                    ? "The workshop is waiting for your decision before they continue."
-                    : latestTimelineEvent
-                      ? `Last update: ${latestTimelineEvent.label} on ${formatOptionalDateTime(
-                          latestTimelineEvent.occurredAt,
-                        )}`
-                      : `Last updated ${formatOptionalDateTime(payload.job.updatedAt)}`}
-                </p>
+                <span className="workshop-portal-summary-label">Right now</span>
+                <strong className="workshop-portal-summary-value">{payload.customerProgress.headline}</strong>
+                <p className="workshop-portal-summary-detail">{payload.customerProgress.nextStep}</p>
               </section>
               <section className="workshop-portal-summary-card">
-                <span className="workshop-portal-summary-label">Scheduled time</span>
+                <span className="workshop-portal-summary-label">Waiting on</span>
+                <strong className="workshop-portal-summary-value">{waitingSummary?.label ?? "Workshop update"}</strong>
+                <p className="workshop-portal-summary-detail">{waitingSummary?.detail ?? payload.customerProgress.detail}</p>
+              </section>
+              <section className="workshop-portal-summary-card" data-testid="workshop-portal-collection-summary">
+                <span className="workshop-portal-summary-label">Collection &amp; payment</span>
                 <strong className="workshop-portal-summary-value">
-                  {formatScheduledWindow(payload.job)}
+                  {payload.collection.totalPence !== null
+                    ? payload.collection.outstandingPence && payload.collection.outstandingPence > 0
+                      ? `${formatMoney(payload.collection.outstandingPence)} due`
+                      : collectionStatusLabel(payload.collection.state)
+                    : collectionStatusLabel(payload.collection.state)}
                 </strong>
-                <p className="workshop-portal-summary-detail">
-                  {payload.job.durationMinutes
-                    ? `${payload.job.durationMinutes} minute workshop slot`
-                    : "The workshop will confirm timing here if it changes."}
-                </p>
+                <p className="workshop-portal-summary-detail">{payload.collection.detail}</p>
               </section>
               <section className="workshop-portal-summary-card">
-                <span className="workshop-portal-summary-label">
-                  {payload.estimate ? "Current quote total" : "Current work subtotal"}
-                </span>
-                <strong className="workshop-portal-summary-value">
-                  {payload.estimate
-                    ? formatMoney(payload.estimate.subtotalPence)
-                    : formatMoney(payload.workSummary.subtotalPence)}
-                </strong>
-                <p className="workshop-portal-summary-detail">
-                  {payload.estimate
-                    ? `${payload.estimate.lineCount} quoted line${
-                        payload.estimate.lineCount === 1 ? "" : "s"
-                      }`
-                    : `${payload.workSummary.lineCount} work line${
-                        payload.workSummary.lineCount === 1 ? "" : "s"
-                      }`}
-                </p>
-              </section>
-              <section className="workshop-portal-summary-card">
-                <span className="workshop-portal-summary-label">
-                  {payload.job.finalSummary ? "Collection total" : "Portal access"}
-                </span>
-                <strong className="workshop-portal-summary-value">
-                  {payload.job.finalSummary
-                    ? formatMoney(payload.job.finalSummary.totalPence)
-                    : workshopQuoteAccessStatusLabel(payload.portal.accessStatus)}
-                </strong>
-                <p className="workshop-portal-summary-detail">
-                  {payload.job.finalSummary?.collectedAt
-                    ? `Collected ${formatOptionalDateTime(payload.job.finalSummary.collectedAt)}`
-                    : payload.portal.customerQuote?.expiresAt
-                      ? `Approval link valid until ${formatOptionalDateTime(
-                          payload.portal.customerQuote.expiresAt,
-                        )}`
-                      : "Use this secure page for updates, notes, attachments, and messages."}
-                </p>
+                <span className="workshop-portal-summary-label">{latestActivity?.label ?? "Latest activity"}</span>
+                <strong className="workshop-portal-summary-value">{latestActivity?.value ?? "-"}</strong>
+                <p className="workshop-portal-summary-detail">{latestActivity?.detail ?? "No customer-facing update yet."}</p>
               </section>
             </div>
 
-            <section className="workshop-portal-panel workshop-portal-progress">
+            <section
+              className={`workshop-portal-action workshop-portal-action--${actionSummary.tone}`}
+              data-testid="workshop-portal-action-summary"
+            >
+              <div className="workshop-portal-action-copy">
+                <span className="workshop-portal-action-eyebrow">{actionSummary.eyebrow}</span>
+                <h2 className="workshop-portal-action-title">{actionSummary.title}</h2>
+                <p className="workshop-portal-action-detail">{actionSummary.detail}</p>
+                <p className="workshop-portal-action-next">{actionSummary.nextStep}</p>
+              </div>
+              <div className="actions-inline">
+                {payload.portal.accessStatus === "ACTIVE" && payload.portal.canApprove ? (
+                  <>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void handleDecision("APPROVED")}
+                      disabled={submitting !== null}
+                      data-testid="workshop-portal-approve"
+                    >
+                      {submitting === "APPROVED" ? "Approving..." : "Approve quote"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDecision("REJECTED")}
+                      disabled={submitting !== null}
+                      data-testid="workshop-portal-reject"
+                    >
+                      {submitting === "REJECTED" ? "Rejecting..." : "Reject quote"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {actionSummary.primaryLink ? (
+                      <a href={actionSummary.primaryLink.href} className="button-link">
+                        {actionSummary.primaryLink.label}
+                      </a>
+                    ) : null}
+                    {actionSummary.secondaryLink ? (
+                      <a href={actionSummary.secondaryLink.href} className="button-link">
+                        {actionSummary.secondaryLink.label}
+                      </a>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </section>
+
+            <section className="workshop-portal-panel workshop-portal-progress" data-testid="workshop-portal-journey-summary">
               <div className="card-header-row">
                 <div>
-                  <h2>Repair progress</h2>
+                  <h2>Journey so far</h2>
                   <p className="table-secondary">
-                    A simple view of where your bike is in the workshop process.
+                    A simple view of where the bike is, what still needs to happen, and when collection becomes possible.
                   </p>
                 </div>
                 <span className={customerProgressClass(payload.customerProgress.stage)}>
@@ -609,137 +972,75 @@ export const WorkshopQuotePage = () => {
               </ol>
             </section>
 
-            <div className="workshop-portal-grid">
-              <section className="workshop-portal-panel">
+            {payload.estimateChangeSummary ? (
+              <section
+                className="workshop-portal-panel"
+                id="quote-changes"
+                data-testid="workshop-portal-estimate-changes"
+              >
                 <div className="card-header-row">
                   <div>
-                    <h2>Job summary</h2>
+                    <h2>What changed in the quote</h2>
                     <p className="table-secondary">
-                      The key workshop details most customers usually ask for first.
+                      Compare the newly saved estimate against the version that was originally shared with you.
                     </p>
                   </div>
-                  <span className="table-secondary">{payload.job.statusLabel}</span>
-                </div>
-                <div className="job-meta-grid">
-                  <div><strong>Bike:</strong> {payload.bike.displayName}</div>
-                  <div><strong>Customer:</strong> {payload.job.customerName}</div>
-                  <div><strong>Current status:</strong> {payload.job.statusLabel}</div>
-                  <div><strong>Booked:</strong> {formatOptionalDateTime(payload.job.createdAt)}</div>
-                  <div><strong>Scheduled:</strong> {formatScheduledWindow(payload.job)}</div>
-                  <div><strong>Duration:</strong> {payload.job.durationMinutes ? `${payload.job.durationMinutes} min` : "-"}</div>
-                  <div><strong>Latest update:</strong> {formatOptionalDateTime(payload.job.updatedAt)}</div>
-                  <div><strong>Quote link valid until:</strong> {formatOptionalDateTime(payload.portal.customerQuote?.expiresAt)}</div>
-                  <div><strong>Collection total:</strong> {payload.job.finalSummary ? formatMoney(payload.job.finalSummary.totalPence) : "-"}</div>
-                  <div><strong>Last timeline event:</strong> {latestTimelineEvent ? latestTimelineEvent.label : "-"}</div>
-                </div>
-              </section>
-
-              <section className="workshop-portal-panel">
-                <div className="card-header-row">
-                  <div>
-                    <h2>Bike summary</h2>
-                    <p className="table-secondary">
-                      The bike details the workshop has linked to this job.
-                    </p>
-                  </div>
-                </div>
-                <p className="workshop-portal-bike-name">{payload.bike.displayName}</p>
-                {bikeDetails.length > 0 ? (
-                  <dl className="workshop-portal-detail-list">
-                    {bikeDetails.map((detail) => (
-                      <div key={detail.label}>
-                        <dt>{detail.label}</dt>
-                        <dd>{detail.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="muted-text">The shop has not added extra bike profile details yet.</p>
-                )}
-              </section>
-            </div>
-
-            {payload.portal.accessStatus === "SUPERSEDED" ? (
-              <div className="quick-create-panel workshop-portal-alert">
-                <strong>The quote has changed since this link was first sent.</strong>
-                <p className="muted-text">
-                  This secure link was originally shared for quote v{payload.portal.linkedEstimateVersion}. The workshop
-                  has since updated the estimate
-                  {payload.portal.currentEstimateVersion
-                    ? ` to v${payload.portal.currentEstimateVersion}`
-                    : ""}. Please review the latest work summary below and contact the shop for a fresh approval request.
-                </p>
-              </div>
-            ) : null}
-
-            {payload.portal.accessStatus === "EXPIRED" ? (
-              <div className="quick-create-panel workshop-portal-alert">
-                <strong>This approval link has expired.</strong>
-                <p className="muted-text">
-                  You can still review the current workshop summary here, but you&apos;ll need a fresh link from the shop to approve or reject any quoted work.
-                </p>
-              </div>
-            ) : null}
-
-            {payload.estimate?.status === "APPROVED" ? (
-              <div className="success-panel success-panel-sale">
-                <div className="success-panel-heading">
-                  <strong>Quote approved</strong>
-                  <span className="status-badge status-complete">
-                    {payload.estimate.decisionSource === "CUSTOMER" ? "Approved from this portal" : "Approved with the shop"}
+                  <span className={workshopQuoteAccessStatusClass(payload.portal.accessStatus)}>
+                    {payload.estimateChangeSummary.currentVersion !== null
+                      ? `v${payload.estimateChangeSummary.previousVersion} to v${payload.estimateChangeSummary.currentVersion}`
+                      : `v${payload.estimateChangeSummary.previousVersion} to live job`}
                   </span>
                 </div>
-                <p>The workshop now has approval to continue with the quoted work.</p>
-              </div>
-            ) : null}
-
-            {payload.estimate?.status === "REJECTED" ? (
-              <div className="quick-create-panel workshop-portal-alert">
-                <strong>Quote rejected</strong>
-                <p className="muted-text">
-                  This estimate has been marked as rejected. If you want to revisit it, please contact the shop directly.
-                </p>
-              </div>
-            ) : null}
-
-            {payload.portal.accessStatus === "ACTIVE" && payload.portal.canApprove ? (
-              <div className="workshop-portal-cta">
-                <div>
-                  <strong>Action needed</strong>
+                <div className="workshop-portal-callout">
+                  <strong>Total change: {formatSignedMoney(payload.estimateChangeSummary.differencePence)}</strong>
                   <p className="muted-text">
-                    Review the quote below and tell the workshop whether they can continue with this work.
+                    Earlier total {formatMoney(payload.estimateChangeSummary.previousSubtotalPence)}. Current total {formatMoney(payload.estimateChangeSummary.currentSubtotalPence)}.
                   </p>
                 </div>
-                <div className="actions-inline">
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => void handleDecision("APPROVED")}
-                    disabled={submitting !== null}
-                  >
-                    {submitting === "APPROVED" ? "Approving..." : "Approve Quoted Work"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDecision("REJECTED")}
-                    disabled={submitting !== null}
-                  >
-                    {submitting === "REJECTED" ? "Rejecting..." : "Reject Quote"}
-                  </button>
-                </div>
-              </div>
+                {payload.estimateChangeSummary.changes.length > 0 ? (
+                  <div className="workshop-portal-change-list">
+                    {payload.estimateChangeSummary.changes.map((change, index) => (
+                      <article
+                        key={`${change.changeType}-${change.description}-${index}`}
+                        className="workshop-portal-change-card"
+                      >
+                        <div className="note-card-header">
+                          <span className={change.changeType === "REMOVED" ? "status-badge status-cancelled" : change.changeType === "UPDATED" ? "status-badge status-warning" : "status-badge status-info"}>
+                            {change.changeType === "ADDED"
+                              ? "Added"
+                              : change.changeType === "REMOVED"
+                                ? "Removed"
+                                : "Updated"}
+                          </span>
+                          <span className="workshop-portal-change-amount">{describeEstimateChange(change)}</span>
+                        </div>
+                        <strong>{change.description}</strong>
+                        {change.meta ? <div className="table-secondary">{change.meta}</div> : null}
+                        {change.changeType === "UPDATED" ? (
+                          <p className="muted-text">
+                            Qty {change.previousQty ?? "-"} to {change.currentQty ?? "-"}.
+                            {" "}Price {change.previousUnitPricePence !== null ? formatMoney(change.previousUnitPricePence) : "-"}
+                            {" "}to {change.currentUnitPricePence !== null ? formatMoney(change.currentUnitPricePence) : "-"}.
+                          </p>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted-text">The workshop saved a new version number, but no customer-visible line changes were recorded.</p>
+                )}
+              </section>
             ) : null}
 
             {payload.estimate ? (
-              <section className="workshop-portal-panel">
+              <section className="workshop-portal-panel" id="quote-section">
                 <div className="card-header-row">
                   <div>
                     <h2>Current quote</h2>
                     <p className="table-secondary">
                       Version {payload.estimate.version}
-                      {payload.portal.hasUpdatedEstimate &&
-                      payload.portal.currentEstimateVersion !== payload.portal.linkedEstimateVersion
-                        ? ` · updated from v${payload.portal.linkedEstimateVersion}`
+                      {payload.estimateChangeSummary
+                        ? `, replacing version ${payload.estimateChangeSummary.previousVersion}`
                         : ""}
                     </p>
                   </div>
@@ -747,9 +1048,15 @@ export const WorkshopQuotePage = () => {
                     {workshopEstimateStatusLabel(payload.estimate.status, "customer")}
                   </span>
                 </div>
-                <p className="muted-text">
-                  This is the quoted work the shop wants you to review. If approval is still needed, your decision here
-                  feeds straight back into the live workshop job.
+
+                <p className="workshop-portal-section-lead">
+                  {payload.portal.canApprove
+                    ? "This is the work the shop is asking you to approve before they continue."
+                    : payload.estimate.status === "APPROVED"
+                      ? "This is the approved quote the workshop is currently working from."
+                      : payload.estimate.status === "REJECTED"
+                        ? "This is the quote that was declined."
+                        : "This is the current quote on the job."}
                 </p>
 
                 <div className="metric-grid">
@@ -771,14 +1078,34 @@ export const WorkshopQuotePage = () => {
                   </div>
                 </div>
 
-                <div className="job-meta-grid" style={{ marginTop: "12px" }}>
-                  <div><strong>Requested:</strong> {formatOptionalDateTime(payload.estimate.requestedAt)}</div>
-                  <div><strong>Approved:</strong> {formatOptionalDateTime(payload.estimate.approvedAt)}</div>
-                  <div><strong>Rejected:</strong> {formatOptionalDateTime(payload.estimate.rejectedAt)}</div>
+                <div className="job-meta-grid workshop-portal-key-grid">
+                  <div><strong>Quote requested:</strong> {formatOptionalDateTime(payload.estimate.requestedAt)}</div>
+                  <div><strong>Secure review link:</strong> {formatOptionalDateTime(payload.portal.customerQuote?.expiresAt)}</div>
+                  <div><strong>Approval recorded:</strong> {formatOptionalDateTime(payload.estimate.approvedAt)}</div>
+                  <div><strong>Rejected recorded:</strong> {formatOptionalDateTime(payload.estimate.rejectedAt)}</div>
                 </div>
 
+                {payload.portal.canApprove ? (
+                  <div className="workshop-portal-change-list">
+                    <article className="workshop-portal-change-card">
+                      <div className="note-card-header">
+                        <span className="status-badge status-complete">If you approve</span>
+                      </div>
+                      <strong>The workshop can continue</strong>
+                      <p className="muted-text">Approval feeds straight into the live job so the team can keep working without waiting for another call.</p>
+                    </article>
+                    <article className="workshop-portal-change-card">
+                      <div className="note-card-header">
+                        <span className="status-badge status-cancelled">If you reject</span>
+                      </div>
+                      <strong>The job pauses for follow-up</strong>
+                      <p className="muted-text">Rejecting tells the workshop not to continue this quote until they speak with you again.</p>
+                    </article>
+                  </div>
+                ) : null}
+
                 {estimateLines.length > 0 ? (
-                  <div className="table-wrap" style={{ marginTop: "16px" }}>
+                  <div className="table-wrap">
                     <table>
                       <thead>
                         <tr>
@@ -808,86 +1135,168 @@ export const WorkshopQuotePage = () => {
                     </table>
                   </div>
                 ) : (
-                  <p className="muted-text" style={{ marginTop: "12px" }}>No quoted lines have been saved for this job yet.</p>
+                  <p className="muted-text">No quoted lines have been saved for this job yet.</p>
                 )}
               </section>
             ) : null}
 
-            <section className="workshop-portal-panel">
+            <section className="workshop-portal-panel workshop-portal-panel--accent" id="collection-section">
               <div className="card-header-row">
                 <div>
-                  <h2>Current work summary</h2>
+                  <h2>Collection and payment</h2>
                   <p className="table-secondary">
-                    A live summary of the labour and parts currently recorded on this job.
+                    The clearest view of whether the bike is ready, whether anything is left to pay, and what happens next.
                   </p>
                 </div>
+                <span className={collectionStatusClass(payload.collection.state)}>
+                  {collectionStatusLabel(payload.collection.state)}
+                </span>
               </div>
+
+              <p className="workshop-portal-section-lead">{payload.collection.headline}</p>
+              <p className="muted-text">{payload.collection.detail}</p>
+
               <div className="metric-grid">
                 <div className="metric-card">
-                  <span className="metric-label">Labour</span>
-                  <strong className="metric-value">{formatMoney(payload.workSummary.labourTotalPence)}</strong>
+                  <span className="metric-label">Final total</span>
+                  <strong className="metric-value">
+                    {payload.collection.totalPence !== null ? formatMoney(payload.collection.totalPence) : "TBC"}
+                  </strong>
                 </div>
                 <div className="metric-card">
-                  <span className="metric-label">Parts</span>
-                  <strong className="metric-value">{formatMoney(payload.workSummary.partsTotalPence)}</strong>
+                  <span className="metric-label">Paid so far</span>
+                  <strong className="metric-value">{formatMoney(payload.collection.paidPence)}</strong>
                 </div>
                 <div className="metric-card">
-                  <span className="metric-label">Lines</span>
-                  <strong className="metric-value">{payload.workSummary.lineCount}</strong>
+                  <span className="metric-label">Still to pay</span>
+                  <strong className="metric-value">
+                    {payload.collection.outstandingPence !== null
+                      ? formatMoney(payload.collection.outstandingPence)
+                      : "TBC"}
+                  </strong>
                 </div>
                 <div className="metric-card">
-                  <span className="metric-label">Subtotal</span>
-                  <strong className="metric-value">{formatMoney(payload.workSummary.subtotalPence)}</strong>
+                  <span className="metric-label">Deposit</span>
+                  <strong className="metric-value">
+                    {payload.collection.depositRequiredPence > 0
+                      ? `${formatMoney(payload.collection.depositRequiredPence)} / ${payload.collection.depositStatus === "PAID" ? "paid" : "not yet paid"}`
+                      : "No deposit"}
+                  </strong>
                 </div>
               </div>
 
-              {workLines.length > 0 ? (
-                <div className="table-wrap" style={{ marginTop: "16px" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Summary</th>
-                        <th>Qty</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workLines.map((line, index) => (
-                        <tr key={`${line.type}-${line.description}-${index}`}>
-                          <td>{line.type === "LABOUR" ? "Labour" : "Part"}</td>
-                          <td>
-                            <div className="table-primary">{line.description}</div>
-                            {renderLineMeta(line) ? (
-                              <div className="table-secondary">{renderLineMeta(line)}</div>
-                            ) : null}
-                          </td>
-                          <td>{line.qty}</td>
-                          <td>{formatMoney(line.lineTotalPence)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="muted-text" style={{ marginTop: "12px" }}>
-                  The workshop has not added any labour or parts lines yet.
-                </p>
-              )}
+              <div className="workshop-portal-callout">
+                <strong>Next step</strong>
+                <p className="muted-text">{payload.collection.nextStep}</p>
+              </div>
             </section>
 
-            <section className="workshop-portal-panel" style={{ marginTop: "16px" }}>
+            {!workSummaryMatchesEstimate ? (
+              <section className="workshop-portal-panel">
+                <div className="card-header-row">
+                  <div>
+                    <h2>Latest recorded work summary</h2>
+                    <p className="table-secondary">
+                      This is the live labour and parts list on the job right now.
+                    </p>
+                  </div>
+                </div>
+                <div className="metric-grid">
+                  <div className="metric-card">
+                    <span className="metric-label">Labour</span>
+                    <strong className="metric-value">{formatMoney(payload.workSummary.labourTotalPence)}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-label">Parts</span>
+                    <strong className="metric-value">{formatMoney(payload.workSummary.partsTotalPence)}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-label">Lines</span>
+                    <strong className="metric-value">{payload.workSummary.lineCount}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span className="metric-label">Subtotal</span>
+                    <strong className="metric-value">{formatMoney(payload.workSummary.subtotalPence)}</strong>
+                  </div>
+                </div>
+
+                {workLines.length > 0 ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Summary</th>
+                          <th>Qty</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workLines.map((line, index) => (
+                          <tr key={`${line.type}-${line.description}-${index}`}>
+                            <td>{line.type === "LABOUR" ? "Labour" : "Part"}</td>
+                            <td>
+                              <div className="table-primary">{line.description}</div>
+                              {renderLineMeta(line) ? (
+                                <div className="table-secondary">{renderLineMeta(line)}</div>
+                              ) : null}
+                            </td>
+                            <td>{line.qty}</td>
+                            <td>{formatMoney(line.lineTotalPence)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="muted-text">The workshop has not added any labour or parts lines yet.</p>
+                )}
+              </section>
+            ) : (
+              <div className="workshop-portal-inline-note">
+                <strong>Current recorded work still matches the quote above.</strong>
+                <p className="muted-text">There is no separate live-work difference to review right now.</p>
+              </div>
+            )}
+
+            <section className="workshop-portal-panel" id="messages-section">
               <div className="card-header-row">
                 <div>
                   <h2>Message thread</h2>
                   <p className="table-secondary">
-                    Read updates from the workshop and reply here while this secure link remains active.
+                    Use this thread for questions, updates, and anything the workshop still needs from you.
                   </p>
                 </div>
                 <span className="table-secondary">
                   {conversationPayload?.conversation.messageCount ?? 0} message
                   {(conversationPayload?.conversation.messageCount ?? 0) === 1 ? "" : "s"}
                 </span>
+              </div>
+
+              <div className="workshop-portal-message-summary">
+                <article className="workshop-portal-message-summary-card">
+                  <span className="workshop-portal-summary-label">Latest contact</span>
+                  <strong>{latestActivity?.value ?? "-"}</strong>
+                  <p>{latestActivity?.detail ?? "No customer-facing message yet."}</p>
+                </article>
+                <article className="workshop-portal-message-summary-card">
+                  <span className="workshop-portal-summary-label">Replies available</span>
+                  <strong>{conversationPayload?.conversation.canReply ? "Yes" : "Read only"}</strong>
+                  <p>
+                    {conversationPayload?.conversation.canReply
+                      ? "Reply here if you need to confirm timing, ask a question, or explain your decision."
+                      : "This secure reply link is no longer active, but the conversation history stays visible."}
+                  </p>
+                </article>
+                <article className="workshop-portal-message-summary-card">
+                  <span className="workshop-portal-summary-label">Best use of this thread</span>
+                  <strong>{payload.portal.canApprove ? "Questions before approval" : "Timing and collection updates"}</strong>
+                  <p>
+                    {payload.portal.canApprove
+                      ? "If anything in the quote is unclear, send the workshop a message before you decide."
+                      : "Use this thread for practical updates rather than long internal workshop notes."}
+                  </p>
+                </article>
               </div>
 
               {conversationLoading ? <p>Loading conversation...</p> : null}
@@ -899,43 +1308,46 @@ export const WorkshopQuotePage = () => {
                 <p className="muted-text">The workshop has not added any direct messages yet.</p>
               ) : (
                 <div className="conversation-thread conversation-thread--portal">
-                  {conversationMessages.map((message) => (
-                    <article
-                      key={message.id}
-                      className={`conversation-message-card conversation-message-card--${
-                        message.direction === "OUTBOUND" ? "outbound" : "inbound"
-                      }`}
-                    >
-                      <div className="note-card-header">
-                        <span
-                          className={
-                            message.direction === "OUTBOUND"
-                              ? "status-badge status-info"
-                              : "status-badge status-complete"
-                          }
-                        >
-                          {message.direction === "OUTBOUND" ? "Workshop update" : "Your reply"}
-                        </span>
-                        <span className="table-secondary">
-                          {formatOptionalDateTime(
-                            message.sentAt ?? message.receivedAt ?? message.createdAt,
-                          )}
-                        </span>
-                      </div>
-                      <p>{message.body}</p>
-                      <div className="table-secondary">{message.senderLabel}</div>
-                    </article>
-                  ))}
+                  {conversationMessages.map((message) => {
+                    const messageTimestamp = message.sentAt ?? message.receivedAt ?? message.createdAt;
+                    const isLatest = latestMessage?.id === message.id;
+                    return (
+                      <article
+                        key={message.id}
+                        className={`conversation-message-card conversation-message-card--${
+                          message.direction === "OUTBOUND" ? "outbound" : "inbound"
+                        }`}
+                      >
+                        <div className="note-card-header">
+                          <div className="actions-inline">
+                            <span
+                              className={
+                                message.direction === "OUTBOUND"
+                                  ? "status-badge status-info"
+                                  : "status-badge status-complete"
+                              }
+                            >
+                              {message.direction === "OUTBOUND" ? "Workshop update" : "Your reply"}
+                            </span>
+                            {isLatest ? <span className="status-badge">Latest</span> : null}
+                          </div>
+                          <span className="table-secondary">{formatOptionalDateTime(messageTimestamp)}</span>
+                        </div>
+                        <p>{message.body}</p>
+                        <div className="table-secondary">{message.senderLabel}</div>
+                      </article>
+                    );
+                  })}
                 </div>
               )}
 
-              <div className="note-form-grid" style={{ marginTop: "8px" }}>
+              <div className="note-form-grid">
                 <label className="note-form-wide">
                   Reply to the workshop
                   <textarea
                     value={replyDraft}
                     onChange={(event) => setReplyDraft(event.target.value)}
-                    placeholder="Send a reply to the workshop team"
+                    placeholder="Ask a question or send an update to the workshop team"
                     disabled={!conversationPayload?.conversation.canReply}
                   />
                 </label>
@@ -945,28 +1357,21 @@ export const WorkshopQuotePage = () => {
                     className="primary"
                     onClick={() => void handleReply()}
                     disabled={
-                      replying ||
-                      !replyDraft.trim() ||
-                      !conversationPayload?.conversation.canReply
+                      replying
+                      || !replyDraft.trim()
+                      || !conversationPayload?.conversation.canReply
                     }
                   >
-                    {replying ? "Sending..." : "Send Reply"}
+                    {replying ? "Sending..." : "Send message"}
                   </button>
                 </div>
               </div>
-
-              {!conversationPayload?.conversation.canReply ? (
-                <p className="muted-text">
-                  Replies are only available while this secure workshop link is still active. You can still read the full
-                  conversation history here.
-                </p>
-              ) : null}
             </section>
 
-            <section className="workshop-portal-panel" style={{ marginTop: "16px" }}>
+            <section className="workshop-portal-panel">
               <div className="card-header-row">
                 <div>
-                  <h2>Shared photos &amp; files</h2>
+                  <h2>Shared photos and files</h2>
                   <p className="table-secondary">
                     The workshop can share customer-visible photos or PDFs here when they help explain the job.
                   </p>
@@ -1013,6 +1418,52 @@ export const WorkshopQuotePage = () => {
                 </div>
               ) : null}
             </section>
+
+            <div className="workshop-portal-grid">
+              <section className="workshop-portal-panel">
+                <div className="card-header-row">
+                  <div>
+                    <h2>Booking and workshop details</h2>
+                    <p className="table-secondary">
+                      The core customer-facing details the workshop has linked to this job.
+                    </p>
+                  </div>
+                  <span className="table-secondary">{payload.job.statusLabel}</span>
+                </div>
+                <div className="job-meta-grid workshop-portal-key-grid">
+                  <div><strong>Bike:</strong> {payload.bike.displayName}</div>
+                  <div><strong>Booked:</strong> {formatOptionalDateTime(payload.job.createdAt)}</div>
+                  <div><strong>Scheduled:</strong> {formatScheduledWindow(payload.job)}</div>
+                  <div><strong>Latest update:</strong> {formatOptionalDateTime(payload.job.updatedAt)}</div>
+                  <div><strong>Workshop slot:</strong> {payload.job.durationMinutes ? `${payload.job.durationMinutes} minutes` : "To be confirmed"}</div>
+                  <div><strong>Secure review link:</strong> {formatOptionalDateTime(payload.portal.customerQuote?.expiresAt)}</div>
+                </div>
+              </section>
+
+              <section className="workshop-portal-panel">
+                <div className="card-header-row">
+                  <div>
+                    <h2>Bike profile</h2>
+                    <p className="table-secondary">
+                      The bike details the workshop has linked to this job.
+                    </p>
+                  </div>
+                </div>
+                <p className="workshop-portal-bike-name">{payload.bike.displayName}</p>
+                {bikeDetails.length > 0 ? (
+                  <dl className="workshop-portal-detail-list">
+                    {bikeDetails.map((detail) => (
+                      <div key={detail.label}>
+                        <dt>{detail.label}</dt>
+                        <dd>{detail.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="muted-text">The shop has not added extra bike profile details yet.</p>
+                )}
+              </section>
+            </div>
 
             <div className="workshop-portal-grid">
               <section className="workshop-portal-panel">

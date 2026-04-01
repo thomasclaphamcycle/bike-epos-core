@@ -88,6 +88,8 @@ const publicEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()
       scheduledStartAt: true,
       scheduledEndAt: true,
       durationMinutes: true,
+      depositRequiredPence: true,
+      depositStatus: true,
       bikeDescription: true,
       customerName: true,
       customer: {
@@ -115,6 +117,14 @@ const publicEstimateInclude = Prisma.validator<Prisma.WorkshopEstimateInclude>()
         select: {
           totalPence: true,
           createdAt: true,
+        },
+      },
+      checkoutOutcome: {
+        select: {
+          saleTotalPence: true,
+          depositPaidPence: true,
+          creditPence: true,
+          outstandingPence: true,
         },
       },
       lines: {
@@ -654,6 +664,147 @@ const buildCustomerPortalProgress = (input: {
   };
 };
 
+const buildCollectionPortalSummary = (input: {
+  rawStatus: WorkshopJobStatus;
+  closedAt: Date | null;
+  completedAt: Date | null;
+  finalSummary: {
+    totalPence: number;
+    collectedAt: Date | null;
+  } | null;
+  checkoutOutcome: {
+    saleTotalPence: number;
+    depositPaidPence: number;
+    creditPence: number;
+    outstandingPence: number;
+  } | null;
+  depositRequiredPence: number;
+  depositStatus: "NOT_REQUIRED" | "REQUIRED" | "PAID";
+}) => {
+  const totalPence = input.checkoutOutcome?.saleTotalPence ?? input.finalSummary?.totalPence ?? null;
+  const outstandingPence = input.checkoutOutcome?.outstandingPence ?? null;
+  const depositPaidPence =
+    input.checkoutOutcome?.depositPaidPence
+    ?? (input.depositStatus === "PAID" ? input.depositRequiredPence : 0);
+  const paidPence =
+    totalPence !== null && outstandingPence !== null
+      ? Math.max(0, totalPence - outstandingPence)
+      : depositPaidPence > 0
+        ? depositPaidPence
+        : 0;
+
+  if (input.closedAt || input.rawStatus === "CANCELLED") {
+    return {
+      state: "CLOSED" as const,
+      headline: "Collection closed",
+      detail: "This workshop job is closed, so there is nothing left to collect on this link.",
+      nextStep: "Contact the shop directly if anything needs to be revisited.",
+      totalPence,
+      outstandingPence,
+      paidPence,
+      depositPaidPence,
+      depositRequiredPence: input.depositRequiredPence,
+      depositStatus: input.depositStatus,
+    };
+  }
+
+  if (input.rawStatus === "COMPLETED" || input.completedAt) {
+    return {
+      state: "COLLECTED" as const,
+      headline: "Bike collected",
+      detail:
+        totalPence !== null
+          ? `Final total ${formatPortalMoneyLabel(totalPence)} settled and the bike has been handed back.`
+          : "The workshop has marked this job as collected.",
+      nextStep: "Keep this link if you want to revisit the work summary or shared notes later.",
+      totalPence,
+      outstandingPence: 0,
+      paidPence: totalPence ?? paidPence,
+      depositPaidPence,
+      depositRequiredPence: input.depositRequiredPence,
+      depositStatus: input.depositStatus,
+    };
+  }
+
+  if (input.rawStatus === "READY_FOR_COLLECTION") {
+    if (totalPence !== null && outstandingPence !== null && outstandingPence > 0) {
+      return {
+        state: "READY_PAYMENT_DUE" as const,
+        headline: "Ready to collect",
+        detail: `Final total ${formatPortalMoneyLabel(totalPence)}. ${formatPortalMoneyLabel(
+          outstandingPence,
+        )} remains to pay at collection.`,
+        nextStep: "Bring payment when you collect, or message the workshop if you need to discuss collection timing.",
+        totalPence,
+        outstandingPence,
+        paidPence,
+        depositPaidPence,
+        depositRequiredPence: input.depositRequiredPence,
+        depositStatus: input.depositStatus,
+      };
+    }
+
+    if (totalPence !== null) {
+      return {
+        state: "READY_TO_COLLECT" as const,
+        headline: "Ready to collect",
+        detail: `Final total ${formatPortalMoneyLabel(totalPence)} with no payment left outstanding.`,
+        nextStep: "You can now arrange collection with the shop.",
+        totalPence,
+        outstandingPence: 0,
+        paidPence: totalPence,
+        depositPaidPence,
+        depositRequiredPence: input.depositRequiredPence,
+        depositStatus: input.depositStatus,
+      };
+    }
+
+    return {
+      state: "READY_PENDING_CHECKOUT" as const,
+      headline: "Ready to collect",
+      detail:
+        depositPaidPence > 0
+          ? `Deposit received (${formatPortalMoneyLabel(depositPaidPence)}). The workshop will confirm anything left to pay when you collect.`
+          : "The workshop has finished the bike and will confirm any final payment at collection.",
+      nextStep: "You do not need to approve anything else. Contact the shop if you need collection timing or handover details.",
+      totalPence: null,
+      outstandingPence: null,
+      paidPence,
+      depositPaidPence,
+      depositRequiredPence: input.depositRequiredPence,
+      depositStatus: input.depositStatus,
+    };
+  }
+
+  if (input.rawStatus === "WAITING_FOR_APPROVAL") {
+    return {
+      state: "AWAITING_APPROVAL" as const,
+      headline: "Collection is on hold",
+      detail: "The workshop cannot complete or hand back the bike until the current quoted work is approved or declined.",
+      nextStep: "Review the latest quote first. Collection timing becomes clear once the workshop can continue.",
+      totalPence,
+      outstandingPence,
+      paidPence,
+      depositPaidPence,
+      depositRequiredPence: input.depositRequiredPence,
+      depositStatus: input.depositStatus,
+    };
+  }
+
+  return {
+    state: "IN_WORKSHOP" as const,
+    headline: "Not ready for collection yet",
+    detail: "The bike is still moving through the workshop, so collection and final payment are not ready yet.",
+    nextStep: "Follow the repair progress here and wait for a ready-to-collect update from the shop.",
+    totalPence,
+    outstandingPence,
+    paidPence,
+    depositPaidPence,
+    depositRequiredPence: input.depositRequiredPence,
+    depositStatus: input.depositStatus,
+  };
+};
+
 const toBikeTypeLabel = (value: string | null | undefined) => {
   const normalized = normalizeOptionalText(value)?.toUpperCase();
   switch (normalized) {
@@ -707,6 +858,49 @@ const toPublicLineSummary = (line: {
   variantSku: line.variant?.sku ?? null,
 });
 
+type PublicLineSummary = ReturnType<typeof toPublicLineSummary>;
+
+const buildPublicLineMeta = (
+  line: Pick<PublicLineSummary, "productName" | "variantName" | "variantSku">,
+) => [line.productName, line.variantName, line.variantSku].filter(Boolean).join(" · ") || null;
+
+const buildPublicLineComparisonKey = (
+  line: Pick<PublicLineSummary, "type" | "description" | "productName" | "variantName" | "variantSku">,
+) => [
+  line.type,
+  normalizeOptionalText(line.description)?.toLowerCase() ?? "",
+  normalizeOptionalText(line.productName)?.toLowerCase() ?? "",
+  normalizeOptionalText(line.variantName)?.toLowerCase() ?? "",
+  normalizeOptionalText(line.variantSku)?.toLowerCase() ?? "",
+].join("::");
+
+const buildPublicLineLooseComparisonKey = (
+  line: Pick<PublicLineSummary, "type" | "productName" | "variantName" | "variantSku">,
+) => [
+  line.type,
+  normalizeOptionalText(line.productName)?.toLowerCase() ?? "",
+  normalizeOptionalText(line.variantName)?.toLowerCase() ?? "",
+  normalizeOptionalText(line.variantSku)?.toLowerCase() ?? "",
+].join("::");
+
+const doPublicLineSummariesMatch = (
+  left: PublicLineSummary[],
+  right: PublicLineSummary[],
+) =>
+  left.length === right.length
+  && left.every((line, index) => {
+    const comparison = right[index];
+    return comparison
+      && line.type === comparison.type
+      && line.description === comparison.description
+      && line.qty === comparison.qty
+      && line.unitPricePence === comparison.unitPricePence
+      && line.lineTotalPence === comparison.lineTotalPence
+      && line.productName === comparison.productName
+      && line.variantName === comparison.variantName
+      && line.variantSku === comparison.variantSku;
+  });
+
 const buildLineSummaryTotals = (
   lines: Array<ReturnType<typeof toPublicLineSummary>>,
 ) => ({
@@ -719,6 +913,12 @@ const buildLineSummaryTotals = (
   subtotalPence: lines.reduce((sum, line) => sum + line.lineTotalPence, 0),
   lineCount: lines.length,
 });
+
+type EstimateComparisonSnapshot = {
+  version: number | null;
+  subtotalPence: number;
+  lines: PublicLineSummary[];
+};
 
 const toPublicEstimateSummary = (
   estimate: PublicWorkshopEstimateRecord | PublicWorkshopEstimateSummaryRecord,
@@ -741,6 +941,109 @@ const toPublicEstimateSummary = (
     updatedAt: estimate.updatedAt,
     isCurrent: estimate.supersededAt === null,
     lines,
+  };
+};
+
+const buildEstimateChangeSummary = (
+  previousEstimate: EstimateComparisonSnapshot,
+  currentEstimate: EstimateComparisonSnapshot,
+) => {
+  if (
+    previousEstimate.version === currentEstimate.version
+    && previousEstimate.subtotalPence === currentEstimate.subtotalPence
+    && doPublicLineSummariesMatch(previousEstimate.lines, currentEstimate.lines)
+  ) {
+    return null;
+  }
+
+  const remainingPrevious = [...previousEstimate.lines];
+
+  const changes: Array<{
+    changeType: "ADDED" | "REMOVED" | "UPDATED";
+    type: "LABOUR" | "PART";
+    description: string;
+    meta: string | null;
+    previousQty: number | null;
+    currentQty: number | null;
+    previousUnitPricePence: number | null;
+    currentUnitPricePence: number | null;
+    previousLineTotalPence: number | null;
+    currentLineTotalPence: number | null;
+  }> = [];
+
+  for (const line of currentEstimate.lines) {
+    const exactIndex = remainingPrevious.findIndex(
+      (previousLine) =>
+        buildPublicLineComparisonKey(previousLine) === buildPublicLineComparisonKey(line),
+    );
+    const looseIndex =
+      exactIndex >= 0
+        ? exactIndex
+        : remainingPrevious.findIndex(
+            (previousLine) =>
+              buildPublicLineLooseComparisonKey(previousLine) === buildPublicLineLooseComparisonKey(line),
+          );
+    const previousLine =
+      looseIndex >= 0 ? remainingPrevious.splice(looseIndex, 1)[0] : null;
+
+    if (!previousLine) {
+      changes.push({
+        changeType: "ADDED",
+        type: line.type,
+        description: line.description,
+        meta: buildPublicLineMeta(line),
+        previousQty: null,
+        currentQty: line.qty,
+        previousUnitPricePence: null,
+        currentUnitPricePence: line.unitPricePence,
+        previousLineTotalPence: null,
+        currentLineTotalPence: line.lineTotalPence,
+      });
+      continue;
+    }
+
+    if (
+      previousLine.qty !== line.qty
+      || previousLine.unitPricePence !== line.unitPricePence
+      || previousLine.lineTotalPence !== line.lineTotalPence
+    ) {
+      changes.push({
+        changeType: "UPDATED",
+        type: line.type,
+        description: line.description,
+        meta: buildPublicLineMeta(line) ?? buildPublicLineMeta(previousLine),
+        previousQty: previousLine.qty,
+        currentQty: line.qty,
+        previousUnitPricePence: previousLine.unitPricePence,
+        currentUnitPricePence: line.unitPricePence,
+        previousLineTotalPence: previousLine.lineTotalPence,
+        currentLineTotalPence: line.lineTotalPence,
+      });
+    }
+  }
+
+  for (const line of remainingPrevious) {
+    changes.push({
+      changeType: "REMOVED",
+      type: line.type,
+      description: line.description,
+      meta: buildPublicLineMeta(line),
+      previousQty: line.qty,
+      currentQty: null,
+      previousUnitPricePence: line.unitPricePence,
+      currentUnitPricePence: null,
+      previousLineTotalPence: line.lineTotalPence,
+      currentLineTotalPence: null,
+    });
+  }
+
+  return {
+    previousVersion: previousEstimate.version,
+    currentVersion: currentEstimate.version,
+    previousSubtotalPence: previousEstimate.subtotalPence,
+    currentSubtotalPence: currentEstimate.subtotalPence,
+    differencePence: currentEstimate.subtotalPence - previousEstimate.subtotalPence,
+    changes,
   };
 };
 
@@ -871,6 +1174,7 @@ const toPublicQuoteResponse = (
   const currentEstimate = input.currentEstimate ?? null;
   const displayEstimate = currentEstimate ?? estimate;
   const displayEstimateSummary = toPublicEstimateSummary(displayEstimate);
+  const linkedEstimateSummary = toPublicEstimateSummary(estimate);
   const workLines = estimate.workshopJob.lines.map((line) => toPublicLineSummary(line));
   const workSummary = {
     ...buildLineSummaryTotals(workLines),
@@ -904,11 +1208,46 @@ const toPublicQuoteResponse = (
     canApprove: access.canApprove,
     finalSummary,
   });
+  const estimateComparisonTarget =
+    currentEstimate && currentEstimate.id !== estimate.id
+      ? ({
+          version: currentEstimate.version,
+          subtotalPence: displayEstimateSummary.subtotalPence,
+          lines: displayEstimateSummary.lines,
+        } satisfies EstimateComparisonSnapshot)
+      : access.hasUpdatedEstimate
+        ? ({
+            version: null,
+            subtotalPence: workSummary.subtotalPence,
+            lines: workSummary.lines,
+          } satisfies EstimateComparisonSnapshot)
+        : null;
+  const estimateChangeSummary =
+    estimateComparisonTarget
+      ? buildEstimateChangeSummary(
+          {
+            version: linkedEstimateSummary.version,
+            subtotalPence: linkedEstimateSummary.subtotalPence,
+            lines: linkedEstimateSummary.lines,
+          },
+          estimateComparisonTarget,
+        )
+      : null;
+  const collection = buildCollectionPortalSummary({
+    rawStatus: estimate.workshopJob.status,
+    closedAt: estimate.workshopJob.closedAt,
+    completedAt: estimate.workshopJob.completedAt,
+    finalSummary,
+    checkoutOutcome: estimate.workshopJob.checkoutOutcome,
+    depositRequiredPence: estimate.workshopJob.depositRequiredPence,
+    depositStatus: estimate.workshopJob.depositStatus,
+  });
 
   return {
     portal: access,
     quote: access,
     customerProgress,
+    collection,
     job: {
       status: executionStatus,
       statusLabel: toCustomerWorkshopStatusLabel(executionStatus),
@@ -939,6 +1278,7 @@ const toPublicQuoteResponse = (
       motorModel: estimate.workshopJob.bike?.motorModel ?? null,
     },
     estimate: displayEstimateSummary,
+    estimateChangeSummary,
     workSummary,
     customerNotes: estimate.workshopJob.jobNotes.map((note) => ({
       note: note.note,

@@ -2549,7 +2549,9 @@ const run = async () => {
       assert.equal(publicPortal.json.quote.accessStatus, "ACTIVE");
       assert.equal(publicPortal.json.customerProgress.stage, "AWAITING_APPROVAL");
       assert.equal(publicPortal.json.customerProgress.needsCustomerAction, true);
+      assert.equal(publicPortal.json.collection.state, "AWAITING_APPROVAL");
       assert.equal(publicPortal.json.estimate.status, "PENDING_APPROVAL");
+      assert.equal(publicPortal.json.estimateChangeSummary, null);
       assert.equal(publicPortal.json.estimate.lines.length, 1);
       assert.equal(publicPortal.json.workSummary.lineCount, 1);
       assert.equal(publicPortal.json.job.customerName.startsWith("M83 Customer"), true);
@@ -2621,6 +2623,12 @@ const run = async () => {
       assert.equal(stalePortal.json.portal.accessStatus, "SUPERSEDED");
       assert.equal(stalePortal.json.portal.canApprove, false);
       assert.equal(stalePortal.json.estimate.status, "APPROVED");
+      assert.equal(stalePortal.json.estimateChangeSummary.previousVersion, 1);
+      assert.equal(stalePortal.json.estimateChangeSummary.currentVersion, null);
+      assert.equal(stalePortal.json.estimateChangeSummary.differencePence, 1300);
+      assert.equal(stalePortal.json.estimateChangeSummary.changes.length, 1);
+      assert.equal(stalePortal.json.estimateChangeSummary.changes[0].changeType, "UPDATED");
+      assert.equal(stalePortal.json.estimateChangeSummary.changes[0].description, "Customer quote labour plus extra fitting");
 
       const staleApprove = await fetchJson(`/api/public/workshop/${quoteToken}/decision`, {
         method: "POST",
@@ -2664,6 +2672,7 @@ const run = async () => {
       assert.equal(awaitingApproval.status, 200, JSON.stringify(awaitingApproval.json));
       assert.equal(awaitingApproval.json.customerProgress.stage, "AWAITING_APPROVAL");
       assert.equal(awaitingApproval.json.customerProgress.needsCustomerAction, true);
+      assert.equal(awaitingApproval.json.collection.state, "AWAITING_APPROVAL");
 
       const approve = await fetchJson(`/api/public/workshop/${quoteToken}/decision`, {
         method: "POST",
@@ -2728,6 +2737,7 @@ const run = async () => {
       const readyPortal = await fetchJson(`/api/public/workshop/${quoteToken}`);
       assert.equal(readyPortal.status, 200, JSON.stringify(readyPortal.json));
       assert.equal(readyPortal.json.customerProgress.stage, "READY_FOR_COLLECTION");
+      assert.equal(readyPortal.json.collection.state, "READY_PENDING_CHECKOUT");
       assert.ok(
         readyPortal.json.customerProgress.headline.includes("ready to collect"),
         readyPortal.json.customerProgress.headline,
