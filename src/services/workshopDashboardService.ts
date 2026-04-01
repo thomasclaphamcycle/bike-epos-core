@@ -460,6 +460,8 @@ const buildDashboardWhere = (input: {
   if (input.search) {
     where.OR = [
       { notes: { contains: input.search, mode: "insensitive" } },
+      { bikeDescription: { contains: input.search, mode: "insensitive" } },
+      { assignedStaffName: { contains: input.search, mode: "insensitive" } },
       { customer: { firstName: { contains: input.search, mode: "insensitive" } } },
       { customer: { lastName: { contains: input.search, mode: "insensitive" } } },
       { customer: { email: { contains: input.search, mode: "insensitive" } } },
@@ -700,7 +702,11 @@ export const getWorkshopDashboard = async (input: WorkshopDashboardInput) => {
       status: job.status,
       source: job.source,
       finalizedBasketId: job.finalizedBasketId,
+      bikeDescription: job.bikeDescription,
       scheduledDate: job.scheduledDate,
+      scheduledStartAt: job.scheduledStartAt,
+      scheduledEndAt: job.scheduledEndAt,
+      durationMinutes: job.durationMinutes,
       notes: job.notes,
       depositRequiredPence: job.depositRequiredPence,
       depositStatus: job.depositStatus,

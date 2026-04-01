@@ -4714,7 +4714,7 @@ button.primary.workshop-status-action {
 
 .workshop-primary-route-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -5038,6 +5038,559 @@ button.primary.workshop-status-action {
   color: var(--cp-navy);
 }
 
+.workshop-technician-page {
+  width: 100%;
+  max-width: none;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 0 18px 0;
+  overflow-anchor: none;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.94) 0%, transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 224, 187, 0.16) 0%, transparent 24%),
+    linear-gradient(180deg, rgba(239, 244, 250, 0.98) 0%, rgba(228, 235, 244, 0.94) 100%);
+}
+
+.workshop-technician-topbar {
+  display: grid;
+  grid-template-columns: minmax(260px, auto) minmax(300px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 13px 14px 14px;
+  border: 1px solid rgba(196, 211, 227, 0.96);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(240, 246, 252, 0.97) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 16px 34px rgba(23, 43, 77, 0.1);
+}
+
+.workshop-technician-topbar__title {
+  display: grid;
+  gap: 2px;
+  align-self: start;
+  padding-top: 12px;
+  padding-left: 6px;
+}
+
+.workshop-technician-topbar__title .ui-page-eyebrow {
+  font-size: 0.68rem;
+}
+
+.workshop-technician-topbar__title .ui-page-title {
+  font-size: clamp(1.55rem, 1.9vw, 2rem);
+  color: #12324f;
+  letter-spacing: -0.02em;
+}
+
+.workshop-technician-topbar__title .ui-page-description {
+  max-width: 46ch;
+  font-size: 0.82rem;
+}
+
+.workshop-technician-search {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  align-self: start;
+}
+
+.workshop-technician-search .table-secondary {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #486177;
+  text-transform: uppercase;
+}
+
+.workshop-technician-search__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 15px;
+  border: 1px solid rgba(126, 157, 187, 0.98);
+  border-radius: 15px;
+  background: linear-gradient(180deg, #ffffff 0%, #eef4fb 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 10px 24px rgba(49, 78, 110, 0.1);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.workshop-technician-search__field:hover {
+  border-color: rgba(92, 140, 182, 0.98);
+}
+
+.workshop-technician-search__field:focus-within {
+  border-color: #4a86b8;
+  background: linear-gradient(180deg, #ffffff 0%, #ebf4fd 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 0 0 3px rgba(86, 146, 194, 0.2),
+    0 14px 28px rgba(49, 78, 110, 0.15);
+  transform: translateY(-1px);
+}
+
+.workshop-technician-search__icon {
+  flex: 0 0 auto;
+  color: #3d6d93;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.workshop-technician-search__field input {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #17324d;
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.workshop-technician-search__field input::placeholder {
+  color: #617a90;
+  font-weight: 500;
+}
+
+.workshop-technician-search__field input:focus {
+  outline: none;
+}
+
+.workshop-technician-controls {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  align-self: stretch;
+  padding: 8px 0 0 12px;
+  border-left: 1px solid rgba(203, 216, 230, 0.94);
+}
+
+.workshop-technician-controls__actions {
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(201, 214, 228, 0.96);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(241, 246, 252, 0.95) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 10px 22px rgba(26, 43, 67, 0.08);
+}
+
+.workshop-technician-controls__actions > button {
+  background: linear-gradient(180deg, #ffffff 0%, #eef4fa 100%);
+  border-color: rgba(192, 207, 222, 0.98);
+}
+
+.workshop-technician-controls__actions > button:hover {
+  border-color: rgba(147, 176, 202, 0.98);
+}
+
+.workshop-technician-scope-toggle {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workshop-technician-scope-toggle__button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #d4deea;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #21425f;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.workshop-technician-scope-toggle__button--active {
+  border-color: #6e98bc;
+  background: linear-gradient(180deg, #ffffff 0%, #e7f1fa 100%);
+  box-shadow: 0 0 0 1px rgba(94, 142, 181, 0.22);
+}
+
+.workshop-technician-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workshop-technician-summary-card,
+.workshop-technician-route-link,
+.workshop-technician-section,
+.workshop-technician-detail {
+  border: 1px solid rgba(214, 224, 235, 0.92);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(252, 254, 255, 0.96) 0%, rgba(242, 247, 252, 0.92) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.97),
+    0 10px 22px rgba(25, 44, 71, 0.06);
+}
+
+.workshop-technician-summary-card {
+  display: grid;
+  gap: 6px;
+  min-height: 128px;
+  padding: 14px;
+}
+
+.workshop-technician-summary-card strong {
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  line-height: 1;
+  color: #12324f;
+}
+
+.workshop-technician-summary-card p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.workshop-technician-summary-card--ready {
+  background:
+    radial-gradient(circle at top right, rgba(113, 196, 146, 0.2) 0%, transparent 34%),
+    linear-gradient(180deg, rgba(247, 255, 250, 0.98) 0%, rgba(236, 248, 240, 0.96) 100%);
+}
+
+.workshop-technician-route-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.workshop-technician-route-link {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.workshop-technician-route-link strong {
+  color: #12324f;
+  font-size: 0.95rem;
+}
+
+.workshop-technician-route-link span {
+  color: #4f6478;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.workshop-technician-route-link:hover {
+  border-color: rgba(163, 189, 213, 0.96);
+  transform: translateY(-1px);
+}
+
+.workshop-technician-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 360px;
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-technician-main {
+  display: grid;
+  gap: 12px;
+}
+
+.workshop-technician-focus-filter {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workshop-technician-focus-filter__button {
+  display: grid;
+  gap: 4px;
+  min-height: 84px;
+  padding: 11px 12px;
+  border: 1px solid #d7e1ec;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #26435d;
+  text-align: left;
+}
+
+.workshop-technician-focus-filter__button strong {
+  font-size: 0.9rem;
+}
+
+.workshop-technician-focus-filter__button span {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #5d7488;
+}
+
+.workshop-technician-focus-filter__button--active {
+  border-color: #6f99be;
+  background: linear-gradient(180deg, #ffffff 0%, #e8f1fa 100%);
+  box-shadow: 0 0 0 1px rgba(98, 146, 185, 0.2);
+}
+
+.workshop-technician-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px 13px;
+}
+
+.workshop-technician-section__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-technician-section__header h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.workshop-technician-empty {
+  display: grid;
+  place-items: center;
+  min-height: 118px;
+  padding: 14px;
+  border: 1px dashed #ced9e5;
+  border-radius: 13px;
+  background: rgba(250, 252, 255, 0.86);
+  color: #5a6f82;
+  text-align: center;
+  line-height: 1.45;
+}
+
+.workshop-technician-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workshop-technician-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d7e1ec;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 8px 18px rgba(30, 49, 76, 0.05);
+}
+
+.workshop-technician-card--selected {
+  border-color: #7ea8ca;
+  background:
+    radial-gradient(circle at top right, rgba(255, 177, 106, 0.18) 0%, transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(241, 247, 252, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 0 0 1px rgba(104, 154, 197, 0.16),
+    0 12px 24px rgba(30, 49, 76, 0.08);
+}
+
+.workshop-technician-card__focus {
+  display: grid;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.workshop-technician-card__topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.workshop-technician-card__topline strong {
+  color: #12324f;
+  font-size: 0.98rem;
+}
+
+.workshop-technician-card__customer {
+  color: #52677b;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.workshop-technician-card__badges,
+.workshop-technician-detail__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.workshop-technician-card__meta,
+.workshop-technician-detail__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workshop-technician-card__meta > div,
+.workshop-technician-detail__summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.workshop-technician-card__meta strong,
+.workshop-technician-detail__summary strong {
+  color: #153350;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.workshop-technician-card__detail {
+  margin: 0;
+  color: #55687b;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.workshop-technician-card__actions,
+.workshop-technician-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-technician-card__actions {
+  padding-top: 2px;
+}
+
+.workshop-technician-detail {
+  position: sticky;
+  top: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px 13px;
+}
+
+.workshop-technician-detail__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.workshop-technician-detail__header h2,
+.workshop-technician-note-form__header h3,
+.workshop-technician-notes__header h3 {
+  margin: 0 0 4px;
+}
+
+.workshop-technician-detail__customer {
+  display: grid;
+  gap: 3px;
+}
+
+.workshop-technician-detail__customer strong {
+  color: #12324f;
+}
+
+.workshop-technician-detail__customer span {
+  color: #607286;
+  font-size: 0.84rem;
+}
+
+.workshop-technician-detail__signal {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid #d7e1ec;
+  border-radius: 12px;
+  background: rgba(249, 252, 255, 0.88);
+}
+
+.workshop-technician-detail__signal strong {
+  color: #12324f;
+  font-size: 0.84rem;
+}
+
+.workshop-technician-detail__signal span {
+  color: #5b7083;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.workshop-technician-note-form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d7e1ec;
+  border-radius: 13px;
+  background: rgba(250, 252, 255, 0.9);
+}
+
+.workshop-technician-note-form textarea {
+  min-height: 116px;
+  resize: vertical;
+}
+
+.workshop-technician-notes {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-technician-notes__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.workshop-technician-note-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-technician-note-list__item {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid #d7e1ec;
+  border-radius: 12px;
+  background: rgba(250, 252, 255, 0.88);
+}
+
+.workshop-technician-note-list__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.workshop-technician-note-list__meta strong {
+  color: #12324f;
+  font-size: 0.84rem;
+}
+
+.workshop-technician-note-list__meta span {
+  color: #687d90;
+  font-size: 0.78rem;
+}
+
+.workshop-technician-note-list__item p {
+  margin: 0;
+  color: #55687b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 @media (max-width: 1180px) {
   .workshop-primary-topbar,
   .workshop-primary-layout,
@@ -5060,6 +5613,27 @@ button.primary.workshop-status-action {
     justify-items: start;
     padding-left: 0;
     border-left: 0;
+  }
+
+  .workshop-technician-topbar,
+  .workshop-technician-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-technician-summary,
+  .workshop-technician-focus-filter,
+  .workshop-technician-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workshop-technician-controls {
+    justify-items: start;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .workshop-technician-detail {
+    position: static;
   }
 }
 
@@ -5087,6 +5661,34 @@ button.primary.workshop-status-action {
   }
 
   .workshop-primary-selection__meta {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-technician-page {
+    padding-inline: 12px;
+  }
+
+  .workshop-technician-summary,
+  .workshop-technician-focus-filter,
+  .workshop-technician-card-grid,
+  .workshop-technician-route-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-technician-controls,
+  .workshop-technician-scope-toggle,
+  .workshop-technician-detail__header,
+  .workshop-technician-notes__header,
+  .workshop-technician-note-list__meta {
+    justify-content: flex-start;
+  }
+
+  .workshop-technician-topbar {
+    padding-inline: 10px;
+  }
+
+  .workshop-technician-card__meta,
+  .workshop-technician-detail__summary {
     grid-template-columns: 1fr;
   }
 }

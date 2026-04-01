@@ -80,6 +80,7 @@ import {
   WorkshopCollectionPage,
   WorkshopJobPage,
   WorkshopPage,
+  WorkshopTechnicianPage,
   WorkshopPerformancePage,
   WorkshopPrintCentrePage,
   WorkshopQuotePage,
@@ -383,7 +384,7 @@ const AuthedApp = () => (
         <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/workshop/new" element={<WorkshopCheckInPage />} />
         <Route path="/workshop/check-in" element={<WorkshopCheckInPage />} />
-        <Route path="/workshop/technician" element={<InternalTasksPage />} />
+        <Route path="/workshop/technician" element={<WorkshopTechnicianPage />} />
         <Route path="/workshop/calendar" element={<WorkshopCalendarPage />} />
         <Route
           path="/workshop/analytics"
