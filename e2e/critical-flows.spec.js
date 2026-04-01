@@ -1237,14 +1237,22 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
   const token = uniqueToken("workshop-technician");
   const todayKey = getLondonDateKey();
   const rotaOverview = await apiJsonWithHeaderBypass(request, "GET", "/api/rota", "MANAGER");
-  const rotaPeriod = rotaOverview.periods?.find((period) => period.isCurrent) ?? await createRotaPeriodViaBypass(
-    request,
-    getOperationalWeekStartDateKey(todayKey),
-    `Technician workflow ${token}`,
-  );
+  const currentRotaPeriod = rotaOverview.periods?.find((period) => period.isCurrent) ?? null;
+  const createdRotaPeriod = currentRotaPeriod
+    ? null
+    : await createRotaPeriodViaBypass(
+      request,
+      getOperationalWeekStartDateKey(todayKey),
+      `Technician workflow ${token}`,
+    );
+  const rotaPeriodId = currentRotaPeriod?.id ?? createdRotaPeriod?.rotaPeriod?.id ?? null;
+
+  if (typeof rotaPeriodId !== "string" || !rotaPeriodId.trim()) {
+    throw new Error("Expected technician workflow setup to resolve a valid rotaPeriodId.");
+  }
 
   await saveRotaAssignmentViaBypass(request, {
-    rotaPeriodId: rotaPeriod.id,
+    rotaPeriodId,
     staffId: credentials.user.id,
     date: todayKey,
     shiftType: "FULL_DAY",
