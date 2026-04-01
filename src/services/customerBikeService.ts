@@ -8,6 +8,10 @@ import {
   serializeBikeServiceSchedule,
   summarizeBikeServiceSchedules,
 } from "./bikeServiceScheduleService";
+import {
+  buildWorkshopCommercialInsights,
+  getWorkshopCommercialSupportData,
+} from "./workshopCommercialIntelligenceService";
 import { toWorkshopExecutionStatus } from "./workshopStatusService";
 
 type CreateCustomerBikeInput = {
@@ -621,6 +625,20 @@ const buildBikeServiceSummary = (
   };
 };
 
+const buildBikeCommercialContext = (
+  bike: Pick<CustomerBikeRecord, "id" | "bikeType" | "motorBrand" | "motorModel" | "serviceSchedules">,
+  serviceSummary: ReturnType<typeof buildBikeServiceSummary>,
+) => ({
+  bike: {
+    id: bike.id,
+    bikeType: bike.bikeType,
+    motorBrand: bike.motorBrand,
+    motorModel: bike.motorModel,
+  },
+  serviceSchedules: bike.serviceSchedules,
+  serviceSummary,
+});
+
 const isOpenWorkshopExecutionStatus = (
   status: ReturnType<typeof toWorkshopExecutionStatus>,
 ) => status === "BOOKED" || status === "IN_PROGRESS" || status === "READY";
@@ -885,20 +903,30 @@ export const getCustomerBikeByIdTx = async (
 export const listCustomerBikes = async (customerId: string) => {
   await assertCustomerExistsTx(prisma, customerId);
 
-  const bikes = await prisma.customerBike.findMany({
-    where: { customerId },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: customerBikeListSelect,
-  });
+  const [{ workshopSettings, templates }, bikes] = await Promise.all([
+    getWorkshopCommercialSupportData(),
+    prisma.customerBike.findMany({
+      where: { customerId },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      select: customerBikeListSelect,
+    }),
+  ]);
 
   return {
     customerId,
-    bikes: bikes.map((bike) => ({
-      ...toCustomerBikeResponse(bike),
-      serviceSummary: buildBikeServiceSummary(bike.workshopJobs),
-      serviceSchedules: bike.serviceSchedules.map((schedule) => serializeBikeServiceSchedule(schedule)),
-      serviceScheduleSummary: summarizeBikeServiceSchedules(bike.serviceSchedules),
-    })),
+    bikes: bikes.map((bike) => {
+      const serviceSummary = buildBikeServiceSummary(bike.workshopJobs);
+      return {
+        ...toCustomerBikeResponse(bike),
+        serviceSummary,
+        serviceSchedules: bike.serviceSchedules.map((schedule) => serializeBikeServiceSchedule(schedule)),
+        serviceScheduleSummary: summarizeBikeServiceSchedules(bike.serviceSchedules),
+        commercialInsights: buildWorkshopCommercialInsights(
+          buildBikeCommercialContext(bike, serviceSummary),
+          { workshopSettings, templates },
+        ),
+      };
+    }),
   };
 };
 
@@ -1090,10 +1118,13 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
     throw new HttpError(400, "Invalid customer bike id", "INVALID_CUSTOMER_BIKE_ID");
   }
 
-  const bike = await prisma.customerBike.findUnique({
-    where: { id: customerBikeId },
-    select: customerBikeHistorySelect,
-  });
+  const [{ workshopSettings, templates }, bike] = await Promise.all([
+    getWorkshopCommercialSupportData(),
+    prisma.customerBike.findUnique({
+      where: { id: customerBikeId },
+      select: customerBikeHistorySelect,
+    }),
+  ]);
 
   if (!bike) {
     throw new HttpError(404, "Bike record not found", "CUSTOMER_BIKE_NOT_FOUND");
@@ -1125,6 +1156,10 @@ export const getCustomerBikeHistory = async (customerBikeId: string) => {
     metrics: shapedHistory.metrics,
     serviceSchedules: bike.serviceSchedules.map((schedule) => serializeBikeServiceSchedule(schedule)),
     serviceScheduleSummary: summarizeBikeServiceSchedules(bike.serviceSchedules),
+    commercialInsights: buildWorkshopCommercialInsights(
+      buildBikeCommercialContext(bike, serviceSummary),
+      { workshopSettings, templates },
+    ),
     historyScope: "LINKED_BIKE_JOBS_ONLY",
     limitations: [
       "Only workshop jobs linked directly to this bike record are included. Legacy free-text workshop jobs without a bike link remain outside formal bike history.",

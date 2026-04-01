@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { EntityTimelinePanel } from "../components/EntityTimelinePanel";
 import { useToasts } from "../components/ToastProvider";
+import { WorkshopCommercialInsightsPanel } from "../components/WorkshopCommercialInsightsPanel";
 import { toBackendUrl } from "../utils/backendUrl";
 import {
   bikeServiceScheduleDueStatusClass,
@@ -21,6 +22,7 @@ import {
   workshopRawStatusLabel,
   type WorkshopExecutionStatus,
 } from "../features/workshop/status";
+import { type WorkshopCommercialInsights } from "../features/workshop/commercialInsights";
 
 type BikeServiceScheduleRecord = {
   id: string;
@@ -210,6 +212,7 @@ type BikeHistoryPayload = {
     upcomingCount: number;
     primarySchedule: BikeServiceScheduleRecord | null;
   };
+  commercialInsights: WorkshopCommercialInsights;
   limitations: string[];
   completedHistory: BikeHistoryEntry[];
   openWork: BikeHistoryEntry[];
@@ -703,6 +706,15 @@ export const BikeHistoryPage = () => {
           <div className="restricted-panel info-panel bike-service-profile__limitation">
             {latestLimitation}
           </div>
+        ) : null}
+
+        {payload?.commercialInsights ? (
+          <WorkshopCommercialInsightsPanel
+            insights={payload.commercialInsights}
+            title="Service and revenue prompts"
+            description="These prompts are generated from the bike's care plan, workshop history, and recorded bike type so staff can make relevant recommendations with a clear why."
+            dataTestId="bike-history-commercial-insights"
+          />
         ) : null}
       </section>
 

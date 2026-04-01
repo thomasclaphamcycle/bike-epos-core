@@ -68,6 +68,9 @@ const SETTINGS_KEYS = [
   "workshop.maxBookingsPerDay",
   "workshop.manageTokenTtlDays",
   "workshop.requestTimingMessage",
+  "workshop.commercialSuggestionsEnabled",
+  "workshop.commercialLongGapDays",
+  "workshop.commercialRecentServiceCooldownDays",
   "notifications.workshopAutoSendEnabled",
   "notifications.workshopEmailEnabled",
   "notifications.workshopSmsEnabled",
@@ -126,6 +129,9 @@ const run = async () => {
       defaultRes.json.settings.workshop.requestTimingMessage,
       "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.",
     );
+    assert.equal(defaultRes.json.settings.workshop.commercialSuggestionsEnabled, true);
+    assert.equal(defaultRes.json.settings.workshop.commercialLongGapDays, 180);
+    assert.equal(defaultRes.json.settings.workshop.commercialRecentServiceCooldownDays, 60);
     assert.equal(defaultRes.json.settings.notifications.workshopAutoSendEnabled, true);
     assert.equal(defaultRes.json.settings.notifications.workshopEmailEnabled, true);
     assert.equal(defaultRes.json.settings.notifications.workshopSmsEnabled, true);
@@ -145,6 +151,9 @@ const run = async () => {
     assert.equal("latitude" in publicConfigRes.json.config.store, false);
     assert.equal("longitude" in publicConfigRes.json.config.store, false);
     assert.equal("manageTokenTtlDays" in publicConfigRes.json.config.workshop, false);
+    assert.equal("commercialSuggestionsEnabled" in publicConfigRes.json.config.workshop, false);
+    assert.equal("commercialLongGapDays" in publicConfigRes.json.config.workshop, false);
+    assert.equal("commercialRecentServiceCooldownDays" in publicConfigRes.json.config.workshop, false);
     assert.equal("notifications" in publicConfigRes.json.config, false);
 
     await prisma.receiptSettings.upsert({
@@ -239,6 +248,9 @@ const run = async () => {
           maxBookingsPerDay: 9,
           manageTokenTtlDays: 45,
           requestTimingMessage: "Pick a preferred workshop date and we will confirm the final slot after review.",
+          commercialSuggestionsEnabled: false,
+          commercialLongGapDays: 240,
+          commercialRecentServiceCooldownDays: 45,
         },
         notifications: {
           workshopAutoSendEnabled: false,
@@ -285,6 +297,9 @@ const run = async () => {
       patchRes.json.settings.workshop.requestTimingMessage,
       "Pick a preferred workshop date and we will confirm the final slot after review.",
     );
+    assert.equal(patchRes.json.settings.workshop.commercialSuggestionsEnabled, false);
+    assert.equal(patchRes.json.settings.workshop.commercialLongGapDays, 240);
+    assert.equal(patchRes.json.settings.workshop.commercialRecentServiceCooldownDays, 45);
     assert.equal(patchRes.json.settings.notifications.workshopAutoSendEnabled, false);
     assert.equal(patchRes.json.settings.notifications.workshopEmailEnabled, true);
     assert.equal(patchRes.json.settings.notifications.workshopSmsEnabled, false);
@@ -314,6 +329,7 @@ const run = async () => {
       "Pick a preferred workshop date and we will confirm the final slot after review.",
     );
     assert.equal(persistedPublicConfigRes.json.config.operations.dashboardWeatherEnabled, false);
+    assert.equal("commercialSuggestionsEnabled" in persistedPublicConfigRes.json.config.workshop, false);
 
     const storeInfoRes = await fetchJson("/api/settings/store-info", { headers: ADMIN_HEADERS });
     assert.equal(storeInfoRes.status, 200, JSON.stringify(storeInfoRes.json));

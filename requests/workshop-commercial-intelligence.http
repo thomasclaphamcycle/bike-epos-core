@@ -1,0 +1,35 @@
+@baseUrl = http://localhost:3100
+@managerRole = MANAGER
+@managerId = commercial-manager-demo
+@customerId = replace-customer-id
+@bikeId = replace-bike-id
+@workshopJobId = replace-workshop-job-id
+
+### Enable workshop commercial suggestions and tune timing windows
+PATCH {{baseUrl}}/api/settings
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "workshop": {
+    "commercialSuggestionsEnabled": true,
+    "commercialLongGapDays": 180,
+    "commercialRecentServiceCooldownDays": 60
+  }
+}
+
+### Inspect customer bike list commercial prompts
+GET {{baseUrl}}/api/customers/{{customerId}}/bikes
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Inspect bike history commercial prompts
+GET {{baseUrl}}/api/customers/bikes/{{bikeId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Inspect workshop job commercial prompts
+GET {{baseUrl}}/api/workshop/jobs/{{workshopJobId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}

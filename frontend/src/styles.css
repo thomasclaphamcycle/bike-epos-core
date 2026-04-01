@@ -7591,6 +7591,122 @@ button.primary.workshop-status-action {
   box-shadow: inset 0 0 0 1px rgba(46, 124, 246, 0.14);
 }
 
+.workshop-commercial-insights {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #d6e1ec;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(39, 103, 163, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(247, 251, 255, 0.98), rgba(255, 255, 255, 0.98));
+}
+
+.workshop-commercial-insights--compact {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+}
+
+.workshop-commercial-insights__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.workshop-commercial-insights__header h3 {
+  margin: 2px 0 0;
+}
+
+.workshop-commercial-insights__header p {
+  margin: 6px 0 0;
+}
+
+.workshop-commercial-insights__summary {
+  min-width: 88px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(136, 156, 177, 0.3);
+  text-align: center;
+  display: grid;
+  gap: 4px;
+}
+
+.workshop-commercial-insights__list {
+  display: grid;
+  gap: 10px;
+}
+
+.workshop-commercial-insights__card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(133, 151, 171, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.workshop-commercial-insights__card p {
+  margin: 0;
+}
+
+.workshop-commercial-insights__card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.workshop-commercial-insights__priority {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.workshop-commercial-insights__priority--high {
+  background: #fde7e2;
+  color: #a43e1a;
+}
+
+.workshop-commercial-insights__priority--medium {
+  background: #fff3dd;
+  color: #8f6114;
+}
+
+.workshop-commercial-insights__priority--low {
+  background: #eaf2fb;
+  color: #285f93;
+}
+
+.workshop-commercial-insights__signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workshop-commercial-insights__signal {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(235, 242, 249, 0.95);
+  color: #446072;
+  font-size: 0.78rem;
+}
+
+.workshop-commercial-insights__meta {
+  display: grid;
+  gap: 6px;
+  color: #41586a;
+  font-size: 0.9rem;
+}
+
 .workshop-checkin-bike-picker__availability {
   display: flex;
   align-items: flex-start;
@@ -9363,6 +9479,15 @@ button.primary.workshop-status-action {
 .store-info-grid textarea {
   width: 100%;
   resize: vertical;
+}
+
+.store-settings-checkbox {
+  align-content: start;
+}
+
+.store-settings-checkbox input[type="checkbox"] {
+  width: auto;
+  justify-self: start;
 }
 
 .store-opening-hours {

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
+import { WorkshopCommercialInsightsPanel } from "../components/WorkshopCommercialInsightsPanel";
 import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
@@ -36,6 +37,7 @@ import {
   type WorkshopServiceTemplate,
   type WorkshopServiceTemplatesResponse,
 } from "../features/workshop/serviceTemplates";
+import { type WorkshopCommercialInsights } from "../features/workshop/commercialInsights";
 import { toBackendUrl } from "../utils/backendUrl";
 import { useAuth } from "../auth/AuthContext";
 
@@ -206,6 +208,7 @@ type WorkshopJobResponse = {
     createdAt: string;
     updatedAt: string;
   };
+  commercialInsights: WorkshopCommercialInsights;
   lines: WorkshopLine[];
   partsOverview: PartsOverview;
   currentEstimate: WorkshopEstimateRecord | null;
@@ -2578,6 +2581,17 @@ export const WorkshopJobPage = () => {
         {payload && payload.lines.length === 0 ? (
           <div className="restricted-panel">
             Add labour and part lines below to create the first estimate for this job.
+          </div>
+        ) : null}
+
+        {payload?.commercialInsights ? (
+          <div style={{ marginTop: "12px" }}>
+            <WorkshopCommercialInsightsPanel
+              insights={payload.commercialInsights}
+              title="Revenue and service prompts"
+              description="These prompts are grounded in the linked bike record, service timing, and the current live work so staff can raise the right follow-on work without duplicating what is already quoted."
+              dataTestId="workshop-job-commercial-insights"
+            />
           </div>
         ) : null}
 

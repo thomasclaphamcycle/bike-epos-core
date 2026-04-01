@@ -50,6 +50,9 @@ export type ShopSettings = {
     maxBookingsPerDay: number;
     manageTokenTtlDays: number;
     requestTimingMessage: string;
+    commercialSuggestionsEnabled: boolean;
+    commercialLongGapDays: number;
+    commercialRecentServiceCooldownDays: number;
   };
   notifications: {
     workshopAutoSendEnabled: boolean;
@@ -108,6 +111,9 @@ const DEFAULT_MAX_BOOKINGS_PER_DAY = 8;
 const DEFAULT_WORKSHOP_MANAGE_TOKEN_TTL_DAYS = 30;
 const DEFAULT_WORKSHOP_REQUEST_TIMING_MESSAGE =
   "Choose a preferred workshop date and drop-off preference. The shop will confirm the final timing if a precise slot is needed.";
+const DEFAULT_WORKSHOP_COMMERCIAL_SUGGESTIONS_ENABLED = true;
+const DEFAULT_WORKSHOP_COMMERCIAL_LONG_GAP_DAYS = 180;
+const DEFAULT_WORKSHOP_COMMERCIAL_RECENT_SERVICE_COOLDOWN_DAYS = 60;
 
 type LegacySettingsFallbacks = {
   receiptSettings?: {
@@ -472,6 +478,24 @@ const SETTINGS_DEFINITIONS = {
     validate: (value: unknown) =>
       normalizeTextSetting(value, "workshop.requestTimingMessage", { allowEmpty: false, maxLength: 400 }),
   },
+  "workshop.commercialSuggestionsEnabled": {
+    key: "workshop.commercialSuggestionsEnabled",
+    defaultValue: DEFAULT_WORKSHOP_COMMERCIAL_SUGGESTIONS_ENABLED,
+    validate: (value: unknown) =>
+      normalizeBooleanSetting(value, "workshop.commercialSuggestionsEnabled"),
+  },
+  "workshop.commercialLongGapDays": {
+    key: "workshop.commercialLongGapDays",
+    defaultValue: DEFAULT_WORKSHOP_COMMERCIAL_LONG_GAP_DAYS,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "workshop.commercialLongGapDays", { min: 30, max: 1095 }),
+  },
+  "workshop.commercialRecentServiceCooldownDays": {
+    key: "workshop.commercialRecentServiceCooldownDays",
+    defaultValue: DEFAULT_WORKSHOP_COMMERCIAL_RECENT_SERVICE_COOLDOWN_DAYS,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "workshop.commercialRecentServiceCooldownDays", { min: 0, max: 365 }),
+  },
   "notifications.workshopAutoSendEnabled": {
     key: "notifications.workshopAutoSendEnabled",
     defaultValue: true,
@@ -617,6 +641,18 @@ const toSettingsSnapshot = (
       requestTimingMessage: getSettingValue(
         valueByKey.get("workshop.requestTimingMessage"),
         SETTINGS_DEFINITIONS["workshop.requestTimingMessage"],
+      ),
+      commercialSuggestionsEnabled: getSettingValue(
+        valueByKey.get("workshop.commercialSuggestionsEnabled"),
+        SETTINGS_DEFINITIONS["workshop.commercialSuggestionsEnabled"],
+      ),
+      commercialLongGapDays: getSettingValue(
+        valueByKey.get("workshop.commercialLongGapDays"),
+        SETTINGS_DEFINITIONS["workshop.commercialLongGapDays"],
+      ),
+      commercialRecentServiceCooldownDays: getSettingValue(
+        valueByKey.get("workshop.commercialRecentServiceCooldownDays"),
+        SETTINGS_DEFINITIONS["workshop.commercialRecentServiceCooldownDays"],
       ),
     },
     notifications: {

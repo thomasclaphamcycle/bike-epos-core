@@ -1,6 +1,7 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch, apiPost } from "../api/client";
+import { WorkshopCommercialInsightsPanel } from "../components/WorkshopCommercialInsightsPanel";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { WorkshopServiceTemplatePreview } from "../components/WorkshopServiceTemplatePreview";
@@ -11,6 +12,7 @@ import {
   type WorkshopServiceTemplate,
   type WorkshopServiceTemplatesResponse,
 } from "../features/workshop/serviceTemplates";
+import { type WorkshopCommercialInsights } from "../features/workshop/commercialInsights";
 
 type CustomerRow = {
   id: string;
@@ -52,6 +54,7 @@ type CustomerBikeRecord = {
     latestJobAt: string | null;
     latestCompletedAt: string | null;
   };
+  commercialInsights?: WorkshopCommercialInsights;
 };
 
 type CustomerBikesResponse = {
@@ -1727,6 +1730,16 @@ export const WorkshopCheckInPage = ({
         {step === 2 ? (
           <section className="card">
             <h2>Services</h2>
+            {selectedBikeRecord?.commercialInsights ? (
+              <WorkshopCommercialInsightsPanel
+                insights={selectedBikeRecord.commercialInsights}
+                title="Bike-specific service prompts"
+                description="These prompts are based on the selected bike's linked workshop history and care-plan timing, so staff can raise relevant work without guessing."
+                dataTestId="workshop-checkin-commercial-insights"
+                onUseSnippet={(snippet) => setProblemWork((current) => appendProblemWorkSnippet(current, snippet))}
+                useSnippetLabel="Use in problem/work"
+              />
+            ) : null}
             <div className="workshop-checkin-services-template">
               {loadingTemplates ? (
                 <div className="table-secondary">Loading active service templates...</div>

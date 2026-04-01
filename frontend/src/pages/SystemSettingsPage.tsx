@@ -63,6 +63,24 @@ type StoreInfoResponse = {
   store: StoreInfo;
 };
 
+type WorkshopCommercialSettings = {
+  commercialSuggestionsEnabled: boolean;
+  commercialLongGapDays: number;
+  commercialRecentServiceCooldownDays: number;
+};
+
+type SettingsResponse = {
+  settings: {
+    workshop: WorkshopCommercialSettings;
+  };
+};
+
+const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
+  commercialSuggestionsEnabled: true,
+  commercialLongGapDays: 180,
+  commercialRecentServiceCooldownDays: 60,
+};
+
 const COMMON_TIME_ZONES = [
   "Europe/London",
   "Europe/Dublin",
@@ -173,12 +191,38 @@ const toStoreInfoFormState = (store: Record<string, unknown>): StoreInfo => ({
   openingHours: toOpeningHoursFormState(store.openingHours),
 });
 
+const toWorkshopCommercialSettings = (value: unknown): WorkshopCommercialSettings => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS;
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    commercialSuggestionsEnabled:
+      typeof record.commercialSuggestionsEnabled === "boolean"
+        ? record.commercialSuggestionsEnabled
+        : DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS.commercialSuggestionsEnabled,
+    commercialLongGapDays:
+      typeof record.commercialLongGapDays === "number" && Number.isInteger(record.commercialLongGapDays)
+        ? record.commercialLongGapDays
+        : DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS.commercialLongGapDays,
+    commercialRecentServiceCooldownDays:
+      typeof record.commercialRecentServiceCooldownDays === "number"
+        && Number.isInteger(record.commercialRecentServiceCooldownDays)
+        ? record.commercialRecentServiceCooldownDays
+        : DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS.commercialRecentServiceCooldownDays,
+  };
+};
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [initialStore, setInitialStore] = useState<StoreInfo | null>(null);
+  const [workshopCommercial, setWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
+  const [initialWorkshopCommercial, setInitialWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,16 +230,26 @@ export const SystemSettingsPage = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const payload = await apiGet<StoreInfoResponse>("/api/settings/store-info");
+        const [storePayload, settingsPayload] = await Promise.all([
+          apiGet<StoreInfoResponse>("/api/settings/store-info"),
+          apiGet<SettingsResponse>("/api/settings"),
+        ]);
         if (cancelled) {
           return;
         }
-        const normalizedStore = toStoreInfoFormState(payload.store as unknown as Record<string, unknown>);
+        const normalizedStore = toStoreInfoFormState(
+          storePayload.store as unknown as Record<string, unknown>,
+        );
+        const normalizedWorkshopCommercial = toWorkshopCommercialSettings(
+          settingsPayload.settings?.workshop as unknown as Record<string, unknown>,
+        );
         setStore(normalizedStore);
         setInitialStore(normalizedStore);
+        setWorkshopCommercial(normalizedWorkshopCommercial);
+        setInitialWorkshopCommercial(normalizedWorkshopCommercial);
       } catch (loadError) {
         if (!cancelled) {
-          error(loadError instanceof Error ? loadError.message : "Failed to load Store Info");
+          error(loadError instanceof Error ? loadError.message : "Failed to load settings");
         }
       } finally {
         if (!cancelled) {
@@ -286,8 +340,59 @@ export const SystemSettingsPage = () => {
   const hasValidationErrors = Object.keys(validationErrors.fields).length > 0
     || Object.keys(validationErrors.openingHours).length > 0;
 
+  const workshopCommercialValidationErrors = useMemo(() => {
+    if (!workshopCommercial) {
+      return {};
+    }
+
+    const errors: Partial<Record<keyof WorkshopCommercialSettings, string>> = {};
+
+    if (
+      !Number.isInteger(workshopCommercial.commercialLongGapDays)
+      || workshopCommercial.commercialLongGapDays < 30
+      || workshopCommercial.commercialLongGapDays > 1095
+    ) {
+      errors.commercialLongGapDays = "Use a whole number of days between 30 and 1095.";
+    }
+
+    if (
+      !Number.isInteger(workshopCommercial.commercialRecentServiceCooldownDays)
+      || workshopCommercial.commercialRecentServiceCooldownDays < 0
+      || workshopCommercial.commercialRecentServiceCooldownDays > 365
+    ) {
+      errors.commercialRecentServiceCooldownDays = "Use a whole number of days between 0 and 365.";
+    }
+
+    if (
+      Number.isInteger(workshopCommercial.commercialLongGapDays)
+      && Number.isInteger(workshopCommercial.commercialRecentServiceCooldownDays)
+      && workshopCommercial.commercialLongGapDays < workshopCommercial.commercialRecentServiceCooldownDays
+    ) {
+      errors.commercialLongGapDays = "Long-gap timing should be equal to or greater than the recent-service cooldown.";
+    }
+
+    return errors;
+  }, [workshopCommercial]);
+
+  const workshopCommercialDirty = useMemo(() => {
+    if (!workshopCommercial || !initialWorkshopCommercial) {
+      return false;
+    }
+
+    return JSON.stringify(workshopCommercial) !== JSON.stringify(initialWorkshopCommercial);
+  }, [initialWorkshopCommercial, workshopCommercial]);
+
+  const hasWorkshopCommercialValidationErrors = Object.keys(workshopCommercialValidationErrors).length > 0;
+
   const setField = <K extends keyof StoreInfo>(key: K, value: StoreInfo[K]) => {
     setStore((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const setWorkshopCommercialField = <K extends keyof WorkshopCommercialSettings>(
+    key: K,
+    value: WorkshopCommercialSettings[K],
+  ) => {
+    setWorkshopCommercial((current) => (current ? { ...current, [key]: value } : current));
   };
 
   const setOpeningHours = (weekday: StoreWeekdayKey, patch: Partial<StoreDailyOpeningHours>) => {
@@ -340,6 +445,42 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to update Store Info");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveWorkshopCommercialSettings = async () => {
+    if (!workshopCommercial) {
+      return;
+    }
+    if (hasWorkshopCommercialValidationErrors) {
+      error("Fix the highlighted workshop commercial settings before saving.");
+      return;
+    }
+
+    const normalized = {
+      commercialSuggestionsEnabled: workshopCommercial.commercialSuggestionsEnabled,
+      commercialLongGapDays: Number.parseInt(String(workshopCommercial.commercialLongGapDays), 10),
+      commercialRecentServiceCooldownDays: Number.parseInt(
+        String(workshopCommercial.commercialRecentServiceCooldownDays),
+        10,
+      ),
+    };
+
+    setSavingWorkshopCommercial(true);
+    try {
+      const payload = await apiPatch<SettingsResponse>("/api/settings", {
+        workshop: normalized,
+      });
+      const normalizedWorkshopCommercial = toWorkshopCommercialSettings(
+        payload.settings.workshop as unknown as Record<string, unknown>,
+      );
+      setWorkshopCommercial(normalizedWorkshopCommercial);
+      setInitialWorkshopCommercial(normalizedWorkshopCommercial);
+      success("Workshop commercial settings updated.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to update workshop commercial settings");
+    } finally {
+      setSavingWorkshopCommercial(false);
     }
   };
 
@@ -641,6 +782,100 @@ export const SystemSettingsPage = () => {
                     placeholder="Thank you for your custom."
                   />
                 </label>
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Workshop Commercial Suggestions"
+          description="Control the explainable workshop prompts that use bike history, care-plan timing, and current workshop context to surface relevant extra work."
+          actions={(
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void saveWorkshopCommercialSettings()}
+              disabled={
+                !workshopCommercial
+                || !workshopCommercialDirty
+                || hasWorkshopCommercialValidationErrors
+                || savingWorkshopCommercial
+              }
+            >
+              {savingWorkshopCommercial ? "Saving..." : "Save Commercial Settings"}
+            </button>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Workshop Commercial Settings"
+            description="Fetching the current rules for service prompts and workshop follow-up suggestions."
+          />
+        ) : null}
+
+        {!loading && workshopCommercial ? (
+          <div className="store-info-sections">
+            <section className="store-info-section">
+              <h3>Suggestion Controls</h3>
+              <div className="purchase-form-grid store-info-grid">
+                <label className="store-info-grid-span store-settings-checkbox">
+                  <span>Enable workshop commercial suggestions</span>
+                  <div className="table-secondary">
+                    Show explainable staff-facing prompts on intake, job, and bike-history surfaces.
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={workshopCommercial.commercialSuggestionsEnabled}
+                    onChange={(event) =>
+                      setWorkshopCommercialField("commercialSuggestionsEnabled", event.target.checked)}
+                  />
+                </label>
+                <label>
+                  Long-gap service window (days)
+                  <input
+                    type="number"
+                    min={30}
+                    max={1095}
+                    step={1}
+                    value={workshopCommercial.commercialLongGapDays}
+                    onChange={(event) =>
+                      setWorkshopCommercialField(
+                        "commercialLongGapDays",
+                        Number.parseInt(event.target.value || "0", 10),
+                      )}
+                  />
+                  {workshopCommercialValidationErrors.commercialLongGapDays ? (
+                    <span className="field-error">
+                      {workshopCommercialValidationErrors.commercialLongGapDays}
+                    </span>
+                  ) : null}
+                </label>
+                <label>
+                  Recent-service cooldown (days)
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    step={1}
+                    value={workshopCommercial.commercialRecentServiceCooldownDays}
+                    onChange={(event) =>
+                      setWorkshopCommercialField(
+                        "commercialRecentServiceCooldownDays",
+                        Number.parseInt(event.target.value || "0", 10),
+                      )}
+                  />
+                  {workshopCommercialValidationErrors.commercialRecentServiceCooldownDays ? (
+                    <span className="field-error">
+                      {workshopCommercialValidationErrors.commercialRecentServiceCooldownDays}
+                    </span>
+                  ) : null}
+                </label>
+              </div>
+              <div className="restricted-panel info-panel">
+                These controls shape a rules-based suggestion layer. Long-gap prompts handle bikes with meaningful time since the last completed service, while the cooldown prevents staff from raising the same type of recommendation immediately after recent work.
               </div>
             </section>
           </div>
