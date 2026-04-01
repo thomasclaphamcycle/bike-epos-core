@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api/client";
+import { PublicSiteLayout } from "../components/PublicSiteLayout";
+import { publicSitePaths } from "../features/publicSite/siteContent";
 import {
   workshopEstimateStatusClass,
   workshopEstimateStatusLabel,
@@ -801,62 +803,80 @@ export const WorkshopQuotePage = () => {
   );
 
   return (
-    <div className="workshop-portal-shell">
-      <section className="workshop-portal-card">
-        <div className="workshop-portal-hero">
-          <div className="workshop-portal-badges">
-            <span
-              className={payload ? customerProgressClass(payload.customerProgress.stage) : "status-badge"}
-            >
-              {payload ? payload.customerProgress.label : "Workshop update"}
-            </span>
-            <span
-              className={payload ? workshopQuoteAccessStatusClass(payload.portal.accessStatus) : "status-badge"}
-            >
-              {payload ? workshopQuoteAccessStatusLabel(payload.portal.accessStatus) : "Portal"}
-            </span>
-            {payload?.estimate ? (
-              <span className={workshopEstimateStatusClass(payload.estimate.status)}>
-                {workshopEstimateStatusLabel(payload.estimate.status, "customer")}
+    <PublicSiteLayout currentNav="repairs">
+      <div className="workshop-portal-shell">
+        <nav className="public-site-breadcrumbs" aria-label="Repair update breadcrumbs">
+          <Link to={publicSitePaths.home}>Overview</Link>
+          <span>/</span>
+          <Link to={publicSitePaths.repairs}>Repairs</Link>
+          <span>/</span>
+          <span>Secure update</span>
+        </nav>
+
+        <section className="workshop-portal-card">
+          <div className="workshop-portal-hero">
+            <div className="workshop-portal-badges">
+              <span
+                className={payload ? customerProgressClass(payload.customerProgress.stage) : "status-badge"}
+              >
+                {payload ? payload.customerProgress.label : "Workshop update"}
               </span>
-            ) : null}
-            {payload ? (
-              <span className={collectionStatusClass(payload.collection.state)}>
-                {collectionStatusLabel(payload.collection.state)}
+              <span
+                className={payload ? workshopQuoteAccessStatusClass(payload.portal.accessStatus) : "status-badge"}
+              >
+                {payload ? workshopQuoteAccessStatusLabel(payload.portal.accessStatus) : "Portal"}
               </span>
-            ) : null}
+              {payload?.estimate ? (
+                <span className={workshopEstimateStatusClass(payload.estimate.status)}>
+                  {workshopEstimateStatusLabel(payload.estimate.status, "customer")}
+                </span>
+              ) : null}
+              {payload ? (
+                <span className={collectionStatusClass(payload.collection.state)}>
+                  {collectionStatusLabel(payload.collection.state)}
+                </span>
+              ) : null}
+            </div>
+            <p className="workshop-portal-kicker">Secure workshop portal</p>
+            <h1>{pageTitle}</h1>
+            <p className="workshop-portal-headline">
+              {payload?.customerProgress.headline
+                ?? "Follow your repair progress, review quoted work, and reply to the workshop team here."}
+            </p>
+            <p className="muted-text">
+              {payload?.customerProgress.detail
+                ?? "Use this secure page to see what the shop is waiting for, what happens next, and how close the bike is to collection."}
+            </p>
           </div>
-          <p className="workshop-portal-kicker">Secure workshop portal</p>
-          <h1>{pageTitle}</h1>
-          <p className="workshop-portal-headline">
-            {payload?.customerProgress.headline
-              ?? "Follow your repair progress, review quoted work, and reply to the workshop team here."}
-          </p>
-          <p className="muted-text">
-            {payload?.customerProgress.detail
-              ?? "Use this secure page to see what the shop is waiting for, what happens next, and how close the bike is to collection."}
-          </p>
-        </div>
 
-        {loading ? <p>Loading workshop update...</p> : null}
-
-        {!loading && loadError ? (
-          <div className="quick-create-panel">
-            <strong>Workshop update unavailable</strong>
-            <p className="muted-text">{loadError}</p>
-            <Link to="/site/workshop">Back to workshop information</Link>
+          <div className="workshop-portal-topbar">
+            <Link to={publicSitePaths.repairs}>Repair journey</Link>
+            <Link to={publicSitePaths.bookWorkshop}>Book another workshop visit</Link>
+            <Link to={publicSitePaths.contact}>Contact the shop</Link>
+            <a href="#quote-section">Quote</a>
+            <a href="#collection-section">Collection</a>
+            <a href="#messages-section">Messages</a>
           </div>
-        ) : null}
 
-        {!loading && !loadError && !token ? (
-          <div className="quick-create-panel">
-            <strong>No workshop link selected</strong>
-            <p className="muted-text">Open the secure workshop link from the shop to review your bike job.</p>
-          </div>
-        ) : null}
+          {loading ? <p>Loading workshop update...</p> : null}
 
-        {!loading && !loadError && payload && actionSummary ? (
-          <>
+          {!loading && loadError ? (
+            <div className="quick-create-panel">
+              <strong>Workshop update unavailable</strong>
+              <p className="muted-text">{loadError}</p>
+              <Link to={publicSitePaths.repairs}>Back to repair information</Link>
+            </div>
+          ) : null}
+
+          {!loading && !loadError && !token ? (
+            <div className="quick-create-panel">
+              <strong>No workshop link selected</strong>
+              <p className="muted-text">Open the secure workshop link from the shop to review your bike job.</p>
+            </div>
+          ) : null}
+
+          {!loading && !loadError && payload && actionSummary ? (
+            <>
             <div className="workshop-portal-summary-grid">
               <section className="workshop-portal-summary-card workshop-portal-summary-card--highlight">
                 <span className="workshop-portal-summary-label">Right now</span>
@@ -1512,9 +1532,10 @@ export const WorkshopQuotePage = () => {
                 )}
               </section>
             </div>
-          </>
-        ) : null}
-      </section>
-    </div>
+            </>
+          ) : null}
+        </section>
+      </div>
+    </PublicSiteLayout>
   );
 };

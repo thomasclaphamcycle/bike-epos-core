@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
+import { PublicSiteLayout } from "../components/PublicSiteLayout";
+import {
+  publicSitePaths,
+  secureCustomerTouchpoints,
+} from "../features/publicSite/siteContent";
 
 type ManageBookingResponse = {
   id: string;
@@ -78,6 +83,20 @@ const BOOKING_JOURNEY_STEPS = [
   "Bike in workshop",
   "Ready to collect",
   "Collected",
+];
+
+const MANAGE_PAGE_GUIDE_CARDS = [
+  {
+    title: "This page tracks the booking request",
+    detail:
+      "Use it for the requested date, booking details, and the first secure stage of the workshop journey.",
+  },
+  secureCustomerTouchpoints[1],
+  {
+    title: "Collection updates arrive later",
+    detail:
+      "When the job moves further on, secure workshop updates become the clearest place to see progress, readiness, and payment expectations.",
+  },
 ];
 
 const getBookingJourneyIndex = (status: string) => {
@@ -252,177 +271,198 @@ export const PublicWorkshopBookingManagePage = () => {
   };
 
   return (
-    <div className="customer-booking-shell">
-      <section className="customer-booking-card">
-        <div className="customer-booking-hero">
-          <div>
-            <p className="customer-booking-kicker">Manage booking</p>
-            <h1>Workshop booking details</h1>
-            <p className="customer-booking-intro">
-              Check the request details, see what happens next, and update the requested date if the booking has not
-              been confirmed yet. This secure page keeps the workshop request, next step, and booking-safe updates in one place.
-            </p>
-          </div>
-          <div className="customer-booking-hero-card">
-            <strong>{statusCopy.label}</strong>
-            <p>{statusCopy.detail}</p>
-            {payload ? <p>{payload.bookingRequest.timingExpectation}</p> : null}
-            {payload?.manageTokenExpiresAt ? (
-              <p>Secure link valid until {formatDateTimeLabel(payload.manageTokenExpiresAt)}</p>
-            ) : null}
-          </div>
-        </div>
+    <PublicSiteLayout currentNav="repairs">
+      <div className="customer-booking-shell">
+        <nav className="public-site-breadcrumbs" aria-label="Manage booking breadcrumbs">
+          <Link to={publicSitePaths.home}>Overview</Link>
+          <span>/</span>
+          <Link to={publicSitePaths.bookWorkshop}>Book workshop</Link>
+          <span>/</span>
+          <span>Manage booking</span>
+        </nav>
 
-        <div className="customer-booking-topbar">
-          <Link to="/site/workshop">Workshop information</Link>
-          <Link to="/site/book-workshop">New booking request</Link>
-        </div>
+        <section className="customer-booking-card">
+          <div className="customer-booking-hero">
+            <div>
+              <p className="customer-booking-kicker">Manage booking</p>
+              <h1>Track your workshop booking request</h1>
+              <p className="customer-booking-intro">
+                This secure page keeps the workshop request, current status, and next step in one place. If the
+                workshop later needs approval for extra work, they will send a separate secure quote link for that
+                decision.
+              </p>
+            </div>
+            <div className="customer-booking-hero-card">
+              <strong>{statusCopy.label}</strong>
+              <p>{statusCopy.detail}</p>
+              {payload ? <p>{payload.bookingRequest.timingExpectation}</p> : null}
+              {payload?.manageTokenExpiresAt ? (
+                <p>Secure link valid until {formatDateTimeLabel(payload.manageTokenExpiresAt)}</p>
+              ) : null}
+            </div>
+          </div>
 
-        {payload ? (
-          <section className="customer-booking-journey" data-testid="customer-booking-manage-journey">
-            {BOOKING_JOURNEY_STEPS.map((label, index) => {
-              const active = index === getBookingJourneyIndex(payload.status);
-              const complete = index < getBookingJourneyIndex(payload.status);
-              return (
-                <article
-                  key={label}
-                  className={`customer-booking-journey-step${active ? " customer-booking-journey-step--active" : ""}${complete ? " customer-booking-journey-step--complete" : ""}`}
-                >
-                  <span className="customer-booking-journey-number">{index + 1}</span>
-                  <div>
-                    <strong>{label}</strong>
-                    {active ? <p>{statusCopy.detail}</p> : null}
-                  </div>
-                </article>
-              );
-            })}
+          <div className="customer-booking-topbar">
+            <Link to={publicSitePaths.repairs}>Repair journey</Link>
+            <Link to={publicSitePaths.bookWorkshop}>New booking request</Link>
+            <Link to={publicSitePaths.contact}>Contact the shop</Link>
+          </div>
+
+          <section className="customer-booking-prep-grid">
+            {MANAGE_PAGE_GUIDE_CARDS.map((card) => (
+              <article key={card.title} className="customer-booking-prep-card">
+                <strong>{card.title}</strong>
+                <p>{card.detail}</p>
+              </article>
+            ))}
           </section>
-        ) : null}
 
-        {loading ? <p>Loading booking…</p> : null}
-        {success ? <p className="success-text">{success}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
-
-        {payload ? (
-          <div className="customer-booking-manage-grid">
-            <section className="customer-booking-section">
-              <div className="customer-booking-section-header">
-                <div>
-                  <h2>Booking summary</h2>
-                  <p>Everything here is tied to this secure booking link.</p>
-                </div>
-              </div>
-
-              <div className="customer-booking-summary-grid">
-                <article className="customer-booking-summary-card customer-booking-summary-card--highlight">
-                  <span>What happens now</span>
-                  <strong>{statusCopy.label}</strong>
-                  <p>{statusCopy.detail}</p>
-                </article>
-                <article className="customer-booking-summary-card">
-                  <span>Requested date</span>
-                  <strong>{formatDateLabel(payload.scheduledDate)}</strong>
-                  <p>{payload.bookingRequest.preferredTime || "Any time"}</p>
-                </article>
-                <article className="customer-booking-summary-card">
-                  <span>Service request</span>
-                  <strong>{payload.bookingRequest.serviceLabel || "General workshop request"}</strong>
-                  <p>{payload.bookingRequest.serviceRequest || "The workshop team will review the request details."}</p>
-                </article>
-                <article className="customer-booking-summary-card">
-                  <span>Deposit and secure link</span>
-                  <strong>
-                    {payload.depositRequiredPence > 0 ? formatMoney(payload.depositRequiredPence) : "No deposit"}
-                  </strong>
-                  <p>
-                    {payload.depositStatus === "PAID"
-                      ? "Deposit received."
-                      : "If a deposit is needed, the shop will confirm how to pay it."}
-                    {" "}
-                    {payload.manageTokenExpiresAt
-                      ? `This secure link stays active until ${formatDateTimeLabel(payload.manageTokenExpiresAt)}.`
-                      : ""}
-                  </p>
-                </article>
-              </div>
-
-              <div className="customer-booking-detail-grid">
-                <article className="customer-booking-detail-card">
-                  <h3>Bike details</h3>
-                  <p>{payload.bookingRequest.bikeDescription || "Bike details will be confirmed by the workshop."}</p>
-                </article>
-                <article className="customer-booking-detail-card">
-                  <h3>Contact details</h3>
-                  <p>
-                    {payload.customer?.firstName} {payload.customer?.lastName}
-                  </p>
-                  <p>{payload.customer?.phone || "No phone saved"}</p>
-                  <p>{payload.customer?.email || "No email saved"}</p>
-                </article>
-                <article className="customer-booking-detail-card">
-                  <h3>Extra notes</h3>
-                  <p>{payload.bookingRequest.additionalNotes || "No extra notes added."}</p>
-                </article>
-                <article className="customer-booking-detail-card">
-                  <h3>What happens next</h3>
-                  <p>The shop will review the request, confirm timing if needed, and keep you updated if approval or collection details become important.</p>
-                </article>
-                <article className="customer-booking-detail-card">
-                  <h3>How quotes and updates arrive</h3>
-                  <p>If the workshop needs your approval for extra work, they will send a separate secure workshop link so you can review the quote clearly before they continue.</p>
-                </article>
-                <article className="customer-booking-detail-card">
-                  <h3>Last booking activity</h3>
-                  <p>Created {formatDateTimeLabel(payload.createdAt)}</p>
-                  <p>Last updated {formatDateTimeLabel(payload.updatedAt)}</p>
-                </article>
-              </div>
+          {payload ? (
+            <section className="customer-booking-journey" data-testid="customer-booking-manage-journey">
+              {BOOKING_JOURNEY_STEPS.map((label, index) => {
+                const active = index === getBookingJourneyIndex(payload.status);
+                const complete = index < getBookingJourneyIndex(payload.status);
+                return (
+                  <article
+                    key={label}
+                    className={`customer-booking-journey-step${active ? " customer-booking-journey-step--active" : ""}${complete ? " customer-booking-journey-step--complete" : ""}`}
+                  >
+                    <span className="customer-booking-journey-number">{index + 1}</span>
+                    <div>
+                      <strong>{label}</strong>
+                      {active ? <p>{statusCopy.detail}</p> : null}
+                    </div>
+                  </article>
+                );
+              })}
             </section>
+          ) : null}
 
-            <section className="customer-booking-section">
-              <div className="customer-booking-section-header">
-                <div>
-                  <h2>Requested date</h2>
-                  <p>Update your preferred drop-off date while the request is still waiting for confirmation.</p>
-                </div>
-              </div>
+          {loading ? <p>Loading booking…</p> : null}
+          {success ? <p className="success-text">{success}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
 
-              {canReschedule ? (
-                <form className="customer-booking-reschedule" onSubmit={handleReschedule}>
-                  <div className="customer-booking-date-grid">
-                    {availability.map((day) => (
-                      <button
-                        key={day.date}
-                        type="button"
-                        className={
-                          rescheduleDate === day.date
-                            ? "customer-booking-date-pill customer-booking-date-pill--selected"
-                            : "customer-booking-date-pill"
-                        }
-                        onClick={() => setRescheduleDate(day.date)}
-                        disabled={!day.isBookable}
-                      >
-                        <strong>{formatDateLabel(day.date)}</strong>
-                        <span>{day.isBookable ? `${day.maxBookings - day.bookedCount} spaces left` : "Unavailable"}</span>
-                      </button>
-                    ))}
+          {payload ? (
+            <div className="customer-booking-manage-grid">
+              <section className="customer-booking-section">
+                <div className="customer-booking-section-header">
+                  <div>
+                    <h2>Booking summary</h2>
+                    <p>Everything here is tied to this secure booking link.</p>
                   </div>
-                  <button className="primary" type="submit" disabled={saving || !rescheduleDate}>
-                    {saving ? "Updating…" : "Update requested date"}
-                  </button>
-                </form>
-              ) : (
-                <div className="customer-booking-info-callout">
-                  <strong>This booking is no longer editable here.</strong>
-                  <p>
-                    If you need to change anything now, please contact the shop directly so the workshop team can help.
-                  </p>
                 </div>
-              )}
-            </section>
-          </div>
-        ) : null}
-      </section>
-    </div>
+
+                <div className="customer-booking-summary-grid">
+                  <article className="customer-booking-summary-card customer-booking-summary-card--highlight">
+                    <span>What happens now</span>
+                    <strong>{statusCopy.label}</strong>
+                    <p>{statusCopy.detail}</p>
+                  </article>
+                  <article className="customer-booking-summary-card">
+                    <span>Requested date</span>
+                    <strong>{formatDateLabel(payload.scheduledDate)}</strong>
+                    <p>{payload.bookingRequest.preferredTime || "Any time"}</p>
+                  </article>
+                  <article className="customer-booking-summary-card">
+                    <span>Service request</span>
+                    <strong>{payload.bookingRequest.serviceLabel || "General workshop request"}</strong>
+                    <p>{payload.bookingRequest.serviceRequest || "The workshop team will review the request details."}</p>
+                  </article>
+                  <article className="customer-booking-summary-card">
+                    <span>Deposit and secure link</span>
+                    <strong>
+                      {payload.depositRequiredPence > 0 ? formatMoney(payload.depositRequiredPence) : "No deposit"}
+                    </strong>
+                    <p>
+                      {payload.depositStatus === "PAID"
+                        ? "Deposit received."
+                        : "If a deposit is needed, the shop will confirm how to pay it."}
+                      {" "}
+                      {payload.manageTokenExpiresAt
+                        ? `This secure link stays active until ${formatDateTimeLabel(payload.manageTokenExpiresAt)}.`
+                        : ""}
+                    </p>
+                  </article>
+                </div>
+
+                <div className="customer-booking-detail-grid">
+                  <article className="customer-booking-detail-card">
+                    <h3>Bike details</h3>
+                    <p>{payload.bookingRequest.bikeDescription || "Bike details will be confirmed by the workshop."}</p>
+                  </article>
+                  <article className="customer-booking-detail-card">
+                    <h3>Contact details</h3>
+                    <p>
+                      {payload.customer?.firstName} {payload.customer?.lastName}
+                    </p>
+                    <p>{payload.customer?.phone || "No phone saved"}</p>
+                    <p>{payload.customer?.email || "No email saved"}</p>
+                  </article>
+                  <article className="customer-booking-detail-card">
+                    <h3>Extra notes</h3>
+                    <p>{payload.bookingRequest.additionalNotes || "No extra notes added."}</p>
+                  </article>
+                  <article className="customer-booking-detail-card">
+                    <h3>What happens next</h3>
+                    <p>The shop will review the request, confirm timing if needed, and keep you updated if approval or collection details become important.</p>
+                  </article>
+                  <article className="customer-booking-detail-card">
+                    <h3>How quotes and updates arrive</h3>
+                    <p>If the workshop needs your approval for extra work, they will send a separate secure workshop link so you can review the quote clearly before they continue.</p>
+                  </article>
+                  <article className="customer-booking-detail-card">
+                    <h3>Last booking activity</h3>
+                    <p>Created {formatDateTimeLabel(payload.createdAt)}</p>
+                    <p>Last updated {formatDateTimeLabel(payload.updatedAt)}</p>
+                  </article>
+                </div>
+              </section>
+
+              <section className="customer-booking-section">
+                <div className="customer-booking-section-header">
+                  <div>
+                    <h2>Requested date</h2>
+                    <p>Update your preferred drop-off date while the request is still waiting for confirmation.</p>
+                  </div>
+                </div>
+
+                {canReschedule ? (
+                  <form className="customer-booking-reschedule" onSubmit={handleReschedule}>
+                    <div className="customer-booking-date-grid">
+                      {availability.map((day) => (
+                        <button
+                          key={day.date}
+                          type="button"
+                          className={
+                            rescheduleDate === day.date
+                              ? "customer-booking-date-pill customer-booking-date-pill--selected"
+                              : "customer-booking-date-pill"
+                          }
+                          onClick={() => setRescheduleDate(day.date)}
+                          disabled={!day.isBookable}
+                        >
+                          <strong>{formatDateLabel(day.date)}</strong>
+                          <span>{day.isBookable ? `${day.maxBookings - day.bookedCount} spaces left` : "Unavailable"}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button className="primary" type="submit" disabled={saving || !rescheduleDate}>
+                      {saving ? "Updating…" : "Update requested date"}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="customer-booking-info-callout">
+                    <strong>This booking is no longer editable here.</strong>
+                    <p>
+                      If you need to change anything now, please contact the shop directly so the workshop team can help.
+                    </p>
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    </PublicSiteLayout>
   );
 };

@@ -638,7 +638,7 @@ const AuthedApp = () => (
               description="Website structure, customer-facing content, and future booking or marketing surfaces are scaffolded here for later expansion."
               links={[
                 { label: "Orders", to: "/online-store/orders" },
-                { label: "Customer site preview", to: "/site" },
+                { label: "Customer site preview", to: "/" },
               ]}
             />,
           )}
@@ -739,10 +739,16 @@ export const App = () => {
         <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
         <Route path="/public/workshop/:token" element={<WorkshopQuotePage />} />
         <Route path="/quote/:token" element={<WorkshopQuotePage />} />
+        <Route path="/book-workshop" element={<PublicWorkshopBookingPage />} />
+        <Route path="/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
         <Route path="/site/book-workshop" element={<PublicWorkshopBookingPage />} />
         <Route path="/site/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
         <Route path="/customer-capture" element={<CustomerCapturePage />} />
         <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
+        <Route path="/" element={<CustomerSitePage variant="home" />} />
+        <Route path="/services" element={<CustomerSitePage variant="services" />} />
+        <Route path="/repairs" element={<CustomerSitePage variant="workshop" />} />
+        <Route path="/contact" element={<CustomerSitePage variant="contact" />} />
         <Route path="/site" element={<CustomerSitePage variant="home" />} />
         <Route path="/site/services" element={<CustomerSitePage variant="services" />} />
         <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
