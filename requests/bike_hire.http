@@ -13,11 +13,30 @@ X-Staff-Id: request-manager
   "variantId": "{{variantId}}",
   "assetTag": "HIRE-001",
   "displayName": "Demo gravel hire bike",
-  "notes": "Workshop-ready frame"
+  "notes": "Workshop-ready frame",
+  "storageLocation": "Front hire rack",
+  "isOnlineBookable": true
+}
+
+### Update hire asset
+PATCH http://localhost:3100/api/hire/assets/{{hireAssetId}}
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+{
+  "storageLocation": "Ready rack",
+  "status": "AVAILABLE",
+  "isOnlineBookable": true
 }
 
 ### List hire bookings
 GET http://localhost:3100/api/hire/bookings
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager
+
+### Check availability for a requested hire window
+GET http://localhost:3100/api/hire/assets?availableFrom=2026-03-13T09:00:00.000Z&availableTo=2026-03-14T17:00:00.000Z&onlineBookable=true
 X-Staff-Role: MANAGER
 X-Staff-Id: request-manager
 
@@ -44,7 +63,8 @@ X-Staff-Role: STAFF
 X-Staff-Id: request-staff
 
 {
-  "depositHeldPence": 15000
+  "depositHeldPence": 15000,
+  "pickupNotes": "ID checked and helmet issued"
 }
 
 ### Return hire booking
@@ -54,10 +74,23 @@ X-Staff-Role: STAFF
 X-Staff-Id: request-staff
 
 {
-  "depositOutcome": "RETURNED"
+  "depositOutcome": "RETURNED",
+  "returnNotes": "Returned clean",
+  "damageNotes": "Minor brake rub to inspect",
+  "markAssetMaintenance": true
 }
 
 ### Cancel reserved hire booking
 POST http://localhost:3100/api/hire/bookings/{{hireBookingId}}/cancel
+Content-Type: application/json
 X-Staff-Role: STAFF
 X-Staff-Id: request-staff
+
+{
+  "cancellationReason": "Customer moved dates"
+}
+
+### Customer-linked rental history
+GET http://localhost:3100/api/hire/bookings?customerId={{customerId}}&view=HISTORY
+X-Staff-Role: MANAGER
+X-Staff-Id: request-manager

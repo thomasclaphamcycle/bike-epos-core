@@ -66,10 +66,10 @@ const serverController = createSmokeServerController({
   label: "hire-smoke",
   baseUrls: appBaseUrlCandidates,
   databaseUrl: DATABASE_URL,
-      startup: {
-        command: "node",
-        args: ["scripts/start_test_server.js"],
-      },
+  startup: {
+    command: "node",
+    args: ["scripts/start_test_server.js"],
+  },
   captureStartupLog: true,
   envOverrides: {
     PORT: new URL(BASE_URL).port || "3100",
@@ -243,23 +243,27 @@ const main = async () => {
           assetTag: `HIRE-ASSET-${RUN_REF}`,
           displayName: "Demo hire bike",
           notes: "Front suspension checked",
+          storageLocation: "Front hire rack",
+          isOnlineBookable: true,
         }),
       },
       managerHeaders,
     );
     assert.equal(createAssetRes.status, 201);
     assert.equal(createAssetRes.json.status, "AVAILABLE");
+    assert.equal(createAssetRes.json.storageLocation, "Front hire rack");
+    assert.equal(createAssetRes.json.isOnlineBookable, true);
     state.assetIds.push(createAssetRes.json.id);
 
-    const listAssetsRes = await fetchJson("/api/hire/assets?take=20", { method: "GET" }, staffHeaders);
+    const listAssetsRes = await fetchJson("/api/hire/assets?onlineBookable=true&take=20", { method: "GET" }, staffHeaders);
     assert.equal(listAssetsRes.status, 200);
     assert.ok(
-      listAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id && asset.status === "AVAILABLE"),
-      "expected created hire asset in fleet list",
+      listAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id && asset.isOnlineBookable === true),
+      "expected created hire asset in online-bookable fleet list",
     );
 
-    const startsAt = new Date(Date.now() + 3_600_000).toISOString();
-    const dueBackAt = new Date(Date.now() + 86_400_000).toISOString();
+    const startsAt = new Date(Date.now() + (60 * 60 * 1000)).toISOString();
+    const dueBackAt = new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString();
     const createBookingRes = await fetchJson(
       "/api/hire/bookings",
       {
@@ -281,6 +285,68 @@ const main = async () => {
     assert.equal(createBookingRes.json.customer.id, customer.id);
     state.bookingIds.push(createBookingRes.json.id);
 
+    const overlapBookingRes = await fetchJson(
+      "/api/hire/bookings",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          hireAssetId: createAssetRes.json.id,
+          customerId: customer.id,
+          startsAt: new Date(Date.now() + (2 * 60 * 60 * 1000)).toISOString(),
+          dueBackAt: new Date(Date.now() + (26 * 60 * 60 * 1000)).toISOString(),
+          hirePricePence: 3000,
+          depositPence: 5000,
+        }),
+      },
+      staffHeaders,
+    );
+    assert.equal(overlapBookingRes.status, 409);
+    assert.equal(overlapBookingRes.json.error.code, "HIRE_ASSET_ALREADY_BOOKED");
+
+    const secondStartsAt = new Date(Date.now() + (72 * 60 * 60 * 1000)).toISOString();
+    const secondDueBackAt = new Date(Date.now() + (96 * 60 * 60 * 1000)).toISOString();
+    const secondBookingRes = await fetchJson(
+      "/api/hire/bookings",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          hireAssetId: createAssetRes.json.id,
+          customerId: customer.id,
+          startsAt: secondStartsAt,
+          dueBackAt: secondDueBackAt,
+          hirePricePence: 3500,
+          depositPence: 10000,
+          notes: "Second future reservation",
+        }),
+      },
+      staffHeaders,
+    );
+    assert.equal(secondBookingRes.status, 201);
+    assert.equal(secondBookingRes.json.status, "RESERVED");
+    state.bookingIds.push(secondBookingRes.json.id);
+
+    const unavailableWindowRes = await fetchJson(
+      `/api/hire/assets?availableFrom=${encodeURIComponent(startsAt)}&availableTo=${encodeURIComponent(dueBackAt)}&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
+    assert.equal(unavailableWindowRes.status, 200);
+    assert.ok(
+      unavailableWindowRes.json.assets.every((asset) => asset.id !== createAssetRes.json.id),
+      "expected asset to be unavailable for overlapping requested dates",
+    );
+
+    const availableLaterWindowRes = await fetchJson(
+      `/api/hire/assets?availableFrom=${encodeURIComponent(new Date(Date.now() + (120 * 60 * 60 * 1000)).toISOString())}&availableTo=${encodeURIComponent(new Date(Date.now() + (144 * 60 * 60 * 1000)).toISOString())}&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
+    assert.equal(availableLaterWindowRes.status, 200);
+    assert.ok(
+      availableLaterWindowRes.json.assets.some((asset) => asset.id === createAssetRes.json.id),
+      "expected asset to be available after existing future reservations end",
+    );
+
     const insufficientCheckoutRes = await fetchJson(
       `/api/hire/bookings/${encodeURIComponent(createBookingRes.json.id)}/checkout`,
       {
@@ -294,7 +360,20 @@ const main = async () => {
     assert.equal(insufficientCheckoutRes.status, 409);
     assert.equal(insufficientCheckoutRes.json.error.code, "HIRE_DEPOSIT_REQUIRED");
 
-    const checkoutRes = await fetchJson(
+    const blockedMaintenanceRes = await fetchJson(
+      `/api/hire/assets/${encodeURIComponent(createAssetRes.json.id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "MAINTENANCE",
+        }),
+      },
+      managerHeaders,
+    );
+    assert.equal(blockedMaintenanceRes.status, 200);
+    assert.equal(blockedMaintenanceRes.json.status, "MAINTENANCE");
+
+    const blockedCheckoutRes = await fetchJson(
       `/api/hire/bookings/${encodeURIComponent(createBookingRes.json.id)}/checkout`,
       {
         method: "POST",
@@ -304,9 +383,39 @@ const main = async () => {
       },
       staffHeaders,
     );
+    assert.equal(blockedCheckoutRes.status, 409);
+    assert.equal(blockedCheckoutRes.json.error.code, "HIRE_ASSET_UNAVAILABLE");
+
+    const reopenAssetRes = await fetchJson(
+      `/api/hire/assets/${encodeURIComponent(createAssetRes.json.id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "AVAILABLE",
+          storageLocation: "Ready rack",
+        }),
+      },
+      managerHeaders,
+    );
+    assert.equal(reopenAssetRes.status, 200);
+    assert.equal(reopenAssetRes.json.storageLocation, "Ready rack");
+    assert.equal(reopenAssetRes.json.status, "RESERVED");
+
+    const checkoutRes = await fetchJson(
+      `/api/hire/bookings/${encodeURIComponent(createBookingRes.json.id)}/checkout`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          depositHeldPence: 15000,
+          pickupNotes: "ID checked and helmet issued",
+        }),
+      },
+      staffHeaders,
+    );
     assert.equal(checkoutRes.status, 200);
     assert.equal(checkoutRes.json.status, "CHECKED_OUT");
     assert.equal(checkoutRes.json.depositStatus, "HELD");
+    assert.equal(checkoutRes.json.pickupNotes, "ID checked and helmet issued");
 
     const onHireAssetsRes = await fetchJson("/api/hire/assets?status=ON_HIRE&take=20", { method: "GET" }, staffHeaders);
     assert.equal(onHireAssetsRes.status, 200);
@@ -321,6 +430,9 @@ const main = async () => {
         method: "POST",
         body: JSON.stringify({
           depositOutcome: "RETURNED",
+          returnNotes: "Returned clean",
+          damageNotes: "Minor brake rub to inspect",
+          markAssetMaintenance: true,
         }),
       },
       staffHeaders,
@@ -328,75 +440,68 @@ const main = async () => {
     assert.equal(returnRes.status, 200);
     assert.equal(returnRes.json.status, "RETURNED");
     assert.equal(returnRes.json.depositStatus, "RETURNED");
+    assert.equal(returnRes.json.damageNotes, "Minor brake rub to inspect");
 
-    const secondAssetRes = await fetchJson(
-      "/api/hire/assets",
+    const maintenanceAssetsRes = await fetchJson("/api/hire/assets?status=MAINTENANCE&take=20", { method: "GET" }, staffHeaders);
+    assert.equal(maintenanceAssetsRes.status, 200);
+    assert.ok(
+      maintenanceAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id),
+      "expected returned asset in MAINTENANCE list after flagged return",
+    );
+
+    const reopenAfterMaintenanceRes = await fetchJson(
+      `/api/hire/assets/${encodeURIComponent(createAssetRes.json.id)}`,
       {
-        method: "POST",
+        method: "PATCH",
         body: JSON.stringify({
-          variantId: product.variants[0].id,
-          assetTag: `HIRE-ASSET-${RUN_REF}-2`,
-          displayName: "Second demo bike",
+          status: "AVAILABLE",
+          notes: "Brake rub resolved and bike ready",
         }),
       },
       managerHeaders,
     );
-    assert.equal(secondAssetRes.status, 201);
-    state.assetIds.push(secondAssetRes.json.id);
-
-    const secondBookingRes = await fetchJson(
-      "/api/hire/bookings",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          hireAssetId: secondAssetRes.json.id,
-          customerId: customer.id,
-          startsAt,
-          dueBackAt,
-          hirePricePence: 3000,
-          depositPence: 5000,
-        }),
-      },
-      staffHeaders,
-    );
-    assert.equal(secondBookingRes.status, 201);
-    state.bookingIds.push(secondBookingRes.json.id);
+    assert.equal(reopenAfterMaintenanceRes.status, 200);
+    assert.equal(reopenAfterMaintenanceRes.json.status, "RESERVED");
 
     const cancelRes = await fetchJson(
       `/api/hire/bookings/${encodeURIComponent(secondBookingRes.json.id)}/cancel`,
       {
         method: "POST",
+        body: JSON.stringify({
+          cancellationReason: "Customer moved trip dates",
+        }),
       },
       staffHeaders,
     );
     assert.equal(cancelRes.status, 200);
     assert.equal(cancelRes.json.status, "CANCELLED");
+    assert.equal(cancelRes.json.cancellationReason, "Customer moved trip dates");
 
-    const bookingListRes = await fetchJson("/api/hire/bookings?take=20", { method: "GET" }, staffHeaders);
+    const bookingListRes = await fetchJson(
+      `/api/hire/bookings?customerId=${encodeURIComponent(customer.id)}&view=HISTORY&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
     assert.equal(bookingListRes.status, 200);
     assert.ok(
       bookingListRes.json.bookings.some((booking) => booking.id === createBookingRes.json.id && booking.status === "RETURNED"),
-      "expected returned hire booking in booking list",
+      "expected returned booking in customer history view",
     );
     assert.ok(
       bookingListRes.json.bookings.some((booking) => booking.id === secondBookingRes.json.id && booking.status === "CANCELLED"),
-      "expected cancelled hire booking in booking list",
+      "expected cancelled booking in customer history view",
     );
 
     const availableAssetsRes = await fetchJson("/api/hire/assets?status=AVAILABLE&take=20", { method: "GET" }, staffHeaders);
     assert.equal(availableAssetsRes.status, 200);
     assert.ok(
       availableAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id),
-      "expected returned asset back in AVAILABLE list",
-    );
-    assert.ok(
-      availableAssetsRes.json.assets.some((asset) => asset.id === secondAssetRes.json.id),
-      "expected cancelled asset back in AVAILABLE list",
+      "expected asset back in AVAILABLE list once future reservation is cancelled",
     );
 
-    console.log("PASS bike hire assets can be created and listed");
-    console.log("PASS hire bookings reserve assets and enforce deposit checkout rules");
-    console.log("PASS hire returns and cancellations restore asset availability");
+    console.log("PASS bike hire assets can be created with fleet metadata and filtered for online readiness");
+    console.log("PASS rental bookings enforce overlap-safe availability rather than a single global reserve flag");
+    console.log("PASS deposits, pickup notes, maintenance returns, and cancellation reasons flow through the full hire lifecycle");
   } finally {
     try {
       await cleanup(state);
