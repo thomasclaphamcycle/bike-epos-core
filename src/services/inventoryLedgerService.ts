@@ -321,6 +321,38 @@ const getTotalOnHandTx = async (
   return aggregate._sum.quantityDelta ?? 0;
 };
 
+type InventoryPositionLock = {
+  variantId: string;
+  locationId: string;
+};
+
+const toInventoryPositionLockKey = (position: InventoryPositionLock) =>
+  `${position.locationId}:${position.variantId}`;
+
+export const lockInventoryPositionsTx = async (
+  tx: Prisma.TransactionClient,
+  positions: InventoryPositionLock[],
+) => {
+  const uniquePositions = Array.from(
+    new Map(
+      positions.map((position) => [toInventoryPositionLockKey(position), position]),
+    ).values(),
+  ).sort((left, right) => toInventoryPositionLockKey(left).localeCompare(toInventoryPositionLockKey(right)));
+
+  for (const position of uniquePositions) {
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${position.variantId}), hashtext(${position.locationId}))
+    `;
+  }
+};
+
+export const lockInventoryPositionTx = async (
+  tx: Prisma.TransactionClient,
+  position: InventoryPositionLock,
+) => {
+  await lockInventoryPositionsTx(tx, [position]);
+};
+
 export const assertNonNegativeProjectedStockTx = async (
   tx: Prisma.TransactionClient,
   input: {
@@ -375,6 +407,11 @@ const recordMovementTx = async (
   const createdByStaffId = normalizeOptionalText(input.createdByStaffId) ?? null;
   const unitCost = parseUnitCost(input.unitCost);
   const location = await resolveStockLocationTx(tx, input.locationId);
+
+  await lockInventoryPositionTx(tx, {
+    variantId: input.variantId,
+    locationId: location.id,
+  });
 
   await assertNonNegativeProjectedStockTx(tx, {
     variantId: input.variantId,

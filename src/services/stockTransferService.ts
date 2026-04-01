@@ -2,6 +2,7 @@ import { Prisma, StockTransferStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { lockInventoryPositionsTx } from "./inventoryLedgerService";
 
 type CreateStockTransferInput = {
   fromLocationId?: string;
@@ -222,6 +223,24 @@ const getStockTransferOrThrowTx = async (
   return transfer;
 };
 
+const getLockedStockTransferOrThrowTx = async (
+  tx: Prisma.TransactionClient,
+  stockTransferId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "StockTransfer"
+    WHERE id = ${stockTransferId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Stock transfer not found", "STOCK_TRANSFER_NOT_FOUND");
+  }
+
+  return getStockTransferOrThrowTx(tx, stockTransferId);
+};
+
 export const listStockTransfers = async (filters: ListStockTransferFilters) => {
   const status = filters.status;
   const fromLocationId = normalizeOptionalText(filters.fromLocationId);
@@ -389,7 +408,7 @@ export const sendStockTransfer = async (stockTransferId: string, auditActor?: Au
   const actorId = normalizeOptionalText(auditActor?.actorId) ?? null;
 
   const transfer = await prisma.$transaction(async (tx) => {
-    const current = await getStockTransferOrThrowTx(tx, validatedId);
+    const current = await getLockedStockTransferOrThrowTx(tx, validatedId);
 
     if (current.status !== "DRAFT") {
       throw new HttpError(409, "Only draft transfers can be sent", "STOCK_TRANSFER_NOT_DRAFT");
@@ -438,11 +457,29 @@ export const receiveStockTransfer = async (stockTransferId: string, auditActor?:
   const actorId = normalizeOptionalText(auditActor?.actorId) ?? null;
 
   const transfer = await prisma.$transaction(async (tx) => {
-    const current = await getStockTransferOrThrowTx(tx, validatedId);
+    const current = await getLockedStockTransferOrThrowTx(tx, validatedId);
+
+    if (current.status === "RECEIVED") {
+      return current;
+    }
 
     if (current.status !== "SENT") {
       throw new HttpError(409, "Only sent transfers can be received", "STOCK_TRANSFER_NOT_SENT");
     }
+
+    await lockInventoryPositionsTx(
+      tx,
+      current.lines.flatMap((line) => [
+        {
+          variantId: line.variant.id,
+          locationId: current.fromLocation.id,
+        },
+        {
+          variantId: line.variant.id,
+          locationId: current.toLocation.id,
+        },
+      ]),
+    );
 
     const onHandRows = await tx.stockLedgerEntry.groupBy({
       by: ["variantId"],
@@ -567,7 +604,7 @@ export const cancelStockTransfer = async (stockTransferId: string, auditActor?: 
   );
 
   const transfer = await prisma.$transaction(async (tx) => {
-    const current = await getStockTransferOrThrowTx(tx, validatedId);
+    const current = await getLockedStockTransferOrThrowTx(tx, validatedId);
 
     if (current.status === "RECEIVED") {
       throw new HttpError(409, "Received transfers cannot be cancelled", "STOCK_TRANSFER_RECEIVED");

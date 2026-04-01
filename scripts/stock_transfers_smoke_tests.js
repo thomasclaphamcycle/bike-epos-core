@@ -311,6 +311,211 @@ const main = async () => {
       ),
     );
 
+    const replayTransfer = await fetchJson("/api/stock-transfers", {
+      method: "POST",
+      body: JSON.stringify({
+        fromLocationId: sourceLocation.id,
+        toLocationId: targetLocation.id,
+        notes: "Concurrent receive replay",
+        lines: [
+          {
+            variantId: product.variants[0].id,
+            quantity: 2,
+          },
+        ],
+      }),
+    });
+    assert.equal(replayTransfer.status, 201, JSON.stringify(replayTransfer.json));
+    state.transferIds.push(replayTransfer.json.id);
+
+    const replaySend = await fetchJson(
+      `/api/stock-transfers/${encodeURIComponent(replayTransfer.json.id)}/send`,
+      {
+        method: "POST",
+      },
+    );
+    assert.equal(replaySend.status, 200, JSON.stringify(replaySend.json));
+
+    const concurrentReplayReceives = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        fetchJson(`/api/stock-transfers/${encodeURIComponent(replayTransfer.json.id)}/receive`, {
+          method: "POST",
+        })),
+    );
+    assert.ok(
+      concurrentReplayReceives.every((result) => result.status === 200),
+      JSON.stringify(concurrentReplayReceives),
+    );
+    assert.ok(
+      concurrentReplayReceives.every((result) => result.json.status === "RECEIVED"),
+      JSON.stringify(concurrentReplayReceives),
+    );
+
+    const replayTransferMovementCount = await prisma.inventoryMovement.count({
+      where: {
+        referenceId: replayTransfer.json.id,
+        type: "TRANSFER",
+      },
+    });
+    assert.equal(replayTransferMovementCount, 2);
+
+    const replayTransferLedgerCount = await prisma.stockLedgerEntry.count({
+      where: {
+        referenceId: replayTransfer.json.id,
+        type: "TRANSFER",
+      },
+    });
+    assert.equal(replayTransferLedgerCount, 2);
+
+    const replayStockRes = await fetchJson(
+      `/api/stock/variants/${encodeURIComponent(product.variants[0].id)}`,
+    );
+    assert.equal(replayStockRes.status, 200, JSON.stringify(replayStockRes.json));
+    assert.equal(replayStockRes.json.onHand, 5);
+    assert.equal(
+      replayStockRes.json.locations.find((location) => location.id === sourceLocation.id)?.onHand,
+      1,
+    );
+    assert.equal(
+      replayStockRes.json.locations.find((location) => location.id === targetLocation.id)?.onHand,
+      4,
+    );
+
+    const competingProduct = await prisma.product.create({
+      data: {
+        name: `Transfer Guardrail ${RUN_REF}`,
+        variants: {
+          create: {
+            sku: `TRANSFER-GUARD-${RUN_REF}`,
+            barcode: `TG-${RUN_REF}`,
+            retailPricePence: 4299,
+          },
+        },
+      },
+      include: {
+        variants: true,
+      },
+    });
+    state.productIds.push(competingProduct.id);
+    state.variantIds.push(competingProduct.variants[0].id);
+
+    const competingSeedRes = await fetchJson("/api/inventory/movements", {
+      method: "POST",
+      body: JSON.stringify({
+        variantId: competingProduct.variants[0].id,
+        locationId: sourceLocation.id,
+        type: "PURCHASE",
+        quantity: 3,
+        referenceType: "TRANSFER_GUARDRAIL_SMOKE",
+        referenceId: `${RUN_REF}-guard`,
+      }),
+    });
+    assert.equal(competingSeedRes.status, 201, JSON.stringify(competingSeedRes.json));
+
+    const createCompetingTransfer = async (notes) => {
+      const createResult = await fetchJson("/api/stock-transfers", {
+        method: "POST",
+        body: JSON.stringify({
+          fromLocationId: sourceLocation.id,
+          toLocationId: targetLocation.id,
+          notes,
+          lines: [
+            {
+              variantId: competingProduct.variants[0].id,
+              quantity: 2,
+            },
+          ],
+        }),
+      });
+      assert.equal(createResult.status, 201, JSON.stringify(createResult.json));
+      state.transferIds.push(createResult.json.id);
+
+      const sendResult = await fetchJson(
+        `/api/stock-transfers/${encodeURIComponent(createResult.json.id)}/send`,
+        {
+          method: "POST",
+        },
+      );
+      assert.equal(sendResult.status, 200, JSON.stringify(sendResult.json));
+
+      return createResult.json.id;
+    };
+
+    const [guardrailTransferAId, guardrailTransferBId] = await Promise.all([
+      createCompetingTransfer("Competing transfer A"),
+      createCompetingTransfer("Competing transfer B"),
+    ]);
+
+    const competingReceiveResults = await Promise.all([
+      fetchJson(`/api/stock-transfers/${encodeURIComponent(guardrailTransferAId)}/receive`, {
+        method: "POST",
+      }),
+      fetchJson(`/api/stock-transfers/${encodeURIComponent(guardrailTransferBId)}/receive`, {
+        method: "POST",
+      }),
+    ]);
+
+    const competingSuccesses = competingReceiveResults.filter((result) => result.status === 200);
+    const competingConflicts = competingReceiveResults.filter((result) => result.status === 409);
+    assert.equal(competingSuccesses.length, 1, JSON.stringify(competingReceiveResults));
+    assert.equal(competingConflicts.length, 1, JSON.stringify(competingReceiveResults));
+    assert.equal(
+      competingConflicts[0].json?.error?.code,
+      "STOCK_TRANSFER_INSUFFICIENT_STOCK",
+      JSON.stringify(competingConflicts[0].json),
+    );
+
+    const guardrailMovements = await prisma.inventoryMovement.findMany({
+      where: {
+        referenceId: {
+          in: [guardrailTransferAId, guardrailTransferBId],
+        },
+        type: "TRANSFER",
+      },
+      select: {
+        referenceId: true,
+        locationId: true,
+        quantity: true,
+      },
+    });
+    assert.equal(guardrailMovements.length, 2, JSON.stringify(guardrailMovements));
+
+    const guardrailStatuses = await prisma.stockTransfer.findMany({
+      where: {
+        id: {
+          in: [guardrailTransferAId, guardrailTransferBId],
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+    assert.equal(
+      guardrailStatuses.filter((transfer) => transfer.status === "RECEIVED").length,
+      1,
+      JSON.stringify(guardrailStatuses),
+    );
+    assert.equal(
+      guardrailStatuses.filter((transfer) => transfer.status === "SENT").length,
+      1,
+      JSON.stringify(guardrailStatuses),
+    );
+
+    const competingStockRes = await fetchJson(
+      `/api/stock/variants/${encodeURIComponent(competingProduct.variants[0].id)}`,
+    );
+    assert.equal(competingStockRes.status, 200, JSON.stringify(competingStockRes.json));
+    assert.equal(competingStockRes.json.onHand, 3);
+    assert.equal(
+      competingStockRes.json.locations.find((location) => location.id === sourceLocation.id)?.onHand,
+      1,
+    );
+    assert.equal(
+      competingStockRes.json.locations.find((location) => location.id === targetLocation.id)?.onHand,
+      2,
+    );
+
     console.log("[transfer-smoke] stock transfer workflow passed");
   } finally {
     try {

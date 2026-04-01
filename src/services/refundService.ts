@@ -205,7 +205,40 @@ const getOrCreateDefaultStockLocationTx = async (tx: Prisma.TransactionClient) =
   });
 };
 
+const lockRefundForUpdateTx = async (tx: Prisma.TransactionClient, refundId: string) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string; saleId: string }>>`
+    SELECT id, "saleId"
+    FROM "Refund"
+    WHERE id = ${refundId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Refund not found", "REFUND_NOT_FOUND");
+  }
+
+  return lockedRows[0];
+};
+
+const lockSaleForRefundCompletionTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "Sale"
+    WHERE id = ${saleId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+  }
+};
+
 const getRefundForMutationTx = async (tx: Prisma.TransactionClient, refundId: string) => {
+  await lockRefundForUpdateTx(tx, refundId);
+
   const refund = await tx.refund.findUnique({
     where: { id: refundId },
     select: {
@@ -735,6 +768,9 @@ export const completeRefund = async (refundId: string, input: CompleteRefundInpu
   const returnToStock = input.returnToStock === true;
 
   return prisma.$transaction(async (tx) => {
+    const lockedRefund = await lockRefundForUpdateTx(tx, refundId);
+    await lockSaleForRefundCompletionTx(tx, lockedRefund.saleId);
+
     const refund = await tx.refund.findUnique({
       where: { id: refundId },
       include: {
