@@ -4,7 +4,10 @@ import { logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
-import { assertNonNegativeProjectedStockTx } from "./inventoryLedgerService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockInventoryPositionTx,
+} from "./inventoryLedgerService";
 import { ensureVariantExistsById } from "./productService";
 
 type CreateStockAdjustmentInput = {
@@ -262,6 +265,11 @@ export const createStockAdjustmentTx = async (
   }
 
   const location = await resolveLocationTx(tx, input.locationId);
+
+  await lockInventoryPositionTx(tx, {
+    variantId: input.variantId,
+    locationId: location.id,
+  });
 
   await assertNonNegativeProjectedStockTx(tx, {
     variantId: input.variantId,

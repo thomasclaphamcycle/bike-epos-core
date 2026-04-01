@@ -97,7 +97,7 @@ const run = async () => {
     variantId: null,
     basketIds: [],
     saleIds: [],
-    refundId: null,
+    refundIds: [],
   };
 
   try {
@@ -203,7 +203,7 @@ const run = async () => {
       body: JSON.stringify({ saleId }),
     });
     assert.equal(createRefund.status, 201, JSON.stringify(createRefund.json));
-    created.refundId = createRefund.json.refund.id;
+    created.refundIds.push(createRefund.json.refund.id);
 
     const saleDetail = await fetchJson(`/api/sales/${saleId}`, {
       headers: staffHeaders,
@@ -211,7 +211,7 @@ const run = async () => {
     assert.equal(saleDetail.status, 200, JSON.stringify(saleDetail.json));
     const saleLineId = saleDetail.json.saleItems[0].id;
 
-    const refundLine = await fetchJson(`/api/refunds/${created.refundId}/lines`, {
+    const refundLine = await fetchJson(`/api/refunds/${createRefund.json.refund.id}/lines`, {
       method: "POST",
       headers: managerHeaders,
       body: JSON.stringify({
@@ -223,7 +223,7 @@ const run = async () => {
     const refundLineId = refundLine.json.line.id;
     const refundTotal = refundLine.json.refund.computedTotalPence;
 
-    const refundTender = await fetchJson(`/api/refunds/${created.refundId}/tenders`, {
+    const refundTender = await fetchJson(`/api/refunds/${createRefund.json.refund.id}/tenders`, {
       method: "POST",
       headers: managerHeaders,
       body: JSON.stringify({
@@ -233,12 +233,19 @@ const run = async () => {
     });
     assert.equal(refundTender.status, 201, JSON.stringify(refundTender.json));
 
-    const completeRefund = await fetchJson(`/api/refunds/${created.refundId}/complete`, {
-      method: "POST",
-      headers: managerHeaders,
-      body: JSON.stringify({ returnToStock: true }),
-    });
-    assert.equal(completeRefund.status, 201, JSON.stringify(completeRefund.json));
+    const concurrentRefundCompletions = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        fetchJson(`/api/refunds/${createRefund.json.refund.id}/complete`, {
+          method: "POST",
+          headers: managerHeaders,
+          body: JSON.stringify({ returnToStock: true }),
+        })),
+    );
+    const completedRefundResponses = concurrentRefundCompletions.filter((result) => result.status === 201);
+    const idempotentRefundResponses = concurrentRefundCompletions.filter((result) => result.status === 200);
+    assert.equal(completedRefundResponses.length, 1, JSON.stringify(concurrentRefundCompletions));
+    assert.equal(idempotentRefundResponses.length, 7, JSON.stringify(concurrentRefundCompletions));
+    const completeRefund = completedRefundResponses[0];
     assert.equal(completeRefund.json.refund.status, "COMPLETED");
     assert.equal(completeRefund.json.refund.returnToStock, true);
     assert.ok(completeRefund.json.refund.returnedToStockAt);
@@ -261,7 +268,7 @@ const run = async () => {
     assert.equal(onHandAfterRefund.status, 200, JSON.stringify(onHandAfterRefund.json));
     assert.equal(onHandAfterRefund.json.onHand, 9);
 
-    const completeAgain = await fetchJson(`/api/refunds/${created.refundId}/complete`, {
+    const completeAgain = await fetchJson(`/api/refunds/${createRefund.json.refund.id}/complete`, {
       method: "POST",
       headers: managerHeaders,
       body: JSON.stringify({ returnToStock: true }),
@@ -282,6 +289,104 @@ const run = async () => {
       1,
       JSON.stringify(movementsAfterIdempotent.json.movements),
     );
+
+    const createCompetingRefundDraft = async () => {
+      const createdRefund = await fetchJson("/api/refunds", {
+        method: "POST",
+        headers: managerHeaders,
+        body: JSON.stringify({ saleId }),
+      });
+      assert.equal(createdRefund.status, 201, JSON.stringify(createdRefund.json));
+      created.refundIds.push(createdRefund.json.refund.id);
+
+      const lineResult = await fetchJson(`/api/refunds/${createdRefund.json.refund.id}/lines`, {
+        method: "POST",
+        headers: managerHeaders,
+        body: JSON.stringify({
+          saleLineId,
+          quantity: 1,
+        }),
+      });
+      assert.equal(lineResult.status, 201, JSON.stringify(lineResult.json));
+
+      const totalPence = lineResult.json.refund.computedTotalPence;
+      const tenderResult = await fetchJson(`/api/refunds/${createdRefund.json.refund.id}/tenders`, {
+        method: "POST",
+        headers: managerHeaders,
+        body: JSON.stringify({
+          tenderType: "CARD",
+          amountPence: totalPence,
+        }),
+      });
+      assert.equal(tenderResult.status, 201, JSON.stringify(tenderResult.json));
+
+      return {
+        refundId: createdRefund.json.refund.id,
+        refundLineId: lineResult.json.line.id,
+      };
+    };
+
+    const [competingRefundA, competingRefundB] = await Promise.all([
+      createCompetingRefundDraft(),
+      createCompetingRefundDraft(),
+    ]);
+
+    const competingRefundResults = await Promise.all([
+      fetchJson(`/api/refunds/${competingRefundA.refundId}/complete`, {
+        method: "POST",
+        headers: managerHeaders,
+        body: JSON.stringify({ returnToStock: true }),
+      }),
+      fetchJson(`/api/refunds/${competingRefundB.refundId}/complete`, {
+        method: "POST",
+        headers: managerHeaders,
+        body: JSON.stringify({ returnToStock: true }),
+      }),
+    ]);
+
+    const competingRefundSuccesses = competingRefundResults.filter((result) => result.status === 201);
+    const competingRefundConflicts = competingRefundResults.filter((result) => result.status === 409);
+    assert.equal(competingRefundSuccesses.length, 1, JSON.stringify(competingRefundResults));
+    assert.equal(competingRefundConflicts.length, 1, JSON.stringify(competingRefundResults));
+    assert.equal(
+      competingRefundConflicts[0].json?.error?.code,
+      "REFUND_QUANTITY_EXCEEDED",
+      JSON.stringify(competingRefundConflicts[0].json),
+    );
+
+    const competingRefundRecords = await prisma.refund.findMany({
+      where: {
+        id: {
+          in: [competingRefundA.refundId, competingRefundB.refundId],
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+    assert.equal(
+      competingRefundRecords.filter((refund) => refund.status === "COMPLETED").length,
+      1,
+      JSON.stringify(competingRefundRecords),
+    );
+    assert.equal(
+      competingRefundRecords.filter((refund) => refund.status === "DRAFT").length,
+      1,
+      JSON.stringify(competingRefundRecords),
+    );
+
+    const competingReturnMovements = await fetchJson(
+      `/api/inventory/movements?variantId=${encodeURIComponent(created.variantId)}`,
+      { headers: managerHeaders },
+    );
+    assert.equal(competingReturnMovements.status, 200, JSON.stringify(competingReturnMovements.json));
+    const competingReturnMovementLines = competingReturnMovements.json.movements.filter(
+      (movement) =>
+        movement.referenceType === "SALE_REFUND_LINE" &&
+        [competingRefundA.refundLineId, competingRefundB.refundLineId].includes(movement.referenceId),
+    );
+    assert.equal(competingReturnMovementLines.length, 1, JSON.stringify(competingReturnMovements.json.movements));
 
     const createExchange = await fetchJson(`/api/sales/${saleId}/exchange`, {
       method: "POST",
@@ -311,22 +416,26 @@ const run = async () => {
     }
 
     const auditRefund = await fetchJson(
-      `/api/audit?action=REFUND_ISSUED&entityId=${encodeURIComponent(created.refundId)}&limit=20`,
+      `/api/audit?action=REFUND_ISSUED&entityId=${encodeURIComponent(createRefund.json.refund.id)}&limit=20`,
       { headers: managerHeaders },
     );
     assert.equal(auditRefund.status, 200, JSON.stringify(auditRefund.json));
     assert.ok(
-      auditRefund.json.events.some((entry) => entry.action === "REFUND_ISSUED"),
+      auditRefund.json.events.some(
+        (entry) => entry.action === "REFUND_ISSUED" && entry.entityId === createRefund.json.refund.id,
+      ),
       JSON.stringify(auditRefund.json),
     );
 
     const auditReturn = await fetchJson(
-      `/api/audit?action=RETURN_TO_STOCK&entityId=${encodeURIComponent(created.refundId)}&limit=20`,
+      `/api/audit?action=RETURN_TO_STOCK&entityId=${encodeURIComponent(createRefund.json.refund.id)}&limit=20`,
       { headers: managerHeaders },
     );
     assert.equal(auditReturn.status, 200, JSON.stringify(auditReturn.json));
     assert.ok(
-      auditReturn.json.events.some((entry) => entry.action === "RETURN_TO_STOCK"),
+      auditReturn.json.events.some(
+        (entry) => entry.action === "RETURN_TO_STOCK" && entry.entityId === createRefund.json.refund.id,
+      ),
       JSON.stringify(auditReturn.json),
     );
 
@@ -342,11 +451,11 @@ const run = async () => {
 
     console.log("M77 refunds/exchanges smoke tests passed.");
   } finally {
-    if (created.refundId) {
-      await prisma.refundTender.deleteMany({ where: { refundId: created.refundId } });
-      await prisma.refundLine.deleteMany({ where: { refundId: created.refundId } });
-      await prisma.receipt.deleteMany({ where: { saleRefundId: created.refundId } });
-      await prisma.refund.deleteMany({ where: { id: created.refundId } });
+    if (created.refundIds.length > 0) {
+      await prisma.refundTender.deleteMany({ where: { refundId: { in: created.refundIds } } });
+      await prisma.refundLine.deleteMany({ where: { refundId: { in: created.refundIds } } });
+      await prisma.receipt.deleteMany({ where: { saleRefundId: { in: created.refundIds } } });
+      await prisma.refund.deleteMany({ where: { id: { in: created.refundIds } } });
     }
 
     if (created.saleIds.length > 0) {
