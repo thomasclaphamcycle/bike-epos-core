@@ -1847,7 +1847,7 @@ test("Public workshop portal shows clear approval and quote-change guidance", as
     throw new Error("Expected customer quote token in public path.");
   }
 
-  await page.goto(`${frontendBaseUrl}/public/workshop/${encodeURIComponent(quoteToken)}`);
+  await page.goto(`${frontendBaseUrl}/quote/${encodeURIComponent(quoteToken)}`);
   await expect(page.getByTestId("workshop-portal-action-summary")).toContainText("Action needed");
   await expect(page.getByTestId("workshop-portal-action-summary")).toContainText("Approve quote");
   await expect(page.getByTestId("workshop-portal-collection-summary")).toContainText("Approval outstanding");
@@ -1872,10 +1872,17 @@ test("Public workshop portal shows clear approval and quote-change guidance", as
   await expect(page.getByTestId("workshop-portal-estimate-changes")).toContainText("Brake service, cable swap, and safety check");
 });
 
-test("Public workshop booking flow keeps the secure customer journey visible", async ({ page }) => {
-  await page.goto(`${frontendBaseUrl}/site/book-workshop`);
+test("Public workshop site guides customers from landing page into the secure booking journey", async ({ page }) => {
+  await page.goto(`${frontendBaseUrl}/`);
 
+  const homePage = page.getByTestId("public-site-home");
+  await expect(homePage).toContainText("Book repairs online with a clearer path from drop-off to collection.");
+  await expect(page.getByTestId("public-site-journey")).toContainText("Review quoted changes clearly");
+  await homePage.getByRole("link", { name: "Book workshop" }).first().click();
+
+  await expect(page).toHaveURL(/\/book-workshop/);
   await expect(page.getByTestId("customer-booking-journey")).toContainText("Approve extra work if needed");
+  await expect(page.getByText("What happens after you send")).toBeVisible();
   await page.getByLabel("What would you like us to do?").fill("Front brake rub and gear indexing");
   await page.getByLabel("Bike description").fill("Blue commuter bike with pannier rack");
   await page.getByLabel("First name").fill("Casey");
@@ -1883,7 +1890,7 @@ test("Public workshop booking flow keeps the secure customer journey visible", a
   await page.getByLabel("Phone").fill("07111222333");
   await page.getByRole("button", { name: "Send booking request" }).click();
 
-  await expect(page).toHaveURL(/\/site\/bookings\//);
+  await expect(page).toHaveURL(/\/bookings\//);
   await expect(page.getByText("Your workshop request has been sent.")).toBeVisible();
   await expect(page.getByTestId("customer-booking-manage-journey")).toContainText("Workshop confirms timing");
   await expect(page.getByText("How quotes and updates arrive")).toBeVisible();
