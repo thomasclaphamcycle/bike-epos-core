@@ -953,7 +953,10 @@ test("Workshop handoff opens the unified POS with context header and grouped bas
   await page.context().clearCookies();
   await loginViaUi(page, credentials, `/workshop/${job.id}`, { surface: "frontend" });
 
-  await page.getByRole("button", { name: "Send to POS" }).click();
+  await expect(page.getByTestId("workshop-job-next-action")).toContainText("Capture the current quote");
+  await expect(page.getByTestId("workshop-job-collection-state")).toContainText("Not ready for collection");
+
+  await page.getByTestId("workshop-job-open-pos").click();
   await expect(page).toHaveURL(/\/pos\?basketId=/);
   await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop Job #${job.id}`);
   await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop ${token}`);
@@ -963,6 +966,80 @@ test("Workshop handoff opens the unified POS with context header and grouped bas
   await page.getByTestId("pos-checkout-basket").click();
   await expect(page.getByTestId("pos-checkout-summary")).toContainText("Job Total");
   await expect(page.getByTestId("pos-checkout-summary")).toContainText("Remaining");
+});
+
+test("Workshop job page flags quote drift after approval and keeps the next action explicit", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-quote-drift",
+  });
+  const token = uniqueToken("workshop-quote-drift");
+  const job = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+    data: {
+      customerName: `Quote Drift ${token}`,
+      bikeDescription: `Bike ${token}`,
+      notes: `Quote drift check ${token}`,
+      status: "BOOKED",
+    },
+  });
+
+  const labourLine = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/lines`,
+    "MANAGER",
+    {
+      data: {
+        type: "LABOUR",
+        description: "Workshop labour",
+        qty: 1,
+        unitPricePence: 4500,
+      },
+    },
+  );
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/estimate`,
+    "MANAGER",
+    { data: {} },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/approval`,
+    "MANAGER",
+    {
+      data: {
+        status: "APPROVED",
+      },
+    },
+  );
+  await apiJsonWithHeaderBypass(
+    request,
+    "PATCH",
+    `/api/workshop/jobs/${encodeURIComponent(job.id)}/lines/${encodeURIComponent(labourLine.line.id)}`,
+    "MANAGER",
+    {
+      data: {
+        description: "Workshop labour plus extra fitting",
+        qty: 1,
+        unitPricePence: 5200,
+      },
+    },
+  );
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, `/workshop/${job.id}`, { surface: "frontend" });
+
+  await expect(page.getByTestId("workshop-job-estimate-state")).toContainText("Changed after approval");
+  await expect(page.getByTestId("workshop-job-estimate-state")).toContainText("£52.00");
+  await expect(page.getByTestId("workshop-job-next-action")).toContainText("Re-issue the quote");
+  await expect(page.getByTestId("workshop-job-next-action")).toContainText("Save revised quote");
 });
 
 test("POS customer capture link flow attaches captured customer to the active sale", async ({
@@ -1129,6 +1206,7 @@ test("Workshop page highlights today and keeps the live schedule range today-awa
 
   await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
 
+  await expect(page.getByTestId("workshop-board-overview")).toBeVisible();
   const headers = page.locator('[data-testid^="workshop-scheduler-day-header-"]');
   await expect(headers).toHaveCount(7);
   await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");

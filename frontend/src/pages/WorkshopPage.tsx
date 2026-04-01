@@ -88,6 +88,25 @@ type TechnicianOption = {
   name: string;
 };
 
+type WorkshopBoardInsight = {
+  job: DashboardJob;
+  displayStatus: ReturnType<typeof getWorkshopDisplayStatus>;
+  workflowSummary: ReturnType<typeof getWorkshopTechnicianWorkflowSummary>;
+  urgency: ReturnType<typeof getUrgency>;
+  partsStatus: WorkshopPartsStatus;
+};
+
+type WorkshopBoardLane = {
+  key: string;
+  title: string;
+  description: string;
+  emptyText: string;
+  jobs: WorkshopBoardInsight[];
+  footerLabel: string;
+  footerHref?: string;
+  footerAction?: () => void;
+};
+
 const quickFilters: Array<{
   key: QuickFilterKey;
   label: string;
@@ -173,6 +192,11 @@ const getPartsClassName = (job: DashboardJob) => {
     default:
       return "parts-ok";
   }
+};
+
+const isOpenWorkshopDisplayStatus = (status: string | null | undefined) => {
+  const displayStatus = getWorkshopDisplayStatus(status);
+  return displayStatus !== "COMPLETED" && displayStatus !== "CANCELLED";
 };
 
 const getUrgency = (job: DashboardJob) => {
@@ -393,6 +417,26 @@ export const WorkshopPage = () => {
     [jobs, quickFilter, selectedTechnicianId, user?.id],
   );
 
+  const visibleInsights = useMemo<WorkshopBoardInsight[]>(
+    () => [...visibleJobs]
+      .sort(compareJobs)
+      .map((job) => ({
+        job,
+        displayStatus: getWorkshopDisplayStatus(job),
+        workflowSummary: getWorkshopTechnicianWorkflowSummary({
+          rawStatus: getWorkshopRawStatusValue(job) ?? job.status,
+          partsStatus: job.partsStatus,
+          assignedStaffName: job.assignedStaffName,
+          scheduledDate: job.scheduledDate,
+          hasSale: Boolean(job.sale),
+          hasBasket: Boolean(job.finalizedBasketId),
+        }),
+        urgency: getUrgency(job),
+        partsStatus: toPartsStatus(job),
+      })),
+    [visibleJobs],
+  );
+
   useEffect(() => {
     if (selectedListJobId && !visibleJobs.some((job) => job.id === selectedListJobId)) {
       setSelectedListJobId(null);
@@ -402,6 +446,77 @@ export const WorkshopPage = () => {
   const visibleJobIds = useMemo(
     () => new Set(visibleJobs.map((job) => job.id)),
     [visibleJobs],
+  );
+
+  const boardSummary = useMemo(() => {
+    const waitingApprovalCount = visibleInsights.filter((entry) => entry.displayStatus === "WAITING_FOR_APPROVAL").length;
+    const activeBenchCount = visibleInsights.filter((entry) =>
+      entry.workflowSummary.stage === "READY_FOR_BENCH" || entry.workflowSummary.stage === "IN_REPAIR",
+    ).length;
+    const waitingPartsCount = visibleInsights.filter((entry) =>
+      entry.displayStatus === "WAITING_FOR_PARTS" || entry.partsStatus === "SHORT",
+    ).length;
+    const readyCollectionCount = visibleInsights.filter((entry) => entry.displayStatus === "BIKE_READY").length;
+    const unscheduledCount = visibleInsights.filter((entry) =>
+      isOpenWorkshopDisplayStatus(entry.job.status) && !entry.job.scheduledStartAt,
+    ).length;
+    const unassignedCount = visibleInsights.filter((entry) =>
+      isOpenWorkshopDisplayStatus(entry.job.status) && !entry.job.assignedStaffId,
+    ).length;
+
+    return {
+      waitingApprovalCount,
+      activeBenchCount,
+      waitingPartsCount,
+      readyCollectionCount,
+      unscheduledCount,
+      unassignedCount,
+    };
+  }, [visibleInsights]);
+
+  const boardLanes = useMemo<WorkshopBoardLane[]>(
+    () => [
+      {
+        key: "front-desk",
+        title: "Front of house now",
+        description: "Jobs waiting on customer approval or ready for collection.",
+        emptyText: "Nothing needs front-desk follow-up in the current queue.",
+        jobs: visibleInsights.filter((entry) =>
+          entry.displayStatus === "WAITING_FOR_APPROVAL" || entry.displayStatus === "BIKE_READY",
+        ).slice(0, 4),
+        footerLabel: "Open collection queue",
+        footerHref: "/workshop/collection",
+      },
+      {
+        key: "bench",
+        title: "Bench now",
+        description: "What technicians can work on, and what is blocked on parts.",
+        emptyText: "No active bench work is visible right now.",
+        jobs: visibleInsights.filter((entry) =>
+          entry.workflowSummary.stage === "READY_FOR_BENCH"
+          || entry.workflowSummary.stage === "IN_REPAIR"
+          || entry.workflowSummary.stage === "WAITING_FOR_PARTS",
+        ).slice(0, 4),
+        footerLabel: "Jump to waiting parts",
+        footerAction: () => setQuickFilter("WAITING_FOR_PARTS"),
+      },
+      {
+        key: "planning",
+        title: "Planning gaps",
+        description: "Jobs that still need a slot, owner, or stronger promise date.",
+        emptyText: "Every visible job already has the basics in place.",
+        jobs: visibleInsights.filter((entry) =>
+          isOpenWorkshopDisplayStatus(entry.job.status)
+          && (!entry.job.scheduledStartAt || !entry.job.assignedStaffId || !entry.job.scheduledDate),
+        ).slice(0, 4),
+        footerLabel: "Focus list view",
+        footerAction: () => {
+          setQuickFilter("ALL");
+          setSurfaceMode("list");
+        },
+      },
+    ],
+    [visibleInsights],
   );
 
   const needsSchedulingJobs = useMemo(
@@ -605,6 +720,104 @@ export const WorkshopPage = () => {
               </button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="workshop-primary-overview" data-testid="workshop-board-overview">
+        <div className="workshop-primary-summary-grid">
+          <article className="workshop-primary-summary-card">
+            <span className="metric-label">Waiting for approval</span>
+            <strong>{boardSummary.waitingApprovalCount}</strong>
+            <p className="muted-text">Quotes that still need a customer decision before work can safely continue.</p>
+          </article>
+          <article className="workshop-primary-summary-card">
+            <span className="metric-label">Active bench work</span>
+            <strong>{boardSummary.activeBenchCount}</strong>
+            <p className="muted-text">Booked or approved work that should be on the bench rather than hidden in the backlog.</p>
+          </article>
+          <article className="workshop-primary-summary-card">
+            <span className="metric-label">Blocked on parts</span>
+            <strong>{boardSummary.waitingPartsCount}</strong>
+            <p className="muted-text">Jobs where stock or allocation is the main blocker and needs a clear follow-up.</p>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--ready">
+            <span className="metric-label">Ready for collection</span>
+            <strong>{boardSummary.readyCollectionCount}</strong>
+            <p className="muted-text">Bikes that can move into collection handoff or full POS checkout.</p>
+          </article>
+          <article className="workshop-primary-summary-card">
+            <span className="metric-label">Needs scheduling</span>
+            <strong>{boardSummary.unscheduledCount}</strong>
+            <p className="muted-text">Visible jobs that still do not have a timed slot in the workshop day.</p>
+          </article>
+          <article className="workshop-primary-summary-card">
+            <span className="metric-label">Unassigned</span>
+            <strong>{boardSummary.unassignedCount}</strong>
+            <p className="muted-text">Open jobs without a named technician, which weakens queue accountability.</p>
+          </article>
+        </div>
+
+        <div className="workshop-primary-route-strip">
+          <button type="button" className="workshop-primary-route-link" onClick={openBlankIntake}>
+            <strong>Fast intake</strong>
+            <span>Start a new workshop job without leaving the board.</span>
+          </button>
+          <Link to="/workshop/collection" className="workshop-primary-route-link">
+            <strong>Collection queue</strong>
+            <span>See what is bike-ready, deposit-safe, and ready for POS handoff.</span>
+          </Link>
+          <Link to="/workshop/calendar" className="workshop-primary-route-link">
+            <strong>Standalone calendar</strong>
+            <span>Use the full planning surface when the embedded scheduler is not enough.</span>
+          </Link>
+        </div>
+
+        <div className="workshop-primary-lane-grid">
+          {boardLanes.map((lane) => (
+            <article key={lane.key} className="workshop-primary-lane-card">
+              <div className="workshop-primary-lane-card__header">
+                <div>
+                  <h2>{lane.title}</h2>
+                  <p className="muted-text">{lane.description}</p>
+                </div>
+                <span className="stock-badge stock-muted">{lane.jobs.length}</span>
+              </div>
+
+              <div className="workshop-primary-lane-list">
+                {lane.jobs.length === 0 ? (
+                  <div className="workshop-primary-lane-empty">{lane.emptyText}</div>
+                ) : lane.jobs.map((entry) => (
+                  <Link
+                    key={entry.job.id}
+                    to={`/workshop/${entry.job.id}`}
+                    className="workshop-primary-lane-item"
+                  >
+                    <div className="workshop-primary-lane-item__heading">
+                      <strong>{entry.job.bikeDescription || "Workshop job"}</strong>
+                      <span className={entry.workflowSummary.className}>{entry.workflowSummary.label}</span>
+                    </div>
+                    <span>{getCustomerName(entry.job)}</span>
+                    <span>
+                      {entry.urgency?.label ?? formatTimeRange(entry.job)}
+                      {entry.job.assignedStaffName ? ` · ${entry.job.assignedStaffName}` : ""}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="actions-inline">
+                {lane.footerHref ? (
+                  <Link to={lane.footerHref} className="button-link">
+                    {lane.footerLabel}
+                  </Link>
+                ) : lane.footerAction ? (
+                  <button type="button" onClick={lane.footerAction}>
+                    {lane.footerLabel}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
