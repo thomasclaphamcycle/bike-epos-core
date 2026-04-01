@@ -18,6 +18,10 @@ export const HomeRedirectPage = lazyPage(
 );
 export const PosPage = lazyPage(() => import("./pages/PosPage"), "PosPage");
 export const WorkshopPage = lazyPage(() => import("./pages/WorkshopPage"), "WorkshopPage");
+export const WorkshopTechnicianPage = lazyPage(
+  () => import("./pages/WorkshopTechnicianPage"),
+  "WorkshopTechnicianPage",
+);
 export const WorkshopJobPage = lazyPage(
   () => import("./pages/WorkshopJobPage"),
   "WorkshopJobPage",

@@ -1229,6 +1229,139 @@ test("Workshop page highlights today and keeps the live schedule range today-awa
   await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");
 });
 
+test("Workshop technician view keeps assigned, blocked, and handoff work execution-first", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "workshop-technician",
+  });
+  const token = uniqueToken("workshop-technician");
+  const todayKey = getLondonDateKey();
+  const rotaOverview = await apiJsonWithHeaderBypass(request, "GET", "/api/rota", "MANAGER");
+  const rotaPeriod = rotaOverview.periods?.find((period) => period.isCurrent) ?? await createRotaPeriodViaBypass(
+    request,
+    getOperationalWeekStartDateKey(todayKey),
+    `Technician workflow ${token}`,
+  );
+
+  await saveRotaAssignmentViaBypass(request, {
+    rotaPeriodId: rotaPeriod.id,
+    staffId: credentials.user.id,
+    date: todayKey,
+    shiftType: "FULL_DAY",
+  });
+
+  const createAssignedJob = async ({ customerName, bikeDescription, status, startTime, internalNote }) => {
+    const job = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
+      data: {
+        customerName,
+        bikeDescription,
+        status: "BOOKED",
+      },
+    });
+
+    await apiJsonWithHeaderBypass(
+      request,
+      "POST",
+      `/api/workshop/jobs/${encodeURIComponent(job.id)}/assign`,
+      "MANAGER",
+      {
+        data: {
+          staffId: credentials.user.id,
+        },
+      },
+    );
+
+    await apiJsonWithHeaderBypass(
+      request,
+      "PATCH",
+      `/api/workshop/jobs/${encodeURIComponent(job.id)}/schedule`,
+      "MANAGER",
+      {
+        data: {
+          scheduledStartAt: `${todayKey}T${startTime}:00`,
+          durationMinutes: 60,
+        },
+      },
+    );
+
+    if (status !== "BOOKED") {
+      await apiJsonWithHeaderBypass(
+        request,
+        "POST",
+        `/api/workshop/jobs/${encodeURIComponent(job.id)}/status`,
+        "MANAGER",
+        {
+          data: {
+            status,
+          },
+        },
+      );
+    }
+
+    if (internalNote) {
+      await apiJsonWithHeaderBypass(
+        request,
+        "POST",
+        `/api/workshop/jobs/${encodeURIComponent(job.id)}/notes`,
+        "STAFF",
+        {
+          headers: {
+            "X-Staff-Id": credentials.user.id,
+          },
+          data: {
+            visibility: "INTERNAL",
+            note: internalNote,
+          },
+        },
+      );
+    }
+
+    return job;
+  };
+
+  const actionableJob = await createAssignedJob({
+    customerName: `Bench Customer ${token}`,
+    bikeDescription: `Bench Bike ${token}`,
+    status: "BIKE_ARRIVED",
+    startTime: "10:00",
+    internalNote: "Bike washed and ready for bench start",
+  });
+  const blockedJob = await createAssignedJob({
+    customerName: `Blocked Customer ${token}`,
+    bikeDescription: `Blocked Bike ${token}`,
+    status: "WAITING_FOR_PARTS",
+    startTime: "12:00",
+  });
+  await createAssignedJob({
+    customerName: `Ready Customer ${token}`,
+    bikeDescription: `Ready Bike ${token}`,
+    status: "READY_FOR_COLLECTION",
+    startTime: "14:00",
+  });
+
+  await loginViaUi(page, credentials, "/workshop/technician", { surface: "frontend" });
+
+  await expect(page.getByTestId("workshop-technician-page")).toBeVisible();
+  await expect(page.getByTestId("workshop-technician-summary")).toContainText("Actionable now");
+  await expect(page.getByTestId("workshop-technician-section-actionable")).toContainText(`Bench Bike ${token}`);
+  await expect(page.getByTestId("workshop-technician-section-blocked")).toContainText(`Blocked Bike ${token}`);
+  await expect(page.getByTestId("workshop-technician-section-handoff")).toContainText(`Ready Bike ${token}`);
+
+  await page
+    .getByTestId(`workshop-technician-card-${actionableJob.id}`)
+    .getByRole("button", { name: new RegExp(`Bench Bike ${token}`) })
+    .click();
+
+  await expect(page.getByTestId("workshop-technician-detail")).toContainText("Bike washed and ready for bench start");
+  await page.getByTestId(`workshop-technician-action-${actionableJob.id}-start-work-detail`).click();
+  await expect(page.getByTestId("workshop-technician-detail")).toContainText("In Repair");
+
+  const noteForm = page.getByTestId("workshop-technician-note-form");
+  await noteForm.getByRole("textbox").fill("Rear brake bled and final road test still to do");
+  await noteForm.getByRole("button", { name: "Save internal note" }).click();
+  await expect(page.getByTestId("workshop-technician-detail")).toContainText("Rear brake bled and final road test still to do");
+});
+
 test("Workshop scheduler double click opens intake with a prefilled 30 minute slot", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",

@@ -1841,6 +1841,9 @@ export const WorkshopJobPage = () => {
               <Link to="/workshop" className="button-link button-link-compact">
                 Workshop board
               </Link>
+              <Link to="/workshop/technician" className="button-link button-link-compact">
+                Bench mode
+              </Link>
               <Link to="/workshop/collection" className="button-link button-link-compact">
                 Collection queue
               </Link>

@@ -762,6 +762,10 @@ export const WorkshopPage = () => {
             <strong>Fast intake</strong>
             <span>Start a new workshop job without leaving the board.</span>
           </button>
+          <Link to="/workshop/technician" className="workshop-primary-route-link">
+            <strong>Bench mode</strong>
+            <span>Give technicians an execution-first queue for assigned, blocked, and handback work.</span>
+          </Link>
           <Link to="/workshop/collection" className="workshop-primary-route-link">
             <strong>Collection queue</strong>
             <span>See what is bike-ready, deposit-safe, and ready for POS handoff.</span>
