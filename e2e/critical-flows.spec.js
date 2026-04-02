@@ -1721,6 +1721,14 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
       frameSize: "54cm",
     },
   });
+  const secondBike = await apiJsonWithHeaderBypass(request, "POST", `/api/customers/${encodeURIComponent(customer.id)}/bikes`, "MANAGER", {
+    data: {
+      make: "Trek",
+      model: `Switch Bike ${token}`,
+      colour: "Blue",
+      frameSize: "56cm",
+    },
+  });
   const createRequests = [];
 
   page.on("request", (pendingRequest) => {
@@ -1736,18 +1744,68 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
   await page.getByRole("button", { name: "New Job", exact: true }).click();
 
   const dialog = page.locator('[role="dialog"]').last();
+  const bikeSelectionSummary = dialog.getByTestId("workshop-checkin-bike-selection");
   await dialog.getByLabel("Search existing customer").fill(customerName);
   await dialog.getByTestId(`workshop-checkin-customer-option-select-${customer.id}`).click();
   await dialog.getByText("Next", { exact: true }).click();
+
+  await expect(dialog.getByTestId(`workshop-checkin-bike-option-${bike.bike.id}`)).toBeVisible();
+  await expect(dialog.getByTestId(`workshop-checkin-bike-option-${secondBike.bike.id}`)).toBeVisible();
   await dialog.getByTestId(`workshop-checkin-bike-option-${bike.bike.id}`).click();
+  await expect(bikeSelectionSummary).toContainText("Specialized Review Bike");
+  await dialog.getByTestId(`workshop-checkin-bike-option-${secondBike.bike.id}`).click();
+  await expect(bikeSelectionSummary).toContainText("Trek Switch Bike");
+  await dialog.getByTestId("workshop-checkin-bike-clear").click();
+  await expect(dialog.getByTestId("workshop-checkin-bike-clear")).toHaveCount(0);
+  await dialog.getByTestId("workshop-checkin-bike-none").click();
+  await expect(bikeSelectionSummary).toContainText("No bike attached to this job");
   await dialog.getByText("Next", { exact: true }).click();
   await dialog.getByPlaceholder("Describe the problem or requested work").fill("Review guard repair request");
   await dialog.getByText("Next", { exact: true }).click();
 
   await expect(dialog.getByText("Review & Confirm", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Create check-in", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Specialized Review Bike", { exact: false })).toBeVisible();
+  await expect(dialog.getByText("No bike attached to this job", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("No bike linked to this job", { exact: true })).toBeVisible();
   expect(createRequests).toHaveLength(0);
+});
+
+test("Workshop new job lets staff continue without a bike when a customer has no saved bikes", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-no-bike",
+  });
+  const token = uniqueToken("workshop-no-bike");
+  const customerName = `No Bike Customer ${token}`;
+  const customer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: customerName,
+      email: `${token}@example.com`,
+      phone: `07222${Math.floor(Math.random() * 90000) + 10000}`,
+    },
+  });
+
+  await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
+  await page.getByRole("button", { name: "New Job", exact: true }).click();
+
+  const dialog = page.locator('[role="dialog"]').last();
+  const bikeSelectionSummary = dialog.getByTestId("workshop-checkin-bike-selection");
+  await dialog.getByLabel("Search existing customer").fill(customerName);
+  await dialog.getByTestId(`workshop-checkin-customer-option-select-${customer.id}`).click();
+  await dialog.getByText("Next", { exact: true }).click();
+
+  await expect(dialog.getByTestId("workshop-checkin-add-bike")).toBeVisible();
+  await expect(dialog.getByTestId("workshop-checkin-bike-none")).toBeVisible();
+  await expect(dialog.getByText("No saved bikes found", { exact: false })).toBeVisible();
+
+  await dialog.getByTestId("workshop-checkin-bike-none").click();
+  await expect(bikeSelectionSummary).toContainText("No bike attached to this job");
+  await dialog.getByText("Next", { exact: true }).click();
+  await dialog.getByPlaceholder("Describe the problem or requested work").fill("Customer requested generic workshop advice");
+  await dialog.getByText("Next", { exact: true }).click();
+
+  await expect(dialog.getByText("No bike attached to this job", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("No bike linked to this job", { exact: true })).toBeVisible();
 });
 
 test("Workshop job page surfaces commercial prompts from linked bike history", async ({ page, request }) => {

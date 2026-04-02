@@ -441,6 +441,7 @@ export const WorkshopCheckInPage = ({
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   const [selectedBikeId, setSelectedBikeId] = useState("");
+  const [noBikeForJob, setNoBikeForJob] = useState(false);
   const [createBikeInline, setCreateBikeInline] = useState(false);
   const [bikeMake, setBikeMake] = useState("");
   const [bikeModel, setBikeModel] = useState("");
@@ -566,8 +567,11 @@ export const WorkshopCheckInPage = ({
     if (createBikeInline) {
       return bikeDraftDisplayName;
     }
+    if (noBikeForJob) {
+      return "No bike attached to this job";
+    }
     return "";
-  }, [bikeDraftDisplayName, createBikeInline, selectedBikeRecord]);
+  }, [bikeDraftDisplayName, createBikeInline, noBikeForJob, selectedBikeRecord]);
   const trimmedCustomerSearch = customerSearch.trim();
   const showInlineCreateCustomerOption = useMemo(() => {
     if (!trimmedCustomerSearch || loadingCustomers) {
@@ -606,7 +610,7 @@ export const WorkshopCheckInPage = ({
     () => [...customerBikes].sort(compareCustomerBikesByRecency),
     [customerBikes],
   );
-  const hasBikeSelection = Boolean(selectedBikeId || createBikeInline);
+  const hasBikeSelection = Boolean(selectedBikeId || createBikeInline || noBikeForJob);
   const isReviewStep = step === stepTitles.length - 1;
 
   useEffect(() => {
@@ -726,6 +730,7 @@ export const WorkshopCheckInPage = ({
           setSelectedCustomer(payload.customer);
           setCreateCustomerInline(false);
           setSelectedBikeId(payload.defaults.bikeId);
+          setNoBikeForJob(false);
           setCreateBikeInline(false);
           setStep((current) => Math.max(current, 1));
         }
@@ -788,6 +793,7 @@ export const WorkshopCheckInPage = ({
     if (!selectedCustomer?.id) {
       setCustomerBikes([]);
       setSelectedBikeId("");
+      setNoBikeForJob(false);
       return;
     }
 
@@ -834,13 +840,6 @@ export const WorkshopCheckInPage = ({
       }
     }
 
-    if (step === 1) {
-      if (!hasBikeSelection) {
-        error("Select an existing bike or add a new one.");
-        return;
-      }
-    }
-
     if (step === 2) {
       if (!problemWork.trim()) {
         error("Problem / Work is required.");
@@ -871,8 +870,8 @@ export const WorkshopCheckInPage = ({
       return;
     }
 
-    if (!resolvedCustomerName || !hasBikeSelection) {
-      error("Customer and bike details are required.");
+    if (!resolvedCustomerName) {
+      error("Customer details are required.");
       return;
     }
     if (!problemWork.trim()) {
@@ -911,6 +910,8 @@ export const WorkshopCheckInPage = ({
         ? buildBikeInlineSummary(selectedBikeRecord)
         : createBikeInline
           ? bikeDraftDisplayName
+          : noBikeForJob
+            ? "Bike not linked to this job"
           : null;
 
       if (customerId && createBikeInline) {
@@ -928,8 +929,8 @@ export const WorkshopCheckInPage = ({
         bikeDescriptionForJob = buildBikeInlineSummary(createdBike.bike);
       }
 
-      if (!bikeId || !bikeDescriptionForJob) {
-        throw new Error("Bike selection was lost before the job could be created.");
+      if (!bikeDescriptionForJob) {
+        bikeDescriptionForJob = "Bike not linked to this job";
       }
 
       const created = await apiPost<{ id: string }>("/api/workshop/jobs", {
@@ -1037,6 +1038,7 @@ export const WorkshopCheckInPage = ({
     setWorkshopStartContext(null);
     setSelectedCustomer(null);
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setCustomerBikes([]);
     setCreateBikeInline(false);
     setCreateCustomerInline(false);
@@ -1062,6 +1064,7 @@ export const WorkshopCheckInPage = ({
     setNewCustomerName(draftName);
     setSelectedCustomer(null);
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     resetBikeDraft();
     setHighlightedCustomerOptionIndex(-1);
   };
@@ -1070,6 +1073,7 @@ export const WorkshopCheckInPage = ({
     setSelectedCustomer(customer);
     setCreateCustomerInline(false);
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setBikeSearchText("");
     resetBikeDraft();
     setHighlightedCustomerOptionIndex(-1);
@@ -1082,6 +1086,7 @@ export const WorkshopCheckInPage = ({
     setNewCustomerEmail("");
     setNewCustomerPhone("");
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setCustomerBikes([]);
     setBikeSearchText("");
     resetBikeDraft();
@@ -1090,17 +1095,27 @@ export const WorkshopCheckInPage = ({
 
   const selectBikeRecord = (bike: CustomerBikeRecord) => {
     setSelectedBikeId(bike.id);
+    setNoBikeForJob(false);
     resetBikeDraft();
-    setBikeSearchText("");
   };
 
-  const changeSelectedBike = () => {
+  const clearBikeSelection = () => {
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setBikeSearchText("");
+    resetBikeDraft();
+  };
+
+  const continueWithoutBike = () => {
+    setSelectedBikeId("");
+    setNoBikeForJob(true);
+    setBikeSearchText("");
+    resetBikeDraft();
   };
 
   const saveBikeDraft = () => {
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setCreateBikeInline(true);
     setBikeCreateModalOpen(false);
   };
@@ -1508,7 +1523,7 @@ export const WorkshopCheckInPage = ({
                             ? "Checking this customer's bike records."
                             : sortedCustomerBikes.length > 0
                               ? "Search and select the bike for this job."
-                              : "Add the customer's bike record now to keep this job linked to service history."}
+                              : "Add the customer's bike now, or continue without linking one to this job."}
                         </div>
                       </div>
                       <div className="actions-inline">
@@ -1519,6 +1534,13 @@ export const WorkshopCheckInPage = ({
                           onClick={() => setBikeCreateModalOpen(true)}
                         >
                           + Add new bike
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="workshop-checkin-bike-none"
+                          onClick={continueWithoutBike}
+                        >
+                          Continue without bike
                         </button>
                       </div>
                     </div>
@@ -1538,28 +1560,44 @@ export const WorkshopCheckInPage = ({
                       >
                         + Add new bike
                       </button>
+                      <button
+                        type="button"
+                        data-testid="workshop-checkin-bike-none"
+                        onClick={continueWithoutBike}
+                      >
+                        Continue without bike
+                      </button>
                     </div>
                   ) : null}
 
                   {hasBikeSelection ? (
-                    <div className="workshop-checkin-bike-picker__selected workshop-checkin-bike-picker__selected--active">
+                    <div
+                      className="workshop-checkin-bike-picker__selected workshop-checkin-bike-picker__selected--active"
+                      data-testid="workshop-checkin-bike-selection"
+                    >
                       <div className="grow">
                         <strong>{selectedBikeSummary}</strong>
                         <div className="table-secondary">
-                          {selectedBikeRecord
+                          {noBikeForJob
+                            ? "This job will stay customer-linked without attaching a saved bike record."
+                            : selectedBikeRecord
                             ? buildBikeInlineMeta(selectedBikeRecord)
                             : "This bike record will be created and linked when you create the job."}
                         </div>
                       </div>
                       <div className="actions-inline">
-                        <button type="button" onClick={changeSelectedBike}>
-                          Change
+                        <button
+                          type="button"
+                          data-testid="workshop-checkin-bike-clear"
+                          onClick={clearBikeSelection}
+                        >
+                          Clear
                         </button>
                       </div>
                     </div>
                   ) : null}
 
-                  {!hasBikeSelection && selectedCustomer && sortedCustomerBikes.length > 0 ? (
+                  {selectedCustomer && sortedCustomerBikes.length > 0 ? (
                     <>
                       <label className="grow">
                         Search bikes
@@ -1584,13 +1622,14 @@ export const WorkshopCheckInPage = ({
                         ) : filteredCustomerBikes.map((bike) => (
                           <article
                             key={bike.id}
-                            className="workshop-checkin-bike-picker__list-item"
+                            className={`workshop-checkin-bike-picker__list-item${selectedBikeId === bike.id ? " workshop-checkin-bike-picker__list-item--selected" : ""}`}
                             role="listitem"
                           >
                             <button
                               type="button"
                               className="workshop-checkin-bike-picker__list-item-label"
                               onClick={() => selectBikeRecord(bike)}
+                              aria-pressed={selectedBikeId === bike.id}
                               data-testid={`workshop-checkin-bike-option-${bike.id}`}
                             >
                               <div className="grow">
@@ -1791,6 +1830,8 @@ export const WorkshopCheckInPage = ({
                     <strong>
                       {createBikeInline
                         ? "New bike record will be created with this check-in"
+                        : noBikeForJob
+                          ? "No bike linked to this job"
                         : selectedBikeId
                           ? "Existing customer bike selected"
                           : "No bike selected"}
