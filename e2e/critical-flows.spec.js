@@ -1730,24 +1730,14 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
       frameSize: "56cm",
     },
   });
-  const template = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/service-templates", "MANAGER", {
+  const thirdBike = await apiJsonWithHeaderBypass(request, "POST", `/api/customers/${encodeURIComponent(customer.id)}/bikes`, "MANAGER", {
     data: {
-      name: templateName,
-      description: "Template restored for workshop intake",
-      category: "Service",
-      defaultDurationMinutes: 45,
-      lines: [
-        {
-          type: "LABOUR",
-          description: "Workshop template labour",
-          qty: 1,
-          unitPricePence: 4500,
-        },
-      ],
+      make: "Giant",
+      model: `Compact Bike ${token}`,
+      colour: "Black",
+      frameSize: "M",
     },
   });
-  const templateList = await apiJsonWithHeaderBypass(request, "GET", "/api/workshop/service-templates", "STAFF");
-  expect(templateList.templates.some((entry) => entry.id === template.template.id)).toBeTruthy();
   const createRequests = [];
 
   page.on("request", (pendingRequest) => {
@@ -1768,8 +1758,11 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
   await dialog.getByTestId(`workshop-checkin-customer-option-select-${customer.id}`).click();
   await dialog.getByText("Next", { exact: true }).click();
 
+  await expect(dialog.getByTestId("workshop-checkin-bike-search")).toHaveCount(0);
+  await expect(dialog.getByTestId("workshop-checkin-bike-list")).not.toHaveClass(/workshop-checkin-bike-picker__list--scrollable/);
   await expect(dialog.getByTestId(`workshop-checkin-bike-option-${bike.bike.id}`)).toBeVisible();
   await expect(dialog.getByTestId(`workshop-checkin-bike-option-${secondBike.bike.id}`)).toBeVisible();
+  await expect(dialog.getByTestId(`workshop-checkin-bike-option-${thirdBike.bike.id}`)).toBeVisible();
   await dialog.getByTestId(`workshop-checkin-bike-option-${bike.bike.id}`).click();
   await expect(bikeSelectionSummary).toContainText("Specialized Review Bike");
   await dialog.getByTestId(`workshop-checkin-bike-option-${secondBike.bike.id}`).click();
@@ -1827,6 +1820,51 @@ test("Workshop new job lets staff continue without a bike when a customer has no
 
   await expect(dialog.getByText("No bike attached to this job", { exact: true })).toBeVisible();
   await expect(dialog.getByText("No bike linked to this job", { exact: true })).toBeVisible();
+});
+
+test("Workshop new job bike selector scrolls only when a customer has more than three bikes", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-bike-scroll",
+  });
+  const token = uniqueToken("workshop-bike-scroll");
+  const customerName = `Bike Scroll ${token}`;
+  const customer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: customerName,
+      email: `${token}@example.com`,
+      phone: `07333${Math.floor(Math.random() * 90000) + 10000}`,
+    },
+  });
+
+  for (const [index, bikeSpec] of [
+    ["Trek", "Domane", "Blue", "56cm"],
+    ["Specialized", "Allez", "Red", "54cm"],
+    ["Cannondale", "Synapse", "Black", "58cm"],
+    ["Giant", "Defy", "Grey", "ML"],
+  ].entries()) {
+    await apiJsonWithHeaderBypass(request, "POST", `/api/customers/${encodeURIComponent(customer.id)}/bikes`, "MANAGER", {
+      data: {
+        make: bikeSpec[0],
+        model: `${bikeSpec[1]} ${token} ${index}`,
+        colour: bikeSpec[2],
+        frameSize: bikeSpec[3],
+      },
+    });
+  }
+
+  await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
+  await page.getByRole("button", { name: "New Job", exact: true }).click();
+
+  const dialog = page.locator('[role="dialog"]').last();
+  const bikeList = dialog.getByTestId("workshop-checkin-bike-list");
+  await dialog.getByLabel("Search existing customer").fill(customerName);
+  await dialog.getByTestId(`workshop-checkin-customer-option-select-${customer.id}`).click();
+  await dialog.getByText("Next", { exact: true }).click();
+
+  await expect(dialog.getByTestId("workshop-checkin-bike-search")).toHaveCount(0);
+  await expect(bikeList).toHaveClass(/workshop-checkin-bike-picker__list--scrollable/);
+  await expect(bikeList.locator('[data-testid^="workshop-checkin-bike-option-"]')).toHaveCount(4);
 });
 
 test("Workshop job page surfaces commercial prompts from linked bike history", async ({ page, request }) => {
