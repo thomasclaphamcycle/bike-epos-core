@@ -161,7 +161,7 @@ export const WorkshopPage = () => {
   const statusStripItems = [
     {
       key: "waiting",
-      label: "Waiting",
+      label: "Waiting for approval",
       value: boardSummary.waitingApprovalCount,
       tone: "default",
       isActive: status === "WAITING_FOR_APPROVAL",
@@ -172,7 +172,7 @@ export const WorkshopPage = () => {
     },
     {
       key: "bench",
-      label: "Bench",
+      label: "Active bench work",
       value: boardSummary.activeBenchCount,
       tone: "default",
       isActive: false,
@@ -182,7 +182,7 @@ export const WorkshopPage = () => {
     },
     {
       key: "blocked",
-      label: "Blocked",
+      label: "Blocked on parts",
       value: boardSummary.waitingPartsCount,
       tone: "caution",
       isActive: quickFilter === "WAITING_FOR_PARTS",
@@ -193,7 +193,7 @@ export const WorkshopPage = () => {
     },
     {
       key: "ready",
-      label: "Ready",
+      label: "Ready for collection",
       value: boardSummary.readyCollectionCount,
       tone: "default",
       isActive: quickFilter === "READY_FOR_COLLECTION",
@@ -204,7 +204,7 @@ export const WorkshopPage = () => {
     },
     {
       key: "needs-scheduling",
-      label: "Needs scheduling",
+      label: "Unscheduled",
       value: boardSummary.unscheduledCount,
       tone: "warning",
       isActive: false,
@@ -325,31 +325,26 @@ export const WorkshopPage = () => {
         className="workshop-primary-overview workshop-primary-overview--compact"
         data-testid="workshop-operating-overview"
       >
-        <div className="workshop-primary-summary-grid">
-          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-            <span className="metric-label">Waiting for approval</span>
-            <strong>{boardSummary.waitingApprovalCount}</strong>
-          </article>
-          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-            <span className="metric-label">Active bench work</span>
-            <strong>{boardSummary.activeBenchCount}</strong>
-          </article>
-          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-            <span className="metric-label">Blocked on parts</span>
-            <strong>{boardSummary.waitingPartsCount}</strong>
-          </article>
-          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact workshop-primary-summary-card--ready">
-            <span className="metric-label">Ready for collection</span>
-            <strong>{boardSummary.readyCollectionCount}</strong>
-          </article>
-          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-            <span className="metric-label">Needs scheduling</span>
-            <strong>{boardSummary.unscheduledCount}</strong>
-          </article>
-          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-            <span className="metric-label">Unassigned</span>
-            <strong>{boardSummary.timedUnassignedCount}</strong>
-          </article>
+        <div className="workshop-primary-status-strip" role="list" aria-label="Workshop operating status">
+          {statusStripItems.map((item, index) => (
+            <div key={item.key} className="workshop-primary-status-strip__item" role="listitem">
+              <button
+                type="button"
+                className={item.isActive
+                  ? `workshop-primary-status-strip__button workshop-primary-status-strip__button--${item.tone} workshop-primary-status-strip__button--active`
+                  : `workshop-primary-status-strip__button workshop-primary-status-strip__button--${item.tone}`}
+                onClick={item.onClick}
+              >
+                <span className="workshop-primary-status-strip__label">{item.label}</span>
+                <strong className="workshop-primary-status-strip__value">{item.value}</strong>
+              </button>
+              {index < statusStripItems.length - 1 ? (
+                <span className="workshop-primary-status-strip__separator" aria-hidden="true">
+                  •
+                </span>
+              ) : null}
+            </div>
+          ))}
         </div>
       </section>
 
