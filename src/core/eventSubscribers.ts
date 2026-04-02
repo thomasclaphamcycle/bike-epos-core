@@ -1,6 +1,7 @@
 import { on, type CoreEventMap } from "./events";
 import { registerNotificationSubscribers } from "./notificationSubscribers";
 import { registerReminderSubscribers } from "./reminderSubscribers";
+import { logger } from "../utils/logger";
 
 type DiagnosticEventName = keyof CoreEventMap;
 
@@ -30,7 +31,11 @@ const recordDiagnosticEvent = <TEventName extends DiagnosticEventName>(
   }
 
   if (process.env.EVENT_BUS_DEBUG === "1") {
-    console.info(`[eventbus] ${eventName} ${JSON.stringify(toLogSummary(eventName, payload))}`);
+    const summary = toLogSummary(eventName, payload);
+    logger.info("eventbus.diagnostic_event", {
+      eventName,
+      ...(summary ?? {}),
+    });
   }
 };
 

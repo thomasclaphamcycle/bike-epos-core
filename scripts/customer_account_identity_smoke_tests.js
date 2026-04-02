@@ -132,6 +132,7 @@ const run = async () => {
 
     const token = uniqueRef();
     const email = `customer-account-${token}@example.com`;
+    const sharedPhone = `07123${token.slice(-6)}`;
     const location = await prisma.location.create({
       data: {
         name: `Customer Account Test ${token}`,
@@ -140,12 +141,21 @@ const run = async () => {
     });
     created.locationIds.add(location.id);
 
+    const olderSharedPhoneCustomer = await prisma.customer.create({
+      data: {
+        firstName: "Older",
+        lastName: "Relative",
+        phone: sharedPhone,
+      },
+    });
+    created.customerIds.add(olderSharedPhoneCustomer.id);
+
     const customer = await prisma.customer.create({
       data: {
         firstName: "Account",
         lastName: "Customer",
         email,
-        phone: `07123${token.slice(-6)}`,
+        phone: sharedPhone,
       },
     });
     created.customerIds.add(customer.id);
@@ -296,6 +306,15 @@ const run = async () => {
       path: "/api/workshop-bookings/public-form",
     });
     const minBookableDate = publicForm.payload.booking.minBookableDate.slice(0, 10);
+    const availabilityRangeEnd = new Date(`${minBookableDate}T00:00:00.000Z`);
+    availabilityRangeEnd.setUTCDate(availabilityRangeEnd.getUTCDate() + 14);
+    const availability = await apiJsonOrThrow({
+      path: `/api/workshop/availability?from=${encodeURIComponent(minBookableDate)}&to=${encodeURIComponent(availabilityRangeEnd.toISOString().slice(0, 10))}`,
+    });
+    const bookableDates = availability.payload.filter((day) => day.isBookable).map((day) => day.date);
+    assert.ok(bookableDates.length >= 2, "Expected at least two bookable dates for customer account smoke");
+    const accountBookingDate = bookableDates[0];
+    const publicBookingDate = bookableDates[1];
 
     const booking = await apiJsonOrThrow({
       path: "/api/workshop-bookings",
@@ -306,9 +325,8 @@ const run = async () => {
       body: {
         firstName: "Account",
         lastName: "Customer",
-        email,
         phone: customer.phone,
-        scheduledDate: minBookableDate,
+        scheduledDate: accountBookingDate,
         bikeId: bike.id,
         serviceRequest: "Please check the rear brake and drivetrain.",
         notes: "Customer account booking reuse smoke test.",
@@ -331,9 +349,39 @@ const run = async () => {
 
     assert.ok(createdBooking, "Expected saved-bike booking to be created");
     assert.equal(createdBooking.customerId, customer.id);
+    assert.notEqual(createdBooking.customerId, olderSharedPhoneCustomer.id);
     assert.equal(createdBooking.bikeId, bike.id);
     assert.match(createdBooking.bikeDescription || "", /Genesis|Croix de Fer/);
     created.workshopJobIds.add(createdBooking.id);
+
+    const publicOnlyBooking = await apiJsonOrThrow({
+      path: "/api/workshop-bookings",
+      method: "POST",
+      body: {
+        firstName: "Fresh",
+        lastName: "Visitor",
+        phone: customer.phone,
+        scheduledDate: publicBookingDate,
+        bikeDescription: "Public booking test bike",
+        serviceRequest: "Fresh public booking should not merge into a shared phone customer.",
+      },
+    });
+
+    const publicOnlyWorkshopJob = await prisma.workshopJob.findUnique({
+      where: {
+        manageToken: publicOnlyBooking.payload.manageToken,
+      },
+      select: {
+        id: true,
+        customerId: true,
+      },
+    });
+
+    assert.ok(publicOnlyWorkshopJob, "Expected public booking with shared phone to be created");
+    assert.notEqual(publicOnlyWorkshopJob.customerId, customer.id);
+    assert.notEqual(publicOnlyWorkshopJob.customerId, olderSharedPhoneCustomer.id);
+    created.workshopJobIds.add(publicOnlyWorkshopJob.id);
+    created.customerIds.add(publicOnlyWorkshopJob.customerId);
 
     console.log("[customer-account-smoke] Customer identity/account flow verified.");
   } finally {

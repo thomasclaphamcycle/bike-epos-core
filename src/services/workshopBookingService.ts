@@ -47,6 +47,9 @@ const normalizeText = (value: string | undefined): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const normalizeComparableText = (value: string) =>
+  value.trim().replace(/\s+/g, " ").toLowerCase();
+
 const resolveManageTokenExpiryDate = (ttlDays: number): Date => {
   const now = new Date();
   const expiresAt = new Date(now);
@@ -273,8 +276,25 @@ const getOrCreateCustomerForOnlineBooking = async (
     email?: string;
     phone: string;
     notes?: string;
+    authenticatedCustomerId?: string;
   },
 ) => {
+  if (input.authenticatedCustomerId) {
+    const authenticatedCustomer = await tx.customer.findUnique({
+      where: { id: input.authenticatedCustomerId },
+    });
+
+    if (!authenticatedCustomer) {
+      throw new HttpError(
+        401,
+        "Customer account session is no longer valid",
+        "CUSTOMER_ACCOUNT_NOT_FOUND",
+      );
+    }
+
+    return authenticatedCustomer;
+  }
+
   if (input.email) {
     const existingByEmail = await tx.customer.findUnique({
       where: { email: input.email },
@@ -307,12 +327,22 @@ const getOrCreateCustomerForOnlineBooking = async (
     }
   }
 
-  const existingByPhone = await tx.customer.findFirst({
+  const existingByPhone = await tx.customer.findMany({
     where: { phone: input.phone },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  if (existingByPhone) {
-    return existingByPhone;
+  if (existingByPhone.length > 0) {
+    const requestedFirstName = normalizeComparableText(input.firstName);
+    const requestedLastName = normalizeComparableText(input.lastName);
+    const exactPhoneMatch = existingByPhone.find(
+      (customer) =>
+        normalizeComparableText(customer.firstName) === requestedFirstName
+        && normalizeComparableText(customer.lastName) === requestedLastName,
+    );
+
+    if (exactPhoneMatch) {
+      return exactPhoneMatch;
+    }
   }
 
   return tx.customer.create({
@@ -388,6 +418,7 @@ export const createOnlineWorkshopBooking = async (
       email,
       phone,
       notes: additionalNotes,
+      authenticatedCustomerId: input.authenticatedCustomerId,
     });
     await ensureCustomerAccountForCustomerTx(tx, {
       customerId: customer.id,
