@@ -254,6 +254,7 @@ const main = async () => {
     assert.equal(createAssetRes.json.storageLocation, "Front hire rack");
     assert.equal(createAssetRes.json.isOnlineBookable, true);
     state.assetIds.push(createAssetRes.json.id);
+    const assetTagQuery = encodeURIComponent(createAssetRes.json.assetTag);
 
     const listAssetsRes = await fetchJson("/api/hire/assets?onlineBookable=true&take=20", { method: "GET" }, staffHeaders);
     assert.equal(listAssetsRes.status, 200);
@@ -337,7 +338,7 @@ const main = async () => {
     );
 
     const availableLaterWindowRes = await fetchJson(
-      `/api/hire/assets?availableFrom=${encodeURIComponent(new Date(Date.now() + (120 * 60 * 60 * 1000)).toISOString())}&availableTo=${encodeURIComponent(new Date(Date.now() + (144 * 60 * 60 * 1000)).toISOString())}&take=20`,
+      `/api/hire/assets?q=${assetTagQuery}&availableFrom=${encodeURIComponent(new Date(Date.now() + (120 * 60 * 60 * 1000)).toISOString())}&availableTo=${encodeURIComponent(new Date(Date.now() + (144 * 60 * 60 * 1000)).toISOString())}&take=20`,
       { method: "GET" },
       staffHeaders,
     );
@@ -492,7 +493,11 @@ const main = async () => {
       "expected cancelled booking in customer history view",
     );
 
-    const availableAssetsRes = await fetchJson("/api/hire/assets?status=AVAILABLE&take=20", { method: "GET" }, staffHeaders);
+    const availableAssetsRes = await fetchJson(
+      `/api/hire/assets?status=AVAILABLE&q=${assetTagQuery}&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
     assert.equal(availableAssetsRes.status, 200);
     assert.ok(
       availableAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id),
