@@ -263,6 +263,14 @@ const run = async () => {
       403,
     );
     expectStatus(
+      "staff inventory value report forbidden",
+      await request({
+        path: `/api/reports/inventory/value?locationId=${fixtures.customerId}`,
+        headers: staffHeaders,
+      }),
+      403,
+    );
+    expectStatus(
       "staff metrics forbidden",
       await request({ path: "/metrics", headers: staffHeaders }),
       403,
@@ -316,6 +324,20 @@ const run = async () => {
         headers: managerHeaders,
       }),
       200,
+    );
+    const managerInventoryValueReport = await request({
+      path: `/api/reports/inventory/value?locationId=${fixtures.customerId}`,
+      headers: managerHeaders,
+    });
+    assert.notEqual(
+      managerInventoryValueReport.status,
+      401,
+      `manager inventory value report should reach the handler, got ${managerInventoryValueReport.status}`,
+    );
+    assert.notEqual(
+      managerInventoryValueReport.status,
+      403,
+      `manager inventory value report should reach the handler, got ${managerInventoryValueReport.status}`,
     );
     expectStatus(
       "manager metrics allowed",

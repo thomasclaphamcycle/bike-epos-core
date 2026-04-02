@@ -83,7 +83,7 @@ reportRouter.get(
   requireRoleAtLeast("MANAGER"),
   getInventoryOnHandReportCsvHandler,
 );
-reportRouter.get("/inventory/value", getInventoryValueReportHandler);
+reportRouter.get("/inventory/value", requireRoleAtLeast("MANAGER"), getInventoryValueReportHandler);
 reportRouter.get("/inventory/value-snapshot", requireRoleAtLeast("MANAGER"), getInventoryValueSnapshotReportHandler);
 reportRouter.get(
   "/inventory/value.csv",

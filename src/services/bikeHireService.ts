@@ -618,6 +618,19 @@ const getHireBookingOrThrowTx = async (tx: Prisma.TransactionClient, bookingId: 
   return booking;
 };
 
+const lockHireAssetTx = async (
+  tx: Prisma.TransactionClient,
+  hireAssetId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "HireAsset" WHERE id = ${hireAssetId} FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Hire asset not found", "HIRE_ASSET_NOT_FOUND");
+  }
+};
+
 const syncHireAssetStatusTx = async (
   tx: Prisma.TransactionClient,
   hireAssetId: string,
@@ -1172,6 +1185,9 @@ export const createHireBooking = async (input: CreateHireBookingInput, auditActo
     if (!customer) {
       throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
     }
+
+    // Serialize booking creation per asset so the overlap check cannot race another reservation.
+    await lockHireAssetTx(tx, hireAssetId);
 
     const asset = await tx.hireAsset.findUnique({
       where: { id: hireAssetId },
