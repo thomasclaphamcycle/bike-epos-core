@@ -11,6 +11,9 @@ import { clearRotaAssignment, createRotaPeriod, getRotaOverview, saveBulkRotaAss
 import { HttpError } from "../utils/http";
 import { RotaShiftType } from "@prisma/client";
 
+const isTruthyQueryFlag = (value: unknown) =>
+  typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+
 const parseImportBody = (body: unknown, requirePreviewKey = false) => {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpError(400, "rota import body must be an object", "INVALID_ROTA_IMPORT");
@@ -238,8 +241,11 @@ export const clearRotaAssignmentHandler = async (req: Request, res: Response) =>
   res.json(result);
 };
 
-export const bankHolidayStatusHandler = async (_req: Request, res: Response) => {
-  const status = await getBankHolidaySyncStatus();
+export const bankHolidayStatusHandler = async (req: Request, res: Response) => {
+  const status = await getBankHolidaySyncStatus({
+    autoSync: isTruthyQueryFlag(req.query.autoSync),
+    syncedByStaffId: getRequestStaffActorId(req) ?? undefined,
+  });
   res.json(status);
 };
 

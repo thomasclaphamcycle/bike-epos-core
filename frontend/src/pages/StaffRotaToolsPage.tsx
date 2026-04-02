@@ -70,7 +70,8 @@ type RotaOverviewResponse = {
 };
 
 type BankHolidaySyncStatus = {
-  region: "england-and-wales";
+  region: "england-and-wales" | "scotland" | "northern-ireland";
+  regionLabel: string;
   sourceUrl: string;
   lastSyncedAt: string | null;
   lastSyncedByStaffId: string | null;
@@ -83,6 +84,10 @@ type BankHolidaySyncStatus = {
     warningCount: number;
   };
   storedCount: number;
+  isStale: boolean;
+  autoSyncAttempted: boolean;
+  autoSyncSucceeded: boolean;
+  warning: string | null;
   upcoming: Array<{
     date: string;
     name: string;
@@ -582,7 +587,7 @@ export const StaffRotaToolsPage = () => {
             <div className="dashboard-summary-grid">
               <div className="metric-card">
                 <span className="metric-label">Region</span>
-                <strong className="metric-value">England &amp; Wales</strong>
+                <strong className="metric-value">{bankHolidayStatus.regionLabel}</strong>
                 <span className="dashboard-metric-detail">Current GOV.UK feed target for synced store closures.</span>
               </div>
               <div className="metric-card">
@@ -624,6 +629,12 @@ export const StaffRotaToolsPage = () => {
                   <span className="metric-label">Skipped Manual</span>
                   <strong>{bankHolidayStatus.lastResult.skippedManualCount}</strong>
                 </div>
+              </div>
+            ) : null}
+
+            {bankHolidayStatus.warning ? (
+              <div className="restricted-panel warning-panel">
+                {bankHolidayStatus.warning}
               </div>
             ) : null}
 

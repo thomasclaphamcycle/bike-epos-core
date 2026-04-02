@@ -96,6 +96,31 @@ type HolidayRequestsPayload = {
   requests: HolidayRequestItem[];
 };
 
+type BankHolidaySyncStatus = {
+  region: "england-and-wales" | "scotland" | "northern-ireland";
+  regionLabel: string;
+  sourceUrl: string;
+  lastSyncedAt: string | null;
+  lastSyncedByStaffId: string | null;
+  lastResult: null | {
+    createdCount: number;
+    updatedCount: number;
+    removedCount: number;
+    unchangedCount: number;
+    skippedManualCount: number;
+    warningCount: number;
+  };
+  storedCount: number;
+  isStale: boolean;
+  autoSyncAttempted: boolean;
+  autoSyncSucceeded: boolean;
+  warning: string | null;
+  upcoming: Array<{
+    date: string;
+    name: string;
+  }>;
+};
+
 type HolidayRequestFilter = HolidayRequestsPayload["statusFilter"];
 
 type RotaGridCell = NonNullable<RotaOverviewResponse["period"]>["staffRows"][number]["cells"][number];
@@ -329,6 +354,8 @@ export const StaffRotaPage = () => {
   const [bulkSavingStaffId, setBulkSavingStaffId] = useState<string | null>(null);
   const [createPeriodStartsOn, setCreatePeriodStartsOn] = useState("");
   const [createPeriodLoading, setCreatePeriodLoading] = useState(false);
+  const [bankHolidayStatus, setBankHolidayStatus] = useState<BankHolidaySyncStatus | null>(null);
+  const [bankHolidayStatusLoading, setBankHolidayStatusLoading] = useState(false);
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
   const [viewMode, setViewMode] = useState<RotaViewMode>("planner");
   const [floatingMenuPosition, setFloatingMenuPosition] = useState<FloatingMenuPosition | null>(null);
@@ -431,8 +458,14 @@ export const StaffRotaPage = () => {
     }
 
     try {
-      const payload = await apiGet<BankHolidaySyncStatus>("/api/rota/bank-holidays/status");
+      const payload = await apiGet<BankHolidaySyncStatus>("/api/rota/bank-holidays/status?autoSync=1");
       setBankHolidayStatus(payload);
+      if (payload.warning) {
+        error(payload.warning);
+      }
+      if (payload.autoSyncSucceeded) {
+        await loadOverview(selectedPeriodId, true);
+      }
     } catch (loadError) {
       error(loadError instanceof Error ? loadError.message : "Failed to load bank holiday status");
     } finally {
@@ -445,6 +478,11 @@ export const StaffRotaPage = () => {
     void loadOverview(selectedPeriodId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriodId, staffScope, roleFilter, searchFilter]);
+
+  useEffect(() => {
+    void loadBankHolidayStatus(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => () => {
     loadOverviewRequestIdRef.current += 1;
@@ -1080,8 +1118,15 @@ export const StaffRotaPage = () => {
           title="Rota"
           actions={(
             <div className="actions-inline">
-              <button type="button" onClick={() => void loadOverview(selectedPeriodId, true)} disabled={loading || refreshing}>
-                {refreshing ? "Refreshing..." : "Refresh"}
+              <button
+                type="button"
+                onClick={() => {
+                  void loadOverview(selectedPeriodId, true);
+                  void loadBankHolidayStatus(true);
+                }}
+                disabled={loading || refreshing || bankHolidayStatusLoading}
+              >
+                {refreshing || bankHolidayStatusLoading ? "Refreshing..." : "Refresh"}
               </button>
               <button type="button" onClick={() => window.print()} disabled={!currentPeriod}>Print view</button>
               <Link to="/dashboard" className="button-link">Dashboard</Link>
@@ -1118,6 +1163,16 @@ export const StaffRotaPage = () => {
             </span>
           </div>
         </div>
+
+        {bankHolidayStatus?.warning || (bankHolidayStatus?.isStale && bankHolidayStatus.storedCount === 0) ? (
+          <div className="restricted-panel warning-panel">
+            <strong>Bank holiday sync needs attention.</strong>
+            <span>
+              {bankHolidayStatus.warning
+                ?? `No future ${bankHolidayStatus.regionLabel} bank holidays are currently stored for the rota. Open Rota Tools to review the sync.`}
+            </span>
+          </div>
+        ) : null}
       </SurfaceCard>
 
       <SurfaceCard>

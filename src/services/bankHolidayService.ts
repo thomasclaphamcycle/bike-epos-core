@@ -1,10 +1,11 @@
 import { AppConfig, Prisma, RotaClosedDayType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { listStoreInfoSettings } from "./configurationService";
 import { HttpError } from "../utils/http";
 
 type BankHolidayClient = Prisma.TransactionClient | typeof prisma;
 
-type GovUkDivisionKey = "england-and-wales";
+type GovUkDivisionKey = "england-and-wales" | "scotland" | "northern-ireland";
 
 type GovUkBankHolidayEvent = {
   title: string;
@@ -38,15 +39,21 @@ type BankHolidaySyncMetadata = {
 type BankHolidaySyncInput = {
   feedUrl?: string;
   syncedByStaffId?: string;
+  region?: GovUkDivisionKey;
 };
 
 export type BankHolidaySyncStatus = {
   region: GovUkDivisionKey;
+  regionLabel: string;
   sourceUrl: string;
   lastSyncedAt: string | null;
   lastSyncedByStaffId: string | null;
   lastResult: BankHolidaySyncMetadata["lastResult"] | null;
   storedCount: number;
+  isStale: boolean;
+  autoSyncAttempted: boolean;
+  autoSyncSucceeded: boolean;
+  warning: string | null;
   upcoming: Array<{
     date: string;
     name: string;
@@ -58,9 +65,16 @@ export type BankHolidaySyncResult = BankHolidaySyncStatus & {
 };
 
 const GOV_UK_BANK_HOLIDAY_FEED_URL = "https://www.gov.uk/bank-holidays.json";
-const BANK_HOLIDAY_REGION: GovUkDivisionKey = "england-and-wales";
+const DEFAULT_BANK_HOLIDAY_REGION: GovUkDivisionKey = "england-and-wales";
 const BANK_HOLIDAY_STATUS_KEY = "rota.bankHolidaySync";
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const BANK_HOLIDAY_SYNC_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const BANK_HOLIDAY_REGION_LABELS: Record<GovUkDivisionKey, string> = {
+  "england-and-wales": "England & Wales",
+  scotland: "Scotland",
+  "northern-ireland": "Northern Ireland",
+};
 
 const normalizeFeedUrl = (value: string | undefined) => {
   const normalized = value?.trim();
@@ -77,6 +91,34 @@ const isValidDateKey = (value: string) => {
 
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+const isGovUkDivisionKey = (value: string): value is GovUkDivisionKey =>
+  value === "england-and-wales" || value === "scotland" || value === "northern-ireland";
+
+const normalizeRegionHint = (value: string | null | undefined) =>
+  value
+    ?.trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() ?? "";
+
+const resolveBankHolidayRegion = async (db: BankHolidayClient): Promise<GovUkDivisionKey> => {
+  const store = await listStoreInfoSettings(db);
+  const regionHint = normalizeRegionHint(store.region);
+  const countryHint = normalizeRegionHint(store.country);
+  const combinedHint = `${regionHint} ${countryHint}`.trim();
+
+  if (combinedHint.includes("northern ireland")) {
+    return "northern-ireland";
+  }
+  if (combinedHint.includes("scotland")) {
+    return "scotland";
+  }
+
+  return DEFAULT_BANK_HOLIDAY_REGION;
 };
 
 const normalizeBankHolidayEvent = (value: GovUkBankHolidayEvent) => {
@@ -116,14 +158,26 @@ const parseGovUkDivision = (payload: unknown, region: GovUkDivisionKey) => {
 
 const buildStatusFromState = (
   storedBankHolidays: Array<{ date: string; note: string | null }>,
+  region: GovUkDivisionKey,
   metadata: BankHolidaySyncMetadata | null,
+  options: {
+    isStale?: boolean;
+    autoSyncAttempted?: boolean;
+    autoSyncSucceeded?: boolean;
+    warning?: string | null;
+  } = {},
 ): BankHolidaySyncStatus => ({
-  region: BANK_HOLIDAY_REGION,
+  region,
+  regionLabel: BANK_HOLIDAY_REGION_LABELS[region],
   sourceUrl: metadata?.sourceUrl ?? normalizeFeedUrl(undefined),
   lastSyncedAt: metadata?.lastSyncedAt ?? null,
   lastSyncedByStaffId: metadata?.lastSyncedByStaffId ?? null,
   lastResult: metadata?.lastResult ?? null,
   storedCount: storedBankHolidays.length,
+  isStale: options.isStale ?? false,
+  autoSyncAttempted: options.autoSyncAttempted ?? false,
+  autoSyncSucceeded: options.autoSyncSucceeded ?? false,
+  warning: options.warning ?? null,
   upcoming: storedBankHolidays.slice(0, 6).map((closedDay) => ({
     date: closedDay.date,
     name: closedDay.note?.trim() || "Bank holiday",
@@ -186,7 +240,7 @@ const parseStoredMetadata = (config: AppConfig | null): BankHolidaySyncMetadata 
 
   const resultRecord = lastResult as Record<string, unknown>;
   return {
-    region: record.region === BANK_HOLIDAY_REGION ? BANK_HOLIDAY_REGION : BANK_HOLIDAY_REGION,
+    region: isGovUkDivisionKey(record.region) ? record.region : DEFAULT_BANK_HOLIDAY_REGION,
     sourceUrl: record.sourceUrl,
     lastSyncedAt: record.lastSyncedAt,
     lastSyncedByStaffId: typeof record.lastSyncedByStaffId === "string" ? record.lastSyncedByStaffId : null,
@@ -199,6 +253,27 @@ const parseStoredMetadata = (config: AppConfig | null): BankHolidaySyncMetadata 
       warningCount: Number(resultRecord.warningCount ?? 0) || 0,
     },
   };
+};
+
+const needsBankHolidayRefresh = (
+  storedBankHolidays: Array<{ date: string; note: string | null }>,
+  metadata: BankHolidaySyncMetadata | null,
+  region: GovUkDivisionKey,
+) => {
+  if (!storedBankHolidays.length || !metadata) {
+    return true;
+  }
+
+  if (metadata.region !== region) {
+    return true;
+  }
+
+  const lastSyncedAt = new Date(metadata.lastSyncedAt);
+  if (Number.isNaN(lastSyncedAt.getTime())) {
+    return true;
+  }
+
+  return Date.now() - lastSyncedAt.getTime() > BANK_HOLIDAY_SYNC_STALE_MS;
 };
 
 const listStoredBankHolidays = async (db: BankHolidayClient) => {
@@ -221,16 +296,48 @@ const listStoredBankHolidays = async (db: BankHolidayClient) => {
 };
 
 export const getBankHolidaySyncStatus = async (
-  db: BankHolidayClient = prisma,
+  options: {
+    autoSync?: boolean;
+    syncedByStaffId?: string;
+  } = {},
+  db: typeof prisma = prisma,
 ): Promise<BankHolidaySyncStatus> => {
-  const [config, storedBankHolidays] = await Promise.all([
+  const [region, config, storedBankHolidays] = await Promise.all([
+    resolveBankHolidayRegion(db),
     db.appConfig.findUnique({
       where: { key: BANK_HOLIDAY_STATUS_KEY },
     }),
     listStoredBankHolidays(db),
   ]);
 
-  return buildStatusFromState(storedBankHolidays, parseStoredMetadata(config));
+  const metadata = parseStoredMetadata(config);
+  const isStale = needsBankHolidayRefresh(storedBankHolidays, metadata, region);
+
+  if (!options.autoSync || !isStale) {
+    return buildStatusFromState(storedBankHolidays, region, metadata, { isStale });
+  }
+
+  try {
+    const result = await syncUkBankHolidays({
+      syncedByStaffId: options.syncedByStaffId,
+      region,
+    }, db);
+
+    return {
+      ...result,
+      isStale: false,
+      autoSyncAttempted: true,
+      autoSyncSucceeded: true,
+      warning: null,
+    };
+  } catch (error) {
+    return buildStatusFromState(storedBankHolidays, region, metadata, {
+      isStale: true,
+      autoSyncAttempted: true,
+      autoSyncSucceeded: false,
+      warning: error instanceof Error ? error.message : "Failed to refresh the GOV.UK bank holiday feed.",
+    });
+  }
 };
 
 export const syncUkBankHolidays = async (
@@ -238,7 +345,8 @@ export const syncUkBankHolidays = async (
   db: typeof prisma = prisma,
 ): Promise<BankHolidaySyncResult> => {
   const sourceUrl = normalizeFeedUrl(input.feedUrl);
-  const events = await fetchGovUkBankHolidays(sourceUrl, BANK_HOLIDAY_REGION);
+  const region = input.region ?? await resolveBankHolidayRegion(db);
+  const events = await fetchGovUkBankHolidays(sourceUrl, region);
 
   const eventMap = new Map<string, string>();
   for (const event of events) {
@@ -326,7 +434,7 @@ export const syncUkBankHolidays = async (
     }
 
     const metadata: BankHolidaySyncMetadata = {
-      region: BANK_HOLIDAY_REGION,
+      region,
       sourceUrl,
       lastSyncedAt: new Date().toISOString(),
       lastSyncedByStaffId: input.syncedByStaffId?.trim() || null,
@@ -353,7 +461,7 @@ export const syncUkBankHolidays = async (
 
     const storedBankHolidays = await listStoredBankHolidays(tx);
     return {
-      status: buildStatusFromState(storedBankHolidays, metadata),
+      status: buildStatusFromState(storedBankHolidays, region, metadata),
       warnings,
     };
   });
