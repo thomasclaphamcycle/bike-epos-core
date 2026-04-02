@@ -325,28 +325,31 @@ export const WorkshopPage = () => {
         className="workshop-primary-overview workshop-primary-overview--compact"
         data-testid="workshop-operating-overview"
       >
-        <div className="workshop-primary-status-strip" role="toolbar" aria-label="Workshop status summary">
-          {statusStripItems.map((item, index) => (
-            <div key={item.key} className="workshop-primary-status-strip__item">
-              {index > 0 ? (
-                <span className="workshop-primary-status-strip__separator" aria-hidden="true">
-                  •
-                </span>
-              ) : null}
-              <button
-                type="button"
-                className={[
-                  "workshop-primary-status-strip__button",
-                  `workshop-primary-status-strip__button--${item.tone}`,
-                  item.isActive ? "workshop-primary-status-strip__button--active" : "",
-                ].filter(Boolean).join(" ")}
-                onClick={item.onClick}
-              >
-                <span className="workshop-primary-status-strip__label">{item.label}</span>
-                <strong className="workshop-primary-status-strip__value">{item.value}</strong>
-              </button>
-            </div>
-          ))}
+        <div className="workshop-primary-summary-grid">
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Waiting for approval</span>
+            <strong>{boardSummary.waitingApprovalCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Active bench work</span>
+            <strong>{boardSummary.activeBenchCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Blocked on parts</span>
+            <strong>{boardSummary.waitingPartsCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact workshop-primary-summary-card--ready">
+            <span className="metric-label">Ready for collection</span>
+            <strong>{boardSummary.readyCollectionCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Needs scheduling</span>
+            <strong>{boardSummary.unscheduledCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Unassigned</span>
+            <strong>{boardSummary.timedUnassignedCount}</strong>
+          </article>
         </div>
       </section>
 
