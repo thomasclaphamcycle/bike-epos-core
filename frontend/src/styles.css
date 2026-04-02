@@ -8107,26 +8107,26 @@ button.primary.workshop-status-action {
 
 .workshop-checkin-bike-picker__list-item {
   display: grid;
-  padding: 12px 14px;
+  padding: 0;
   border: 1px solid #d5dfeb;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.86);
+  overflow: hidden;
 }
 
 .workshop-checkin-bike-picker__list-item-label {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: flex-start;
   gap: 14px;
   width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-}
-
-.workshop-checkin-bike-picker__list-item-input {
-  width: auto;
-  min-height: auto;
-  margin: 2px 0 0;
-  accent-color: #1856bc;
 }
 
 .workshop-checkin-bike-picker__list-item:focus-within {
