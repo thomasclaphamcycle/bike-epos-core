@@ -347,11 +347,24 @@ export const BusinessIntelligencePage = () => {
   }, [report]);
 
   return (
-    <div className="page-shell" data-testid="business-intelligence-page">
-      <section className="card">
+    <div
+      className="page-shell"
+      data-testid="business-intelligence-page"
+      role="region"
+      aria-labelledby="business-intelligence-heading"
+      aria-busy={loading && !report ? "true" : "false"}
+    >
+      <section className="card" aria-labelledby="business-intelligence-heading">
         <div className="card-header-row">
           <div>
-            <h1>Business Intelligence</h1>
+            <h1
+              id="business-intelligence-heading"
+              data-testid="business-intelligence-heading"
+              role="heading"
+              aria-level={1}
+            >
+              Business Intelligence
+            </h1>
             <p className="muted-text">
               Owner-facing reporting across retail, workshop, hire, customers, and inventory using the signals CorePOS already records reliably today.
             </p>
