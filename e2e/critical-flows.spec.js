@@ -154,6 +154,14 @@ const addDaysToDateKey = (dateKey, days) => {
   return getLondonDateKey(next);
 };
 
+const getMondayDateKey = (anchorDateKey) => {
+  const anchor = parseDateKeyAtNoon(anchorDateKey);
+  const day = anchor.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  anchor.setDate(anchor.getDate() + mondayOffset);
+  return getLondonDateKey(anchor);
+};
+
 const getOperationalWeekStartDateKey = (anchorDateKey) => {
   const anchor = parseDateKeyAtNoon(anchorDateKey);
   const day = anchor.getDay();
@@ -1242,7 +1250,7 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
     ? null
     : await createRotaPeriodViaBypass(
       request,
-      getOperationalWeekStartDateKey(todayKey),
+      getMondayDateKey(todayKey),
       `Technician workflow ${token}`,
     );
   const rotaPeriodId = currentRotaPeriod?.id ?? createdRotaPeriod?.rotaPeriod?.id ?? null;
