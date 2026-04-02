@@ -1182,7 +1182,7 @@ test("Workshop page highlights today and keeps the live schedule range today-awa
   await expect(page.getByTestId("workshop-operating-page")).toBeVisible();
   await expect(page.getByTestId("workshop-operating-overview")).toBeVisible();
   await expect(page.getByTestId("workshop-board-overview")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Needs scheduling" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Unscheduled" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Unassigned" })).toBeVisible();
   const headers = page.locator('[data-testid^="workshop-scheduler-day-header-"]');
   await expect(headers).toHaveCount(7);

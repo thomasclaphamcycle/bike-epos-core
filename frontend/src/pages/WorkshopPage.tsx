@@ -253,7 +253,7 @@ export const WorkshopPage = () => {
             { key: "bench", label: "Bench", value: boardSummary.activeBenchCount, tone: "default" },
             { key: "blocked", label: "Blocked", value: boardSummary.waitingPartsCount, tone: "caution" },
             { key: "ready", label: "Ready", value: boardSummary.readyCollectionCount, tone: "default" },
-            { key: "needs-scheduling", label: "Needs scheduling", value: boardSummary.unscheduledCount, tone: "warning" },
+            { key: "needs-scheduling", label: "Unscheduled", value: boardSummary.unscheduledCount, tone: "warning" },
             { key: "unassigned", label: "Unassigned", value: boardSummary.timedUnassignedCount, tone: "alert" },
           ].map((item, index, items) => (
             <div key={item.key} className="workshop-primary-status-strip__item" role="listitem">
