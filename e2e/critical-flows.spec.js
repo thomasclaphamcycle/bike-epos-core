@@ -1,9 +1,14 @@
 const { test, expect } = require("@playwright/test");
 const {
+  addDaysToDateKey,
   apiJson,
   apiJsonWithHeaderBypass,
   ensureUserViaAdminBypass,
+  getLondonDateKey,
+  getMondayDateKey,
+  getOperationalWeekStartDateKey,
   loginViaUi,
+  parseDateKeyAtNoon,
   seedCatalogVariant,
   uniqueToken,
 } = require("./helpers");
@@ -108,17 +113,6 @@ const expectStocktakeLineCount = async (page, variantId, expectedCount) => {
   }).toBe(String(expectedCount));
 };
 
-const getLondonDateKey = (date = new Date()) => {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/London",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const lookup = (type) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${lookup("year")}-${lookup("month")}-${lookup("day")}`;
-};
-
 const freezeBrowserClock = async (page, isoValue) => {
   await page.addInitScript(({ isoValue: fixedIso }) => {
     const fixedTime = new Date(fixedIso).getTime();
@@ -144,35 +138,6 @@ const freezeBrowserClock = async (page, isoValue) => {
     window.Date = FrozenDate;
     globalThis.Date = FrozenDate;
   }, { isoValue });
-};
-
-const parseDateKeyAtNoon = (dateKey) => new Date(`${dateKey}T12:00:00`);
-
-const addDaysToDateKey = (dateKey, days) => {
-  const next = parseDateKeyAtNoon(dateKey);
-  next.setDate(next.getDate() + days);
-  return getLondonDateKey(next);
-};
-
-const getMondayDateKey = (anchorDateKey) => {
-  const anchor = parseDateKeyAtNoon(anchorDateKey);
-  const day = anchor.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  anchor.setDate(anchor.getDate() + mondayOffset);
-  return getLondonDateKey(anchor);
-};
-
-const getOperationalWeekStartDateKey = (anchorDateKey) => {
-  const anchor = parseDateKeyAtNoon(anchorDateKey);
-  const day = anchor.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = parseDateKeyAtNoon(anchorDateKey);
-  monday.setDate(monday.getDate() + mondayOffset);
-  const weekdayIndex = (day + 6) % 7;
-  if (weekdayIndex <= 2) {
-    return getLondonDateKey(monday);
-  }
-  return addDaysToDateKey(anchorDateKey, -2);
 };
 
 const ensureOpenRegisterSession = async (request) => {

@@ -1,7 +1,9 @@
 import { on } from "./events";
 import { deliverWorkshopNotificationEvent } from "../services/notificationService";
+import { logger } from "../utils/logger";
 
 let notificationSubscribersRegistered = false;
+const isEventBusDebugEnabled = () => process.env.EVENT_BUS_DEBUG === "1";
 
 export const registerNotificationSubscribers = () => {
   if (notificationSubscribersRegistered) {
@@ -18,14 +20,11 @@ export const registerNotificationSubscribers = () => {
         workshopEstimateId: payload.workshopEstimateId,
       });
     } catch (error) {
-      if (process.env.EVENT_BUS_DEBUG === "1") {
-        console.warn(
-          `[eventbus:notifications] quote-ready failed ${JSON.stringify({
-            workshopJobId: payload.workshopJobId,
-            workshopEstimateId: payload.workshopEstimateId,
-            message: error instanceof Error ? error.message : String(error),
-          })}`,
-        );
+      if (isEventBusDebugEnabled()) {
+        logger.error("eventbus.notifications.quote_ready_failed", error, {
+          workshopJobId: payload.workshopJobId,
+          workshopEstimateId: payload.workshopEstimateId,
+        });
       }
 
       throw error;
@@ -39,13 +38,10 @@ export const registerNotificationSubscribers = () => {
         workshopJobId: payload.workshopJobId,
       });
     } catch (error) {
-      if (process.env.EVENT_BUS_DEBUG === "1") {
-        console.warn(
-          `[eventbus:notifications] ready-for-collection failed ${JSON.stringify({
-            workshopJobId: payload.workshopJobId,
-            message: error instanceof Error ? error.message : String(error),
-          })}`,
-        );
+      if (isEventBusDebugEnabled()) {
+        logger.error("eventbus.notifications.ready_for_collection_failed", error, {
+          workshopJobId: payload.workshopJobId,
+        });
       }
 
       throw error;
@@ -60,14 +56,11 @@ export const registerNotificationSubscribers = () => {
         workshopMessageId: payload.workshopMessageId,
       });
     } catch (error) {
-      if (process.env.EVENT_BUS_DEBUG === "1") {
-        console.warn(
-          `[eventbus:notifications] portal-message failed ${JSON.stringify({
-            workshopJobId: payload.workshopJobId,
-            workshopMessageId: payload.workshopMessageId,
-            message: error instanceof Error ? error.message : String(error),
-          })}`,
-        );
+      if (isEventBusDebugEnabled()) {
+        logger.error("eventbus.notifications.portal_message_failed", error, {
+          workshopJobId: payload.workshopJobId,
+          workshopMessageId: payload.workshopMessageId,
+        });
       }
 
       throw error;

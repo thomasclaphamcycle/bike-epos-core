@@ -24,6 +24,46 @@ const readJsonBody = async (response) => {
   }
 };
 
+const getLondonDateKey = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const lookup = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${lookup("year")}-${lookup("month")}-${lookup("day")}`;
+};
+
+const parseDateKeyAtNoon = (dateKey) => new Date(`${dateKey}T12:00:00`);
+
+const addDaysToDateKey = (dateKey, days) => {
+  const next = parseDateKeyAtNoon(dateKey);
+  next.setDate(next.getDate() + days);
+  return getLondonDateKey(next);
+};
+
+const getMondayDateKey = (anchorDateKey) => {
+  const anchor = parseDateKeyAtNoon(anchorDateKey);
+  const day = anchor.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  anchor.setDate(anchor.getDate() + mondayOffset);
+  return getLondonDateKey(anchor);
+};
+
+const getOperationalWeekStartDateKey = (anchorDateKey) => {
+  const anchor = parseDateKeyAtNoon(anchorDateKey);
+  const day = anchor.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = parseDateKeyAtNoon(anchorDateKey);
+  monday.setDate(monday.getDate() + mondayOffset);
+  const weekdayIndex = (day + 6) % 7;
+  if (weekdayIndex <= 2) {
+    return getLondonDateKey(monday);
+  }
+  return addDaysToDateKey(anchorDateKey, -2);
+};
+
 const apiJson = async (request, method, path, options = {}) => {
   const response = await request.fetch(path, {
     method,
@@ -185,11 +225,16 @@ const seedCatalogVariant = async (request, options = {}) => {
 };
 
 module.exports = {
+  addDaysToDateKey,
   apiJson,
   apiJsonWithHeaderBypass,
   buildHeaderBypassHeaders,
   ensureUserViaAdminBypass,
+  getLondonDateKey,
+  getMondayDateKey,
+  getOperationalWeekStartDateKey,
   loginViaUi,
+  parseDateKeyAtNoon,
   seedCatalogVariant,
   uniqueToken,
 };
