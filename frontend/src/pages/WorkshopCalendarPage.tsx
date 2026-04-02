@@ -3016,7 +3016,7 @@ export const WorkshopSchedulerScreen = ({
           >
             <div className="card-header-row">
               <div>
-                <h2>Needs scheduling</h2>
+                <h2>Unscheduled</h2>
               </div>
               <span className="stock-badge stock-muted">{filteredUnscheduledJobs.length}</span>
             </div>

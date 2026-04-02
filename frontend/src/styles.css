@@ -1550,6 +1550,7 @@ textarea {
   width: 100%;
   max-width: none;
   padding: 8px 2px 16px;
+  background: linear-gradient(180deg, rgba(238, 244, 250, 0.96) 0%, rgba(232, 239, 247, 0.94) 100%);
 }
 
 .app-main--pos {
@@ -4885,10 +4886,7 @@ button.primary.workshop-status-action {
   box-sizing: border-box;
   padding: 0 18px 0;
   overflow-anchor: none;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.95) 0%, transparent 26%),
-    radial-gradient(circle at top right, rgba(227, 236, 246, 0.52) 0%, transparent 24%),
-    linear-gradient(180deg, rgba(237, 243, 249, 0.98) 0%, rgba(228, 236, 245, 0.92) 100%);
+  background: transparent;
 }
 
 .workshop-primary-topbar {
@@ -4897,20 +4895,23 @@ button.primary.workshop-status-action {
   gap: 12px;
   align-items: end;
   padding: 12px 14px 14px;
-  border: 1px solid rgba(196, 211, 227, 0.96);
+  border-style: solid;
+  border-color: rgba(199, 213, 228, 0.66);
+  border-left-color: rgba(199, 213, 228, 0.28);
+  border-width: 0 1px 1px;
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(239, 246, 252, 0.97) 100%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.12) 42%, transparent 70%),
+    linear-gradient(180deg, rgba(247, 250, 253, 0.9) 0%, rgba(239, 245, 251, 0.84) 52%, rgba(234, 240, 247, 0.78) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 16px 34px rgba(23, 43, 77, 0.1);
+    0 10px 22px rgba(23, 43, 77, 0.05);
 }
 
 .workshop-primary-title {
   display: grid;
-  gap: 2px;
+  gap: 0;
   align-self: start;
-  padding-top: 14px;
+  padding-top: 38px;
   padding-left: 6px;
 }
 
@@ -5228,7 +5229,6 @@ button.primary.workshop-status-action {
   color: #17324d;
 }
 
-.workshop-primary-summary-card,
 .workshop-primary-route-link,
 .workshop-primary-lane-card {
   border: 1px solid rgba(214, 224, 235, 0.92);
@@ -5239,34 +5239,91 @@ button.primary.workshop-status-action {
     0 10px 22px rgba(25, 44, 71, 0.06);
 }
 
-.workshop-primary-summary-card {
-  display: grid;
+.workshop-primary-status-strip {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  min-height: 132px;
-  padding: 14px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border: 1px solid rgba(205, 217, 230, 0.82);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(244, 249, 253, 0.86) 0%, rgba(237, 243, 249, 0.82) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 6px 14px rgba(25, 44, 71, 0.035);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.workshop-primary-summary-card--compact {
-  min-height: 108px;
-  padding: 12px 13px;
+.workshop-primary-status-strip__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
-.workshop-primary-summary-card strong {
-  font-size: clamp(1.6rem, 2vw, 2rem);
+.workshop-primary-status-strip__token {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.52);
+  white-space: nowrap;
+}
+
+.workshop-primary-status-strip__token--default {
+  color: #14314d;
+}
+
+.workshop-primary-status-strip__token--caution {
+  border-color: rgba(221, 196, 152, 0.55);
+  background: rgba(255, 246, 231, 0.88);
+  color: #8a601d;
+}
+
+.workshop-primary-status-strip__token--warning {
+  border-color: rgba(231, 184, 123, 0.62);
+  background: rgba(255, 240, 221, 0.92);
+  color: #b36413;
+}
+
+.workshop-primary-status-strip__token--alert {
+  border-color: rgba(230, 202, 116, 0.62);
+  background: rgba(255, 246, 214, 0.94);
+  color: #a57214;
+}
+
+.workshop-primary-status-strip__label {
+  color: #66798c;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.workshop-primary-status-strip__token--caution .workshop-primary-status-strip__label,
+.workshop-primary-status-strip__token--warning .workshop-primary-status-strip__label,
+.workshop-primary-status-strip__token--alert .workshop-primary-status-strip__label {
+  color: inherit;
+}
+
+.workshop-primary-status-strip__value {
+  font-size: 0.98rem;
   line-height: 1;
   color: #12324f;
 }
 
-.workshop-primary-summary-card p {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
+.workshop-primary-status-strip__token--caution .workshop-primary-status-strip__value,
+.workshop-primary-status-strip__token--warning .workshop-primary-status-strip__value,
+.workshop-primary-status-strip__token--alert .workshop-primary-status-strip__value {
+  color: inherit;
 }
 
-.workshop-primary-summary-card--ready {
-  background:
-    radial-gradient(circle at top right, rgba(113, 196, 146, 0.2) 0%, transparent 34%),
-    linear-gradient(180deg, rgba(247, 255, 250, 0.98) 0%, rgba(236, 248, 240, 0.96) 100%);
+.workshop-primary-status-strip__separator {
+  color: #a6b5c3;
+  font-size: 0.7rem;
+  line-height: 1;
 }
 
 .workshop-primary-route-strip {
