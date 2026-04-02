@@ -18,6 +18,7 @@ export const HomeRedirectPage = lazyPage(
 );
 export const PosPage = lazyPage(() => import("./pages/PosPage"), "PosPage");
 export const WorkshopPage = lazyPage(() => import("./pages/WorkshopPage"), "WorkshopPage");
+export const WorkshopQueuePage = lazyPage(() => import("./pages/WorkshopQueuePage"), "WorkshopQueuePage");
 export const WorkshopTechnicianPage = lazyPage(
   () => import("./pages/WorkshopTechnicianPage"),
   "WorkshopTechnicianPage",

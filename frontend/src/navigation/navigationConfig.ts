@@ -113,8 +113,14 @@ export const navigationSections: NavigationSection[] = [
     items: [
       {
         kind: "link",
-        label: "Operating System",
+        label: "Operating",
         to: "/workshop",
+        minimumRole: "STAFF",
+      },
+      {
+        kind: "link",
+        label: "Queue",
+        to: "/workshop/queue",
         minimumRole: "STAFF",
       },
       {
@@ -122,13 +128,6 @@ export const navigationSections: NavigationSection[] = [
         label: "New Job",
         to: "/workshop/new",
         minimumRole: "STAFF",
-      },
-      {
-        kind: "link",
-        label: "Calendar",
-        to: "/workshop/calendar",
-        minimumRole: "STAFF",
-        matchExact: ["/management/calendar"],
       },
       {
         kind: "link",

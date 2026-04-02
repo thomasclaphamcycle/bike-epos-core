@@ -40,6 +40,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const isWorkspacePage = workspacePagePrefixes.some((prefix) => currentPath.startsWith(prefix));
   const isWorkshopOperatingScreen =
     currentPath === "/workshop"
+    || currentPath === "/workshop/queue"
     || currentPath === "/workshop/technician";
   const isWorkshopCalendarOverview =
     currentPath === "/workshop/calendar"

@@ -1179,7 +1179,11 @@ test("Workshop page highlights today and keeps the live schedule range today-awa
 
   await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
 
-  await expect(page.getByTestId("workshop-board-overview")).toBeVisible();
+  await expect(page.getByTestId("workshop-operating-page")).toBeVisible();
+  await expect(page.getByTestId("workshop-operating-overview")).toBeVisible();
+  await expect(page.getByTestId("workshop-board-overview")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Needs scheduling" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Timed but unassigned" })).toBeVisible();
   const headers = page.locator('[data-testid^="workshop-scheduler-day-header-"]');
   await expect(headers).toHaveCount(7);
   await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");
@@ -1200,6 +1204,23 @@ test("Workshop page highlights today and keeps the live schedule range today-awa
 
   await page.getByRole("button", { name: "Today", exact: true }).click();
   await expect(page.getByTestId(`workshop-scheduler-day-header-${todayKey}`)).toHaveAttribute("data-current-day", "true");
+});
+
+test("Workshop queue keeps action triage separate from timed scheduling", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "workshop-queue",
+  });
+
+  await loginViaUi(page, credentials, "/workshop/queue", { surface: "frontend" });
+
+  await expect(page.getByTestId("workshop-queue-page")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Queue" })).toBeVisible();
+  await expect(page.getByText("Front of house now")).toBeVisible();
+  await expect(page.getByText("Bench now")).toBeVisible();
+  await expect(page.getByText("Planning gaps")).toBeVisible();
+  await expect(page.getByText("Fast intake")).toBeVisible();
+  await expect(page.locator('[data-testid^="workshop-scheduler-day-header-"]')).toHaveCount(0);
 });
 
 test("Workshop technician view keeps assigned, blocked, and handoff work execution-first", async ({ page, request }) => {

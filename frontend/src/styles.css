@@ -5023,6 +5023,10 @@ button.primary.workshop-status-action {
   justify-content: flex-end;
 }
 
+.workshop-primary-view-toggle--links {
+  justify-content: flex-end;
+}
+
 .workshop-primary-actions__toolbar {
   justify-content: flex-end;
   gap: 10px;
@@ -5105,6 +5109,10 @@ button.primary.workshop-status-action {
   gap: 10px;
 }
 
+.workshop-primary-overview--compact {
+  gap: 8px;
+}
+
 .workshop-primary-summary-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -5127,6 +5135,11 @@ button.primary.workshop-status-action {
   gap: 6px;
   min-height: 132px;
   padding: 14px;
+}
+
+.workshop-primary-summary-card--compact {
+  min-height: 108px;
+  padding: 12px 13px;
 }
 
 .workshop-primary-summary-card strong {
@@ -5371,6 +5384,78 @@ button.primary.workshop-status-action {
 .workshop-primary-surface > .workshop-scheduler-screen--embedded {
   height: 100%;
   min-height: clamp(820px, calc(100dvh - 152px), 1220px);
+}
+
+.workshop-primary-layout--queue {
+  align-items: start;
+}
+
+.workshop-queue-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.workshop-primary-lane-item--queue {
+  gap: 8px;
+}
+
+.workshop-primary-lane-item--queue .actions-inline {
+  padding-top: 2px;
+}
+
+.workshop-queue-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workshop-queue-action-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid rgba(214, 224, 235, 0.92);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(252, 254, 255, 0.96) 0%, rgba(242, 247, 252, 0.92) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.97),
+    0 10px 22px rgba(25, 44, 71, 0.06);
+}
+
+.workshop-queue-action-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.workshop-queue-action-card__header h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.workshop-queue-action-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workshop-queue-action-item {
+  display: grid;
+  gap: 7px;
+  min-height: 102px;
+  padding: 11px 12px;
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.workshop-queue-action-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #54687b;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .workshop-primary-list-layout {
@@ -6035,7 +6120,8 @@ button.primary.workshop-status-action {
 
   .workshop-primary-summary-grid,
   .workshop-primary-route-strip,
-  .workshop-primary-lane-grid {
+  .workshop-primary-lane-grid,
+  .workshop-queue-action-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -6079,7 +6165,8 @@ button.primary.workshop-status-action {
 
   .workshop-primary-summary-grid,
   .workshop-primary-route-strip,
-  .workshop-primary-lane-grid {
+  .workshop-primary-lane-grid,
+  .workshop-queue-action-grid {
     grid-template-columns: 1fr;
   }
 
