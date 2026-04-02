@@ -2,6 +2,7 @@ import express, { Router } from "express";
 import {
   dismissReminderCandidateHandler,
   getActionCentreReportHandler,
+  getBusinessIntelligenceReportHandler,
   getCustomerServiceRemindersReportHandler,
   getDailyCloseHandler,
   getFinancialMonthlyMarginReportHandler,
@@ -44,6 +45,11 @@ export const reportRouter = Router();
 
 reportRouter.get("/sales/daily", requireRoleAtLeast("MANAGER"), getSalesDailyReportHandler);
 reportRouter.get("/sales/daily.csv", requireRoleAtLeast("MANAGER"), getSalesDailyReportCsvHandler);
+reportRouter.get(
+  "/business-intelligence",
+  requireRoleAtLeast("MANAGER"),
+  getBusinessIntelligenceReportHandler,
+);
 reportRouter.get(
   "/financial/monthly-sales-summary",
   requireRoleAtLeast("MANAGER"),

@@ -58,6 +58,7 @@ const baselineSteps = [
   "test:dashboard-weather",
   "test:financial-comparisons",
   "test:financial-reports",
+  "test:business-intelligence",
 ];
 
 const env = applyTestEnvDefaults({

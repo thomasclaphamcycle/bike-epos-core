@@ -70,6 +70,10 @@ export const DashboardPage = lazyPage(
   () => import("./pages/DashboardPage"),
   "DashboardPage",
 );
+export const BusinessIntelligencePage = lazyPage(
+  () => import("./pages/BusinessIntelligencePage"),
+  "BusinessIntelligencePage",
+);
 export const SuppliersPage = lazyPage(
   () => import("./pages/SuppliersPage"),
   "SuppliersPage",

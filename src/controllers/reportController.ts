@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { logCorePosEvent, logOperationalEvent } from "../lib/operationalLogger";
 import {
   getActionCentreReport,
+  getBusinessIntelligenceReport,
   getCustomerServiceRemindersReport,
   getDailyCloseReport,
   getFinancialMonthlyMarginSummary,
@@ -132,6 +133,12 @@ export const getFinancialMonthlySalesReportHandler = async (req: Request, res: R
 export const getFinancialSalesByCategoryReportHandler = async (req: Request, res: Response) => {
   const { from, to } = getDateRangeQuery(req);
   const report = await getFinancialSalesByCategoryReport(from, to);
+  res.json(report);
+};
+
+export const getBusinessIntelligenceReportHandler = async (req: Request, res: Response) => {
+  const { from, to } = getDateRangeQuery(req);
+  const report = await getBusinessIntelligenceReport(from, to, getTakeQuery(req));
   res.json(report);
 };
 

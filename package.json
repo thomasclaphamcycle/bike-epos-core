@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.1.124",
+  "version": "1.1.125",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -107,6 +107,7 @@
     "test:rota-foundation": "node scripts/run_smoke_test.js scripts/rota_foundation_smoke_tests.js",
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
+    "test:business-intelligence": "node scripts/run_smoke_test.js scripts/business_intelligence_phase1_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
     "verify:postflight": "node scripts/verify_postflight.js",
     "verify": "node scripts/run_verify.js",
