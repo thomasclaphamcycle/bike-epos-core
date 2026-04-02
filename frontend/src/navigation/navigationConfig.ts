@@ -280,7 +280,7 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "reports",
     label: "Reports",
-    to: "/reports/financial",
+    to: "/reports/business-intelligence",
     minimumRole: "MANAGER",
     matchPrefixes: ["/reports"],
     matchExact: [
@@ -290,6 +290,12 @@ export const navigationSections: NavigationSection[] = [
       "/management/staff-performance",
     ],
     items: [
+      {
+        kind: "link",
+        label: "Business Intelligence",
+        to: "/reports/business-intelligence",
+        minimumRole: "MANAGER",
+      },
       {
         kind: "link",
         label: "Financial Reports",

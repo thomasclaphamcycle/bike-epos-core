@@ -8,6 +8,7 @@ import {
   AdminReviewPage,
   AlertsCentrePage,
   BackupToolkitPage,
+  BusinessIntelligencePage,
   BikeHistoryPage,
   BikeHirePage,
   CashOversightPage,
@@ -584,6 +585,7 @@ const AuthedApp = () => (
         <Route path="/purchasing/receive-deliveries" element={<SupplierReceivingPage />} />
         <Route path="/purchasing/receiving" element={<SupplierReceivingPage />} />
         <Route path="/purchasing/:id" element={<PurchaseOrderPage />} />
+        <Route path="/reports/business-intelligence" element={managerOnly(<BusinessIntelligencePage />)} />
         <Route path="/reports/sales" element={managerOnly(<SalesAnalyticsPage />)} />
         <Route path="/reports/financial" element={managerOnly(<FinancialReportsPage />)} />
         <Route path="/reports/inventory" element={managerOnly(<InventoryVelocityPage />)} />

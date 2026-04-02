@@ -154,6 +154,14 @@ const addDaysToDateKey = (dateKey, days) => {
   return getLondonDateKey(next);
 };
 
+const getMondayDateKey = (anchorDateKey) => {
+  const anchor = parseDateKeyAtNoon(anchorDateKey);
+  const day = anchor.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  anchor.setDate(anchor.getDate() + mondayOffset);
+  return getLondonDateKey(anchor);
+};
+
 const getOperationalWeekStartDateKey = (anchorDateKey) => {
   const anchor = parseDateKeyAtNoon(anchorDateKey);
   const day = anchor.getDay();
@@ -1242,7 +1250,7 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
     ? null
     : await createRotaPeriodViaBypass(
       request,
-      getOperationalWeekStartDateKey(todayKey),
+      getMondayDateKey(todayKey),
       `Technician workflow ${token}`,
     );
   const rotaPeriodId = currentRotaPeriod?.id ?? createdRotaPeriod?.rotaPeriod?.id ?? null;
@@ -2002,6 +2010,25 @@ test("Login then workshop add labour and checkout marks job as collected", async
 
   await page.click("#refresh-jobs");
   await expect(page.locator("#jobs-wrap")).toContainText("COLLECTED");
+});
+
+test("Business intelligence report gives managers one coherent owner view", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "business-intelligence",
+  });
+
+  await loginViaUi(page, credentials, "/reports/business-intelligence", { surface: "frontend" });
+  await expect(page.getByTestId("business-intelligence-page")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Business Intelligence" })).toBeVisible();
+  await expect(page.getByTestId("bi-card-net-sales")).toBeVisible();
+  await expect(page.getByTestId("bi-card-hire-booked-value")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trading Mix" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workshop Performance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hire Performance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inventory Signals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Customer Signals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Trust Notes" })).toBeVisible();
 });
 
 test("Public workshop portal shows clear approval and quote-change guidance", async ({ page, request }) => {

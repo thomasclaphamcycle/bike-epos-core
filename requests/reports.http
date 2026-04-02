@@ -23,6 +23,12 @@ GET {{baseUrl}}/api/reports/sales/daily.csv?from=2026-03-01&to=2026-03-31
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Business intelligence phase-1 report (MANAGER+)
+### Retail and workshop are actual completed net sales. Hire remains booking contract value until dedicated sales-ledger linkage is added.
+GET {{baseUrl}}/api/reports/business-intelligence?from=2026-03-01&to=2026-03-31&take=5
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
 ### Financial monthly margin (MANAGER+)
 ### Defaults to current month-to-date when from/to are omitted.
 ### Revenue is net of completed refunds. Retail COGS use current Variant.costPricePence;
