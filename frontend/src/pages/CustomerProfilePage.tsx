@@ -116,6 +116,48 @@ type CustomerWorkshopJobs = {
   workshopJobs?: CustomerWorkshopJob[];
 };
 
+type CustomerHireBooking = {
+  id: string;
+  status: "RESERVED" | "CHECKED_OUT" | "RETURNED" | "CANCELLED";
+  depositStatus: "NONE" | "HELD" | "RETURNED" | "KEPT";
+  startsAt: string;
+  dueBackAt: string;
+  checkedOutAt: string | null;
+  returnedAt: string | null;
+  cancelledAt: string | null;
+  hirePricePence: number;
+  depositPence: number;
+  depositHeldPence: number;
+  notes: string | null;
+  pickupNotes: string | null;
+  returnNotes: string | null;
+  cancellationReason: string | null;
+  damageNotes: string | null;
+  operational: {
+    label: string;
+    detail: string;
+    overdue: boolean;
+    canCheckout: boolean;
+    canReturn: boolean;
+    canCancel: boolean;
+  };
+  hireAsset: {
+    id: string;
+    assetTag: string;
+    displayName: string | null;
+    status: "AVAILABLE" | "RESERVED" | "ON_HIRE" | "MAINTENANCE" | "RETIRED";
+    storageLocation: string | null;
+    variant: {
+      productName: string;
+      variantName: string | null;
+    };
+  };
+};
+
+type CustomerHireBookingsResponse = {
+  bookings: CustomerHireBooking[];
+};
+
 type CustomerBikeRecord = {
   id: string;
   customerId: string;
@@ -386,6 +428,7 @@ export const CustomerProfilePage = () => {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [sales, setSales] = useState<CustomerSales["sales"]>([]);
   const [jobs, setJobs] = useState<CustomerWorkshopJob[]>([]);
+  const [hireBookings, setHireBookings] = useState<CustomerHireBooking[]>([]);
   const [bikes, setBikes] = useState<CustomerBikeRecord[]>([]);
   const [communicationPreferences, setCommunicationPreferences] =
     useState<CustomerCommunicationPreferences | null>(null);
@@ -428,6 +471,14 @@ export const CustomerProfilePage = () => {
     () => jobs.filter((job) => job.status === "BOOKED" || job.status === "IN_PROGRESS" || job.status === "READY").slice(0, 3),
     [jobs],
   );
+  const activeHireBookings = useMemo(
+    () => hireBookings.filter((booking) => booking.status === "RESERVED" || booking.status === "CHECKED_OUT").slice(0, 4),
+    [hireBookings],
+  );
+  const recentHireHistory = useMemo(
+    () => hireBookings.filter((booking) => booking.status === "RETURNED" || booking.status === "CANCELLED").slice(0, 4),
+    [hireBookings],
+  );
 
   const loadProfile = async () => {
     if (!id) {
@@ -436,11 +487,12 @@ export const CustomerProfilePage = () => {
 
     setLoading(true);
     try {
-      const [customerPayload, salesPayload, jobsPayload, bikesPayload] = await Promise.all([
+      const [customerPayload, salesPayload, jobsPayload, bikesPayload, hirePayload] = await Promise.all([
         apiGet<Customer>(`/api/customers/${encodeURIComponent(id)}`),
         apiGet<CustomerSales>(`/api/customers/${encodeURIComponent(id)}/sales`),
         apiGet<CustomerWorkshopJobs>(`/api/customers/${encodeURIComponent(id)}/workshop-jobs`),
         apiGet<CustomerBikesResponse>(`/api/customers/${encodeURIComponent(id)}/bikes`),
+        apiGet<CustomerHireBookingsResponse>(`/api/hire/bookings?customerId=${encodeURIComponent(id)}&take=20`),
       ]);
       setCustomer(customerPayload);
       setCommunicationPreferences({
@@ -451,6 +503,7 @@ export const CustomerProfilePage = () => {
       setSales(salesPayload.sales || []);
       setJobs(jobsPayload.workshopJobs || jobsPayload.jobs || []);
       setBikes(bikesPayload.bikes || []);
+      setHireBookings(hirePayload.bookings || []);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load customer profile";
       error(message);
@@ -1027,6 +1080,105 @@ export const CustomerProfilePage = () => {
             ) : null}
           </>
         ) : null}
+      </section>
+
+      <section className="card">
+        <div className="card-header-row">
+          <div>
+            <h2>Rental Activity</h2>
+            <p className="muted-text">
+              Keep active hires, recent returns, and issue notes attached to the customer relationship instead of leaving bike hire as a disconnected desk-only workflow.
+            </p>
+          </div>
+          <Link to="/rental/calendar" className="button-link">Open rental operations</Link>
+        </div>
+
+        <div className="customer-relationship-overview">
+          <div className="customer-relationship-overview__section">
+            <div className="card-header-row">
+              <div>
+                <h3 style={{ margin: 0 }}>Active rentals</h3>
+                <p className="muted-text" style={{ margin: "6px 0 0" }}>
+                  Reserved and checked-out hires that still need pickup, return, or customer follow-up.
+                </p>
+              </div>
+            </div>
+            <div className="timeline-list">
+              {activeHireBookings.length ? activeHireBookings.map((booking) => (
+                <article key={booking.id} className="timeline-card">
+                  <div className="card-header-row">
+                    <div>
+                      <strong>{booking.hireAsset.assetTag} · {booking.hireAsset.variant.productName}</strong>
+                      <div className="table-secondary">
+                        {booking.hireAsset.displayName || booking.hireAsset.variant.variantName || "Hire fleet bike"}
+                      </div>
+                    </div>
+                    <span className={booking.operational.overdue ? "status-badge status-warning" : "status-badge"}>
+                      {booking.operational.label}
+                    </span>
+                  </div>
+                  <div className="job-meta-grid">
+                    <div><strong>Dates:</strong> {formatOptionalDate(booking.startsAt)} to {formatOptionalDate(booking.dueBackAt)}</div>
+                    <div><strong>Hire price:</strong> {formatMoney(booking.hirePricePence)}</div>
+                    <div><strong>Deposit:</strong> {formatMoney(booking.depositHeldPence)} held / {formatMoney(booking.depositPence)} required</div>
+                    <div><strong>Location:</strong> {booking.hireAsset.storageLocation || "No storage location set"}</div>
+                  </div>
+                  <div className="table-secondary">{booking.operational.detail}</div>
+                  {booking.notes ? <div className="table-secondary">Booking: {booking.notes}</div> : null}
+                  {booking.pickupNotes ? <div className="table-secondary">Pickup: {booking.pickupNotes}</div> : null}
+                  <div className="actions-inline">
+                    <Link to="/rental/active">Open rental desk</Link>
+                  </div>
+                </article>
+              )) : (
+                <div className="restricted-panel info-panel">
+                  No active rentals for this customer right now.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="customer-relationship-overview__section">
+            <div className="card-header-row">
+              <div>
+                <h3 style={{ margin: 0 }}>Recent rental history</h3>
+                <p className="muted-text" style={{ margin: "6px 0 0" }}>
+                  Return and cancellation notes stay visible so repeat rental issues are easy to spot during workshop or future booking conversations.
+                </p>
+              </div>
+            </div>
+            <div className="timeline-list">
+              {recentHireHistory.length ? recentHireHistory.map((booking) => (
+                <article key={booking.id} className="timeline-card">
+                  <div className="card-header-row">
+                    <div>
+                      <strong>{booking.hireAsset.assetTag} · {booking.hireAsset.variant.productName}</strong>
+                      <div className="table-secondary">
+                        {booking.status === "RETURNED"
+                          ? `Returned ${formatOptionalDateTime(booking.returnedAt)}`
+                          : `Cancelled ${formatOptionalDateTime(booking.cancelledAt)}`}
+                      </div>
+                    </div>
+                    <span className="status-badge status-ready">{booking.status === "RETURNED" ? "Returned" : "Cancelled"}</span>
+                  </div>
+                  <div className="job-meta-grid">
+                    <div><strong>Hire price:</strong> {formatMoney(booking.hirePricePence)}</div>
+                    <div><strong>Deposit:</strong> {formatMoney(booking.depositHeldPence)} held</div>
+                    <div><strong>Booked for:</strong> {formatOptionalDate(booking.startsAt)} to {formatOptionalDate(booking.dueBackAt)}</div>
+                    <div><strong>Fleet status:</strong> {booking.hireAsset.status.replaceAll("_", " ")}</div>
+                  </div>
+                  {booking.returnNotes ? <div className="table-secondary">Return: {booking.returnNotes}</div> : null}
+                  {booking.damageNotes ? <div className="table-secondary">Damage: {booking.damageNotes}</div> : null}
+                  {booking.cancellationReason ? <div className="table-secondary">Cancellation: {booking.cancellationReason}</div> : null}
+                </article>
+              )) : (
+                <div className="restricted-panel info-panel">
+                  No closed rental history for this customer yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="card">

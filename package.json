@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.1.123",
+  "version": "1.1.124",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -102,7 +102,7 @@
     "test:supplier-product-links": "node scripts/run_smoke_test.js scripts/supplier_product_links_smoke_tests.js",
     "test:product-import": "node scripts/run_smoke_test.js scripts/product_csv_import_smoke_tests.js",
     "test:stock-transfers": "node scripts/run_smoke_test.js scripts/stock_transfers_smoke_tests.js",
-    "test:bike-hire": "node scripts/run_smoke_test.js scripts/bike_hire_foundation_smoke_tests.js",
+    "test:bike-hire": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/bike_hire_foundation_smoke_tests.js",
     "test:settings": "node scripts/run_smoke_test.js scripts/settings_foundation_smoke_tests.js",
     "test:rota-foundation": "node scripts/run_smoke_test.js scripts/rota_foundation_smoke_tests.js",
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",

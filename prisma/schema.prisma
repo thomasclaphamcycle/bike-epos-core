@@ -303,14 +303,16 @@ enum HireDepositStatus {
 }
 
 model HireAsset {
-  id          String          @id @default(uuid()) @db.Uuid
-  variantId   String
-  assetTag    String          @unique
-  displayName String?
-  notes       String?
-  status      HireAssetStatus @default(AVAILABLE)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id               String          @id @default(uuid()) @db.Uuid
+  variantId        String
+  assetTag         String          @unique
+  displayName      String?
+  notes            String?
+  storageLocation  String?
+  isOnlineBookable Boolean         @default(false)
+  status           HireAssetStatus @default(AVAILABLE)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   variant  Variant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
   bookings HireBooking[]
@@ -329,13 +331,19 @@ model HireBooking {
   dueBackAt           DateTime
   checkedOutAt        DateTime?
   returnedAt          DateTime?
+  cancelledAt         DateTime?
   hirePricePence      Int               @default(0)
   depositPence        Int               @default(0)
   depositHeldPence    Int               @default(0)
   notes               String?
+  pickupNotes         String?
+  returnNotes         String?
+  cancellationReason  String?
+  damageNotes         String?
   createdByStaffId    String?
   checkedOutByStaffId String?
   returnedByStaffId   String?
+  cancelledByStaffId  String?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -344,10 +352,12 @@ model HireBooking {
   createdByStaff    User?     @relation("HireBookingCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   checkedOutByStaff User?     @relation("HireBookingCheckedOutByStaff", fields: [checkedOutByStaffId], references: [id], onDelete: SetNull)
   returnedByStaff   User?     @relation("HireBookingReturnedByStaff", fields: [returnedByStaffId], references: [id], onDelete: SetNull)
+  cancelledByStaff  User?     @relation("HireBookingCancelledByStaff", fields: [cancelledByStaffId], references: [id], onDelete: SetNull)
 
   @@index([hireAssetId, status])
   @@index([customerId, status])
   @@index([status, dueBackAt])
+  @@index([status, startsAt])
 }
 
 enum StockLedgerEntryType {
@@ -1735,6 +1745,7 @@ model User {
   createdHireBookings      HireBooking[]          @relation("HireBookingCreatedByStaff")
   checkedOutHireBookings   HireBooking[]          @relation("HireBookingCheckedOutByStaff")
   returnedHireBookings     HireBooking[]          @relation("HireBookingReturnedByStaff")
+  cancelledHireBookings    HireBooking[]          @relation("HireBookingCancelledByStaff")
   rotaAssignments          RotaAssignment[]
   holidayRequests          HolidayRequest[]       @relation("HolidayRequestStaff")
   reviewedHolidayRequests  HolidayRequest[]       @relation("HolidayRequestReviewedBy")
