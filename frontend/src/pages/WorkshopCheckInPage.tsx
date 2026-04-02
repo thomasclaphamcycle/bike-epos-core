@@ -449,7 +449,6 @@ export const WorkshopCheckInPage = ({
   const [bikeFrameSize, setBikeFrameSize] = useState("");
   const [bikeRecordNotes, setBikeRecordNotes] = useState("");
   const [bikeCreateModalOpen, setBikeCreateModalOpen] = useState(false);
-  const [bikeSearchText, setBikeSearchText] = useState("");
   const [problemWork, setProblemWork] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -582,34 +581,11 @@ export const WorkshopCheckInPage = ({
     return !customerResults.some((customer) => customer.name.trim().toLocaleLowerCase() === normalizedSearch);
   }, [customerResults, loadingCustomers, trimmedCustomerSearch]);
   const customerSearchOptionCount = customerResults.length + (showInlineCreateCustomerOption ? 1 : 0);
-  const filteredCustomerBikes = useMemo(() => {
-    const sortedBikes = [...customerBikes].sort(compareCustomerBikesByRecency);
-    const query = bikeSearchText.trim().toLocaleLowerCase();
-    if (!query) {
-      return sortedBikes;
-    }
-
-    return sortedBikes.filter((bike) =>
-      [
-        bike.displayName,
-        bike.label,
-        bike.make,
-        bike.model,
-        bike.colour,
-        bike.frameSize,
-        bike.registrationNumber,
-        bike.serialNumber,
-        bike.frameNumber,
-        bike.notes,
-      ]
-        .filter(Boolean)
-        .some((value) => value?.toLocaleLowerCase().includes(query)),
-    );
-  }, [bikeSearchText, customerBikes]);
   const sortedCustomerBikes = useMemo(
     () => [...customerBikes].sort(compareCustomerBikesByRecency),
     [customerBikes],
   );
+  const shouldScrollBikeList = sortedCustomerBikes.length > 3;
   const hasBikeSelection = Boolean(selectedBikeId || createBikeInline || noBikeForJob);
   const isReviewStep = step === stepTitles.length - 1;
 
@@ -1074,7 +1050,6 @@ export const WorkshopCheckInPage = ({
     setCreateCustomerInline(false);
     setSelectedBikeId("");
     setNoBikeForJob(false);
-    setBikeSearchText("");
     resetBikeDraft();
     setHighlightedCustomerOptionIndex(-1);
   };
@@ -1088,7 +1063,6 @@ export const WorkshopCheckInPage = ({
     setSelectedBikeId("");
     setNoBikeForJob(false);
     setCustomerBikes([]);
-    setBikeSearchText("");
     resetBikeDraft();
     setHighlightedCustomerOptionIndex(-1);
   };
@@ -1102,14 +1076,12 @@ export const WorkshopCheckInPage = ({
   const clearBikeSelection = () => {
     setSelectedBikeId("");
     setNoBikeForJob(false);
-    setBikeSearchText("");
     resetBikeDraft();
   };
 
   const continueWithoutBike = () => {
     setSelectedBikeId("");
     setNoBikeForJob(true);
-    setBikeSearchText("");
     resetBikeDraft();
   };
 
@@ -1522,7 +1494,7 @@ export const WorkshopCheckInPage = ({
                           {loadingCustomerBikes
                             ? "Checking this customer's bike records."
                             : sortedCustomerBikes.length > 0
-                              ? "Search and select the bike for this job."
+                              ? "Select the bike for this job."
                               : "Add the customer's bike now, or continue without linking one to this job."}
                         </div>
                       </div>
@@ -1598,28 +1570,13 @@ export const WorkshopCheckInPage = ({
                   ) : null}
 
                   {selectedCustomer && sortedCustomerBikes.length > 0 ? (
-                    <>
-                      <label className="grow">
-                        Search bikes
-                        <input
-                          value={bikeSearchText}
-                          onChange={(event) => setBikeSearchText(event.target.value)}
-                          placeholder="Search brand, model, colour, size, serial, registration"
-                          data-testid="workshop-checkin-bike-search"
-                        />
-                      </label>
-                      <div
-                        className="workshop-checkin-bike-picker__list"
-                        role="list"
-                        aria-label={`Saved bikes for ${selectedCustomer.name}`}
-                      >
-                        {filteredCustomerBikes.length === 0 ? (
-                          <div className="restricted-panel">
-                            {bikeSearchText.trim()
-                              ? "No saved bikes matched that search."
-                              : "No saved bikes are available for this customer yet."}
-                          </div>
-                        ) : filteredCustomerBikes.map((bike) => (
+                    <div
+                      className={`workshop-checkin-bike-picker__list${shouldScrollBikeList ? " workshop-checkin-bike-picker__list--scrollable" : ""}`}
+                      role="list"
+                      aria-label={`Saved bikes for ${selectedCustomer.name}`}
+                      data-testid="workshop-checkin-bike-list"
+                    >
+                      {sortedCustomerBikes.map((bike) => (
                           <article
                             key={bike.id}
                             className={`workshop-checkin-bike-picker__list-item${selectedBikeId === bike.id ? " workshop-checkin-bike-picker__list-item--selected" : ""}`}
@@ -1638,9 +1595,8 @@ export const WorkshopCheckInPage = ({
                               </div>
                             </button>
                           </article>
-                        ))}
-                      </div>
-                    </>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
               </>
