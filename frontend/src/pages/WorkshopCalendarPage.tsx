@@ -133,6 +133,7 @@ type WorkshopSchedulerScreenProps = {
   embedded?: boolean;
   refreshToken?: number;
   showToolbar?: boolean;
+  showTimeOffRailPanel?: boolean;
   title?: string;
   description?: string;
   backLinkTo?: string | null;
@@ -1365,6 +1366,7 @@ export const WorkshopSchedulerScreen = ({
   embedded = false,
   refreshToken = 0,
   showToolbar = !embedded,
+  showTimeOffRailPanel = true,
   title,
   description,
   backLinkTo = embedded ? null : "/workshop",
@@ -3081,7 +3083,7 @@ export const WorkshopSchedulerScreen = ({
             </div>
           </section>
 
-          {(calendar?.workshopTimeOff.length ?? 0) > 0 ? (
+          {showTimeOffRailPanel && (calendar?.workshopTimeOff.length ?? 0) > 0 ? (
             <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
               <div className="card-header-row">
                 <div>
