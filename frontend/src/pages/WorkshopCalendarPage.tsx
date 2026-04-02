@@ -3012,6 +3012,7 @@ export const WorkshopSchedulerScreen = ({
           <section
             id="workshop-needs-scheduling-panel"
             className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}
+            data-testid="workshop-scheduler-unscheduled-panel"
           >
             <div className="card-header-row">
               <div>
@@ -3052,6 +3053,7 @@ export const WorkshopSchedulerScreen = ({
           <section
             id="workshop-unassigned-panel"
             className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}
+            data-testid="workshop-scheduler-unassigned-panel"
           >
             <div className="card-header-row">
               <div>
