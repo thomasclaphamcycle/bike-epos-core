@@ -24,6 +24,11 @@ GET http://localhost:3100/api/rota/bank-holidays/status
 X-Staff-Role: MANAGER
 X-Staff-Id: rota-manager
 
+### Bank holiday sync status (refresh if stale or missing)
+GET http://localhost:3100/api/rota/bank-holidays/status?autoSync=1
+X-Staff-Role: MANAGER
+X-Staff-Id: rota-manager
+
 ### Download rota template
 GET http://localhost:3100/api/rota/template?startsOn=2026-03-09
 X-Staff-Role: MANAGER

@@ -51,6 +51,8 @@ const serverController = createSmokeServerController({
 
 const STORE_OPENING_HOURS_KEY = "store.openingHours";
 const BANK_HOLIDAY_STATUS_KEY = "rota.bankHolidaySync";
+const STORE_REGION_KEY = "store.region";
+const STORE_COUNTRY_KEY = "store.country";
 const ALEX_STAFF_ID = "rota-alex-id";
 const JORDAN_STAFF_ID = "rota-jordan-id";
 const CASEY_STAFF_ID = "rota-casey-id";
@@ -65,6 +67,8 @@ const CAPACITY_LIGHT_DATE = "2099-04-01";
 const CAPACITY_OVERLOADED_DATE = "2099-04-02";
 const CAPACITY_NOCOVER_DATE = "2099-04-03";
 const LONG_RANGE_BANK_HOLIDAY = "2099-03-24";
+const SCOTTISH_BANK_HOLIDAY = IMPORTED_WEDNESDAY;
+const SCOTTISH_LONG_RANGE_BANK_HOLIDAY = "2099-04-07";
 const WORKSHOP_CAPACITY_REF = `rota-capacity-${Date.now()}`;
 
 const ALEX_HEADERS = {
@@ -364,6 +368,34 @@ const startBankHolidayFeedServer = async () =>
             },
           ],
         },
+        scotland: {
+          division: "scotland",
+          events: [
+            {
+              title: "Scottish spring bank holiday",
+              date: SCOTTISH_BANK_HOLIDAY,
+              notes: "",
+              bunting: true,
+            },
+            {
+              title: "Scottish long-range bank holiday",
+              date: SCOTTISH_LONG_RANGE_BANK_HOLIDAY,
+              notes: "",
+              bunting: true,
+            },
+          ],
+        },
+        "northern-ireland": {
+          division: "northern-ireland",
+          events: [
+            {
+              title: "Northern Ireland spring bank holiday",
+              date: IMPORTED_TUESDAY,
+              notes: "",
+              bunting: true,
+            },
+          ],
+        },
       }));
     });
 
@@ -394,7 +426,7 @@ const run = async () => {
     await prisma.appConfig.deleteMany({
       where: {
         key: {
-          in: [STORE_OPENING_HOURS_KEY, BANK_HOLIDAY_STATUS_KEY],
+          in: [STORE_OPENING_HOURS_KEY, BANK_HOLIDAY_STATUS_KEY, STORE_REGION_KEY, STORE_COUNTRY_KEY],
         },
       },
     });
@@ -482,6 +514,18 @@ const run = async () => {
     assert.equal(bankHolidayStatusBeforeSyncRes.status, 200, JSON.stringify(bankHolidayStatusBeforeSyncRes.json));
     assert.equal(bankHolidayStatusBeforeSyncRes.json.lastSyncedAt, null);
     assert.equal(bankHolidayStatusBeforeSyncRes.json.storedCount, 0);
+    assert.equal(bankHolidayStatusBeforeSyncRes.json.region, "england-and-wales");
+
+    const bankHolidayAutoSyncRes = await fetchJson("/api/rota/bank-holidays/status?autoSync=1", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(bankHolidayAutoSyncRes.status, 200, JSON.stringify(bankHolidayAutoSyncRes.json));
+    assert.equal(bankHolidayAutoSyncRes.json.autoSyncAttempted, true);
+    assert.equal(bankHolidayAutoSyncRes.json.autoSyncSucceeded, true);
+    assert.equal(bankHolidayAutoSyncRes.json.region, "england-and-wales");
+    assert.equal(bankHolidayAutoSyncRes.json.lastResult.createdCount, 2);
+    assert.equal(bankHolidayAutoSyncRes.json.storedCount, 1);
+    assert.equal(bankHolidayAutoSyncRes.json.upcoming[0].name, "Long-range bank holiday");
 
     const templateRes = await fetchText(`/api/rota/template?startsOn=${IMPORTED_MONDAY}`, {
       headers: MANAGER_HEADERS,
@@ -497,8 +541,9 @@ const run = async () => {
       headers: ADMIN_HEADERS,
     });
     assert.equal(bankHolidaySyncRes.status, 200, JSON.stringify(bankHolidaySyncRes.json));
-    assert.equal(bankHolidaySyncRes.json.lastResult.createdCount, 2);
+    assert.equal(bankHolidaySyncRes.json.lastResult.createdCount, 0);
     assert.equal(bankHolidaySyncRes.json.lastResult.updatedCount, 0);
+    assert.equal(bankHolidaySyncRes.json.lastResult.unchangedCount, 2);
     assert.equal(bankHolidaySyncRes.json.lastResult.skippedManualCount, 0);
     assert.equal(bankHolidaySyncRes.json.storedCount, 1);
     assert.equal(bankHolidaySyncRes.json.upcoming[0].name, "Long-range bank holiday");
@@ -1265,6 +1310,43 @@ const run = async () => {
     assert.equal(workshopClosedDayRes.json.capacityToday.label, "Closed");
     assert.match(workshopClosedDayRes.json.capacityToday.explanation, /Special bank holiday/);
 
+    await prisma.rotaClosedDay.deleteMany({
+      where: {
+        type: "BANK_HOLIDAY",
+      },
+    });
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: BANK_HOLIDAY_STATUS_KEY,
+      },
+    });
+    await prisma.appConfig.upsert({
+      where: { key: STORE_REGION_KEY },
+      update: { value: "Scotland" },
+      create: { key: STORE_REGION_KEY, value: "Scotland" },
+    });
+    await prisma.appConfig.upsert({
+      where: { key: STORE_COUNTRY_KEY },
+      update: { value: "United Kingdom" },
+      create: { key: STORE_COUNTRY_KEY, value: "United Kingdom" },
+    });
+
+    const scotlandStatusRes = await fetchJson("/api/rota/bank-holidays/status?autoSync=1", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(scotlandStatusRes.status, 200, JSON.stringify(scotlandStatusRes.json));
+    assert.equal(scotlandStatusRes.json.region, "scotland");
+    assert.equal(scotlandStatusRes.json.regionLabel, "Scotland");
+    assert.equal(scotlandStatusRes.json.autoSyncAttempted, true);
+    assert.equal(scotlandStatusRes.json.autoSyncSucceeded, true);
+    assert.equal(scotlandStatusRes.json.upcoming[0].name, "Scottish long-range bank holiday");
+
+    const scotlandOverviewRes = await fetchJson(`/api/rota?periodId=${rotaPeriod.id}`, { headers: MANAGER_HEADERS });
+    assert.equal(scotlandOverviewRes.status, 200, JSON.stringify(scotlandOverviewRes.json));
+    const scottishHolidayColumn = scotlandOverviewRes.json.period.days.find((day) => day.date === SCOTTISH_BANK_HOLIDAY);
+    assert.equal(scottishHolidayColumn.isClosed, true);
+    assert.equal(scottishHolidayColumn.closedReason, "Scottish spring bank holiday");
+
     console.log("[rota-foundation-smoke] rota import and dashboard staff summary passed");
   } finally {
     fs.rmSync(tempFilePath, { force: true });
@@ -1277,6 +1359,18 @@ const run = async () => {
         },
       });
     }
+    await prisma.rotaClosedDay.deleteMany({
+      where: {
+        type: "BANK_HOLIDAY",
+      },
+    });
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: [BANK_HOLIDAY_STATUS_KEY, STORE_REGION_KEY, STORE_COUNTRY_KEY],
+        },
+      },
+    });
     await prisma.$disconnect();
     await serverController.stop();
 

@@ -262,7 +262,11 @@ const main = async () => {
     state.assetIds.push(createAssetRes.json.id);
     const assetTagQuery = encodeURIComponent(createAssetRes.json.assetTag);
 
-    const listAssetsRes = await fetchJson("/api/hire/assets?onlineBookable=true&take=20", { method: "GET" }, staffHeaders);
+    const listAssetsRes = await fetchJson(
+      `/api/hire/assets?onlineBookable=true&q=${assetTagQuery}&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
     assert.equal(listAssetsRes.status, 200);
     assert.ok(
       listAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id && asset.isOnlineBookable === true),
@@ -426,7 +430,11 @@ const main = async () => {
     assert.equal(checkoutRes.json.depositStatus, "HELD");
     assert.equal(checkoutRes.json.pickupNotes, "ID checked and helmet issued");
 
-    const onHireAssetsRes = await fetchJson("/api/hire/assets?status=ON_HIRE&take=20", { method: "GET" }, staffHeaders);
+    const onHireAssetsRes = await fetchJson(
+      `/api/hire/assets?status=ON_HIRE&q=${assetTagQuery}&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
     assert.equal(onHireAssetsRes.status, 200);
     assert.ok(
       onHireAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id),
@@ -451,7 +459,11 @@ const main = async () => {
     assert.equal(returnRes.json.depositStatus, "RETURNED");
     assert.equal(returnRes.json.damageNotes, "Minor brake rub to inspect");
 
-    const maintenanceAssetsRes = await fetchJson("/api/hire/assets?status=MAINTENANCE&take=20", { method: "GET" }, staffHeaders);
+    const maintenanceAssetsRes = await fetchJson(
+      `/api/hire/assets?status=MAINTENANCE&q=${assetTagQuery}&take=20`,
+      { method: "GET" },
+      staffHeaders,
+    );
     assert.equal(maintenanceAssetsRes.status, 200);
     assert.ok(
       maintenanceAssetsRes.json.assets.some((asset) => asset.id === createAssetRes.json.id),
