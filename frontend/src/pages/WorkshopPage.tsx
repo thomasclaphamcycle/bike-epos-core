@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
@@ -31,6 +31,7 @@ import { type WorkshopCheckInScheduleDraft } from "./WorkshopCheckInPage";
 export const WorkshopPage = () => {
   const { user } = useAuth();
   const { error } = useToasts();
+  const navigate = useNavigate();
 
   const [view, setView] = useState<CalendarViewMode>("week");
   const [anchorDateKey, setAnchorDateKey] = useState(getWorkshopOperationalWeekStartDateKey());
@@ -147,10 +148,87 @@ export const WorkshopPage = () => {
     setIsIntakeOpen(true);
   };
 
+  const scrollToSchedulerPanel = (panelId: string) => {
+    requestAnimationFrame(() => {
+      document.getElementById(panelId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+        inline: "nearest",
+      });
+    });
+  };
+
+  const statusStripItems = [
+    {
+      key: "waiting",
+      label: "Waiting",
+      value: boardSummary.waitingApprovalCount,
+      tone: "default",
+      isActive: status === "WAITING_FOR_APPROVAL",
+      onClick: () => {
+        setQuickFilter("ALL");
+        setStatus((current) => (current === "WAITING_FOR_APPROVAL" ? "" : "WAITING_FOR_APPROVAL"));
+      },
+    },
+    {
+      key: "bench",
+      label: "Bench",
+      value: boardSummary.activeBenchCount,
+      tone: "default",
+      isActive: false,
+      onClick: () => {
+        void navigate("/workshop/queue");
+      },
+    },
+    {
+      key: "blocked",
+      label: "Blocked",
+      value: boardSummary.waitingPartsCount,
+      tone: "caution",
+      isActive: quickFilter === "WAITING_FOR_PARTS",
+      onClick: () => {
+        setStatus("");
+        setQuickFilter((current) => (current === "WAITING_FOR_PARTS" ? "ALL" : "WAITING_FOR_PARTS"));
+      },
+    },
+    {
+      key: "ready",
+      label: "Ready",
+      value: boardSummary.readyCollectionCount,
+      tone: "default",
+      isActive: quickFilter === "READY_FOR_COLLECTION",
+      onClick: () => {
+        setStatus("");
+        setQuickFilter((current) => (current === "READY_FOR_COLLECTION" ? "ALL" : "READY_FOR_COLLECTION"));
+      },
+    },
+    {
+      key: "needs-scheduling",
+      label: "Needs scheduling",
+      value: boardSummary.unscheduledCount,
+      tone: "warning",
+      isActive: false,
+      onClick: () => {
+        scrollToSchedulerPanel("workshop-needs-scheduling-panel");
+      },
+    },
+    {
+      key: "unassigned",
+      label: "Unassigned",
+      value: boardSummary.timedUnassignedCount,
+      tone: "alert",
+      isActive: false,
+      onClick: () => {
+        scrollToSchedulerPanel("workshop-unassigned-panel");
+      },
+    },
+  ] as const;
+
   return (
     <div className="page-shell page-shell-workspace workshop-primary-page" data-testid="workshop-operating-page">
       <section className="workshop-primary-topbar">
         <div className="workshop-primary-title">
+          <span className="ui-page-eyebrow">Workshop</span>
           <h1 className="ui-page-title">Workshop</h1>
         </div>
 
@@ -247,27 +325,31 @@ export const WorkshopPage = () => {
         className="workshop-primary-overview workshop-primary-overview--compact"
         data-testid="workshop-operating-overview"
       >
-        <div className="workshop-primary-status-strip" role="list" aria-label="Workshop operating status">
-          {[
-            { key: "waiting", label: "Waiting", value: boardSummary.waitingApprovalCount, tone: "default" },
-            { key: "bench", label: "Bench", value: boardSummary.activeBenchCount, tone: "default" },
-            { key: "blocked", label: "Blocked", value: boardSummary.waitingPartsCount, tone: "caution" },
-            { key: "ready", label: "Ready", value: boardSummary.readyCollectionCount, tone: "default" },
-            { key: "needs-scheduling", label: "Unscheduled", value: boardSummary.unscheduledCount, tone: "warning" },
-            { key: "unassigned", label: "Unassigned", value: boardSummary.timedUnassignedCount, tone: "alert" },
-          ].map((item, index, items) => (
-            <div key={item.key} className="workshop-primary-status-strip__item" role="listitem">
-              <span className={`workshop-primary-status-strip__token workshop-primary-status-strip__token--${item.tone}`}>
-                <span className="workshop-primary-status-strip__label">{item.label}</span>
-                <strong className="workshop-primary-status-strip__value">{item.value}</strong>
-              </span>
-              {index < items.length - 1 ? (
-                <span className="workshop-primary-status-strip__separator" aria-hidden="true">
-                  •
-                </span>
-              ) : null}
-            </div>
-          ))}
+        <div className="workshop-primary-summary-grid">
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Waiting for approval</span>
+            <strong>{boardSummary.waitingApprovalCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Active bench work</span>
+            <strong>{boardSummary.activeBenchCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Blocked on parts</span>
+            <strong>{boardSummary.waitingPartsCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact workshop-primary-summary-card--ready">
+            <span className="metric-label">Ready for collection</span>
+            <strong>{boardSummary.readyCollectionCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Needs scheduling</span>
+            <strong>{boardSummary.unscheduledCount}</strong>
+          </article>
+          <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
+            <span className="metric-label">Unassigned</span>
+            <strong>{boardSummary.timedUnassignedCount}</strong>
+          </article>
         </div>
       </section>
 

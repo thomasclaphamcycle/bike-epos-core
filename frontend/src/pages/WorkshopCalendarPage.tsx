@@ -3009,7 +3009,10 @@ export const WorkshopSchedulerScreen = ({
 
         {!standaloneOverview ? (
         <aside className={embedded ? "workshop-scheduler-rail workshop-scheduler-rail--embedded" : "workshop-scheduler-rail"}>
-          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
+          <section
+            id="workshop-needs-scheduling-panel"
+            className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}
+          >
             <div className="card-header-row">
               <div>
                 <h2>Unscheduled</h2>
@@ -3046,7 +3049,10 @@ export const WorkshopSchedulerScreen = ({
             </div>
           </section>
 
-          <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
+          <section
+            id="workshop-unassigned-panel"
+            className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}
+          >
             <div className="card-header-row">
               <div>
                 <h2>Unassigned</h2>
