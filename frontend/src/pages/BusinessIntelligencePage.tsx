@@ -607,7 +607,7 @@ export const BusinessIntelligencePage = () => {
                     </td>
                     <td>{row.stallReason}</td>
                     <td>
-                      <span className={reportSeverityBadgeClass(row.severity)}>{formatStatusLabel(row.rawStatus)}</span>
+                      <span className={reportSeverityBadgeClass[row.severity]}>{formatStatusLabel(row.rawStatus)}</span>
                     </td>
                     <td>{row.stageAgeDays === null ? "—" : `${row.stageAgeDays}d`}</td>
                   </tr>
