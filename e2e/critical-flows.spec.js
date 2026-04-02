@@ -1705,6 +1705,7 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
     prefix: "workshop-review-guard",
   });
   const token = uniqueToken("workshop-review-guard");
+  const templateName = `Hub Service ${token}`;
   const customerName = `Review Guard ${token}`;
   const customer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
     data: {
@@ -1729,6 +1730,24 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
       frameSize: "56cm",
     },
   });
+  const template = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/service-templates", "MANAGER", {
+    data: {
+      name: templateName,
+      description: "Template restored for workshop intake",
+      category: "Service",
+      defaultDurationMinutes: 45,
+      lines: [
+        {
+          type: "LABOUR",
+          description: "Workshop template labour",
+          qty: 1,
+          unitPricePence: 4500,
+        },
+      ],
+    },
+  });
+  const templateList = await apiJsonWithHeaderBypass(request, "GET", "/api/workshop/service-templates", "STAFF");
+  expect(templateList.templates.some((entry) => entry.id === template.template.id)).toBeTruthy();
   const createRequests = [];
 
   page.on("request", (pendingRequest) => {
@@ -1760,6 +1779,8 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
   await dialog.getByTestId("workshop-checkin-bike-none").click();
   await expect(bikeSelectionSummary).toContainText("No bike attached to this job");
   await dialog.getByText("Next", { exact: true }).click();
+  await expect(dialog.getByText(templateName, { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Custom work", { exact: true })).toBeVisible();
   await dialog.getByPlaceholder("Describe the problem or requested work").fill("Review guard repair request");
   await dialog.getByText("Next", { exact: true }).click();
 
