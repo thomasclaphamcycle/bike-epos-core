@@ -1,7 +1,9 @@
 import { on } from "./events";
 import { prepareReminderCandidateFromWorkshopCompletion } from "../services/reminderCandidateService";
+import { logger } from "../utils/logger";
 
 let reminderSubscribersRegistered = false;
+const isEventBusDebugEnabled = () => process.env.EVENT_BUS_DEBUG === "1";
 
 export const registerReminderSubscribers = () => {
   if (reminderSubscribersRegistered) {
@@ -21,24 +23,19 @@ export const registerReminderSubscribers = () => {
         sourceEvent: payload.type,
       });
 
-      if (process.env.EVENT_BUS_DEBUG === "1" && candidate) {
-        console.info(
-          `[eventbus:reminders] workshop.job.completed ${JSON.stringify({
-            workshopJobId: candidate.workshopJobId,
-            reminderCandidateId: candidate.id,
-            status: candidate.status,
-            dueAt: candidate.dueAt.toISOString(),
-          })}`,
-        );
+      if (isEventBusDebugEnabled() && candidate) {
+        logger.info("eventbus.reminders.candidate_prepared", {
+          workshopJobId: candidate.workshopJobId,
+          reminderCandidateId: candidate.id,
+          status: candidate.status,
+          dueAt: candidate.dueAt.toISOString(),
+        });
       }
     } catch (error) {
-      if (process.env.EVENT_BUS_DEBUG === "1") {
-        console.warn(
-          `[eventbus:reminders] failed ${JSON.stringify({
-            workshopJobId: payload.workshopJobId,
-            message: error instanceof Error ? error.message : String(error),
-          })}`,
-        );
+      if (isEventBusDebugEnabled()) {
+        logger.error("eventbus.reminders.prepare_failed", error, {
+          workshopJobId: payload.workshopJobId,
+        });
       }
 
       throw error;

@@ -122,6 +122,12 @@ const fetchJson = async (path, options = {}, headers = managerHeaders) => {
   return { status: response.status, json };
 };
 
+const addHoursToIso = (isoValue, hoursToAdd) => {
+  const value = new Date(isoValue);
+  value.setTime(value.getTime() + (hoursToAdd * 60 * 60 * 1000));
+  return value.toISOString();
+};
+
 const cleanup = async (state) => {
   if (state.bookingIds.length > 0) {
     await prisma.hireBooking.deleteMany({
@@ -264,7 +270,7 @@ const main = async () => {
     );
 
     const startsAt = new Date(Date.now() + (60 * 60 * 1000)).toISOString();
-    const dueBackAt = new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString();
+    const dueBackAt = addHoursToIso(startsAt, 23);
     const createBookingRes = await fetchJson(
       "/api/hire/bookings",
       {
@@ -293,8 +299,8 @@ const main = async () => {
         body: JSON.stringify({
           hireAssetId: createAssetRes.json.id,
           customerId: customer.id,
-          startsAt: new Date(Date.now() + (2 * 60 * 60 * 1000)).toISOString(),
-          dueBackAt: new Date(Date.now() + (26 * 60 * 60 * 1000)).toISOString(),
+          startsAt: addHoursToIso(startsAt, 1),
+          dueBackAt: addHoursToIso(startsAt, 25),
           hirePricePence: 3000,
           depositPence: 5000,
         }),
@@ -304,8 +310,8 @@ const main = async () => {
     assert.equal(overlapBookingRes.status, 409);
     assert.equal(overlapBookingRes.json.error.code, "HIRE_ASSET_ALREADY_BOOKED");
 
-    const secondStartsAt = new Date(Date.now() + (72 * 60 * 60 * 1000)).toISOString();
-    const secondDueBackAt = new Date(Date.now() + (96 * 60 * 60 * 1000)).toISOString();
+    const secondStartsAt = addHoursToIso(startsAt, 71);
+    const secondDueBackAt = addHoursToIso(startsAt, 95);
     const secondBookingRes = await fetchJson(
       "/api/hire/bookings",
       {
@@ -337,8 +343,10 @@ const main = async () => {
       "expected asset to be unavailable for overlapping requested dates",
     );
 
+    const availableLaterFrom = addHoursToIso(startsAt, 119);
+    const availableLaterTo = addHoursToIso(startsAt, 143);
     const availableLaterWindowRes = await fetchJson(
-      `/api/hire/assets?q=${assetTagQuery}&availableFrom=${encodeURIComponent(new Date(Date.now() + (120 * 60 * 60 * 1000)).toISOString())}&availableTo=${encodeURIComponent(new Date(Date.now() + (144 * 60 * 60 * 1000)).toISOString())}&take=20`,
+      `/api/hire/assets?q=${assetTagQuery}&availableFrom=${encodeURIComponent(availableLaterFrom)}&availableTo=${encodeURIComponent(availableLaterTo)}&take=20`,
       { method: "GET" },
       staffHeaders,
     );
