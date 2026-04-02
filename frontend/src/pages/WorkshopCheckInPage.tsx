@@ -38,6 +38,7 @@ type CustomerBikeRecord = {
   year: number | null;
   bikeType: string | null;
   colour: string | null;
+  frameSize: string | null;
   frameNumber: string | null;
   serialNumber: string | null;
   registrationNumber: string | null;
@@ -125,20 +126,6 @@ type ReviewActionKey = (typeof REVIEW_ACTION_PILLS)[number]["key"];
 
 type WorkshopReviewActionState = Record<ReviewActionKey, boolean>;
 
-const BIKE_TYPE_LABELS: Record<string, string> = {
-  ROAD: "Road",
-  MTB: "MTB",
-  E_BIKE: "E-bike",
-  HYBRID: "Hybrid",
-  GRAVEL: "Gravel",
-  COMMUTER: "Commuter",
-  BMX: "BMX",
-  KIDS: "Kids",
-  CARGO: "Cargo",
-  FOLDING: "Folding",
-  OTHER: "Other",
-};
-
 const buildCheckInNotes = (input: {
   problemWork: string;
   additionalNotes: string;
@@ -152,43 +139,20 @@ const buildCheckInNotes = (input: {
 };
 
 const buildBikeDraftDisplayName = (input: {
-  label: string;
   make: string;
   model: string;
   colour: string;
-  frameNumber: string;
-  serialNumber: string;
-  registrationNumber: string;
+  frameSize: string;
 }) => {
-  const label = input.label.trim();
   const makeModel = [input.make.trim(), input.model.trim()].filter(Boolean).join(" ");
   const colour = input.colour.trim();
-  const identifier = input.registrationNumber.trim() || input.serialNumber.trim() || input.frameNumber.trim();
-  const primary = [label, makeModel].filter(Boolean).join(" · ");
-
-  if (primary) {
-    return [primary, colour, identifier].filter(Boolean).join(" | ");
-  }
-
-  const fallback = [makeModel, colour, identifier].filter(Boolean).join(" | ");
-  return fallback || "New bike record";
+  const frameSize = input.frameSize.trim();
+  return [makeModel, colour, frameSize].filter(Boolean).join(" • ") || "New bike";
 };
 
 const normalizeBikeText = (value: string | null | undefined) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
-};
-
-const formatBikeTypeLabel = (bikeType: string | null | undefined) => {
-  const normalized = normalizeBikeText(bikeType);
-  if (!normalized) {
-    return null;
-  }
-
-  return BIKE_TYPE_LABELS[normalized] ?? normalized
-    .toLocaleLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (character) => character.toLocaleUpperCase());
 };
 
 const buildBikeInlineSummary = (bike: CustomerBikeRecord) => {
@@ -197,11 +161,11 @@ const buildBikeInlineSummary = (bike: CustomerBikeRecord) => {
     .join(" ");
   const summary = [
     makeModel || normalizeBikeText(bike.label),
-    formatBikeTypeLabel(bike.bikeType),
     normalizeBikeText(bike.colour),
+    normalizeBikeText(bike.frameSize),
   ].filter(Boolean);
 
-  return summary.join(" · ") || bike.displayName;
+  return summary.join(" • ") || bike.displayName;
 };
 
 const formatDaysAgo = (value: string | null | undefined) => {
@@ -471,25 +435,19 @@ export const WorkshopCheckInPage = ({
   const [workshopStartContext, setWorkshopStartContext] = useState<CustomerBikeWorkshopStartContextResponse | null>(null);
   const [loadingWorkshopStartContext, setLoadingWorkshopStartContext] = useState(false);
 
-  const [manualCustomerName, setManualCustomerName] = useState("");
-  const [manualCustomerMode, setManualCustomerMode] = useState(false);
   const [createCustomerInline, setCreateCustomerInline] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
-  const [bikeDescription, setBikeDescription] = useState("");
   const [selectedBikeId, setSelectedBikeId] = useState("");
+  const [noBikeForJob, setNoBikeForJob] = useState(false);
   const [createBikeInline, setCreateBikeInline] = useState(false);
-  const [bikeLabel, setBikeLabel] = useState("");
   const [bikeMake, setBikeMake] = useState("");
   const [bikeModel, setBikeModel] = useState("");
   const [bikeColour, setBikeColour] = useState("");
-  const [bikeFrameNumber, setBikeFrameNumber] = useState("");
-  const [bikeSerialNumber, setBikeSerialNumber] = useState("");
-  const [bikeRegistrationNumber, setBikeRegistrationNumber] = useState("");
+  const [bikeFrameSize, setBikeFrameSize] = useState("");
   const [bikeRecordNotes, setBikeRecordNotes] = useState("");
-  const [bikeSearchModalOpen, setBikeSearchModalOpen] = useState(false);
   const [bikeCreateModalOpen, setBikeCreateModalOpen] = useState(false);
   const [bikeSearchText, setBikeSearchText] = useState("");
   const [problemWork, setProblemWork] = useState("");
@@ -518,8 +476,8 @@ export const WorkshopCheckInPage = ({
     if (createCustomerInline) {
       return newCustomerName.trim();
     }
-    return manualCustomerName.trim();
-  }, [createCustomerInline, manualCustomerName, newCustomerName, selectedCustomer]);
+    return "";
+  }, [createCustomerInline, newCustomerName, selectedCustomer]);
 
   const checkInNotes = useMemo(
     () => buildCheckInNotes({ problemWork, additionalNotes }),
@@ -595,16 +553,25 @@ export const WorkshopCheckInPage = ({
   const bikeDraftDisplayName = useMemo(
     () =>
       buildBikeDraftDisplayName({
-        label: bikeLabel,
         make: bikeMake,
         model: bikeModel,
         colour: bikeColour,
-        frameNumber: bikeFrameNumber,
-        serialNumber: bikeSerialNumber,
-        registrationNumber: bikeRegistrationNumber,
+        frameSize: bikeFrameSize,
       }),
-    [bikeColour, bikeFrameNumber, bikeLabel, bikeMake, bikeModel, bikeRegistrationNumber, bikeSerialNumber],
+    [bikeColour, bikeFrameSize, bikeMake, bikeModel],
   );
+  const selectedBikeSummary = useMemo(() => {
+    if (selectedBikeRecord) {
+      return buildBikeInlineSummary(selectedBikeRecord);
+    }
+    if (createBikeInline) {
+      return bikeDraftDisplayName;
+    }
+    if (noBikeForJob) {
+      return "No bike attached to this job";
+    }
+    return "";
+  }, [bikeDraftDisplayName, createBikeInline, noBikeForJob, selectedBikeRecord]);
   const trimmedCustomerSearch = customerSearch.trim();
   const showInlineCreateCustomerOption = useMemo(() => {
     if (!trimmedCustomerSearch || loadingCustomers) {
@@ -629,6 +596,7 @@ export const WorkshopCheckInPage = ({
         bike.make,
         bike.model,
         bike.colour,
+        bike.frameSize,
         bike.registrationNumber,
         bike.serialNumber,
         bike.frameNumber,
@@ -642,7 +610,7 @@ export const WorkshopCheckInPage = ({
     () => [...customerBikes].sort(compareCustomerBikesByRecency),
     [customerBikes],
   );
-  const shouldScrollSavedBikeList = sortedCustomerBikes.length > 3;
+  const hasBikeSelection = Boolean(selectedBikeId || createBikeInline || noBikeForJob);
   const isReviewStep = step === stepTitles.length - 1;
 
   useEffect(() => {
@@ -761,10 +729,9 @@ export const WorkshopCheckInPage = ({
           setWorkshopStartContext(payload);
           setSelectedCustomer(payload.customer);
           setCreateCustomerInline(false);
-          setManualCustomerName("");
           setSelectedBikeId(payload.defaults.bikeId);
+          setNoBikeForJob(false);
           setCreateBikeInline(false);
-          setBikeDescription(payload.defaults.bikeDescription);
           setStep((current) => Math.max(current, 1));
         }
       } catch (loadError) {
@@ -826,6 +793,7 @@ export const WorkshopCheckInPage = ({
     if (!selectedCustomer?.id) {
       setCustomerBikes([]);
       setSelectedBikeId("");
+      setNoBikeForJob(false);
       return;
     }
 
@@ -862,15 +830,12 @@ export const WorkshopCheckInPage = ({
     reviewSubmitIntentRef.current = false;
 
     if (step === 0) {
-      if (!resolvedCustomerName) {
-        error("Choose an existing customer, create one, or enter a customer name.");
+      if (!selectedCustomer && !createCustomerInline) {
+        error("Choose an existing customer or create a new one.");
         return;
       }
-    }
-
-    if (step === 1) {
-      if (!bikeDescription.trim()) {
-        error("Bike description is required.");
+      if (!selectedCustomer && !newCustomerName.trim()) {
+        error("Customer name is required.");
         return;
       }
     }
@@ -905,8 +870,8 @@ export const WorkshopCheckInPage = ({
       return;
     }
 
-    if (!resolvedCustomerName || !bikeDescription.trim()) {
-      error("Customer and bike details are required.");
+    if (!resolvedCustomerName) {
+      error("Customer details are required.");
       return;
     }
     if (!problemWork.trim()) {
@@ -941,28 +906,38 @@ export const WorkshopCheckInPage = ({
       }
 
       let bikeId = selectedBikeId || null;
+      let bikeDescriptionForJob = selectedBikeRecord
+        ? buildBikeInlineSummary(selectedBikeRecord)
+        : createBikeInline
+          ? bikeDraftDisplayName
+          : noBikeForJob
+            ? "Bike not linked to this job"
+          : null;
+
       if (customerId && createBikeInline) {
         const createdBike = await apiPost<{ bike: CustomerBikeRecord }>(
           `/api/customers/${encodeURIComponent(customerId)}/bikes`,
           {
-            label: bikeLabel.trim() || undefined,
             make: bikeMake.trim() || undefined,
             model: bikeModel.trim() || undefined,
             colour: bikeColour.trim() || undefined,
-            frameNumber: bikeFrameNumber.trim() || undefined,
-            serialNumber: bikeSerialNumber.trim() || undefined,
-            registrationNumber: bikeRegistrationNumber.trim() || undefined,
+            frameSize: bikeFrameSize.trim() || undefined,
             notes: bikeRecordNotes.trim() || undefined,
           },
         );
         bikeId = createdBike.bike.id;
+        bikeDescriptionForJob = buildBikeInlineSummary(createdBike.bike);
+      }
+
+      if (!bikeDescriptionForJob) {
+        bikeDescriptionForJob = "Bike not linked to this job";
       }
 
       const created = await apiPost<{ id: string }>("/api/workshop/jobs", {
         customerId,
         customerName: selectedCustomer ? undefined : resolvedCustomerName,
         bikeId,
-        bikeDescription: bikeDescription.trim(),
+        bikeDescription: bikeDescriptionForJob,
         notes: checkInNotes || undefined,
         status: "BOOKED",
       });
@@ -1063,7 +1038,7 @@ export const WorkshopCheckInPage = ({
     setWorkshopStartContext(null);
     setSelectedCustomer(null);
     setSelectedBikeId("");
-    setBikeDescription("");
+    setNoBikeForJob(false);
     setCustomerBikes([]);
     setCreateBikeInline(false);
     setCreateCustomerInline(false);
@@ -1076,84 +1051,72 @@ export const WorkshopCheckInPage = ({
 
   const resetBikeDraft = () => {
     setCreateBikeInline(false);
-    setBikeLabel("");
     setBikeMake("");
     setBikeModel("");
     setBikeColour("");
-    setBikeFrameNumber("");
-    setBikeSerialNumber("");
-    setBikeRegistrationNumber("");
+    setBikeFrameSize("");
     setBikeRecordNotes("");
   };
 
   const beginInlineCustomerCreateFromSearch = () => {
     const draftName = trimmedCustomerSearch || newCustomerName.trim();
-    setManualCustomerMode(false);
     setCreateCustomerInline(true);
     setNewCustomerName(draftName);
     setSelectedCustomer(null);
-    setManualCustomerName("");
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     resetBikeDraft();
     setHighlightedCustomerOptionIndex(-1);
   };
 
   const selectExistingCustomer = (customer: CustomerRow) => {
     setSelectedCustomer(customer);
-    setManualCustomerMode(false);
     setCreateCustomerInline(false);
-    setManualCustomerName("");
     setSelectedBikeId("");
+    setNoBikeForJob(false);
+    setBikeSearchText("");
     resetBikeDraft();
     setHighlightedCustomerOptionIndex(-1);
   };
 
   const clearCustomerSelection = () => {
     setSelectedCustomer(null);
-    setManualCustomerMode(false);
     setCreateCustomerInline(false);
     setNewCustomerName("");
     setNewCustomerEmail("");
     setNewCustomerPhone("");
-    setManualCustomerName("");
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setCustomerBikes([]);
+    setBikeSearchText("");
     resetBikeDraft();
-    setHighlightedCustomerOptionIndex(-1);
-  };
-
-  const beginManualCustomerEntry = () => {
-    clearCustomerSelection();
-    setManualCustomerMode(true);
-    setCustomerSearch("");
     setHighlightedCustomerOptionIndex(-1);
   };
 
   const selectBikeRecord = (bike: CustomerBikeRecord) => {
     setSelectedBikeId(bike.id);
+    setNoBikeForJob(false);
     resetBikeDraft();
-    setBikeDescription((current) => current.trim() || bike.displayName);
-    setBikeSearchModalOpen(false);
   };
 
-  const openBikeSelector = () => {
+  const clearBikeSelection = () => {
+    setSelectedBikeId("");
+    setNoBikeForJob(false);
     setBikeSearchText("");
-    setBikeSearchModalOpen(true);
+    resetBikeDraft();
   };
 
-  const changeSelectedBike = () => {
+  const continueWithoutBike = () => {
     setSelectedBikeId("");
-    openBikeSelector();
-  };
-
-  const clearSelectedBike = () => {
-    setSelectedBikeId("");
+    setNoBikeForJob(true);
+    setBikeSearchText("");
+    resetBikeDraft();
   };
 
   const saveBikeDraft = () => {
     setSelectedBikeId("");
+    setNoBikeForJob(false);
     setCreateBikeInline(true);
-    setBikeDescription((current) => current.trim() || bikeDraftDisplayName);
     setBikeCreateModalOpen(false);
   };
 
@@ -1184,7 +1147,7 @@ export const WorkshopCheckInPage = ({
   };
 
   useEffect(() => {
-    if (!bikeSearchModalOpen && !bikeCreateModalOpen) {
+    if (!bikeCreateModalOpen) {
       return undefined;
     }
 
@@ -1198,18 +1161,14 @@ export const WorkshopCheckInPage = ({
         setBikeCreateModalOpen(false);
         return;
       }
-
-      if (bikeSearchModalOpen) {
-        setBikeSearchModalOpen(false);
-      }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [bikeCreateModalOpen, bikeSearchModalOpen]);
+  }, [bikeCreateModalOpen]);
 
   useEffect(() => {
-    if (step !== 0 || !selectedCustomer || bikeSearchModalOpen || bikeCreateModalOpen) {
+    if (step !== 0 || !selectedCustomer || bikeCreateModalOpen) {
       return;
     }
 
@@ -1220,15 +1179,16 @@ export const WorkshopCheckInPage = ({
     return () => {
       window.cancelAnimationFrame(focusHandle);
     };
-  }, [bikeCreateModalOpen, bikeSearchModalOpen, selectedCustomer, step]);
+  }, [bikeCreateModalOpen, selectedCustomer, step]);
 
-  const persistBikeRecord = async (options: { useInIntake: boolean }) => {
+  const persistBikeRecord = async () => {
+    if (!bikeMake.trim() && !bikeModel.trim() && !bikeColour.trim()) {
+      error("Add at least a brand, model, or colour for the bike.");
+      return;
+    }
+
     if (!selectedCustomer?.id) {
-      if (options.useInIntake) {
-        saveBikeDraft();
-        return;
-      }
-      error("Save bike is only available once an existing customer has been selected.");
+      saveBikeDraft();
       return;
     }
 
@@ -1236,13 +1196,10 @@ export const WorkshopCheckInPage = ({
       const createdBike = await apiPost<{ bike: CustomerBikeRecord }>(
         `/api/customers/${encodeURIComponent(selectedCustomer.id)}/bikes`,
         {
-          label: bikeLabel.trim() || undefined,
           make: bikeMake.trim() || undefined,
           model: bikeModel.trim() || undefined,
           colour: bikeColour.trim() || undefined,
-          frameNumber: bikeFrameNumber.trim() || undefined,
-          serialNumber: bikeSerialNumber.trim() || undefined,
-          registrationNumber: bikeRegistrationNumber.trim() || undefined,
+          frameSize: bikeFrameSize.trim() || undefined,
           notes: bikeRecordNotes.trim() || undefined,
         },
       );
@@ -1250,11 +1207,8 @@ export const WorkshopCheckInPage = ({
       setCustomerBikes((current) => [createdBike.bike, ...current]);
       resetBikeDraft();
       setBikeCreateModalOpen(false);
-      success(options.useInIntake ? "Bike saved and linked to intake" : "Bike saved");
-
-      if (options.useInIntake) {
-        selectBikeRecord(createdBike.bike);
-      }
+      success("Bike saved and linked to intake");
+      selectBikeRecord(createdBike.bike);
     } catch (saveError) {
       error(saveError instanceof Error ? saveError.message : "Failed to save bike");
     }
@@ -1265,7 +1219,7 @@ export const WorkshopCheckInPage = ({
       return;
     }
 
-    if (bikeSearchModalOpen || bikeCreateModalOpen) {
+    if (bikeCreateModalOpen) {
       return;
     }
 
@@ -1455,6 +1409,7 @@ export const WorkshopCheckInPage = ({
                               <td>
                                 <button
                                   type="button"
+                                  data-testid={`workshop-checkin-customer-option-select-${customer.id}`}
                                   onClick={() => {
                                     selectExistingCustomer(customer);
                                   }}
@@ -1507,43 +1462,8 @@ export const WorkshopCheckInPage = ({
                       >
                         Create new customer
                       </button>
-                      {!manualCustomerMode ? (
-                        <button
-                          type="button"
-                          onClick={beginManualCustomerEntry}
-                        >
-                          Use walk-in name
-                        </button>
-                      ) : null}
                     </div>
                   </>
-                ) : null}
-
-                {!selectedCustomer && !createCustomerInline && manualCustomerMode ? (
-                  <div className="restricted-panel info-panel" style={{ marginTop: "12px" }}>
-                    <div className="actions-inline" style={{ justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
-                      <div className="grow">
-                        <strong>Walk-in / manual customer</strong>
-                        <div className="table-secondary">Use this only when you do not want to link the intake to an existing or newly created customer record.</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={clearCustomerSelection}
-                      >
-                        Search instead
-                      </button>
-                    </div>
-                    <div className="filter-row" style={{ marginTop: "12px" }}>
-                      <label className="grow">
-                        Customer name for intake
-                        <input
-                          value={manualCustomerName}
-                          onChange={(event) => setManualCustomerName(event.target.value)}
-                          placeholder="Walk-in customer or quick manual entry"
-                        />
-                      </label>
-                    </div>
-                  </div>
                 ) : null}
 
                 {createCustomerInline ? (
@@ -1570,15 +1490,13 @@ export const WorkshopCheckInPage = ({
         {step === 1 ? (
           <section className="card">
             <h2>Bike</h2>
-            <p className="muted-text">Identify the bike first, then capture the service request on the next step.</p>
             {loadingWorkshopStartContext ? <p>Loading selected bike...</p> : null}
             {workshopStartContext ? (
               <div className="restricted-panel info-panel" style={{ marginBottom: "12px" }}>
                 <div className="job-meta-grid">
-                  <div><strong>Known bike:</strong> <Link to={`/customers/bikes/${workshopStartContext.bike.id}`}>{workshopStartContext.bike.displayName}</Link></div>
+                  <div><strong>Known bike:</strong> <Link to={`/customers/bikes/${workshopStartContext.bike.id}`}>{buildBikeInlineSummary(workshopStartContext.bike)}</Link></div>
                   <div><strong>Customer:</strong> <Link to={`/customers/${workshopStartContext.customer.id}`}>{workshopStartContext.customer.name}</Link></div>
                   <div><strong>Bike notes:</strong> {workshopStartContext.bike.notes || "-"}</div>
-                  <div><strong>Prefilled summary:</strong> {workshopStartContext.defaults.bikeDescription}</div>
                 </div>
                 <div className="actions-inline" style={{ marginTop: "8px" }}>
                   <button type="button" onClick={clearBikeLedContext}>
@@ -1604,102 +1522,74 @@ export const WorkshopCheckInPage = ({
                           {loadingCustomerBikes
                             ? "Checking this customer's bike records."
                             : sortedCustomerBikes.length > 0
-                              ? "Use a saved bike inline below. Most recently used bikes appear first."
-                              : "Add a new bike now, or continue with the workshop bike summary below."}
+                              ? "Search and select the bike for this job."
+                              : "Add the customer's bike now, or continue without linking one to this job."}
                         </div>
                       </div>
                       <div className="actions-inline">
-                        {sortedCustomerBikes.length > 0 ? (
-                          <button
-                            type="button"
-                            className="primary"
-                            onClick={openBikeSelector}
-                          >
-                            Search/select bike
-                          </button>
-                        ) : null}
                         <button
                           type="button"
                           className={sortedCustomerBikes.length === 0 ? "primary" : undefined}
+                          data-testid="workshop-checkin-add-bike"
                           onClick={() => setBikeCreateModalOpen(true)}
                         >
-                          Add new bike
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedBikeRecord ? (
-                    <div className="workshop-checkin-bike-picker__selected workshop-checkin-bike-picker__selected--active">
-                      <div className="grow">
-                        <div className="eyebrow-label">Selected bike</div>
-                        <strong>{buildBikeInlineSummary(selectedBikeRecord)}</strong>
-                        <div className="table-secondary">
-                          {buildBikeInlineMeta(selectedBikeRecord)}
-                        </div>
-                      </div>
-                      <div className="actions-inline">
-                        <button type="button" onClick={changeSelectedBike}>
-                          Change
-                        </button>
-                        <button type="button" onClick={clearSelectedBike}>
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {!selectedBikeRecord && selectedCustomer && sortedCustomerBikes.length > 0 ? (
-                    <div
-                      className={`workshop-checkin-bike-picker__list${shouldScrollSavedBikeList ? " workshop-checkin-bike-picker__list--scrollable" : ""}`}
-                      role="list"
-                      aria-label={`Saved bikes for ${selectedCustomer.name}`}
-                    >
-                      {sortedCustomerBikes.map((bike) => {
-                        const isSelected = bike.id === selectedBikeId;
-
-                        return (
-                          <article
-                            key={bike.id}
-                            className={`workshop-checkin-bike-picker__list-item${isSelected ? " workshop-checkin-bike-picker__list-item--selected" : ""}`}
-                            role="listitem"
-                          >
-                            <label className="workshop-checkin-bike-picker__list-item-label">
-                              <input
-                                type="radio"
-                                className="workshop-checkin-bike-picker__list-item-input"
-                                name="selected-bike-record"
-                                checked={isSelected}
-                                onChange={() => selectBikeRecord(bike)}
-                              />
-                              <div className="grow">
-                                <strong className="workshop-checkin-bike-picker__list-summary">{buildBikeInlineSummary(bike)}</strong>
-                                <div className="table-secondary">{buildBikeInlineMeta(bike)}</div>
-                              </div>
-                            </label>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  {createBikeInline ? (
-                    <div className="workshop-checkin-bike-picker__selected">
-                      <div>
-                        <strong>{bikeDraftDisplayName}</strong>
-                        <div className="table-secondary">
-                          New bike record will be created with this check-in.
-                        </div>
-                      </div>
-                      <div className="actions-inline">
-                        <button type="button" onClick={() => setBikeCreateModalOpen(true)}>
-                          Edit
+                          + Add new bike
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            resetBikeDraft();
-                          }}
+                          data-testid="workshop-checkin-bike-none"
+                          onClick={continueWithoutBike}
+                        >
+                          Continue without bike
+                        </button>
+                      </div>
+                    </div>
+                  ) : createCustomerInline ? (
+                    <div className="workshop-checkin-bike-picker__availability">
+                      <div className="grow">
+                        <strong>Create the customer's bike record for this check-in.</strong>
+                        <div className="table-secondary">
+                          This new customer does not have saved bikes yet, so add the bike you are booking in now.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="primary"
+                        data-testid="workshop-checkin-add-bike"
+                        onClick={() => setBikeCreateModalOpen(true)}
+                      >
+                        + Add new bike
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="workshop-checkin-bike-none"
+                        onClick={continueWithoutBike}
+                      >
+                        Continue without bike
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {hasBikeSelection ? (
+                    <div
+                      className="workshop-checkin-bike-picker__selected workshop-checkin-bike-picker__selected--active"
+                      data-testid="workshop-checkin-bike-selection"
+                    >
+                      <div className="grow">
+                        <strong>{selectedBikeSummary}</strong>
+                        <div className="table-secondary">
+                          {noBikeForJob
+                            ? "This job will stay customer-linked without attaching a saved bike record."
+                            : selectedBikeRecord
+                            ? buildBikeInlineMeta(selectedBikeRecord)
+                            : "This bike record will be created and linked when you create the job."}
+                        </div>
+                      </div>
+                      <div className="actions-inline">
+                        <button
+                          type="button"
+                          data-testid="workshop-checkin-bike-clear"
+                          onClick={clearBikeSelection}
                         >
                           Clear
                         </button>
@@ -1707,23 +1597,58 @@ export const WorkshopCheckInPage = ({
                     </div>
                   ) : null}
 
+                  {selectedCustomer && sortedCustomerBikes.length > 0 ? (
+                    <>
+                      <label className="grow">
+                        Search bikes
+                        <input
+                          value={bikeSearchText}
+                          onChange={(event) => setBikeSearchText(event.target.value)}
+                          placeholder="Search brand, model, colour, size, serial, registration"
+                          data-testid="workshop-checkin-bike-search"
+                        />
+                      </label>
+                      <div
+                        className="workshop-checkin-bike-picker__list"
+                        role="list"
+                        aria-label={`Saved bikes for ${selectedCustomer.name}`}
+                      >
+                        {filteredCustomerBikes.length === 0 ? (
+                          <div className="restricted-panel">
+                            {bikeSearchText.trim()
+                              ? "No saved bikes matched that search."
+                              : "No saved bikes are available for this customer yet."}
+                          </div>
+                        ) : filteredCustomerBikes.map((bike) => (
+                          <article
+                            key={bike.id}
+                            className={`workshop-checkin-bike-picker__list-item${selectedBikeId === bike.id ? " workshop-checkin-bike-picker__list-item--selected" : ""}`}
+                            role="listitem"
+                          >
+                            <button
+                              type="button"
+                              className="workshop-checkin-bike-picker__list-item-label"
+                              onClick={() => selectBikeRecord(bike)}
+                              aria-pressed={selectedBikeId === bike.id}
+                              data-testid={`workshop-checkin-bike-option-${bike.id}`}
+                            >
+                              <div className="grow">
+                                <strong className="workshop-checkin-bike-picker__list-summary">{buildBikeInlineSummary(bike)}</strong>
+                                <div className="table-secondary">{buildBikeInlineMeta(bike)}</div>
+                              </div>
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               </>
             ) : (
               <p className="muted-text">
-                Choose or create a customer to link a saved bike. Manual walk-in check-ins can still use the workshop bike summary below.
+                Choose or create a customer first so this job can be linked to a saved bike record.
               </p>
             )}
-            <div className="job-meta-grid">
-              <label>
-                Workshop bike summary
-                <input
-                  value={bikeDescription}
-                  onChange={(event) => setBikeDescription(event.target.value)}
-                  placeholder={workshopStartContext ? "Prefilled from the linked bike record" : "e.g. Trek road bike, blue, 56cm"}
-                />
-              </label>
-            </div>
           </section>
         ) : null}
 
@@ -1897,17 +1822,19 @@ export const WorkshopCheckInPage = ({
                     <strong>{resolvedCustomerName || "-"}</strong>
                   </div>
                   <div className="workshop-checkin-review-detail-card">
-                    <span className="workshop-checkin-review-detail-card__label">Workshop bike summary</span>
-                    <strong>{bikeDescription || "-"}</strong>
+                    <span className="workshop-checkin-review-detail-card__label">Bike</span>
+                    <strong>{selectedBikeSummary || "-"}</strong>
                   </div>
                   <div className="workshop-checkin-review-detail-card">
-                    <span className="workshop-checkin-review-detail-card__label">Linked bike</span>
+                    <span className="workshop-checkin-review-detail-card__label">Bike record</span>
                     <strong>
                       {createBikeInline
-                        ? `${bikeDraftDisplayName} (new record will be created with this check-in)`
+                        ? "New bike record will be created with this check-in"
+                        : noBikeForJob
+                          ? "No bike linked to this job"
                         : selectedBikeId
-                          ? selectedBikeRecord?.displayName || "Existing bike selected"
-                          : "No linked bike record"}
+                          ? "Existing customer bike selected"
+                          : "No bike selected"}
                     </strong>
                   </div>
                   <div className="workshop-checkin-review-detail-card">
@@ -1915,7 +1842,7 @@ export const WorkshopCheckInPage = ({
                     <strong>
                       {workshopStartContext
                         ? `Started from ${workshopStartContext.bike.displayName}`
-                        : "Manual check-in flow"}
+                        : "Workshop check-in flow"}
                     </strong>
                   </div>
                 </div>
@@ -2081,77 +2008,6 @@ export const WorkshopCheckInPage = ({
           {renderStepIndicators(step, goToPreviousStep)}
         </section>
         {formContent}
-        {bikeSearchModalOpen ? (
-          <div className="workshop-checkin-submodal-backdrop" onClick={() => setBikeSearchModalOpen(false)} aria-hidden="true">
-            <aside
-              className="workshop-os-modal workshop-checkin-submodal"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Search existing bike"
-            >
-              <div className="workshop-os-modal__header">
-                <div className="workshop-os-drawer__header">
-                  <div className="workshop-os-overlay-hero__title">
-                    <p className="ui-page-eyebrow">Bike Search</p>
-                    <h2>Select existing bike</h2>
-                    <p className="table-secondary">Search linked bikes for the selected customer. Most recently used bikes appear first.</p>
-                  </div>
-                  <button type="button" onClick={() => setBikeSearchModalOpen(false)} aria-label="Close bike search">
-                    Close
-                  </button>
-                </div>
-              </div>
-              <div className="workshop-os-modal__content workshop-checkin-submodal__content">
-                <label className="grow">
-                  Search bikes
-                  <input
-                    value={bikeSearchText}
-                    onChange={(event) => setBikeSearchText(event.target.value)}
-                    placeholder="Search make, model, colour, serial, registration"
-                  />
-                </label>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Bike</th>
-                        <th>Details</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredCustomerBikes.length === 0 ? (
-                        <tr>
-                          <td colSpan={3}>
-                            {loadingCustomerBikes
-                              ? "Loading bikes..."
-                              : bikeSearchText.trim()
-                                ? "No customer bikes matched that search."
-                                : "No saved bikes are available for this customer yet."}
-                          </td>
-                        </tr>
-                      ) : filteredCustomerBikes.map((bike) => (
-                        <tr key={bike.id}>
-                          <td>{bike.displayName}</td>
-                          <td>
-                            <div>{bike.notes || bike.make || bike.model || "-"}</div>
-                            <div className="table-secondary">{bike.registrationNumber || bike.serialNumber || bike.frameNumber || "-"}</div>
-                          </td>
-                          <td>
-                            <button type="button" onClick={() => selectBikeRecord(bike)}>
-                              Use
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </aside>
-          </div>
-        ) : null}
         {bikeCreateModalOpen ? (
           <div className="workshop-checkin-submodal-backdrop" onClick={() => setBikeCreateModalOpen(false)} aria-hidden="true">
             <aside
@@ -2160,6 +2016,7 @@ export const WorkshopCheckInPage = ({
               role="dialog"
               aria-modal="true"
               aria-label="Add new bike"
+              data-testid="workshop-checkin-bike-create"
             >
               <div className="workshop-os-modal__header">
                 <div className="workshop-os-drawer__header">
@@ -2176,11 +2033,7 @@ export const WorkshopCheckInPage = ({
               <div className="workshop-os-modal__content workshop-checkin-submodal__content">
                 <div className="job-meta-grid">
                   <label>
-                    Nickname / label
-                    <input value={bikeLabel} onChange={(event) => setBikeLabel(event.target.value)} placeholder="Winter commuter" />
-                  </label>
-                  <label>
-                    Make
+                    Brand
                     <input value={bikeMake} onChange={(event) => setBikeMake(event.target.value)} placeholder="Trek" />
                   </label>
                   <label>
@@ -2192,19 +2045,11 @@ export const WorkshopCheckInPage = ({
                     <input value={bikeColour} onChange={(event) => setBikeColour(event.target.value)} placeholder="Blue" />
                   </label>
                   <label>
-                    Frame number
-                    <input value={bikeFrameNumber} onChange={(event) => setBikeFrameNumber(event.target.value)} />
-                  </label>
-                  <label>
-                    Serial number
-                    <input value={bikeSerialNumber} onChange={(event) => setBikeSerialNumber(event.target.value)} />
-                  </label>
-                  <label>
-                    Registration
-                    <input value={bikeRegistrationNumber} onChange={(event) => setBikeRegistrationNumber(event.target.value)} />
+                    Size
+                    <input value={bikeFrameSize} onChange={(event) => setBikeFrameSize(event.target.value)} placeholder="56cm" />
                   </label>
                   <label className="grow">
-                    Bike record notes
+                    Notes
                     <textarea value={bikeRecordNotes} onChange={(event) => setBikeRecordNotes(event.target.value)} rows={3} />
                   </label>
                 </div>
@@ -2216,8 +2061,8 @@ export const WorkshopCheckInPage = ({
               <div className="workshop-os-modal__footer">
                 <div className="workshop-os-modal__footer-message">
                   {selectedCustomer
-                    ? "Save the bike record now, or return it directly into intake. Bike summary stays editable separately."
-                    : "Bike summary will remain editable separately in the intake step. Save bike requires an existing customer record."}
+                    ? "Save this bike record now and link it straight into the intake."
+                    : "This bike will be created and linked when the new customer record is saved."}
                 </div>
                 <div className="workshop-os-modal__footer-actions">
                   <div className="actions-inline">
@@ -2226,21 +2071,13 @@ export const WorkshopCheckInPage = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        void persistBikeRecord({ useInIntake: false });
-                      }}
-                      disabled={!selectedCustomer}
-                    >
-                      Save bike
-                    </button>
-                    <button
-                      type="button"
                       className="primary"
+                      data-testid="workshop-checkin-bike-save"
                       onClick={() => {
-                        void persistBikeRecord({ useInIntake: true });
+                        void persistBikeRecord();
                       }}
                     >
-                      Use bike in intake
+                      Save and use bike
                     </button>
                   </div>
                 </div>
