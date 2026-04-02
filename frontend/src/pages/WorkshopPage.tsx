@@ -152,10 +152,7 @@ export const WorkshopPage = () => {
       <section className="workshop-primary-topbar">
         <div className="workshop-primary-title">
           <span className="ui-page-eyebrow">Workshop</span>
-          <h1 className="ui-page-title">Operating</h1>
-          <p className="ui-page-description muted-text">
-            Place work in time, keep capacity clear, and resolve scheduling gaps without the rest of the queue competing for attention.
-          </p>
+          <h1 className="ui-page-title">Workshop</h1>
         </div>
 
         <label className="workshop-primary-search">
@@ -255,32 +252,26 @@ export const WorkshopPage = () => {
           <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
             <span className="metric-label">Waiting for approval</span>
             <strong>{boardSummary.waitingApprovalCount}</strong>
-            <p className="muted-text">Customer decision still needed.</p>
           </article>
           <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
             <span className="metric-label">Active bench work</span>
             <strong>{boardSummary.activeBenchCount}</strong>
-            <p className="muted-text">Ready for bench or already underway.</p>
           </article>
           <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
             <span className="metric-label">Blocked on parts</span>
             <strong>{boardSummary.waitingPartsCount}</strong>
-            <p className="muted-text">Parts or allocation is holding progress.</p>
           </article>
           <article className="workshop-primary-summary-card workshop-primary-summary-card--compact workshop-primary-summary-card--ready">
             <span className="metric-label">Ready for collection</span>
             <strong>{boardSummary.readyCollectionCount}</strong>
-            <p className="muted-text">Bike can move into handover.</p>
           </article>
           <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
             <span className="metric-label">Needs scheduling</span>
             <strong>{boardSummary.unscheduledCount}</strong>
-            <p className="muted-text">Still missing a first timed slot.</p>
           </article>
           <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-            <span className="metric-label">Timed but unassigned</span>
+            <span className="metric-label">Unassigned</span>
             <strong>{boardSummary.timedUnassignedCount}</strong>
-            <p className="muted-text">Placed in time without an owner yet.</p>
           </article>
         </div>
       </section>

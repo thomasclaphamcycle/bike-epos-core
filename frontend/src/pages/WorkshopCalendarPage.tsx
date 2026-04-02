@@ -3049,7 +3049,7 @@ export const WorkshopSchedulerScreen = ({
           <section className={embedded ? "workshop-scheduler-panel workshop-scheduler-panel--embedded" : "card workshop-scheduler-panel"}>
             <div className="card-header-row">
               <div>
-                <h2>Timed but unassigned</h2>
+                <h2>Unassigned</h2>
               </div>
               <span className="stock-badge stock-muted">{filteredUnassignedJobs.length}</span>
             </div>

@@ -387,7 +387,7 @@ export const WorkshopQueuePage = () => {
                 <p className="muted-text">Still missing a first timed slot.</p>
               </article>
               <article className="workshop-primary-summary-card workshop-primary-summary-card--compact">
-                <span className="metric-label">Timed but unassigned</span>
+                <span className="metric-label">Unassigned</span>
                 <strong>{boardSummary.timedUnassignedCount}</strong>
                 <p className="muted-text">Placed in time without an owner yet.</p>
               </article>
