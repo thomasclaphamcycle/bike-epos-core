@@ -107,3 +107,18 @@ X-Staff-Id: demo-admin
   "logoUrl": "https://cdn.corepos.local/logo.png",
   "footerText": "Thanks for riding with CorePOS."
 }
+
+### Upload Store Info logo (ADMIN)
+POST {{baseUrl}}/api/settings/store-info/logo
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "fileDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII="
+}
+
+### Remove uploaded Store Info logo (ADMIN)
+DELETE {{baseUrl}}/api/settings/store-info/logo
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin

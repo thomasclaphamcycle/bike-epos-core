@@ -2,7 +2,12 @@ import { PaymentMethod, Prisma, RefundTenderType, SaleTenderMethod } from "@pris
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
-import { buildLegacyReceiptSettingsFromStore, listShopSettings } from "./configurationService";
+import {
+  buildLegacyReceiptSettingsFromStore,
+  listShopSettings,
+  listStoreInfoSettings,
+  type StoreInfoSettings,
+} from "./configurationService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -364,6 +369,9 @@ export type DetailedReceipt = {
     name: string;
     address: string;
     vatNumber: string | null;
+    logoUrl: string;
+    uploadedLogoPath: string;
+    preferredLogoUrl: string;
     footerText: string | null;
   };
   staff: {
@@ -541,6 +549,9 @@ const buildDetailedSaleReceipt = (receipt: {
       name: receipt.shopName,
       address: receipt.shopAddress,
       vatNumber: receipt.vatNumber,
+      logoUrl: "",
+      uploadedLogoPath: "",
+      preferredLogoUrl: "",
       footerText: receipt.footerText,
     },
     staff: {
@@ -639,6 +650,9 @@ const buildDetailedPaymentRefundReceipt = (receipt: {
       name: receipt.shopName,
       address: receipt.shopAddress,
       vatNumber: receipt.vatNumber,
+      logoUrl: "",
+      uploadedLogoPath: "",
+      preferredLogoUrl: "",
       footerText: receipt.footerText,
     },
     staff: {
@@ -801,6 +815,9 @@ const buildDetailedSaleRefundReceipt = (receipt: {
       name: receipt.shopName,
       address: receipt.shopAddress,
       vatNumber: receipt.vatNumber,
+      logoUrl: "",
+      uploadedLogoPath: "",
+      preferredLogoUrl: "",
       footerText: receipt.footerText,
     },
     staff: {
@@ -847,6 +864,19 @@ const buildDetailedSaleRefundReceipt = (receipt: {
     },
   };
 };
+
+const withResolvedStoreLogo = (
+  receipt: DetailedReceipt,
+  store: StoreInfoSettings,
+): DetailedReceipt => ({
+  ...receipt,
+  shop: {
+    ...receipt.shop,
+    logoUrl: store.logoUrl,
+    uploadedLogoPath: store.uploadedLogoPath,
+    preferredLogoUrl: store.preferredLogoUrl,
+  },
+});
 
 export const getReceiptByNumber = async (receiptNumber: string): Promise<DetailedReceipt> => {
   const normalized = normalizeOptionalText(receiptNumber);
@@ -941,19 +971,30 @@ export const getReceiptByNumber = async (receiptNumber: string): Promise<Detaile
     throw new HttpError(404, "Receipt not found", "RECEIPT_NOT_FOUND");
   }
 
+  const currentStoreInfo = await listStoreInfoSettings();
+
   if (receipt.sale) {
-    return buildDetailedSaleReceipt(receipt as Parameters<typeof buildDetailedSaleReceipt>[0]);
+    return withResolvedStoreLogo(
+      buildDetailedSaleReceipt(receipt as Parameters<typeof buildDetailedSaleReceipt>[0]),
+      currentStoreInfo,
+    );
   }
 
   if (receipt.refund) {
-    return buildDetailedPaymentRefundReceipt(
-      receipt as Parameters<typeof buildDetailedPaymentRefundReceipt>[0],
+    return withResolvedStoreLogo(
+      buildDetailedPaymentRefundReceipt(
+        receipt as Parameters<typeof buildDetailedPaymentRefundReceipt>[0],
+      ),
+      currentStoreInfo,
     );
   }
 
   if (receipt.saleRefund) {
-    return buildDetailedSaleRefundReceipt(
-      receipt as Parameters<typeof buildDetailedSaleRefundReceipt>[0],
+    return withResolvedStoreLogo(
+      buildDetailedSaleRefundReceipt(
+        receipt as Parameters<typeof buildDetailedSaleRefundReceipt>[0],
+      ),
+      currentStoreInfo,
     );
   }
 
