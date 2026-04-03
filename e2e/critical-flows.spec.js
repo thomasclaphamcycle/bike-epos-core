@@ -1738,6 +1738,22 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
       frameSize: "M",
     },
   });
+  const template = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/service-templates", "MANAGER", {
+    data: {
+      name: templateName,
+      description: "Template restored for workshop intake",
+      category: "Service",
+      defaultDurationMinutes: 45,
+      lines: [
+        {
+          type: "LABOUR",
+          description: "Workshop template labour",
+          qty: 1,
+          unitPricePence: 4500,
+        },
+      ],
+    },
+  });
   const createRequests = [];
 
   page.on("request", (pendingRequest) => {
