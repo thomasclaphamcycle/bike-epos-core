@@ -88,6 +88,23 @@ type DemoWorkshopJob = {
   };
 };
 
+type DemoWorkshopServiceTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  sortOrder: number;
+  defaultDurationMinutes: number;
+  lines: Array<{
+    id: string;
+    type: "LABOUR" | "PART";
+    description: string;
+    qty: number;
+    unitPricePence: number;
+    isOptional?: boolean;
+  }>;
+};
+
 type DemoSale = {
   id: string;
   basketId: string;
@@ -496,6 +513,77 @@ const DEMO_WORKSHOP_JOBS: DemoWorkshopJob[] = [
   },
 ];
 
+const DEMO_WORKSHOP_SERVICE_TEMPLATES: DemoWorkshopServiceTemplate[] = [
+  {
+    id: "90000000-0000-4000-8000-000000000001",
+    name: "Inspection & Safety Check",
+    description: "Fast intake check for safety, wear, and next-step advice.",
+    category: "Inspection",
+    sortOrder: 0,
+    defaultDurationMinutes: 30,
+    lines: [
+      {
+        id: "90000000-0000-4000-8000-100000000001",
+        type: "LABOUR",
+        description: "Workshop inspection and safety assessment",
+        qty: 1,
+        unitPricePence: 2500,
+      },
+    ],
+  },
+  {
+    id: "90000000-0000-4000-8000-000000000002",
+    name: "Basic Service",
+    description: "Core tune-up for bikes that need a straightforward refresh.",
+    category: "Service",
+    sortOrder: 1,
+    defaultDurationMinutes: 60,
+    lines: [
+      {
+        id: "90000000-0000-4000-8000-100000000002",
+        type: "LABOUR",
+        description: "Basic service labour",
+        qty: 1,
+        unitPricePence: 6500,
+      },
+    ],
+  },
+  {
+    id: "90000000-0000-4000-8000-000000000003",
+    name: "Pro Service",
+    description: "Deeper workshop service for heavier use or repeat riders.",
+    category: "Service",
+    sortOrder: 2,
+    defaultDurationMinutes: 90,
+    lines: [
+      {
+        id: "90000000-0000-4000-8000-100000000003",
+        type: "LABOUR",
+        description: "Pro service labour",
+        qty: 1,
+        unitPricePence: 9500,
+      },
+    ],
+  },
+  {
+    id: "90000000-0000-4000-8000-000000000004",
+    name: "Elite Service",
+    description: "Full workshop strip, rebuild, and performance setup.",
+    category: "Service",
+    sortOrder: 3,
+    defaultDurationMinutes: 120,
+    lines: [
+      {
+        id: "90000000-0000-4000-8000-100000000004",
+        type: "LABOUR",
+        description: "Elite service labour",
+        qty: 1,
+        unitPricePence: 13500,
+      },
+    ],
+  },
+];
+
 const DEMO_SUPPLIERS: DemoSupplier[] = [
   {
     id: "50000000-0000-4000-8000-000000000001",
@@ -864,6 +952,54 @@ const seedDemoWorkshopJobs = async (
   }
 };
 
+const seedDemoWorkshopServiceTemplates = async () => {
+  for (const template of DEMO_WORKSHOP_SERVICE_TEMPLATES) {
+    await prisma.workshopServiceTemplate.upsert({
+      where: { id: template.id },
+      update: {
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        sortOrder: template.sortOrder,
+        defaultDurationMinutes: template.defaultDurationMinutes,
+        pricingMode: "STANDARD_SERVICE",
+        targetTotalPricePence: null,
+        isActive: true,
+      },
+      create: {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        sortOrder: template.sortOrder,
+        defaultDurationMinutes: template.defaultDurationMinutes,
+        pricingMode: "STANDARD_SERVICE",
+        targetTotalPricePence: null,
+        isActive: true,
+      },
+    });
+
+    await prisma.workshopServiceTemplateLine.deleteMany({
+      where: { templateId: template.id },
+    });
+
+    await prisma.workshopServiceTemplateLine.createMany({
+      data: template.lines.map((line, index) => ({
+        id: line.id,
+        templateId: template.id,
+        type: line.type,
+        productId: null,
+        variantId: null,
+        description: line.description,
+        qty: line.qty,
+        unitPricePence: line.unitPricePence,
+        isOptional: line.isOptional ?? false,
+        sortOrder: index,
+      })),
+    });
+  }
+};
+
 const seedDemoSuppliers = async () => {
   for (const supplier of DEMO_SUPPLIERS) {
     await prisma.supplier.upsert({
@@ -1153,6 +1289,7 @@ const run = async () => {
   await seedDemoCustomers();
   await seedDemoOpeningStock(variantBySku);
   await seedDemoWorkshopJobs(variantBySku);
+  await seedDemoWorkshopServiceTemplates();
   await seedDemoSuppliers();
   await seedDemoPurchaseOrders(variantBySku);
   await seedDemoSales(variantBySku);
@@ -1163,6 +1300,7 @@ const run = async () => {
   console.log(`- ${DEMO_PRODUCTS.length} products with opening stock in ${DEMO_STOCK_LOCATION.name}`);
   console.log(`- ${DEMO_CUSTOMERS.length} customers`);
   console.log(`- ${DEMO_WORKSHOP_JOBS.length} workshop jobs`);
+  console.log(`- ${DEMO_WORKSHOP_SERVICE_TEMPLATES.length} workshop service templates`);
   console.log(`- ${DEMO_SUPPLIERS.length} supplier and ${DEMO_PURCHASE_ORDERS.length} open purchase order`);
   console.log("Existing local staff accounts are preserved and Thomas is upserted idempotently.");
 };

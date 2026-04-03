@@ -1638,6 +1638,7 @@ export const WorkshopCheckInPage = ({
                       <button
                         key={template.id}
                         type="button"
+                        data-testid={`workshop-checkin-service-template-${template.id}`}
                         className={`workshop-checkin-services-template__option${isSelected ? " workshop-checkin-services-template__option--active" : ""}${isFeatured ? " workshop-checkin-services-template__option--featured" : ""}`}
                         onClick={() => selectServiceTemplate(template.id)}
                         aria-pressed={isSelected}
@@ -1669,6 +1670,7 @@ export const WorkshopCheckInPage = ({
                   })}
                   <button
                     type="button"
+                    data-testid="workshop-checkin-service-template-custom"
                     className={`workshop-checkin-services-template__option workshop-checkin-services-template__option--custom${!hasSelectedTemplate ? " workshop-checkin-services-template__option--active" : ""}`}
                     onClick={() => selectServiceTemplate("")}
                     aria-pressed={!hasSelectedTemplate}
