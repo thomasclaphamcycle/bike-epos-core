@@ -479,7 +479,7 @@ const startServer = async () => {
     );
   }
 
-  httpServer = app.listen(port, () => {
+  httpServer = app.listen(port, "0.0.0.0", () => {
     logger.info("server.listening", {
       ...startupPayload,
       resultStatus: "succeeded",
