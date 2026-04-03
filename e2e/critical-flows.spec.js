@@ -1772,8 +1772,9 @@ test("Workshop new job keeps Services -> Review as a non-submitting step", async
   await dialog.getByTestId("workshop-checkin-bike-none").click();
   await expect(bikeSelectionSummary).toContainText("No bike attached to this job");
   await dialog.getByText("Next", { exact: true }).click();
-  await expect(dialog.getByText(templateName, { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Custom work", { exact: true })).toBeVisible();
+  await expect(dialog.getByTestId(`workshop-checkin-service-template-${template.template.id}`)).toBeVisible();
+  await expect(dialog.getByTestId(`workshop-checkin-service-template-${template.template.id}`)).toContainText(templateName);
+  await expect(dialog.getByTestId("workshop-checkin-service-template-custom")).toBeVisible();
   await dialog.getByPlaceholder("Describe the problem or requested work").fill("Review guard repair request");
   await dialog.getByText("Next", { exact: true }).click();
 
