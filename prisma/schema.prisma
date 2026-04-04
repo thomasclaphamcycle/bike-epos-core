@@ -1035,19 +1035,24 @@ model WebOrder {
   shippingPricePence    Int                       @default(0)
   totalPence            Int
   placedAt              DateTime                  @default(now())
+  packedAt              DateTime?
   createdByStaffId      String?
+  packedByStaffId       String?
   createdAt             DateTime                  @default(now())
   updatedAt             DateTime                  @updatedAt
 
   customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
   createdByStaff User?              @relation("WebOrderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  packedByStaff  User?              @relation("WebOrderPackedByStaff", fields: [packedByStaffId], references: [id], onDelete: SetNull)
   items          WebOrderItem[]
   shipments      WebOrderShipment[]
 
   @@index([status, placedAt])
   @@index([fulfillmentMethod, status, placedAt])
+  @@index([packedAt, status, placedAt])
   @@index([customerId])
   @@index([createdByStaffId])
+  @@index([packedByStaffId])
 }
 
 model WebOrderItem {
@@ -1902,6 +1907,7 @@ model User {
   cashMovements            CashMovement[]         @relation("CashMovementCreatedBy")
   cashCounts               CashCount[]            @relation("CashCountCountedBy")
   createdWebOrders         WebOrder[]             @relation("WebOrderCreatedByStaff")
+  packedWebOrders          WebOrder[]             @relation("WebOrderPackedByStaff")
   createdWebOrderShipments WebOrderShipment[]     @relation("WebOrderShipmentCreatedByStaff")
   createdStockTransfers    StockTransfer[]        @relation("StockTransferCreatedByStaff")
   sentStockTransfers       StockTransfer[]        @relation("StockTransferSentByStaff")

@@ -2715,6 +2715,8 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
   await expect(page.getByTestId("online-store-order-detail")).toContainText(createdOrder.order.orderNumber);
+  await page.getByTestId("online-store-mark-packed").click();
+  await expect(page.getByTestId("online-store-order-detail")).toContainText("Packed");
   await page.getByTestId("online-store-generate-label").click();
 
   await expect.poll(async () => {
@@ -2747,4 +2749,107 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   expect(finalOrder.order.status).toBe("DISPATCHED");
   expect(finalOrder.order.shipments[0].status).toBe("DISPATCHED");
   expect(finalOrder.order.shipments[0].trackingNumber).toMatch(/^MOCK/);
+});
+
+test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders", async ({ page, request }) => {
+  const managerCredentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "online-store-bulk-dispatch",
+  });
+  const printerToken = uniqueToken("dispatch-bulk-printer");
+  const registeredPrinter = await apiJsonWithHeaderBypass(request, "POST", "/api/settings/printers", "ADMIN", {
+    data: {
+      name: `Dispatch Zebra ${printerToken}`.slice(0, 48),
+      key: `DISPATCH_${printerToken}`.toUpperCase(),
+      transportMode: "DRY_RUN",
+      location: "Playwright dispatch bench",
+    },
+  });
+  await apiJsonWithHeaderBypass(
+    request,
+    "PUT",
+    "/api/settings/printers/default-shipping-label",
+    "ADMIN",
+    {
+      data: {
+        printerId: registeredPrinter.printer.id,
+      },
+    },
+  );
+
+  const orderIds = [];
+  for (let index = 0; index < 2; index += 1) {
+    const token = uniqueToken(`web-order-bulk-${index}`);
+    const createdOrder = await apiJsonWithHeaderBypass(request, "POST", "/api/online-store/orders", "MANAGER", {
+      data: {
+        orderNumber: `WEB-BULK-E2E-${token}`.toUpperCase(),
+        sourceChannel: "INTERNAL_MOCK_WEB_STORE",
+        externalOrderRef: `checkout-${token}`,
+        customerName: `Bulk Dispatch ${index + 1}`,
+        customerEmail: `${token}@example.com`,
+        customerPhone: "07123 456789",
+        shippingRecipientName: `Bulk Dispatch ${index + 1}`,
+        shippingAddressLine1: "18 Parcel Walk",
+        shippingCity: "Clapham",
+        shippingRegion: "London",
+        shippingPostcode: "SW4 0HY",
+        shippingCountry: "United Kingdom",
+        shippingPricePence: 495,
+        items: [
+          {
+            sku: `E2E-BULK-SHIP-${token}`.toUpperCase(),
+            productName: "Bulk Shipment Flow Product",
+            variantName: "Standard",
+            quantity: 1,
+            unitPricePence: 2499,
+          },
+        ],
+      },
+    });
+    orderIds.push(createdOrder.order.id);
+    await apiJsonWithHeaderBypass(
+      request,
+      "POST",
+      `/api/online-store/orders/${encodeURIComponent(createdOrder.order.id)}/packing`,
+      "MANAGER",
+      { data: { packed: true } },
+    );
+  }
+
+  await loginViaUi(page, managerCredentials, "/online-store/orders", {
+    surface: "frontend",
+    expectedPath: "/online-store/orders",
+  });
+
+  await expect(page.getByTestId(`online-store-order-row-${orderIds[0]}`)).toBeVisible();
+  await page.getByTestId(`online-store-select-order-${orderIds[0]}`).check();
+  await page.getByTestId(`online-store-select-order-${orderIds[1]}`).check();
+  await page.getByTestId("online-store-bulk-create").click();
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("2 succeeded");
+
+  await page.getByTestId("online-store-bulk-print").click();
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("Bulk label print");
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("2 succeeded");
+
+  await page.getByTestId("online-store-bulk-dispatch").click();
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("Bulk dispatch confirmation");
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("2 succeeded");
+
+  const firstOrder = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/online-store/orders/${encodeURIComponent(orderIds[0])}`,
+    "MANAGER",
+  );
+  expect(firstOrder.order.status).toBe("DISPATCHED");
+  expect(firstOrder.order.shipments[0].status).toBe("DISPATCHED");
+
+  const secondOrder = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/online-store/orders/${encodeURIComponent(orderIds[1])}`,
+    "MANAGER",
+  );
+  expect(secondOrder.order.status).toBe("DISPATCHED");
+  expect(secondOrder.order.shipments[0].status).toBe("DISPATCHED");
 });
