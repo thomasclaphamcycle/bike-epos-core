@@ -145,6 +145,8 @@ type ShippingProviderConfiguration = {
   parcelLengthIn: number | null;
   parcelWidthIn: number | null;
   parcelHeightIn: number | null;
+  hasWebhookSecret: boolean;
+  webhookSecretHint: string | null;
   hasApiKey: boolean;
   apiKeyHint: string | null;
   updatedAt: string;
@@ -156,6 +158,7 @@ type ShippingProviderSettings = {
   mode: "mock" | "integration";
   implementationState: "mock" | "scaffold" | "live";
   requiresConfiguration: boolean;
+  supportsWebhookEvents: boolean;
   supportedLabelFormats: string[];
   defaultServiceCode: string;
   defaultServiceName: string;
@@ -187,6 +190,8 @@ type ShippingProviderFormState = {
   parcelLengthIn: string;
   parcelWidthIn: string;
   parcelHeightIn: string;
+  webhookSecret: string;
+  clearWebhookSecret: boolean;
   apiKey: string;
   clearApiKey: boolean;
 };
@@ -226,6 +231,8 @@ const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
   parcelLengthIn: "",
   parcelWidthIn: "",
   parcelHeightIn: "",
+  webhookSecret: "",
+  clearWebhookSecret: false,
   apiKey: "",
   clearApiKey: false,
 };
@@ -426,6 +433,8 @@ const toShippingProviderFormState = (
     parcelLengthIn: provider.configuration.parcelLengthIn ? String(provider.configuration.parcelLengthIn) : "",
     parcelWidthIn: provider.configuration.parcelWidthIn ? String(provider.configuration.parcelWidthIn) : "",
     parcelHeightIn: provider.configuration.parcelHeightIn ? String(provider.configuration.parcelHeightIn) : "",
+    webhookSecret: "",
+    clearWebhookSecret: false,
     apiKey: "",
     clearApiKey: false,
   };
@@ -1004,6 +1013,12 @@ export const SystemSettingsPage = () => {
       parcelHeightIn: selectedProvider.key === "EASYPOST"
         ? Number.parseFloat(providerForm.parcelHeightIn)
         : null,
+      webhookSecret: selectedProvider.key === "EASYPOST"
+        ? providerForm.webhookSecret.trim() || undefined
+        : undefined,
+      clearWebhookSecret: selectedProvider.key === "EASYPOST"
+        ? providerForm.clearWebhookSecret
+        : undefined,
       apiKey: providerForm.apiKey.trim() || undefined,
       clearApiKey: providerForm.clearApiKey,
     };
@@ -1834,6 +1849,38 @@ export const SystemSettingsPage = () => {
                             <span className="field-error">{providerValidationErrors.parcelHeightIn}</span>
                           ) : null}
                         </label>
+                        <label className="store-info-grid-span">
+                          Webhook secret
+                          <input
+                            type="password"
+                            value={providerForm.webhookSecret}
+                            onChange={(event) => setProviderField("webhookSecret", event.target.value)}
+                            placeholder={selectedProvider.configuration?.webhookSecretHint ?? "Enter a new webhook secret"}
+                          />
+                          {selectedProvider.configuration?.hasWebhookSecret ? (
+                            <span className="table-secondary">
+                              Stored secret: {selectedProvider.configuration.webhookSecretHint}
+                            </span>
+                          ) : (
+                            <span className="table-secondary">
+                              Optional for automated sync. Without it, staff can still use manual refresh from dispatch.
+                            </span>
+                          )}
+                        </label>
+                        <label className="store-info-grid-span store-settings-checkbox">
+                          <span>Clear stored webhook secret on save</span>
+                          <div className="table-secondary">
+                            Leave unticked to preserve the current webhook secret when you are only changing shipment settings.
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={providerForm.clearWebhookSecret}
+                            onChange={(event) => setProviderField("clearWebhookSecret", event.target.checked)}
+                          />
+                        </label>
+                        <div className="restricted-panel info-panel store-info-grid-span">
+                          EasyPost webhook endpoint: <code>/api/shipping/providers/EASYPOST/webhooks</code>. CorePOS verifies the HMAC signature, records event receipts idempotently, and keeps manual refresh available as a fallback if automated sync is not configured yet.
+                        </div>
                       </>
                     ) : null}
                     <label>

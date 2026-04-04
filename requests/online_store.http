@@ -83,6 +83,29 @@ POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/refresh
 X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
+### Receive an EasyPost provider webhook (unsigned placeholder example)
+### Replace the HMAC headers with a real signature generated from:
+###   x-timestamp + POST + /api/shipping/providers/EASYPOST/webhooks + raw JSON body
+POST {{baseUrl}}/api/shipping/providers/EASYPOST/webhooks
+Content-Type: application/json
+X-Timestamp: Sat, 04 Apr 2026 18:15:00 GMT
+X-Path: /api/shipping/providers/EASYPOST/webhooks
+X-Hmac-Signature-V2: hmac-sha256-hex=replace-with-real-signature
+
+{
+  "id": "evt_replace_me",
+  "object": "Event",
+  "description": "tracker.updated",
+  "created_at": "2026-04-04T18:15:00.000Z",
+  "result": {
+    "id": "trk_replace_me",
+    "object": "Tracker",
+    "tracking_code": "EZREPLACEME123456",
+    "status": "in_transit",
+    "shipment_id": "shp_replace_me"
+  }
+}
+
 ### Request provider void/cancel for a shipment when supported (MANAGER+)
 POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/cancel
 X-Staff-Role: {{managerRole}}

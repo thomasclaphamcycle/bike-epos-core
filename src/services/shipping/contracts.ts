@@ -101,6 +101,7 @@ export type ShippingProviderRuntimeConfig = {
   endpointBaseUrl?: string | null;
   apiBaseUrl?: string | null;
   apiKey?: string | null;
+  webhookSecret?: string | null;
   accountId?: string | null;
   carrierAccountId?: string | null;
   defaultServiceCode?: string | null;
@@ -115,6 +116,28 @@ export type ShippingLabelProviderExecutionContext = {
   runtimeConfig: ShippingProviderRuntimeConfig | null;
 };
 
+export type ShippingProviderWebhookInput = {
+  headers: Record<string, string | string[] | undefined>;
+  method: string;
+  path: string;
+  rawBody: Buffer;
+  body: unknown;
+};
+
+export type ShippingProviderWebhookEvent = {
+  eventId: string;
+  eventType: string;
+  occurredAt?: Date | null;
+  providerShipmentReference?: string | null;
+  providerTrackingReference?: string | null;
+  trackingNumber?: string | null;
+  signatureVerified: boolean;
+  disposition: "APPLY_UPDATE" | "IGNORE";
+  lifecycleResult?: ShippingProviderShipmentLifecycleResult | null;
+  ignoreReason?: string | null;
+  payload: Record<string, unknown> | null;
+};
+
 export interface ShippingLabelProvider {
   readonly providerKey: string;
   readonly providerDisplayName: string;
@@ -123,6 +146,7 @@ export interface ShippingLabelProvider {
   readonly requiresConfiguration: boolean;
   readonly supportsShipmentRefresh: boolean;
   readonly supportsShipmentVoid: boolean;
+  readonly supportsWebhookEvents: boolean;
   createLabel(
     input: ShippingLabelGenerationInput,
     context: ShippingLabelProviderExecutionContext,
@@ -135,6 +159,10 @@ export interface ShippingLabelProvider {
     input: ShippingProviderShipmentLifecycleInput,
     context: ShippingLabelProviderExecutionContext,
   ): Promise<ShippingProviderShipmentLifecycleResult>;
+  parseWebhookEvent?(
+    input: ShippingProviderWebhookInput,
+    context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingProviderWebhookEvent>;
 }
 
 export type ShippingPrintPreparationInput = {
