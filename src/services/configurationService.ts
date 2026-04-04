@@ -35,6 +35,7 @@ export type ShopSettings = {
     defaultCurrency: string;
     timeZone: string;
     logoUrl: string;
+    uploadedLogoPath: string;
     footerText: string;
     openingHours: StoreOpeningHoursSettings;
     latitude: number | null;
@@ -70,13 +71,16 @@ export type ShopSettingsPatch = Partial<{
   [Section in keyof ShopSettings]: Partial<ShopSettings[Section]>;
 }>;
 
-export type StoreInfoSettings = ShopSettings["store"];
+type PersistedStoreInfoSettings = ShopSettings["store"];
+export type StoreInfoSettings = PersistedStoreInfoSettings & {
+  preferredLogoUrl: string;
+};
 export type WorkshopSettings = ShopSettings["workshop"];
 export type NotificationSettings = ShopSettings["notifications"];
 export type OperationsSettings = ShopSettings["operations"];
 export type PublicShopConfig = {
   store: Pick<
-    StoreInfoSettings,
+    PersistedStoreInfoSettings,
     | "name"
     | "businessName"
     | "email"
@@ -91,9 +95,12 @@ export type PublicShopConfig = {
     | "defaultCurrency"
     | "timeZone"
     | "logoUrl"
+    | "uploadedLogoPath"
     | "footerText"
     | "openingHours"
-  >;
+  > & {
+    preferredLogoUrl: string;
+  };
   pos: ShopSettings["pos"];
   workshop: Pick<
     WorkshopSettings,
@@ -114,6 +121,7 @@ const DEFAULT_WORKSHOP_REQUEST_TIMING_MESSAGE =
 const DEFAULT_WORKSHOP_COMMERCIAL_SUGGESTIONS_ENABLED = true;
 const DEFAULT_WORKSHOP_COMMERCIAL_LONG_GAP_DAYS = 180;
 const DEFAULT_WORKSHOP_COMMERCIAL_RECENT_SERVICE_COOLDOWN_DAYS = 60;
+const STORE_LOGO_UPLOAD_PATH_PREFIX = "/uploads/store-logos/";
 
 type LegacySettingsFallbacks = {
   receiptSettings?: {
@@ -179,6 +187,39 @@ const normalizeUrlSetting = (value: unknown, field: string) => {
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new HttpError(400, `${field} must start with http:// or https://`, "INVALID_SETTINGS");
+  }
+
+  return normalized;
+};
+
+const normalizeStoreUploadPathSetting = (value: unknown, field: string) => {
+  const normalized = normalizeTextSetting(value, field, { maxLength: 240 });
+  if (normalized.length === 0) {
+    return normalized;
+  }
+
+  if (!normalized.startsWith(STORE_LOGO_UPLOAD_PATH_PREFIX)) {
+    throw new HttpError(
+      400,
+      `${field} must point to a managed CorePOS upload`,
+      "INVALID_SETTINGS",
+    );
+  }
+
+  if (normalized.includes("..") || normalized.includes("\\") || /\/$/.test(normalized)) {
+    throw new HttpError(
+      400,
+      `${field} must be a valid managed CorePOS upload path`,
+      "INVALID_SETTINGS",
+    );
+  }
+
+  if (!/\.(png|jpg|jpeg|webp)$/i.test(normalized)) {
+    throw new HttpError(
+      400,
+      `${field} must be a PNG, JPG, or WEBP upload path`,
+      "INVALID_SETTINGS",
+    );
   }
 
   return normalized;
@@ -423,6 +464,11 @@ const SETTINGS_DEFINITIONS = {
     defaultValue: "",
     validate: (value: unknown) => normalizeUrlSetting(value, "store.logoUrl"),
   },
+  "store.uploadedLogoPath": {
+    key: "store.uploadedLogoPath",
+    defaultValue: "",
+    validate: (value: unknown) => normalizeStoreUploadPathSetting(value, "store.uploadedLogoPath"),
+  },
   "store.footerText": {
     key: "store.footerText",
     defaultValue: "Thank you for your custom.",
@@ -601,6 +647,10 @@ const toSettingsSnapshot = (
       ),
       timeZone: getSettingValue(valueByKey.get("store.timeZone"), SETTINGS_DEFINITIONS["store.timeZone"]),
       logoUrl: getSettingValue(valueByKey.get("store.logoUrl"), SETTINGS_DEFINITIONS["store.logoUrl"]),
+      uploadedLogoPath: getSettingValue(
+        valueByKey.get("store.uploadedLogoPath"),
+        SETTINGS_DEFINITIONS["store.uploadedLogoPath"],
+      ),
       footerText: getSettingValue(
         valueByKey.get("store.footerText"),
         SETTINGS_DEFINITIONS["store.footerText"],
@@ -713,7 +763,7 @@ const flattenPatch = (patch: ShopSettingsPatch) => {
   return updates;
 };
 
-const buildReceiptAddress = (store: StoreInfoSettings) =>
+const buildReceiptAddress = (store: PersistedStoreInfoSettings) =>
   [
     store.addressLine1,
     store.addressLine2,
@@ -724,10 +774,18 @@ const buildReceiptAddress = (store: StoreInfoSettings) =>
     .filter((part) => part.length > 0)
     .join(", ");
 
+export const resolvePreferredStoreLogoUrl = (store: PersistedStoreInfoSettings) =>
+  store.uploadedLogoPath || store.logoUrl;
+
+const toResolvedStoreInfoSettings = (store: PersistedStoreInfoSettings): StoreInfoSettings => ({
+  ...store,
+  preferredLogoUrl: resolvePreferredStoreLogoUrl(store),
+});
+
 const startOfUtcDay = (value: Date) =>
   new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 
-export const buildLegacyReceiptSettingsFromStore = (store: StoreInfoSettings) => ({
+export const buildLegacyReceiptSettingsFromStore = (store: PersistedStoreInfoSettings) => ({
   shopName: store.name,
   shopAddress: buildReceiptAddress(store) || DEFAULT_RECEIPT_SHOP_ADDRESS,
   vatNumber: store.vatNumber || null,
@@ -736,7 +794,7 @@ export const buildLegacyReceiptSettingsFromStore = (store: StoreInfoSettings) =>
 
 const syncLegacyReceiptSettingsTx = async (
   tx: Prisma.TransactionClient,
-  store: StoreInfoSettings,
+  store: PersistedStoreInfoSettings,
 ) => {
   const legacySettings = buildLegacyReceiptSettingsFromStore(store);
   await tx.receiptSettings.upsert({
@@ -826,6 +884,8 @@ export const listPublicShopConfig = async (
       defaultCurrency: settings.store.defaultCurrency,
       timeZone: settings.store.timeZone,
       logoUrl: settings.store.logoUrl,
+      uploadedLogoPath: settings.store.uploadedLogoPath,
+      preferredLogoUrl: resolvePreferredStoreLogoUrl(settings.store),
       footerText: settings.store.footerText,
       openingHours: settings.store.openingHours,
     },
@@ -923,13 +983,13 @@ export const listStoreInfoSettings = async (
   db: SettingsClient = prisma,
 ): Promise<StoreInfoSettings> => {
   const settings = await listShopSettings(db);
-  return settings.store;
+  return toResolvedStoreInfoSettings(settings.store);
 };
 
 export const updateStoreInfoSettings = async (
-  patch: Partial<StoreInfoSettings>,
+  patch: Partial<PersistedStoreInfoSettings>,
   db: SettingsClient = prisma,
 ): Promise<StoreInfoSettings> => {
   const settings = await updateShopSettings({ store: patch }, db);
-  return settings.store;
+  return toResolvedStoreInfoSettings(settings.store);
 };

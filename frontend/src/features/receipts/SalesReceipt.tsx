@@ -33,6 +33,9 @@ export type SalesReceiptData = {
     name: string;
     address: string;
     vatNumber: string | null;
+    logoUrl: string;
+    uploadedLogoPath: string;
+    preferredLogoUrl: string;
     footerText: string | null;
   };
   staff: {
@@ -113,6 +116,15 @@ export const SalesReceipt = ({ receipt }: SalesReceiptProps) => {
   return (
     <article className="sales-receipt" data-testid="sales-receipt">
       <header className="sales-receipt__header">
+        {receipt.shop.preferredLogoUrl ? (
+          <div className="sales-receipt__logo-wrap">
+            <img
+              className="sales-receipt__logo"
+              src={receipt.shop.preferredLogoUrl}
+              alt={`${receipt.shop.name} logo`}
+            />
+          </div>
+        ) : null}
         <div className="sales-receipt__shop-name">{receipt.shop.name}</div>
         <div className="sales-receipt__shop-address">{receipt.shop.address}</div>
         {receipt.shop.vatNumber ? (

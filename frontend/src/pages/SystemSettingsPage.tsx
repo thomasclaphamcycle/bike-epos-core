@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPatch } from "../api/client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { invalidateAppConfigCache } from "../config/appConfig";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -55,12 +55,15 @@ type StoreInfo = {
   defaultCurrency: string;
   timeZone: string;
   logoUrl: string;
+  uploadedLogoPath: string;
   footerText: string;
   openingHours: StoreOpeningHours;
 };
 
 type StoreInfoResponse = {
-  store: StoreInfo;
+  store: StoreInfo & {
+    preferredLogoUrl?: string;
+  };
 };
 
 type WorkshopCommercialSettings = {
@@ -113,6 +116,21 @@ const normalizeTextInput = (value: string) => value.replace(/\s+/g, " ").trim();
 const normalizePostcodeInput = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
 const normalizeOpeningHoursTime = (value: string) => value.trim();
 
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Failed to read logo image"));
+    };
+    reader.onerror = () => reject(new Error("Failed to read logo image"));
+    reader.readAsDataURL(file);
+  });
+
 const normalizeOpeningHours = (openingHours: StoreOpeningHours): StoreOpeningHours =>
   STORE_WEEKDAYS.reduce((result, weekday) => {
     const day = openingHours[weekday.key];
@@ -126,7 +144,9 @@ const normalizeOpeningHours = (openingHours: StoreOpeningHours): StoreOpeningHou
     return result;
   }, {} as StoreOpeningHours);
 
-const normalizeFormBeforeSave = (store: StoreInfo): StoreInfo => ({
+const normalizeFormBeforeSave = (
+  store: StoreInfo,
+): Omit<StoreInfo, "uploadedLogoPath"> => ({
   name: normalizeTextInput(store.name),
   businessName: normalizeTextInput(store.businessName),
   email: store.email.trim().toLowerCase(),
@@ -187,6 +207,7 @@ const toStoreInfoFormState = (store: Record<string, unknown>): StoreInfo => ({
   defaultCurrency: typeof store.defaultCurrency === "string" ? store.defaultCurrency : "",
   timeZone: typeof store.timeZone === "string" ? store.timeZone : "",
   logoUrl: typeof store.logoUrl === "string" ? store.logoUrl : "",
+  uploadedLogoPath: typeof store.uploadedLogoPath === "string" ? store.uploadedLogoPath : "",
   footerText: typeof store.footerText === "string" ? store.footerText : "",
   openingHours: toOpeningHoursFormState(store.openingHours),
 });
@@ -218,10 +239,13 @@ export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [initialStore, setInitialStore] = useState<StoreInfo | null>(null);
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [workshopCommercial, setWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
   const [initialWorkshopCommercial, setInitialWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [removingLogo, setRemovingLogo] = useState(false);
   const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
 
   useEffect(() => {
@@ -339,6 +363,10 @@ export const SystemSettingsPage = () => {
 
   const hasValidationErrors = Object.keys(validationErrors.fields).length > 0
     || Object.keys(validationErrors.openingHours).length > 0;
+  const preferredLogoUrl = store
+    ? (store.uploadedLogoPath || (isValidUrl(store.logoUrl) ? store.logoUrl.trim() : ""))
+    : "";
+  const isUsingUploadedLogo = Boolean(store?.uploadedLogoPath);
 
   const workshopCommercialValidationErrors = useMemo(() => {
     if (!workshopCommercial) {
@@ -423,6 +451,11 @@ export const SystemSettingsPage = () => {
     });
   };
 
+  const handleLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedLogoFile(file);
+  };
+
   const saveStoreInfo = async () => {
     if (!store) {
       return;
@@ -445,6 +478,51 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to update Store Info");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadLogo = async () => {
+    if (!selectedLogoFile || uploadingLogo || removingLogo) {
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const fileDataUrl = await readFileAsDataUrl(selectedLogoFile);
+      const payload = await apiPost<StoreInfoResponse>("/api/settings/store-info/logo", {
+        fileDataUrl,
+      });
+      const nextUploadedLogoPath =
+        typeof payload.store.uploadedLogoPath === "string" ? payload.store.uploadedLogoPath : "";
+      setStore((current) => (current ? { ...current, uploadedLogoPath: nextUploadedLogoPath } : current));
+      setInitialStore((current) => (current ? { ...current, uploadedLogoPath: nextUploadedLogoPath } : current));
+      invalidateAppConfigCache();
+      setSelectedLogoFile(null);
+      success(nextUploadedLogoPath ? "Store logo uploaded." : "Store logo updated.");
+    } catch (uploadError) {
+      error(uploadError instanceof Error ? uploadError.message : "Failed to upload store logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const removeUploadedLogo = async () => {
+    if (!store?.uploadedLogoPath || removingLogo || uploadingLogo) {
+      return;
+    }
+
+    setRemovingLogo(true);
+    try {
+      await apiDelete<StoreInfoResponse>("/api/settings/store-info/logo");
+      setStore((current) => (current ? { ...current, uploadedLogoPath: "" } : current));
+      setInitialStore((current) => (current ? { ...current, uploadedLogoPath: "" } : current));
+      invalidateAppConfigCache();
+      setSelectedLogoFile(null);
+      success("Uploaded store logo removed.");
+    } catch (removeError) {
+      error(removeError instanceof Error ? removeError.message : "Failed to remove store logo");
+    } finally {
+      setRemovingLogo(false);
     }
   };
 
@@ -762,8 +840,69 @@ export const SystemSettingsPage = () => {
             <section className="store-info-section">
               <h3>Branding / Footer</h3>
               <div className="purchase-form-grid store-info-grid">
+                <div className="store-logo-panel store-info-grid-span">
+                  <div className="store-logo-panel__copy">
+                    <strong>Current logo</strong>
+                    <span className="muted-text">
+                      {isUsingUploadedLogo
+                        ? "Uploaded CorePOS-managed logo is active and will be preferred on receipts."
+                        : store.logoUrl.trim()
+                          ? "No uploaded logo is active, so receipts will fall back to the external logo URL."
+                          : "No logo is configured yet."}
+                    </span>
+                  </div>
+
+                  <div className="store-logo-preview">
+                    {preferredLogoUrl ? (
+                      <img
+                        src={preferredLogoUrl}
+                        alt={`${store.name || "Store"} logo preview`}
+                      />
+                    ) : (
+                      <div className="store-logo-preview__empty">No logo configured</div>
+                    )}
+                  </div>
+
+                  <div className="store-logo-controls">
+                    <label>
+                      Upload / replace logo
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handleLogoFileChange}
+                      />
+                    </label>
+
+                    <div className="store-logo-buttons">
+                      <button
+                        type="button"
+                        onClick={() => void uploadLogo()}
+                        disabled={!selectedLogoFile || uploadingLogo || removingLogo}
+                      >
+                        {uploadingLogo
+                          ? "Uploading..."
+                          : isUsingUploadedLogo
+                            ? "Replace uploaded logo"
+                            : "Upload logo"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void removeUploadedLogo()}
+                        disabled={!store.uploadedLogoPath || removingLogo || uploadingLogo}
+                      >
+                        {removingLogo ? "Removing..." : "Remove uploaded logo"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="muted-text">
+                    {selectedLogoFile
+                      ? `Selected file: ${selectedLogoFile.name}`
+                      : "PNG, JPG, or WEBP up to 5MB. Uploaded logos are stored locally and preferred on receipts."}
+                  </div>
+                </div>
                 <label className="store-info-grid-span">
-                  Logo URL
+                  Logo URL fallback
                   <input
                     value={store.logoUrl}
                     onChange={(event) => setField("logoUrl", event.target.value)}
