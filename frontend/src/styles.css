@@ -9914,12 +9914,34 @@ button.primary.workshop-status-action {
   gap: 16px;
 }
 
+.shipping-providers-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+}
+
 .dispatch-printers-list__items {
   display: grid;
   gap: 10px;
 }
 
+.shipping-providers-list__items {
+  display: grid;
+  gap: 10px;
+}
+
 .dispatch-printer-row {
+  width: 100%;
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.shipping-provider-row {
   width: 100%;
   border: 1px solid #d8e1ec;
   border-radius: 12px;
@@ -9936,8 +9958,22 @@ button.primary.workshop-status-action {
   background: rgba(238, 245, 255, 0.9);
 }
 
+.shipping-provider-row--selected {
+  border-color: rgba(16, 95, 211, 0.55);
+  box-shadow: 0 0 0 1px rgba(16, 95, 211, 0.18);
+  background: rgba(238, 245, 255, 0.9);
+}
+
 .dispatch-printer-row__topline,
 .dispatch-printer-row__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shipping-provider-row__topline,
+.shipping-provider-row__meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -9948,8 +9984,22 @@ button.primary.workshop-status-action {
   font-size: 0.92rem;
 }
 
+.shipping-provider-row__meta {
+  font-size: 0.92rem;
+}
+
 .dispatch-printer-row__meta--muted {
   color: #627184;
+}
+
+.shipping-provider-row__meta--muted {
+  color: #627184;
+}
+
+.shipping-provider-row__badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .dispatch-printer-editor__actions {
@@ -9958,7 +10008,14 @@ button.primary.workshop-status-action {
   gap: 8px;
 }
 
+.shipping-provider-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 960px) {
+  .shipping-providers-layout,
   .dispatch-printers-layout {
     grid-template-columns: 1fr;
   }

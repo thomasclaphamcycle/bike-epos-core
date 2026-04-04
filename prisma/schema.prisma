@@ -1075,6 +1075,7 @@ model WebOrderShipment {
   status              WebOrderShipmentStatus   @default(LABEL_READY)
   providerKey         String
   providerDisplayName String
+  providerEnvironment String?
   serviceCode         String
   serviceName         String
   trackingNumber      String                   @unique
@@ -1084,6 +1085,10 @@ model WebOrderShipment {
   labelFileName       String
   labelContent        String                   @db.Text
   providerReference   String?
+  providerShipmentReference String?
+  providerTrackingReference String?
+  providerLabelReference String?
+  providerStatus      String?
   providerMetadata    Json?
   labelGeneratedAt    DateTime                 @default(now())
   printPreparedAt     DateTime?
@@ -1101,6 +1106,7 @@ model WebOrderShipment {
   @@index([webOrderId, status, createdAt])
   @@index([createdByStaffId])
   @@index([providerKey, status, createdAt])
+  @@index([providerKey, providerStatus, createdAt])
 }
 
 model Printer {

@@ -3,12 +3,15 @@ import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
   createRegisteredPrinterHandler,
   listRegisteredPrintersHandler,
+  listShippingProvidersHandler,
   listSettingsHandler,
   listStoreInfoHandler,
   removeStoreLogoHandler,
+  setDefaultShippingProviderHandler,
   setDefaultShippingLabelPrinterHandler,
   uploadStoreLogoHandler,
   updateRegisteredPrinterHandler,
+  updateShippingProviderSettingsHandler,
   updateSettingsHandler,
   updateStoreInfoHandler,
 } from "../controllers/settingsController";
@@ -17,6 +20,9 @@ export const settingsRouter = Router();
 
 settingsRouter.get("/", requireRoleAtLeast("MANAGER"), listSettingsHandler);
 settingsRouter.patch("/", requireRoleAtLeast("MANAGER"), updateSettingsHandler);
+settingsRouter.get("/shipping-providers", requireRoleAtLeast("MANAGER"), listShippingProvidersHandler);
+settingsRouter.put("/shipping-providers/default", requireRoleAtLeast("ADMIN"), setDefaultShippingProviderHandler);
+settingsRouter.put("/shipping-providers/:providerKey", requireRoleAtLeast("ADMIN"), updateShippingProviderSettingsHandler);
 settingsRouter.get("/printers", requireRoleAtLeast("MANAGER"), listRegisteredPrintersHandler);
 settingsRouter.post("/printers", requireRoleAtLeast("ADMIN"), createRegisteredPrinterHandler);
 settingsRouter.patch("/printers/:printerId", requireRoleAtLeast("ADMIN"), updateRegisteredPrinterHandler);

@@ -1,5 +1,6 @@
 @baseUrl = http://localhost:3100
 @printerId = 00000000-0000-4000-8000-000000000000
+@shippingProviderKey = GENERIC_HTTP_ZPL
 
 ### Get persisted shop settings (MANAGER+)
 GET {{baseUrl}}/api/settings
@@ -15,6 +16,36 @@ X-Staff-Id: demo-staff
 GET {{baseUrl}}/api/settings/store-info
 X-Staff-Role: ADMIN
 X-Staff-Id: demo-admin
+
+### List shipping providers (MANAGER+)
+GET {{baseUrl}}/api/settings/shipping-providers
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Update a configured shipping provider (ADMIN)
+PUT {{baseUrl}}/api/settings/shipping-providers/{{shippingProviderKey}}
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "enabled": true,
+  "environment": "SANDBOX",
+  "displayName": "Generic Courier Sandbox",
+  "endpointBaseUrl": "http://127.0.0.1:4110",
+  "accountId": "sandbox-account-1",
+  "apiKey": "replace-with-provider-sandbox-key"
+}
+
+### Set the default shipping provider (ADMIN)
+PUT {{baseUrl}}/api/settings/shipping-providers/default
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "providerKey": "{{shippingProviderKey}}"
+}
 
 ### List registered dispatch printers (MANAGER+)
 GET {{baseUrl}}/api/settings/printers

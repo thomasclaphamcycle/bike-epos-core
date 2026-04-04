@@ -12,6 +12,11 @@ import {
   setDefaultShippingLabelPrinter,
   updateRegisteredPrinter,
 } from "../services/printerService";
+import {
+  listShippingProviderSettings,
+  setDefaultShippingProvider,
+  updateShippingProviderSettings,
+} from "../services/shipping/providerConfigService";
 import { removeStoreLogo, uploadStoreLogo } from "../services/storeLogoService";
 import { HttpError } from "../utils/http";
 
@@ -87,6 +92,49 @@ const toRegisteredPrinterInput = (body: unknown) => {
   };
 };
 
+const toShippingProviderSettingsInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(
+      400,
+      "shipping provider body must be an object",
+      "INVALID_SHIPPING_PROVIDER_SETTINGS",
+    );
+  }
+
+  const record = body as Record<string, unknown>;
+  if (record.enabled !== undefined && typeof record.enabled !== "boolean") {
+    throw new HttpError(400, "enabled must be a boolean", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.environment !== undefined && record.environment !== null && typeof record.environment !== "string") {
+    throw new HttpError(400, "environment must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.displayName !== undefined && record.displayName !== null && typeof record.displayName !== "string") {
+    throw new HttpError(400, "displayName must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.endpointBaseUrl !== undefined && record.endpointBaseUrl !== null && typeof record.endpointBaseUrl !== "string") {
+    throw new HttpError(400, "endpointBaseUrl must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.accountId !== undefined && record.accountId !== null && typeof record.accountId !== "string") {
+    throw new HttpError(400, "accountId must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.apiKey !== undefined && record.apiKey !== null && typeof record.apiKey !== "string") {
+    throw new HttpError(400, "apiKey must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.clearApiKey !== undefined && typeof record.clearApiKey !== "boolean") {
+    throw new HttpError(400, "clearApiKey must be a boolean", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+
+  return {
+    enabled: record.enabled as boolean | undefined,
+    environment: record.environment as string | undefined,
+    displayName: record.displayName as string | null | undefined,
+    endpointBaseUrl: record.endpointBaseUrl as string | null | undefined,
+    accountId: record.accountId as string | null | undefined,
+    apiKey: record.apiKey as string | null | undefined,
+    clearApiKey: record.clearApiKey as boolean | undefined,
+  };
+};
+
 export const listSettingsHandler = async (_req: Request, res: Response) => {
   const settings = await listShopSettings();
   res.json({ settings });
@@ -144,6 +192,11 @@ export const listRegisteredPrintersHandler = async (req: Request, res: Response)
   res.json(payload);
 };
 
+export const listShippingProvidersHandler = async (_req: Request, res: Response) => {
+  const payload = await listShippingProviderSettings();
+  res.json(payload);
+};
+
 export const createRegisteredPrinterHandler = async (req: Request, res: Response) => {
   const result = await createRegisteredPrinter(
     toRegisteredPrinterInput(req.body),
@@ -173,6 +226,40 @@ export const setDefaultShippingLabelPrinterHandler = async (req: Request, res: R
 
   const result = await setDefaultShippingLabelPrinter(
     (body.printerId as string | null | undefined) ?? null,
+    getRequestAuditActor(req),
+  );
+  res.json(result);
+};
+
+export const updateShippingProviderSettingsHandler = async (req: Request, res: Response) => {
+  const result = await updateShippingProviderSettings(
+    req.params.providerKey,
+    toShippingProviderSettingsInput(req.body),
+    getRequestAuditActor(req),
+  );
+  res.json(result);
+};
+
+export const setDefaultShippingProviderHandler = async (req: Request, res: Response) => {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    throw new HttpError(
+      400,
+      "default shipping provider body must be an object",
+      "INVALID_SHIPPING_PROVIDER_SETTINGS",
+    );
+  }
+
+  const body = req.body as { providerKey?: unknown };
+  if (body.providerKey !== undefined && body.providerKey !== null && typeof body.providerKey !== "string") {
+    throw new HttpError(
+      400,
+      "providerKey must be a string or null",
+      "INVALID_SHIPPING_PROVIDER_SETTINGS",
+    );
+  }
+
+  const result = await setDefaultShippingProvider(
+    (body.providerKey as string | null | undefined) ?? null,
     getRequestAuditActor(req),
   );
   res.json(result);

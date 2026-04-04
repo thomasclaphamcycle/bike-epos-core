@@ -9,13 +9,19 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - persist web orders independently of workshop or POS sales
 - create one active shipment label per shipping order
 - generate a stored label artifact through a provider abstraction
+- persist provider-backed shipment references, tracking references, label references, and provider status
+- manage the default shipping provider through CorePOS settings
 - register dispatch printers and choose a default shipping-label target
 - return a backend-owned print-preparation payload
 - hand that payload off to a repo-local Windows-oriented print agent
 - record printed and dispatched timestamps with audit events
 - expose a minimal manager-facing UI at `/online-store/orders`
 
-The current implementation is intentionally still mock/dev on the courier side, but it now includes a real print-agent handoff path for Zebra-oriented shipment labels.
+The current implementation now includes a real courier-integration foundation:
+
+- `INTERNAL_MOCK_ZPL` remains available as the built-in development path
+- `GENERIC_HTTP_ZPL` provides a production-shaped provider adapter scaffold with manager-configured endpoint, environment, and credentials
+- shipment labels continue through the existing CorePOS-owned print preparation, dispatch-printer resolution, and Windows print-agent path
 
 ## Current architecture
 
@@ -28,7 +34,9 @@ The flow is now split into six layers:
 2. Shipping provider abstraction
    - `src/services/shipping/contracts.ts`
    - `src/services/shipping/providerRegistry.ts`
+   - `src/services/shipping/providerConfigService.ts`
    - provider implementations generate a normalized label artifact for CorePOS to store
+   - provider configuration, enablement, and default-provider resolution stay in CorePOS settings rather than loose env-only flags
 
 3. Print-preparation contract
    - shipment label payloads can be fetched directly from CorePOS
@@ -50,16 +58,30 @@ The flow is now split into six layers:
    - validates shipment print payloads and performs the actual transport
    - currently supports `DRY_RUN` plus real `RAW_TCP` ZPL delivery
 
-## Mock provider status
+## Provider status
 
-The first provider is `INTERNAL_MOCK_ZPL`.
+CorePOS currently ships with two provider paths:
 
-It is explicitly mock/dev only:
+### `INTERNAL_MOCK_ZPL`
+
+This path is explicitly mock/dev only:
 
 - it does not call a real courier
 - it generates deterministic tracking numbers for testing
 - it returns ZPL content shaped for Zebra-style thermal printing
 - it stores the label content inline in CorePOS so reprints do not depend on external URLs
+
+### `GENERIC_HTTP_ZPL`
+
+This path is a production-shaped courier adapter scaffold:
+
+- it is configured in CorePOS Settings rather than hardcoded in the UI
+- it supports enabled/disabled state plus `SANDBOX` or `LIVE` environment selection
+- it accepts manager/admin-provided endpoint and credential settings, with secrets masked on readback
+- it maps a CorePOS shipment request into a normalized HTTP JSON request and expects a normalized ZPL response
+- it persists provider-backed shipment metadata so later live adapters have a clean storage model
+
+`GENERIC_HTTP_ZPL` is intentionally honest about its current status: it is a generic adapter scaffold, not a branded live carrier integration.
 
 ## Why ZPL first
 
@@ -76,6 +98,7 @@ ZPL is the preferred intermediate artifact because it:
 The first API slice lives under `/api/online-store` and supports:
 
 - listing and creating web orders
+- listing configured shipping providers and setting the default provider through settings APIs
 - listing, creating, editing, and defaulting registered shipping-label printers via settings APIs
 - generating a shipment label for an order
 - fetching shipment metadata and stored label content
@@ -91,6 +114,7 @@ It currently supports:
 
 - selecting a web order
 - generating a shipment label for shipping orders
+- choosing between the built-in mock provider and configured provider-backed shipment creation paths
 - viewing shipment/tracking state
 - seeing which registered printer will be used
 - previewing stored ZPL
@@ -104,8 +128,8 @@ This is intentionally a narrow dispatch workflow, not a broader storefront or fu
 
 The intended next steps are:
 
-1. real courier/provider adapters
-   - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references
+1. real branded courier/provider adapters
+   - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references, richer provider-status sync
 
 2. richer print-agent/device support
    - local printer/device mappings beyond the first CorePOS-managed target model
@@ -130,4 +154,5 @@ The current implementation does not attempt to be:
 
 It is a backend-first shipping foundation for web-order dispatch that stays honest about the current mock/dev stage while pointing cleanly toward real courier and Windows print-agent integrations.
 
+For the courier adapter/configuration foundation and current provider-backed workflow, see [courier_integration.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/courier_integration.md).
 For the current Windows/Zebra print-agent setup, configuration, and limitations, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).

@@ -1,9 +1,11 @@
 import { HttpError } from "../../utils/http";
 import type { ShippingLabelProvider } from "./contracts";
+import { GenericHttpZplShippingProvider } from "./genericHttpZplProvider";
 import { InternalMockShippingLabelProvider } from "./mockShippingProvider";
 
 const providers = [
   new InternalMockShippingLabelProvider(),
+  new GenericHttpZplShippingProvider(),
 ] as const satisfies readonly ShippingLabelProvider[];
 
 const providerMap = new Map(providers.map((provider) => [provider.providerKey, provider]));
@@ -22,6 +24,8 @@ export const listSupportedShippingProviders = () =>
     key: provider.providerKey,
     displayName: provider.providerDisplayName,
     mode: provider.mode,
+    implementationState: provider.implementationState,
+    requiresConfiguration: provider.requiresConfiguration,
     supportedLabelFormats: ["ZPL"] as const,
     defaultServiceCode: "STANDARD",
     defaultServiceName: "Standard Dispatch",
