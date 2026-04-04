@@ -2651,3 +2651,78 @@ test("Manager can open till, record paid-in, and close with count", async ({ pag
   await page.click('[data-testid="till-close-submit"]');
   await expect(page.locator("#close-status")).toContainText("Session closed");
 });
+
+test("Manager can generate, prepare, print, and dispatch a web-order shipment label", async ({ page, request }) => {
+  const managerCredentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "online-store-dispatch",
+  });
+
+  const token = uniqueToken("web-order");
+  const createdOrder = await apiJsonWithHeaderBypass(request, "POST", "/api/online-store/orders", "MANAGER", {
+    data: {
+      orderNumber: `WEB-E2E-${token}`.toUpperCase(),
+      sourceChannel: "INTERNAL_MOCK_WEB_STORE",
+      externalOrderRef: `checkout-${token}`,
+      customerName: "Dispatch Rider",
+      customerEmail: `${token}@example.com`,
+      customerPhone: "07123 456789",
+      shippingRecipientName: "Dispatch Rider",
+      shippingAddressLine1: "18 Parcel Walk",
+      shippingCity: "Clapham",
+      shippingRegion: "London",
+      shippingPostcode: "SW4 0HY",
+      shippingCountry: "United Kingdom",
+      shippingPricePence: 495,
+      items: [
+        {
+          sku: `E2E-SHIP-${token}`.toUpperCase(),
+          productName: "Shipment Flow Product",
+          variantName: "Standard",
+          quantity: 1,
+          unitPricePence: 2499,
+        },
+      ],
+    },
+  });
+
+  await loginViaUi(page, managerCredentials, "/online-store/orders", {
+    surface: "frontend",
+    expectedPath: "/online-store/orders",
+  });
+
+  await expect(page.getByTestId(`online-store-order-row-${createdOrder.order.id}`)).toBeVisible();
+  await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
+
+  await expect(page.getByTestId("online-store-order-detail")).toContainText(createdOrder.order.orderNumber);
+  await page.getByTestId("online-store-generate-label").click();
+
+  await expect.poll(async () => {
+    return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
+  }).toContain("Label Ready");
+  await expect(page.getByTestId("online-store-label-preview")).toContainText("COREPOS DEV SHIPMENT LABEL");
+
+  await page.getByTestId("online-store-prepare-print").click();
+  await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"transport": "WINDOWS_LOCAL_AGENT"');
+  await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"printerFamily": "ZEBRA_LABEL"');
+
+  await page.getByTestId("online-store-record-printed").click();
+  await expect.poll(async () => {
+    return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
+  }).toContain("Printed");
+
+  await page.getByTestId("online-store-dispatch").click();
+  await expect.poll(async () => {
+    return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
+  }).toContain("Dispatched");
+
+  const finalOrder = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/online-store/orders/${encodeURIComponent(createdOrder.order.id)}`,
+    "MANAGER",
+  );
+  expect(finalOrder.order.status).toBe("DISPATCHED");
+  expect(finalOrder.order.shipments[0].status).toBe("DISPATCHED");
+  expect(finalOrder.order.shipments[0].trackingNumber).toMatch(/^MOCK/);
+});

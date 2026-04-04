@@ -102,19 +102,19 @@ model PurchaseOrderItem {
 }
 
 model Variant {
-  id               String  @id @default(cuid())
-  productId        String
-  sku              String  @unique
-  barcode          String? @unique
+  id                  String  @id @default(cuid())
+  productId           String
+  sku                 String  @unique
+  barcode             String? @unique
   manufacturerBarcode String? @unique
-  internalBarcode  String? @unique
-  name             String?
-  option           String?
-  retailPrice      Decimal @default(0) @db.Decimal(12, 2)
-  retailPricePence Int     @default(0)
-  costPricePence   Int?
-  taxCode          String?
-  isActive         Boolean @default(true)
+  internalBarcode     String? @unique
+  name                String?
+  option              String?
+  retailPrice         Decimal @default(0) @db.Decimal(12, 2)
+  retailPricePence    Int     @default(0)
+  costPricePence      Int?
+  taxCode             String?
+  isActive            Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -136,6 +136,7 @@ model Variant {
   stockTransferLines StockTransferLine[]
   hireAssets         HireAsset[]
   templateLines      WorkshopServiceTemplateLine[]
+  webOrderItems      WebOrderItem[]
 }
 
 model SupplierProductLink {
@@ -859,10 +860,10 @@ model Payment {
   providerRef        String?
   createdAt          DateTime       @default(now())
 
-  sale          Sale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  workshopJob   WorkshopJob?        @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
-  refunds       PaymentRefund[]
-  creditEntries CreditLedgerEntry[]
+  sale                                Sale?                    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  workshopJob                         WorkshopJob?             @relation(fields: [workshopJobId], references: [id], onDelete: SetNull)
+  refunds                             PaymentRefund[]
+  creditEntries                       CreditLedgerEntry[]
   workshopCheckoutOutcomeFinalPayment WorkshopCheckoutOutcome? @relation("WorkshopCheckoutOutcomeFinalPayment")
 
   @@index([workshopJobId])
@@ -974,6 +975,125 @@ model InventoryMovement {
   @@index([variantId, locationId, createdAt])
 }
 
+enum WebOrderStatus {
+  READY_FOR_DISPATCH
+  DISPATCHED
+  CANCELLED
+}
+
+enum WebOrderFulfillmentMethod {
+  SHIPPING
+  CLICK_AND_COLLECT
+}
+
+enum WebOrderShipmentStatus {
+  LABEL_READY
+  PRINT_PREPARED
+  PRINTED
+  DISPATCHED
+  VOIDED
+}
+
+enum ShipmentLabelFormat {
+  ZPL
+}
+
+enum ShipmentLabelStorageKind {
+  INLINE_TEXT
+}
+
+model WebOrder {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  orderNumber           String                    @unique
+  sourceChannel         String                    @default("INTERNAL_MOCK_WEB_STORE")
+  externalOrderRef      String?
+  customerId            String?                   @db.Uuid
+  status                WebOrderStatus            @default(READY_FOR_DISPATCH)
+  fulfillmentMethod     WebOrderFulfillmentMethod @default(SHIPPING)
+  customerName          String
+  customerEmail         String
+  customerPhone         String?
+  deliveryInstructions  String?
+  shippingRecipientName String
+  shippingAddressLine1  String
+  shippingAddressLine2  String?
+  shippingCity          String
+  shippingRegion        String?
+  shippingPostcode      String
+  shippingCountry       String
+  subtotalPence         Int
+  shippingPricePence    Int                       @default(0)
+  totalPence            Int
+  placedAt              DateTime                  @default(now())
+  createdByStaffId      String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdByStaff User?              @relation("WebOrderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  items          WebOrderItem[]
+  shipments      WebOrderShipment[]
+
+  @@index([status, placedAt])
+  @@index([fulfillmentMethod, status, placedAt])
+  @@index([customerId])
+  @@index([createdByStaffId])
+}
+
+model WebOrderItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  webOrderId     String   @db.Uuid
+  variantId      String?
+  sku            String?
+  productName    String
+  variantName    String?
+  quantity       Int
+  unitPricePence Int
+  lineTotalPence Int
+  createdAt      DateTime @default(now())
+
+  webOrder WebOrder @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
+  variant  Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([webOrderId])
+  @@index([variantId])
+}
+
+model WebOrderShipment {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  webOrderId          String                   @db.Uuid
+  shipmentNumber      Int
+  status              WebOrderShipmentStatus   @default(LABEL_READY)
+  providerKey         String
+  providerDisplayName String
+  serviceCode         String
+  serviceName         String
+  trackingNumber      String                   @unique
+  labelFormat         ShipmentLabelFormat
+  labelStorageKind    ShipmentLabelStorageKind @default(INLINE_TEXT)
+  labelMimeType       String
+  labelFileName       String
+  labelContent        String                   @db.Text
+  providerReference   String?
+  providerMetadata    Json?
+  labelGeneratedAt    DateTime                 @default(now())
+  printPreparedAt     DateTime?
+  printedAt           DateTime?
+  dispatchedAt        DateTime?
+  reprintCount        Int                      @default(0)
+  createdByStaffId    String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  webOrder       WebOrder @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
+  createdByStaff User?    @relation("WebOrderShipmentCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@unique([webOrderId, shipmentNumber])
+  @@index([webOrderId, status, createdAt])
+  @@index([createdByStaffId])
+  @@index([providerKey, status, createdAt])
+}
+
 model SaleReturn {
   id        String   @id @default(uuid()) @db.Uuid
   saleId    String   @db.Uuid
@@ -1034,6 +1154,7 @@ model Customer {
   workshopNotifications   WorkshopNotification[]
   workshopConversations   WorkshopConversation[]
   hireBookings            HireBooking[]
+  webOrders               WebOrder[]
 
   @@index([firstName])
   @@index([lastName])
@@ -1062,16 +1183,16 @@ model CustomerAccount {
 }
 
 model CustomerAccessToken {
-  id                String   @id @default(uuid()) @db.Uuid
-  customerAccountId String   @db.Uuid
-  tokenHash         String   @unique
+  id                String    @id @default(uuid()) @db.Uuid
+  customerAccountId String    @db.Uuid
+  tokenHash         String    @unique
   tokenLastEight    String?
   redirectPath      String?
   expiresAt         DateTime
   consumedAt        DateTime?
   revokedAt         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   customerAccount CustomerAccount @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
 
@@ -1187,39 +1308,39 @@ enum CancellationOutcome {
 }
 
 model WorkshopJob {
-  id                   String                @id @default(uuid()) @db.Uuid
-  customerId           String?               @db.Uuid
-  bikeId               String?               @db.Uuid
-  locationId           String
-  customerName         String?
-  bikeDescription      String?
-  assignedStaffId      String?
-  assignedStaffName    String?
-  status               WorkshopJobStatus     @default(BOOKED)
-  scheduledDate        DateTime?
-  scheduledStartAt     DateTime?
-  scheduledEndAt       DateTime?
-  durationMinutes      Int?
-  servicePricingMode   WorkshopServicePricingMode?
-  serviceTargetTotalPence Int?
+  id                             String                      @id @default(uuid()) @db.Uuid
+  customerId                     String?                     @db.Uuid
+  bikeId                         String?                     @db.Uuid
+  locationId                     String
+  customerName                   String?
+  bikeDescription                String?
+  assignedStaffId                String?
+  assignedStaffName              String?
+  status                         WorkshopJobStatus           @default(BOOKED)
+  scheduledDate                  DateTime?
+  scheduledStartAt               DateTime?
+  scheduledEndAt                 DateTime?
+  durationMinutes                Int?
+  servicePricingMode             WorkshopServicePricingMode?
+  serviceTargetTotalPence        Int?
   servicePricingAdjustmentLineId String?
-  source               WorkshopJobSource     @default(IN_STORE)
-  depositRequiredPence Int                   @default(0)
-  depositStatus        WorkshopDepositStatus @default(NOT_REQUIRED)
-  manageToken          String?               @unique
-  manageTokenExpiresAt DateTime?
-  cancelledAt          DateTime?
-  completedAt          DateTime?
-  closedAt             DateTime?
-  finalizedBasketId    String?               @db.Uuid
-  notes                String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  source                         WorkshopJobSource           @default(IN_STORE)
+  depositRequiredPence           Int                         @default(0)
+  depositStatus                  WorkshopDepositStatus       @default(NOT_REQUIRED)
+  manageToken                    String?                     @unique
+  manageTokenExpiresAt           DateTime?
+  cancelledAt                    DateTime?
+  completedAt                    DateTime?
+  closedAt                       DateTime?
+  finalizedBasketId              String?                     @db.Uuid
+  notes                          String?
+  createdAt                      DateTime                    @default(now())
+  updatedAt                      DateTime                    @updatedAt
 
-  customer           Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  bike               CustomerBike?          @relation(fields: [bikeId], references: [id], onDelete: SetNull)
-  location           Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  assignedStaff      User?                  @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  customer           Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  bike               CustomerBike?            @relation(fields: [bikeId], references: [id], onDelete: SetNull)
+  location           Location                 @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  assignedStaff      User?                    @relation("WorkshopJobAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
   sale               Sale?
   payments           Payment[]
   cancellations      WorkshopCancellation[]
@@ -1363,16 +1484,16 @@ enum WorkshopAttachmentVisibility {
 }
 
 model WorkshopAttachment {
-  id                String                     @id @default(uuid()) @db.Uuid
-  workshopJobId     String                     @db.Uuid
+  id                String                       @id @default(uuid()) @db.Uuid
+  workshopJobId     String                       @db.Uuid
   uploadedByStaffId String?
   filename          String
   mimeType          String
   storagePath       String
   fileSizeBytes     Int
   visibility        WorkshopAttachmentVisibility @default(INTERNAL)
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
 
   workshopJob     WorkshopJob @relation(fields: [workshopJobId], references: [id], onDelete: Cascade)
   uploadedByStaff User?       @relation("WorkshopAttachmentUploadedByStaff", fields: [uploadedByStaffId], references: [id], onDelete: SetNull)
@@ -1524,17 +1645,17 @@ model WorkshopJobLine {
 }
 
 model WorkshopServiceTemplate {
-  id                     String   @id @default(uuid()) @db.Uuid
+  id                     String                     @id @default(uuid()) @db.Uuid
   name                   String
   description            String?
   category               String?
-  sortOrder              Int      @default(0)
+  sortOrder              Int                        @default(0)
   defaultDurationMinutes Int?
   pricingMode            WorkshopServicePricingMode @default(STANDARD_SERVICE)
   targetTotalPricePence  Int?
-  isActive               Boolean  @default(true)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  isActive               Boolean                    @default(true)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
 
   lines WorkshopServiceTemplateLine[]
 
@@ -1739,6 +1860,8 @@ model User {
   closedCashSessions       CashSession[]          @relation("CashSessionClosedBy")
   cashMovements            CashMovement[]         @relation("CashMovementCreatedBy")
   cashCounts               CashCount[]            @relation("CashCountCountedBy")
+  createdWebOrders         WebOrder[]             @relation("WebOrderCreatedByStaff")
+  createdWebOrderShipments WebOrderShipment[]     @relation("WebOrderShipmentCreatedByStaff")
   createdStockTransfers    StockTransfer[]        @relation("StockTransferCreatedByStaff")
   sentStockTransfers       StockTransfer[]        @relation("StockTransferSentByStaff")
   receivedStockTransfers   StockTransfer[]        @relation("StockTransferReceivedByStaff")

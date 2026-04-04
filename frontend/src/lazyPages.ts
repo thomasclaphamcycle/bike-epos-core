@@ -299,6 +299,10 @@ export const OnboardingPage = lazyPage(
   () => import("./pages/OnboardingPage"),
   "OnboardingPage",
 );
+export const OnlineStoreOrdersPage = lazyPage(
+  () => import("./pages/OnlineStoreOrdersPage"),
+  "OnlineStoreOrdersPage",
+);
 export const DocumentationHubPage = lazyPage(
   () => import("./pages/DocumentationHubPage"),
   "DocumentationHubPage",

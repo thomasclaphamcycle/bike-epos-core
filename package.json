@@ -108,6 +108,7 @@
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
     "test:business-intelligence": "node scripts/run_smoke_test.js scripts/business_intelligence_phase1_smoke_tests.js",
+    "test:online-store": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/online_store_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
     "verify:postflight": "node scripts/verify_postflight.js",
     "verify": "node scripts/run_verify.js",
