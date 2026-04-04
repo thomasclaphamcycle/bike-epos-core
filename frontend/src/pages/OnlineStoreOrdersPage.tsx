@@ -15,9 +15,23 @@ type SupportedShippingProvider = {
   key: string;
   displayName: string;
   mode: "mock" | "integration";
+  implementationState: "mock" | "scaffold" | "live";
+  requiresConfiguration: boolean;
   supportedLabelFormats: string[];
   defaultServiceCode: string;
   defaultServiceName: string;
+  isDefaultProvider: boolean;
+  isAvailable: boolean;
+  configuration: {
+    enabled: boolean;
+    environment: "SANDBOX" | "LIVE";
+    displayName: string | null;
+    endpointBaseUrl: string | null;
+    accountId: string | null;
+    hasApiKey: boolean;
+    apiKeyHint: string | null;
+    updatedAt: string;
+  } | null;
 };
 
 type WebOrderShipment = {
@@ -26,6 +40,7 @@ type WebOrderShipment = {
   status: WebOrderShipmentStatus;
   providerKey: string;
   providerDisplayName: string;
+  providerEnvironment: string | null;
   serviceCode: string;
   serviceName: string;
   trackingNumber: string;
@@ -34,6 +49,10 @@ type WebOrderShipment = {
   labelMimeType: string;
   labelFileName: string;
   providerReference: string | null;
+  providerShipmentReference: string | null;
+  providerTrackingReference: string | null;
+  providerLabelReference: string | null;
+  providerStatus: string | null;
   providerMetadata: unknown;
   labelGeneratedAt: string;
   printPreparedAt: string | null;
@@ -344,7 +363,11 @@ export const OnlineStoreOrdersPage = () => {
         }
         return payload.orders[0]?.id ?? "";
       });
-      setSelectedProviderKey((current) => current || payload.supportedProviders[0]?.key || "");
+      setSelectedProviderKey((current) =>
+        current
+        || payload.supportedProviders.find((provider) => provider.isDefaultProvider)?.key
+        || payload.supportedProviders[0]?.key
+        || "");
       return payload;
     } catch (loadError) {
       if (requestSequence === listRequestSequenceRef.current) {
@@ -383,7 +406,9 @@ export const OnlineStoreOrdersPage = () => {
         if (current && supportedKeys.has(current)) {
           return current;
         }
-        return payload.supportedProviders[0]?.key || "";
+        return payload.supportedProviders.find((provider) => provider.isDefaultProvider)?.key
+          || payload.supportedProviders[0]?.key
+          || "";
       });
       return payload;
     } catch (loadError) {
@@ -614,6 +639,7 @@ export const OnlineStoreOrdersPage = () => {
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
       && selectedOrder.status !== "DISPATCHED"
+      && selectedProvider?.isAvailable
       && !selectedShipment,
   );
   const canPreparePrint = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedPrinter);
@@ -626,7 +652,7 @@ export const OnlineStoreOrdersPage = () => {
         <PageHeader
           eyebrow="Online Store / Web Dispatch"
           title="Shipping Labels"
-          description="Create, inspect, and reprint web-order shipment labels through a CorePOS-owned dispatch flow. The current provider is intentionally mock/dev only, but the print path now hands Zebra-oriented payloads to a Windows/local agent without using the browser print dialog."
+          description="Create, inspect, and reprint web-order shipment labels through a CorePOS-owned dispatch flow. Shipment creation now resolves through managed provider settings, while Zebra-oriented print jobs still hand off through the Windows/local agent without using the browser print dialog."
           actions={(
             <div className="actions-inline">
               <Link to="/online-store/products">Products</Link>
@@ -659,7 +685,7 @@ export const OnlineStoreOrdersPage = () => {
         </div>
 
         <div className="restricted-panel info-panel online-orders-info-panel">
-          This flow keeps shipment orchestration inside CorePOS, returns ZPL for reliable thermal-label output, and resolves every print through a registered dispatch printer before handing the job to the Windows/local print agent.
+          This flow keeps shipment orchestration inside CorePOS, resolves shipment creation through managed courier-provider settings, returns a stored ZPL artifact for reliable thermal-label output, and routes every print through a registered dispatch printer before handing the job to the Windows/local print agent.
         </div>
       </SurfaceCard>
 
@@ -828,7 +854,9 @@ export const OnlineStoreOrdersPage = () => {
                       title="No shipment label yet"
                       description={
                         selectedOrder.fulfillmentMethod === "SHIPPING"
-                          ? "Generate the first shipment label for this web order. The current implementation uses an internal mock ZPL provider and stores the label content in CorePOS for reprintability."
+                          ? selectedProvider?.isAvailable
+                            ? "Generate the first shipment label for this web order. CorePOS will resolve the selected provider, store the returned label artifact locally, and keep the result reprintable."
+                            : "The selected provider is not currently ready for shipment creation. Configure or enable it in Settings, or switch back to an available provider."
                           : "Click & collect orders do not create shipping labels in this flow."
                       }
                       actions={(
@@ -856,12 +884,28 @@ export const OnlineStoreOrdersPage = () => {
                             <dd>{selectedShipment.providerDisplayName}</dd>
                           </div>
                           <div>
+                            <dt>Environment</dt>
+                            <dd>{selectedShipment.providerEnvironment ?? "-"}</dd>
+                          </div>
+                          <div>
                             <dt>Service</dt>
                             <dd>{selectedShipment.serviceName}</dd>
                           </div>
                           <div>
+                            <dt>Provider status</dt>
+                            <dd>{selectedShipment.providerStatus ?? "-"}</dd>
+                          </div>
+                          <div>
                             <dt>Label format</dt>
                             <dd>{selectedShipment.labelFormat}</dd>
+                          </div>
+                          <div>
+                            <dt>Provider shipment ref</dt>
+                            <dd>{selectedShipment.providerShipmentReference ?? selectedShipment.providerReference ?? "-"}</dd>
+                          </div>
+                          <div>
+                            <dt>Provider tracking ref</dt>
+                            <dd>{selectedShipment.providerTrackingReference ?? "-"}</dd>
                           </div>
                           <div>
                             <dt>Prepared</dt>
@@ -900,7 +944,7 @@ export const OnlineStoreOrdersPage = () => {
                           >
                             {(detailPayload?.supportedProviders ?? []).map((provider) => (
                               <option key={provider.key} value={provider.key}>
-                                {`${provider.displayName} (${provider.mode})`}
+                                {`${provider.displayName}${provider.isDefaultProvider ? " (Default)" : ""} · ${provider.mode}/${provider.implementationState}${provider.isAvailable ? "" : " · needs config"}`}
                               </option>
                             ))}
                           </select>
@@ -945,6 +989,14 @@ export const OnlineStoreOrdersPage = () => {
                           : printersPayload?.printers.length
                             ? "Choose a registered shipping-label printer before preparing or printing this shipment."
                             : "No active shipping-label printer is registered. Ask an admin to add one in Settings before printing."}
+                      </div>
+
+                      <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
+                        {selectedProvider
+                          ? selectedProvider.isAvailable
+                            ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}.`
+                            : `Shipment provider: ${selectedProvider.displayName} is not ready. Configure its credentials/endpoint in Settings or choose an available provider.`
+                          : "No shipment provider is currently selected."}
                       </div>
 
                       <div className="online-orders-dispatch-actions">
@@ -997,7 +1049,7 @@ export const OnlineStoreOrdersPage = () => {
                     {loadingLabel ? <span className="status-badge">Loading</span> : null}
                   </div>
                   <p className="online-orders-preview-card__description">
-                    Stored label content is currently inline ZPL so the dispatch workflow stays reprintable without depending on an external URL.
+                    Stored label content stays inline ZPL so provider-backed shipment labels remain reprintable inside CorePOS without depending on a remote label URL at print time.
                   </p>
                   <pre className="online-orders-preview" data-testid="online-store-label-preview">
                     {labelPayload?.document.content ?? "No shipment label available for this order yet."}

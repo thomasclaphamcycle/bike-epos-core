@@ -29,7 +29,8 @@ The shipping-label print path is now split into six layers:
 2. Shipping provider abstraction
    - `src/services/shipping/contracts.ts`
    - `src/services/shipping/providerRegistry.ts`
-   - current label generation is still `INTERNAL_MOCK_ZPL`
+   - `src/services/shipping/providerConfigService.ts`
+   - label generation can come from the built-in `INTERNAL_MOCK_ZPL` path or from a configured provider-backed adapter such as `GENERIC_HTTP_ZPL`
 
 3. Print preparation contract
    - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
@@ -166,10 +167,24 @@ npm run print-agent:start
 
 The actual target printer host and port now come from the registered CorePOS printer record, not from global print-agent env vars.
 
+## Relationship to courier integration
+
+The print agent remains deliberately downstream of courier generation.
+
+Current behavior:
+
+- CorePOS creates or retrieves the shipment label through the selected shipping provider
+- provider-backed shipment metadata is stored on the shipment record
+- the printable label artifact is still stored inline in CorePOS as ZPL for reprint safety
+- printer resolution still happens through the registered-printer/default-printer layer
+- the Windows/local agent still only receives the backend-owned `SHIPMENT_LABEL_PRINT` payload
+
+That means courier integration can evolve independently without forcing the print-agent contract to change every time a new carrier is added.
+
 ## How the current flow works
 
 1. Manager generates a shipment label for a shipping web order.
-2. CorePOS stores the ZPL label content and shipment metadata.
+2. CorePOS stores the ZPL label content plus shipment/provider metadata.
 3. CorePOS resolves the selected or default registered printer.
 4. Manager can still call `prepare-print` to inspect the exact backend-owned print payload.
 5. Manager clicks the real print action.
@@ -195,7 +210,7 @@ If CorePOS backend and the print agent are on different machines, the backend mu
 
 Still future work:
 
-- real courier/provider integrations
+- real branded courier/provider integrations beyond the current generic scaffold
 - richer local printer/device mappings for multi-station environments
 - durable local queueing or job retry policy inside the agent
 - direct Windows spooler / USB Zebra transport

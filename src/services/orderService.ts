@@ -6,12 +6,14 @@ import { createAuditEventTx } from "./auditService";
 import { listStoreInfoSettings } from "./configurationService";
 import { resolveShipmentLabelPrinterSelection, type ResolvedShipmentPrinter } from "./printerService";
 import {
-  DEFAULT_SHIPPING_PROVIDER_KEY,
   DEFAULT_SHIPPING_SERVICE_CODE,
   DEFAULT_SHIPPING_SERVICE_NAME,
-  getShippingLabelProviderOrThrow,
-  listSupportedShippingProviders,
 } from "./shipping/providerRegistry";
+import {
+  listShippingProviderSettings,
+  resolveShippingProviderForShipment,
+  type ShippingProviderSettingsResponse,
+} from "./shipping/providerConfigService";
 import { deliverShipmentPrintRequestToAgent } from "./shipping/printAgentDeliveryService";
 import type {
   ShipmentPrintRequest,
@@ -45,6 +47,7 @@ const webOrderShipmentSelect = Prisma.validator<Prisma.WebOrderShipmentSelect>()
   status: true,
   providerKey: true,
   providerDisplayName: true,
+  providerEnvironment: true,
   serviceCode: true,
   serviceName: true,
   trackingNumber: true,
@@ -53,6 +56,10 @@ const webOrderShipmentSelect = Prisma.validator<Prisma.WebOrderShipmentSelect>()
   labelMimeType: true,
   labelFileName: true,
   providerReference: true,
+  providerShipmentReference: true,
+  providerTrackingReference: true,
+  providerLabelReference: true,
+  providerStatus: true,
   providerMetadata: true,
   labelGeneratedAt: true,
   printPreparedAt: true,
@@ -166,6 +173,7 @@ export type WebOrderShipmentResponse = {
   status: WebOrderShipmentStatus;
   providerKey: string;
   providerDisplayName: string;
+  providerEnvironment: string | null;
   serviceCode: string;
   serviceName: string;
   trackingNumber: string;
@@ -174,6 +182,10 @@ export type WebOrderShipmentResponse = {
   labelMimeType: string;
   labelFileName: string;
   providerReference: string | null;
+  providerShipmentReference: string | null;
+  providerTrackingReference: string | null;
+  providerLabelReference: string | null;
+  providerStatus: string | null;
   providerMetadata: Prisma.JsonValue | null;
   labelGeneratedAt: Date;
   printPreparedAt: Date | null;
@@ -245,7 +257,7 @@ export type WebOrderDetailResponse = {
   shipments: WebOrderShipmentResponse[];
 };
 
-export type SupportedShippingProviderResponse = ReturnType<typeof listSupportedShippingProviders>[number];
+export type SupportedShippingProviderResponse = ShippingProviderSettingsResponse;
 
 export type CreateWebOrderInput = {
   orderNumber?: string;
@@ -419,6 +431,7 @@ const toShipmentResponse = (shipment: WebOrderShipmentRecord): WebOrderShipmentR
   status: shipment.status,
   providerKey: shipment.providerKey,
   providerDisplayName: shipment.providerDisplayName,
+  providerEnvironment: shipment.providerEnvironment ?? null,
   serviceCode: shipment.serviceCode,
   serviceName: shipment.serviceName,
   trackingNumber: shipment.trackingNumber,
@@ -427,6 +440,10 @@ const toShipmentResponse = (shipment: WebOrderShipmentRecord): WebOrderShipmentR
   labelMimeType: shipment.labelMimeType,
   labelFileName: shipment.labelFileName,
   providerReference: shipment.providerReference ?? null,
+  providerShipmentReference: shipment.providerShipmentReference ?? null,
+  providerTrackingReference: shipment.providerTrackingReference ?? null,
+  providerLabelReference: shipment.providerLabelReference ?? null,
+  providerStatus: shipment.providerStatus ?? null,
   providerMetadata: shipment.providerMetadata ?? null,
   labelGeneratedAt: shipment.labelGeneratedAt,
   printPreparedAt: shipment.printPreparedAt ?? null,
@@ -522,6 +539,52 @@ const buildShipFromAddress = async (): Promise<ShippingPartyAddress> => {
     region: store.region || null,
     postcode: store.postcode || "UNKNOWN",
     country: store.country || "United Kingdom",
+  };
+};
+
+const loadShipmentCreationPreflight = async (
+  tx: Prisma.TransactionClient,
+  orderId: string,
+) => {
+  const order = await tx.webOrder.findUnique({
+    where: { id: orderId },
+    select: webOrderDetailSelect,
+  });
+
+  if (!order) {
+    throw new HttpError(404, "Web order not found", "WEB_ORDER_NOT_FOUND");
+  }
+  if (order.fulfillmentMethod !== "SHIPPING") {
+    throw new HttpError(409, "Only shipping web orders can generate shipment labels", "WEB_ORDER_NOT_SHIPPING");
+  }
+  if (order.status === "CANCELLED") {
+    throw new HttpError(409, "Cancelled web orders cannot generate shipment labels", "WEB_ORDER_CANCELLED");
+  }
+  if (order.status === "DISPATCHED") {
+    throw new HttpError(409, "Dispatched web orders cannot generate another active shipment", "WEB_ORDER_ALREADY_DISPATCHED");
+  }
+
+  const activeShipment = await tx.webOrderShipment.findFirst({
+    where: {
+      webOrderId: order.id,
+      status: { in: [...ACTIVE_SHIPMENT_STATUSES, "DISPATCHED"] },
+    },
+    select: { id: true, status: true },
+  });
+
+  if (activeShipment) {
+    throw new HttpError(409, "An active shipment already exists for this web order", "ACTIVE_SHIPMENT_EXISTS");
+  }
+
+  const lastShipment = await tx.webOrderShipment.findFirst({
+    where: { webOrderId: order.id },
+    orderBy: [{ shipmentNumber: "desc" }],
+    select: { shipmentNumber: true },
+  });
+
+  return {
+    order,
+    shipmentNumber: (lastShipment?.shipmentNumber ?? 0) + 1,
   };
 };
 
@@ -659,7 +722,7 @@ export const listOnlineStoreOrders = async (input: {
     ];
   }
 
-  const [orders, total] = await Promise.all([
+  const [orders, total, providerSettings] = await Promise.all([
     prisma.webOrder.findMany({
       where,
       select: webOrderListSelect,
@@ -668,6 +731,7 @@ export const listOnlineStoreOrders = async (input: {
       skip,
     }),
     prisma.webOrder.count({ where }),
+    listShippingProviderSettings(),
   ]);
 
   const mappedOrders = orders.map(toOrderSummary);
@@ -685,16 +749,19 @@ export const listOnlineStoreOrders = async (input: {
       labelReadyCount: mappedOrders.filter((order) => order.latestShipment?.status === "LABEL_READY").length,
       dispatchedCount: mappedOrders.filter((order) => order.status === "DISPATCHED").length,
     },
-    supportedProviders: listSupportedShippingProviders(),
+    supportedProviders: providerSettings.providers,
     orders: mappedOrders,
   };
 };
 
 export const getOnlineStoreOrderDetail = async (orderId: string) => {
-  const order = await getOrderOrThrow(orderId);
+  const [order, providerSettings] = await Promise.all([
+    getOrderOrThrow(orderId),
+    listShippingProviderSettings(),
+  ]);
   return {
     order: toOrderDetail(order),
-    supportedProviders: listSupportedShippingProviders(),
+    supportedProviders: providerSettings.providers,
   };
 };
 
@@ -832,68 +899,31 @@ export const createShipmentLabelForOrder = async (
   auditActor?: AuditActor,
 ) => {
   const normalizedOrderId = parseRequiredUuid(orderId, "orderId", "INVALID_WEB_ORDER_ID");
-  const providerKey = normalizeOptionalText(input.providerKey) ?? DEFAULT_SHIPPING_PROVIDER_KEY;
-  const provider = getShippingLabelProviderOrThrow(providerKey);
+  const resolvedProvider = await resolveShippingProviderForShipment(normalizeOptionalText(input.providerKey) ?? null);
   const serviceCode = normalizeOptionalLimitedText(input.serviceCode, "serviceCode", 64) ?? DEFAULT_SHIPPING_SERVICE_CODE;
   const serviceName = normalizeOptionalLimitedText(input.serviceName, "serviceName", 120) ?? DEFAULT_SHIPPING_SERVICE_NAME;
   const shipFrom = await buildShipFromAddress();
+  const preflight = await prisma.$transaction((tx) => loadShipmentCreationPreflight(tx, normalizedOrderId));
 
-  const shipment = await prisma.$transaction(async (tx) => {
-    const order = await tx.webOrder.findUnique({
-      where: { id: normalizedOrderId },
-      select: webOrderDetailSelect,
-    });
-
-    if (!order) {
-      throw new HttpError(404, "Web order not found", "WEB_ORDER_NOT_FOUND");
-    }
-    if (order.fulfillmentMethod !== "SHIPPING") {
-      throw new HttpError(409, "Only shipping web orders can generate shipment labels", "WEB_ORDER_NOT_SHIPPING");
-    }
-    if (order.status === "CANCELLED") {
-      throw new HttpError(409, "Cancelled web orders cannot generate shipment labels", "WEB_ORDER_CANCELLED");
-    }
-    if (order.status === "DISPATCHED") {
-      throw new HttpError(409, "Dispatched web orders cannot generate another active shipment", "WEB_ORDER_ALREADY_DISPATCHED");
-    }
-
-    const activeShipment = await tx.webOrderShipment.findFirst({
-      where: {
-        webOrderId: order.id,
-        status: { in: [...ACTIVE_SHIPMENT_STATUSES, "DISPATCHED"] },
-      },
-      select: { id: true, status: true },
-    });
-
-    if (activeShipment) {
-      throw new HttpError(409, "An active shipment already exists for this web order", "ACTIVE_SHIPMENT_EXISTS");
-    }
-
-    const lastShipment = await tx.webOrderShipment.findFirst({
-      where: { webOrderId: order.id },
-      orderBy: [{ shipmentNumber: "desc" }],
-      select: { shipmentNumber: true },
-    });
-    const shipmentNumber = (lastShipment?.shipmentNumber ?? 0) + 1;
-
-    const labelResult = await provider.createLabel({
+  const labelResult = await resolvedProvider.provider.createLabel(
+    {
       order: {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        sourceChannel: order.sourceChannel,
-        placedAt: order.placedAt,
-        customerName: order.customerName,
-        customerEmail: order.customerEmail,
+        id: preflight.order.id,
+        orderNumber: preflight.order.orderNumber,
+        sourceChannel: preflight.order.sourceChannel,
+        placedAt: preflight.order.placedAt,
+        customerName: preflight.order.customerName,
+        customerEmail: preflight.order.customerEmail,
         shippingRecipient: {
-          name: order.shippingRecipientName,
-          addressLine1: order.shippingAddressLine1,
-          addressLine2: order.shippingAddressLine2,
-          city: order.shippingCity,
-          region: order.shippingRegion,
-          postcode: order.shippingPostcode,
-          country: order.shippingCountry,
+          name: preflight.order.shippingRecipientName,
+          addressLine1: preflight.order.shippingAddressLine1,
+          addressLine2: preflight.order.shippingAddressLine2,
+          city: preflight.order.shippingCity,
+          region: preflight.order.shippingRegion,
+          postcode: preflight.order.shippingPostcode,
+          country: preflight.order.shippingCountry,
         },
-        items: order.items.map((item) => ({
+        items: preflight.order.items.map((item) => ({
           sku: item.sku ?? null,
           productName: item.productName,
           variantName: item.variantName ?? null,
@@ -901,32 +931,54 @@ export const createShipmentLabelForOrder = async (
         })),
       },
       shipment: {
-        shipmentId: `pending-${order.id}-${shipmentNumber}`,
-        shipmentNumber,
-        providerKey,
-        providerDisplayName: provider.providerDisplayName,
+        shipmentId: `pending-${preflight.order.id}-${preflight.shipmentNumber}`,
+        shipmentNumber: preflight.shipmentNumber,
+        providerKey: resolvedProvider.providerKey,
+        providerDisplayName: resolvedProvider.providerDisplayName,
+        providerEnvironment: resolvedProvider.providerEnvironment,
         serviceCode,
         serviceName,
       },
       shipFrom,
-    });
+    },
+    {
+      runtimeConfig: resolvedProvider.runtimeConfig,
+    },
+  );
 
+  const shipment = await prisma.$transaction(async (tx) => {
+    const finalPreflight = await loadShipmentCreationPreflight(tx, normalizedOrderId);
+    if (finalPreflight.shipmentNumber !== preflight.shipmentNumber) {
+      throw new HttpError(
+        409,
+        "Shipment numbering changed while the courier label was being prepared. Retry shipment creation.",
+        "SHIPMENT_CREATION_CONFLICT",
+      );
+    }
+
+    const finalServiceCode = labelResult.normalizedServiceCode ?? serviceCode;
+    const finalServiceName = labelResult.normalizedServiceName ?? serviceName;
     const created = await tx.webOrderShipment.create({
       data: {
-        webOrderId: order.id,
-        shipmentNumber,
+        webOrderId: finalPreflight.order.id,
+        shipmentNumber: finalPreflight.shipmentNumber,
         status: "LABEL_READY",
-        providerKey,
-        providerDisplayName: provider.providerDisplayName,
-        serviceCode,
-        serviceName,
+        providerKey: resolvedProvider.providerKey,
+        providerDisplayName: resolvedProvider.providerDisplayName,
+        providerEnvironment: resolvedProvider.providerEnvironment,
+        serviceCode: finalServiceCode,
+        serviceName: finalServiceName,
         trackingNumber: labelResult.trackingNumber,
         labelFormat: labelResult.document.format,
         labelStorageKind: "INLINE_TEXT",
         labelMimeType: labelResult.document.mimeType,
         labelFileName: labelResult.document.fileName,
         labelContent: labelResult.document.content,
-        providerReference: labelResult.providerReference ?? null,
+        providerReference: labelResult.providerReference ?? labelResult.providerShipmentReference ?? null,
+        providerShipmentReference: labelResult.providerShipmentReference ?? null,
+        providerTrackingReference: labelResult.providerTrackingReference ?? null,
+        providerLabelReference: labelResult.providerLabelReference ?? null,
+        providerStatus: labelResult.providerStatus ?? null,
         providerMetadata: (labelResult.providerMetadata ?? null) as Prisma.InputJsonValue | null,
         createdByStaffId: auditActor?.actorId ?? null,
       },
@@ -938,13 +990,16 @@ export const createShipmentLabelForOrder = async (
       {
         action: "WEB_ORDER_SHIPMENT_CREATED",
         entityType: "WEB_ORDER",
-        entityId: order.id,
+        entityId: finalPreflight.order.id,
         metadata: {
           shipmentId: created.id,
           shipmentNumber: created.shipmentNumber,
-          providerKey,
-          serviceCode,
+          providerKey: resolvedProvider.providerKey,
+          providerEnvironment: resolvedProvider.providerEnvironment,
+          serviceCode: created.serviceCode,
           trackingNumber: created.trackingNumber,
+          providerShipmentReference: created.providerShipmentReference,
+          providerStatus: created.providerStatus,
           labelFormat: created.labelFormat,
         },
       },
@@ -958,9 +1013,11 @@ export const createShipmentLabelForOrder = async (
         entityType: "WEB_ORDER_SHIPMENT",
         entityId: created.id,
         metadata: {
-          webOrderId: order.id,
-          orderNumber: order.orderNumber,
+          webOrderId: finalPreflight.order.id,
+          orderNumber: finalPreflight.order.orderNumber,
           trackingNumber: created.trackingNumber,
+          providerShipmentReference: created.providerShipmentReference,
+          providerTrackingReference: created.providerTrackingReference,
         },
       },
       auditActor,
@@ -975,11 +1032,13 @@ export const createShipmentLabelForOrder = async (
     webOrderId: normalizedOrderId,
     trackingNumber: shipment.trackingNumber,
     providerKey: shipment.providerKey,
+    providerEnvironment: shipment.providerEnvironment,
+    providerShipmentReference: shipment.providerShipmentReference,
   });
 
   return {
     shipment: toShipmentResponse(shipment),
-    supportedProviders: listSupportedShippingProviders(),
+    supportedProviders: (await listShippingProviderSettings()).providers,
   };
 };
 

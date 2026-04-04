@@ -2,6 +2,10 @@ import type { ShippingLabelDocument, ShipmentPrintRequest } from "../../../share
 
 export type { ShippingLabelDocument, ShipmentPrintRequest };
 
+export type ShippingProviderMode = "mock" | "integration";
+export type ShippingProviderImplementationState = "mock" | "scaffold" | "live";
+export type ShippingProviderEnvironment = "SANDBOX" | "LIVE";
+
 export type ShippingPartyAddress = {
   name: string;
   addressLine1: string;
@@ -17,6 +21,7 @@ export type ShippingShipmentContext = {
   shipmentNumber: number;
   providerKey: string;
   providerDisplayName: string;
+  providerEnvironment?: ShippingProviderEnvironment | null;
   serviceCode: string;
   serviceName: string;
 };
@@ -43,16 +48,40 @@ export type ShippingLabelGenerationInput = {
 
 export type ShippingLabelProviderResult = {
   trackingNumber: string;
+  normalizedServiceCode?: string | null;
+  normalizedServiceName?: string | null;
   providerReference?: string | null;
+  providerShipmentReference?: string | null;
+  providerTrackingReference?: string | null;
+  providerLabelReference?: string | null;
+  providerStatus?: string | null;
   providerMetadata?: Record<string, unknown> | null;
   document: ShippingLabelDocument;
+};
+
+export type ShippingProviderRuntimeConfig = {
+  providerKey: string;
+  environment?: ShippingProviderEnvironment | null;
+  displayName?: string | null;
+  endpointBaseUrl?: string | null;
+  apiKey?: string | null;
+  accountId?: string | null;
+};
+
+export type ShippingLabelProviderExecutionContext = {
+  runtimeConfig: ShippingProviderRuntimeConfig | null;
 };
 
 export interface ShippingLabelProvider {
   readonly providerKey: string;
   readonly providerDisplayName: string;
-  readonly mode: "mock" | "integration";
-  createLabel(input: ShippingLabelGenerationInput): Promise<ShippingLabelProviderResult>;
+  readonly mode: ShippingProviderMode;
+  readonly implementationState: ShippingProviderImplementationState;
+  readonly requiresConfiguration: boolean;
+  createLabel(
+    input: ShippingLabelGenerationInput,
+    context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingLabelProviderResult>;
 }
 
 export type ShippingPrintPreparationInput = {

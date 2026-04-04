@@ -1,6 +1,7 @@
 import type {
   ShippingLabelGenerationInput,
   ShippingLabelProvider,
+  ShippingLabelProviderExecutionContext,
   ShippingLabelProviderResult,
 } from "./contracts";
 
@@ -81,14 +82,23 @@ export class InternalMockShippingLabelProvider implements ShippingLabelProvider 
   readonly providerKey = "INTERNAL_MOCK_ZPL";
   readonly providerDisplayName = "Internal Mock ZPL";
   readonly mode = "mock" as const;
+  readonly implementationState = "mock" as const;
+  readonly requiresConfiguration = false;
 
-  async createLabel(input: ShippingLabelGenerationInput): Promise<ShippingLabelProviderResult> {
+  async createLabel(
+    input: ShippingLabelGenerationInput,
+    _context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingLabelProviderResult> {
     const trackingNumber = buildTrackingNumber(input);
     const safeOrderToken = upperSlug(input.order.orderNumber).slice(-12);
 
     return {
       trackingNumber,
       providerReference: `mock-ref-${safeOrderToken}-${input.shipment.shipmentNumber}`,
+      providerShipmentReference: `mock-shipment-${safeOrderToken}-${input.shipment.shipmentNumber}`,
+      providerTrackingReference: trackingNumber,
+      providerLabelReference: `mock-label-${trackingNumber}`,
+      providerStatus: "LABEL_CREATED",
       providerMetadata: {
         generatedBy: this.providerKey,
         intendedPrinterLanguage: "ZPL",

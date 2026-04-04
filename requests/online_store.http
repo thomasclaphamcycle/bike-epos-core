@@ -53,9 +53,9 @@ X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
 {
-  "providerKey": "INTERNAL_MOCK_ZPL",
-  "serviceCode": "STANDARD",
-  "serviceName": "Standard Dispatch"
+  "providerKey": "GENERIC_HTTP_ZPL",
+  "serviceCode": "NEXT_DAY",
+  "serviceName": "Next Day Dispatch"
 }
 
 ### Get stored shipment label payload (MANAGER+)

@@ -129,6 +129,52 @@ type PrinterFormState = {
   setAsDefaultShippingLabel: boolean;
 };
 
+type ShippingProviderEnvironment = "SANDBOX" | "LIVE";
+
+type ShippingProviderConfiguration = {
+  enabled: boolean;
+  environment: ShippingProviderEnvironment;
+  displayName: string | null;
+  endpointBaseUrl: string | null;
+  accountId: string | null;
+  hasApiKey: boolean;
+  apiKeyHint: string | null;
+  updatedAt: string;
+};
+
+type ShippingProviderSettings = {
+  key: string;
+  displayName: string;
+  mode: "mock" | "integration";
+  implementationState: "mock" | "scaffold" | "live";
+  requiresConfiguration: boolean;
+  supportedLabelFormats: string[];
+  defaultServiceCode: string;
+  defaultServiceName: string;
+  isDefaultProvider: boolean;
+  isAvailable: boolean;
+  configuration: ShippingProviderConfiguration | null;
+};
+
+type ShippingProviderSettingsListResponse = {
+  defaultProviderKey: string;
+  providers: ShippingProviderSettings[];
+};
+
+type ShippingProviderMutationResponse = {
+  provider: ShippingProviderSettings;
+};
+
+type ShippingProviderFormState = {
+  enabled: boolean;
+  environment: ShippingProviderEnvironment;
+  displayName: string;
+  endpointBaseUrl: string;
+  accountId: string;
+  apiKey: string;
+  clearApiKey: boolean;
+};
+
 const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
@@ -148,6 +194,16 @@ const DEFAULT_PRINTER_FORM: PrinterFormState = {
   location: "",
   notes: "",
   setAsDefaultShippingLabel: false,
+};
+
+const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
+  enabled: false,
+  environment: "SANDBOX",
+  displayName: "",
+  endpointBaseUrl: "",
+  accountId: "",
+  apiKey: "",
+  clearApiKey: false,
 };
 
 const COMMON_TIME_ZONES = [
@@ -325,6 +381,24 @@ const toPrinterFormState = (
   };
 };
 
+const toShippingProviderFormState = (
+  provider: ShippingProviderSettings | null,
+): ShippingProviderFormState => {
+  if (!provider?.configuration) {
+    return DEFAULT_SHIPPING_PROVIDER_FORM;
+  }
+
+  return {
+    enabled: provider.configuration.enabled,
+    environment: provider.configuration.environment,
+    displayName: provider.configuration.displayName ?? "",
+    endpointBaseUrl: provider.configuration.endpointBaseUrl ?? "",
+    accountId: provider.configuration.accountId ?? "",
+    apiKey: "",
+    clearApiKey: false,
+  };
+};
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -332,6 +406,9 @@ export const SystemSettingsPage = () => {
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [workshopCommercial, setWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
   const [initialWorkshopCommercial, setInitialWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
+  const [providerSettingsPayload, setProviderSettingsPayload] = useState<ShippingProviderSettingsListResponse | null>(null);
+  const [selectedProviderKey, setSelectedProviderKey] = useState("");
+  const [providerForm, setProviderForm] = useState<ShippingProviderFormState>(DEFAULT_SHIPPING_PROVIDER_FORM);
   const [printersPayload, setPrintersPayload] = useState<RegisteredPrinterListResponse | null>(null);
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
   const [printerForm, setPrinterForm] = useState<PrinterFormState>(DEFAULT_PRINTER_FORM);
@@ -340,6 +417,8 @@ export const SystemSettingsPage = () => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [removingLogo, setRemovingLogo] = useState(false);
   const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
+  const [savingProvider, setSavingProvider] = useState(false);
+  const [settingDefaultProvider, setSettingDefaultProvider] = useState(false);
   const [savingPrinter, setSavingPrinter] = useState(false);
   const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
 
@@ -349,9 +428,10 @@ export const SystemSettingsPage = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const [storePayload, settingsPayload, printersResponse] = await Promise.all([
+        const [storePayload, settingsPayload, providerSettingsResponse, printersResponse] = await Promise.all([
           apiGet<StoreInfoResponse>("/api/settings/store-info"),
           apiGet<SettingsResponse>("/api/settings"),
+          apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers"),
           apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
         ]);
         if (cancelled) {
@@ -367,6 +447,17 @@ export const SystemSettingsPage = () => {
         setInitialStore(normalizedStore);
         setWorkshopCommercial(normalizedWorkshopCommercial);
         setInitialWorkshopCommercial(normalizedWorkshopCommercial);
+        setProviderSettingsPayload(providerSettingsResponse);
+        const preferredProviderKey =
+          providerSettingsResponse.defaultProviderKey
+          || providerSettingsResponse.providers[0]?.key
+          || "";
+        setSelectedProviderKey(preferredProviderKey);
+        setProviderForm(
+          toShippingProviderFormState(
+            providerSettingsResponse.providers.find((provider) => provider.key === preferredProviderKey) ?? null,
+          ),
+        );
         setPrintersPayload(printersResponse);
         const preferredPrinterId =
           printersResponse.defaultShippingLabelPrinterId
@@ -519,6 +610,36 @@ export const SystemSettingsPage = () => {
   }, [initialWorkshopCommercial, workshopCommercial]);
 
   const hasWorkshopCommercialValidationErrors = Object.keys(workshopCommercialValidationErrors).length > 0;
+  const selectedProvider = useMemo(
+    () => providerSettingsPayload?.providers.find((provider) => provider.key === selectedProviderKey) ?? null,
+    [providerSettingsPayload?.providers, selectedProviderKey],
+  );
+  const providerValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof ShippingProviderFormState, string>> = {};
+    if (!selectedProvider?.requiresConfiguration) {
+      return errors;
+    }
+
+    if (providerForm.enabled) {
+      if (!providerForm.endpointBaseUrl.trim()) {
+        errors.endpointBaseUrl = "Enabled providers need an endpoint URL.";
+      } else if (!isValidUrl(providerForm.endpointBaseUrl)) {
+        errors.endpointBaseUrl = "Endpoint URL must start with http:// or https://";
+      }
+      const hasStoredApiKey = Boolean(selectedProvider.configuration?.hasApiKey);
+      if (!hasStoredApiKey && !providerForm.apiKey.trim()) {
+        errors.apiKey = "Provide an API key before enabling this provider.";
+      }
+      if (providerForm.clearApiKey && !providerForm.apiKey.trim()) {
+        errors.apiKey = "Enter a replacement API key or untick clear API key.";
+      }
+    } else if (providerForm.endpointBaseUrl.trim() && !isValidUrl(providerForm.endpointBaseUrl)) {
+      errors.endpointBaseUrl = "Endpoint URL must start with http:// or https://";
+    }
+
+    return errors;
+  }, [providerForm, selectedProvider]);
+  const hasProviderValidationErrors = Object.keys(providerValidationErrors).length > 0;
   const selectedPrinter = useMemo(
     () => printersPayload?.printers.find((printer) => printer.id === selectedPrinterId) ?? null,
     [printersPayload?.printers, selectedPrinterId],
@@ -554,6 +675,13 @@ export const SystemSettingsPage = () => {
 
   const setPrinterField = <K extends keyof PrinterFormState>(key: K, value: PrinterFormState[K]) => {
     setPrinterForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const setProviderField = <K extends keyof ShippingProviderFormState>(
+    key: K,
+    value: ShippingProviderFormState[K],
+  ) => {
+    setProviderForm((current) => ({ ...current, [key]: value }));
   };
 
   const setWorkshopCommercialField = <K extends keyof WorkshopCommercialSettings>(
@@ -607,6 +735,29 @@ export const SystemSettingsPage = () => {
       ),
     );
     return payload;
+  };
+
+  const loadShippingProviders = async (preferredProviderKey?: string) => {
+    const payload = await apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers");
+    setProviderSettingsPayload(payload);
+    const nextProviderKey =
+      preferredProviderKey
+      ?? payload.defaultProviderKey
+      ?? payload.providers[0]?.key
+      ?? "";
+    setSelectedProviderKey(nextProviderKey);
+    setProviderForm(
+      toShippingProviderFormState(
+        payload.providers.find((provider) => provider.key === nextProviderKey) ?? null,
+      ),
+    );
+    return payload;
+  };
+
+  const selectShippingProviderForEditing = (providerKey: string) => {
+    const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
+    setSelectedProviderKey(providerKey);
+    setProviderForm(toShippingProviderFormState(provider));
   };
 
   const selectPrinterForEditing = (printerId: string) => {
@@ -731,6 +882,71 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to update workshop commercial settings");
     } finally {
       setSavingWorkshopCommercial(false);
+    }
+  };
+
+  const saveShippingProvider = async () => {
+    if (!selectedProvider) {
+      return;
+    }
+    if (!selectedProvider.requiresConfiguration) {
+      error("This provider is built in and does not have editable stored settings.");
+      return;
+    }
+    if (hasProviderValidationErrors) {
+      error("Fix the highlighted shipping provider fields before saving.");
+      return;
+    }
+
+    const payload = {
+      enabled: providerForm.enabled,
+      environment: providerForm.environment,
+      displayName: providerForm.displayName.trim() || null,
+      endpointBaseUrl: providerForm.endpointBaseUrl.trim() || null,
+      accountId: providerForm.accountId.trim() || null,
+      apiKey: providerForm.apiKey.trim() || undefined,
+      clearApiKey: providerForm.clearApiKey,
+    };
+
+    setSavingProvider(true);
+    try {
+      await apiPut<ShippingProviderMutationResponse>(
+        `/api/settings/shipping-providers/${encodeURIComponent(selectedProvider.key)}`,
+        payload,
+      );
+      await loadShippingProviders(selectedProvider.key);
+      success("Shipping provider settings updated.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save shipping provider settings");
+    } finally {
+      setSavingProvider(false);
+    }
+  };
+
+  const updateDefaultShippingProvider = async (providerKey: string | null) => {
+    setSettingDefaultProvider(true);
+    try {
+      const response = await apiPut<ShippingProviderSettingsListResponse>(
+        "/api/settings/shipping-providers/default",
+        { providerKey },
+      );
+      setProviderSettingsPayload(response);
+      const nextSelectedProviderKey = providerKey ?? response.defaultProviderKey;
+      setSelectedProviderKey(nextSelectedProviderKey);
+      setProviderForm(
+        toShippingProviderFormState(
+          response.providers.find((provider) => provider.key === nextSelectedProviderKey) ?? null,
+        ),
+      );
+      success(
+        providerKey
+          ? "Default shipping provider updated."
+          : "Default shipping provider reset to the built-in mock path.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to update default shipping provider");
+    } finally {
+      setSettingDefaultProvider(false);
     }
   };
 
@@ -1260,6 +1476,212 @@ export const SystemSettingsPage = () => {
               <div className="restricted-panel info-panel">
                 These controls shape a rules-based suggestion layer. Long-gap prompts handle bikes with meaningful time since the last completed service, while the cooldown prevents staff from raising the same type of recommendation immediately after recent work.
               </div>
+            </section>
+          </div>
+        ) : null}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Shipping Providers"
+          description="Configure which courier/provider integrations dispatch can use for shipment creation, and choose the default provider for new shipping labels."
+          actions={selectedProvider?.requiresConfiguration ? (
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveShippingProvider()}
+                disabled={savingProvider || hasProviderValidationErrors}
+              >
+                {savingProvider ? "Saving..." : "Save Provider Settings"}
+              </button>
+            </div>
+          ) : null}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Shipping Providers"
+            description="Fetching the configured provider list and current default shipment provider."
+          />
+        ) : null}
+
+        {!loading ? (
+          <div className="shipping-providers-layout">
+            <section className="store-info-section shipping-providers-list">
+              <h3>Available Providers</h3>
+              {providerSettingsPayload?.providers.length ? (
+                <div className="shipping-providers-list__items">
+                  {providerSettingsPayload.providers.map((provider) => {
+                    const isSelected = provider.key === selectedProviderKey;
+                    return (
+                      <button
+                        key={provider.key}
+                        type="button"
+                        className={`shipping-provider-row${isSelected ? " shipping-provider-row--selected" : ""}`}
+                        onClick={() => selectShippingProviderForEditing(provider.key)}
+                      >
+                        <div className="shipping-provider-row__topline">
+                          <strong>{provider.displayName}</strong>
+                          <div className="shipping-provider-row__badges">
+                            {provider.isDefaultProvider ? (
+                              <span className="status-badge status-ready">Default</span>
+                            ) : null}
+                            <span className={`status-badge ${provider.isAvailable ? "status-info" : "status-warning"}`}>
+                              {provider.isAvailable ? "Available" : "Needs config"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="shipping-provider-row__meta">
+                          <span>{provider.key}</span>
+                          <span>{provider.mode}</span>
+                          <span>{provider.implementationState}</span>
+                        </div>
+                        <div className="shipping-provider-row__meta shipping-provider-row__meta--muted">
+                          <span>{provider.defaultServiceName}</span>
+                          <span>
+                            {provider.configuration
+                              ? `${provider.configuration.environment} · ${provider.configuration.enabled ? "Enabled" : "Disabled"}`
+                              : "Built-in"}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No shipping providers found"
+                  description="The provider registry did not return any shipment-label providers."
+                />
+              )}
+            </section>
+
+            <section className="store-info-section shipping-providers-editor">
+              <h3>{selectedProvider ? selectedProvider.displayName : "Provider Detail"}</h3>
+              {!selectedProvider ? (
+                <EmptyState
+                  title="Select a provider"
+                  description="Choose a provider from the list to review its configuration and default-provider status."
+                />
+              ) : !selectedProvider.requiresConfiguration ? (
+                <>
+                  <div className="restricted-panel info-panel">
+                    <strong>{selectedProvider.displayName}</strong> is the built-in CorePOS mock provider. It stays available for development and fallback use, but it does not store external credentials.
+                  </div>
+                  <div className="shipping-provider-editor__actions">
+                    <button
+                      type="button"
+                      onClick={() => void updateDefaultShippingProvider(selectedProvider.key)}
+                      disabled={settingDefaultProvider || selectedProvider.isDefaultProvider}
+                    >
+                      {settingDefaultProvider ? "Updating..." : "Set As Default Provider"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="purchase-form-grid store-info-grid">
+                    <label className="store-info-grid-span store-settings-checkbox">
+                      <span>Enable provider</span>
+                      <div className="table-secondary">
+                        Disabled providers stay on record but cannot be chosen for shipment creation.
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={providerForm.enabled}
+                        onChange={(event) => setProviderField("enabled", event.target.checked)}
+                      />
+                    </label>
+                    <label>
+                      Environment
+                      <select
+                        value={providerForm.environment}
+                        onChange={(event) =>
+                          setProviderField("environment", event.target.value as ShippingProviderEnvironment)}
+                      >
+                        <option value="SANDBOX">SANDBOX</option>
+                        <option value="LIVE">LIVE</option>
+                      </select>
+                    </label>
+                    <label>
+                      Display name override
+                      <input
+                        value={providerForm.displayName}
+                        onChange={(event) => setProviderField("displayName", event.target.value)}
+                        placeholder={selectedProvider.displayName}
+                      />
+                    </label>
+                    <label className="store-info-grid-span">
+                      Endpoint base URL
+                      <input
+                        value={providerForm.endpointBaseUrl}
+                        onChange={(event) => setProviderField("endpointBaseUrl", event.target.value)}
+                        placeholder="http://127.0.0.1:4110"
+                      />
+                      {providerValidationErrors.endpointBaseUrl ? (
+                        <span className="field-error">{providerValidationErrors.endpointBaseUrl}</span>
+                      ) : null}
+                    </label>
+                    <label>
+                      Account / tenant ID
+                      <input
+                        value={providerForm.accountId}
+                        onChange={(event) => setProviderField("accountId", event.target.value)}
+                        placeholder="dispatch-sandbox-1"
+                      />
+                    </label>
+                    <label>
+                      API key
+                      <input
+                        type="password"
+                        value={providerForm.apiKey}
+                        onChange={(event) => setProviderField("apiKey", event.target.value)}
+                        placeholder={selectedProvider.configuration?.apiKeyHint ?? "Enter a new API key"}
+                      />
+                      {providerValidationErrors.apiKey ? (
+                        <span className="field-error">{providerValidationErrors.apiKey}</span>
+                      ) : selectedProvider.configuration?.hasApiKey ? (
+                        <span className="table-secondary">
+                          Stored key: {selectedProvider.configuration.apiKeyHint}
+                        </span>
+                      ) : null}
+                    </label>
+                    <label className="store-info-grid-span store-settings-checkbox">
+                      <span>Clear stored API key on save</span>
+                      <div className="table-secondary">
+                        Leave unticked to preserve the current key when you are only changing non-secret settings.
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={providerForm.clearApiKey}
+                        onChange={(event) => setProviderField("clearApiKey", event.target.checked)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="shipping-provider-editor__actions">
+                    <button
+                      type="button"
+                      onClick={() => void updateDefaultShippingProvider(selectedProvider.key)}
+                      disabled={settingDefaultProvider || !selectedProvider.isAvailable}
+                    >
+                      {settingDefaultProvider ? "Updating..." : "Set As Default Provider"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void updateDefaultShippingProvider(null)}
+                      disabled={settingDefaultProvider || !selectedProvider.isDefaultProvider}
+                    >
+                      Reset To Mock Default
+                    </button>
+                  </div>
+
+                  <div className="restricted-panel info-panel">
+                    This milestone adds a production-shaped courier adapter foundation. The first integration path is a generic HTTP ZPL scaffold, so CorePOS can manage provider-backed shipment creation, normalize references, tracking, and labels, and keep the downstream Windows Zebra print flow unchanged.
+                  </div>
+                </>
+              )}
             </section>
           </div>
         ) : null}
