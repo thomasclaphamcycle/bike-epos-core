@@ -316,6 +316,471 @@ const shipmentStatusClassName = (status: WebOrderShipmentStatus) => {
   }
 };
 
+type DispatchReadinessState = "ready" | "pending" | "blocked" | "complete";
+type DispatchActionKey =
+  | "generate"
+  | "refresh"
+  | "cancel"
+  | "regenerate"
+  | "prepare-print"
+  | "print"
+  | "dispatch";
+
+type DispatchReadinessItem = {
+  label: string;
+  state: DispatchReadinessState;
+  headline: string;
+  detail: string;
+};
+
+type DispatchActionCard = {
+  key: DispatchActionKey;
+  title: string;
+  detail: string;
+  enabled: boolean;
+};
+
+type ShipmentTimelineEntry = {
+  key: string;
+  label: string;
+  detail: string;
+  timestamp: string;
+  tone: "default" | "success" | "warning" | "danger";
+};
+
+type DispatchRecommendation = {
+  title: string;
+  detail: string;
+};
+
+const readinessClassName = (state: DispatchReadinessState) => {
+  switch (state) {
+    case "complete":
+      return "online-orders-readiness-card online-orders-readiness-card--complete";
+    case "ready":
+      return "online-orders-readiness-card online-orders-readiness-card--ready";
+    case "blocked":
+      return "online-orders-readiness-card online-orders-readiness-card--blocked";
+    case "pending":
+    default:
+      return "online-orders-readiness-card online-orders-readiness-card--pending";
+  }
+};
+
+const timelineToneClassName = (tone: ShipmentTimelineEntry["tone"]) => {
+  switch (tone) {
+    case "success":
+      return "online-orders-timeline__item online-orders-timeline__item--success";
+    case "warning":
+      return "online-orders-timeline__item online-orders-timeline__item--warning";
+    case "danger":
+      return "online-orders-timeline__item online-orders-timeline__item--danger";
+    case "default":
+    default:
+      return "online-orders-timeline__item";
+  }
+};
+
+const getDispatchRecommendation = (
+  order: WebOrderDetail | null,
+  shipment: WebOrderShipment | null,
+  provider: SupportedShippingProvider | null,
+  printer: RegisteredPrinter | null,
+): DispatchRecommendation => {
+  if (!order) {
+    return {
+      title: "Select an order",
+      detail: "Choose a web order to see shipment readiness, operator actions, and recent dispatch activity.",
+    };
+  }
+
+  if (order.fulfillmentMethod !== "SHIPPING") {
+    return {
+      title: "No shipping workflow required",
+      detail: "This order is click & collect, so the dispatch shipment flow does not apply.",
+    };
+  }
+
+  if (order.status === "CANCELLED") {
+    return {
+      title: "Order is cancelled",
+      detail: "No further dispatch action is expected unless the order itself is reinstated first.",
+    };
+  }
+
+  if (!shipment) {
+    return provider?.isAvailable
+      ? {
+          title: "Generate the first shipment label",
+          detail: "Start by creating a provider-backed shipment so CorePOS can store the label and tracking locally.",
+        }
+      : {
+          title: "Configure or choose an available provider",
+          detail: "Shipment creation is blocked until the selected provider is available in Settings.",
+        };
+  }
+
+  if (shipment.status === "VOID_PENDING") {
+    return {
+      title: "Refresh provider status before doing anything else",
+      detail: "A void request is in flight. Printing and dispatch stay blocked until the provider confirms the final outcome.",
+    };
+  }
+
+  if (shipment.status === "VOIDED") {
+    return {
+      title: "Generate a replacement shipment when ready",
+      detail: "This shipment is no longer active. Create a replacement only if the order still needs to be shipped.",
+    };
+  }
+
+  if (!printer) {
+    return {
+      title: "Choose a dispatch printer",
+      detail: "Printing is the next step, but CorePOS needs an active shipping-label printer selected first.",
+    };
+  }
+
+  if (!shipment.printPreparedAt) {
+    return {
+      title: "Prepare the Zebra print payload",
+      detail: "This confirms the target printer and lets staff preview the exact backend-owned print contract before sending it.",
+    };
+  }
+
+  if (!shipment.printedAt) {
+    return {
+      title: "Print the shipment label",
+      detail: "Send the stored ZPL label to the Windows dispatch agent. Dispatch remains blocked until print succeeds.",
+    };
+  }
+
+  if (!shipment.dispatchedAt) {
+    return {
+      title: "Mark the parcel dispatched after handoff",
+      detail: "The label has been printed. Confirm dispatch only once the parcel has actually left the store.",
+    };
+  }
+
+  return {
+    title: "Shipment workflow complete",
+    detail: "This order has already been dispatched. Reprints remain available for operational follow-up if needed.",
+  };
+};
+
+const getDispatchReadiness = (
+  order: WebOrderDetail | null,
+  shipment: WebOrderShipment | null,
+  provider: SupportedShippingProvider | null,
+  printer: RegisteredPrinter | null,
+): DispatchReadinessItem[] => {
+  const shipmentItem: DispatchReadinessItem = !order
+    ? {
+        label: "Shipment",
+        state: "pending",
+        headline: "Select an order",
+        detail: "No dispatch state is available until an order is selected.",
+      }
+    : order.fulfillmentMethod !== "SHIPPING"
+      ? {
+          label: "Shipment",
+          state: "blocked",
+          headline: "Not a shipping order",
+          detail: "Click & collect orders do not use the shipment-label flow.",
+        }
+      : order.status === "CANCELLED"
+        ? {
+            label: "Shipment",
+            state: "blocked",
+            headline: "Order cancelled",
+            detail: "Shipment creation is blocked because the order itself is cancelled.",
+          }
+        : !shipment
+          ? provider?.isAvailable
+            ? {
+                label: "Shipment",
+                state: "pending",
+                headline: "Ready to create",
+                detail: "Generate the first provider-backed shipment label.",
+              }
+            : {
+                label: "Shipment",
+                state: "blocked",
+                headline: "Provider not ready",
+                detail: "Choose or configure an available provider before creating a shipment.",
+              }
+          : shipment.status === "VOID_PENDING"
+            ? {
+                label: "Shipment",
+                state: "pending",
+                headline: "Void pending",
+                detail: "Refresh the provider outcome before using this shipment again.",
+              }
+            : shipment.status === "VOIDED"
+              ? {
+                  label: "Shipment",
+                  state: "blocked",
+                  headline: "Voided",
+                  detail: "This label is no longer active and cannot be printed or dispatched.",
+                }
+              : {
+                  label: "Shipment",
+                  state: "ready",
+                  headline: humanizeToken(shipment.status),
+                  detail: `${shipment.providerDisplayName} ${shipment.serviceName} · ${shipment.trackingNumber}`,
+                };
+
+  const printItem: DispatchReadinessItem = !shipment
+    ? {
+        label: "Print",
+        state: "pending",
+        headline: "Waiting for shipment",
+        detail: "Create a shipment label before any print action is available.",
+      }
+    : shipment.status === "VOID_PENDING" || shipment.status === "VOIDED"
+      ? {
+          label: "Print",
+          state: "blocked",
+          headline: "Printing blocked",
+          detail: "Voided or void-pending shipments stay visible for audit but cannot be treated as active printable labels.",
+        }
+      : !printer
+        ? {
+            label: "Print",
+            state: "blocked",
+            headline: "No printer selected",
+            detail: "Choose an active shipping-label printer to prepare or print this label.",
+          }
+        : shipment.printedAt
+          ? {
+              label: "Print",
+              state: "complete",
+              headline: "Printed",
+              detail: `Last print recorded ${formatDateTime(shipment.printedAt)}${shipment.reprintCount ? ` · ${shipment.reprintCount} reprints` : ""}`,
+            }
+          : shipment.printPreparedAt
+            ? {
+                label: "Print",
+                state: "ready",
+                headline: "Ready to print",
+                detail: `Prepared for ${printer.name} at ${formatDateTime(shipment.printPreparedAt)}.`,
+              }
+            : {
+                label: "Print",
+                state: "pending",
+                headline: "Prepare payload first",
+                detail: `Printer selected: ${printer.name}. Prepare the payload before sending it to the Windows agent.`,
+              };
+
+  const dispatchItem: DispatchReadinessItem = !shipment
+    ? {
+        label: "Dispatch",
+        state: "pending",
+        headline: "Waiting for shipment",
+        detail: "Dispatch stays locked until a shipment exists and a label has been printed.",
+      }
+    : shipment.dispatchedAt
+      ? {
+          label: "Dispatch",
+          state: "complete",
+          headline: "Dispatched",
+          detail: `Confirmed at ${formatDateTime(shipment.dispatchedAt)}.`,
+        }
+      : shipment.status === "VOID_PENDING" || shipment.status === "VOIDED"
+        ? {
+            label: "Dispatch",
+            state: "blocked",
+            headline: "Dispatch blocked",
+            detail: "CorePOS will not dispatch a shipment that has been voided or is waiting on a void outcome.",
+          }
+        : shipment.printedAt
+          ? {
+              label: "Dispatch",
+              state: "ready",
+              headline: "Ready to dispatch",
+              detail: "Mark dispatched once the parcel has actually left the store.",
+            }
+          : {
+              label: "Dispatch",
+              state: "blocked",
+              headline: "Print required first",
+              detail: "Dispatch confirmation only unlocks after a successful print record exists.",
+            };
+
+  return [shipmentItem, printItem, dispatchItem];
+};
+
+const getDispatchActionCards = (
+  order: WebOrderDetail | null,
+  shipment: WebOrderShipment | null,
+  provider: SupportedShippingProvider | null,
+  shipmentProvider: SupportedShippingProvider | null,
+  printer: RegisteredPrinter | null,
+  flags: {
+    canGenerateShipment: boolean;
+    canRefreshShipment: boolean;
+    canCancelShipment: boolean;
+    canRegenerateShipment: boolean;
+    canPreparePrint: boolean;
+    canPrintShipment: boolean;
+    canDispatchShipment: boolean;
+  },
+): DispatchActionCard[] => {
+  const cards: DispatchActionCard[] = [
+    {
+      key: "refresh",
+      title: "Refresh provider status",
+      detail: !shipment
+        ? "Available after a shipment exists."
+        : !shipmentProvider?.supportsShipmentRefresh
+          ? `${shipment.providerDisplayName} does not currently expose refresh support in CorePOS.`
+          : shipment.status === "VOID_PENDING"
+            ? "Recommended now: confirm whether the provider void/refund has completed."
+            : "Use when provider tracking or void status may have changed since the last sync.",
+      enabled: flags.canRefreshShipment,
+    },
+    {
+      key: "cancel",
+      title: "Void shipment",
+      detail: !shipment
+        ? "Available after a shipment exists."
+        : !shipmentProvider?.supportsShipmentVoid
+          ? `${shipment.providerDisplayName} does not currently support voiding through CorePOS.`
+          : shipment.dispatchedAt
+            ? "Blocked because the shipment is already dispatched."
+            : shipment.status === "VOID_PENDING"
+              ? "Blocked until the current void request reaches a final provider outcome."
+              : shipment.status === "VOIDED"
+                ? "Already voided."
+                : "Use only when this exact shipment should no longer be used.",
+      enabled: flags.canCancelShipment,
+    },
+    {
+      key: "regenerate",
+      title: "Replacement shipment",
+      detail: !shipment
+        ? "Available after a shipment exists."
+        : shipment.status === "VOIDED"
+          ? "Ready now. CorePOS will create a new shipment with the same provider and service."
+          : "Blocked until the current shipment is fully voided.",
+      enabled: flags.canRegenerateShipment,
+    },
+    {
+      key: "prepare-print",
+      title: "Prepare print payload",
+      detail: !shipment
+        ? "Available after a shipment exists."
+        : shipment.status === "VOID_PENDING" || shipment.status === "VOIDED"
+          ? "Blocked because this shipment is no longer an active printable label."
+          : !printer
+            ? "Select an active shipping-label printer first."
+            : shipment.printPreparedAt
+              ? "Use again if you need to confirm a different printer or copy count before reprinting."
+              : "First print step. Confirms printer targeting and previewable payload.",
+      enabled: flags.canPreparePrint,
+    },
+    {
+      key: "print",
+      title: shipment?.printedAt ? "Reprint label" : "Print label",
+      detail: !shipment
+        ? "Available after a shipment exists."
+        : shipment.status === "VOID_PENDING" || shipment.status === "VOIDED"
+          ? "Blocked because this shipment is no longer an active printable label."
+          : !printer
+            ? "Select an active shipping-label printer first."
+            : shipment.printedAt
+              ? "Safe for operational reprints. Dispatch remains a separate action."
+              : "Sends the stored ZPL document through the Windows dispatch agent.",
+      enabled: flags.canPrintShipment,
+    },
+    {
+      key: "dispatch",
+      title: "Mark dispatched",
+      detail: !shipment
+        ? "Available after a shipment exists."
+        : shipment.dispatchedAt
+          ? "Already completed."
+          : shipment.status === "VOID_PENDING" || shipment.status === "VOIDED"
+            ? "Blocked because the shipment is voided or waiting on a void result."
+            : !shipment.printedAt
+              ? "Blocked until the label has been printed successfully."
+              : "Final step. Use only after the parcel has physically left the store.",
+      enabled: flags.canDispatchShipment,
+    },
+  ];
+
+  if (!shipment) {
+    cards.unshift({
+      key: "generate",
+      title: "Generate shipment",
+      detail: !order
+        ? "Select an order first."
+        : order.fulfillmentMethod !== "SHIPPING"
+          ? "Click & collect orders do not create shipping labels."
+          : order.status === "CANCELLED"
+            ? "Cancelled orders cannot create shipments."
+            : !provider?.isAvailable
+              ? "Choose or configure an available provider before creating the shipment."
+              : "Creates the first active shipment label and stores the result locally in CorePOS.",
+      enabled: flags.canGenerateShipment,
+    });
+  }
+
+  return cards;
+};
+
+const buildShipmentTimeline = (shipment: WebOrderShipment | null): ShipmentTimelineEntry[] => {
+  if (!shipment) {
+    return [];
+  }
+
+  const entries: ShipmentTimelineEntry[] = [];
+  const pushEntry = (
+    key: string,
+    label: string,
+    detail: string,
+    timestamp: string | null | undefined,
+    tone: ShipmentTimelineEntry["tone"] = "default",
+  ) => {
+    if (!timestamp) {
+      return;
+    }
+    entries.push({ key, label, detail, timestamp, tone });
+  };
+
+  pushEntry("created", "Shipment created", `${shipment.providerDisplayName} created ${shipment.serviceName}.`, shipment.createdAt);
+  pushEntry(
+    "label-generated",
+    "Label stored",
+    `CorePOS stored ${shipment.labelFormat} for ${shipment.trackingNumber}.`,
+    shipment.labelGeneratedAt,
+  );
+  pushEntry(
+    "provider-synced",
+    "Provider synced",
+    shipment.providerStatus
+      ? `Latest provider state: ${humanizeToken(shipment.providerStatus)}${shipment.providerRefundStatus ? ` · ${humanizeToken(shipment.providerRefundStatus)}` : ""}.`
+      : "Provider status refreshed.",
+    shipment.providerSyncedAt,
+  );
+  if (shipment.providerSyncError) {
+    pushEntry(
+      "provider-sync-error",
+      "Provider sync issue",
+      shipment.providerSyncError,
+      shipment.providerSyncedAt ?? shipment.updatedAt,
+      "danger",
+    );
+  }
+  pushEntry("print-prepared", "Print payload prepared", "Printer targeting was confirmed for this shipment.", shipment.printPreparedAt, "warning");
+  pushEntry("printed", shipment.reprintCount ? "Label reprinted" : "Label printed", `Print recorded${shipment.reprintCount ? ` · ${shipment.reprintCount} additional reprints` : ""}.`, shipment.printedAt, "success");
+  pushEntry("void-requested", "Void requested", "A provider void/refund request was submitted for this shipment.", shipment.voidRequestedAt, "warning");
+  pushEntry("voided", "Shipment voided", "The provider confirmed that this shipment is no longer active.", shipment.voidedAt, "danger");
+  pushEntry("dispatched", "Dispatched", "Staff confirmed that the parcel left the store.", shipment.dispatchedAt, "success");
+
+  return entries.sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
+};
+
 export const OnlineStoreOrdersPage = () => {
   const { error, success } = useToasts();
   const listRequestSequenceRef = useRef(0);
@@ -716,7 +1181,7 @@ export const OnlineStoreOrdersPage = () => {
   const canGenerateShipment = Boolean(
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
-      && selectedOrder.status !== "DISPATCHED"
+      && selectedOrder.status === "READY_FOR_DISPATCH"
       && selectedProvider?.isAvailable
       && !selectedShipment,
   );
@@ -734,7 +1199,41 @@ export const OnlineStoreOrdersPage = () => {
   const canRegenerateShipment = Boolean(selectedShipment && selectedShipment.status === "VOIDED");
   const canPreparePrint = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
   const canPrintShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
-  const canDispatchShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedShipment.printedAt);
+  const canDispatchShipment = Boolean(
+    selectedShipment
+      && !shipmentIsVoidBlocked
+      && selectedShipment.printedAt
+      && !selectedShipment.dispatchedAt,
+  );
+  const dispatchRecommendation = getDispatchRecommendation(
+    selectedOrder,
+    selectedShipment,
+    selectedShipment ? shipmentProvider : selectedProvider,
+    selectedPrinter,
+  );
+  const dispatchReadiness = getDispatchReadiness(
+    selectedOrder,
+    selectedShipment,
+    selectedShipment ? shipmentProvider : selectedProvider,
+    selectedPrinter,
+  );
+  const dispatchActionCards = getDispatchActionCards(
+    selectedOrder,
+    selectedShipment,
+    selectedProvider,
+    shipmentProvider,
+    selectedPrinter,
+    {
+      canGenerateShipment,
+      canRefreshShipment,
+      canCancelShipment,
+      canRegenerateShipment,
+      canPreparePrint,
+      canPrintShipment,
+      canDispatchShipment,
+    },
+  );
+  const shipmentTimeline = buildShipmentTimeline(selectedShipment);
 
   return (
     <div className="page-shell ui-page online-orders-page" data-testid="online-store-orders-page">
@@ -939,6 +1438,89 @@ export const OnlineStoreOrdersPage = () => {
                     ) : null}
                   </div>
 
+                  <div className="online-orders-next-step" data-testid="online-store-next-action">
+                    <span className="online-orders-next-step__eyebrow">Recommended next step</span>
+                    <strong>{dispatchRecommendation.title}</strong>
+                    <p>{dispatchRecommendation.detail}</p>
+                  </div>
+
+                  <div className="online-orders-readiness-grid" data-testid="online-store-readiness">
+                    {dispatchReadiness.map((item) => (
+                      <article key={item.label} className={readinessClassName(item.state)}>
+                        <span className="online-orders-readiness-card__label">{item.label}</span>
+                        <strong>{item.headline}</strong>
+                        <p>{item.detail}</p>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="online-orders-dispatch-controls">
+                    <label>
+                      Provider
+                      <select
+                        value={selectedProviderKey}
+                        onChange={(event) => setSelectedProviderKey(event.target.value)}
+                        disabled={pendingAction.length > 0 || Boolean(selectedShipment)}
+                      >
+                        {(detailPayload?.supportedProviders ?? []).map((provider) => (
+                          <option key={provider.key} value={provider.key}>
+                            {`${provider.displayName}${provider.isDefaultProvider ? " (Default)" : ""} · ${provider.mode}/${provider.implementationState}${provider.isAvailable ? "" : " · needs config"}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Registered printer
+                      <select
+                        value={selectedPrinterId}
+                        onChange={(event) => setSelectedPrinterId(event.target.value)}
+                        disabled={pendingAction.length > 0 || loadingPrinters}
+                        data-testid="online-store-printer-select"
+                      >
+                        <option value="">
+                          {loadingPrinters
+                            ? "Loading printers..."
+                            : printersPayload?.defaultShippingLabelPrinterId
+                              ? "Use default shipping-label printer"
+                              : "Select a registered printer"}
+                        </option>
+                        {(printersPayload?.printers ?? []).map((printer) => (
+                          <option key={printer.id} value={printer.id}>
+                            {`${printer.name}${printer.isDefaultShippingLabelPrinter ? " (Default)" : ""} · ${printer.transportMode}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Copies
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={copies}
+                        onChange={(event) => setCopies(event.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
+                    {selectedPrinter
+                      ? `Dispatch printer: ${selectedPrinter.name} (${selectedPrinter.transportMode})${selectedPrinter.location ? ` · ${selectedPrinter.location}` : ""}.`
+                      : printersPayload?.printers.length
+                        ? "Choose a registered shipping-label printer before preparing or printing this shipment."
+                        : "No active shipping-label printer is registered. Ask an admin to add one in Settings before printing."}
+                  </div>
+
+                  <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
+                    {selectedShipment && shipmentProvider
+                      ? `Shipment provider: ${shipmentProvider.displayName}${selectedShipment.providerEnvironment ? ` (${selectedShipment.providerEnvironment})` : ""} · service ${selectedShipment.serviceName}.${shipmentProvider.supportsShipmentRefresh ? " Refresh supported." : ""}${shipmentProvider.supportsShipmentVoid ? " Void supported." : ""}`
+                      : selectedProvider
+                        ? selectedProvider.isAvailable
+                          ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}${selectedProvider.defaultServiceName ? ` · default service ${selectedProvider.defaultServiceName}` : ""}.`
+                          : `Shipment provider: ${selectedProvider.displayName} is not ready. Configure its credentials/endpoint in Settings or choose an available provider.`
+                        : "No shipment provider is currently selected."}
+                  </div>
+
                   {!selectedShipment ? (
                     <EmptyState
                       title="No shipment label yet"
@@ -949,17 +1531,6 @@ export const OnlineStoreOrdersPage = () => {
                             : "The selected provider is not currently ready for shipment creation. Configure or enable it in Settings, or switch back to an available provider."
                           : "Click & collect orders do not create shipping labels in this flow."
                       }
-                      actions={(
-                        <button
-                          type="button"
-                          className="primary"
-                          onClick={() => void handleGenerateShipment()}
-                          disabled={!canGenerateShipment || pendingAction.length > 0}
-                          data-testid="online-store-generate-label"
-                        >
-                          {pendingAction === "generate" ? "Generating..." : "Generate Shipment Label"}
-                        </button>
-                      )}
                     />
                   ) : (
                     <>
@@ -1044,149 +1615,11 @@ export const OnlineStoreOrdersPage = () => {
                         </div>
                       </div>
 
-                      <div className="online-orders-dispatch-controls">
-                        <label>
-                          Provider
-                          <select
-                            value={selectedProviderKey}
-                            onChange={(event) => setSelectedProviderKey(event.target.value)}
-                            disabled={pendingAction.length > 0 || Boolean(selectedShipment)}
-                          >
-                            {(detailPayload?.supportedProviders ?? []).map((provider) => (
-                              <option key={provider.key} value={provider.key}>
-                                {`${provider.displayName}${provider.isDefaultProvider ? " (Default)" : ""} · ${provider.mode}/${provider.implementationState}${provider.isAvailable ? "" : " · needs config"}`}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Registered printer
-                          <select
-                            value={selectedPrinterId}
-                            onChange={(event) => setSelectedPrinterId(event.target.value)}
-                            disabled={pendingAction.length > 0 || loadingPrinters}
-                            data-testid="online-store-printer-select"
-                          >
-                            <option value="">
-                              {loadingPrinters
-                                ? "Loading printers..."
-                                : printersPayload?.defaultShippingLabelPrinterId
-                                  ? "Use default shipping-label printer"
-                                  : "Select a registered printer"}
-                            </option>
-                            {(printersPayload?.printers ?? []).map((printer) => (
-                              <option key={printer.id} value={printer.id}>
-                                {`${printer.name}${printer.isDefaultShippingLabelPrinter ? " (Default)" : ""} · ${printer.transportMode}`}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Copies
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={copies}
-                            onChange={(event) => setCopies(event.target.value)}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
-                        {selectedPrinter
-                          ? `Dispatch printer: ${selectedPrinter.name} (${selectedPrinter.transportMode})${selectedPrinter.location ? ` · ${selectedPrinter.location}` : ""}.`
-                          : printersPayload?.printers.length
-                            ? "Choose a registered shipping-label printer before preparing or printing this shipment."
-                            : "No active shipping-label printer is registered. Ask an admin to add one in Settings before printing."}
-                      </div>
-
-                      <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
-                        {selectedShipment && shipmentProvider
-                          ? `Shipment provider: ${shipmentProvider.displayName}${selectedShipment.providerEnvironment ? ` (${selectedShipment.providerEnvironment})` : ""} · service ${selectedShipment.serviceName}.${shipmentProvider.supportsShipmentRefresh ? " Refresh supported." : ""}${shipmentProvider.supportsShipmentVoid ? " Void supported." : ""}`
-                          : selectedProvider
-                            ? selectedProvider.isAvailable
-                              ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}${selectedProvider.defaultServiceName ? ` · default service ${selectedProvider.defaultServiceName}` : ""}.`
-                              : `Shipment provider: ${selectedProvider.displayName} is not ready. Configure its credentials/endpoint in Settings or choose an available provider.`
-                            : "No shipment provider is currently selected."}
-                      </div>
-
-                      <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
-                        {selectedShipment
-                          ? `Local shipment state: ${humanizeToken(selectedShipment.status)}. Print state: ${selectedShipment.printedAt ? "printed" : selectedShipment.printPreparedAt ? "prepared" : "not printed"}. Dispatch state: ${selectedShipment.dispatchedAt ? "dispatched" : "awaiting dispatch"}.`
-                          : "No shipment provider is currently selected."}
-                      </div>
-
                       {selectedShipment?.providerSyncError ? (
                         <div className="online-orders-print-notice online-orders-print-notice--error">
                           {selectedShipment.providerSyncError}
                         </div>
                       ) : null}
-
-                      <div className="online-orders-dispatch-actions">
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => void handleRefreshShipment()}
-                          disabled={!canRefreshShipment || pendingAction.length > 0}
-                          data-testid="online-store-refresh-shipment"
-                        >
-                          {pendingAction === "refresh" ? "Refreshing..." : "Refresh Provider Status"}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => void handleCancelShipment()}
-                          disabled={!canCancelShipment || pendingAction.length > 0}
-                          data-testid="online-store-cancel-shipment"
-                        >
-                          {pendingAction === "cancel" ? "Voiding..." : "Void Shipment"}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => void handleRegenerateShipment()}
-                          disabled={!canRegenerateShipment || pendingAction.length > 0}
-                          data-testid="online-store-regenerate-shipment"
-                        >
-                          {pendingAction === "regenerate" ? "Generating..." : "Generate Replacement Shipment"}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => void handlePreparePrint()}
-                          disabled={!canPreparePrint || pendingAction.length > 0}
-                          data-testid="online-store-prepare-print"
-                        >
-                          {pendingAction === "prepare-print"
-                            ? "Preparing..."
-                            : selectedShipment.printPreparedAt
-                              ? "Re-prepare Zebra Print Payload"
-                              : "Prepare Zebra Print Payload"}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => void handlePrintShipment()}
-                          disabled={!canPrintShipment || pendingAction.length > 0}
-                          data-testid="online-store-print"
-                        >
-                          {pendingAction === "print"
-                            ? "Printing..."
-                            : selectedShipment.printedAt
-                              ? "Reprint via Windows Agent"
-                              : "Print via Windows Agent"}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-link"
-                          onClick={() => void handleDispatchShipment()}
-                          disabled={!canDispatchShipment || pendingAction.length > 0}
-                          data-testid="online-store-dispatch"
-                        >
-                          {pendingAction === "dispatch" ? "Dispatching..." : "Mark Dispatched"}
-                        </button>
-                      </div>
 
                       {printNotice ? (
                         <div
@@ -1198,6 +1631,126 @@ export const OnlineStoreOrdersPage = () => {
                       ) : null}
                     </>
                   )}
+
+                  <div className="online-orders-dispatch-action-grid">
+                    {dispatchActionCards.map((card) => {
+                      let actionLabel = card.title;
+                      let actionTestId = "";
+                      let actionHandler: (() => void) | null = null;
+
+                      switch (card.key) {
+                        case "generate":
+                          actionLabel = pendingAction === "generate" ? "Generating..." : "Generate Shipment Label";
+                          actionTestId = "online-store-generate-label";
+                          actionHandler = () => {
+                            void handleGenerateShipment();
+                          };
+                          break;
+                        case "refresh":
+                          actionLabel = pendingAction === "refresh" ? "Refreshing..." : "Refresh Provider Status";
+                          actionTestId = "online-store-refresh-shipment";
+                          actionHandler = () => {
+                            void handleRefreshShipment();
+                          };
+                          break;
+                        case "cancel":
+                          actionLabel = pendingAction === "cancel" ? "Voiding..." : "Void Shipment";
+                          actionTestId = "online-store-cancel-shipment";
+                          actionHandler = () => {
+                            void handleCancelShipment();
+                          };
+                          break;
+                        case "regenerate":
+                          actionLabel = pendingAction === "regenerate" ? "Generating..." : "Generate Replacement Shipment";
+                          actionTestId = "online-store-regenerate-shipment";
+                          actionHandler = () => {
+                            void handleRegenerateShipment();
+                          };
+                          break;
+                        case "prepare-print":
+                          actionLabel = pendingAction === "prepare-print"
+                            ? "Preparing..."
+                            : selectedShipment?.printPreparedAt
+                              ? "Re-prepare Zebra Print Payload"
+                              : "Prepare Zebra Print Payload";
+                          actionTestId = "online-store-prepare-print";
+                          actionHandler = () => {
+                            void handlePreparePrint();
+                          };
+                          break;
+                        case "print":
+                          actionLabel = pendingAction === "print"
+                            ? "Printing..."
+                            : selectedShipment?.printedAt
+                              ? "Reprint via Windows Agent"
+                              : "Print via Windows Agent";
+                          actionTestId = "online-store-print";
+                          actionHandler = () => {
+                            void handlePrintShipment();
+                          };
+                          break;
+                        case "dispatch":
+                          actionLabel = pendingAction === "dispatch" ? "Dispatching..." : "Mark Dispatched";
+                          actionTestId = "online-store-dispatch";
+                          actionHandler = () => {
+                            void handleDispatchShipment();
+                          };
+                          break;
+                        default:
+                          break;
+                      }
+
+                      return (
+                        <article
+                          key={card.key}
+                          className={`online-orders-dispatch-action-card${card.enabled ? "" : " online-orders-dispatch-action-card--disabled"}`}
+                        >
+                          <div className="online-orders-dispatch-action-card__copy">
+                            <div className="online-orders-dispatch-action-card__header">
+                              <strong>{card.title}</strong>
+                              <span className={`status-badge${card.enabled ? " status-ready" : ""}`}>
+                                {card.enabled ? "Available now" : "Blocked"}
+                              </span>
+                            </div>
+                            <p>{card.detail}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className={card.enabled ? "button-link" : "button-link"}
+                            onClick={actionHandler ?? undefined}
+                            disabled={!card.enabled || pendingAction.length > 0}
+                            data-testid={actionTestId}
+                          >
+                            {actionLabel}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  <div className="online-orders-timeline" data-testid="online-store-shipment-timeline">
+                    <div className="online-orders-detail__section-header">
+                      <h3>Recent shipment activity</h3>
+                      {selectedShipment ? <span className="status-badge">{shipmentTimeline.length} events</span> : null}
+                    </div>
+                    {shipmentTimeline.length > 0 ? (
+                      <ol className="online-orders-timeline__list">
+                        {shipmentTimeline.map((entry) => (
+                          <li key={entry.key} className={timelineToneClassName(entry.tone)}>
+                            <div className="online-orders-timeline__meta">
+                              <strong>{entry.label}</strong>
+                              <time dateTime={entry.timestamp}>{formatDateTime(entry.timestamp)}</time>
+                            </div>
+                            <p>{entry.detail}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="online-orders-timeline__empty">
+                        No shipment activity yet. Generate the first shipment label to start the dispatch timeline.
+                      </p>
+                    )}
+                  </div>
                 </section>
               </div>
 
