@@ -1,0 +1,89 @@
+@baseUrl = http://localhost:3100
+@managerRole = MANAGER
+@managerId = online-store-demo-manager
+@orderId = 00000000-0000-4000-8000-000000000000
+@shipmentId = 00000000-0000-4000-8000-000000000000
+
+### List web orders (MANAGER+)
+GET {{baseUrl}}/api/online-store/orders?take=20&skip=0
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Create a web order for dispatch testing (MANAGER+)
+POST {{baseUrl}}/api/online-store/orders
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "orderNumber": "WEB-MANUAL-1001",
+  "sourceChannel": "INTERNAL_MOCK_WEB_STORE",
+  "externalOrderRef": "checkout-session-1001",
+  "customerName": "Jamie Dispatch",
+  "customerEmail": "jamie.dispatch@example.com",
+  "customerPhone": "07123 456789",
+  "shippingRecipientName": "Jamie Dispatch",
+  "shippingAddressLine1": "7 Dispatch Lane",
+  "shippingCity": "Clapham",
+  "shippingRegion": "London",
+  "shippingPostcode": "SW4 0HY",
+  "shippingCountry": "United Kingdom",
+  "shippingPricePence": 495,
+  "items": [
+    {
+      "sku": "WEB-LABEL-DEMO-1",
+      "productName": "Dispatch Test Product",
+      "variantName": "Standard",
+      "quantity": 1,
+      "unitPricePence": 2499
+    }
+  ]
+}
+
+### Get one web order with shipment state (MANAGER+)
+GET {{baseUrl}}/api/online-store/orders/{{orderId}}
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Generate a shipment label for a web order (MANAGER+)
+POST {{baseUrl}}/api/online-store/orders/{{orderId}}/shipments
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "providerKey": "INTERNAL_MOCK_ZPL",
+  "serviceCode": "STANDARD",
+  "serviceName": "Standard Dispatch"
+}
+
+### Get stored shipment label payload (MANAGER+)
+GET {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/label
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Get raw label content for local print-agent testing (MANAGER+)
+GET {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/label/content
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Prepare Windows local-agent print payload (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/prepare-print
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "printerName": "Dispatch Zebra GK420d",
+  "copies": 1
+}
+
+### Record the shipment label as printed (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/record-printed
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Mark the shipment as dispatched (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/dispatch
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}

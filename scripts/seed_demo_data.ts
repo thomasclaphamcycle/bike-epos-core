@@ -166,6 +166,34 @@ type DemoPurchaseOrder = {
   }>;
 };
 
+type DemoWebOrder = {
+  id: string;
+  orderNumber: string;
+  customerId: string | null;
+  status: "READY_FOR_DISPATCH" | "DISPATCHED" | "CANCELLED";
+  fulfillmentMethod: "SHIPPING" | "CLICK_AND_COLLECT";
+  sourceChannel: string;
+  externalOrderRef: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  deliveryInstructions: string | null;
+  shippingRecipientName: string;
+  shippingAddressLine1: string;
+  shippingAddressLine2: string | null;
+  shippingCity: string;
+  shippingRegion: string | null;
+  shippingPostcode: string;
+  shippingCountry: string;
+  shippingPricePence: number;
+  placedAt: string;
+  items: Array<{
+    id: string;
+    sku: string;
+    quantity: number;
+  }>;
+};
+
 const toRelativeIso = (dayOffset: number, hour = 10, minute = 0) => {
   const date = new Date();
   date.setUTCHours(hour, minute, 0, 0);
@@ -644,6 +672,72 @@ const DEMO_SALES: DemoSale[] = [
     items: [
       { id: "32000000-0000-4000-8000-000000000001", sku: "DEMO-ACC-HELMET", quantity: 1 },
       { id: "32000000-0000-4000-8000-000000000002", sku: "DEMO-ACC-LUBE", quantity: 1 },
+    ],
+  },
+];
+
+const DEMO_WEB_ORDERS: DemoWebOrder[] = [
+  {
+    id: "36000000-0000-4000-8000-000000000001",
+    orderNumber: "WEB-DEMO-1001",
+    customerId: DEMO_CUSTOMERS[0].id,
+    status: "READY_FOR_DISPATCH",
+    fulfillmentMethod: "SHIPPING",
+    sourceChannel: "INTERNAL_MOCK_WEB_STORE",
+    externalOrderRef: "checkout-session-demo-1001",
+    customerName: DEMO_CUSTOMERS[0].name,
+    customerEmail: DEMO_CUSTOMERS[0].email,
+    customerPhone: DEMO_CUSTOMERS[0].phone,
+    deliveryInstructions: "Leave in the signed-for parcel cage if dispatch is after collection.",
+    shippingRecipientName: DEMO_CUSTOMERS[0].name,
+    shippingAddressLine1: "7 Courier Yard",
+    shippingAddressLine2: "Unit B",
+    shippingCity: "Clapham",
+    shippingRegion: "London",
+    shippingPostcode: "SW4 0HY",
+    shippingCountry: "United Kingdom",
+    shippingPricePence: 495,
+    placedAt: toRelativeIso(-1, 13, 15),
+    items: [
+      {
+        id: "36100000-0000-4000-8000-000000000001",
+        sku: "DEMO-ACC-PUMP",
+        quantity: 1,
+      },
+      {
+        id: "36100000-0000-4000-8000-000000000002",
+        sku: "DEMO-PART-TUBE700",
+        quantity: 2,
+      },
+    ],
+  },
+  {
+    id: "36000000-0000-4000-8000-000000000002",
+    orderNumber: "WEB-DEMO-1002",
+    customerId: DEMO_CUSTOMERS[1].id,
+    status: "READY_FOR_DISPATCH",
+    fulfillmentMethod: "CLICK_AND_COLLECT",
+    sourceChannel: "INTERNAL_MOCK_WEB_STORE",
+    externalOrderRef: "checkout-session-demo-1002",
+    customerName: DEMO_CUSTOMERS[1].name,
+    customerEmail: DEMO_CUSTOMERS[1].email,
+    customerPhone: DEMO_CUSTOMERS[1].phone,
+    deliveryInstructions: "Customer will collect after workshop appointment.",
+    shippingRecipientName: DEMO_CUSTOMERS[1].name,
+    shippingAddressLine1: "1 Demo High Street",
+    shippingAddressLine2: "",
+    shippingCity: "Clapham",
+    shippingRegion: "London",
+    shippingPostcode: "SW4 0HY",
+    shippingCountry: "United Kingdom",
+    shippingPricePence: 0,
+    placedAt: toRelativeIso(0, 9, 45),
+    items: [
+      {
+        id: "36100000-0000-4000-8000-000000000003",
+        sku: "DEMO-ACC-HELMET",
+        quantity: 1,
+      },
     ],
   },
 ];
@@ -1283,6 +1377,108 @@ const seedDemoSales = async (
   }
 };
 
+const seedDemoWebOrders = async (
+  variantBySku: Map<string, { id: string; productId: string; retailPricePence: number }>,
+) => {
+  for (const order of DEMO_WEB_ORDERS) {
+    const resolvedItems = order.items.map((item) => {
+      const variant = variantBySku.get(item.sku);
+      if (!variant) {
+        throw new Error(`Missing seeded variant for sku ${item.sku}`);
+      }
+
+      const product = DEMO_PRODUCTS.find((candidate) => candidate.sku === item.sku);
+      if (!product) {
+        throw new Error(`Missing seeded product definition for sku ${item.sku}`);
+      }
+
+      return {
+        id: item.id,
+        variantId: variant.id,
+        sku: item.sku,
+        productName: product.name,
+        variantName: product.name,
+        quantity: item.quantity,
+        unitPricePence: variant.retailPricePence,
+        lineTotalPence: variant.retailPricePence * item.quantity,
+      };
+    });
+
+    const subtotalPence = resolvedItems.reduce((sum, item) => sum + item.lineTotalPence, 0);
+
+    await prisma.webOrder.upsert({
+      where: { id: order.id },
+      update: {
+        orderNumber: order.orderNumber,
+        sourceChannel: order.sourceChannel,
+        externalOrderRef: order.externalOrderRef,
+        customerId: order.customerId,
+        status: order.status,
+        fulfillmentMethod: order.fulfillmentMethod,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        customerPhone: order.customerPhone,
+        deliveryInstructions: order.deliveryInstructions,
+        shippingRecipientName: order.shippingRecipientName,
+        shippingAddressLine1: order.shippingAddressLine1,
+        shippingAddressLine2: order.shippingAddressLine2,
+        shippingCity: order.shippingCity,
+        shippingRegion: order.shippingRegion,
+        shippingPostcode: order.shippingPostcode,
+        shippingCountry: order.shippingCountry,
+        subtotalPence,
+        shippingPricePence: order.shippingPricePence,
+        totalPence: subtotalPence + order.shippingPricePence,
+        placedAt: new Date(order.placedAt),
+      },
+      create: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        sourceChannel: order.sourceChannel,
+        externalOrderRef: order.externalOrderRef,
+        customerId: order.customerId,
+        status: order.status,
+        fulfillmentMethod: order.fulfillmentMethod,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        customerPhone: order.customerPhone,
+        deliveryInstructions: order.deliveryInstructions,
+        shippingRecipientName: order.shippingRecipientName,
+        shippingAddressLine1: order.shippingAddressLine1,
+        shippingAddressLine2: order.shippingAddressLine2,
+        shippingCity: order.shippingCity,
+        shippingRegion: order.shippingRegion,
+        shippingPostcode: order.shippingPostcode,
+        shippingCountry: order.shippingCountry,
+        subtotalPence,
+        shippingPricePence: order.shippingPricePence,
+        totalPence: subtotalPence + order.shippingPricePence,
+        placedAt: new Date(order.placedAt),
+      },
+    });
+
+    await prisma.webOrderShipment.deleteMany({
+      where: { webOrderId: order.id },
+    });
+    await prisma.webOrderItem.deleteMany({
+      where: { webOrderId: order.id },
+    });
+    await prisma.webOrderItem.createMany({
+      data: resolvedItems.map((item) => ({
+        id: item.id,
+        webOrderId: order.id,
+        variantId: item.variantId,
+        sku: item.sku,
+        productName: item.productName,
+        variantName: item.variantName,
+        quantity: item.quantity,
+        unitPricePence: item.unitPricePence,
+        lineTotalPence: item.lineTotalPence,
+      })),
+    });
+  }
+};
+
 const run = async () => {
   await removeLegacyDemoUsers();
   const variantBySku = await seedDemoProducts();
@@ -1293,6 +1489,7 @@ const run = async () => {
   await seedDemoSuppliers();
   await seedDemoPurchaseOrders(variantBySku);
   await seedDemoSales(variantBySku);
+  await seedDemoWebOrders(variantBySku);
   await createThomasAdmin();
 
   console.log("Demo seed ready:");
@@ -1302,6 +1499,7 @@ const run = async () => {
   console.log(`- ${DEMO_WORKSHOP_JOBS.length} workshop jobs`);
   console.log(`- ${DEMO_WORKSHOP_SERVICE_TEMPLATES.length} workshop service templates`);
   console.log(`- ${DEMO_SUPPLIERS.length} supplier and ${DEMO_PURCHASE_ORDERS.length} open purchase order`);
+  console.log(`- ${DEMO_WEB_ORDERS.length} demo web orders for shipment-label dispatch testing`);
   console.log("Existing local staff accounts are preserved and Thomas is upserted idempotently.");
 };
 

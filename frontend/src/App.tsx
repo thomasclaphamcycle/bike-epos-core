@@ -42,6 +42,7 @@ import {
   ManagementDashboardPage,
   NavigationPlaceholderPage,
   OnboardingPage,
+  OnlineStoreOrdersPage,
   OperationsExceptionsPage,
   OperationsSummaryPage,
   OpsHealthPage,
@@ -600,16 +601,7 @@ const AuthedApp = () => (
         <Route path="/rental/history" element={managerOnly(<BikeHirePage />)} />
         <Route
           path="/online-store/orders"
-          element={managerOnly(
-            <NavigationPlaceholderPage
-              title="Online Store · Orders"
-              description="Online order intake and review will live here when the customer-facing commerce flow moves beyond the current brochure-site foundation."
-              links={[
-                { label: "Products", to: "/online-store/products" },
-                { label: "Website Builder", to: "/online-store/website-builder" },
-              ]}
-            />,
-          )}
+          element={managerOnly(<OnlineStoreOrdersPage />)}
         />
         <Route
           path="/online-store/products"

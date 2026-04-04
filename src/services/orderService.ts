@@ -1,0 +1,1197 @@
+import { Prisma, WebOrderFulfillmentMethod, WebOrderShipmentStatus, WebOrderStatus } from "@prisma/client";
+import { prisma } from "../lib/prisma";
+import { logOperationalEvent } from "../lib/operationalLogger";
+import type { AuditActor } from "./auditService";
+import { createAuditEventTx } from "./auditService";
+import { listStoreInfoSettings } from "./configurationService";
+import {
+  DEFAULT_SHIPPING_PROVIDER_KEY,
+  DEFAULT_SHIPPING_SERVICE_CODE,
+  DEFAULT_SHIPPING_SERVICE_NAME,
+  getShippingLabelProviderOrThrow,
+  listSupportedShippingProviders,
+} from "./shipping/providerRegistry";
+import type {
+  ShipmentPrintRequest,
+  ShippingLabelDocument,
+  ShippingPartyAddress,
+  ShippingPrintPreparationInput,
+} from "./shipping/contracts";
+import { HttpError } from "../utils/http";
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 200;
+const ACTIVE_SHIPMENT_STATUSES: WebOrderShipmentStatus[] = ["LABEL_READY", "PRINT_PREPARED", "PRINTED"];
+
+const webOrderItemSelect = Prisma.validator<Prisma.WebOrderItemSelect>()({
+  id: true,
+  variantId: true,
+  sku: true,
+  productName: true,
+  variantName: true,
+  quantity: true,
+  unitPricePence: true,
+  lineTotalPence: true,
+  createdAt: true,
+});
+
+const webOrderShipmentSelect = Prisma.validator<Prisma.WebOrderShipmentSelect>()({
+  id: true,
+  shipmentNumber: true,
+  status: true,
+  providerKey: true,
+  providerDisplayName: true,
+  serviceCode: true,
+  serviceName: true,
+  trackingNumber: true,
+  labelFormat: true,
+  labelStorageKind: true,
+  labelMimeType: true,
+  labelFileName: true,
+  providerReference: true,
+  providerMetadata: true,
+  labelGeneratedAt: true,
+  printPreparedAt: true,
+  printedAt: true,
+  dispatchedAt: true,
+  reprintCount: true,
+  createdAt: true,
+  updatedAt: true,
+  createdByStaffId: true,
+});
+
+const webOrderListSelect = Prisma.validator<Prisma.WebOrderSelect>()({
+  id: true,
+  orderNumber: true,
+  sourceChannel: true,
+  externalOrderRef: true,
+  status: true,
+  fulfillmentMethod: true,
+  customerId: true,
+  customerName: true,
+  customerEmail: true,
+  customerPhone: true,
+  shippingRecipientName: true,
+  shippingPostcode: true,
+  shippingCountry: true,
+  subtotalPence: true,
+  shippingPricePence: true,
+  totalPence: true,
+  placedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  items: {
+    select: {
+      id: true,
+      quantity: true,
+      productName: true,
+      variantName: true,
+      sku: true,
+    },
+    orderBy: [{ createdAt: "asc" }],
+  },
+  shipments: {
+    select: webOrderShipmentSelect,
+    orderBy: [{ shipmentNumber: "desc" }],
+    take: 1,
+  },
+});
+
+const webOrderDetailSelect = Prisma.validator<Prisma.WebOrderSelect>()({
+  id: true,
+  orderNumber: true,
+  sourceChannel: true,
+  externalOrderRef: true,
+  status: true,
+  fulfillmentMethod: true,
+  customerId: true,
+  customerName: true,
+  customerEmail: true,
+  customerPhone: true,
+  deliveryInstructions: true,
+  shippingRecipientName: true,
+  shippingAddressLine1: true,
+  shippingAddressLine2: true,
+  shippingCity: true,
+  shippingRegion: true,
+  shippingPostcode: true,
+  shippingCountry: true,
+  subtotalPence: true,
+  shippingPricePence: true,
+  totalPence: true,
+  placedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  items: {
+    select: webOrderItemSelect,
+    orderBy: [{ createdAt: "asc" }],
+  },
+  shipments: {
+    select: webOrderShipmentSelect,
+    orderBy: [{ shipmentNumber: "desc" }],
+  },
+});
+
+const webOrderShipmentWithOrderAndContentSelect = Prisma.validator<Prisma.WebOrderShipmentSelect>()({
+  ...webOrderShipmentSelect,
+  labelContent: true,
+  webOrder: {
+    select: webOrderDetailSelect,
+  },
+});
+
+type WebOrderListRecord = Prisma.WebOrderGetPayload<{ select: typeof webOrderListSelect }>;
+type WebOrderDetailRecord = Prisma.WebOrderGetPayload<{ select: typeof webOrderDetailSelect }>;
+type WebOrderShipmentRecord = Prisma.WebOrderShipmentGetPayload<{ select: typeof webOrderShipmentSelect }>;
+
+export type WebOrderItemResponse = {
+  id: string;
+  variantId: string | null;
+  sku: string | null;
+  productName: string;
+  variantName: string | null;
+  quantity: number;
+  unitPricePence: number;
+  lineTotalPence: number;
+  createdAt: Date;
+};
+
+export type WebOrderShipmentResponse = {
+  id: string;
+  shipmentNumber: number;
+  status: WebOrderShipmentStatus;
+  providerKey: string;
+  providerDisplayName: string;
+  serviceCode: string;
+  serviceName: string;
+  trackingNumber: string;
+  labelFormat: "ZPL";
+  labelStorageKind: "INLINE_TEXT";
+  labelMimeType: string;
+  labelFileName: string;
+  providerReference: string | null;
+  providerMetadata: Prisma.JsonValue | null;
+  labelGeneratedAt: Date;
+  printPreparedAt: Date | null;
+  printedAt: Date | null;
+  dispatchedAt: Date | null;
+  reprintCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  createdByStaffId: string | null;
+  labelPayloadPath: string;
+  labelContentPath: string;
+  preparePrintPath: string;
+  recordPrintedPath: string;
+  dispatchPath: string;
+};
+
+export type WebOrderSummaryResponse = {
+  id: string;
+  orderNumber: string;
+  sourceChannel: string;
+  externalOrderRef: string | null;
+  status: WebOrderStatus;
+  fulfillmentMethod: WebOrderFulfillmentMethod;
+  customerId: string | null;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  shippingRecipientName: string;
+  shippingPostcode: string;
+  shippingCountry: string;
+  subtotalPence: number;
+  shippingPricePence: number;
+  totalPence: number;
+  placedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  itemCount: number;
+  itemQuantity: number;
+  latestShipment: WebOrderShipmentResponse | null;
+};
+
+export type WebOrderDetailResponse = {
+  id: string;
+  orderNumber: string;
+  sourceChannel: string;
+  externalOrderRef: string | null;
+  status: WebOrderStatus;
+  fulfillmentMethod: WebOrderFulfillmentMethod;
+  customerId: string | null;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  deliveryInstructions: string | null;
+  shippingRecipientName: string;
+  shippingAddressLine1: string;
+  shippingAddressLine2: string | null;
+  shippingCity: string;
+  shippingRegion: string | null;
+  shippingPostcode: string;
+  shippingCountry: string;
+  subtotalPence: number;
+  shippingPricePence: number;
+  totalPence: number;
+  placedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  items: WebOrderItemResponse[];
+  shipments: WebOrderShipmentResponse[];
+};
+
+export type SupportedShippingProviderResponse = ReturnType<typeof listSupportedShippingProviders>[number];
+
+export type CreateWebOrderInput = {
+  orderNumber?: string;
+  sourceChannel?: string;
+  externalOrderRef?: string;
+  fulfillmentMethod?: WebOrderFulfillmentMethod;
+  customerId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  deliveryInstructions?: string;
+  shippingRecipientName?: string;
+  shippingAddressLine1?: string;
+  shippingAddressLine2?: string;
+  shippingCity?: string;
+  shippingRegion?: string;
+  shippingPostcode?: string;
+  shippingCountry?: string;
+  shippingPricePence?: number;
+  placedAt?: string;
+  items?: Array<{
+    variantId?: string;
+    sku?: string;
+    productName?: string;
+    variantName?: string;
+    quantity?: number;
+    unitPricePence?: number;
+  }>;
+};
+
+export type CreateShipmentLabelInput = {
+  providerKey?: string;
+  serviceCode?: string;
+  serviceName?: string;
+};
+
+const normalizeOptionalText = (value: string | undefined | null) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const normalizeRequiredText = (value: string | undefined | null, field: string, maxLength = 160) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    throw new HttpError(400, `${field} is required`, "INVALID_WEB_ORDER");
+  }
+  if (normalized.length > maxLength) {
+    throw new HttpError(400, `${field} must be ${maxLength} characters or fewer`, "INVALID_WEB_ORDER");
+  }
+  return normalized;
+};
+
+const normalizeEmail = (value: string | undefined | null, field: string) => {
+  const normalized = normalizeRequiredText(value, field, 160).toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalized)) {
+    throw new HttpError(400, `${field} must be a valid email address`, "INVALID_WEB_ORDER");
+  }
+  return normalized;
+};
+
+const normalizeOptionalLimitedText = (
+  value: string | undefined | null,
+  field: string,
+  maxLength = 160,
+) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.length > maxLength) {
+    throw new HttpError(400, `${field} must be ${maxLength} characters or fewer`, "INVALID_WEB_ORDER");
+  }
+  return normalized;
+};
+
+const parseOptionalPence = (value: number | undefined, field: string, fallback = 0) => {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (!Number.isInteger(value) || value < 0) {
+    throw new HttpError(400, `${field} must be a non-negative integer`, "INVALID_WEB_ORDER");
+  }
+  return value;
+};
+
+const parsePositiveInt = (value: number | undefined, field: string) => {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new HttpError(400, `${field} must be a positive integer`, "INVALID_WEB_ORDER");
+  }
+  return value;
+};
+
+const parseOptionalDate = (value: string | undefined, field: string) => {
+  if (value === undefined) {
+    return new Date();
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new HttpError(400, `${field} must be a valid ISO date string`, "INVALID_WEB_ORDER");
+  }
+  return parsed;
+};
+
+const parseUuidOrUndefined = (value: string | undefined, field: string) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return undefined;
+  }
+  if (!UUID_REGEX.test(normalized)) {
+    throw new HttpError(400, `${field} must be a valid UUID`, "INVALID_WEB_ORDER");
+  }
+  return normalized;
+};
+
+const parseEntityIdOrUndefined = (value: string | undefined, field: string) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized.length > 64) {
+    throw new HttpError(400, `${field} must be 64 characters or fewer`, "INVALID_WEB_ORDER");
+  }
+  return normalized;
+};
+
+const parseRequiredUuid = (value: string, field: string, code: string) => {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized || !UUID_REGEX.test(normalized)) {
+    throw new HttpError(400, `${field} must be a valid UUID`, code);
+  }
+  return normalized;
+};
+
+const parsePageSize = (value: number | undefined) => {
+  if (value === undefined) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > MAX_PAGE_SIZE) {
+    throw new HttpError(400, `take must be an integer between 1 and ${MAX_PAGE_SIZE}`, "INVALID_FILTER");
+  }
+  return value;
+};
+
+const parseSkip = (value: number | undefined) => {
+  if (value === undefined) {
+    return 0;
+  }
+  if (!Number.isInteger(value) || value < 0) {
+    throw new HttpError(400, "skip must be a non-negative integer", "INVALID_FILTER");
+  }
+  return value;
+};
+
+const isShipmentPrintable = (status: WebOrderShipmentStatus) => status !== "VOIDED";
+
+const buildShipmentApiPath = (shipmentId: string) => `/api/online-store/shipments/${shipmentId}`;
+
+const toShipmentResponse = (shipment: WebOrderShipmentRecord): WebOrderShipmentResponse => ({
+  id: shipment.id,
+  shipmentNumber: shipment.shipmentNumber,
+  status: shipment.status,
+  providerKey: shipment.providerKey,
+  providerDisplayName: shipment.providerDisplayName,
+  serviceCode: shipment.serviceCode,
+  serviceName: shipment.serviceName,
+  trackingNumber: shipment.trackingNumber,
+  labelFormat: shipment.labelFormat,
+  labelStorageKind: shipment.labelStorageKind,
+  labelMimeType: shipment.labelMimeType,
+  labelFileName: shipment.labelFileName,
+  providerReference: shipment.providerReference ?? null,
+  providerMetadata: shipment.providerMetadata ?? null,
+  labelGeneratedAt: shipment.labelGeneratedAt,
+  printPreparedAt: shipment.printPreparedAt ?? null,
+  printedAt: shipment.printedAt ?? null,
+  dispatchedAt: shipment.dispatchedAt ?? null,
+  reprintCount: shipment.reprintCount,
+  createdAt: shipment.createdAt,
+  updatedAt: shipment.updatedAt,
+  createdByStaffId: shipment.createdByStaffId ?? null,
+  labelPayloadPath: `${buildShipmentApiPath(shipment.id)}/label`,
+  labelContentPath: `${buildShipmentApiPath(shipment.id)}/label/content`,
+  preparePrintPath: `${buildShipmentApiPath(shipment.id)}/prepare-print`,
+  recordPrintedPath: `${buildShipmentApiPath(shipment.id)}/record-printed`,
+  dispatchPath: `${buildShipmentApiPath(shipment.id)}/dispatch`,
+});
+
+const toItemResponse = (item: Prisma.WebOrderItemGetPayload<{ select: typeof webOrderItemSelect }>): WebOrderItemResponse => ({
+  id: item.id,
+  variantId: item.variantId ?? null,
+  sku: item.sku ?? null,
+  productName: item.productName,
+  variantName: item.variantName ?? null,
+  quantity: item.quantity,
+  unitPricePence: item.unitPricePence,
+  lineTotalPence: item.lineTotalPence,
+  createdAt: item.createdAt,
+});
+
+const toOrderSummary = (order: WebOrderListRecord): WebOrderSummaryResponse => ({
+  id: order.id,
+  orderNumber: order.orderNumber,
+  sourceChannel: order.sourceChannel,
+  externalOrderRef: order.externalOrderRef ?? null,
+  status: order.status,
+  fulfillmentMethod: order.fulfillmentMethod,
+  customerId: order.customerId ?? null,
+  customerName: order.customerName,
+  customerEmail: order.customerEmail,
+  customerPhone: order.customerPhone ?? null,
+  shippingRecipientName: order.shippingRecipientName,
+  shippingPostcode: order.shippingPostcode,
+  shippingCountry: order.shippingCountry,
+  subtotalPence: order.subtotalPence,
+  shippingPricePence: order.shippingPricePence,
+  totalPence: order.totalPence,
+  placedAt: order.placedAt,
+  createdAt: order.createdAt,
+  updatedAt: order.updatedAt,
+  itemCount: order.items.length,
+  itemQuantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
+  latestShipment: order.shipments[0] ? toShipmentResponse(order.shipments[0]) : null,
+});
+
+const toOrderDetail = (order: WebOrderDetailRecord): WebOrderDetailResponse => ({
+  id: order.id,
+  orderNumber: order.orderNumber,
+  sourceChannel: order.sourceChannel,
+  externalOrderRef: order.externalOrderRef ?? null,
+  status: order.status,
+  fulfillmentMethod: order.fulfillmentMethod,
+  customerId: order.customerId ?? null,
+  customerName: order.customerName,
+  customerEmail: order.customerEmail,
+  customerPhone: order.customerPhone ?? null,
+  deliveryInstructions: order.deliveryInstructions ?? null,
+  shippingRecipientName: order.shippingRecipientName,
+  shippingAddressLine1: order.shippingAddressLine1,
+  shippingAddressLine2: order.shippingAddressLine2 ?? null,
+  shippingCity: order.shippingCity,
+  shippingRegion: order.shippingRegion ?? null,
+  shippingPostcode: order.shippingPostcode,
+  shippingCountry: order.shippingCountry,
+  subtotalPence: order.subtotalPence,
+  shippingPricePence: order.shippingPricePence,
+  totalPence: order.totalPence,
+  placedAt: order.placedAt,
+  createdAt: order.createdAt,
+  updatedAt: order.updatedAt,
+  items: order.items.map(toItemResponse),
+  shipments: order.shipments.map(toShipmentResponse),
+});
+
+const buildDefaultOrderNumber = () => `WEB-${Date.now()}`;
+
+const buildShipFromAddress = async (): Promise<ShippingPartyAddress> => {
+  const store = await listStoreInfoSettings();
+  return {
+    name: store.businessName || store.name || "CorePOS Store",
+    addressLine1: store.addressLine1 || "Store address pending",
+    addressLine2: store.addressLine2 || null,
+    city: store.city || "Local",
+    region: store.region || null,
+    postcode: store.postcode || "UNKNOWN",
+    country: store.country || "United Kingdom",
+  };
+};
+
+const resolveVariantsById = async (
+  tx: Prisma.TransactionClient,
+  inputs: Array<{ variantId?: string }>,
+) => {
+  const variantIds = [...new Set(inputs.map((item) => parseEntityIdOrUndefined(item.variantId, "items.variantId")).filter(Boolean))] as string[];
+  if (variantIds.length === 0) {
+    return new Map<string, { sku: string | null; variantName: string; productName: string }>();
+  }
+
+  const variants = await tx.variant.findMany({
+    where: { id: { in: variantIds } },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      product: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (variants.length !== variantIds.length) {
+    throw new HttpError(404, "One or more variants were not found", "VARIANT_NOT_FOUND");
+  }
+
+  return new Map(variants.map((variant) => [variant.id, {
+    sku: variant.sku ?? null,
+    variantName: variant.name,
+    productName: variant.product.name,
+  }]));
+};
+
+const buildPrintRequest = (
+  order: Pick<WebOrderDetailResponse, "id" | "orderNumber" | "sourceChannel">,
+  shipment: WebOrderShipmentResponse,
+  document: ShippingLabelDocument,
+  input: ShippingPrintPreparationInput,
+): ShipmentPrintRequest => ({
+  version: 1,
+  intentType: "SHIPMENT_LABEL_PRINT",
+  shipmentId: shipment.id,
+  orderId: order.id,
+  orderNumber: order.orderNumber,
+  trackingNumber: shipment.trackingNumber,
+  printer: {
+    transport: "WINDOWS_LOCAL_AGENT",
+    printerFamily: "ZEBRA_LABEL",
+    printerModelHint: "GK420D_OR_COMPATIBLE",
+    printerName: normalizeOptionalText(input.printerName ?? null) ?? null,
+    copies: Number.isInteger(input.copies) && input.copies && input.copies > 0 ? input.copies : 1,
+  },
+  document,
+  metadata: {
+    providerKey: shipment.providerKey,
+    providerDisplayName: shipment.providerDisplayName,
+    serviceCode: shipment.serviceCode,
+    serviceName: shipment.serviceName,
+    sourceChannel: order.sourceChannel,
+  },
+});
+
+const assertShipmentActionable = (shipment: { status: WebOrderShipmentStatus }) => {
+  if (!isShipmentPrintable(shipment.status)) {
+    throw new HttpError(409, "This shipment is voided and can no longer be used", "SHIPMENT_VOIDED");
+  }
+};
+
+const getOrderOrThrow = async (orderId: string) => {
+  const order = await prisma.webOrder.findUnique({
+    where: { id: parseRequiredUuid(orderId, "orderId", "INVALID_WEB_ORDER_ID") },
+    select: webOrderDetailSelect,
+  });
+
+  if (!order) {
+    throw new HttpError(404, "Web order not found", "WEB_ORDER_NOT_FOUND");
+  }
+
+  return order;
+};
+
+const getShipmentWithOrderOrThrow = async (shipmentId: string) => {
+  const normalizedId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
+  const shipment = await prisma.webOrderShipment.findUnique({
+    where: { id: normalizedId },
+    select: webOrderShipmentWithOrderAndContentSelect,
+  });
+
+  if (!shipment) {
+    throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
+  }
+
+  return shipment;
+};
+
+export const listOnlineStoreOrders = async (input: {
+  q?: string;
+  status?: WebOrderStatus;
+  take?: number;
+  skip?: number;
+} = {}) => {
+  const take = parsePageSize(input.take);
+  const skip = parseSkip(input.skip);
+  const q = normalizeOptionalText(input.q);
+
+  const where: Prisma.WebOrderWhereInput = {};
+
+  if (input.status) {
+    where.status = input.status;
+  }
+
+  if (q) {
+    where.OR = [
+      { orderNumber: { contains: q, mode: "insensitive" } },
+      { customerName: { contains: q, mode: "insensitive" } },
+      { customerEmail: { contains: q, mode: "insensitive" } },
+      { externalOrderRef: { contains: q, mode: "insensitive" } },
+      {
+        shipments: {
+          some: {
+            trackingNumber: { contains: q, mode: "insensitive" },
+          },
+        },
+      },
+    ];
+  }
+
+  const [orders, total] = await Promise.all([
+    prisma.webOrder.findMany({
+      where,
+      select: webOrderListSelect,
+      orderBy: [{ placedAt: "desc" }, { createdAt: "desc" }],
+      take,
+      skip,
+    }),
+    prisma.webOrder.count({ where }),
+  ]);
+
+  const mappedOrders = orders.map(toOrderSummary);
+
+  return {
+    filters: {
+      q: q ?? null,
+      status: input.status ?? null,
+      take,
+      skip,
+    },
+    summary: {
+      total,
+      readyForDispatchCount: mappedOrders.filter((order) => order.status === "READY_FOR_DISPATCH").length,
+      labelReadyCount: mappedOrders.filter((order) => order.latestShipment?.status === "LABEL_READY").length,
+      dispatchedCount: mappedOrders.filter((order) => order.status === "DISPATCHED").length,
+    },
+    supportedProviders: listSupportedShippingProviders(),
+    orders: mappedOrders,
+  };
+};
+
+export const getOnlineStoreOrderDetail = async (orderId: string) => {
+  const order = await getOrderOrThrow(orderId);
+  return {
+    order: toOrderDetail(order),
+    supportedProviders: listSupportedShippingProviders(),
+  };
+};
+
+export const createOnlineStoreOrder = async (input: CreateWebOrderInput, auditActor?: AuditActor) => {
+  const items = Array.isArray(input.items) ? input.items : [];
+  if (items.length === 0) {
+    throw new HttpError(400, "items must include at least one line", "INVALID_WEB_ORDER");
+  }
+
+  const fulfillmentMethod = input.fulfillmentMethod ?? "SHIPPING";
+  if (fulfillmentMethod !== "SHIPPING" && fulfillmentMethod !== "CLICK_AND_COLLECT") {
+    throw new HttpError(400, "fulfillmentMethod must be SHIPPING or CLICK_AND_COLLECT", "INVALID_WEB_ORDER");
+  }
+
+  const order = await prisma.$transaction(async (tx) => {
+    const customerId = parseUuidOrUndefined(input.customerId, "customerId") ?? null;
+    if (customerId) {
+      const customer = await tx.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+      if (!customer) {
+        throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+      }
+    }
+
+    const variantsById = await resolveVariantsById(tx, items);
+    const normalizedItems = items.map((item, index) => {
+      const variantId = parseEntityIdOrUndefined(item.variantId, `items[${index}].variantId`);
+      const variantRecord = variantId ? variantsById.get(variantId) : undefined;
+      const quantity = parsePositiveInt(item.quantity, `items[${index}].quantity`);
+      const unitPricePence = parseOptionalPence(item.unitPricePence, `items[${index}].unitPricePence`);
+      const productName = normalizeRequiredText(
+        item.productName ?? variantRecord?.productName,
+        `items[${index}].productName`,
+      );
+      const variantName = normalizeOptionalLimitedText(
+        item.variantName ?? variantRecord?.variantName,
+        `items[${index}].variantName`,
+      );
+      const sku = normalizeOptionalLimitedText(item.sku ?? variantRecord?.sku ?? null, `items[${index}].sku`, 64);
+
+      return {
+        variantId: variantId ?? null,
+        sku,
+        productName,
+        variantName,
+        quantity,
+        unitPricePence,
+        lineTotalPence: quantity * unitPricePence,
+      };
+    });
+
+    const subtotalPence = normalizedItems.reduce((sum, item) => sum + item.lineTotalPence, 0);
+    const shippingPricePence = parseOptionalPence(input.shippingPricePence, "shippingPricePence", 0);
+    const orderNumber = normalizeOptionalLimitedText(input.orderNumber, "orderNumber", 64) ?? buildDefaultOrderNumber();
+    const customerName = normalizeRequiredText(input.customerName, "customerName");
+    const customerEmail = normalizeEmail(input.customerEmail, "customerEmail");
+    const customerPhone = normalizeOptionalLimitedText(input.customerPhone, "customerPhone", 64);
+    const deliveryInstructions = normalizeOptionalLimitedText(input.deliveryInstructions, "deliveryInstructions", 400);
+    const shippingRecipientName = normalizeRequiredText(
+      input.shippingRecipientName ?? customerName,
+      "shippingRecipientName",
+    );
+    const shippingAddressLine1 = normalizeRequiredText(input.shippingAddressLine1, "shippingAddressLine1");
+    const shippingAddressLine2 = normalizeOptionalLimitedText(input.shippingAddressLine2, "shippingAddressLine2");
+    const shippingCity = normalizeRequiredText(input.shippingCity, "shippingCity", 120);
+    const shippingRegion = normalizeOptionalLimitedText(input.shippingRegion, "shippingRegion", 120);
+    const shippingPostcode = normalizeRequiredText(input.shippingPostcode, "shippingPostcode", 32).toUpperCase();
+    const shippingCountry = normalizeRequiredText(input.shippingCountry, "shippingCountry", 80);
+    const sourceChannel = normalizeOptionalLimitedText(input.sourceChannel, "sourceChannel", 64) ?? "INTERNAL_MOCK_WEB_STORE";
+    const externalOrderRef = normalizeOptionalLimitedText(input.externalOrderRef, "externalOrderRef", 80);
+    const placedAt = parseOptionalDate(input.placedAt, "placedAt");
+
+    const created = await tx.webOrder.create({
+      data: {
+        orderNumber,
+        sourceChannel,
+        externalOrderRef,
+        status: "READY_FOR_DISPATCH",
+        fulfillmentMethod,
+        customerId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        deliveryInstructions,
+        shippingRecipientName,
+        shippingAddressLine1,
+        shippingAddressLine2,
+        shippingCity,
+        shippingRegion,
+        shippingPostcode,
+        shippingCountry,
+        subtotalPence,
+        shippingPricePence,
+        totalPence: subtotalPence + shippingPricePence,
+        placedAt,
+        createdByStaffId: auditActor?.actorId ?? null,
+        items: {
+          create: normalizedItems,
+        },
+      },
+      select: webOrderDetailSelect,
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_CREATED",
+        entityType: "WEB_ORDER",
+        entityId: created.id,
+        metadata: {
+          orderNumber: created.orderNumber,
+          sourceChannel: created.sourceChannel,
+          fulfillmentMethod: created.fulfillmentMethod,
+          itemCount: created.items.length,
+          totalPence: created.totalPence,
+        },
+      },
+      auditActor,
+    );
+
+    return created;
+  });
+
+  logOperationalEvent("online_store.order.created", {
+    entityId: order.id,
+    orderNumber: order.orderNumber,
+    fulfillmentMethod: order.fulfillmentMethod,
+  });
+
+  return { order: toOrderDetail(order) };
+};
+
+export const createShipmentLabelForOrder = async (
+  orderId: string,
+  input: CreateShipmentLabelInput = {},
+  auditActor?: AuditActor,
+) => {
+  const normalizedOrderId = parseRequiredUuid(orderId, "orderId", "INVALID_WEB_ORDER_ID");
+  const providerKey = normalizeOptionalText(input.providerKey) ?? DEFAULT_SHIPPING_PROVIDER_KEY;
+  const provider = getShippingLabelProviderOrThrow(providerKey);
+  const serviceCode = normalizeOptionalLimitedText(input.serviceCode, "serviceCode", 64) ?? DEFAULT_SHIPPING_SERVICE_CODE;
+  const serviceName = normalizeOptionalLimitedText(input.serviceName, "serviceName", 120) ?? DEFAULT_SHIPPING_SERVICE_NAME;
+  const shipFrom = await buildShipFromAddress();
+
+  const shipment = await prisma.$transaction(async (tx) => {
+    const order = await tx.webOrder.findUnique({
+      where: { id: normalizedOrderId },
+      select: webOrderDetailSelect,
+    });
+
+    if (!order) {
+      throw new HttpError(404, "Web order not found", "WEB_ORDER_NOT_FOUND");
+    }
+    if (order.fulfillmentMethod !== "SHIPPING") {
+      throw new HttpError(409, "Only shipping web orders can generate shipment labels", "WEB_ORDER_NOT_SHIPPING");
+    }
+    if (order.status === "CANCELLED") {
+      throw new HttpError(409, "Cancelled web orders cannot generate shipment labels", "WEB_ORDER_CANCELLED");
+    }
+    if (order.status === "DISPATCHED") {
+      throw new HttpError(409, "Dispatched web orders cannot generate another active shipment", "WEB_ORDER_ALREADY_DISPATCHED");
+    }
+
+    const activeShipment = await tx.webOrderShipment.findFirst({
+      where: {
+        webOrderId: order.id,
+        status: { in: [...ACTIVE_SHIPMENT_STATUSES, "DISPATCHED"] },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (activeShipment) {
+      throw new HttpError(409, "An active shipment already exists for this web order", "ACTIVE_SHIPMENT_EXISTS");
+    }
+
+    const lastShipment = await tx.webOrderShipment.findFirst({
+      where: { webOrderId: order.id },
+      orderBy: [{ shipmentNumber: "desc" }],
+      select: { shipmentNumber: true },
+    });
+    const shipmentNumber = (lastShipment?.shipmentNumber ?? 0) + 1;
+
+    const labelResult = await provider.createLabel({
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        sourceChannel: order.sourceChannel,
+        placedAt: order.placedAt,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        shippingRecipient: {
+          name: order.shippingRecipientName,
+          addressLine1: order.shippingAddressLine1,
+          addressLine2: order.shippingAddressLine2,
+          city: order.shippingCity,
+          region: order.shippingRegion,
+          postcode: order.shippingPostcode,
+          country: order.shippingCountry,
+        },
+        items: order.items.map((item) => ({
+          sku: item.sku ?? null,
+          productName: item.productName,
+          variantName: item.variantName ?? null,
+          quantity: item.quantity,
+        })),
+      },
+      shipment: {
+        shipmentId: `pending-${order.id}-${shipmentNumber}`,
+        shipmentNumber,
+        providerKey,
+        providerDisplayName: provider.providerDisplayName,
+        serviceCode,
+        serviceName,
+      },
+      shipFrom,
+    });
+
+    const created = await tx.webOrderShipment.create({
+      data: {
+        webOrderId: order.id,
+        shipmentNumber,
+        status: "LABEL_READY",
+        providerKey,
+        providerDisplayName: provider.providerDisplayName,
+        serviceCode,
+        serviceName,
+        trackingNumber: labelResult.trackingNumber,
+        labelFormat: labelResult.document.format,
+        labelStorageKind: "INLINE_TEXT",
+        labelMimeType: labelResult.document.mimeType,
+        labelFileName: labelResult.document.fileName,
+        labelContent: labelResult.document.content,
+        providerReference: labelResult.providerReference ?? null,
+        providerMetadata: (labelResult.providerMetadata ?? null) as Prisma.InputJsonValue | null,
+        createdByStaffId: auditActor?.actorId ?? null,
+      },
+      select: webOrderShipmentSelect,
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_SHIPMENT_CREATED",
+        entityType: "WEB_ORDER",
+        entityId: order.id,
+        metadata: {
+          shipmentId: created.id,
+          shipmentNumber: created.shipmentNumber,
+          providerKey,
+          serviceCode,
+          trackingNumber: created.trackingNumber,
+          labelFormat: created.labelFormat,
+        },
+      },
+      auditActor,
+    );
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_SHIPMENT_CREATED",
+        entityType: "WEB_ORDER_SHIPMENT",
+        entityId: created.id,
+        metadata: {
+          webOrderId: order.id,
+          orderNumber: order.orderNumber,
+          trackingNumber: created.trackingNumber,
+        },
+      },
+      auditActor,
+    );
+
+    return created;
+  });
+
+  logOperationalEvent("online_store.shipment.created", {
+    entityId: shipment.id,
+    shipmentId: shipment.id,
+    webOrderId: normalizedOrderId,
+    trackingNumber: shipment.trackingNumber,
+    providerKey: shipment.providerKey,
+  });
+
+  return {
+    shipment: toShipmentResponse(shipment),
+    supportedProviders: listSupportedShippingProviders(),
+  };
+};
+
+export const getShipmentLabelPayload = async (shipmentId: string) => {
+  const shipmentWithOrder = await getShipmentWithOrderOrThrow(shipmentId);
+  const shipment = toShipmentResponse(shipmentWithOrder);
+  const order = toOrderDetail(shipmentWithOrder.webOrder);
+
+  return {
+    order,
+    shipment,
+    document: {
+      format: shipment.labelFormat,
+      mimeType: shipment.labelMimeType,
+      fileName: shipment.labelFileName,
+      content: shipmentWithOrder.labelContent,
+    } satisfies ShippingLabelDocument,
+  };
+};
+
+export const prepareShipmentLabelPrint = async (
+  shipmentId: string,
+  input: ShippingPrintPreparationInput = {},
+  auditActor?: AuditActor,
+) => {
+  const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
+  const updated = await prisma.$transaction(async (tx) => {
+    const shipment = await tx.webOrderShipment.findUnique({
+      where: { id: normalizedShipmentId },
+      select: webOrderShipmentWithOrderAndContentSelect,
+    });
+
+    if (!shipment) {
+      throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
+    }
+    assertShipmentActionable(shipment);
+
+    const nextStatus = shipment.status === "LABEL_READY" ? "PRINT_PREPARED" : shipment.status;
+    const saved = await tx.webOrderShipment.update({
+      where: { id: shipment.id },
+      data: {
+        status: nextStatus,
+        printPreparedAt: new Date(),
+      },
+      select: webOrderShipmentWithOrderAndContentSelect,
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_SHIPMENT_PRINT_PREPARED",
+        entityType: "WEB_ORDER_SHIPMENT",
+        entityId: saved.id,
+        metadata: {
+          webOrderId: saved.webOrder.id,
+          printerName: normalizeOptionalText(input.printerName ?? null) ?? null,
+          copies: Number.isInteger(input.copies) && input.copies && input.copies > 0 ? input.copies : 1,
+          status: saved.status,
+        },
+      },
+      auditActor,
+    );
+
+    return saved;
+  });
+
+  const shipment = toShipmentResponse(updated);
+  const order = toOrderDetail(updated.webOrder);
+  const document = {
+    format: shipment.labelFormat,
+    mimeType: shipment.labelMimeType,
+    fileName: shipment.labelFileName,
+    content: updated.labelContent,
+  } satisfies ShippingLabelDocument;
+
+  return {
+    order,
+    shipment,
+    printRequest: buildPrintRequest(order, shipment, document, input),
+  };
+};
+
+export const recordShipmentPrinted = async (shipmentId: string, auditActor?: AuditActor) => {
+  const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
+  const saved = await prisma.$transaction(async (tx) => {
+    const shipment = await tx.webOrderShipment.findUnique({
+      where: { id: normalizedShipmentId },
+      select: webOrderShipmentSelect,
+    });
+
+    if (!shipment) {
+      throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
+    }
+    assertShipmentActionable(shipment);
+
+    const savedShipment = await tx.webOrderShipment.update({
+      where: { id: shipment.id },
+      data: {
+        status: shipment.status === "DISPATCHED" ? shipment.status : "PRINTED",
+        printedAt: new Date(),
+        reprintCount: shipment.printedAt ? shipment.reprintCount + 1 : shipment.reprintCount,
+      },
+      select: webOrderShipmentSelect,
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: shipment.printedAt ? "WEB_ORDER_SHIPMENT_REPRINT_RECORDED" : "WEB_ORDER_SHIPMENT_PRINT_RECORDED",
+        entityType: "WEB_ORDER_SHIPMENT",
+        entityId: savedShipment.id,
+        metadata: {
+          webOrderId: savedShipment.webOrderId,
+          status: savedShipment.status,
+          reprintCount: savedShipment.reprintCount,
+        },
+      },
+      auditActor,
+    );
+
+    return savedShipment;
+  });
+
+  logOperationalEvent("online_store.shipment.print_recorded", {
+    entityId: saved.id,
+    shipmentId: saved.id,
+    webOrderId: saved.webOrderId,
+    reprintCount: saved.reprintCount,
+  });
+
+  return { shipment: toShipmentResponse(saved) };
+};
+
+export const dispatchShipment = async (shipmentId: string, auditActor?: AuditActor) => {
+  const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
+  const result = await prisma.$transaction(async (tx) => {
+    const shipment = await tx.webOrderShipment.findUnique({
+      where: { id: normalizedShipmentId },
+      select: {
+        ...webOrderShipmentSelect,
+        webOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!shipment) {
+      throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
+    }
+    assertShipmentActionable(shipment);
+    if (!shipment.printedAt) {
+      throw new HttpError(409, "Shipment label must be printed before dispatch is recorded", "SHIPMENT_NOT_PRINTED");
+    }
+    if (shipment.dispatchedAt) {
+      return shipment;
+    }
+
+    const dispatchedAt = new Date();
+    const savedShipment = await tx.webOrderShipment.update({
+      where: { id: shipment.id },
+      data: {
+        status: "DISPATCHED",
+        dispatchedAt,
+      },
+      select: {
+        ...webOrderShipmentSelect,
+        webOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    await tx.webOrder.update({
+      where: { id: savedShipment.webOrder.id },
+      data: {
+        status: "DISPATCHED",
+      },
+    });
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_SHIPMENT_DISPATCHED",
+        entityType: "WEB_ORDER_SHIPMENT",
+        entityId: savedShipment.id,
+        metadata: {
+          webOrderId: savedShipment.webOrder.id,
+          orderNumber: savedShipment.webOrder.orderNumber,
+          trackingNumber: savedShipment.trackingNumber,
+          dispatchedAt: dispatchedAt.toISOString(),
+        },
+      },
+      auditActor,
+    );
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_DISPATCHED",
+        entityType: "WEB_ORDER",
+        entityId: savedShipment.webOrder.id,
+        metadata: {
+          shipmentId: savedShipment.id,
+          trackingNumber: savedShipment.trackingNumber,
+        },
+      },
+      auditActor,
+    );
+
+    return savedShipment;
+  });
+
+  logOperationalEvent("online_store.shipment.dispatched", {
+    entityId: result.id,
+    shipmentId: result.id,
+    webOrderId: result.webOrder.id,
+    trackingNumber: result.trackingNumber,
+  });
+
+  return {
+    shipment: toShipmentResponse(result),
+  };
+};
