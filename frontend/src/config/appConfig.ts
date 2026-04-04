@@ -28,6 +28,8 @@ export type AppConfig = {
     defaultCurrency: string;
     timeZone: string;
     logoUrl: string;
+    uploadedLogoPath: string;
+    preferredLogoUrl: string;
     footerText: string;
     openingHours: StoreOpeningHours;
   };
@@ -77,6 +79,8 @@ const DEFAULT_APP_CONFIG: AppConfig = {
     defaultCurrency: "GBP",
     timeZone: "Europe/London",
     logoUrl: "",
+    uploadedLogoPath: "",
+    preferredLogoUrl: "",
     footerText: "Thank you for your custom.",
     openingHours: DEFAULT_OPENING_HOURS,
   },

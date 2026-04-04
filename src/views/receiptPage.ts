@@ -10,6 +10,9 @@ type ReceiptPageInput = {
 };
 
 export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
+  const logoBlock = receipt.shop.preferredLogoUrl
+    ? `<div class="logo-wrap"><img class="logo" src="${escapeHtml(receipt.shop.preferredLogoUrl)}" alt="${escapeHtml(receipt.shop.name)} logo" /></div>`
+    : "";
   const itemRows = receipt.items
     .map(
       (item) =>
@@ -48,6 +51,9 @@ export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
     .page { max-width: 760px; margin: 18px auto; padding: 0 12px 24px; }
     .card { background: #fff; border: 1px solid #d3d3d3; border-radius: 8px; padding: 14px; }
     .top { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .brand { display: grid; gap: 8px; }
+    .logo-wrap { display: flex; justify-content: flex-start; }
+    .logo { max-width: 220px; max-height: 72px; width: auto; height: auto; object-fit: contain; }
     .muted { color: #5f5f5f; font-size: 12px; }
     table { width: 100%; border-collapse: collapse; margin-top: 8px; }
     th, td { border-bottom: 1px solid #dcdcdc; text-align: left; padding: 6px 4px; font-size: 12px; }
@@ -69,7 +75,8 @@ export const renderReceiptPage = ({ receipt }: ReceiptPageInput) => {
   <div class="page">
     <div class="card">
       <div class="top">
-        <div>
+        <div class="brand">
+          ${logoBlock}
           <div><strong>${escapeHtml(receipt.shop.name)}</strong></div>
           <div>${escapeHtml(receipt.shop.address)}</div>
           ${receipt.shop.vatNumber ? `<div><strong>VAT:</strong> ${escapeHtml(receipt.shop.vatNumber)}</div>` : ""}

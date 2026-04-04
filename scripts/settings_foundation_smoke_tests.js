@@ -2,6 +2,8 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { createSmokeServerController } = require("./smoke_server_helper");
@@ -58,6 +60,7 @@ const SETTINGS_KEYS = [
   "store.defaultCurrency",
   "store.timeZone",
   "store.logoUrl",
+  "store.uploadedLogoPath",
   "store.footerText",
   "store.latitude",
   "store.longitude",
@@ -78,6 +81,8 @@ const SETTINGS_KEYS = [
   "operations.lowStockThreshold",
   "operations.dashboardWeatherEnabled",
 ];
+const STORE_LOGO_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII=";
 
 const fetchJson = async (path, options = {}) => {
   const response = await fetch(`${BASE_URL}${path}`, options);
@@ -87,6 +92,8 @@ const fetchJson = async (path, options = {}) => {
 };
 
 const run = async () => {
+  let uploadedLogoPath = null;
+
   try {
     await serverController.startIfNeeded();
 
@@ -117,6 +124,7 @@ const run = async () => {
     assert.equal(defaultRes.json.settings.store.openingHours.SUNDAY.isClosed, true);
     assert.equal(defaultRes.json.settings.store.defaultCurrency, "GBP");
     assert.equal(defaultRes.json.settings.store.timeZone, "Europe/London");
+    assert.equal(defaultRes.json.settings.store.uploadedLogoPath, "");
     assert.equal(defaultRes.json.settings.store.footerText, "Thank you for your custom.");
     assert.equal(defaultRes.json.settings.store.latitude, null);
     assert.equal(defaultRes.json.settings.store.longitude, null);
@@ -143,6 +151,8 @@ const run = async () => {
     assert.equal(publicConfigRes.status, 200, JSON.stringify(publicConfigRes.json));
     assert.equal(publicConfigRes.json.config.store.name, "Bike EPOS");
     assert.equal(publicConfigRes.json.config.store.defaultCurrency, "GBP");
+    assert.equal(publicConfigRes.json.config.store.uploadedLogoPath, "");
+    assert.equal(publicConfigRes.json.config.store.preferredLogoUrl, "");
     assert.equal(publicConfigRes.json.config.workshop.defaultDepositPence, 1000);
     assert.equal(publicConfigRes.json.config.workshop.maxBookingsPerDay, 8);
     assert.equal(publicConfigRes.json.config.operations.dashboardWeatherEnabled, true);
@@ -284,6 +294,7 @@ const run = async () => {
     assert.equal(patchRes.json.settings.store.defaultCurrency, "GBP");
     assert.equal(patchRes.json.settings.store.timeZone, "Europe/London");
     assert.equal(patchRes.json.settings.store.logoUrl, "https://cdn.corepos.local/logo.png");
+    assert.equal(patchRes.json.settings.store.uploadedLogoPath, "");
     assert.equal(patchRes.json.settings.store.footerText, "Thanks for riding with CorePOS.");
     assert.equal(patchRes.json.settings.store.latitude, 51.4526);
     assert.equal(patchRes.json.settings.store.longitude, -0.1477);
@@ -322,6 +333,12 @@ const run = async () => {
     const persistedPublicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
     assert.equal(persistedPublicConfigRes.status, 200, JSON.stringify(persistedPublicConfigRes.json));
     assert.equal(persistedPublicConfigRes.json.config.store.name, "CorePOS Cycles");
+    assert.equal(persistedPublicConfigRes.json.config.store.logoUrl, "https://cdn.corepos.local/logo.png");
+    assert.equal(persistedPublicConfigRes.json.config.store.uploadedLogoPath, "");
+    assert.equal(
+      persistedPublicConfigRes.json.config.store.preferredLogoUrl,
+      "https://cdn.corepos.local/logo.png",
+    );
     assert.equal(persistedPublicConfigRes.json.config.workshop.defaultDepositPence, 1500);
     assert.equal(persistedPublicConfigRes.json.config.workshop.maxBookingsPerDay, 9);
     assert.equal(
@@ -335,6 +352,8 @@ const run = async () => {
     assert.equal(storeInfoRes.status, 200, JSON.stringify(storeInfoRes.json));
     assert.equal(storeInfoRes.json.store.businessName, "CorePOS Cycles Ltd");
     assert.equal(storeInfoRes.json.store.footerText, "Thanks for riding with CorePOS.");
+    assert.equal(storeInfoRes.json.store.uploadedLogoPath, "");
+    assert.equal(storeInfoRes.json.store.preferredLogoUrl, "https://cdn.corepos.local/logo.png");
 
     const storeInfoPatchRes = await fetchJson("/api/settings/store-info", {
       method: "PATCH",
@@ -379,6 +398,52 @@ const run = async () => {
     assert.equal(storeInfoPatchRes.json.store.footerText, "See you in the workshop soon.");
     assert.equal(storeInfoPatchRes.json.store.openingHours.MONDAY.opensAt, "10:00");
     assert.equal(storeInfoPatchRes.json.store.openingHours.SUNDAY.isClosed, true);
+    assert.equal(storeInfoPatchRes.json.store.uploadedLogoPath, "");
+    assert.equal(storeInfoPatchRes.json.store.preferredLogoUrl, "");
+
+    const logoUploadRes = await fetchJson("/api/settings/store-info/logo", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileDataUrl: STORE_LOGO_DATA_URL,
+      }),
+    });
+    assert.equal(logoUploadRes.status, 201, JSON.stringify(logoUploadRes.json));
+    assert.match(logoUploadRes.json.store.uploadedLogoPath, /^\/uploads\/store-logos\/.+\.(png|jpg|jpeg|webp)$/i);
+    assert.equal(
+      logoUploadRes.json.store.preferredLogoUrl,
+      logoUploadRes.json.store.uploadedLogoPath,
+    );
+    uploadedLogoPath = logoUploadRes.json.store.uploadedLogoPath;
+
+    const uploadedLogoFileRes = await fetch(`${BASE_URL}${uploadedLogoPath}`);
+    assert.equal(uploadedLogoFileRes.status, 200);
+    assert.match(uploadedLogoFileRes.headers.get("content-type") || "", /^image\//i);
+
+    const uploadedStoreInfoRes = await fetchJson("/api/settings/store-info", { headers: ADMIN_HEADERS });
+    assert.equal(uploadedStoreInfoRes.status, 200, JSON.stringify(uploadedStoreInfoRes.json));
+    assert.equal(uploadedStoreInfoRes.json.store.uploadedLogoPath, uploadedLogoPath);
+    assert.equal(uploadedStoreInfoRes.json.store.preferredLogoUrl, uploadedLogoPath);
+
+    const uploadedPublicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
+    assert.equal(uploadedPublicConfigRes.status, 200, JSON.stringify(uploadedPublicConfigRes.json));
+    assert.equal(uploadedPublicConfigRes.json.config.store.uploadedLogoPath, uploadedLogoPath);
+    assert.equal(uploadedPublicConfigRes.json.config.store.preferredLogoUrl, uploadedLogoPath);
+
+    const logoRemoveRes = await fetchJson("/api/settings/store-info/logo", {
+      method: "DELETE",
+      headers: ADMIN_HEADERS,
+    });
+    assert.equal(logoRemoveRes.status, 200, JSON.stringify(logoRemoveRes.json));
+    assert.equal(logoRemoveRes.json.store.uploadedLogoPath, "");
+    assert.equal(logoRemoveRes.json.store.preferredLogoUrl, "");
+
+    const removedLogoFileRes = await fetch(`${BASE_URL}${uploadedLogoPath}`);
+    assert.equal(removedLogoFileRes.status, 404);
+    uploadedLogoPath = null;
 
     const receiptSettings = await prisma.receiptSettings.findUnique({
       where: { id: 1 },
@@ -410,6 +475,10 @@ const run = async () => {
 
     console.log("[settings-smoke] persisted settings API passed");
   } finally {
+    if (uploadedLogoPath) {
+      const absoluteLogoPath = path.join(process.cwd(), uploadedLogoPath.replace(/^\/+/, ""));
+      await fs.unlink(absoluteLogoPath).catch(() => {});
+    }
     await prisma.appConfig.deleteMany({
       where: {
         key: {

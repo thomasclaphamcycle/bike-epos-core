@@ -11,7 +11,7 @@ const setReceiptPageHeaders = (res: Response) => {
       "default-src 'self'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
-      "img-src 'self' data:",
+      "img-src 'self' data: http: https:",
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline'",
     ].join("; "),

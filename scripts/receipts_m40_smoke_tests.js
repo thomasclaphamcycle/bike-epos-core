@@ -3,6 +3,8 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { createSmokeServerController } = require("./smoke_server_helper");
@@ -82,6 +84,8 @@ const login = async (email, password) => {
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
+const STORE_LOGO_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII=";
 
 const run = async () => {
   const token = uniqueRef();
@@ -97,6 +101,7 @@ const run = async () => {
     paymentIds: new Set(),
     refundIds: new Set(),
     receiptNumbers: new Set(),
+    storeLogoPaths: new Set(),
   };
 
   try {
@@ -233,6 +238,39 @@ const run = async () => {
       issuedSale.payload.receipt.receiptNumber,
     );
 
+    const externalLogoUrl = `https://cdn.corepos.local/logo-${token}.png`;
+    await prisma.appConfig.upsert({
+      where: { key: "store.logoUrl" },
+      create: {
+        key: "store.logoUrl",
+        value: externalLogoUrl,
+      },
+      update: {
+        value: externalLogoUrl,
+      },
+    });
+
+    const storeLogoDir = path.join(process.cwd(), "uploads", "store-logos");
+    await fs.mkdir(storeLogoDir, { recursive: true });
+    const uploadedLogoFilename = `m40-store-logo-${token}.png`;
+    const uploadedLogoPublicPath = `/uploads/store-logos/${uploadedLogoFilename}`;
+    await fs.writeFile(
+      path.join(storeLogoDir, uploadedLogoFilename),
+      Buffer.from(STORE_LOGO_PNG_BASE64, "base64"),
+    );
+    created.storeLogoPaths.add(uploadedLogoPublicPath);
+
+    await prisma.appConfig.upsert({
+      where: { key: "store.uploadedLogoPath" },
+      create: {
+        key: "store.uploadedLogoPath",
+        value: uploadedLogoPublicPath,
+      },
+      update: {
+        value: uploadedLogoPublicPath,
+      },
+    });
+
     const saleReceipt = await apiJson({
       path: `/api/receipts/${encodeURIComponent(issuedSale.payload.receipt.receiptNumber)}`,
       cookie,
@@ -242,6 +280,9 @@ const run = async () => {
     assert.equal(Array.isArray(saleReceipt.payload.items), true);
     assert.equal(Array.isArray(saleReceipt.payload.tenders), true);
     assert.equal(saleReceipt.payload.totals.totalPence, tenderSale.sale.totalPence);
+    assert.equal(saleReceipt.payload.shop.logoUrl, externalLogoUrl);
+    assert.equal(saleReceipt.payload.shop.uploadedLogoPath, uploadedLogoPublicPath);
+    assert.equal(saleReceipt.payload.shop.preferredLogoUrl, uploadedLogoPublicPath);
 
     const printable = await fetch(
       `${BASE_URL}/r/${encodeURIComponent(issuedSale.payload.receipt.receiptNumber)}`,
@@ -253,6 +294,36 @@ const run = async () => {
     const printableHtml = await printable.text();
     assert.ok(printableHtml.includes("Print"));
     assert.ok(printableHtml.includes(issuedSale.payload.receipt.receiptNumber));
+    assert.ok(printableHtml.includes(uploadedLogoPublicPath));
+
+    await prisma.appConfig.upsert({
+      where: { key: "store.uploadedLogoPath" },
+      create: {
+        key: "store.uploadedLogoPath",
+        value: "",
+      },
+      update: {
+        value: "",
+      },
+    });
+
+    const fallbackReceipt = await apiJson({
+      path: `/api/receipts/${encodeURIComponent(issuedSale.payload.receipt.receiptNumber)}`,
+      cookie,
+    });
+    assert.equal(fallbackReceipt.payload.shop.logoUrl, externalLogoUrl);
+    assert.equal(fallbackReceipt.payload.shop.uploadedLogoPath, "");
+    assert.equal(fallbackReceipt.payload.shop.preferredLogoUrl, externalLogoUrl);
+
+    const fallbackPrintable = await fetch(
+      `${BASE_URL}/r/${encodeURIComponent(issuedSale.payload.receipt.receiptNumber)}`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    assert.equal(fallbackPrintable.status, 200);
+    const fallbackPrintableHtml = await fallbackPrintable.text();
+    assert.ok(fallbackPrintableHtml.includes(externalLogoUrl));
 
     const legacySaleReceipt = await apiJson({
       path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/receipt`,
@@ -305,6 +376,19 @@ const run = async () => {
 
     console.log("M40 receipts smoke tests passed.");
   } finally {
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: ["store.logoUrl", "store.uploadedLogoPath"],
+        },
+      },
+    });
+
+    for (const storeLogoPath of created.storeLogoPaths) {
+      const absolutePath = path.join(process.cwd(), storeLogoPath.replace(/^\/+/, ""));
+      await fs.unlink(absolutePath).catch(() => {});
+    }
+
     const receiptNumbers = Array.from(created.receiptNumbers);
     if (receiptNumbers.length > 0) {
       await prisma.receipt.deleteMany({
