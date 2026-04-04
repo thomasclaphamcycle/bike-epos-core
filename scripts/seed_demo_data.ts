@@ -194,6 +194,21 @@ type DemoWebOrder = {
   }>;
 };
 
+type DemoPrinter = {
+  id: string;
+  name: string;
+  key: string;
+  printerFamily: "ZEBRA_LABEL";
+  printerModelHint: "GK420D_OR_COMPATIBLE";
+  supportsShippingLabels: boolean;
+  isActive: boolean;
+  transportMode: "DRY_RUN" | "RAW_TCP";
+  rawTcpHost: string | null;
+  rawTcpPort: number | null;
+  location: string | null;
+  notes: string | null;
+};
+
 const toRelativeIso = (dayOffset: number, hour = 10, minute = 0) => {
   const date = new Date();
   date.setUTCHours(hour, minute, 0, 0);
@@ -742,6 +757,23 @@ const DEMO_WEB_ORDERS: DemoWebOrder[] = [
   },
 ];
 
+const DEMO_DISPATCH_PRINTERS: DemoPrinter[] = [
+  {
+    id: "37000000-0000-4000-8000-000000000001",
+    name: "Dispatch Zebra GK420d",
+    key: "DISPATCH_ZEBRA_GK420D",
+    printerFamily: "ZEBRA_LABEL",
+    printerModelHint: "GK420D_OR_COMPATIBLE",
+    supportsShippingLabels: true,
+    isActive: true,
+    transportMode: "DRY_RUN",
+    rawTcpHost: null,
+    rawTcpPort: null,
+    location: "Dispatch bench",
+    notes: "Demo default shipping-label printer for local and dry-run dispatch flows.",
+  },
+];
+
 const toReceiptSettings = async () => {
   for (const row of DEMO_APP_CONFIG_ROWS) {
     await prisma.appConfig.upsert({
@@ -779,6 +811,37 @@ const toReceiptSettings = async () => {
     update: {
       maxBookingsPerDay: DEMO_BOOKING_DEFAULTS.maxBookingsPerDay,
       defaultDepositPence: DEMO_BOOKING_DEFAULTS.defaultDepositPence,
+    },
+  });
+};
+
+const seedDemoDispatchPrinters = async () => {
+  for (const printer of DEMO_DISPATCH_PRINTERS) {
+    await prisma.printer.upsert({
+      where: { id: printer.id },
+      update: {
+        name: printer.name,
+        key: printer.key,
+        printerFamily: printer.printerFamily,
+        printerModelHint: printer.printerModelHint,
+        supportsShippingLabels: printer.supportsShippingLabels,
+        isActive: printer.isActive,
+        transportMode: printer.transportMode,
+        rawTcpHost: printer.rawTcpHost,
+        rawTcpPort: printer.rawTcpPort,
+        location: printer.location,
+        notes: printer.notes,
+      },
+      create: printer,
+    });
+  }
+
+  await prisma.appConfig.upsert({
+    where: { key: "dispatch.defaultShippingLabelPrinterId" },
+    update: { value: DEMO_DISPATCH_PRINTERS[0].id },
+    create: {
+      key: "dispatch.defaultShippingLabelPrinterId",
+      value: DEMO_DISPATCH_PRINTERS[0].id,
     },
   });
 };
@@ -1490,6 +1553,7 @@ const run = async () => {
   await seedDemoPurchaseOrders(variantBySku);
   await seedDemoSales(variantBySku);
   await seedDemoWebOrders(variantBySku);
+  await seedDemoDispatchPrinters();
   await createThomasAdmin();
 
   console.log("Demo seed ready:");
@@ -1500,6 +1564,7 @@ const run = async () => {
   console.log(`- ${DEMO_WORKSHOP_SERVICE_TEMPLATES.length} workshop service templates`);
   console.log(`- ${DEMO_SUPPLIERS.length} supplier and ${DEMO_PURCHASE_ORDERS.length} open purchase order`);
   console.log(`- ${DEMO_WEB_ORDERS.length} demo web orders for shipment-label dispatch testing`);
+  console.log(`- ${DEMO_DISPATCH_PRINTERS.length} registered dispatch printer with a default shipping-label target`);
   console.log("Existing local staff accounts are preserved and Thomas is upserted idempotently.");
 };
 

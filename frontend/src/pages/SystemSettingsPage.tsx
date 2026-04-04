@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { invalidateAppConfigCache } from "../config/appConfig";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -78,10 +78,76 @@ type SettingsResponse = {
   };
 };
 
+type RegisteredPrinterTransportMode = "DRY_RUN" | "RAW_TCP";
+
+type RegisteredPrinter = {
+  id: string;
+  name: string;
+  key: string;
+  printerFamily: "ZEBRA_LABEL";
+  printerModelHint: "GK420D_OR_COMPATIBLE";
+  supportsShippingLabels: boolean;
+  isActive: boolean;
+  transportMode: RegisteredPrinterTransportMode;
+  rawTcpHost: string | null;
+  rawTcpPort: number | null;
+  location: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isDefaultShippingLabelPrinter: boolean;
+};
+
+type RegisteredPrinterListResponse = {
+  printers: RegisteredPrinter[];
+  defaultShippingLabelPrinterId: string | null;
+  defaultShippingLabelPrinter: RegisteredPrinter | null;
+};
+
+type PrinterMutationResponse = {
+  printer: RegisteredPrinter;
+  defaultShippingLabelPrinterId: string | null;
+};
+
+type DefaultShippingLabelPrinterResponse = {
+  defaultShippingLabelPrinterId: string | null;
+  defaultShippingLabelPrinter: RegisteredPrinter | null;
+};
+
+type PrinterFormState = {
+  name: string;
+  key: string;
+  printerFamily: "ZEBRA_LABEL";
+  printerModelHint: "GK420D_OR_COMPATIBLE";
+  supportsShippingLabels: boolean;
+  isActive: boolean;
+  transportMode: RegisteredPrinterTransportMode;
+  rawTcpHost: string;
+  rawTcpPort: string;
+  location: string;
+  notes: string;
+  setAsDefaultShippingLabel: boolean;
+};
+
 const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
   commercialRecentServiceCooldownDays: 60,
+};
+
+const DEFAULT_PRINTER_FORM: PrinterFormState = {
+  name: "",
+  key: "",
+  printerFamily: "ZEBRA_LABEL",
+  printerModelHint: "GK420D_OR_COMPATIBLE",
+  supportsShippingLabels: true,
+  isActive: true,
+  transportMode: "DRY_RUN",
+  rawTcpHost: "",
+  rawTcpPort: "9100",
+  location: "",
+  notes: "",
+  setAsDefaultShippingLabel: false,
 };
 
 const COMMON_TIME_ZONES = [
@@ -235,6 +301,30 @@ const toWorkshopCommercialSettings = (value: unknown): WorkshopCommercialSetting
   };
 };
 
+const toPrinterFormState = (
+  printer: RegisteredPrinter | null,
+  defaultShippingLabelPrinterId: string | null,
+): PrinterFormState => {
+  if (!printer) {
+    return DEFAULT_PRINTER_FORM;
+  }
+
+  return {
+    name: printer.name,
+    key: printer.key,
+    printerFamily: printer.printerFamily,
+    printerModelHint: printer.printerModelHint,
+    supportsShippingLabels: printer.supportsShippingLabels,
+    isActive: printer.isActive,
+    transportMode: printer.transportMode,
+    rawTcpHost: printer.rawTcpHost ?? "",
+    rawTcpPort: printer.rawTcpPort ? String(printer.rawTcpPort) : "9100",
+    location: printer.location ?? "",
+    notes: printer.notes ?? "",
+    setAsDefaultShippingLabel: printer.id === defaultShippingLabelPrinterId,
+  };
+};
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -242,11 +332,16 @@ export const SystemSettingsPage = () => {
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [workshopCommercial, setWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
   const [initialWorkshopCommercial, setInitialWorkshopCommercial] = useState<WorkshopCommercialSettings | null>(null);
+  const [printersPayload, setPrintersPayload] = useState<RegisteredPrinterListResponse | null>(null);
+  const [selectedPrinterId, setSelectedPrinterId] = useState("");
+  const [printerForm, setPrinterForm] = useState<PrinterFormState>(DEFAULT_PRINTER_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [removingLogo, setRemovingLogo] = useState(false);
   const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
+  const [savingPrinter, setSavingPrinter] = useState(false);
+  const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,9 +349,10 @@ export const SystemSettingsPage = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const [storePayload, settingsPayload] = await Promise.all([
+        const [storePayload, settingsPayload, printersResponse] = await Promise.all([
           apiGet<StoreInfoResponse>("/api/settings/store-info"),
           apiGet<SettingsResponse>("/api/settings"),
+          apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
         ]);
         if (cancelled) {
           return;
@@ -271,6 +367,18 @@ export const SystemSettingsPage = () => {
         setInitialStore(normalizedStore);
         setWorkshopCommercial(normalizedWorkshopCommercial);
         setInitialWorkshopCommercial(normalizedWorkshopCommercial);
+        setPrintersPayload(printersResponse);
+        const preferredPrinterId =
+          printersResponse.defaultShippingLabelPrinterId
+          ?? printersResponse.printers[0]?.id
+          ?? "";
+        setSelectedPrinterId(preferredPrinterId);
+        setPrinterForm(
+          toPrinterFormState(
+            printersResponse.printers.find((printer) => printer.id === preferredPrinterId) ?? null,
+            printersResponse.defaultShippingLabelPrinterId,
+          ),
+        );
       } catch (loadError) {
         if (!cancelled) {
           error(loadError instanceof Error ? loadError.message : "Failed to load settings");
@@ -411,9 +519,41 @@ export const SystemSettingsPage = () => {
   }, [initialWorkshopCommercial, workshopCommercial]);
 
   const hasWorkshopCommercialValidationErrors = Object.keys(workshopCommercialValidationErrors).length > 0;
+  const selectedPrinter = useMemo(
+    () => printersPayload?.printers.find((printer) => printer.id === selectedPrinterId) ?? null,
+    [printersPayload?.printers, selectedPrinterId],
+  );
+  const printerValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof PrinterFormState, string>> = {};
+
+    if (!printerForm.name.trim()) {
+      errors.name = "Printer name is required.";
+    }
+    if (!printerForm.key.trim()) {
+      errors.key = "Printer key is required.";
+    } else if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/.test(printerForm.key.trim())) {
+      errors.key = "Use letters, numbers, underscores, or hyphens.";
+    }
+    if (printerForm.transportMode === "RAW_TCP") {
+      if (!printerForm.rawTcpHost.trim()) {
+        errors.rawTcpHost = "RAW_TCP printers need a host.";
+      }
+      const parsedPort = Number.parseInt(printerForm.rawTcpPort, 10);
+      if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+        errors.rawTcpPort = "Use a port between 1 and 65535.";
+      }
+    }
+
+    return errors;
+  }, [printerForm]);
+  const hasPrinterValidationErrors = Object.keys(printerValidationErrors).length > 0;
 
   const setField = <K extends keyof StoreInfo>(key: K, value: StoreInfo[K]) => {
     setStore((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const setPrinterField = <K extends keyof PrinterFormState>(key: K, value: PrinterFormState[K]) => {
+    setPrinterForm((current) => ({ ...current, [key]: value }));
   };
 
   const setWorkshopCommercialField = <K extends keyof WorkshopCommercialSettings>(
@@ -448,6 +588,38 @@ export const SystemSettingsPage = () => {
             },
         },
       };
+    });
+  };
+
+  const loadPrinters = async (preferredPrinterId?: string) => {
+    const payload = await apiGet<RegisteredPrinterListResponse>("/api/settings/printers");
+    setPrintersPayload(payload);
+    const nextPrinterId =
+      preferredPrinterId
+      ?? payload.defaultShippingLabelPrinterId
+      ?? payload.printers[0]?.id
+      ?? "";
+    setSelectedPrinterId(nextPrinterId);
+    setPrinterForm(
+      toPrinterFormState(
+        payload.printers.find((printer) => printer.id === nextPrinterId) ?? null,
+        payload.defaultShippingLabelPrinterId,
+      ),
+    );
+    return payload;
+  };
+
+  const selectPrinterForEditing = (printerId: string) => {
+    const printer = printersPayload?.printers.find((candidate) => candidate.id === printerId) ?? null;
+    setSelectedPrinterId(printerId);
+    setPrinterForm(toPrinterFormState(printer, printersPayload?.defaultShippingLabelPrinterId ?? null));
+  };
+
+  const resetPrinterForm = () => {
+    setSelectedPrinterId("");
+    setPrinterForm({
+      ...DEFAULT_PRINTER_FORM,
+      setAsDefaultShippingLabel: printersPayload?.defaultShippingLabelPrinterId === null,
     });
   };
 
@@ -559,6 +731,78 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to update workshop commercial settings");
     } finally {
       setSavingWorkshopCommercial(false);
+    }
+  };
+
+  const savePrinter = async () => {
+    if (hasPrinterValidationErrors) {
+      error("Fix the highlighted printer fields before saving.");
+      return;
+    }
+
+    const payload = {
+      name: printerForm.name.trim(),
+      key: printerForm.key.trim().toUpperCase(),
+      printerFamily: printerForm.printerFamily,
+      printerModelHint: printerForm.printerModelHint,
+      supportsShippingLabels: printerForm.supportsShippingLabels,
+      isActive: printerForm.isActive,
+      transportMode: printerForm.transportMode,
+      rawTcpHost: printerForm.transportMode === "RAW_TCP" ? printerForm.rawTcpHost.trim() : null,
+      rawTcpPort: printerForm.transportMode === "RAW_TCP"
+        ? Number.parseInt(printerForm.rawTcpPort, 10)
+        : null,
+      location: printerForm.location.trim() || null,
+      notes: printerForm.notes.trim() || null,
+      setAsDefaultShippingLabel: printerForm.setAsDefaultShippingLabel,
+    };
+
+    setSavingPrinter(true);
+    try {
+      const response = selectedPrinterId
+        ? await apiPatch<PrinterMutationResponse>(
+          `/api/settings/printers/${encodeURIComponent(selectedPrinterId)}`,
+          payload,
+        )
+        : await apiPost<PrinterMutationResponse>("/api/settings/printers", payload);
+
+      await loadPrinters(response.printer.id);
+      success(selectedPrinterId ? "Dispatch printer updated." : "Dispatch printer created.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save dispatch printer");
+    } finally {
+      setSavingPrinter(false);
+    }
+  };
+
+  const updateDefaultShippingLabelPrinter = async (printerId: string | null) => {
+    setSettingDefaultPrinter(true);
+    try {
+      const response = await apiPut<DefaultShippingLabelPrinterResponse>(
+        "/api/settings/printers/default-shipping-label",
+        { printerId },
+      );
+      setPrintersPayload((current) => current
+        ? {
+          ...current,
+          defaultShippingLabelPrinterId: response.defaultShippingLabelPrinterId,
+          defaultShippingLabelPrinter: response.defaultShippingLabelPrinter,
+          printers: current.printers.map((printer) => ({
+            ...printer,
+            isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
+          })),
+        }
+        : current);
+      setPrinterForm((current) => ({ ...current, setAsDefaultShippingLabel: selectedPrinterId === printerId }));
+      success(
+        printerId
+          ? "Default shipping-label printer updated."
+          : "Default shipping-label printer cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to update default printer");
+    } finally {
+      setSettingDefaultPrinter(false);
     }
   };
 
@@ -1015,6 +1259,230 @@ export const SystemSettingsPage = () => {
               </div>
               <div className="restricted-panel info-panel">
                 These controls shape a rules-based suggestion layer. Long-gap prompts handle bikes with meaningful time since the last completed service, while the cooldown prevents staff from raising the same type of recommendation immediately after recent work.
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Dispatch Printers"
+          description="Register the Zebra-style printers that shipment-label workflows are allowed to target, and choose the default printer used by dispatch."
+          actions={(
+            <div className="actions-inline">
+              <button type="button" className="button-link" onClick={resetPrinterForm}>
+                New Printer
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void savePrinter()}
+                disabled={savingPrinter || hasPrinterValidationErrors}
+              >
+                {savingPrinter ? "Saving..." : selectedPrinterId ? "Save Printer" : "Create Printer"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Dispatch Printers"
+            description="Fetching the registered printer list and current default shipping-label target."
+          />
+        ) : null}
+
+        {!loading ? (
+          <div className="dispatch-printers-layout">
+            <section className="store-info-section dispatch-printers-list">
+              <h3>Registered Printers</h3>
+              {printersPayload?.printers.length ? (
+                <div className="dispatch-printers-list__items">
+                  {printersPayload.printers.map((printer) => {
+                    const isSelected = printer.id === selectedPrinterId;
+                    return (
+                      <button
+                        key={printer.id}
+                        type="button"
+                        className={`dispatch-printer-row${isSelected ? " dispatch-printer-row--selected" : ""}`}
+                        onClick={() => selectPrinterForEditing(printer.id)}
+                      >
+                        <div className="dispatch-printer-row__topline">
+                          <strong>{printer.name}</strong>
+                          {printer.isDefaultShippingLabelPrinter ? (
+                            <span className="status-badge status-ready">Default</span>
+                          ) : null}
+                        </div>
+                        <div className="dispatch-printer-row__meta">
+                          <span>{printer.key}</span>
+                          <span>{printer.transportMode}</span>
+                        </div>
+                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
+                          <span>{printer.supportsShippingLabels ? "Shipping labels enabled" : "Shipping labels disabled"}</span>
+                          <span>{printer.isActive ? "Active" : "Inactive"}</span>
+                        </div>
+                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
+                          <span>{printer.location || "No location set"}</span>
+                          <span>
+                            {printer.transportMode === "RAW_TCP"
+                              ? `${printer.rawTcpHost ?? "-"}:${printer.rawTcpPort ?? "-"}`
+                              : "Dry-run transport"}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No dispatch printers yet"
+                  description="Create the first registered shipping-label printer so web-order dispatch can target a managed Zebra path instead of a free-text name."
+                />
+              )}
+            </section>
+
+            <section className="store-info-section dispatch-printers-editor">
+              <h3>{selectedPrinter ? "Edit Printer" : "Create Printer"}</h3>
+              <div className="purchase-form-grid store-info-grid">
+                <label>
+                  Printer name
+                  <input
+                    value={printerForm.name}
+                    onChange={(event) => setPrinterField("name", event.target.value)}
+                    placeholder="Dispatch Zebra GK420d"
+                  />
+                  {printerValidationErrors.name ? <span className="field-error">{printerValidationErrors.name}</span> : null}
+                </label>
+                <label>
+                  Internal key
+                  <input
+                    value={printerForm.key}
+                    onChange={(event) => setPrinterField("key", event.target.value.toUpperCase())}
+                    placeholder="DISPATCH_ZEBRA_GK420D"
+                  />
+                  {printerValidationErrors.key ? <span className="field-error">{printerValidationErrors.key}</span> : null}
+                </label>
+                <label>
+                  Printer family
+                  <input value={printerForm.printerFamily} disabled />
+                </label>
+                <label>
+                  Model hint
+                  <input value={printerForm.printerModelHint} disabled />
+                </label>
+                <label>
+                  Transport mode
+                  <select
+                    value={printerForm.transportMode}
+                    onChange={(event) =>
+                      setPrinterField("transportMode", event.target.value as RegisteredPrinterTransportMode)}
+                  >
+                    <option value="DRY_RUN">DRY_RUN</option>
+                    <option value="RAW_TCP">RAW_TCP</option>
+                  </select>
+                </label>
+                <label>
+                  Location / notes label
+                  <input
+                    value={printerForm.location}
+                    onChange={(event) => setPrinterField("location", event.target.value)}
+                    placeholder="Dispatch bench"
+                  />
+                </label>
+                <label>
+                  RAW_TCP host
+                  <input
+                    value={printerForm.rawTcpHost}
+                    onChange={(event) => setPrinterField("rawTcpHost", event.target.value)}
+                    placeholder="192.168.1.45"
+                    disabled={printerForm.transportMode !== "RAW_TCP"}
+                  />
+                  {printerValidationErrors.rawTcpHost ? (
+                    <span className="field-error">{printerValidationErrors.rawTcpHost}</span>
+                  ) : null}
+                </label>
+                <label>
+                  RAW_TCP port
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    step={1}
+                    value={printerForm.rawTcpPort}
+                    onChange={(event) => setPrinterField("rawTcpPort", event.target.value)}
+                    disabled={printerForm.transportMode !== "RAW_TCP"}
+                  />
+                  {printerValidationErrors.rawTcpPort ? (
+                    <span className="field-error">{printerValidationErrors.rawTcpPort}</span>
+                  ) : null}
+                </label>
+                <label className="store-info-grid-span">
+                  Notes
+                  <textarea
+                    rows={3}
+                    value={printerForm.notes}
+                    onChange={(event) => setPrinterField("notes", event.target.value)}
+                    placeholder="Windows dispatch machine beside packing bench."
+                  />
+                </label>
+                <label className="store-info-grid-span store-settings-checkbox">
+                  <span>Supports shipping labels</span>
+                  <div className="table-secondary">
+                    Only printers with shipping-label capability can be selected in the web-order dispatch flow.
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={printerForm.supportsShippingLabels}
+                    onChange={(event) => setPrinterField("supportsShippingLabels", event.target.checked)}
+                  />
+                </label>
+                <label className="store-info-grid-span store-settings-checkbox">
+                  <span>Printer is active</span>
+                  <div className="table-secondary">
+                    Inactive printers stay on record for audit/history but cannot be used for shipment printing.
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={printerForm.isActive}
+                    onChange={(event) => setPrinterField("isActive", event.target.checked)}
+                  />
+                </label>
+                <label className="store-info-grid-span store-settings-checkbox">
+                  <span>Make this the default shipping-label printer</span>
+                  <div className="table-secondary">
+                    Dispatch uses this printer automatically when staff do not choose another registered target.
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={printerForm.setAsDefaultShippingLabel}
+                    onChange={(event) =>
+                      setPrinterField("setAsDefaultShippingLabel", event.target.checked)}
+                  />
+                </label>
+              </div>
+
+              {selectedPrinter ? (
+                <div className="dispatch-printer-editor__actions">
+                  <button
+                    type="button"
+                    onClick={() => void updateDefaultShippingLabelPrinter(selectedPrinter.id)}
+                    disabled={settingDefaultPrinter || !selectedPrinter.isActive || !selectedPrinter.supportsShippingLabels}
+                  >
+                    {settingDefaultPrinter ? "Updating..." : "Set As Default Printer"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void updateDefaultShippingLabelPrinter(null)}
+                    disabled={settingDefaultPrinter || printersPayload?.defaultShippingLabelPrinterId !== selectedPrinter.id}
+                  >
+                    Clear Default
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="restricted-panel info-panel">
+                Registered printers give the shipment workflow a stable target. CorePOS now resolves shipment-label printing through these records instead of relying on a free-text printer hint from the dispatch UI.
               </div>
             </section>
           </div>

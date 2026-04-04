@@ -66,9 +66,14 @@ export type ShipmentPrintRequest = {
   trackingNumber: string;
   printer: {
     transport: typeof WINDOWS_LOCAL_AGENT_TRANSPORT;
+    printerId: string;
+    printerKey: string;
     printerFamily: typeof ZEBRA_LABEL_PRINTER_FAMILY;
     printerModelHint: typeof ZEBRA_GK420D_MODEL_HINT;
-    printerName: string | null;
+    printerName: string;
+    transportMode: PrintAgentTransportMode;
+    rawTcpHost: string | null;
+    rawTcpPort: number | null;
     copies: number;
   };
   document: ShippingLabelDocument;
@@ -88,7 +93,9 @@ export type ShipmentPrintAgentJob = {
   acceptedAt: string;
   completedAt: string;
   transportMode: PrintAgentTransportMode;
-  printerName: string | null;
+  printerId: string;
+  printerKey: string;
+  printerName: string;
   printerTarget: string;
   copies: number;
   documentFormat: typeof SHIPMENT_LABEL_DOCUMENT_FORMAT;
@@ -151,8 +158,24 @@ export const validateShipmentPrintRequest = (value: unknown): ShipmentPrintReque
   if (printerModelHint !== ZEBRA_GK420D_MODEL_HINT) {
     throw new Error(`printRequest.printer.printerModelHint must be ${ZEBRA_GK420D_MODEL_HINT}`);
   }
+  const printerTransportMode = expectString(
+    printerRecord.transportMode,
+    "printRequest.printer.transportMode",
+  );
+  if (printerTransportMode !== "DRY_RUN" && printerTransportMode !== "RAW_TCP") {
+    throw new Error("printRequest.printer.transportMode must be DRY_RUN or RAW_TCP");
+  }
 
   const metadataRecord = expectRecord(record.metadata, "printRequest.metadata");
+  const rawTcpHost = expectNullableString(printerRecord.rawTcpHost, "printRequest.printer.rawTcpHost");
+  const rawTcpPort =
+    printerRecord.rawTcpPort === null
+      ? null
+      : expectPositiveInteger(printerRecord.rawTcpPort, "printRequest.printer.rawTcpPort");
+
+  if (printerTransportMode === "RAW_TCP" && (!rawTcpHost || !rawTcpPort)) {
+    throw new Error("RAW_TCP print requests must include rawTcpHost and rawTcpPort");
+  }
 
   return {
     version: SHIPMENT_PRINT_REQUEST_VERSION,
@@ -163,9 +186,14 @@ export const validateShipmentPrintRequest = (value: unknown): ShipmentPrintReque
     trackingNumber: expectString(record.trackingNumber, "printRequest.trackingNumber"),
     printer: {
       transport: WINDOWS_LOCAL_AGENT_TRANSPORT,
+      printerId: expectString(printerRecord.printerId, "printRequest.printer.printerId"),
+      printerKey: expectString(printerRecord.printerKey, "printRequest.printer.printerKey"),
       printerFamily: ZEBRA_LABEL_PRINTER_FAMILY,
       printerModelHint: ZEBRA_GK420D_MODEL_HINT,
-      printerName: expectNullableString(printerRecord.printerName, "printRequest.printer.printerName"),
+      printerName: expectString(printerRecord.printerName, "printRequest.printer.printerName"),
+      transportMode: printerTransportMode,
+      rawTcpHost,
+      rawTcpPort,
       copies: expectPositiveInteger(printerRecord.copies, "printRequest.printer.copies"),
     },
     document: validateShippingLabelDocument(record.document),
@@ -204,7 +232,9 @@ export const validateShipmentPrintAgentJob = (value: unknown): ShipmentPrintAgen
     acceptedAt: expectIsoDateString(record.acceptedAt, "job.acceptedAt"),
     completedAt: expectIsoDateString(record.completedAt, "job.completedAt"),
     transportMode,
-    printerName: expectNullableString(record.printerName, "job.printerName"),
+    printerId: expectString(record.printerId, "job.printerId"),
+    printerKey: expectString(record.printerKey, "job.printerKey"),
+    printerName: expectString(record.printerName, "job.printerName"),
     printerTarget: expectString(record.printerTarget, "job.printerTarget"),
     copies: expectPositiveInteger(record.copies, "job.copies"),
     documentFormat,

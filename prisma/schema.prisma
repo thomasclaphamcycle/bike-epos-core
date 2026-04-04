@@ -1002,6 +1002,15 @@ enum ShipmentLabelStorageKind {
   INLINE_TEXT
 }
 
+enum RegisteredPrinterFamily {
+  ZEBRA_LABEL
+}
+
+enum RegisteredPrinterTransportMode {
+  DRY_RUN
+  RAW_TCP
+}
+
 model WebOrder {
   id                    String                    @id @default(uuid()) @db.Uuid
   orderNumber           String                    @unique
@@ -1092,6 +1101,26 @@ model WebOrderShipment {
   @@index([webOrderId, status, createdAt])
   @@index([createdByStaffId])
   @@index([providerKey, status, createdAt])
+}
+
+model Printer {
+  id                     String                         @id @default(uuid()) @db.Uuid
+  name                   String
+  key                    String                         @unique
+  printerFamily          RegisteredPrinterFamily        @default(ZEBRA_LABEL)
+  printerModelHint       String                         @default("GK420D_OR_COMPATIBLE")
+  supportsShippingLabels Boolean                        @default(true)
+  isActive               Boolean                        @default(true)
+  transportMode          RegisteredPrinterTransportMode @default(DRY_RUN)
+  rawTcpHost             String?
+  rawTcpPort             Int?
+  location               String?
+  notes                  String?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+
+  @@index([supportsShippingLabels, isActive])
+  @@index([transportMode, isActive])
 }
 
 model SaleReturn {

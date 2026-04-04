@@ -162,9 +162,14 @@ type ShipmentPrintRequestResponse = {
     trackingNumber: string;
     printer: {
       transport: "WINDOWS_LOCAL_AGENT";
+      printerId: string;
+      printerKey: string;
       printerFamily: "ZEBRA_LABEL";
-      printerModelHint: "GK420D_OR_COMPATIBLE";
-      printerName: string | null;
+      printerModelHint: string;
+      printerName: string;
+      transportMode: "DRY_RUN" | "RAW_TCP";
+      rawTcpHost: string | null;
+      rawTcpPort: number | null;
       copies: number;
     };
     document: {
@@ -189,7 +194,9 @@ type ShipmentPrintExecutionResponse = ShipmentPrintRequestResponse & {
     acceptedAt: string;
     completedAt: string;
     transportMode: "DRY_RUN" | "RAW_TCP";
-    printerName: string | null;
+    printerId: string;
+    printerKey: string;
+    printerName: string;
     printerTarget: string;
     copies: number;
     documentFormat: "ZPL";
@@ -197,6 +204,30 @@ type ShipmentPrintExecutionResponse = ShipmentPrintRequestResponse & {
     simulated: boolean;
     outputPath: string | null;
   };
+};
+
+type RegisteredPrinter = {
+  id: string;
+  name: string;
+  key: string;
+  printerFamily: "ZEBRA_LABEL";
+  printerModelHint: "GK420D_OR_COMPATIBLE";
+  supportsShippingLabels: boolean;
+  isActive: boolean;
+  transportMode: "DRY_RUN" | "RAW_TCP";
+  rawTcpHost: string | null;
+  rawTcpPort: number | null;
+  location: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isDefaultShippingLabelPrinter: boolean;
+};
+
+type RegisteredPrinterListResponse = {
+  printers: RegisteredPrinter[];
+  defaultShippingLabelPrinterId: string | null;
+  defaultShippingLabelPrinter: RegisteredPrinter | null;
 };
 
 const formatMoney = (pence: number) =>
@@ -260,16 +291,18 @@ export const OnlineStoreOrdersPage = () => {
   const [ordersPayload, setOrdersPayload] = useState<ListOrdersResponse | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [detailPayload, setDetailPayload] = useState<OrderDetailResponse | null>(null);
+  const [printersPayload, setPrintersPayload] = useState<RegisteredPrinterListResponse | null>(null);
   const [labelPayload, setLabelPayload] = useState<ShipmentLabelPayloadResponse | null>(null);
   const [printPayload, setPrintPayload] = useState<ShipmentPrintRequestResponse | null>(null);
   const [printJob, setPrintJob] = useState<ShipmentPrintExecutionResponse["printJob"] | null>(null);
   const [printNotice, setPrintNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
-  const [printerName, setPrinterName] = useState("Dispatch Zebra GK420d");
+  const [selectedPrinterId, setSelectedPrinterId] = useState("");
   const [copies, setCopies] = useState("1");
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState(false);
+  const [loadingPrinters, setLoadingPrinters] = useState(true);
   const [pendingAction, setPendingAction] = useState("");
 
   useEffect(() => {
@@ -366,9 +399,43 @@ export const OnlineStoreOrdersPage = () => {
     }
   }, [error]);
 
+  const loadPrinters = useCallback(async (preferredPrinterId?: string) => {
+    setLoadingPrinters(true);
+
+    try {
+      const payload = await apiGet<RegisteredPrinterListResponse>(
+        "/api/settings/printers?activeOnly=true&shippingLabelOnly=true",
+      );
+      setPrintersPayload(payload);
+      setSelectedPrinterId((current) => {
+        const requestedPrinterId = preferredPrinterId ?? current;
+        if (requestedPrinterId && payload.printers.some((printer) => printer.id === requestedPrinterId)) {
+          return requestedPrinterId;
+        }
+        if (
+          payload.defaultShippingLabelPrinterId
+          && payload.printers.some((printer) => printer.id === payload.defaultShippingLabelPrinterId)
+        ) {
+          return payload.defaultShippingLabelPrinterId;
+        }
+        return "";
+      });
+      return payload;
+    } catch (loadError) {
+      error(loadError instanceof Error ? loadError.message : "Failed to load registered printers");
+      return null;
+    } finally {
+      setLoadingPrinters(false);
+    }
+  }, [error]);
+
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    void loadPrinters();
+  }, [loadPrinters]);
 
   useEffect(() => {
     setLabelPayload(null);
@@ -424,6 +491,15 @@ export const OnlineStoreOrdersPage = () => {
     }
     return supportedProviders.find((provider) => provider.key === selectedProviderKey) ?? supportedProviders[0];
   }, [detailPayload?.supportedProviders, ordersPayload?.supportedProviders, selectedProviderKey]);
+  const selectedPrinter = useMemo(() => {
+    if (!printersPayload) {
+      return null;
+    }
+    if (selectedPrinterId) {
+      return printersPayload.printers.find((printer) => printer.id === selectedPrinterId) ?? null;
+    }
+    return printersPayload.defaultShippingLabelPrinter;
+  }, [printersPayload, selectedPrinterId]);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     await Promise.all([
@@ -460,7 +536,7 @@ export const OnlineStoreOrdersPage = () => {
   };
 
   const handlePreparePrint = async () => {
-    if (!selectedOrder || !selectedShipment) {
+    if (!selectedOrder || !selectedShipment || !selectedPrinter) {
       return;
     }
 
@@ -468,19 +544,20 @@ export const OnlineStoreOrdersPage = () => {
     await runAction("prepare-print", async () => {
       setPrintNotice(null);
       const payload = await apiPost<ShipmentPrintRequestResponse>(selectedShipment.preparePrintPath, {
-        printerName: printerName.trim() || undefined,
+        printerId: selectedPrinter.id,
         copies: parsedCopies,
       });
+      setSelectedPrinterId(payload.printRequest.printer.printerId);
       setCopies(String(payload.printRequest.printer.copies));
       setPrintPayload(payload);
       setPrintJob(null);
-      success(`Print payload prepared for ${selectedShipment.trackingNumber}.`);
+      success(`Print payload prepared for ${selectedShipment.trackingNumber} on ${payload.printRequest.printer.printerName}.`);
       await refreshSelectedOrder(selectedOrder.id);
     });
   };
 
   const handlePrintShipment = async () => {
-    if (!selectedOrder || !selectedShipment) {
+    if (!selectedOrder || !selectedShipment || !selectedPrinter) {
       return;
     }
 
@@ -490,22 +567,23 @@ export const OnlineStoreOrdersPage = () => {
 
     try {
       const payload = await apiPost<ShipmentPrintExecutionResponse>(selectedShipment.printPath, {
-        printerName: printerName.trim() || undefined,
+        printerId: selectedPrinter.id,
         copies: parsedCopies,
       });
+      setSelectedPrinterId(payload.printRequest.printer.printerId);
       setCopies(String(payload.printRequest.printer.copies));
       setPrintPayload(payload);
       setPrintJob(payload.printJob);
       setPrintNotice({
         tone: "success",
         text: payload.printJob.simulated
-          ? `Dry-run print completed for ${selectedShipment.trackingNumber}. Output stored at ${payload.printJob.outputPath ?? payload.printJob.printerTarget}.`
-          : `Print job sent to ${payload.printJob.printerTarget} for ${selectedShipment.trackingNumber}.`,
+          ? `Dry-run print completed on ${payload.printJob.printerName}. Output stored at ${payload.printJob.outputPath ?? payload.printJob.printerTarget}.`
+          : `Print job sent to ${payload.printJob.printerTarget} for ${selectedShipment.trackingNumber} on ${payload.printJob.printerName}.`,
       });
       success(
         payload.printJob.simulated
           ? `Dry-run print completed for ${selectedShipment.trackingNumber}.`
-          : `Shipment label printed via ${payload.printJob.printerTarget}.`,
+          : `Shipment label printed via ${payload.printJob.printerName}.`,
       );
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "Shipment label print failed";
@@ -538,8 +616,8 @@ export const OnlineStoreOrdersPage = () => {
       && selectedOrder.status !== "DISPATCHED"
       && !selectedShipment,
   );
-  const canPreparePrint = Boolean(selectedShipment && selectedShipment.status !== "VOIDED");
-  const canPrintShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED");
+  const canPreparePrint = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedPrinter);
+  const canPrintShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedPrinter);
   const canDispatchShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedShipment.printedAt);
 
   return (
@@ -581,7 +659,7 @@ export const OnlineStoreOrdersPage = () => {
         </div>
 
         <div className="restricted-panel info-panel online-orders-info-panel">
-          This flow keeps shipment orchestration inside CorePOS, returns ZPL for reliable thermal-label output, and hands prepared shipment labels to the configured Windows/local print agent without routing through the browser print dialog.
+          This flow keeps shipment orchestration inside CorePOS, returns ZPL for reliable thermal-label output, and resolves every print through a registered dispatch printer before handing the job to the Windows/local print agent.
         </div>
       </SurfaceCard>
 
@@ -828,12 +906,26 @@ export const OnlineStoreOrdersPage = () => {
                           </select>
                         </label>
                         <label>
-                          Printer hint
-                          <input
-                            value={printerName}
-                            onChange={(event) => setPrinterName(event.target.value)}
-                            placeholder="Dispatch Zebra GK420d"
-                          />
+                          Registered printer
+                          <select
+                            value={selectedPrinterId}
+                            onChange={(event) => setSelectedPrinterId(event.target.value)}
+                            disabled={pendingAction.length > 0 || loadingPrinters}
+                            data-testid="online-store-printer-select"
+                          >
+                            <option value="">
+                              {loadingPrinters
+                                ? "Loading printers..."
+                                : printersPayload?.defaultShippingLabelPrinterId
+                                  ? "Use default shipping-label printer"
+                                  : "Select a registered printer"}
+                            </option>
+                            {(printersPayload?.printers ?? []).map((printer) => (
+                              <option key={printer.id} value={printer.id}>
+                                {`${printer.name}${printer.isDefaultShippingLabelPrinter ? " (Default)" : ""} · ${printer.transportMode}`}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label>
                           Copies
@@ -845,6 +937,14 @@ export const OnlineStoreOrdersPage = () => {
                             onChange={(event) => setCopies(event.target.value)}
                           />
                         </label>
+                      </div>
+
+                      <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
+                        {selectedPrinter
+                          ? `Dispatch printer: ${selectedPrinter.name} (${selectedPrinter.transportMode})${selectedPrinter.location ? ` · ${selectedPrinter.location}` : ""}.`
+                          : printersPayload?.printers.length
+                            ? "Choose a registered shipping-label printer before preparing or printing this shipment."
+                            : "No active shipping-label printer is registered. Ask an admin to add one in Settings before printing."}
                       </div>
 
                       <div className="online-orders-dispatch-actions">

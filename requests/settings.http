@@ -1,4 +1,5 @@
 @baseUrl = http://localhost:3100
+@printerId = 00000000-0000-4000-8000-000000000000
 
 ### Get persisted shop settings (MANAGER+)
 GET {{baseUrl}}/api/settings
@@ -14,6 +15,49 @@ X-Staff-Id: demo-staff
 GET {{baseUrl}}/api/settings/store-info
 X-Staff-Role: ADMIN
 X-Staff-Id: demo-admin
+
+### List registered dispatch printers (MANAGER+)
+GET {{baseUrl}}/api/settings/printers
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Create a registered dispatch printer (ADMIN)
+POST {{baseUrl}}/api/settings/printers
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "name": "Dispatch Zebra GK420d",
+  "key": "DISPATCH_ZEBRA_GK420D",
+  "transportMode": "DRY_RUN",
+  "location": "Dispatch bench",
+  "notes": "Primary shipping-label printer",
+  "setAsDefaultShippingLabel": true
+}
+
+### Update a registered dispatch printer (ADMIN)
+PATCH {{baseUrl}}/api/settings/printers/{{printerId}}
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "transportMode": "RAW_TCP",
+  "rawTcpHost": "192.168.1.50",
+  "rawTcpPort": 9100,
+  "location": "Packing bench"
+}
+
+### Set the default shipping-label printer (ADMIN)
+PUT {{baseUrl}}/api/settings/printers/default-shipping-label
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "printerId": "{{printerId}}"
+}
 
 ### Update persisted shop settings (MANAGER+)
 PATCH {{baseUrl}}/api/settings

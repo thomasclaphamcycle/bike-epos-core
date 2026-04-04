@@ -74,10 +74,10 @@ The React app proxies `/api` to `http://localhost:3100` in development and is th
 Optional shipping-label print agent for web-order dispatch:
 
 ```bash
-COREPOS_PRINT_AGENT_TRANSPORT=DRY_RUN npm run print-agent:start
+npm run print-agent:start
 ```
 
-For the full Windows/Zebra agent setup and raw TCP configuration, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
+Then register a printer in `/management/settings`, mark it shipping-label capable, and set it as the default shipping-label printer. For the full Windows/Zebra agent setup and raw TCP configuration, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
 5. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 

@@ -3,6 +3,7 @@
 @managerId = online-store-demo-manager
 @orderId = 00000000-0000-4000-8000-000000000000
 @shipmentId = 00000000-0000-4000-8000-000000000000
+@printerId = 00000000-0000-4000-8000-000000000000
 
 ### List web orders (MANAGER+)
 GET {{baseUrl}}/api/online-store/orders?take=20&skip=0
@@ -74,7 +75,7 @@ X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
 {
-  "printerName": "Dispatch Zebra GK420d",
+  "printerId": "{{printerId}}",
   "copies": 1
 }
 
@@ -85,7 +86,7 @@ X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
 {
-  "printerName": "Dispatch Zebra GK420d",
+  "printerId": "{{printerId}}",
   "copies": 1
 }
 

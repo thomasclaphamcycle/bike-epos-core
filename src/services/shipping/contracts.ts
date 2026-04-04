@@ -56,6 +56,7 @@ export interface ShippingLabelProvider {
 }
 
 export type ShippingPrintPreparationInput = {
-  printerName?: string | null;
+  printerId?: string | null;
+  printerKey?: string | null;
   copies?: number;
 };

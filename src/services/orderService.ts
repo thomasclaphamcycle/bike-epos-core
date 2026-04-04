@@ -4,6 +4,7 @@ import { logOperationalEvent } from "../lib/operationalLogger";
 import type { AuditActor } from "./auditService";
 import { createAuditEventTx } from "./auditService";
 import { listStoreInfoSettings } from "./configurationService";
+import { resolveShipmentLabelPrinterSelection, type ResolvedShipmentPrinter } from "./printerService";
 import {
   DEFAULT_SHIPPING_PROVIDER_KEY,
   DEFAULT_SHIPPING_SERVICE_CODE,
@@ -562,7 +563,8 @@ const buildPrintRequest = (
   order: Pick<WebOrderDetailResponse, "id" | "orderNumber" | "sourceChannel">,
   shipment: WebOrderShipmentResponse,
   document: ShippingLabelDocument,
-  input: ShippingPrintPreparationInput,
+  printer: ResolvedShipmentPrinter,
+  input: Pick<ShippingPrintPreparationInput, "copies">,
 ): ShipmentPrintRequest => ({
   version: 1,
   intentType: "SHIPMENT_LABEL_PRINT",
@@ -572,9 +574,14 @@ const buildPrintRequest = (
   trackingNumber: shipment.trackingNumber,
   printer: {
     transport: "WINDOWS_LOCAL_AGENT",
-    printerFamily: "ZEBRA_LABEL",
-    printerModelHint: "GK420D_OR_COMPATIBLE",
-    printerName: normalizeOptionalText(input.printerName ?? null) ?? null,
+    printerId: printer.id,
+    printerKey: printer.key,
+    printerFamily: printer.printerFamily,
+    printerModelHint: printer.printerModelHint,
+    printerName: printer.name,
+    transportMode: printer.transportMode,
+    rawTcpHost: printer.rawTcpHost,
+    rawTcpPort: printer.rawTcpPort,
     copies: Number.isInteger(input.copies) && input.copies && input.copies > 0 ? input.copies : 1,
   },
   document,
@@ -999,7 +1006,11 @@ export const prepareShipmentLabelPrint = async (
   auditActor?: AuditActor,
 ) => {
   const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
-  const updated = await prisma.$transaction(async (tx) => {
+  const prepared = await prisma.$transaction(async (tx) => {
+    const resolvedPrinter = await resolveShipmentLabelPrinterSelection({
+      printerId: input.printerId ?? null,
+      printerKey: input.printerKey ?? null,
+    }, tx);
     const shipment = await tx.webOrderShipment.findUnique({
       where: { id: normalizedShipmentId },
       select: webOrderShipmentWithOrderAndContentSelect,
@@ -1022,36 +1033,42 @@ export const prepareShipmentLabelPrint = async (
 
     await createAuditEventTx(
       tx,
-      {
-        action: "WEB_ORDER_SHIPMENT_PRINT_PREPARED",
-        entityType: "WEB_ORDER_SHIPMENT",
-        entityId: saved.id,
-        metadata: {
-          webOrderId: saved.webOrder.id,
-          printerName: normalizeOptionalText(input.printerName ?? null) ?? null,
-          copies: Number.isInteger(input.copies) && input.copies && input.copies > 0 ? input.copies : 1,
-          status: saved.status,
+        {
+          action: "WEB_ORDER_SHIPMENT_PRINT_PREPARED",
+          entityType: "WEB_ORDER_SHIPMENT",
+          entityId: saved.id,
+          metadata: {
+            webOrderId: saved.webOrder.id,
+            printerId: resolvedPrinter.id,
+            printerKey: resolvedPrinter.key,
+            printerName: resolvedPrinter.name,
+            printerTransportMode: resolvedPrinter.transportMode,
+            copies: Number.isInteger(input.copies) && input.copies && input.copies > 0 ? input.copies : 1,
+            status: saved.status,
+          },
         },
-      },
       auditActor,
     );
 
-    return saved;
+    return {
+      shipment: saved,
+      resolvedPrinter,
+    };
   });
 
-  const shipment = toShipmentResponse(updated);
-  const order = toOrderDetail(updated.webOrder);
+  const shipment = toShipmentResponse(prepared.shipment);
+  const order = toOrderDetail(prepared.shipment.webOrder);
   const document = {
     format: shipment.labelFormat,
     mimeType: shipment.labelMimeType,
     fileName: shipment.labelFileName,
-    content: updated.labelContent,
+    content: prepared.shipment.labelContent,
   } satisfies ShippingLabelDocument;
 
   return {
     order,
     shipment,
-    printRequest: buildPrintRequest(order, shipment, document, input),
+    printRequest: buildPrintRequest(order, shipment, document, prepared.resolvedPrinter, input),
   };
 };
 
@@ -1090,6 +1107,8 @@ const recordShipmentPrintFailure = async (
           webOrderId: shipmentRecord.webOrderId,
           trackingNumber: shipmentRecord.trackingNumber,
           status: shipmentRecord.status,
+          printerId: printRequest.printer.printerId,
+          printerKey: printRequest.printer.printerKey,
           printerName: printRequest.printer.printerName,
           copies: printRequest.printer.copies,
           failureCode,
@@ -1189,6 +1208,8 @@ export const recordShipmentPrinted = async (
           webOrderId: savedShipment.webOrderId,
           status: savedShipment.status,
           reprintCount: savedShipment.reprintCount,
+          printerId: options.printJob?.printerId ?? options.printRequest?.printer.printerId ?? null,
+          printerKey: options.printJob?.printerKey ?? options.printRequest?.printer.printerKey ?? null,
           printerName: options.printJob?.printerName ?? options.printRequest?.printer.printerName ?? null,
           printerTarget: options.printJob?.printerTarget ?? null,
           copies: options.printJob?.copies ?? options.printRequest?.printer.copies ?? null,

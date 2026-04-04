@@ -11,6 +11,10 @@ const { createSmokeServerController } = require("./smoke_server_helper");
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 const PRINT_AGENT_SECRET = "online-store-smoke-print-secret";
+const ADMIN_HEADERS = {
+  "X-Staff-Role": "ADMIN",
+  "X-Staff-Id": "online-store-smoke-admin",
+};
 const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": "online-store-smoke-manager",
@@ -71,7 +75,7 @@ const startFakePrintAgent = async () => {
       requests.push(payload);
       const printRequest = payload?.printRequest;
 
-      if (printRequest?.printer?.printerName === "Force Failing Zebra") {
+      if (printRequest?.printer?.printerKey === "FORCE_FAILING_ZEBRA") {
         res.writeHead(502, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           error: {
@@ -93,6 +97,8 @@ const startFakePrintAgent = async () => {
           acceptedAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
           transportMode: "DRY_RUN",
+          printerId: printRequest?.printer?.printerId ?? "unknown-printer-id",
+          printerKey: printRequest?.printer?.printerKey ?? "UNKNOWN_PRINTER",
           printerName: printRequest?.printer?.printerName ?? "Dispatch Zebra GK420d",
           printerTarget: "dry-run://online-store-smoke",
           copies,
@@ -167,8 +173,22 @@ const createOrderBody = (token, overrides = {}) => ({
   ...overrides,
 });
 
+const createPrinter = async (body) => {
+  const response = await fetchJson("/api/settings/printers", {
+    method: "POST",
+    headers: {
+      ...ADMIN_HEADERS,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  assert.equal(response.status, 201, JSON.stringify(response.json));
+  return response.json.printer;
+};
+
 const run = async () => {
   const createdOrderIds = [];
+  const createdPrinterIds = [];
   const fakePrintAgent = await startFakePrintAgent();
   const serverController = createSmokeServerController({
     label: "online-store-smoke",
@@ -182,6 +202,48 @@ const run = async () => {
 
   try {
     await serverController.startIfNeeded();
+
+    const defaultPrinter = await createPrinter({
+      name: "Dispatch Zebra GK420d",
+      key: "DISPATCH_ZEBRA_GK420D",
+      transportMode: "DRY_RUN",
+      location: "Dispatch bench",
+    });
+    createdPrinterIds.push(defaultPrinter.id);
+    const failingPrinter = await createPrinter({
+      name: "Force Failing Zebra",
+      key: "FORCE_FAILING_ZEBRA",
+      transportMode: "DRY_RUN",
+      location: "Dispatch bench backup",
+    });
+    createdPrinterIds.push(failingPrinter.id);
+    const inactivePrinter = await createPrinter({
+      name: "Inactive Zebra",
+      key: "INACTIVE_ZEBRA",
+      transportMode: "DRY_RUN",
+      isActive: false,
+    });
+    createdPrinterIds.push(inactivePrinter.id);
+    const nonShippingPrinter = await createPrinter({
+      name: "Back Office Printer",
+      key: "BACK_OFFICE_ONLY",
+      transportMode: "DRY_RUN",
+      supportsShippingLabels: false,
+    });
+    createdPrinterIds.push(nonShippingPrinter.id);
+
+    const setDefaultPrinterRes = await fetchJson("/api/settings/printers/default-shipping-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: defaultPrinter.id,
+      }),
+    });
+    assert.equal(setDefaultPrinterRes.status, 200, JSON.stringify(setDefaultPrinterRes.json));
+    assert.equal(setDefaultPrinterRes.json.defaultShippingLabelPrinterId, defaultPrinter.id);
 
     const successToken = `smoke-${Date.now()}`;
     const successOrderBody = createOrderBody(successToken);
@@ -266,7 +328,6 @@ const run = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        printerName: "Dispatch Zebra GK420d",
         copies: 2,
       }),
     });
@@ -274,7 +335,12 @@ const run = async () => {
     assert.equal(preparePrintRes.json.shipment.status, "PRINT_PREPARED");
     assert.equal(preparePrintRes.json.printRequest.printer.transport, "WINDOWS_LOCAL_AGENT");
     assert.equal(preparePrintRes.json.printRequest.printer.printerFamily, "ZEBRA_LABEL");
+    assert.equal(preparePrintRes.json.printRequest.printer.printerId, defaultPrinter.id);
+    assert.equal(preparePrintRes.json.printRequest.printer.printerKey, defaultPrinter.key);
     assert.equal(preparePrintRes.json.printRequest.printer.printerName, "Dispatch Zebra GK420d");
+    assert.equal(preparePrintRes.json.printRequest.printer.transportMode, "DRY_RUN");
+    assert.equal(preparePrintRes.json.printRequest.printer.rawTcpHost, null);
+    assert.equal(preparePrintRes.json.printRequest.printer.rawTcpPort, null);
     assert.equal(preparePrintRes.json.printRequest.printer.copies, 2);
     assert.equal(preparePrintRes.json.printRequest.document.format, "ZPL");
 
@@ -285,7 +351,6 @@ const run = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        printerName: "Dispatch Zebra GK420d",
         copies: 2,
       }),
     });
@@ -295,6 +360,8 @@ const run = async () => {
     assert.equal(printRes.json.shipment.reprintCount, 0);
     assert.equal(printRes.json.printJob.transportMode, "DRY_RUN");
     assert.equal(printRes.json.printJob.simulated, true);
+    assert.equal(printRes.json.printJob.printerId, defaultPrinter.id);
+    assert.equal(printRes.json.printJob.printerKey, defaultPrinter.key);
     assert.equal(printRes.json.printJob.printerTarget, "dry-run://online-store-smoke");
 
     const reprintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/print`, {
@@ -304,7 +371,7 @@ const run = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        printerName: "Dispatch Zebra GK420d",
+        printerId: defaultPrinter.id,
         copies: 1,
       }),
     });
@@ -356,6 +423,71 @@ const run = async () => {
     assert.equal(createFailureShipmentRes.status, 201, JSON.stringify(createFailureShipmentRes.json));
     const failureShipmentId = createFailureShipmentRes.json.shipment.id;
 
+    const clearDefaultPrinterRes = await fetchJson("/api/settings/printers/default-shipping-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: null,
+      }),
+    });
+    assert.equal(clearDefaultPrinterRes.status, 200, JSON.stringify(clearDefaultPrinterRes.json));
+
+    const missingDefaultPrepareRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(failureShipmentId)}/prepare-print`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        copies: 1,
+      }),
+    });
+    assert.equal(missingDefaultPrepareRes.status, 409, JSON.stringify(missingDefaultPrepareRes.json));
+    assert.equal(missingDefaultPrepareRes.json.error.code, "DEFAULT_SHIPPING_LABEL_PRINTER_NOT_CONFIGURED");
+
+    const inactivePrinterPrepareRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(failureShipmentId)}/prepare-print`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: inactivePrinter.id,
+        copies: 1,
+      }),
+    });
+    assert.equal(inactivePrinterPrepareRes.status, 409, JSON.stringify(inactivePrinterPrepareRes.json));
+    assert.equal(inactivePrinterPrepareRes.json.error.code, "PRINTER_INACTIVE");
+
+    const nonShippingPrinterPrepareRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(failureShipmentId)}/prepare-print`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: nonShippingPrinter.id,
+        copies: 1,
+      }),
+    });
+    assert.equal(nonShippingPrinterPrepareRes.status, 409, JSON.stringify(nonShippingPrinterPrepareRes.json));
+    assert.equal(nonShippingPrinterPrepareRes.json.error.code, "PRINTER_NOT_SHIPPING_LABEL_CAPABLE");
+
+    const resetDefaultPrinterRes = await fetchJson("/api/settings/printers/default-shipping-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: defaultPrinter.id,
+      }),
+    });
+    assert.equal(resetDefaultPrinterRes.status, 200, JSON.stringify(resetDefaultPrinterRes.json));
+
     const failedPrintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(failureShipmentId)}/print`, {
       method: "POST",
       headers: {
@@ -363,7 +495,7 @@ const run = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        printerName: "Force Failing Zebra",
+        printerId: failingPrinter.id,
         copies: 1,
       }),
     });
@@ -385,6 +517,16 @@ const run = async () => {
         where: { id: { in: createdOrderIds } },
       });
     }
+    if (createdPrinterIds.length > 0) {
+      await prisma.printer.deleteMany({
+        where: { id: { in: createdPrinterIds } },
+      });
+    }
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: "dispatch.defaultShippingLabelPrinterId",
+      },
+    });
 
     await prisma.$disconnect();
     await Promise.allSettled([
