@@ -14,6 +14,8 @@ export type ShippingPartyAddress = {
   region?: string | null;
   postcode: string;
   country: string;
+  phone?: string | null;
+  email?: string | null;
 };
 
 export type ShippingShipmentContext = {
@@ -64,8 +66,16 @@ export type ShippingProviderRuntimeConfig = {
   environment?: ShippingProviderEnvironment | null;
   displayName?: string | null;
   endpointBaseUrl?: string | null;
+  apiBaseUrl?: string | null;
   apiKey?: string | null;
   accountId?: string | null;
+  carrierAccountId?: string | null;
+  defaultServiceCode?: string | null;
+  defaultServiceName?: string | null;
+  parcelWeightOz?: number | null;
+  parcelLengthIn?: number | null;
+  parcelWidthIn?: number | null;
+  parcelHeightIn?: number | null;
 };
 
 export type ShippingLabelProviderExecutionContext = {

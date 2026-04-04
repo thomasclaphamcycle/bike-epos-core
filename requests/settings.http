@@ -1,6 +1,7 @@
 @baseUrl = http://localhost:3100
 @printerId = 00000000-0000-4000-8000-000000000000
 @shippingProviderKey = GENERIC_HTTP_ZPL
+@easyPostProviderKey = EASYPOST
 
 ### Get persisted shop settings (MANAGER+)
 GET {{baseUrl}}/api/settings
@@ -35,6 +36,26 @@ X-Staff-Id: demo-admin
   "endpointBaseUrl": "http://127.0.0.1:4110",
   "accountId": "sandbox-account-1",
   "apiKey": "replace-with-provider-sandbox-key"
+}
+
+### Update EasyPost shipping provider settings (ADMIN)
+PUT {{baseUrl}}/api/settings/shipping-providers/{{easyPostProviderKey}}
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "enabled": true,
+  "environment": "SANDBOX",
+  "displayName": "EasyPost Sandbox",
+  "carrierAccountId": "ca_replace_me",
+  "defaultServiceCode": "GroundAdvantage",
+  "defaultServiceName": "Ground Advantage",
+  "parcelWeightOz": 24,
+  "parcelLengthIn": 10,
+  "parcelWidthIn": 8,
+  "parcelHeightIn": 4,
+  "apiKey": "EZTK_replace_me"
 }
 
 ### Set the default shipping provider (ADMIN)

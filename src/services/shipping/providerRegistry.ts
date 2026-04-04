@@ -1,11 +1,13 @@
 import { HttpError } from "../../utils/http";
 import type { ShippingLabelProvider } from "./contracts";
+import { EasyPostShippingLabelProvider } from "./easyPostProvider";
 import { GenericHttpZplShippingProvider } from "./genericHttpZplProvider";
 import { InternalMockShippingLabelProvider } from "./mockShippingProvider";
 
 const providers = [
   new InternalMockShippingLabelProvider(),
   new GenericHttpZplShippingProvider(),
+  new EasyPostShippingLabelProvider(),
 ] as const satisfies readonly ShippingLabelProvider[];
 
 const providerMap = new Map(providers.map((provider) => [provider.providerKey, provider]));
@@ -27,8 +29,8 @@ export const listSupportedShippingProviders = () =>
     implementationState: provider.implementationState,
     requiresConfiguration: provider.requiresConfiguration,
     supportedLabelFormats: ["ZPL"] as const,
-    defaultServiceCode: "STANDARD",
-    defaultServiceName: "Standard Dispatch",
+    defaultServiceCode: provider.providerKey === "EASYPOST" ? "GroundAdvantage" : "STANDARD",
+    defaultServiceName: provider.providerKey === "EASYPOST" ? "Ground Advantage" : "Standard Dispatch",
   }));
 
 export const DEFAULT_SHIPPING_PROVIDER_KEY = "INTERNAL_MOCK_ZPL";

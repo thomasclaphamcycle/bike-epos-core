@@ -117,6 +117,36 @@ const toShippingProviderSettingsInput = (body: unknown) => {
   if (record.accountId !== undefined && record.accountId !== null && typeof record.accountId !== "string") {
     throw new HttpError(400, "accountId must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
   }
+  if (record.apiBaseUrl !== undefined && record.apiBaseUrl !== null && typeof record.apiBaseUrl !== "string") {
+    throw new HttpError(400, "apiBaseUrl must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (
+    record.carrierAccountId !== undefined
+    && record.carrierAccountId !== null
+    && typeof record.carrierAccountId !== "string"
+  ) {
+    throw new HttpError(400, "carrierAccountId must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (
+    record.defaultServiceCode !== undefined
+    && record.defaultServiceCode !== null
+    && typeof record.defaultServiceCode !== "string"
+  ) {
+    throw new HttpError(400, "defaultServiceCode must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (
+    record.defaultServiceName !== undefined
+    && record.defaultServiceName !== null
+    && typeof record.defaultServiceName !== "string"
+  ) {
+    throw new HttpError(400, "defaultServiceName must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  for (const numericField of ["parcelWeightOz", "parcelLengthIn", "parcelWidthIn", "parcelHeightIn"] as const) {
+    const value = record[numericField];
+    if (value !== undefined && value !== null && typeof value !== "number") {
+      throw new HttpError(400, `${numericField} must be a number`, "INVALID_SHIPPING_PROVIDER_SETTINGS");
+    }
+  }
   if (record.apiKey !== undefined && record.apiKey !== null && typeof record.apiKey !== "string") {
     throw new HttpError(400, "apiKey must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
   }
@@ -129,7 +159,15 @@ const toShippingProviderSettingsInput = (body: unknown) => {
     environment: record.environment as string | undefined,
     displayName: record.displayName as string | null | undefined,
     endpointBaseUrl: record.endpointBaseUrl as string | null | undefined,
+    apiBaseUrl: record.apiBaseUrl as string | null | undefined,
     accountId: record.accountId as string | null | undefined,
+    carrierAccountId: record.carrierAccountId as string | null | undefined,
+    defaultServiceCode: record.defaultServiceCode as string | null | undefined,
+    defaultServiceName: record.defaultServiceName as string | null | undefined,
+    parcelWeightOz: record.parcelWeightOz as number | null | undefined,
+    parcelLengthIn: record.parcelLengthIn as number | null | undefined,
+    parcelWidthIn: record.parcelWidthIn as number | null | undefined,
+    parcelHeightIn: record.parcelHeightIn as number | null | undefined,
     apiKey: record.apiKey as string | null | undefined,
     clearApiKey: record.clearApiKey as boolean | undefined,
   };

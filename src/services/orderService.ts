@@ -539,6 +539,8 @@ const buildShipFromAddress = async (): Promise<ShippingPartyAddress> => {
     region: store.region || null,
     postcode: store.postcode || "UNKNOWN",
     country: store.country || "United Kingdom",
+    phone: store.phone || null,
+    email: store.email || null,
   };
 };
 
@@ -900,8 +902,24 @@ export const createShipmentLabelForOrder = async (
 ) => {
   const normalizedOrderId = parseRequiredUuid(orderId, "orderId", "INVALID_WEB_ORDER_ID");
   const resolvedProvider = await resolveShippingProviderForShipment(normalizeOptionalText(input.providerKey) ?? null);
-  const serviceCode = normalizeOptionalLimitedText(input.serviceCode, "serviceCode", 64) ?? DEFAULT_SHIPPING_SERVICE_CODE;
-  const serviceName = normalizeOptionalLimitedText(input.serviceName, "serviceName", 120) ?? DEFAULT_SHIPPING_SERVICE_NAME;
+  const configuredDefaultServiceCode =
+    normalizeOptionalLimitedText(
+      resolvedProvider.runtimeConfig?.defaultServiceCode ?? undefined,
+      "configuredDefaultServiceCode",
+      64,
+    ) ?? null;
+  const configuredDefaultServiceName =
+    normalizeOptionalLimitedText(
+      resolvedProvider.runtimeConfig?.defaultServiceName ?? undefined,
+      "configuredDefaultServiceName",
+      120,
+    ) ?? null;
+  const requestedServiceCode = normalizeOptionalLimitedText(input.serviceCode, "serviceCode", 64);
+  const requestedServiceName = normalizeOptionalLimitedText(input.serviceName, "serviceName", 120);
+  const serviceCode = requestedServiceCode ?? configuredDefaultServiceCode ?? DEFAULT_SHIPPING_SERVICE_CODE;
+  const serviceName = requestedServiceName
+    ?? (requestedServiceCode ? serviceCode : configuredDefaultServiceName)
+    ?? DEFAULT_SHIPPING_SERVICE_NAME;
   const shipFrom = await buildShipFromAddress();
   const preflight = await prisma.$transaction((tx) => loadShipmentCreationPreflight(tx, normalizedOrderId));
 
@@ -922,6 +940,8 @@ export const createShipmentLabelForOrder = async (
           region: preflight.order.shippingRegion,
           postcode: preflight.order.shippingPostcode,
           country: preflight.order.shippingCountry,
+          phone: preflight.order.customerPhone ?? null,
+          email: preflight.order.customerEmail,
         },
         items: preflight.order.items.map((item) => ({
           sku: item.sku ?? null,

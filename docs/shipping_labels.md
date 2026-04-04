@@ -21,6 +21,7 @@ The current implementation now includes a real courier-integration foundation:
 
 - `INTERNAL_MOCK_ZPL` remains available as the built-in development path
 - `GENERIC_HTTP_ZPL` provides a production-shaped provider adapter scaffold with manager-configured endpoint, environment, and credentials
+- `EASYPOST` provides the first genuine carrier-backed shipment purchase flow with stored provider references, tracking, and downloaded ZPL
 - shipment labels continue through the existing CorePOS-owned print preparation, dispatch-printer resolution, and Windows print-agent path
 
 ## Current architecture
@@ -60,7 +61,7 @@ The flow is now split into six layers:
 
 ## Provider status
 
-CorePOS currently ships with two provider paths:
+CorePOS currently ships with three provider paths:
 
 ### `INTERNAL_MOCK_ZPL`
 
@@ -82,6 +83,21 @@ This path is a production-shaped courier adapter scaffold:
 - it persists provider-backed shipment metadata so later live adapters have a clean storage model
 
 `GENERIC_HTTP_ZPL` is intentionally honest about its current status: it is a generic adapter scaffold, not a branded live carrier integration.
+
+### `EASYPOST`
+
+This path is the first real carrier adapter:
+
+- it is configured through CorePOS Settings with sandbox/live mode, API key, carrier account, default service, and parcel defaults
+- it creates and buys a real provider-backed shipment through EasyPost
+- it stores provider shipment/tracking/label references on the shipment record
+- it downloads ZPL-compatible label output into CorePOS so reprints stay local and stable
+
+The current scope is intentionally narrow:
+
+- one configured carrier account
+- one configured default service
+- one parcel-default profile suitable for the current dispatch workflow
 
 ## Why ZPL first
 
@@ -152,7 +168,7 @@ The current implementation does not attempt to be:
 - a general media or document library
 - a browser-print-based final architecture
 
-It is a backend-first shipping foundation for web-order dispatch that stays honest about the current mock/dev stage while pointing cleanly toward real courier and Windows print-agent integrations.
+It is a backend-first shipping foundation for web-order dispatch that now includes a first live carrier path while still staying honest about the remaining production rollout work.
 
 For the courier adapter/configuration foundation and current provider-backed workflow, see [courier_integration.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/courier_integration.md).
 For the current Windows/Zebra print-agent setup, configuration, and limitations, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
