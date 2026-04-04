@@ -2711,18 +2711,22 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
     expectedPath: "/online-store/orders",
   });
 
+  await page.getByLabel("Search orders").fill(createdOrder.order.orderNumber);
   await expect(page.getByTestId(`online-store-order-row-${createdOrder.order.id}`)).toBeVisible();
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
   await expect(page.getByTestId("online-store-order-detail")).toContainText(createdOrder.order.orderNumber);
-  await page.getByTestId("online-store-mark-packed").click();
-  await expect(page.getByTestId("online-store-order-detail")).toContainText("Packed");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Generate the first shipment label");
+  await expect(page.getByTestId("online-store-readiness")).toContainText("Ready to create");
+  await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("No shipment activity yet");
   await page.getByTestId("online-store-generate-label").click();
 
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Label Ready");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Prepare the Zebra print payload");
   await expect(page.getByTestId("online-store-label-preview")).toContainText("COREPOS DEV SHIPMENT LABEL");
+  await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("Shipment created");
 
   await page.getByTestId("online-store-prepare-print").click();
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"transport": "WINDOWS_LOCAL_AGENT"');
@@ -2733,12 +2737,15 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Printed");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Mark the parcel dispatched after handoff");
   await expect(page.getByTestId("online-store-print-job-result")).toContainText("DRY_RUN");
 
   await page.getByTestId("online-store-dispatch").click();
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Dispatched");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Shipment workflow complete");
+  await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("Dispatched");
 
   const finalOrder = await apiJsonWithHeaderBypass(
     request,

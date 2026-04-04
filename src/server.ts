@@ -63,6 +63,7 @@ import { customerAccountRouter } from "./routes/customerAccountRoutes";
 import { onlineStoreRouter } from "./routes/onlineStoreRoutes";
 import { tillUiRouter } from "./routes/tillUiRoutes";
 import { eventRouter } from "./routes/eventRoutes";
+import { shippingProviderWebhookRouter } from "./routes/shippingProviderWebhookRoutes";
 import { findBarcodeOrThrow } from "./services/productLookupService";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestContextMiddleware } from "./middleware/requestContext";
@@ -91,6 +92,7 @@ const appVersion = resolveVersion();
 registerInternalEventSubscribers();
 app.use(requestContextMiddleware);
 app.use(requestLoggingMiddleware);
+app.use("/api/shipping/providers", shippingProviderWebhookRouter);
 app.use(express.json({ limit: "12mb" }));
 app.use(enforceAuthMode);
 

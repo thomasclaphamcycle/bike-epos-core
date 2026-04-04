@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { HttpError } from "../../utils/http";
 import type {
   ShippingLabelDocument,
@@ -9,10 +10,14 @@ import type {
   ShippingProviderShipmentLifecycleInput,
   ShippingProviderShipmentLifecycleResult,
   ShippingProviderEnvironment,
+  ShippingProviderWebhookEvent,
+  ShippingProviderWebhookInput,
 } from "./contracts";
 
 const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_EASYPOST_API_BASE_URL = "https://api.easypost.com/v2";
+const EASYPOST_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 60;
+const EASYPOST_WEBHOOK_FUTURE_SKEW_SECONDS = 30;
 
 const COUNTRY_ALIASES = new Map<string, string>([
   ["UK", "GB"],
@@ -185,19 +190,13 @@ const buildLabelFileName = (input: ShippingLabelGenerationInput, trackingNumber:
 const buildShipmentReference = (input: ShippingLabelGenerationInput) =>
   `${input.order.orderNumber} / ${input.shipment.shipmentNumber}`;
 
-const resolveRuntimeConfig = (context: ShippingLabelProviderExecutionContext) => {
+const resolveEnvironmentAndBaseUrl = (context: ShippingLabelProviderExecutionContext) => {
   const runtimeConfig = context.runtimeConfig;
   if (!runtimeConfig) {
     throw new HttpError(503, "EasyPost provider is not configured", "SHIPPING_PROVIDER_NOT_CONFIGURED");
   }
 
-  const apiKey = expectString(runtimeConfig.apiKey, "runtimeConfig.apiKey");
-  const carrierAccountId = expectString(runtimeConfig.carrierAccountId, "runtimeConfig.carrierAccountId");
   const environment = expectEnvironment(runtimeConfig.environment);
-  const parcelWeightOz = expectPositiveNumber(runtimeConfig.parcelWeightOz, "runtimeConfig.parcelWeightOz");
-  const parcelLengthIn = expectPositiveNumber(runtimeConfig.parcelLengthIn, "runtimeConfig.parcelLengthIn");
-  const parcelWidthIn = expectPositiveNumber(runtimeConfig.parcelWidthIn, "runtimeConfig.parcelWidthIn");
-  const parcelHeightIn = expectPositiveNumber(runtimeConfig.parcelHeightIn, "runtimeConfig.parcelHeightIn");
 
   const apiBaseUrl = runtimeConfig.apiBaseUrl?.trim() || DEFAULT_EASYPOST_API_BASE_URL;
   let parsedBaseUrl: URL;
@@ -221,13 +220,52 @@ const resolveRuntimeConfig = (context: ShippingLabelProviderExecutionContext) =>
 
   return {
     apiBaseUrl: parsedBaseUrl.toString().replace(/\/$/, ""),
-    apiKey,
-    carrierAccountId,
     environment,
-    parcelWeightOz,
-    parcelLengthIn,
-    parcelWidthIn,
-    parcelHeightIn,
+  };
+};
+
+const resolveBaseRuntimeConfig = (context: ShippingLabelProviderExecutionContext) => {
+  const base = resolveEnvironmentAndBaseUrl(context);
+  const runtimeConfig = context.runtimeConfig;
+  if (!runtimeConfig) {
+    throw new HttpError(503, "EasyPost provider is not configured", "SHIPPING_PROVIDER_NOT_CONFIGURED");
+  }
+
+  return {
+    ...base,
+    apiKey: expectString(runtimeConfig.apiKey, "runtimeConfig.apiKey"),
+  };
+};
+
+const resolveLabelRuntimeConfig = (context: ShippingLabelProviderExecutionContext) => {
+  const base = resolveBaseRuntimeConfig(context);
+  const runtimeConfig = context.runtimeConfig;
+  if (!runtimeConfig) {
+    throw new HttpError(503, "EasyPost provider is not configured", "SHIPPING_PROVIDER_NOT_CONFIGURED");
+  }
+
+  return {
+    ...base,
+    carrierAccountId: expectString(runtimeConfig.carrierAccountId, "runtimeConfig.carrierAccountId"),
+    parcelWeightOz: expectPositiveNumber(runtimeConfig.parcelWeightOz, "runtimeConfig.parcelWeightOz"),
+    parcelLengthIn: expectPositiveNumber(runtimeConfig.parcelLengthIn, "runtimeConfig.parcelLengthIn"),
+    parcelWidthIn: expectPositiveNumber(runtimeConfig.parcelWidthIn, "runtimeConfig.parcelWidthIn"),
+    parcelHeightIn: expectPositiveNumber(runtimeConfig.parcelHeightIn, "runtimeConfig.parcelHeightIn"),
+  };
+};
+
+const resolveLifecycleRuntimeConfig = (context: ShippingLabelProviderExecutionContext) => resolveBaseRuntimeConfig(context);
+
+const resolveWebhookRuntimeConfig = (context: ShippingLabelProviderExecutionContext) => {
+  const base = resolveEnvironmentAndBaseUrl(context);
+  const runtimeConfig = context.runtimeConfig;
+  if (!runtimeConfig) {
+    throw new HttpError(503, "EasyPost provider is not configured", "SHIPPING_PROVIDER_NOT_CONFIGURED");
+  }
+
+  return {
+    ...base,
+    webhookSecret: expectString(runtimeConfig.webhookSecret, "runtimeConfig.webhookSecret"),
   };
 };
 
@@ -446,6 +484,164 @@ const getLifecycleShipmentReference = (input: ShippingProviderShipmentLifecycleI
   ?? input.shipment.providerReference
   ?? null;
 
+const getHeaderValue = (
+  headers: ShippingProviderWebhookInput["headers"],
+  key: string,
+) => {
+  const value = headers[key] ?? headers[key.toLowerCase()];
+  if (Array.isArray(value)) {
+    const first = value.find((candidate) => typeof candidate === "string" && candidate.trim().length > 0);
+    return first?.trim() ?? null;
+  }
+
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+};
+
+const parseEasyPostWebhookTimestamp = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook timestamp was not a valid RFC 2822 date",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+
+  const now = Date.now();
+  const ageSeconds = (now - parsed.getTime()) / 1000;
+  if (ageSeconds > EASYPOST_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook timestamp was outside the accepted replay window",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+  if (ageSeconds < -EASYPOST_WEBHOOK_FUTURE_SKEW_SECONDS) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook timestamp was too far in the future",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+
+  return parsed;
+};
+
+const verifyEasyPostWebhookSignature = (
+  input: ShippingProviderWebhookInput,
+  webhookSecret: string,
+) => {
+  const timestamp = getHeaderValue(input.headers, "x-timestamp");
+  const signedPath = getHeaderValue(input.headers, "x-path");
+  const signatureHeader = getHeaderValue(input.headers, "x-hmac-signature-v2");
+
+  if (!timestamp || !signedPath || !signatureHeader) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook was missing required HMAC headers",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+
+  parseEasyPostWebhookTimestamp(timestamp);
+  if (signedPath !== input.path) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook path header did not match the received request path",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+
+  const normalizedSignature = signatureHeader.toLowerCase().startsWith("hmac-sha256-hex=")
+    ? signatureHeader.slice("hmac-sha256-hex=".length).trim().toLowerCase()
+    : null;
+  if (!normalizedSignature || !/^[0-9a-f]{64}$/i.test(normalizedSignature)) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook signature header was not in the expected format",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+
+  const stringToSign = `${timestamp}${input.method.toUpperCase()}${signedPath}${input.rawBody.toString("utf8")}`;
+  const expectedSignature = createHmac("sha256", webhookSecret)
+    .update(stringToSign, "utf8")
+    .digest("hex")
+    .toLowerCase();
+
+  const actualBuffer = Buffer.from(normalizedSignature, "utf8");
+  const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
+    throw new HttpError(
+      401,
+      "EasyPost webhook signature verification failed",
+      "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED",
+    );
+  }
+};
+
+type EasyPostEventPayload = {
+  id: string;
+  description: string;
+  createdAt: Date | null;
+  result: Record<string, unknown> | null;
+  raw: Record<string, unknown>;
+};
+
+type EasyPostTrackerResult = {
+  id: string;
+  trackingCode: string | null;
+  status: string | null;
+  shipmentId: string | null;
+};
+
+type EasyPostRefundResult = {
+  id: string;
+  trackingCode: string | null;
+  shipmentId: string | null;
+  status: string | null;
+};
+
+const parseOptionalDateString = (value: unknown, field: string) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const raw = expectString(value, field);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`${field} must be a valid ISO timestamp`);
+  }
+
+  return parsed;
+};
+
+const parseEasyPostEventPayload = (value: unknown): EasyPostEventPayload => {
+  const record = expectRecord(value, "event");
+
+  return {
+    id: expectString(record.id, "event.id"),
+    description: expectString(record.description, "event.description"),
+    createdAt: parseOptionalDateString(record.created_at, "event.created_at"),
+    result: expectOptionalRecord(record.result, "event.result"),
+    raw: record,
+  };
+};
+
+const parseEasyPostTrackerResult = (value: Record<string, unknown>): EasyPostTrackerResult => ({
+  id: expectString(value.id, "event.result.id"),
+  trackingCode: expectOptionalString(value.tracking_code, "event.result.tracking_code"),
+  status: expectOptionalString(value.status, "event.result.status"),
+  shipmentId: expectOptionalString(value.shipment_id, "event.result.shipment_id"),
+});
+
+const parseEasyPostRefundResult = (value: Record<string, unknown>): EasyPostRefundResult => ({
+  id: expectString(value.id, "event.result.id"),
+  trackingCode: expectOptionalString(value.tracking_code, "event.result.tracking_code"),
+  shipmentId: expectOptionalString(value.shipment_id, "event.result.shipment_id"),
+  status: expectOptionalString(value.status, "event.result.status"),
+});
+
 export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
   readonly providerKey = "EASYPOST";
   readonly providerDisplayName = "EasyPost";
@@ -454,12 +650,13 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
   readonly requiresConfiguration = true;
   readonly supportsShipmentRefresh = true;
   readonly supportsShipmentVoid = true;
+  readonly supportsWebhookEvents = true;
 
   async createLabel(
     input: ShippingLabelGenerationInput,
     context: ShippingLabelProviderExecutionContext,
   ): Promise<ShippingLabelProviderResult> {
-    const config = resolveRuntimeConfig(context);
+    const config = resolveLabelRuntimeConfig(context);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
     const authorization = buildBasicAuthHeader(config.apiKey);
@@ -625,7 +822,7 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
     input: ShippingProviderShipmentLifecycleInput,
     context: ShippingLabelProviderExecutionContext,
   ): Promise<ShippingProviderShipmentLifecycleResult> {
-    const config = resolveRuntimeConfig(context);
+    const config = resolveLifecycleRuntimeConfig(context);
     const providerShipmentReference = getLifecycleShipmentReference(input);
     if (!providerShipmentReference) {
       throw new HttpError(
@@ -684,7 +881,7 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
     input: ShippingProviderShipmentLifecycleInput,
     context: ShippingLabelProviderExecutionContext,
   ): Promise<ShippingProviderShipmentLifecycleResult> {
-    const config = resolveRuntimeConfig(context);
+    const config = resolveLifecycleRuntimeConfig(context);
     const providerShipmentReference = getLifecycleShipmentReference(input);
     if (!providerShipmentReference) {
       throw new HttpError(
@@ -737,5 +934,65 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async parseWebhookEvent(
+    input: ShippingProviderWebhookInput,
+    context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingProviderWebhookEvent> {
+    const config = resolveWebhookRuntimeConfig(context);
+    verifyEasyPostWebhookSignature(input, config.webhookSecret);
+
+    const event = parseEasyPostEventPayload(input.body);
+
+    if (event.description === "tracker.updated" && event.result) {
+      const tracker = parseEasyPostTrackerResult(event.result);
+      return {
+        eventId: event.id,
+        eventType: event.description,
+        occurredAt: event.createdAt,
+        providerShipmentReference: tracker.shipmentId ?? null,
+        providerTrackingReference: tracker.id,
+        trackingNumber: tracker.trackingCode ?? null,
+        signatureVerified: true,
+        disposition: "APPLY_UPDATE",
+        lifecycleResult: {
+          trackingNumber: tracker.trackingCode ?? null,
+          providerShipmentReference: tracker.shipmentId ?? null,
+          providerTrackingReference: tracker.id,
+          providerStatus: tracker.status ?? null,
+        },
+        payload: event.raw,
+      };
+    }
+
+    if (event.description === "refund.successful" && event.result) {
+      const refund = parseEasyPostRefundResult(event.result);
+      return {
+        eventId: event.id,
+        eventType: event.description,
+        occurredAt: event.createdAt,
+        providerShipmentReference: refund.shipmentId ?? null,
+        trackingNumber: refund.trackingCode ?? null,
+        signatureVerified: true,
+        disposition: "APPLY_UPDATE",
+        lifecycleResult: {
+          trackingNumber: refund.trackingCode ?? null,
+          providerShipmentReference: refund.shipmentId ?? null,
+          providerRefundStatus: refund.status ?? "REFUNDED",
+        },
+        payload: event.raw,
+      };
+    }
+
+    return {
+      eventId: event.id,
+      eventType: event.description,
+      occurredAt: event.createdAt,
+      signatureVerified: true,
+      disposition: "IGNORE",
+      ignoreReason: `EasyPost event ${event.description} is not mapped into CorePOS shipment sync yet`,
+      payload: event.raw,
+    };
   }
 }
