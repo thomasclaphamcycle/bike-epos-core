@@ -170,6 +170,7 @@ type ListOrdersResponse = {
     packedCount: number;
     packedWithoutShipmentCount: number;
     labelReadyCount: number;
+    readyToDispatchCount: number;
     dispatchedCount: number;
   };
   supportedProviders: SupportedShippingProvider[];
@@ -283,10 +284,11 @@ type BulkShipmentActionResult = {
   trackingNumber: string | null;
   shipmentStatus: WebOrderShipmentStatus | null;
   printedAt: string | null;
+  dispatchedAt: string | null;
 };
 
 type BulkShipmentOperationResponse = {
-  action: "CREATE_SHIPMENTS" | "PRINT_SHIPMENTS";
+  action: "CREATE_SHIPMENTS" | "PRINT_SHIPMENTS" | "DISPATCH_SHIPMENTS";
   summary: {
     requestedCount: number;
     processedCount: number;
@@ -337,6 +339,119 @@ const canBulkPrintShipmentForOrder = (order: WebOrderSummary) =>
   && order.latestShipment?.status !== "VOIDED"
   && order.latestShipment?.status !== "VOID_PENDING"
   && order.latestShipment?.status !== "DISPATCHED";
+
+const canBulkDispatchShipmentForOrder = (order: WebOrderSummary) =>
+  order.status === "READY_FOR_DISPATCH"
+  && order.fulfillmentMethod === "SHIPPING"
+  && isOrderPacked(order)
+  && Boolean(order.latestShipment?.printedAt)
+  && !order.latestShipment?.dispatchedAt
+  && order.latestShipment?.status !== "VOIDED"
+  && order.latestShipment?.status !== "VOID_PENDING"
+  && order.latestShipment?.status !== "DISPATCHED";
+
+const getOrderDispatchQueueHint = (order: WebOrderSummary) => {
+  if (order.latestShipment?.dispatchedAt || order.status === "DISPATCHED") {
+    return "Dispatched";
+  }
+  if (order.latestShipment?.status === "VOID_PENDING") {
+    return "Void pending provider confirmation";
+  }
+  if (order.latestShipment?.status === "VOIDED") {
+    return "Voided shipment; replacement may be needed";
+  }
+  if (order.latestShipment?.printedAt) {
+    return "Printed and ready to dispatch";
+  }
+  if (order.latestShipment?.printPreparedAt) {
+    return "Print prepared and waiting for output";
+  }
+  if (order.latestShipment) {
+    return "Label ready, needs print";
+  }
+  if (isOrderPacked(order)) {
+    return "Packed and waiting for shipment";
+  }
+  return "Waiting for packing";
+};
+
+const getDetailNextStep = (order: WebOrderDetail, shipment: WebOrderShipment | null) => {
+  if (order.fulfillmentMethod !== "SHIPPING") {
+    return {
+      title: "Outside shipping flow",
+      detail: "Click & collect orders stay outside the shipment-label dispatch bench.",
+    };
+  }
+  if (shipment?.dispatchedAt || order.status === "DISPATCHED") {
+    return {
+      title: "Dispatch complete",
+      detail: "This order has already been confirmed as dispatched. Reprints stay available for audit, but no further bench action is needed.",
+    };
+  }
+  if (!isOrderPacked(order)) {
+    return {
+      title: "Next: mark packed",
+      detail: "Packing is the first gate. Once packed, the order becomes eligible for shipment creation and bulk bench work.",
+    };
+  }
+  if (!shipment) {
+    return {
+      title: "Next: create shipment",
+      detail: "Generate the provider-backed shipment label now that the parcel is packed and ready for dispatch processing.",
+    };
+  }
+  if (shipment.status === "VOID_PENDING") {
+    return {
+      title: "Next: refresh provider status",
+      detail: "This shipment is waiting on the courier void outcome. Refresh it before attempting any further bench action.",
+    };
+  }
+  if (shipment.status === "VOIDED") {
+    return {
+      title: "Next: regenerate if still shipping",
+      detail: "Voided shipments cannot be printed or dispatched. Generate a replacement shipment if the order still needs to go out.",
+    };
+  }
+  if (!shipment.printedAt) {
+    return {
+      title: "Next: print label",
+      detail: "Dispatch remains blocked until the shipment label has been printed through the registered dispatch printer.",
+    };
+  }
+  return {
+    title: "Next: confirm dispatch",
+    detail: "Once the parcel has physically left the dispatch bench, use Mark Dispatched or the bulk dispatch action to record it explicitly.",
+  };
+};
+
+const getBulkActionLabel = (action: BulkShipmentOperationResponse["action"]) => {
+  switch (action) {
+    case "CREATE_SHIPMENTS":
+      return "Bulk shipment creation";
+    case "PRINT_SHIPMENTS":
+      return "Bulk label print";
+    case "DISPATCH_SHIPMENTS":
+      return "Bulk dispatch confirmation";
+    default:
+      return "Bulk dispatch action";
+  }
+};
+
+const getBulkResultGuidance = (result: BulkShipmentOperationResponse | null) => {
+  if (!result) {
+    return "";
+  }
+  switch (result.action) {
+    case "CREATE_SHIPMENTS":
+      return "Skipped rows usually need packing first or already have an active shipment. Printed output still remains a separate next step.";
+    case "PRINT_SHIPMENTS":
+      return "Printed rows are ready for the final explicit dispatch confirmation step. Failed or skipped rows can be retried from the printable or dispatch-ready queues.";
+    case "DISPATCH_SHIPMENTS":
+      return "Dispatch confirmation only applies to printed, active shipments. Skipped rows usually still need print, provider recovery, or operator review.";
+    default:
+      return "";
+  }
+};
 
 const orderStatusClassName = (status: WebOrderStatus) => {
   switch (status) {
@@ -623,11 +738,23 @@ export const OnlineStoreOrdersPage = () => {
     () => selectedOrders.filter(canBulkPrintShipmentForOrder),
     [selectedOrders],
   );
+  const selectedDispatchEligibleOrders = useMemo(
+    () => selectedOrders.filter(canBulkDispatchShipmentForOrder),
+    [selectedOrders],
+  );
   const bulkSelectionSummary = useMemo(() => ({
     selectedCount: selectedOrders.length,
     creatableCount: selectedCreateEligibleOrders.length,
     printableCount: selectedPrintEligibleOrders.length,
-  }), [selectedCreateEligibleOrders.length, selectedOrders.length, selectedPrintEligibleOrders.length]);
+    dispatchableCount: selectedDispatchEligibleOrders.length,
+  }), [
+    selectedCreateEligibleOrders.length,
+    selectedDispatchEligibleOrders.length,
+    selectedOrders.length,
+    selectedPrintEligibleOrders.length,
+  ]);
+  const detailNextStep = selectedOrder ? getDetailNextStep(selectedOrder, selectedShipment) : null;
+  const bulkResultGuidance = getBulkResultGuidance(bulkResult);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     await Promise.all([
@@ -661,6 +788,10 @@ export const OnlineStoreOrdersPage = () => {
 
   const selectPrintableQueue = useCallback(() => {
     setSelectedOrderIds(visibleOrders.filter(canBulkPrintShipmentForOrder).map((order) => order.id));
+  }, [visibleOrders]);
+
+  const selectDispatchQueue = useCallback(() => {
+    setSelectedOrderIds(visibleOrders.filter(canBulkDispatchShipmentForOrder).map((order) => order.id));
   }, [visibleOrders]);
 
   const clearBulkSelection = useCallback(() => {
@@ -882,6 +1013,29 @@ export const OnlineStoreOrdersPage = () => {
     });
   };
 
+  const handleBulkDispatchShipments = async () => {
+    if (selectedOrderIds.length === 0) {
+      return;
+    }
+
+    await runAction("bulk-dispatch", async () => {
+      setPrintNotice(null);
+      const payload = await apiPost<BulkShipmentOperationResponse>("/api/online-store/orders/bulk/dispatch", {
+        orderIds: selectedOrderIds,
+      });
+      setBulkResult(payload);
+      success(
+        payload.summary.succeededCount > 0
+          ? `Bulk dispatch finished: ${payload.summary.succeededCount} succeeded, ${payload.summary.failedCount} failed, ${payload.summary.skippedCount} skipped.`
+          : "Bulk dispatch finished with no successful rows.",
+      );
+      await Promise.all([
+        loadOrders(selectedOrderId || undefined),
+        selectedOrderId ? loadOrderDetail(selectedOrderId) : Promise.resolve(null),
+      ]);
+    });
+  };
+
   const canGenerateShipment = Boolean(
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
@@ -902,7 +1056,12 @@ export const OnlineStoreOrdersPage = () => {
   const canRegenerateShipment = Boolean(selectedShipment && selectedShipment.status === "VOIDED");
   const canPreparePrint = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
   const canPrintShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
-  const canDispatchShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedShipment.printedAt);
+  const canDispatchShipment = Boolean(
+    selectedShipment
+      && !shipmentIsVoidBlocked
+      && selectedShipment.printedAt
+      && !selectedShipment.dispatchedAt,
+  );
   const canPackOrder = Boolean(
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
@@ -925,6 +1084,10 @@ export const OnlineStoreOrdersPage = () => {
     selectedOrderIds.length > 0
       && selectedPrinter
       && selectedPrintEligibleOrders.length > 0,
+  );
+  const canBulkDispatchSelected = Boolean(
+    selectedOrderIds.length > 0
+      && selectedDispatchEligibleOrders.length > 0,
   );
 
   return (
@@ -949,9 +1112,9 @@ export const OnlineStoreOrdersPage = () => {
             <span className="dashboard-metric-detail">Current query across web orders</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Ready for dispatch</span>
+            <span className="metric-label">Bench queue</span>
             <strong className="metric-value">{ordersPayload?.summary.readyForDispatchCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Orders waiting on shipment action</span>
+            <span className="dashboard-metric-detail">Open web orders still in dispatch handling</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Packed queue</span>
@@ -959,9 +1122,14 @@ export const OnlineStoreOrdersPage = () => {
             <span className="dashboard-metric-detail">Orders explicitly packed for shipping work</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Labels ready</span>
+            <span className="metric-label">Needs print</span>
             <strong className="metric-value">{ordersPayload?.summary.labelReadyCount ?? 0}</strong>
-            <span className="dashboard-metric-detail">Orders with an unprinted active label</span>
+            <span className="dashboard-metric-detail">Active labels still waiting to be printed</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Ready to dispatch</span>
+            <strong className="metric-value">{ordersPayload?.summary.readyToDispatchCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Printed labels awaiting final dispatch confirmation</span>
           </div>
           <div className="metric-card">
             <span className="metric-label">Dispatched</span>
@@ -1017,6 +1185,7 @@ export const OnlineStoreOrdersPage = () => {
                 {bulkSelectionSummary.selectedCount} selected
                 {` · ${bulkSelectionSummary.creatableCount} ready to create`}
                 {` · ${bulkSelectionSummary.printableCount} ready to print`}
+                {` · ${bulkSelectionSummary.dispatchableCount} ready to dispatch`}
               </span>
             </div>
             <div className="online-orders-bulk-toolbar__actions">
@@ -1025,6 +1194,9 @@ export const OnlineStoreOrdersPage = () => {
               </button>
               <button type="button" className="button-link" onClick={selectPrintableQueue} disabled={loadingOrders || pendingAction.length > 0}>
                 Select Printable Queue
+              </button>
+              <button type="button" className="button-link" onClick={selectDispatchQueue} disabled={loadingOrders || pendingAction.length > 0}>
+                Select Ready To Dispatch
               </button>
               <button type="button" className="button-link" onClick={clearBulkSelection} disabled={selectedOrderIds.length === 0 || pendingAction.length > 0}>
                 Clear Selection
@@ -1047,29 +1219,43 @@ export const OnlineStoreOrdersPage = () => {
               >
                 {pendingAction === "bulk-print" ? "Printing..." : "Bulk Print Labels"}
               </button>
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => void handleBulkDispatchShipments()}
+                disabled={!canBulkDispatchSelected || pendingAction.length > 0}
+                data-testid="online-store-bulk-dispatch"
+              >
+                {pendingAction === "bulk-dispatch" ? "Dispatching..." : "Bulk Confirm Dispatch"}
+              </button>
             </div>
           </div>
 
           {bulkResult ? (
             <div className="online-orders-bulk-results" data-testid="online-store-bulk-results">
               <div className="online-orders-bulk-results__summary">
-                <strong>
-                  {bulkResult.action === "CREATE_SHIPMENTS" ? "Bulk shipment creation" : "Bulk label print"}
-                </strong>
+                <strong>{getBulkActionLabel(bulkResult.action)}</strong>
                 <span>
                   {bulkResult.summary.succeededCount} succeeded
                   {` · ${bulkResult.summary.failedCount} failed`}
                   {` · ${bulkResult.summary.skippedCount} skipped`}
                 </span>
               </div>
+              {bulkResultGuidance ? (
+                <p className="online-orders-bulk-results__guidance">{bulkResultGuidance}</p>
+              ) : null}
               <ul className="online-orders-bulk-results__list">
                 {bulkResult.results.map((result) => (
                   <li
                     key={`${bulkResult.action}-${result.orderId}-${result.shipmentId ?? "none"}`}
                     className={`online-orders-bulk-results__item online-orders-bulk-results__item--${result.outcome.toLowerCase()}`}
                   >
-                    <span>{result.orderNumber}</span>
-                    <span>{result.trackingNumber ?? humanizeToken(result.outcome)}</span>
+                    <span className="online-orders-bulk-results__title">{result.orderNumber}</span>
+                    <span className="online-orders-bulk-results__meta">
+                      {result.trackingNumber ?? humanizeToken(result.outcome)}
+                      {result.shipmentStatus ? ` · ${humanizeToken(result.shipmentStatus)}` : ""}
+                      {result.dispatchedAt ? " · dispatched" : result.printedAt ? " · printed" : ""}
+                    </span>
                     <span>{result.message}</span>
                   </li>
                 ))}
@@ -1094,6 +1280,7 @@ export const OnlineStoreOrdersPage = () => {
                 const isSelected = order.id === selectedOrderId;
                 const isChecked = selectedOrderIds.includes(order.id);
                 const packed = isOrderPacked(order);
+                const dispatchable = canBulkDispatchShipmentForOrder(order);
                 return (
                   <div
                     key={order.id}
@@ -1120,6 +1307,7 @@ export const OnlineStoreOrdersPage = () => {
                           <span className={`status-badge ${packed ? "status-ready" : "status-warning"}`}>
                             {packed ? "Packed" : "Needs Packing"}
                           </span>
+                          {dispatchable ? <span className="status-badge status-ready">Ready To Dispatch</span> : null}
                           <span className={orderStatusClassName(order.status)}>{humanizeToken(order.status)}</span>
                         </div>
                       </div>
@@ -1133,13 +1321,7 @@ export const OnlineStoreOrdersPage = () => {
                       </div>
                       <div className="online-order-row__footer">
                         <span>{humanizeToken(order.fulfillmentMethod)}</span>
-                        <span>
-                          {order.latestShipment
-                            ? `${humanizeToken(order.latestShipment.status)} · ${order.latestShipment.trackingNumber}`
-                            : packed
-                              ? "Packed and waiting for shipment"
-                              : "Waiting for packing"}
-                        </span>
+                        <span>{getOrderDispatchQueueHint(order)}</span>
                       </div>
                     </button>
                   </div>
@@ -1230,6 +1412,12 @@ export const OnlineStoreOrdersPage = () => {
                         : "Packed orders are eligible for shipment label creation and bulk dispatch actions."
                       : "Mark the order as packed before creating a shipment label or including it in bulk dispatch work."}
                   </div>
+                  {detailNextStep ? (
+                    <div className="online-orders-next-step">
+                      <strong>{detailNextStep.title}</strong>
+                      <span>{detailNextStep.detail}</span>
+                    </div>
+                  ) : null}
                   <div className="online-orders-address-card">
                     <strong>Ship to</strong>
                     <p>{selectedOrder.shippingRecipientName}</p>

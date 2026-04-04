@@ -179,9 +179,9 @@ It currently supports:
 - generating a replacement shipment after void
 - preparing a Windows-local-agent print payload
 - sending the print job through the real agent path
-- selecting multiple packed orders for bulk shipment creation or bulk print in sequence
-- seeing per-order bulk outcomes with safe skip/failure isolation
-- dispatching separately after print succeeds
+- selecting multiple packed orders for bulk shipment creation, bulk print, or bulk dispatch confirmation in sequence
+- seeing per-order bulk outcomes with safe skip/failure isolation plus concise retry/recovery cues
+- dispatching separately after print succeeds, including a ready-to-dispatch batch queue for printed labels
 
 This is intentionally a narrow dispatch workflow, not a broader storefront or fulfilment dashboard redesign.
 

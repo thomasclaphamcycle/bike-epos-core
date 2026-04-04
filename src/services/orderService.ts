@@ -347,10 +347,11 @@ type BulkShipmentActionResult = {
   trackingNumber: string | null;
   shipmentStatus: WebOrderShipmentStatus | null;
   printedAt: Date | null;
+  dispatchedAt: Date | null;
 };
 
 export type BulkShipmentOperationResponse = {
-  action: "CREATE_SHIPMENTS" | "PRINT_SHIPMENTS";
+  action: "CREATE_SHIPMENTS" | "PRINT_SHIPMENTS" | "DISPATCH_SHIPMENTS";
   summary: {
     requestedCount: number;
     processedCount: number;
@@ -366,6 +367,10 @@ export type BulkCreateShipmentsInput = CreateShipmentLabelInput & {
 };
 
 export type BulkPrintShipmentsInput = ShippingPrintPreparationInput & {
+  orderIds: string[];
+};
+
+export type BulkDispatchShipmentsInput = {
   orderIds: string[];
 };
 
@@ -639,13 +644,39 @@ const canBulkPrintShipmentForOrder = (order: {
   status: WebOrderStatus;
   fulfillmentMethod: WebOrderFulfillmentMethod;
   packedAt: Date | null;
-  latestShipment?: { status: WebOrderShipmentStatus } | null;
+  latestShipment?: {
+    status: WebOrderShipmentStatus;
+    printedAt: Date | null;
+    dispatchedAt: Date | null;
+  } | null;
 }) => (
   order.status === "READY_FOR_DISPATCH"
   && order.fulfillmentMethod === "SHIPPING"
   && isOrderPacked(order)
   && Boolean(order.latestShipment)
   && isShipmentPrintable(order.latestShipment?.status ?? "VOIDED")
+  && order.latestShipment?.status !== "DISPATCHED"
+);
+
+const canBulkDispatchShipmentForOrder = (order: {
+  status: WebOrderStatus;
+  fulfillmentMethod: WebOrderFulfillmentMethod;
+  packedAt: Date | null;
+  latestShipment?: {
+    status: WebOrderShipmentStatus;
+    printedAt: Date | null;
+    dispatchedAt: Date | null;
+  } | null;
+}) => (
+  order.status === "READY_FOR_DISPATCH"
+  && order.fulfillmentMethod === "SHIPPING"
+  && isOrderPacked(order)
+  && Boolean(order.latestShipment)
+  && Boolean(order.latestShipment?.printedAt)
+  && !order.latestShipment?.dispatchedAt
+  && isShipmentPrintable(order.latestShipment?.status ?? "VOIDED")
+  && order.latestShipment?.status !== "VOID_PENDING"
+  && order.latestShipment?.status !== "VOIDED"
   && order.latestShipment?.status !== "DISPATCHED"
 );
 
@@ -671,6 +702,7 @@ const toBulkShipmentActionResult = (
   trackingNumber: order.latestShipment?.trackingNumber ?? null,
   shipmentStatus: order.latestShipment?.status ?? null,
   printedAt: order.latestShipment?.printedAt ?? null,
+  dispatchedAt: order.latestShipment?.dispatchedAt ?? null,
 });
 
 const buildDefaultOrderNumber = () => `WEB-${Date.now()}`;
@@ -1251,6 +1283,7 @@ export const listOnlineStoreOrders = async (input: {
       labelReadyCount: mappedOrders.filter((order) =>
         order.latestShipment
         && (order.latestShipment.status === "LABEL_READY" || order.latestShipment.status === "PRINT_PREPARED")).length,
+      readyToDispatchCount: mappedOrders.filter((order) => canBulkDispatchShipmentForOrder(order)).length,
       dispatchedCount: mappedOrders.filter((order) => order.status === "DISPATCHED").length,
     },
     supportedProviders: providerSettings.providers,
@@ -1488,6 +1521,7 @@ const toUnknownBulkResult = (
   trackingNumber: null,
   shipmentStatus: null,
   printedAt: null,
+  dispatchedAt: null,
 });
 
 const getBulkOrderSummaries = async (orderIds: string[]) => {
@@ -1675,6 +1709,104 @@ export const bulkPrintShipmentLabels = async (
 
   return {
     action: "PRINT_SHIPMENTS",
+    summary,
+    results,
+  };
+};
+
+export const bulkDispatchShipments = async (
+  input: BulkDispatchShipmentsInput,
+  auditActor?: AuditActor,
+): Promise<BulkShipmentOperationResponse> => {
+  const orderIds = parseBulkOrderIds(input.orderIds);
+  if (orderIds.length === 0) {
+    throw new HttpError(400, "orderIds must include at least one web order", "INVALID_WEB_ORDER");
+  }
+
+  const ordersById = await getBulkOrderSummaries(orderIds);
+  const results: BulkShipmentActionResult[] = [];
+
+  for (const orderId of orderIds) {
+    const order = ordersById.get(orderId);
+    if (!order) {
+      results.push(toUnknownBulkResult(orderId, "Web order not found", "WEB_ORDER_NOT_FOUND"));
+      continue;
+    }
+
+    if (!canBulkDispatchShipmentForOrder(order)) {
+      results.push(
+        toBulkShipmentActionResult(
+          order,
+          "SKIPPED",
+          !isOrderPacked(order)
+            ? "Order is not packed yet"
+            : order.fulfillmentMethod !== "SHIPPING"
+              ? "Only shipping orders can be dispatched here"
+              : order.status !== "READY_FOR_DISPATCH"
+                ? `Order is ${humanizeToken(order.status)}`
+                : !order.latestShipment
+                  ? "No shipment exists yet"
+                  : order.latestShipment.dispatchedAt || order.latestShipment.status === "DISPATCHED"
+                    ? "Shipment is already dispatched"
+                    : !order.latestShipment.printedAt
+                      ? "Shipment label must be printed before dispatch"
+                      : order.latestShipment.status === "VOID_PENDING"
+                        ? "Shipment is waiting for provider void confirmation"
+                        : "Shipment is not in a dispatchable state",
+          !isOrderPacked(order)
+            ? "ORDER_NOT_PACKED"
+            : order.fulfillmentMethod !== "SHIPPING"
+              ? "WEB_ORDER_NOT_SHIPPING"
+              : order.status !== "READY_FOR_DISPATCH"
+                ? "INVALID_WEB_ORDER_STATE"
+                : !order.latestShipment
+                  ? "WEB_ORDER_SHIPMENT_NOT_FOUND"
+                  : order.latestShipment.dispatchedAt || order.latestShipment.status === "DISPATCHED"
+                    ? "SHIPMENT_ALREADY_DISPATCHED"
+                    : !order.latestShipment.printedAt
+                      ? "SHIPMENT_NOT_PRINTED"
+                      : order.latestShipment.status === "VOID_PENDING"
+                        ? "SHIPMENT_VOID_PENDING"
+                        : "INVALID_SHIPMENT_STATE",
+        ),
+      );
+      continue;
+    }
+
+    try {
+      const dispatched = await dispatchShipment(order.latestShipment!.id, auditActor);
+      const refreshedOrder = await getOrderSummaryOrThrow(order.id);
+      results.push(
+        toBulkShipmentActionResult(
+          toOrderSummary(refreshedOrder),
+          "SUCCEEDED",
+          `Shipment ${dispatched.shipment.trackingNumber} dispatched`,
+        ),
+      );
+    } catch (error) {
+      const latestOrder = await getOrderSummaryOrThrow(order.id).catch(() => null);
+      const latestSummary = latestOrder ? toOrderSummary(latestOrder) : order;
+      results.push(
+        toBulkShipmentActionResult(
+          latestSummary,
+          "FAILED",
+          error instanceof Error ? error.message : "Shipment dispatch failed",
+          error instanceof HttpError ? error.code : "WEB_ORDER_SHIPMENT_DISPATCH_FAILED",
+        ),
+      );
+    }
+  }
+
+  const summary = buildBulkOperationSummary(orderIds.length, results);
+  logOperationalEvent("online_store.bulk_dispatch_shipments.completed", {
+    requestedCount: summary.requestedCount,
+    succeededCount: summary.succeededCount,
+    failedCount: summary.failedCount,
+    skippedCount: summary.skippedCount,
+  });
+
+  return {
+    action: "DISPATCH_SHIPMENTS",
     summary,
     results,
   };

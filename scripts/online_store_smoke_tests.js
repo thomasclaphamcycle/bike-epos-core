@@ -734,6 +734,30 @@ const run = async () => {
     assert.equal(bulkPrintRes.json.summary.skippedCount, 1);
     assert.equal(bulkPrintRes.json.summary.failedCount, 1);
 
+    const bulkDispatchRes = await fetchJson("/api/online-store/orders/bulk/dispatch", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        orderIds: [bulkReadyOrderRes.json.order.id, bulkUnpackedOrderRes.json.order.id, randomUUID()],
+      }),
+    });
+    assert.equal(bulkDispatchRes.status, 200, JSON.stringify(bulkDispatchRes.json));
+    assert.equal(bulkDispatchRes.json.action, "DISPATCH_SHIPMENTS");
+    assert.equal(bulkDispatchRes.json.summary.requestedCount, 3);
+    assert.equal(bulkDispatchRes.json.summary.succeededCount, 1);
+    assert.equal(bulkDispatchRes.json.summary.skippedCount, 1);
+    assert.equal(bulkDispatchRes.json.summary.failedCount, 1);
+
+    const bulkDispatchedOrderDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(bulkReadyOrderRes.json.order.id)}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(bulkDispatchedOrderDetailRes.status, 200, JSON.stringify(bulkDispatchedOrderDetailRes.json));
+    assert.equal(bulkDispatchedOrderDetailRes.json.order.status, "DISPATCHED");
+    assert.equal(bulkDispatchedOrderDetailRes.json.order.shipments[0].status, "DISPATCHED");
+
     assert.equal(fakePrintAgent.requests.length >= 3, true);
   } finally {
     if (createdOrderIds.length > 0) {

@@ -2751,7 +2751,7 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   expect(finalOrder.order.shipments[0].trackingNumber).toMatch(/^MOCK/);
 });
 
-test("Manager can bulk-create and bulk-print packed web orders", async ({ page, request }) => {
+test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders", async ({ page, request }) => {
   const managerCredentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
     prefix: "online-store-bulk-dispatch",
@@ -2831,11 +2831,25 @@ test("Manager can bulk-create and bulk-print packed web orders", async ({ page, 
   await expect(page.getByTestId("online-store-bulk-results")).toContainText("Bulk label print");
   await expect(page.getByTestId("online-store-bulk-results")).toContainText("2 succeeded");
 
+  await page.getByTestId("online-store-bulk-dispatch").click();
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("Bulk dispatch confirmation");
+  await expect(page.getByTestId("online-store-bulk-results")).toContainText("2 succeeded");
+
   const firstOrder = await apiJsonWithHeaderBypass(
     request,
     "GET",
     `/api/online-store/orders/${encodeURIComponent(orderIds[0])}`,
     "MANAGER",
   );
-  expect(firstOrder.order.shipments[0].status).toBe("PRINTED");
+  expect(firstOrder.order.status).toBe("DISPATCHED");
+  expect(firstOrder.order.shipments[0].status).toBe("DISPATCHED");
+
+  const secondOrder = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/online-store/orders/${encodeURIComponent(orderIds[1])}`,
+    "MANAGER",
+  );
+  expect(secondOrder.order.status).toBe("DISPATCHED");
+  expect(secondOrder.order.shipments[0].status).toBe("DISPATCHED");
 });

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
   bulkCreateShipmentLabelsHandler,
+  bulkDispatchShipmentsHandler,
   bulkPrintShipmentLabelsHandler,
   cancelShipmentHandler,
   createOnlineStoreOrderHandler,
@@ -26,6 +27,7 @@ onlineStoreRouter.get("/orders", requireRoleAtLeast("MANAGER"), listOnlineStoreO
 onlineStoreRouter.post("/orders", requireRoleAtLeast("MANAGER"), createOnlineStoreOrderHandler);
 onlineStoreRouter.post("/orders/bulk/shipments", requireRoleAtLeast("MANAGER"), bulkCreateShipmentLabelsHandler);
 onlineStoreRouter.post("/orders/bulk/print", requireRoleAtLeast("MANAGER"), bulkPrintShipmentLabelsHandler);
+onlineStoreRouter.post("/orders/bulk/dispatch", requireRoleAtLeast("MANAGER"), bulkDispatchShipmentsHandler);
 onlineStoreRouter.get("/orders/:id", requireRoleAtLeast("MANAGER"), getOnlineStoreOrderDetailHandler);
 onlineStoreRouter.get("/orders/:id/shipment", requireRoleAtLeast("MANAGER"), getOnlineStoreOrderShipmentHandler);
 onlineStoreRouter.post("/orders/:id/packing", requireRoleAtLeast("MANAGER"), setOnlineStoreOrderPackedStateHandler);

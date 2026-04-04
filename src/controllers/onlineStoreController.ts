@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { getRequestAuditActor } from "../middleware/staffRole";
 import {
   bulkCreateShipmentLabels,
+  bulkDispatchShipments,
   bulkPrintShipmentLabels,
   cancelShipment,
   createOnlineStoreOrder,
@@ -17,6 +18,7 @@ import {
   recordShipmentPrinted,
   setWebOrderPackedState,
   type BulkCreateShipmentsInput,
+  type BulkDispatchShipmentsInput,
   type BulkPrintShipmentsInput,
   type CreateWebOrderInput,
   type CreateShipmentLabelInput,
@@ -256,6 +258,21 @@ const toBulkPrintShipmentsInput = (body: unknown): BulkPrintShipmentsInput => {
   };
 };
 
+const toBulkDispatchShipmentsInput = (body: unknown): BulkDispatchShipmentsInput => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "bulk dispatch body must be an object", "INVALID_WEB_ORDER");
+  }
+
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.orderIds) || record.orderIds.some((orderId) => typeof orderId !== "string")) {
+    throw new HttpError(400, "orderIds must be an array of UUID strings", "INVALID_WEB_ORDER");
+  }
+
+  return {
+    orderIds: record.orderIds as string[],
+  };
+};
+
 export const listOnlineStoreOrdersHandler = async (req: Request, res: Response) => {
   const payload = await listOnlineStoreOrders({
     q: typeof req.query.q === "string" ? req.query.q : undefined,
@@ -317,6 +334,11 @@ export const bulkCreateShipmentLabelsHandler = async (req: Request, res: Respons
 
 export const bulkPrintShipmentLabelsHandler = async (req: Request, res: Response) => {
   const result = await bulkPrintShipmentLabels(toBulkPrintShipmentsInput(req.body), getRequestAuditActor(req));
+  res.json(result);
+};
+
+export const bulkDispatchShipmentsHandler = async (req: Request, res: Response) => {
+  const result = await bulkDispatchShipments(toBulkDispatchShipmentsInput(req.body), getRequestAuditActor(req));
   res.json(result);
 };
 
