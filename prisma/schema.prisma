@@ -991,6 +991,7 @@ enum WebOrderShipmentStatus {
   PRINT_PREPARED
   PRINTED
   DISPATCHED
+  VOID_PENDING
   VOIDED
 }
 
@@ -1089,11 +1090,16 @@ model WebOrderShipment {
   providerTrackingReference String?
   providerLabelReference String?
   providerStatus      String?
+  providerRefundStatus String?
   providerMetadata    Json?
   labelGeneratedAt    DateTime                 @default(now())
+  providerSyncedAt    DateTime?
+  providerSyncError   String?
   printPreparedAt     DateTime?
   printedAt           DateTime?
   dispatchedAt        DateTime?
+  voidRequestedAt     DateTime?
+  voidedAt            DateTime?
   reprintCount        Int                      @default(0)
   createdByStaffId    String?
   createdAt           DateTime                 @default(now())

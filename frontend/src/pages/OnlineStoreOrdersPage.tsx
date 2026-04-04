@@ -9,7 +9,13 @@ import { SurfaceCard } from "../components/ui/SurfaceCard";
 
 type WebOrderStatus = "READY_FOR_DISPATCH" | "DISPATCHED" | "CANCELLED";
 type WebOrderFulfillmentMethod = "SHIPPING" | "CLICK_AND_COLLECT";
-type WebOrderShipmentStatus = "LABEL_READY" | "PRINT_PREPARED" | "PRINTED" | "DISPATCHED" | "VOIDED";
+type WebOrderShipmentStatus =
+  | "LABEL_READY"
+  | "PRINT_PREPARED"
+  | "PRINTED"
+  | "DISPATCHED"
+  | "VOID_PENDING"
+  | "VOIDED";
 
 type SupportedShippingProvider = {
   key: string;
@@ -17,6 +23,8 @@ type SupportedShippingProvider = {
   mode: "mock" | "integration";
   implementationState: "mock" | "scaffold" | "live";
   requiresConfiguration: boolean;
+  supportsShipmentRefresh: boolean;
+  supportsShipmentVoid: boolean;
   supportedLabelFormats: string[];
   defaultServiceCode: string;
   defaultServiceName: string;
@@ -53,11 +61,16 @@ type WebOrderShipment = {
   providerTrackingReference: string | null;
   providerLabelReference: string | null;
   providerStatus: string | null;
+  providerRefundStatus: string | null;
   providerMetadata: unknown;
   labelGeneratedAt: string;
+  providerSyncedAt: string | null;
+  providerSyncError: string | null;
   printPreparedAt: string | null;
   printedAt: string | null;
   dispatchedAt: string | null;
+  voidRequestedAt: string | null;
+  voidedAt: string | null;
   reprintCount: number;
   createdAt: string;
   updatedAt: string;
@@ -68,6 +81,9 @@ type WebOrderShipment = {
   printPath: string;
   recordPrintedPath: string;
   dispatchPath: string;
+  refreshPath: string;
+  cancelPath: string;
+  regeneratePath: string;
 };
 
 type WebOrderSummary = {
@@ -290,6 +306,8 @@ const shipmentStatusClassName = (status: WebOrderShipmentStatus) => {
       return "status-badge status-ready";
     case "PRINT_PREPARED":
       return "status-badge status-warning";
+    case "VOID_PENDING":
+      return "status-badge status-warning";
     case "VOIDED":
       return "status-badge status-cancelled";
     case "LABEL_READY":
@@ -509,13 +527,19 @@ export const OnlineStoreOrdersPage = () => {
 
   const selectedOrder = detailPayload?.order ?? null;
   const selectedShipment = selectedOrder?.shipments[0] ?? null;
+  const providerOptions = detailPayload?.supportedProviders ?? ordersPayload?.supportedProviders ?? [];
   const selectedProvider = useMemo(() => {
-    const supportedProviders = detailPayload?.supportedProviders ?? ordersPayload?.supportedProviders ?? [];
-    if (supportedProviders.length === 0) {
+    if (providerOptions.length === 0) {
       return null;
     }
-    return supportedProviders.find((provider) => provider.key === selectedProviderKey) ?? supportedProviders[0];
-  }, [detailPayload?.supportedProviders, ordersPayload?.supportedProviders, selectedProviderKey]);
+    return providerOptions.find((provider) => provider.key === selectedProviderKey) ?? providerOptions[0];
+  }, [providerOptions, selectedProviderKey]);
+  const shipmentProvider = useMemo(() => {
+    if (!selectedShipment) {
+      return null;
+    }
+    return providerOptions.find((provider) => provider.key === selectedShipment.providerKey) ?? null;
+  }, [providerOptions, selectedShipment]);
   const selectedPrinter = useMemo(() => {
     if (!printersPayload) {
       return null;
@@ -555,7 +579,61 @@ export const OnlineStoreOrdersPage = () => {
         serviceCode: selectedProvider.defaultServiceCode,
         serviceName: selectedProvider.defaultServiceName,
       });
+      setPrintPayload(null);
+      setPrintJob(null);
+      setPrintNotice(null);
       success(`Shipment label generated for ${selectedOrder.orderNumber}.`);
+      await refreshSelectedOrder(selectedOrder.id);
+    });
+  };
+
+  const handleRefreshShipment = async () => {
+    if (!selectedOrder || !selectedShipment) {
+      return;
+    }
+
+    await runAction("refresh", async () => {
+      const payload = await apiPost<{ shipment: WebOrderShipment }>(selectedShipment.refreshPath);
+      setPrintNotice(null);
+      success(
+        payload.shipment.providerRefundStatus === "REFUNDED"
+          ? `Shipment ${payload.shipment.trackingNumber} is now voided at the provider.`
+          : `Shipment ${payload.shipment.trackingNumber} refreshed from ${payload.shipment.providerDisplayName}.`,
+      );
+      await refreshSelectedOrder(selectedOrder.id);
+    });
+  };
+
+  const handleCancelShipment = async () => {
+    if (!selectedOrder || !selectedShipment) {
+      return;
+    }
+
+    await runAction("cancel", async () => {
+      const payload = await apiPost<{ shipment: WebOrderShipment }>(selectedShipment.cancelPath);
+      setPrintPayload(null);
+      setPrintJob(null);
+      setPrintNotice(null);
+      success(
+        payload.shipment.status === "VOID_PENDING"
+          ? `Void requested for ${payload.shipment.trackingNumber}. Refresh later to confirm the final courier outcome.`
+          : `Shipment ${payload.shipment.trackingNumber} has been voided.`,
+      );
+      await refreshSelectedOrder(selectedOrder.id);
+    });
+  };
+
+  const handleRegenerateShipment = async () => {
+    if (!selectedOrder || !selectedShipment) {
+      return;
+    }
+
+    await runAction("regenerate", async () => {
+      await apiPost(selectedShipment.regeneratePath);
+      setPrintPayload(null);
+      setPrintJob(null);
+      setPrintNotice(null);
+      success(`Replacement shipment label generated for ${selectedOrder.orderNumber}.`);
       await refreshSelectedOrder(selectedOrder.id);
     });
   };
@@ -642,9 +720,21 @@ export const OnlineStoreOrdersPage = () => {
       && selectedProvider?.isAvailable
       && !selectedShipment,
   );
-  const canPreparePrint = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedPrinter);
-  const canPrintShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedPrinter);
-  const canDispatchShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedShipment.printedAt);
+  const shipmentIsVoidBlocked = selectedShipment
+    ? selectedShipment.status === "VOIDED" || selectedShipment.status === "VOID_PENDING"
+    : false;
+  const canRefreshShipment = Boolean(selectedShipment && shipmentProvider?.supportsShipmentRefresh);
+  const canCancelShipment = Boolean(
+    selectedShipment
+      && shipmentProvider?.supportsShipmentVoid
+      && selectedShipment.status !== "VOIDED"
+      && selectedShipment.status !== "VOID_PENDING"
+      && !selectedShipment.dispatchedAt,
+  );
+  const canRegenerateShipment = Boolean(selectedShipment && selectedShipment.status === "VOIDED");
+  const canPreparePrint = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
+  const canPrintShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
+  const canDispatchShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedShipment.printedAt);
 
   return (
     <div className="page-shell ui-page online-orders-page" data-testid="online-store-orders-page">
@@ -896,6 +986,10 @@ export const OnlineStoreOrdersPage = () => {
                             <dd>{selectedShipment.providerStatus ?? "-"}</dd>
                           </div>
                           <div>
+                            <dt>Refund status</dt>
+                            <dd>{selectedShipment.providerRefundStatus ?? "-"}</dd>
+                          </div>
+                          <div>
                             <dt>Label format</dt>
                             <dd>{selectedShipment.labelFormat}</dd>
                           </div>
@@ -908,6 +1002,14 @@ export const OnlineStoreOrdersPage = () => {
                             <dd>{selectedShipment.providerTrackingReference ?? "-"}</dd>
                           </div>
                           <div>
+                            <dt>Provider synced</dt>
+                            <dd>{formatDateTime(selectedShipment.providerSyncedAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Sync issue</dt>
+                            <dd>{selectedShipment.providerSyncError ?? "-"}</dd>
+                          </div>
+                          <div>
                             <dt>Prepared</dt>
                             <dd>{formatDateTime(selectedShipment.printPreparedAt)}</dd>
                           </div>
@@ -918,6 +1020,14 @@ export const OnlineStoreOrdersPage = () => {
                           <div>
                             <dt>Dispatched</dt>
                             <dd>{formatDateTime(selectedShipment.dispatchedAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Void requested</dt>
+                            <dd>{formatDateTime(selectedShipment.voidRequestedAt)}</dd>
+                          </div>
+                          <div>
+                            <dt>Voided</dt>
+                            <dd>{formatDateTime(selectedShipment.voidedAt)}</dd>
                           </div>
                           <div>
                             <dt>Reprints</dt>
@@ -940,7 +1050,7 @@ export const OnlineStoreOrdersPage = () => {
                           <select
                             value={selectedProviderKey}
                             onChange={(event) => setSelectedProviderKey(event.target.value)}
-                            disabled={pendingAction.length > 0}
+                            disabled={pendingAction.length > 0 || Boolean(selectedShipment)}
                           >
                             {(detailPayload?.supportedProviders ?? []).map((provider) => (
                               <option key={provider.key} value={provider.key}>
@@ -992,14 +1102,55 @@ export const OnlineStoreOrdersPage = () => {
                       </div>
 
                       <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
-                        {selectedProvider
-                          ? selectedProvider.isAvailable
-                            ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}${selectedProvider.defaultServiceName ? ` · default service ${selectedProvider.defaultServiceName}` : ""}.`
-                            : `Shipment provider: ${selectedProvider.displayName} is not ready. Configure its credentials/endpoint in Settings or choose an available provider.`
+                        {selectedShipment && shipmentProvider
+                          ? `Shipment provider: ${shipmentProvider.displayName}${selectedShipment.providerEnvironment ? ` (${selectedShipment.providerEnvironment})` : ""} · service ${selectedShipment.serviceName}.${shipmentProvider.supportsShipmentRefresh ? " Refresh supported." : ""}${shipmentProvider.supportsShipmentVoid ? " Void supported." : ""}`
+                          : selectedProvider
+                            ? selectedProvider.isAvailable
+                              ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}${selectedProvider.defaultServiceName ? ` · default service ${selectedProvider.defaultServiceName}` : ""}.`
+                              : `Shipment provider: ${selectedProvider.displayName} is not ready. Configure its credentials/endpoint in Settings or choose an available provider.`
+                            : "No shipment provider is currently selected."}
+                      </div>
+
+                      <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
+                        {selectedShipment
+                          ? `Local shipment state: ${humanizeToken(selectedShipment.status)}. Print state: ${selectedShipment.printedAt ? "printed" : selectedShipment.printPreparedAt ? "prepared" : "not printed"}. Dispatch state: ${selectedShipment.dispatchedAt ? "dispatched" : "awaiting dispatch"}.`
                           : "No shipment provider is currently selected."}
                       </div>
 
+                      {selectedShipment?.providerSyncError ? (
+                        <div className="online-orders-print-notice online-orders-print-notice--error">
+                          {selectedShipment.providerSyncError}
+                        </div>
+                      ) : null}
+
                       <div className="online-orders-dispatch-actions">
+                        <button
+                          type="button"
+                          className="button-link"
+                          onClick={() => void handleRefreshShipment()}
+                          disabled={!canRefreshShipment || pendingAction.length > 0}
+                          data-testid="online-store-refresh-shipment"
+                        >
+                          {pendingAction === "refresh" ? "Refreshing..." : "Refresh Provider Status"}
+                        </button>
+                        <button
+                          type="button"
+                          className="button-link"
+                          onClick={() => void handleCancelShipment()}
+                          disabled={!canCancelShipment || pendingAction.length > 0}
+                          data-testid="online-store-cancel-shipment"
+                        >
+                          {pendingAction === "cancel" ? "Voiding..." : "Void Shipment"}
+                        </button>
+                        <button
+                          type="button"
+                          className="button-link"
+                          onClick={() => void handleRegenerateShipment()}
+                          disabled={!canRegenerateShipment || pendingAction.length > 0}
+                          data-testid="online-store-regenerate-shipment"
+                        >
+                          {pendingAction === "regenerate" ? "Generating..." : "Generate Replacement Shipment"}
+                        </button>
                         <button
                           type="button"
                           className="button-link"
@@ -1007,7 +1158,11 @@ export const OnlineStoreOrdersPage = () => {
                           disabled={!canPreparePrint || pendingAction.length > 0}
                           data-testid="online-store-prepare-print"
                         >
-                          {pendingAction === "prepare-print" ? "Preparing..." : "Prepare Zebra Print Payload"}
+                          {pendingAction === "prepare-print"
+                            ? "Preparing..."
+                            : selectedShipment.printPreparedAt
+                              ? "Re-prepare Zebra Print Payload"
+                              : "Prepare Zebra Print Payload"}
                         </button>
                         <button
                           type="button"
@@ -1016,7 +1171,11 @@ export const OnlineStoreOrdersPage = () => {
                           disabled={!canPrintShipment || pendingAction.length > 0}
                           data-testid="online-store-print"
                         >
-                          {pendingAction === "print" ? "Printing..." : "Print via Windows Agent"}
+                          {pendingAction === "print"
+                            ? "Printing..."
+                            : selectedShipment.printedAt
+                              ? "Reprint via Windows Agent"
+                              : "Print via Windows Agent"}
                         </button>
                         <button
                           type="button"
@@ -1049,7 +1208,7 @@ export const OnlineStoreOrdersPage = () => {
                     {loadingLabel ? <span className="status-badge">Loading</span> : null}
                   </div>
                   <p className="online-orders-preview-card__description">
-                    Stored label content stays inline ZPL so provider-backed shipment labels remain reprintable inside CorePOS without depending on a remote label URL at print time.
+                    Stored label content stays inline ZPL so provider-backed shipment labels remain reprintable inside CorePOS without depending on a remote label URL at print time. Voided or void-pending shipments stay visible for audit, but CorePOS blocks them from being treated as active printable labels.
                   </p>
                   <pre className="online-orders-preview" data-testid="online-store-label-preview">
                     {labelPayload?.document.content ?? "No shipment label available for this order yet."}

@@ -236,10 +236,55 @@ const startFakeEasyPostProvider = async () => {
   const requests = {
     create: [],
     buy: [],
+    refresh: [],
+    refund: [],
     labelDownloads: [],
   };
   const shipments = new Map();
   const labels = new Map();
+
+  const serializeShipment = (baseUrl, shipment) => ({
+    id: shipment.shipmentId,
+    mode: "test",
+    status: shipment.status,
+    refund_status: shipment.refundStatus,
+    tracking_code: shipment.trackingNumber,
+    selected_rate: shipment.purchased
+      ? {
+          id: shipment.rateId,
+          service: "GroundAdvantage",
+          carrier: "USPS",
+          carrier_account_id: EASYPOST_CARRIER_ACCOUNT_ID,
+          rate: "8.25",
+          currency: "USD",
+        }
+      : null,
+    tracker: shipment.purchased
+      ? {
+          id: shipment.trackerId,
+          status: shipment.trackerStatus,
+        }
+      : null,
+    postage_label: shipment.purchased
+      ? {
+          id: shipment.labelId,
+          label_file_type: "application/zpl",
+          label_url: `${baseUrl}/labels/${encodeURIComponent(shipment.shipmentId)}.zpl`,
+          label_zpl_url: `${baseUrl}/labels/${encodeURIComponent(shipment.shipmentId)}.zpl`,
+          label_size: "4x6",
+        }
+      : null,
+    rates: [
+      {
+        id: shipment.rateId,
+        service: "GroundAdvantage",
+        carrier: "USPS",
+        carrier_account_id: EASYPOST_CARRIER_ACCOUNT_ID,
+        rate: "8.25",
+        currency: "USD",
+      },
+    ],
+  });
 
   const server = http.createServer(async (req, res) => {
     const baseUrl = `http://${req.headers.host || "127.0.0.1"}`;
@@ -268,6 +313,14 @@ const startFakeEasyPostProvider = async () => {
         shipmentId,
         rateId,
         reference,
+        purchased: false,
+        status: "unknown",
+        refundStatus: null,
+        trackingNumber: null,
+        trackerId: null,
+        trackerStatus: null,
+        labelId: null,
+        pendingRefundFinalization: false,
       });
 
       res.writeHead(201, { "Content-Type": "application/json" });
@@ -319,35 +372,78 @@ const startFakeEasyPostProvider = async () => {
       const trackingNumber = `EZ${shipment.reference.replace(/[^A-Za-z0-9]/g, "").slice(-14).toUpperCase()}`;
       const trackerId = `trk_${shipment.reference.replace(/[^A-Za-z0-9]/g, "").slice(-14).toLowerCase()}`;
       const labelId = `pl_${shipment.reference.replace(/[^A-Za-z0-9]/g, "").slice(-14).toLowerCase()}`;
-      const labelUrl = `${baseUrl}/labels/${encodeURIComponent(shipmentId)}.zpl`;
       labels.set(shipmentId, buildEasyPostLabelContent(trackingNumber, shipment.reference));
+      shipment.purchased = true;
+      shipment.status = "pre_transit";
+      shipment.trackingNumber = trackingNumber;
+      shipment.trackerId = trackerId;
+      shipment.trackerStatus = "pre_transit";
+      shipment.labelId = labelId;
 
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        id: shipmentId,
-        mode: "test",
-        status: "purchased",
-        tracking_code: trackingNumber,
-        selected_rate: {
-          id: shipment.rateId,
-          service: "GroundAdvantage",
-          carrier: "USPS",
-          carrier_account_id: EASYPOST_CARRIER_ACCOUNT_ID,
-          rate: "8.25",
-          currency: "USD",
-        },
-        tracker: {
-          id: trackerId,
-          status: "pre_transit",
-        },
-        postage_label: {
-          id: labelId,
-          label_file_type: "application/zpl",
-          label_url: labelUrl,
-          label_zpl_url: labelUrl,
-          label_size: "4x6",
-        },
-      }));
+      res.end(JSON.stringify(serializeShipment(baseUrl, shipment)));
+      return;
+    }
+
+    const refreshMatch = req.method === "GET" ? url.pathname.match(/^\/shipments\/([^/]+)$/) : null;
+    if (refreshMatch) {
+      if (req.headers.authorization !== expectedAuthorization) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "Unauthorized" } }));
+        return;
+      }
+
+      const shipmentId = refreshMatch[1];
+      const shipment = shipments.get(shipmentId);
+      requests.refresh.push({
+        headers: req.headers,
+        shipmentId,
+      });
+
+      if (!shipment) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "Shipment not found" } }));
+        return;
+      }
+
+      if (shipment.pendingRefundFinalization && shipment.refundStatus === "submitted") {
+        shipment.pendingRefundFinalization = false;
+        shipment.refundStatus = "refunded";
+        shipment.status = "cancelled";
+        shipment.trackerStatus = "cancelled";
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(serializeShipment(baseUrl, shipment)));
+      return;
+    }
+
+    const refundMatch = req.method === "POST" ? url.pathname.match(/^\/shipments\/([^/]+)\/refund$/) : null;
+    if (refundMatch) {
+      if (req.headers.authorization !== expectedAuthorization) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "Unauthorized" } }));
+        return;
+      }
+
+      const shipmentId = refundMatch[1];
+      const shipment = shipments.get(shipmentId);
+      requests.refund.push({
+        headers: req.headers,
+        shipmentId,
+      });
+
+      if (!shipment) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "Shipment not found" } }));
+        return;
+      }
+
+      shipment.refundStatus = "submitted";
+      shipment.pendingRefundFinalization = true;
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(serializeShipment(baseUrl, shipment)));
       return;
     }
 
@@ -484,6 +580,14 @@ const run = async () => {
     assert.equal(listBefore.json.defaultProviderKey, "INTERNAL_MOCK_ZPL");
     assert.equal(listBefore.json.providers.some((provider) => provider.key === "GENERIC_HTTP_ZPL"), true);
     assert.equal(listBefore.json.providers.some((provider) => provider.key === "EASYPOST"), true);
+    assert.equal(
+      listBefore.json.providers.find((provider) => provider.key === "EASYPOST").supportsShipmentRefresh,
+      true,
+    );
+    assert.equal(
+      listBefore.json.providers.find((provider) => provider.key === "EASYPOST").supportsShipmentVoid,
+      true,
+    );
 
     const invalidConfig = await fetchJson("/api/settings/shipping-providers/GENERIC_HTTP_ZPL", {
       method: "PUT",
@@ -730,6 +834,8 @@ const run = async () => {
     assert.equal(easyPostShipmentRes.json.shipment.providerTrackingReference.startsWith("trk_"), true);
     assert.equal(easyPostShipmentRes.json.shipment.providerLabelReference.startsWith("pl_"), true);
     assert.equal(easyPostShipmentRes.json.shipment.providerStatus, "PRE_TRANSIT");
+    assert.equal(easyPostShipmentRes.json.shipment.providerRefundStatus, null);
+    assert.equal(Boolean(easyPostShipmentRes.json.shipment.providerSyncedAt), true);
     const easyPostShipmentId = easyPostShipmentRes.json.shipment.id;
 
     assert.equal(fakeEasyPost.requests.create.length, 1);
@@ -755,8 +861,71 @@ const run = async () => {
     assert.equal(fakeEasyPost.requests.create[0].payload.shipment.parcel.weight, 24);
     assert.equal(fakeEasyPost.requests.buy[0].payload.rate.id.startsWith("rate_"), true);
 
+    const easyPostRefreshRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/refresh`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(easyPostRefreshRes.status, 200, JSON.stringify(easyPostRefreshRes.json));
+    assert.equal(easyPostRefreshRes.json.shipment.status, "LABEL_READY");
+    assert.equal(easyPostRefreshRes.json.shipment.providerStatus, "PRE_TRANSIT");
+    assert.equal(easyPostRefreshRes.json.shipment.providerRefundStatus, null);
+
+    const easyPostVoidRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/cancel`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(easyPostVoidRes.status, 200, JSON.stringify(easyPostVoidRes.json));
+    assert.equal(easyPostVoidRes.json.shipment.status, "VOID_PENDING");
+    assert.equal(easyPostVoidRes.json.shipment.providerRefundStatus, "SUBMITTED");
+    assert.equal(Boolean(easyPostVoidRes.json.shipment.voidRequestedAt), true);
+
+    const blockedVoidPrintRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/print`,
+      {
+        method: "POST",
+        headers: {
+          ...MANAGER_HEADERS,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ printerId: printer.id, copies: 1 }),
+      },
+    );
+    assert.equal(blockedVoidPrintRes.status, 409, JSON.stringify(blockedVoidPrintRes.json));
+    assert.equal(blockedVoidPrintRes.json.error.code, "SHIPMENT_VOID_PENDING");
+
+    const easyPostVoidRefreshRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/refresh`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(easyPostVoidRefreshRes.status, 200, JSON.stringify(easyPostVoidRefreshRes.json));
+    assert.equal(easyPostVoidRefreshRes.json.shipment.status, "VOIDED");
+    assert.equal(easyPostVoidRefreshRes.json.shipment.providerRefundStatus, "REFUNDED");
+    assert.equal(Boolean(easyPostVoidRefreshRes.json.shipment.voidedAt), true);
+
+    const easyPostReplacementRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/regenerate`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(easyPostReplacementRes.status, 201, JSON.stringify(easyPostReplacementRes.json));
+    assert.equal(easyPostReplacementRes.json.shipment.shipmentNumber, 2);
+    assert.equal(easyPostReplacementRes.json.shipment.status, "LABEL_READY");
+    assert.equal(easyPostReplacementRes.json.shipment.providerKey, "EASYPOST");
+    const easyPostReplacementShipmentId = easyPostReplacementRes.json.shipment.id;
+
     const easyPostPreparePrintRes = await fetchJson(
-      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/prepare-print`,
+      `/api/online-store/shipments/${encodeURIComponent(easyPostReplacementShipmentId)}/prepare-print`,
       {
         method: "POST",
         headers: {
@@ -771,7 +940,7 @@ const run = async () => {
     assert.equal(easyPostPreparePrintRes.json.printRequest.metadata.serviceCode, "GroundAdvantage");
 
     const easyPostPrintRes = await fetchJson(
-      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/print`,
+      `/api/online-store/shipments/${encodeURIComponent(easyPostReplacementShipmentId)}/print`,
       {
         method: "POST",
         headers: {
@@ -785,6 +954,8 @@ const run = async () => {
     assert.equal(easyPostPrintRes.json.shipment.status, "PRINTED");
     assert.equal(Boolean(easyPostPrintRes.json.shipment.printedAt), true);
     assert.equal(easyPostPrintRes.json.printJob.transportMode, "DRY_RUN");
+    assert.equal(fakeEasyPost.requests.refresh.length >= 2, true);
+    assert.equal(fakeEasyPost.requests.refund.length, 1);
 
     const easyPostFailureToken = `EPFAIL-${randomUUID().slice(0, 6).toUpperCase()}`;
     const easyPostFailureOrderRes = await fetchJson("/api/online-store/orders", {

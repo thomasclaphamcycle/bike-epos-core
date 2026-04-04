@@ -235,6 +235,8 @@ export class GenericHttpZplShippingProvider implements ShippingLabelProvider {
   readonly mode = "integration" as const;
   readonly implementationState = "scaffold" as const;
   readonly requiresConfiguration = true;
+  readonly supportsShipmentRefresh = false;
+  readonly supportsShipmentVoid = false;
 
   async createLabel(
     input: ShippingLabelGenerationInput,

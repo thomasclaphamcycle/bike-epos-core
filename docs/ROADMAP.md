@@ -28,7 +28,7 @@ The current codebase already contains substantial implementation across the earl
 - workshop operations are substantially implemented
 - staff/admin/reporting surfaces are substantially implemented
 - customer and communication features are now substantially implemented for workshop operations, with broader portal/self-service depth still future work
-- rental remains future work, and the online-store phase is still incomplete overall, though a first web-order shipping-label dispatch foundation, an initial Windows/Zebra print-agent path, registered dispatch-printer management, a configurable courier-integration scaffold, and a first live carrier adapter path now exist
+- rental remains future work, and the online-store phase is still incomplete overall, though a first web-order shipping-label dispatch foundation, an initial Windows/Zebra print-agent path, registered dispatch-printer management, a configurable courier-integration scaffold, a first live carrier adapter path, and initial shipment lifecycle hardening for refresh/void/replacement recovery now exist
 
 The roadmap below remains the canonical planning structure even where current implementation is ahead in some areas and behind in others.
 The phase count should not be collapsed or reduced unless the product strategy itself is intentionally changed.
@@ -519,4 +519,5 @@ Shops can use CorePOS for customer-facing digital experiences and, later, for th
 Implementation status:
 - still mostly future-facing overall
 - customer communication groundwork exists, and a first internal/mock web-order dispatch plus shipping-label/print-agent foundation now exists
+- provider-backed web-order shipping now also has initial lifecycle hardening for provider refresh, supported void/cancel flow, and replacement-shipment recovery
 - the wider online-store / website-builder product line is not yet complete

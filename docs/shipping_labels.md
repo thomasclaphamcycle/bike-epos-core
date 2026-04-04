@@ -15,6 +15,10 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - return a backend-owned print-preparation payload
 - hand that payload off to a repo-local Windows-oriented print agent
 - record printed and dispatched timestamps with audit events
+- refresh provider-backed shipment state from CorePOS
+- request shipment void/cancel where the provider supports it
+- block print/dispatch cleanly while a void outcome is pending
+- generate a replacement shipment only after the prior shipment is fully voided
 - expose a minimal manager-facing UI at `/online-store/orders`
 
 The current implementation now includes a real courier-integration foundation:
@@ -30,7 +34,7 @@ The flow is now split into six layers:
 
 1. CorePOS shipment orchestration
    - `src/services/orderService.ts`
-   - owns web-order lifecycle, shipment creation, audit events, duplicate-active-shipment protection, and dispatch status transitions
+   - owns web-order lifecycle, shipment creation, shipment refresh/void/regenerate rules, audit events, duplicate-active-shipment protection, and dispatch status transitions
 
 2. Shipping provider abstraction
    - `src/services/shipping/contracts.ts`
@@ -118,9 +122,41 @@ The first API slice lives under `/api/online-store` and supports:
 - listing, creating, editing, and defaulting registered shipping-label printers via settings APIs
 - generating a shipment label for an order
 - fetching shipment metadata and stored label content
+- refreshing shipment/provider state
+- requesting provider void/cancel where supported
+- generating a replacement shipment after a voided label
 - preparing a print-intent payload
 - printing through the configured Windows/local agent path
 - recording print and dispatch milestones
+
+## Shipment lifecycle hardening
+
+CorePOS now separates the main operational states for a web-order shipment:
+
+- `LABEL_READY`: provider-backed label exists and is available locally in CorePOS
+- `PRINT_PREPARED`: a Zebra-oriented print payload has been prepared
+- `PRINTED`: CorePOS has a successful print record
+- `DISPATCHED`: staff have separately confirmed dispatch
+- `VOID_PENDING`: CorePOS has submitted a provider void/refund request and is waiting for a final provider outcome
+- `VOIDED`: the provider has confirmed the shipment is no longer active
+
+Additional persisted lifecycle fields now track:
+
+- provider shipment status
+- provider refund/void status
+- provider sync timestamp
+- last provider sync error
+- void-requested timestamp
+- voided timestamp
+
+Operational rules:
+
+- printing never implies dispatch
+- dispatch never recreates a shipment
+- void-pending and voided shipments cannot be prepared or printed
+- reprints stay available for active or already-dispatched shipments
+- replacement shipment generation is only allowed once the previous shipment is fully voided
+- provider refresh can restore a `VOID_PENDING` shipment back to its last active local print state if the carrier rejects the void/refund
 
 ## Current UI slice
 
@@ -134,6 +170,9 @@ It currently supports:
 - viewing shipment/tracking state
 - seeing which registered printer will be used
 - previewing stored ZPL
+- refreshing provider status
+- voiding/cancelling shipments where supported
+- generating a replacement shipment after void
 - preparing a Windows-local-agent print payload
 - sending the print job through the real agent path
 - dispatching separately after print succeeds
@@ -155,8 +194,6 @@ The intended next steps are:
 3. richer fulfilment operations
    - packing workflow
    - dispatch batching
-   - shipment cancellation/void flows
-   - label regeneration policies where providers allow it
    - eventual customer-facing online-order history and notifications
 
 ## Constraints kept intentionally

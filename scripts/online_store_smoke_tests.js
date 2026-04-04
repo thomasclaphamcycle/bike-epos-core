@@ -292,6 +292,8 @@ const run = async () => {
     assert.equal(createShipmentRes.json.shipment.providerKey, "INTERNAL_MOCK_ZPL");
     assert.equal(createShipmentRes.json.shipment.labelFormat, "ZPL");
     assert.match(createShipmentRes.json.shipment.trackingNumber, /^MOCK/);
+    assert.equal(createShipmentRes.json.shipment.providerRefundStatus, null);
+    assert.equal(Boolean(createShipmentRes.json.shipment.providerSyncedAt), true);
     const shipmentId = createShipmentRes.json.shipment.id;
 
     const duplicateShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`, {
@@ -393,6 +395,87 @@ const run = async () => {
     assert.equal(dispatchedDetailRes.status, 200, JSON.stringify(dispatchedDetailRes.json));
     assert.equal(dispatchedDetailRes.json.order.status, "DISPATCHED");
     assert.equal(dispatchedDetailRes.json.order.shipments[0].status, "DISPATCHED");
+
+    const voidToken = `smoke-void-${Date.now()}`;
+    const voidOrderBody = createOrderBody(voidToken, {
+      customerName: "Online Store Void Flow",
+      shippingRecipientName: "Online Store Void Flow",
+    });
+    const createVoidOrderRes = await fetchJson("/api/online-store/orders", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(voidOrderBody),
+    });
+    assert.equal(createVoidOrderRes.status, 201, JSON.stringify(createVoidOrderRes.json));
+    createdOrderIds.push(createVoidOrderRes.json.order.id);
+
+    const createVoidShipmentRes = await fetchJson(
+      `/api/online-store/orders/${encodeURIComponent(createVoidOrderRes.json.order.id)}/shipments`,
+      {
+        method: "POST",
+        headers: {
+          ...MANAGER_HEADERS,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          providerKey: "INTERNAL_MOCK_ZPL",
+        }),
+      },
+    );
+    assert.equal(createVoidShipmentRes.status, 201, JSON.stringify(createVoidShipmentRes.json));
+    const voidShipmentId = createVoidShipmentRes.json.shipment.id;
+
+    const cancelShipmentRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(voidShipmentId)}/cancel`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(cancelShipmentRes.status, 200, JSON.stringify(cancelShipmentRes.json));
+    assert.equal(cancelShipmentRes.json.shipment.status, "VOIDED");
+    assert.equal(cancelShipmentRes.json.shipment.providerRefundStatus, "REFUNDED");
+    assert.equal(Boolean(cancelShipmentRes.json.shipment.voidedAt), true);
+
+    const blockedVoidedPrepareRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(voidShipmentId)}/prepare-print`,
+      {
+        method: "POST",
+        headers: {
+          ...MANAGER_HEADERS,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ copies: 1 }),
+      },
+    );
+    assert.equal(blockedVoidedPrepareRes.status, 409, JSON.stringify(blockedVoidedPrepareRes.json));
+    assert.equal(blockedVoidedPrepareRes.json.error.code, "SHIPMENT_VOIDED");
+
+    const regenerateShipmentRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(voidShipmentId)}/regenerate`,
+      {
+        method: "POST",
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(regenerateShipmentRes.status, 201, JSON.stringify(regenerateShipmentRes.json));
+    assert.equal(regenerateShipmentRes.json.shipment.shipmentNumber, 2);
+    assert.equal(regenerateShipmentRes.json.shipment.status, "LABEL_READY");
+    assert.equal(regenerateShipmentRes.json.shipment.providerKey, "INTERNAL_MOCK_ZPL");
+
+    const regeneratedDetailRes = await fetchJson(
+      `/api/online-store/orders/${encodeURIComponent(createVoidOrderRes.json.order.id)}`,
+      {
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(regeneratedDetailRes.status, 200, JSON.stringify(regeneratedDetailRes.json));
+    assert.equal(regeneratedDetailRes.json.order.shipments[0].shipmentNumber, 2);
+    assert.equal(regeneratedDetailRes.json.order.shipments[0].status, "LABEL_READY");
+    assert.equal(regeneratedDetailRes.json.order.shipments[1].status, "VOIDED");
 
     const failureToken = `smoke-failure-${Date.now()}`;
     const failureOrderBody = createOrderBody(failureToken, {

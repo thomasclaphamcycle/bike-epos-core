@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { getRequestAuditActor } from "../middleware/staffRole";
 import {
+  cancelShipment,
   createOnlineStoreOrder,
   createShipmentLabelForOrder,
   dispatchShipment,
@@ -9,6 +10,8 @@ import {
   listOnlineStoreOrders,
   prepareShipmentLabelPrint,
   printShipmentLabelViaAgent,
+  refreshShipmentProviderState,
+  regenerateShipmentLabel,
   recordShipmentPrinted,
   type CreateWebOrderInput,
   type CreateShipmentLabelInput,
@@ -270,4 +273,19 @@ export const recordShipmentPrintedHandler = async (req: Request, res: Response) 
 export const dispatchShipmentHandler = async (req: Request, res: Response) => {
   const result = await dispatchShipment(req.params.shipmentId, getRequestAuditActor(req));
   res.json(result);
+};
+
+export const refreshShipmentProviderStateHandler = async (req: Request, res: Response) => {
+  const result = await refreshShipmentProviderState(req.params.shipmentId, getRequestAuditActor(req));
+  res.json(result);
+};
+
+export const cancelShipmentHandler = async (req: Request, res: Response) => {
+  const result = await cancelShipment(req.params.shipmentId, getRequestAuditActor(req));
+  res.json(result);
+};
+
+export const regenerateShipmentLabelHandler = async (req: Request, res: Response) => {
+  const result = await regenerateShipmentLabel(req.params.shipmentId, getRequestAuditActor(req));
+  res.status(201).json(result);
 };

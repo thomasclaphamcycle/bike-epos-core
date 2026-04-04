@@ -316,6 +316,12 @@ const isEasyPostConfigReady = (config: EasyPostProviderConfig | null) =>
     && config.parcelHeightIn,
   );
 
+const isEasyPostLifecycleConfigReady = (config: EasyPostProviderConfig | null) =>
+  Boolean(config?.apiKey);
+
+const isGenericHttpZplLifecycleConfigReady = (config: GenericHttpZplProviderConfig | null) =>
+  Boolean(config?.endpointBaseUrl && config.apiKey);
+
 const buildConfigurationResponse = (
   config: GenericHttpZplProviderConfig | EasyPostProviderConfig,
 ) => ({
@@ -540,6 +546,79 @@ export const resolveShippingProviderForShipment = async (
         parcelLengthIn: config.parcelLengthIn,
         parcelWidthIn: config.parcelWidthIn,
         parcelHeightIn: config.parcelHeightIn,
+      },
+    };
+  }
+
+  return {
+    provider,
+    providerKey: requestedProviderKey,
+    providerDisplayName: provider.providerDisplayName,
+    providerEnvironment: null,
+    runtimeConfig: null,
+  };
+};
+
+export const resolveShippingProviderForShipmentLifecycle = async (
+  providerKey: string,
+): Promise<ResolvedShippingProvider> => {
+  const requestedProviderKey = providerKey.trim();
+  const provider = getShippingLabelProviderOrThrow(requestedProviderKey);
+
+  if (requestedProviderKey === "GENERIC_HTTP_ZPL") {
+    const config = await getStoredGenericHttpZplConfig();
+    if (!isGenericHttpZplLifecycleConfigReady(config)) {
+      throw new HttpError(
+        409,
+        "Generic HTTP courier lifecycle actions require endpointBaseUrl and apiKey in Settings",
+        "SHIPPING_PROVIDER_NOT_CONFIGURED",
+      );
+    }
+
+    return {
+      provider,
+      providerKey: requestedProviderKey,
+      providerDisplayName: config?.displayName ?? provider.providerDisplayName,
+      providerEnvironment: config?.environment ?? "SANDBOX",
+      runtimeConfig: {
+        providerKey: requestedProviderKey,
+        environment: config?.environment ?? "SANDBOX",
+        displayName: config?.displayName ?? null,
+        endpointBaseUrl: config?.endpointBaseUrl ?? null,
+        accountId: config?.accountId ?? null,
+        apiKey: config?.apiKey ?? null,
+      },
+    };
+  }
+
+  if (requestedProviderKey === "EASYPOST") {
+    const config = await getStoredEasyPostConfig();
+    if (!isEasyPostLifecycleConfigReady(config)) {
+      throw new HttpError(
+        409,
+        "EasyPost lifecycle actions require an API key in Settings",
+        "SHIPPING_PROVIDER_NOT_CONFIGURED",
+      );
+    }
+
+    return {
+      provider,
+      providerKey: requestedProviderKey,
+      providerDisplayName: config?.displayName ?? provider.providerDisplayName,
+      providerEnvironment: config?.environment ?? "SANDBOX",
+      runtimeConfig: {
+        providerKey: requestedProviderKey,
+        environment: config?.environment ?? "SANDBOX",
+        displayName: config?.displayName ?? null,
+        apiKey: config?.apiKey ?? null,
+        apiBaseUrl: config?.apiBaseUrl ?? null,
+        carrierAccountId: config?.carrierAccountId ?? null,
+        defaultServiceCode: config?.defaultServiceCode ?? null,
+        defaultServiceName: config?.defaultServiceName ?? null,
+        parcelWeightOz: config?.parcelWeightOz ?? null,
+        parcelLengthIn: config?.parcelLengthIn ?? null,
+        parcelWidthIn: config?.parcelWidthIn ?? null,
+        parcelHeightIn: config?.parcelHeightIn ?? null,
       },
     };
   }
