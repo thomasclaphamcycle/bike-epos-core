@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
+  cancelShipmentHandler,
   createOnlineStoreOrderHandler,
   createShipmentLabelHandler,
   dispatchShipmentHandler,
@@ -11,6 +12,8 @@ import {
   listOnlineStoreOrdersHandler,
   prepareShipmentLabelPrintHandler,
   printShipmentLabelViaAgentHandler,
+  refreshShipmentProviderStateHandler,
+  regenerateShipmentLabelHandler,
   recordShipmentPrintedHandler,
 } from "../controllers/onlineStoreController";
 
@@ -23,6 +26,9 @@ onlineStoreRouter.get("/orders/:id/shipment", requireRoleAtLeast("MANAGER"), get
 onlineStoreRouter.post("/orders/:id/shipments", requireRoleAtLeast("MANAGER"), createShipmentLabelHandler);
 onlineStoreRouter.get("/shipments/:shipmentId/label", requireRoleAtLeast("MANAGER"), getShipmentLabelPayloadHandler);
 onlineStoreRouter.get("/shipments/:shipmentId/label/content", requireRoleAtLeast("MANAGER"), getShipmentLabelContentHandler);
+onlineStoreRouter.post("/shipments/:shipmentId/refresh", requireRoleAtLeast("MANAGER"), refreshShipmentProviderStateHandler);
+onlineStoreRouter.post("/shipments/:shipmentId/cancel", requireRoleAtLeast("MANAGER"), cancelShipmentHandler);
+onlineStoreRouter.post("/shipments/:shipmentId/regenerate", requireRoleAtLeast("MANAGER"), regenerateShipmentLabelHandler);
 onlineStoreRouter.post("/shipments/:shipmentId/prepare-print", requireRoleAtLeast("MANAGER"), prepareShipmentLabelPrintHandler);
 onlineStoreRouter.post("/shipments/:shipmentId/print", requireRoleAtLeast("MANAGER"), printShipmentLabelViaAgentHandler);
 onlineStoreRouter.post("/shipments/:shipmentId/record-printed", requireRoleAtLeast("MANAGER"), recordShipmentPrintedHandler);

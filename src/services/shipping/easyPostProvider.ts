@@ -6,6 +6,8 @@ import type {
   ShippingLabelProviderExecutionContext,
   ShippingLabelProviderResult,
   ShippingPartyAddress,
+  ShippingProviderShipmentLifecycleInput,
+  ShippingProviderShipmentLifecycleResult,
   ShippingProviderEnvironment,
 } from "./contracts";
 
@@ -262,6 +264,7 @@ type EasyPostShipmentResponse = {
   id: string;
   mode: string | null;
   status: string | null;
+  refundStatus: string | null;
   trackingCode: string | null;
   rates: EasyPostRate[];
   selectedRate: EasyPostRate | null;
@@ -302,6 +305,7 @@ const parseEasyPostShipmentResponse = (value: unknown): EasyPostShipmentResponse
     id: expectString(record.id, "response.id"),
     mode: expectOptionalString(record.mode, "response.mode"),
     status: expectOptionalString(record.status, "response.status"),
+    refundStatus: expectOptionalString(record.refund_status, "response.refund_status"),
     trackingCode: expectOptionalString(record.tracking_code, "response.tracking_code"),
     rates,
     selectedRate: record.selected_rate ? parseEasyPostRate(record.selected_rate, "response.selected_rate") : null,
@@ -396,12 +400,60 @@ const toProviderStatus = (shipment: EasyPostShipmentResponse) => {
   return rawStatus.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase() || null;
 };
 
+const toProviderRefundStatus = (shipment: EasyPostShipmentResponse) => {
+  const rawStatus = shipment.refundStatus ?? null;
+  if (!rawStatus) {
+    return null;
+  }
+
+  return rawStatus.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase() || null;
+};
+
+const buildLifecycleMetadata = (
+  shipment: EasyPostShipmentResponse,
+  environment: ShippingProviderEnvironment,
+  existingMetadata: Record<string, unknown> | null = null,
+) => ({
+  ...(existingMetadata ?? {}),
+  adapterKey: "EASYPOST",
+  environment,
+  easyPostMode: shipment.mode,
+  easyPostShipmentId: shipment.id,
+  easyPostTrackerId: shipment.trackerId,
+  easyPostLabelId: shipment.postageLabel?.id ?? null,
+  labelFileType: shipment.postageLabel?.labelFileType ?? null,
+  labelSize: shipment.postageLabel?.labelSize ?? null,
+  refundStatus: toProviderRefundStatus(shipment),
+});
+
+const buildLifecycleResult = (
+  shipment: EasyPostShipmentResponse,
+  environment: ShippingProviderEnvironment,
+  existingMetadata: Record<string, unknown> | null = null,
+): ShippingProviderShipmentLifecycleResult => ({
+  trackingNumber: shipment.trackingCode ?? null,
+  providerReference: shipment.id,
+  providerShipmentReference: shipment.id,
+  providerTrackingReference: shipment.trackerId ?? shipment.trackingCode ?? null,
+  providerLabelReference: shipment.postageLabel?.id ?? shipment.postageLabel?.labelZplUrl ?? shipment.postageLabel?.labelUrl ?? null,
+  providerStatus: toProviderStatus(shipment),
+  providerRefundStatus: toProviderRefundStatus(shipment),
+  providerMetadata: buildLifecycleMetadata(shipment, environment, existingMetadata),
+});
+
+const getLifecycleShipmentReference = (input: ShippingProviderShipmentLifecycleInput) =>
+  input.shipment.providerShipmentReference
+  ?? input.shipment.providerReference
+  ?? null;
+
 export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
   readonly providerKey = "EASYPOST";
   readonly providerDisplayName = "EasyPost";
   readonly mode = "integration" as const;
   readonly implementationState = "live" as const;
   readonly requiresConfiguration = true;
+  readonly supportsShipmentRefresh = true;
+  readonly supportsShipmentVoid = true;
 
   async createLabel(
     input: ShippingLabelGenerationInput,
@@ -546,6 +598,124 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
         },
         document,
       };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+
+      if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
+        throw new HttpError(
+          504,
+          `EasyPost timed out after ${DEFAULT_TIMEOUT_MS}ms`,
+          "SHIPPING_PROVIDER_TIMEOUT",
+        );
+      }
+
+      throw new HttpError(
+        503,
+        error instanceof Error ? `EasyPost could not be reached: ${error.message}` : "EasyPost could not be reached",
+        "SHIPPING_PROVIDER_UNREACHABLE",
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async syncShipment(
+    input: ShippingProviderShipmentLifecycleInput,
+    context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingProviderShipmentLifecycleResult> {
+    const config = resolveRuntimeConfig(context);
+    const providerShipmentReference = getLifecycleShipmentReference(input);
+    if (!providerShipmentReference) {
+      throw new HttpError(
+        409,
+        "EasyPost shipment sync requires a stored provider shipment reference",
+        "SHIPMENT_PROVIDER_REFERENCE_MISSING",
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const authorization = buildBasicAuthHeader(config.apiKey);
+
+    try {
+      const payload = await requestJson(
+        `${config.apiBaseUrl}/shipments/${encodeURIComponent(providerShipmentReference)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: authorization,
+          },
+        },
+        controller,
+      );
+
+      const shipment = parseEasyPostShipmentResponse(payload);
+      return buildLifecycleResult(
+        shipment,
+        config.environment,
+        input.shipment.providerMetadata ?? null,
+      );
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+
+      if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
+        throw new HttpError(
+          504,
+          `EasyPost timed out after ${DEFAULT_TIMEOUT_MS}ms`,
+          "SHIPPING_PROVIDER_TIMEOUT",
+        );
+      }
+
+      throw new HttpError(
+        503,
+        error instanceof Error ? `EasyPost could not be reached: ${error.message}` : "EasyPost could not be reached",
+        "SHIPPING_PROVIDER_UNREACHABLE",
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async voidShipment(
+    input: ShippingProviderShipmentLifecycleInput,
+    context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingProviderShipmentLifecycleResult> {
+    const config = resolveRuntimeConfig(context);
+    const providerShipmentReference = getLifecycleShipmentReference(input);
+    if (!providerShipmentReference) {
+      throw new HttpError(
+        409,
+        "EasyPost shipment void requires a stored provider shipment reference",
+        "SHIPMENT_PROVIDER_REFERENCE_MISSING",
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const authorization = buildBasicAuthHeader(config.apiKey);
+
+    try {
+      const payload = await requestJson(
+        `${config.apiBaseUrl}/shipments/${encodeURIComponent(providerShipmentReference)}/refund`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: authorization,
+          },
+        },
+        controller,
+      );
+
+      const shipment = parseEasyPostShipmentResponse(payload);
+      return buildLifecycleResult(
+        shipment,
+        config.environment,
+        input.shipment.providerMetadata ?? null,
+      );
     } catch (error) {
       if (error instanceof HttpError) {
         throw error;

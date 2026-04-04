@@ -13,6 +13,7 @@ The current delivered slice includes:
 - manager/admin settings for configured shipping providers
 - default shipping-provider resolution inside CorePOS
 - provider-backed shipment metadata persisted on `WebOrderShipment`
+- provider lifecycle refresh/void hooks with adapter-level capability flags
 - continued use of stored inline ZPL for reliable reprints
 - compatibility with the existing registered-printer and Windows print-agent flow
 
@@ -40,6 +41,8 @@ Characteristics:
 - mode: `mock`
 - implementation state: `mock`
 - requires configuration: no
+- supports shipment refresh: yes
+- supports shipment void: yes
 
 ### `GENERIC_HTTP_ZPL`
 
@@ -53,6 +56,8 @@ Characteristics:
 - mode: `integration`
 - implementation state: `scaffold`
 - requires configuration: yes
+- supports shipment refresh: no
+- supports shipment void: no
 
 It currently expects a provider endpoint that accepts a normalized shipment request and returns:
 
@@ -72,6 +77,8 @@ Characteristics:
 - mode: `integration`
 - implementation state: `live`
 - requires configuration: yes
+- supports shipment refresh: yes
+- supports shipment void: yes
 
 Current behavior:
 
@@ -129,11 +136,38 @@ Security behavior:
 - provider tracking reference
 - provider label reference
 - provider status
+- provider refund/void status
 - provider metadata blob
+- provider sync timestamp / last sync error
+- void-requested and voided timestamps
 - normalized service code / name
 - stored label document content
 
 This keeps the persistence model ready for future real carrier adapters without forcing the print path to depend on remote label retrieval.
+
+## Shipment lifecycle operations
+
+CorePOS now supports three distinct provider-facing shipment operations:
+
+1. create label
+   - creates and purchases the shipment
+   - stores the label inline in CorePOS
+
+2. refresh shipment
+   - re-reads provider shipment state
+   - updates provider status / refund status / sync metadata
+   - can confirm a pending EasyPost refund into a final voided shipment state
+
+3. void shipment
+   - requests provider-side shipment void/refund when the adapter supports it
+   - does not silently mark the shipment voided unless the provider confirms a successful outcome
+
+CorePOS keeps these separate from print and dispatch:
+
+- print remains a local printer/agent concern
+- dispatch remains a distinct staff confirmation
+- voided or void-pending shipments are blocked from new print/dispatch actions
+- replacement shipment creation is only allowed after a prior shipment is fully voided
 
 ## Request mapping and normalization
 
@@ -165,6 +199,7 @@ For EasyPost specifically, the mapping is now:
    - shipment/provider references
    - tracking number
    - provider status
+   - provider refund status where relevant
    - stored inline ZPL document
 
 ## Current shipment generation flow
@@ -184,6 +219,13 @@ Important safety behavior:
 - reprints use the stored CorePOS-owned label artifact
 - EasyPost credential/config readiness is validated before shipment creation is attempted
 
+For lifecycle hardening:
+
+- provider refresh failures are recorded without falsely changing local shipment state
+- provider void failures do not falsely mark a shipment as voided
+- a pending void can later resolve to either `VOIDED` or back to the prior active local print state depending on the provider outcome
+- existing provider-backed shipments can still use lifecycle actions even if new-shipment defaults such as parcel presets are incomplete later
+
 ## API and UI surfaces
 
 Settings/API:
@@ -196,12 +238,16 @@ Dispatch/API:
 
 - shipment creation under `/api/online-store/orders/:orderId/shipments`
 - shipment metadata and label retrieval under `/api/online-store/shipments/...`
+- provider refresh under `/api/online-store/shipments/:shipmentId/refresh`
+- provider void under `/api/online-store/shipments/:shipmentId/cancel`
+- replacement shipment generation under `/api/online-store/shipments/:shipmentId/regenerate`
 - print preparation and print execution remain on the existing shipment-print endpoints
 
 UI:
 
 - `/management/settings` now includes shipping-provider configuration alongside dispatch-printer management
 - `/online-store/orders` shows provider selection/readiness plus persisted provider references on created shipments
+- `/online-store/orders` now also surfaces provider refund state, last sync outcome, void controls, refresh controls, and replacement-shipment recovery
 - EasyPost configuration now includes carrier account, service, and parcel-default controls required for a usable shipment purchase flow
 
 ## Relationship to Windows/Zebra printing
@@ -222,7 +268,6 @@ The Zebra GK420d path therefore stays stable while the courier layer evolves.
 This milestone does not yet provide:
 
 - rate shopping or service availability lookup
-- shipment cancellation / void APIs
 - provider webhook/status sync
 - remote label re-fetch logic
 - carrier-specific packaging/compliance features
@@ -235,7 +280,7 @@ This milestone does not yet provide:
 The next realistic follow-on work is:
 
 1. expand EasyPost service/rate handling beyond a configured default service
-2. add shipment cancellation/regeneration rules where the carrier permits them
-3. add richer provider status sync and operational troubleshooting surfaces
+2. add richer provider status sync and operational troubleshooting surfaces, including webhook ingestion
+3. add carrier-specific regeneration/void policies where adapters differ materially
 4. add the next branded carrier adapter on top of the current contracts
 5. keep the print-agent contract stable while printer/device support expands

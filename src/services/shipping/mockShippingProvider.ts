@@ -3,6 +3,8 @@ import type {
   ShippingLabelProvider,
   ShippingLabelProviderExecutionContext,
   ShippingLabelProviderResult,
+  ShippingProviderShipmentLifecycleInput,
+  ShippingProviderShipmentLifecycleResult,
 } from "./contracts";
 
 const zplSafe = (value: string) =>
@@ -84,6 +86,8 @@ export class InternalMockShippingLabelProvider implements ShippingLabelProvider 
   readonly mode = "mock" as const;
   readonly implementationState = "mock" as const;
   readonly requiresConfiguration = false;
+  readonly supportsShipmentRefresh = true;
+  readonly supportsShipmentVoid = true;
 
   async createLabel(
     input: ShippingLabelGenerationInput,
@@ -108,6 +112,46 @@ export class InternalMockShippingLabelProvider implements ShippingLabelProvider 
         mimeType: "application/zpl",
         fileName: `shipment-${safeOrderToken}-${trackingNumber}.zpl`,
         content: buildDocument(input, trackingNumber),
+      },
+    };
+  }
+
+  async syncShipment(
+    input: ShippingProviderShipmentLifecycleInput,
+    _context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingProviderShipmentLifecycleResult> {
+    return {
+      trackingNumber: input.shipment.trackingNumber,
+      providerReference: input.shipment.providerReference ?? input.shipment.providerShipmentReference ?? null,
+      providerShipmentReference: input.shipment.providerShipmentReference ?? null,
+      providerTrackingReference: input.shipment.providerTrackingReference ?? input.shipment.trackingNumber,
+      providerLabelReference: input.shipment.providerLabelReference ?? null,
+      providerStatus: input.shipment.providerRefundStatus === "REFUNDED" ? "CANCELLED" : "LABEL_CREATED",
+      providerRefundStatus: input.shipment.providerRefundStatus ?? "NOT_APPLICABLE",
+      providerMetadata: {
+        ...(input.shipment.providerMetadata ?? {}),
+        generatedBy: this.providerKey,
+        lastLifecycleOperation: "SYNC",
+      },
+    };
+  }
+
+  async voidShipment(
+    input: ShippingProviderShipmentLifecycleInput,
+    _context: ShippingLabelProviderExecutionContext,
+  ): Promise<ShippingProviderShipmentLifecycleResult> {
+    return {
+      trackingNumber: input.shipment.trackingNumber,
+      providerReference: input.shipment.providerReference ?? input.shipment.providerShipmentReference ?? null,
+      providerShipmentReference: input.shipment.providerShipmentReference ?? null,
+      providerTrackingReference: input.shipment.providerTrackingReference ?? input.shipment.trackingNumber,
+      providerLabelReference: input.shipment.providerLabelReference ?? null,
+      providerStatus: "CANCELLED",
+      providerRefundStatus: "REFUNDED",
+      providerMetadata: {
+        ...(input.shipment.providerMetadata ?? {}),
+        generatedBy: this.providerKey,
+        lastLifecycleOperation: "VOID",
       },
     };
   }

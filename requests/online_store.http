@@ -78,6 +78,21 @@ GET {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/label/content
 X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
+### Refresh shipment/provider state from the configured provider (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/refresh
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Request provider void/cancel for a shipment when supported (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/cancel
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Generate a replacement shipment after a prior shipment is fully voided (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/regenerate
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
 ### Prepare Windows local-agent print payload (MANAGER+)
 POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/prepare-print
 Content-Type: application/json
