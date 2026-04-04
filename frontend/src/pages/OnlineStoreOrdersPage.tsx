@@ -1218,6 +1218,20 @@ export const OnlineStoreOrdersPage = () => {
     selectedOrders.length,
     selectedPrintEligibleOrders.length,
   ]);
+  const canBulkCreateSelected = Boolean(
+    selectedProvider
+    && selectedOrders.length > 0
+    && selectedCreateEligibleOrders.length === selectedOrders.length,
+  );
+  const canBulkPrintSelected = Boolean(
+    selectedPrinter
+    && selectedOrders.length > 0
+    && selectedPrintEligibleOrders.length === selectedOrders.length,
+  );
+  const canBulkDispatchSelected = Boolean(
+    selectedOrders.length > 0
+    && selectedDispatchEligibleOrders.length === selectedOrders.length,
+  );
   const detailNextStep = selectedOrder ? getDetailNextStep(selectedOrder, selectedShipment) : null;
   const bulkResultGuidance = getBulkResultGuidance(bulkResult);
 
@@ -1525,6 +1539,19 @@ export const OnlineStoreOrdersPage = () => {
       && !shipmentIsVoidBlocked
       && selectedShipment.printedAt
       && !selectedShipment.dispatchedAt,
+  );
+  const canPackOrder = Boolean(
+    selectedOrder
+      && selectedOrder.fulfillmentMethod === "SHIPPING"
+      && selectedOrder.status === "READY_FOR_DISPATCH"
+      && !isOrderPacked(selectedOrder),
+  );
+  const canUnpackOrder = Boolean(
+    selectedOrder
+      && selectedOrder.fulfillmentMethod === "SHIPPING"
+      && selectedOrder.status === "READY_FOR_DISPATCH"
+      && isOrderPacked(selectedOrder)
+      && !selectedShipment,
   );
   const dispatchRecommendation = getDispatchRecommendation(
     selectedOrder,

@@ -1229,14 +1229,14 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
     prefix: "workshop-technician",
   });
   const token = uniqueToken("workshop-technician");
-  const todayKey = getLondonDateKey();
+  const assignmentDateKey = getMondayDateKey(getLondonDateKey());
   const rotaOverview = await apiJsonWithHeaderBypass(request, "GET", "/api/rota", "MANAGER");
   const currentRotaPeriod = rotaOverview.periods?.find((period) => period.isCurrent) ?? null;
   const createdRotaPeriod = currentRotaPeriod
     ? null
     : await createRotaPeriodViaBypass(
       request,
-      getMondayDateKey(todayKey),
+      getMondayDateKey(assignmentDateKey),
       `Technician workflow ${token}`,
     );
   const rotaPeriodId = currentRotaPeriod?.id ?? createdRotaPeriod?.rotaPeriod?.id ?? null;
@@ -1248,7 +1248,7 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
   await saveRotaAssignmentViaBypass(request, {
     rotaPeriodId,
     staffId: credentials.user.id,
-    date: todayKey,
+    date: assignmentDateKey,
     shiftType: "FULL_DAY",
   });
 
@@ -1280,7 +1280,7 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
       "MANAGER",
       {
         data: {
-          scheduledStartAt: `${todayKey}T${startTime}:00`,
+          scheduledStartAt: `${assignmentDateKey}T${startTime}:00`,
           durationMinutes: 60,
         },
       },
@@ -1371,6 +1371,9 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
   });
   const token = uniqueToken("workshop-double-click");
   const todayKey = getLondonDateKey();
+  const schedulerDateKey = parseDateKeyAtNoon(todayKey).getDay() === 0
+    ? addDaysToDateKey(todayKey, 1)
+    : todayKey;
   const seededJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
     data: {
       customerName: `Double Click Existing ${token}`,
@@ -1386,7 +1389,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
     "MANAGER",
     {
       data: {
-        scheduledStartAt: `${todayKey}T10:00:00`,
+        scheduledStartAt: `${schedulerDateKey}T10:00:00`,
         durationMinutes: 60,
       },
     },
@@ -1394,7 +1397,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
 
   await loginViaUi(page, credentials, "/workshop", { surface: "frontend" });
 
-  const todayTrack = page.getByTestId(`workshop-scheduler-day-track-${todayKey}`);
+  const todayTrack = page.getByTestId(`workshop-scheduler-day-track-${schedulerDateKey}`);
   await expect(todayTrack).toBeVisible();
 
   const emptyPoint = await todayTrack.evaluate((track) => {
@@ -1496,7 +1499,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
   await intakeDialog.getByPlaceholder("Describe the problem or requested work").fill("Scheduler double click check");
   await intakeDialog.getByText("Next", { exact: true }).click();
 
-  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-date")).toHaveValue(todayKey);
+  await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-date")).toHaveValue(schedulerDateKey);
   await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-time")).toHaveValue(emptyPoint.expectedTime);
   await expect(intakeDialog.getByTestId("workshop-checkin-scheduled-duration")).toHaveValue("30");
 
@@ -2705,13 +2708,20 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
       ],
     },
   });
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/online-store/orders/${encodeURIComponent(createdOrder.order.id)}/packing`,
+    "MANAGER",
+    { data: { packed: true } },
+  );
 
   await loginViaUi(page, managerCredentials, "/online-store/orders", {
     surface: "frontend",
     expectedPath: "/online-store/orders",
   });
 
-  await page.getByLabel("Search orders").fill(createdOrder.order.orderNumber);
+  await page.getByPlaceholder("Order number, customer, email, tracking").fill(createdOrder.order.orderNumber);
   await expect(page.getByTestId(`online-store-order-row-${createdOrder.order.id}`)).toBeVisible();
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
@@ -2763,6 +2773,7 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
     role: "MANAGER",
     prefix: "online-store-bulk-dispatch",
   });
+  const bulkToken = uniqueToken("web-order-bulk");
   const printerToken = uniqueToken("dispatch-bulk-printer");
   const registeredPrinter = await apiJsonWithHeaderBypass(request, "POST", "/api/settings/printers", "ADMIN", {
     data: {
@@ -2786,7 +2797,7 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
 
   const orderIds = [];
   for (let index = 0; index < 2; index += 1) {
-    const token = uniqueToken(`web-order-bulk-${index}`);
+    const token = `${bulkToken}-${index + 1}`;
     const createdOrder = await apiJsonWithHeaderBypass(request, "POST", "/api/online-store/orders", "MANAGER", {
       data: {
         orderNumber: `WEB-BULK-E2E-${token}`.toUpperCase(),
@@ -2828,7 +2839,9 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
     expectedPath: "/online-store/orders",
   });
 
+  await page.getByPlaceholder("Order number, customer, email, tracking").fill(bulkToken);
   await expect(page.getByTestId(`online-store-order-row-${orderIds[0]}`)).toBeVisible();
+  await expect(page.getByTestId(`online-store-order-row-${orderIds[1]}`)).toBeVisible();
   await page.getByTestId(`online-store-select-order-${orderIds[0]}`).check();
   await page.getByTestId(`online-store-select-order-${orderIds[1]}`).check();
   await page.getByTestId("online-store-bulk-create").click();
