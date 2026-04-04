@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { getRequestAuditActor } from "../middleware/staffRole";
 import {
+  bulkCreateShipmentLabels,
+  bulkPrintShipmentLabels,
   cancelShipment,
   createOnlineStoreOrder,
   createShipmentLabelForOrder,
@@ -13,8 +15,12 @@ import {
   refreshShipmentProviderState,
   regenerateShipmentLabel,
   recordShipmentPrinted,
+  setWebOrderPackedState,
+  type BulkCreateShipmentsInput,
+  type BulkPrintShipmentsInput,
   type CreateWebOrderInput,
   type CreateShipmentLabelInput,
+  type SetWebOrderPackedInput,
 } from "../services/orderService";
 import { HttpError } from "../utils/http";
 import { parseOptionalIntegerQuery } from "../utils/requestParsing";
@@ -54,6 +60,25 @@ const parseStatusQuery = (value: unknown) => {
   }
 
   return normalized as "READY_FOR_DISPATCH" | "DISPATCHED" | "CANCELLED";
+};
+
+const parsePackedQuery = (value: unknown) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new HttpError(400, "packed must be true or false", "INVALID_FILTER");
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+  if (normalized === "false") {
+    return false;
+  }
+
+  throw new HttpError(400, "packed must be true or false", "INVALID_FILTER");
 };
 
 const toCreateWebOrderInput = (body: unknown): CreateWebOrderInput => {
@@ -182,10 +207,60 @@ const toPrintPreparationInput = (body: unknown) => {
   };
 };
 
+const toSetPackedInput = (body: unknown): SetWebOrderPackedInput => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "packed state body must be an object", "INVALID_WEB_ORDER");
+  }
+
+  const record = body as Record<string, unknown>;
+  if (typeof record.packed !== "boolean") {
+    throw new HttpError(400, "packed must be a boolean", "INVALID_WEB_ORDER");
+  }
+
+  return {
+    packed: record.packed,
+  };
+};
+
+const toBulkCreateShipmentsInput = (body: unknown): BulkCreateShipmentsInput => {
+  const shipmentInput = toCreateShipmentInput(body);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "bulk shipment body must be an object", "INVALID_WEB_ORDER");
+  }
+
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.orderIds) || record.orderIds.some((orderId) => typeof orderId !== "string")) {
+    throw new HttpError(400, "orderIds must be an array of UUID strings", "INVALID_WEB_ORDER");
+  }
+
+  return {
+    ...shipmentInput,
+    orderIds: record.orderIds as string[],
+  };
+};
+
+const toBulkPrintShipmentsInput = (body: unknown): BulkPrintShipmentsInput => {
+  const printInput = toPrintPreparationInput(body);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "bulk print body must be an object", "INVALID_WEB_ORDER");
+  }
+
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.orderIds) || record.orderIds.some((orderId) => typeof orderId !== "string")) {
+    throw new HttpError(400, "orderIds must be an array of UUID strings", "INVALID_WEB_ORDER");
+  }
+
+  return {
+    ...printInput,
+    orderIds: record.orderIds as string[],
+  };
+};
+
 export const listOnlineStoreOrdersHandler = async (req: Request, res: Response) => {
   const payload = await listOnlineStoreOrders({
     q: typeof req.query.q === "string" ? req.query.q : undefined,
     status: parseStatusQuery(req.query.status),
+    packed: parsePackedQuery(req.query.packed),
     take: parseOptionalIntegerQuery(req.query.take, {
       code: "INVALID_FILTER",
       message: "take must be an integer between 1 and 200",
@@ -205,6 +280,11 @@ export const listOnlineStoreOrdersHandler = async (req: Request, res: Response) 
 export const createOnlineStoreOrderHandler = async (req: Request, res: Response) => {
   const result = await createOnlineStoreOrder(toCreateWebOrderInput(req.body), getRequestAuditActor(req));
   res.status(201).json(result);
+};
+
+export const setOnlineStoreOrderPackedStateHandler = async (req: Request, res: Response) => {
+  const result = await setWebOrderPackedState(req.params.id, toSetPackedInput(req.body), getRequestAuditActor(req));
+  res.json(result);
 };
 
 export const getOnlineStoreOrderDetailHandler = async (req: Request, res: Response) => {
@@ -228,6 +308,16 @@ export const createShipmentLabelHandler = async (req: Request, res: Response) =>
     getRequestAuditActor(req),
   );
   res.status(201).json(result);
+};
+
+export const bulkCreateShipmentLabelsHandler = async (req: Request, res: Response) => {
+  const result = await bulkCreateShipmentLabels(toBulkCreateShipmentsInput(req.body), getRequestAuditActor(req));
+  res.json(result);
+};
+
+export const bulkPrintShipmentLabelsHandler = async (req: Request, res: Response) => {
+  const result = await bulkPrintShipmentLabels(toBulkPrintShipmentsInput(req.body), getRequestAuditActor(req));
+  res.json(result);
 };
 
 export const getShipmentLabelPayloadHandler = async (req: Request, res: Response) => {

@@ -104,6 +104,8 @@ type WebOrderSummary = {
   shippingPricePence: number;
   totalPence: number;
   placedAt: string;
+  packedAt: string | null;
+  packedByStaffId: string | null;
   createdAt: string;
   updatedAt: string;
   itemCount: number;
@@ -146,6 +148,8 @@ type WebOrderDetail = {
   shippingPricePence: number;
   totalPence: number;
   placedAt: string;
+  packedAt: string | null;
+  packedByStaffId: string | null;
   createdAt: string;
   updatedAt: string;
   items: WebOrderItem[];
@@ -156,12 +160,15 @@ type ListOrdersResponse = {
   filters: {
     q: string | null;
     status: WebOrderStatus | null;
+    packed: boolean | null;
     take: number;
     skip: number;
   };
   summary: {
     total: number;
     readyForDispatchCount: number;
+    packedCount: number;
+    packedWithoutShipmentCount: number;
     labelReadyCount: number;
     dispatchedCount: number;
   };
@@ -265,6 +272,31 @@ type RegisteredPrinterListResponse = {
   defaultShippingLabelPrinter: RegisteredPrinter | null;
 };
 
+type BulkShipmentActionResult = {
+  orderId: string;
+  orderNumber: string;
+  outcome: "SUCCEEDED" | "FAILED" | "SKIPPED";
+  code: string | null;
+  message: string;
+  packedAt: string | null;
+  shipmentId: string | null;
+  trackingNumber: string | null;
+  shipmentStatus: WebOrderShipmentStatus | null;
+  printedAt: string | null;
+};
+
+type BulkShipmentOperationResponse = {
+  action: "CREATE_SHIPMENTS" | "PRINT_SHIPMENTS";
+  summary: {
+    requestedCount: number;
+    processedCount: number;
+    succeededCount: number;
+    failedCount: number;
+    skippedCount: number;
+  };
+  results: BulkShipmentActionResult[];
+};
+
 const formatMoney = (pence: number) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -285,6 +317,26 @@ const humanizeToken = (value: string) =>
     .split("_")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+
+const isOrderPacked = (order: Pick<WebOrderSummary, "packedAt"> | Pick<WebOrderDetail, "packedAt">) => Boolean(order.packedAt);
+
+const isShipmentVoidBlocked = (shipment: WebOrderShipment | null) =>
+  shipment ? shipment.status === "VOIDED" || shipment.status === "VOID_PENDING" : false;
+
+const canBulkCreateShipmentForOrder = (order: WebOrderSummary) =>
+  order.status === "READY_FOR_DISPATCH"
+  && order.fulfillmentMethod === "SHIPPING"
+  && isOrderPacked(order)
+  && !order.latestShipment;
+
+const canBulkPrintShipmentForOrder = (order: WebOrderSummary) =>
+  order.status === "READY_FOR_DISPATCH"
+  && order.fulfillmentMethod === "SHIPPING"
+  && isOrderPacked(order)
+  && Boolean(order.latestShipment)
+  && order.latestShipment?.status !== "VOIDED"
+  && order.latestShipment?.status !== "VOID_PENDING"
+  && order.latestShipment?.status !== "DISPATCHED";
 
 const orderStatusClassName = (status: WebOrderStatus) => {
   switch (status) {
@@ -325,14 +377,17 @@ export const OnlineStoreOrdersPage = () => {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | WebOrderStatus>("");
+  const [packedFilter, setPackedFilter] = useState<"" | "packed" | "unpacked">("");
   const [ordersPayload, setOrdersPayload] = useState<ListOrdersResponse | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [detailPayload, setDetailPayload] = useState<OrderDetailResponse | null>(null);
   const [printersPayload, setPrintersPayload] = useState<RegisteredPrinterListResponse | null>(null);
   const [labelPayload, setLabelPayload] = useState<ShipmentLabelPayloadResponse | null>(null);
   const [printPayload, setPrintPayload] = useState<ShipmentPrintRequestResponse | null>(null);
   const [printJob, setPrintJob] = useState<ShipmentPrintExecutionResponse["printJob"] | null>(null);
   const [printNotice, setPrintNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkShipmentOperationResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
   const [copies, setCopies] = useState("1");
@@ -367,6 +422,11 @@ export const OnlineStoreOrdersPage = () => {
       if (statusFilter) {
         params.set("status", statusFilter);
       }
+      if (packedFilter === "packed") {
+        params.set("packed", "true");
+      } else if (packedFilter === "unpacked") {
+        params.set("packed", "false");
+      }
 
       const payload = await apiGet<ListOrdersResponse>(`/api/online-store/orders?${params.toString()}`);
       if (requestSequence !== listRequestSequenceRef.current) {
@@ -374,6 +434,7 @@ export const OnlineStoreOrdersPage = () => {
       }
 
       setOrdersPayload(payload);
+      setSelectedOrderIds((current) => current.filter((orderId) => payload.orders.some((order) => order.id === orderId)));
       setSelectedOrderId((current) => {
         const requestedId = preferredSelectedOrderId ?? current;
         if (requestedId && payload.orders.some((order) => order.id === requestedId)) {
@@ -397,7 +458,7 @@ export const OnlineStoreOrdersPage = () => {
         setLoadingOrders(false);
       }
     }
-  }, [error, searchQuery, statusFilter]);
+  }, [error, packedFilter, searchQuery, statusFilter]);
 
   const loadOrderDetail = useCallback(async (orderId: string) => {
     if (!orderId) {
@@ -549,6 +610,24 @@ export const OnlineStoreOrdersPage = () => {
     }
     return printersPayload.defaultShippingLabelPrinter;
   }, [printersPayload, selectedPrinterId]);
+  const visibleOrders = ordersPayload?.orders ?? [];
+  const selectedOrders = useMemo(
+    () => visibleOrders.filter((order) => selectedOrderIds.includes(order.id)),
+    [selectedOrderIds, visibleOrders],
+  );
+  const selectedCreateEligibleOrders = useMemo(
+    () => selectedOrders.filter(canBulkCreateShipmentForOrder),
+    [selectedOrders],
+  );
+  const selectedPrintEligibleOrders = useMemo(
+    () => selectedOrders.filter(canBulkPrintShipmentForOrder),
+    [selectedOrders],
+  );
+  const bulkSelectionSummary = useMemo(() => ({
+    selectedCount: selectedOrders.length,
+    creatableCount: selectedCreateEligibleOrders.length,
+    printableCount: selectedPrintEligibleOrders.length,
+  }), [selectedCreateEligibleOrders.length, selectedOrders.length, selectedPrintEligibleOrders.length]);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     await Promise.all([
@@ -568,6 +647,26 @@ export const OnlineStoreOrdersPage = () => {
     }
   };
 
+  const toggleOrderSelection = useCallback((orderId: string) => {
+    setSelectedOrderIds((current) =>
+      current.includes(orderId)
+        ? current.filter((selectedId) => selectedId !== orderId)
+        : [...current, orderId],
+    );
+  }, []);
+
+  const selectPackedQueue = useCallback(() => {
+    setSelectedOrderIds(visibleOrders.filter(canBulkCreateShipmentForOrder).map((order) => order.id));
+  }, [visibleOrders]);
+
+  const selectPrintableQueue = useCallback(() => {
+    setSelectedOrderIds(visibleOrders.filter(canBulkPrintShipmentForOrder).map((order) => order.id));
+  }, [visibleOrders]);
+
+  const clearBulkSelection = useCallback(() => {
+    setSelectedOrderIds([]);
+  }, []);
+
   const handleGenerateShipment = async () => {
     if (!selectedOrder || !selectedProvider) {
       return;
@@ -583,6 +682,23 @@ export const OnlineStoreOrdersPage = () => {
       setPrintJob(null);
       setPrintNotice(null);
       success(`Shipment label generated for ${selectedOrder.orderNumber}.`);
+      await refreshSelectedOrder(selectedOrder.id);
+    });
+  };
+
+  const handleSetPackedState = async (packed: boolean) => {
+    if (!selectedOrder) {
+      return;
+    }
+
+    await runAction(packed ? "pack" : "unpack", async () => {
+      await apiPost(`/api/online-store/orders/${encodeURIComponent(selectedOrder.id)}/packing`, { packed });
+      setBulkResult(null);
+      success(
+        packed
+          ? `${selectedOrder.orderNumber} marked as packed and ready for shipment processing.`
+          : `${selectedOrder.orderNumber} removed from the packed queue.`,
+      );
       await refreshSelectedOrder(selectedOrder.id);
     });
   };
@@ -713,16 +829,68 @@ export const OnlineStoreOrdersPage = () => {
     });
   };
 
+  const handleBulkCreateShipments = async () => {
+    if (!selectedProvider || selectedOrderIds.length === 0) {
+      return;
+    }
+
+    await runAction("bulk-create", async () => {
+      setPrintNotice(null);
+      const payload = await apiPost<BulkShipmentOperationResponse>("/api/online-store/orders/bulk/shipments", {
+        orderIds: selectedOrderIds,
+        providerKey: selectedProvider.key,
+        serviceCode: selectedProvider.defaultServiceCode,
+        serviceName: selectedProvider.defaultServiceName,
+      });
+      setBulkResult(payload);
+      setPrintNotice(null);
+      success(
+        payload.summary.succeededCount > 0
+          ? `Bulk shipment creation finished: ${payload.summary.succeededCount} succeeded, ${payload.summary.failedCount} failed, ${payload.summary.skippedCount} skipped.`
+          : "Bulk shipment creation finished with no successful rows.",
+      );
+      await Promise.all([
+        loadOrders(selectedOrderId || undefined),
+        selectedOrderId ? loadOrderDetail(selectedOrderId) : Promise.resolve(null),
+      ]);
+    });
+  };
+
+  const handleBulkPrintShipments = async () => {
+    if (selectedOrderIds.length === 0 || !selectedPrinter) {
+      return;
+    }
+
+    const parsedCopies = Math.max(1, Number.parseInt(copies, 10) || 1);
+    await runAction("bulk-print", async () => {
+      setPrintNotice(null);
+      const payload = await apiPost<BulkShipmentOperationResponse>("/api/online-store/orders/bulk/print", {
+        orderIds: selectedOrderIds,
+        printerId: selectedPrinter.id,
+        copies: parsedCopies,
+      });
+      setBulkResult(payload);
+      success(
+        payload.summary.succeededCount > 0
+          ? `Bulk print finished: ${payload.summary.succeededCount} succeeded, ${payload.summary.failedCount} failed, ${payload.summary.skippedCount} skipped.`
+          : "Bulk print finished with no successful rows.",
+      );
+      await Promise.all([
+        loadOrders(selectedOrderId || undefined),
+        selectedOrderId ? loadOrderDetail(selectedOrderId) : Promise.resolve(null),
+      ]);
+    });
+  };
+
   const canGenerateShipment = Boolean(
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
-      && selectedOrder.status !== "DISPATCHED"
+      && selectedOrder.status === "READY_FOR_DISPATCH"
+      && isOrderPacked(selectedOrder)
       && selectedProvider?.isAvailable
       && !selectedShipment,
   );
-  const shipmentIsVoidBlocked = selectedShipment
-    ? selectedShipment.status === "VOIDED" || selectedShipment.status === "VOID_PENDING"
-    : false;
+  const shipmentIsVoidBlocked = isShipmentVoidBlocked(selectedShipment);
   const canRefreshShipment = Boolean(selectedShipment && shipmentProvider?.supportsShipmentRefresh);
   const canCancelShipment = Boolean(
     selectedShipment
@@ -735,6 +903,29 @@ export const OnlineStoreOrdersPage = () => {
   const canPreparePrint = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
   const canPrintShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedPrinter);
   const canDispatchShipment = Boolean(selectedShipment && !shipmentIsVoidBlocked && selectedShipment.printedAt);
+  const canPackOrder = Boolean(
+    selectedOrder
+      && selectedOrder.fulfillmentMethod === "SHIPPING"
+      && selectedOrder.status === "READY_FOR_DISPATCH"
+      && !isOrderPacked(selectedOrder),
+  );
+  const canUnpackOrder = Boolean(
+    selectedOrder
+      && selectedOrder.fulfillmentMethod === "SHIPPING"
+      && selectedOrder.status === "READY_FOR_DISPATCH"
+      && isOrderPacked(selectedOrder)
+      && !selectedShipment,
+  );
+  const canBulkCreateSelected = Boolean(
+    selectedOrderIds.length > 0
+      && selectedProvider?.isAvailable
+      && selectedCreateEligibleOrders.length > 0,
+  );
+  const canBulkPrintSelected = Boolean(
+    selectedOrderIds.length > 0
+      && selectedPrinter
+      && selectedPrintEligibleOrders.length > 0,
+  );
 
   return (
     <div className="page-shell ui-page online-orders-page" data-testid="online-store-orders-page">
@@ -763,6 +954,11 @@ export const OnlineStoreOrdersPage = () => {
             <span className="dashboard-metric-detail">Orders waiting on shipment action</span>
           </div>
           <div className="metric-card">
+            <span className="metric-label">Packed queue</span>
+            <strong className="metric-value">{ordersPayload?.summary.packedCount ?? 0}</strong>
+            <span className="dashboard-metric-detail">Orders explicitly packed for shipping work</span>
+          </div>
+          <div className="metric-card">
             <span className="metric-label">Labels ready</span>
             <strong className="metric-value">{ordersPayload?.summary.labelReadyCount ?? 0}</strong>
             <span className="dashboard-metric-detail">Orders with an unprinted active label</span>
@@ -775,7 +971,7 @@ export const OnlineStoreOrdersPage = () => {
         </div>
 
         <div className="restricted-panel info-panel online-orders-info-panel">
-          This flow keeps shipment orchestration inside CorePOS, resolves shipment creation through managed courier-provider settings, returns a stored ZPL artifact for reliable thermal-label output, and routes every print through a registered dispatch printer before handing the job to the Windows/local print agent.
+          Pack first, then create and print labels in CorePOS. Shipment orchestration stays inside CorePOS, label content stays stored locally as ZPL, and every print still routes through a registered dispatch printer before handing off to the Windows print agent.
         </div>
       </SurfaceCard>
 
@@ -797,6 +993,14 @@ export const OnlineStoreOrdersPage = () => {
             <option value="CANCELLED">Cancelled</option>
           </select>
         </label>
+        <label className="online-orders-toolbar__field online-orders-toolbar__field--compact">
+          Packing
+          <select value={packedFilter} onChange={(event) => setPackedFilter(event.target.value as "" | "packed" | "unpacked")}>
+            <option value="">All packing states</option>
+            <option value="packed">Packed only</option>
+            <option value="unpacked">Needs packing</option>
+          </select>
+        </label>
       </div>
 
       <div className="online-orders-layout">
@@ -805,6 +1009,73 @@ export const OnlineStoreOrdersPage = () => {
             title="Web Orders"
             description="Manager-facing dispatch view for current online orders. Use the API or demo seed data to create additional web orders while the wider storefront remains under construction."
           />
+
+          <div className="online-orders-bulk-toolbar">
+            <div className="online-orders-bulk-toolbar__summary">
+              <strong>Bulk throughput</strong>
+              <span>
+                {bulkSelectionSummary.selectedCount} selected
+                {` · ${bulkSelectionSummary.creatableCount} ready to create`}
+                {` · ${bulkSelectionSummary.printableCount} ready to print`}
+              </span>
+            </div>
+            <div className="online-orders-bulk-toolbar__actions">
+              <button type="button" className="button-link" onClick={selectPackedQueue} disabled={loadingOrders || pendingAction.length > 0}>
+                Select Packed Queue
+              </button>
+              <button type="button" className="button-link" onClick={selectPrintableQueue} disabled={loadingOrders || pendingAction.length > 0}>
+                Select Printable Queue
+              </button>
+              <button type="button" className="button-link" onClick={clearBulkSelection} disabled={selectedOrderIds.length === 0 || pendingAction.length > 0}>
+                Clear Selection
+              </button>
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => void handleBulkCreateShipments()}
+                disabled={!canBulkCreateSelected || pendingAction.length > 0}
+                data-testid="online-store-bulk-create"
+              >
+                {pendingAction === "bulk-create" ? "Creating..." : "Bulk Create Shipments"}
+              </button>
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => void handleBulkPrintShipments()}
+                disabled={!canBulkPrintSelected || pendingAction.length > 0}
+                data-testid="online-store-bulk-print"
+              >
+                {pendingAction === "bulk-print" ? "Printing..." : "Bulk Print Labels"}
+              </button>
+            </div>
+          </div>
+
+          {bulkResult ? (
+            <div className="online-orders-bulk-results" data-testid="online-store-bulk-results">
+              <div className="online-orders-bulk-results__summary">
+                <strong>
+                  {bulkResult.action === "CREATE_SHIPMENTS" ? "Bulk shipment creation" : "Bulk label print"}
+                </strong>
+                <span>
+                  {bulkResult.summary.succeededCount} succeeded
+                  {` · ${bulkResult.summary.failedCount} failed`}
+                  {` · ${bulkResult.summary.skippedCount} skipped`}
+                </span>
+              </div>
+              <ul className="online-orders-bulk-results__list">
+                {bulkResult.results.map((result) => (
+                  <li
+                    key={`${bulkResult.action}-${result.orderId}-${result.shipmentId ?? "none"}`}
+                    className={`online-orders-bulk-results__item online-orders-bulk-results__item--${result.outcome.toLowerCase()}`}
+                  >
+                    <span>{result.orderNumber}</span>
+                    <span>{result.trackingNumber ?? humanizeToken(result.outcome)}</span>
+                    <span>{result.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {loadingOrders ? (
             <EmptyState title="Loading web orders" description="Pulling the current dispatch queue from CorePOS." />
@@ -821,35 +1092,57 @@ export const OnlineStoreOrdersPage = () => {
             <div className="online-orders-list" role="list">
               {ordersPayload.orders.map((order) => {
                 const isSelected = order.id === selectedOrderId;
+                const isChecked = selectedOrderIds.includes(order.id);
+                const packed = isOrderPacked(order);
                 return (
-                  <button
+                  <div
                     key={order.id}
-                    type="button"
-                    className={`online-order-row${isSelected ? " online-order-row--selected" : ""}`}
-                    onClick={() => setSelectedOrderId(order.id)}
-                    data-testid={`online-store-order-row-${order.id}`}
+                    className={`online-order-row-shell${isChecked ? " online-order-row-shell--checked" : ""}`}
                   >
-                    <div className="online-order-row__topline">
-                      <strong>{order.orderNumber}</strong>
-                      <span className={orderStatusClassName(order.status)}>{humanizeToken(order.status)}</span>
-                    </div>
-                    <div className="online-order-row__meta">
-                      <span>{order.customerName}</span>
-                      <span>{formatMoney(order.totalPence)}</span>
-                    </div>
-                    <div className="online-order-row__meta online-order-row__meta--muted">
-                      <span>{order.shippingPostcode}</span>
-                      <span>{formatDateTime(order.placedAt)}</span>
-                    </div>
-                    <div className="online-order-row__footer">
-                      <span>{humanizeToken(order.fulfillmentMethod)}</span>
-                      <span>
-                        {order.latestShipment
-                          ? `${humanizeToken(order.latestShipment.status)} · ${order.latestShipment.trackingNumber}`
-                          : "No shipment yet"}
-                      </span>
-                    </div>
-                  </button>
+                    <label className="online-order-row__select">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleOrderSelection(order.id)}
+                        aria-label={`Select ${order.orderNumber} for bulk dispatch actions`}
+                        data-testid={`online-store-select-order-${order.id}`}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={`online-order-row${isSelected ? " online-order-row--selected" : ""}`}
+                      onClick={() => setSelectedOrderId(order.id)}
+                      data-testid={`online-store-order-row-${order.id}`}
+                    >
+                      <div className="online-order-row__topline">
+                        <strong>{order.orderNumber}</strong>
+                        <div className="online-order-row__badges">
+                          <span className={`status-badge ${packed ? "status-ready" : "status-warning"}`}>
+                            {packed ? "Packed" : "Needs Packing"}
+                          </span>
+                          <span className={orderStatusClassName(order.status)}>{humanizeToken(order.status)}</span>
+                        </div>
+                      </div>
+                      <div className="online-order-row__meta">
+                        <span>{order.customerName}</span>
+                        <span>{formatMoney(order.totalPence)}</span>
+                      </div>
+                      <div className="online-order-row__meta online-order-row__meta--muted">
+                        <span>{order.shippingPostcode}</span>
+                        <span>{formatDateTime(order.placedAt)}</span>
+                      </div>
+                      <div className="online-order-row__footer">
+                        <span>{humanizeToken(order.fulfillmentMethod)}</span>
+                        <span>
+                          {order.latestShipment
+                            ? `${humanizeToken(order.latestShipment.status)} · ${order.latestShipment.trackingNumber}`
+                            : packed
+                              ? "Packed and waiting for shipment"
+                              : "Waiting for packing"}
+                        </span>
+                      </div>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -880,6 +1173,9 @@ export const OnlineStoreOrdersPage = () => {
                     <span className={orderStatusClassName(selectedOrder.status)}>{humanizeToken(selectedOrder.status)}</span>
                     <span className="status-badge">{humanizeToken(selectedOrder.fulfillmentMethod)}</span>
                     <span className="status-badge">{selectedOrder.sourceChannel}</span>
+                    <span className={`status-badge ${isOrderPacked(selectedOrder) ? "status-ready" : "status-warning"}`}>
+                      {isOrderPacked(selectedOrder) ? "Packed" : "Needs Packing"}
+                    </span>
                   </div>
                   <dl className="online-orders-detail__facts">
                     <div>
@@ -899,10 +1195,41 @@ export const OnlineStoreOrdersPage = () => {
                       <dd>{formatDateTime(selectedOrder.placedAt)}</dd>
                     </div>
                     <div>
+                      <dt>Packed</dt>
+                      <dd>{formatDateTime(selectedOrder.packedAt)}</dd>
+                    </div>
+                    <div>
                       <dt>Total</dt>
                       <dd>{formatMoney(selectedOrder.totalPence)}</dd>
                     </div>
                   </dl>
+                  <div className="online-orders-pack-actions">
+                    <button
+                      type="button"
+                      className="button-link"
+                      onClick={() => void handleSetPackedState(true)}
+                      disabled={!canPackOrder || pendingAction.length > 0}
+                      data-testid="online-store-mark-packed"
+                    >
+                      {pendingAction === "pack" ? "Marking..." : "Mark Packed"}
+                    </button>
+                    <button
+                      type="button"
+                      className="button-link"
+                      onClick={() => void handleSetPackedState(false)}
+                      disabled={!canUnpackOrder || pendingAction.length > 0}
+                      data-testid="online-store-unmark-packed"
+                    >
+                      {pendingAction === "unpack" ? "Updating..." : "Remove From Packed Queue"}
+                    </button>
+                  </div>
+                  <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
+                    {isOrderPacked(selectedOrder)
+                      ? selectedShipment
+                        ? "Packed state is recorded. This order has already moved into shipment handling."
+                        : "Packed orders are eligible for shipment label creation and bulk dispatch actions."
+                      : "Mark the order as packed before creating a shipment label or including it in bulk dispatch work."}
+                  </div>
                   <div className="online-orders-address-card">
                     <strong>Ship to</strong>
                     <p>{selectedOrder.shippingRecipientName}</p>
@@ -944,7 +1271,9 @@ export const OnlineStoreOrdersPage = () => {
                       title="No shipment label yet"
                       description={
                         selectedOrder.fulfillmentMethod === "SHIPPING"
-                          ? selectedProvider?.isAvailable
+                          ? !isOrderPacked(selectedOrder)
+                            ? "Mark this order as packed before creating a shipment label or adding it to the bulk shipment queue."
+                            : selectedProvider?.isAvailable
                             ? "Generate the first shipment label for this web order. CorePOS will resolve the selected provider, store the returned label artifact locally, and keep the result reprintable."
                             : "The selected provider is not currently ready for shipment creation. Configure or enable it in Settings, or switch back to an available provider."
                           : "Click & collect orders do not create shipping labels in this flow."
@@ -1113,7 +1442,7 @@ export const OnlineStoreOrdersPage = () => {
 
                       <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
                         {selectedShipment
-                          ? `Local shipment state: ${humanizeToken(selectedShipment.status)}. Print state: ${selectedShipment.printedAt ? "printed" : selectedShipment.printPreparedAt ? "prepared" : "not printed"}. Dispatch state: ${selectedShipment.dispatchedAt ? "dispatched" : "awaiting dispatch"}.`
+                          ? `Packing state: ${isOrderPacked(selectedOrder) ? "packed" : "not packed"}. Local shipment state: ${humanizeToken(selectedShipment.status)}. Print state: ${selectedShipment.printedAt ? "printed" : selectedShipment.printPreparedAt ? "prepared" : "not printed"}. Dispatch state: ${selectedShipment.dispatchedAt ? "dispatched" : "awaiting dispatch"}.`
                           : "No shipment provider is currently selected."}
                       </div>
 

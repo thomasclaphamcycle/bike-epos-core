@@ -667,6 +667,16 @@ const run = async () => {
     assert.equal(createOrderRes.status, 201, JSON.stringify(createOrderRes.json));
     createdOrderIds.push(createOrderRes.json.order.id);
 
+    const packOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packOrderRes.status, 200, JSON.stringify(packOrderRes.json));
+
     const createShipmentRes = await fetchJson(
       `/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`,
       {
@@ -740,6 +750,16 @@ const run = async () => {
     assert.equal(failureOrderRes.status, 201, JSON.stringify(failureOrderRes.json));
     createdOrderIds.push(failureOrderRes.json.order.id);
 
+    const packFailureOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(failureOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packFailureOrderRes.status, 200, JSON.stringify(packFailureOrderRes.json));
+
     const failureShipmentRes = await fetchJson(
       `/api/online-store/orders/${encodeURIComponent(failureOrderRes.json.order.id)}/shipments`,
       {
@@ -812,6 +832,16 @@ const run = async () => {
     });
     assert.equal(easyPostOrderRes.status, 201, JSON.stringify(easyPostOrderRes.json));
     createdOrderIds.push(easyPostOrderRes.json.order.id);
+
+    const packEasyPostOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(easyPostOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packEasyPostOrderRes.status, 200, JSON.stringify(packEasyPostOrderRes.json));
 
     const easyPostShipmentRes = await fetchJson(
       `/api/online-store/orders/${encodeURIComponent(easyPostOrderRes.json.order.id)}/shipments`,
@@ -968,6 +998,16 @@ const run = async () => {
     });
     assert.equal(easyPostFailureOrderRes.status, 201, JSON.stringify(easyPostFailureOrderRes.json));
     createdOrderIds.push(easyPostFailureOrderRes.json.order.id);
+
+    const packEasyPostFailureOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(easyPostFailureOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packEasyPostFailureOrderRes.status, 200, JSON.stringify(packEasyPostFailureOrderRes.json));
 
     const easyPostFailureShipmentRes = await fetchJson(
       `/api/online-store/orders/${encodeURIComponent(easyPostFailureOrderRes.json.order.id)}/shipments`,

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
+  bulkCreateShipmentLabelsHandler,
+  bulkPrintShipmentLabelsHandler,
   cancelShipmentHandler,
   createOnlineStoreOrderHandler,
   createShipmentLabelHandler,
@@ -15,14 +17,18 @@ import {
   refreshShipmentProviderStateHandler,
   regenerateShipmentLabelHandler,
   recordShipmentPrintedHandler,
+  setOnlineStoreOrderPackedStateHandler,
 } from "../controllers/onlineStoreController";
 
 export const onlineStoreRouter = Router();
 
 onlineStoreRouter.get("/orders", requireRoleAtLeast("MANAGER"), listOnlineStoreOrdersHandler);
 onlineStoreRouter.post("/orders", requireRoleAtLeast("MANAGER"), createOnlineStoreOrderHandler);
+onlineStoreRouter.post("/orders/bulk/shipments", requireRoleAtLeast("MANAGER"), bulkCreateShipmentLabelsHandler);
+onlineStoreRouter.post("/orders/bulk/print", requireRoleAtLeast("MANAGER"), bulkPrintShipmentLabelsHandler);
 onlineStoreRouter.get("/orders/:id", requireRoleAtLeast("MANAGER"), getOnlineStoreOrderDetailHandler);
 onlineStoreRouter.get("/orders/:id/shipment", requireRoleAtLeast("MANAGER"), getOnlineStoreOrderShipmentHandler);
+onlineStoreRouter.post("/orders/:id/packing", requireRoleAtLeast("MANAGER"), setOnlineStoreOrderPackedStateHandler);
 onlineStoreRouter.post("/orders/:id/shipments", requireRoleAtLeast("MANAGER"), createShipmentLabelHandler);
 onlineStoreRouter.get("/shipments/:shipmentId/label", requireRoleAtLeast("MANAGER"), getShipmentLabelPayloadHandler);
 onlineStoreRouter.get("/shipments/:shipmentId/label/content", requireRoleAtLeast("MANAGER"), getShipmentLabelContentHandler);

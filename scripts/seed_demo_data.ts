@@ -187,6 +187,7 @@ type DemoWebOrder = {
   shippingCountry: string;
   shippingPricePence: number;
   placedAt: string;
+  packedAt?: string | null;
   items: Array<{
     id: string;
     sku: string;
@@ -713,6 +714,7 @@ const DEMO_WEB_ORDERS: DemoWebOrder[] = [
     shippingCountry: "United Kingdom",
     shippingPricePence: 495,
     placedAt: toRelativeIso(-1, 13, 15),
+    packedAt: toRelativeIso(0, 8, 30),
     items: [
       {
         id: "36100000-0000-4000-8000-000000000001",
@@ -747,6 +749,7 @@ const DEMO_WEB_ORDERS: DemoWebOrder[] = [
     shippingCountry: "United Kingdom",
     shippingPricePence: 0,
     placedAt: toRelativeIso(0, 9, 45),
+    packedAt: null,
     items: [
       {
         id: "36100000-0000-4000-8000-000000000003",
@@ -1493,6 +1496,7 @@ const seedDemoWebOrders = async (
         shippingPricePence: order.shippingPricePence,
         totalPence: subtotalPence + order.shippingPricePence,
         placedAt: new Date(order.placedAt),
+        packedAt: order.packedAt ? new Date(order.packedAt) : null,
       },
       create: {
         id: order.id,
@@ -1517,6 +1521,7 @@ const seedDemoWebOrders = async (
         shippingPricePence: order.shippingPricePence,
         totalPence: subtotalPence + order.shippingPricePence,
         placedAt: new Date(order.placedAt),
+        packedAt: order.packedAt ? new Date(order.packedAt) : null,
       },
     });
 

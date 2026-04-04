@@ -46,6 +46,16 @@ GET {{baseUrl}}/api/online-store/orders/{{orderId}}
 X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
+### Mark a web order as packed and ready for shipment processing (MANAGER+)
+POST {{baseUrl}}/api/online-store/orders/{{orderId}}/packing
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "packed": true
+}
+
 ### Generate a shipment label for a web order (MANAGER+)
 POST {{baseUrl}}/api/online-store/orders/{{orderId}}/shipments
 Content-Type: application/json
@@ -65,6 +75,19 @@ X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
 {
+  "providerKey": "EASYPOST"
+}
+
+### Bulk-create shipment labels for packed web orders (MANAGER+)
+POST {{baseUrl}}/api/online-store/orders/bulk/shipments
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "orderIds": [
+    "{{orderId}}"
+  ],
   "providerKey": "EASYPOST"
 }
 
@@ -100,6 +123,20 @@ X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}
 
 {
+  "printerId": "{{printerId}}",
+  "copies": 1
+}
+
+### Bulk-print shipment labels for packed web orders (MANAGER+)
+POST {{baseUrl}}/api/online-store/orders/bulk/print
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "orderIds": [
+    "{{orderId}}"
+  ],
   "printerId": "{{printerId}}",
   "copies": 1
 }
