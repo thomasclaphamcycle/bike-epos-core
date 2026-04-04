@@ -78,7 +78,18 @@ X-Staff-Id: {{managerId}}
   "copies": 1
 }
 
-### Record the shipment label as printed (MANAGER+)
+### Print the shipment label through the configured Windows/local print agent (MANAGER+)
+POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/print
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "printerName": "Dispatch Zebra GK420d",
+  "copies": 1
+}
+
+### Record the shipment label as printed manually (MANAGER+ fallback)
 POST {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/record-printed
 X-Staff-Role: {{managerRole}}
 X-Staff-Id: {{managerId}}

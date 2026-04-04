@@ -55,6 +55,12 @@ npm run db:seed:dev
 npm run dev
 ```
 
+Optional web-order shipping-label print agent for local dispatch testing:
+
+```bash
+COREPOS_PRINT_AGENT_TRANSPORT=DRY_RUN npm run print-agent:start
+```
+
 6. In a second terminal, run the React frontend:
 
 ```bash
@@ -69,6 +75,8 @@ Production-style serving still comes from the backend after `npm run build`.
 ## Production Deployment Checklist
 
 For a real shop deployment, use the concise production runbook in [docs/production_setup.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/production_setup.md).
+
+For the current Windows/Zebra shipping-label print-agent setup, use [docs/windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
 It covers:
 

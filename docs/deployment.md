@@ -13,6 +13,9 @@ Backend:
 - `NODE_ENV` (`development`, `test`, or `production`)
 - `OPS_LOGGING=1` (optional, enables concise structured operational logs for auth, workshop, purchasing, and inventory lifecycle events)
 - `COREPOS_DEBUG=1` (optional, adds concise request, error, and startup diagnostics for support/debug sessions)
+- `COREPOS_SHIPPING_PRINT_AGENT_URL` (optional, enables backend handoff for web-order shipping-label printing)
+- `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
+- `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional but recommended when using a remote agent over a trusted LAN)
 
 Frontend (optional build-time customizations):
 
@@ -67,6 +70,14 @@ npm --prefix frontend run dev
 ```
 
 The React app proxies `/api` to `http://localhost:3100` in development and is the recommended trial/evaluation surface on `http://localhost:5173/login`.
+
+Optional shipping-label print agent for web-order dispatch:
+
+```bash
+COREPOS_PRINT_AGENT_TRANSPORT=DRY_RUN npm run print-agent:start
+```
+
+For the full Windows/Zebra agent setup and raw TCP configuration, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
 5. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 

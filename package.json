@@ -1,10 +1,11 @@
 {
   "name": "bike-epos-core",
-  "version": "1.2.11",
+  "version": "1.2.12",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "print-agent:start": "ts-node --transpile-only print-agent/src/server.ts",
     "dev:start": "bash scripts/dev_start_local.sh",
     "dev:stop": "bash scripts/dev_stop_local.sh",
     "dev:guard": "bash scripts/dev_codex_guard.sh",
@@ -108,6 +109,7 @@
     "test:dashboard-weather": "node scripts/run_smoke_test.js scripts/dashboard_weather_smoke_tests.js",
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
     "test:business-intelligence": "node scripts/run_smoke_test.js scripts/business_intelligence_phase1_smoke_tests.js",
+    "test:print-agent": "node scripts/run_smoke_test.js scripts/print_agent_smoke_tests.js",
     "test:online-store": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/online_store_smoke_tests.js",
     "test:pin-auth": "node scripts/run_smoke_test.js scripts/pin_auth_foundation_smoke_tests.js",
     "verify:postflight": "node scripts/verify_postflight.js",

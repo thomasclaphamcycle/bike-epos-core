@@ -11,6 +11,7 @@ import {
   getShippingLabelProviderOrThrow,
   listSupportedShippingProviders,
 } from "./shipping/providerRegistry";
+import { deliverShipmentPrintRequestToAgent } from "./shipping/printAgentDeliveryService";
 import type {
   ShipmentPrintRequest,
   ShippingLabelDocument,
@@ -18,6 +19,7 @@ import type {
   ShippingPrintPreparationInput,
 } from "./shipping/contracts";
 import { HttpError } from "../utils/http";
+import type { ShipmentPrintAgentJob } from "../../shared/shippingPrintContract";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_PAGE_SIZE = 100;
@@ -183,6 +185,7 @@ export type WebOrderShipmentResponse = {
   labelPayloadPath: string;
   labelContentPath: string;
   preparePrintPath: string;
+  printPath: string;
   recordPrintedPath: string;
   dispatchPath: string;
 };
@@ -276,6 +279,11 @@ export type CreateShipmentLabelInput = {
   providerKey?: string;
   serviceCode?: string;
   serviceName?: string;
+};
+
+type RecordShipmentPrintedOptions = {
+  printRequest?: ShipmentPrintRequest;
+  printJob?: ShipmentPrintAgentJob;
 };
 
 const normalizeOptionalText = (value: string | undefined | null) => {
@@ -430,6 +438,7 @@ const toShipmentResponse = (shipment: WebOrderShipmentRecord): WebOrderShipmentR
   labelPayloadPath: `${buildShipmentApiPath(shipment.id)}/label`,
   labelContentPath: `${buildShipmentApiPath(shipment.id)}/label/content`,
   preparePrintPath: `${buildShipmentApiPath(shipment.id)}/prepare-print`,
+  printPath: `${buildShipmentApiPath(shipment.id)}/print`,
   recordPrintedPath: `${buildShipmentApiPath(shipment.id)}/record-printed`,
   dispatchPath: `${buildShipmentApiPath(shipment.id)}/dispatch`,
 });
@@ -1046,7 +1055,108 @@ export const prepareShipmentLabelPrint = async (
   };
 };
 
-export const recordShipmentPrinted = async (shipmentId: string, auditActor?: AuditActor) => {
+const recordShipmentPrintFailure = async (
+  shipmentId: string,
+  printRequest: ShipmentPrintRequest,
+  error: unknown,
+  auditActor?: AuditActor,
+) => {
+  const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
+  const failureMessage = error instanceof Error ? error.message : String(error);
+  const failureCode = error instanceof HttpError ? error.code : "SHIPPING_PRINT_AGENT_FAILED";
+
+  const shipment = await prisma.$transaction(async (tx) => {
+    const shipmentRecord = await tx.webOrderShipment.findUnique({
+      where: { id: normalizedShipmentId },
+      select: {
+        id: true,
+        webOrderId: true,
+        trackingNumber: true,
+        status: true,
+      },
+    });
+
+    if (!shipmentRecord) {
+      return null;
+    }
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: "WEB_ORDER_SHIPMENT_PRINT_FAILED",
+        entityType: "WEB_ORDER_SHIPMENT",
+        entityId: shipmentRecord.id,
+        metadata: {
+          webOrderId: shipmentRecord.webOrderId,
+          trackingNumber: shipmentRecord.trackingNumber,
+          status: shipmentRecord.status,
+          printerName: printRequest.printer.printerName,
+          copies: printRequest.printer.copies,
+          failureCode,
+          failureMessage,
+        },
+      },
+      auditActor,
+    );
+
+    return shipmentRecord;
+  });
+
+  if (shipment) {
+    logOperationalEvent("online_store.shipment.print_failed", {
+      entityId: shipment.id,
+      shipmentId: shipment.id,
+      webOrderId: shipment.webOrderId,
+      trackingNumber: shipment.trackingNumber,
+      failureCode,
+    });
+  }
+};
+
+export const printShipmentLabelViaAgent = async (
+  shipmentId: string,
+  input: ShippingPrintPreparationInput = {},
+  auditActor?: AuditActor,
+) => {
+  const prepared = await prepareShipmentLabelPrint(shipmentId, input, auditActor);
+
+  try {
+    const printAgentResponse = await deliverShipmentPrintRequestToAgent(prepared.printRequest);
+    const recorded = await recordShipmentPrinted(
+      shipmentId,
+      auditActor,
+      {
+        printRequest: prepared.printRequest,
+        printJob: printAgentResponse.job,
+      },
+    );
+
+    logOperationalEvent("online_store.shipment.print_agent_completed", {
+      entityId: recorded.shipment.id,
+      shipmentId: recorded.shipment.id,
+      webOrderId: prepared.order.id,
+      trackingNumber: recorded.shipment.trackingNumber,
+      transportMode: printAgentResponse.job.transportMode,
+      printerTarget: printAgentResponse.job.printerTarget,
+    });
+
+    return {
+      order: prepared.order,
+      shipment: recorded.shipment,
+      printRequest: prepared.printRequest,
+      printJob: printAgentResponse.job,
+    };
+  } catch (error) {
+    await recordShipmentPrintFailure(shipmentId, prepared.printRequest, error, auditActor);
+    throw error;
+  }
+};
+
+export const recordShipmentPrinted = async (
+  shipmentId: string,
+  auditActor?: AuditActor,
+  options: RecordShipmentPrintedOptions = {},
+) => {
   const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
   const saved = await prisma.$transaction(async (tx) => {
     const shipment = await tx.webOrderShipment.findUnique({
@@ -1079,6 +1189,12 @@ export const recordShipmentPrinted = async (shipmentId: string, auditActor?: Aud
           webOrderId: savedShipment.webOrderId,
           status: savedShipment.status,
           reprintCount: savedShipment.reprintCount,
+          printerName: options.printJob?.printerName ?? options.printRequest?.printer.printerName ?? null,
+          printerTarget: options.printJob?.printerTarget ?? null,
+          copies: options.printJob?.copies ?? options.printRequest?.printer.copies ?? null,
+          transportMode: options.printJob?.transportMode ?? null,
+          printJobId: options.printJob?.jobId ?? null,
+          simulated: options.printJob?.simulated ?? null,
         },
       },
       auditActor,

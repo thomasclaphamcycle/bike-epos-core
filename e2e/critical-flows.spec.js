@@ -2652,7 +2652,7 @@ test("Manager can open till, record paid-in, and close with count", async ({ pag
   await expect(page.locator("#close-status")).toContainText("Session closed");
 });
 
-test("Manager can generate, prepare, print, and dispatch a web-order shipment label", async ({ page, request }) => {
+test("Manager can generate, prepare, print via agent, and dispatch a web-order shipment label", async ({ page, request }) => {
   const managerCredentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
     prefix: "online-store-dispatch",
@@ -2706,10 +2706,11 @@ test("Manager can generate, prepare, print, and dispatch a web-order shipment la
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"transport": "WINDOWS_LOCAL_AGENT"');
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"printerFamily": "ZEBRA_LABEL"');
 
-  await page.getByTestId("online-store-record-printed").click();
+  await page.getByTestId("online-store-print").click();
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Printed");
+  await expect(page.getByTestId("online-store-print-job-result")).toContainText("DRY_RUN");
 
   await page.getByTestId("online-store-dispatch").click();
   await expect.poll(async () => {

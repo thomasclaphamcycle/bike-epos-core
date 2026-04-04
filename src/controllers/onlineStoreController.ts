@@ -8,6 +8,7 @@ import {
   getShipmentLabelPayload,
   listOnlineStoreOrders,
   prepareShipmentLabelPrint,
+  printShipmentLabelViaAgent,
   recordShipmentPrinted,
   type CreateWebOrderInput,
   type CreateShipmentLabelInput,
@@ -159,6 +160,23 @@ const toCreateShipmentInput = (body: unknown): CreateShipmentLabelInput => {
   };
 };
 
+const toPrintPreparationInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "prepare print body must be an object", "INVALID_WEB_ORDER_SHIPMENT");
+  }
+
+  const record = body as Record<string, unknown>;
+  assertOptionalString(record.printerName, "printerName");
+  if (record.copies !== undefined && (!Number.isInteger(record.copies) || Number(record.copies) <= 0)) {
+    throw new HttpError(400, "copies must be a positive integer", "INVALID_WEB_ORDER_SHIPMENT");
+  }
+
+  return {
+    printerName: record.printerName as string | undefined,
+    copies: record.copies as number | undefined,
+  };
+};
+
 export const listOnlineStoreOrdersHandler = async (req: Request, res: Response) => {
   const payload = await listOnlineStoreOrders({
     q: typeof req.query.q === "string" ? req.query.q : undefined,
@@ -224,25 +242,21 @@ export const getShipmentLabelContentHandler = async (req: Request, res: Response
 };
 
 export const prepareShipmentLabelPrintHandler = async (req: Request, res: Response) => {
-  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
-    throw new HttpError(400, "prepare print body must be an object", "INVALID_WEB_ORDER_SHIPMENT");
-  }
-
-  const record = req.body as Record<string, unknown>;
-  assertOptionalString(record.printerName, "printerName");
-  if (record.copies !== undefined && (!Number.isInteger(record.copies) || Number(record.copies) <= 0)) {
-    throw new HttpError(400, "copies must be a positive integer", "INVALID_WEB_ORDER_SHIPMENT");
-  }
-
   const result = await prepareShipmentLabelPrint(
     req.params.shipmentId,
-    {
-      printerName: record.printerName as string | undefined,
-      copies: record.copies as number | undefined,
-    },
+    toPrintPreparationInput(req.body),
     getRequestAuditActor(req),
   );
 
+  res.json(result);
+};
+
+export const printShipmentLabelViaAgentHandler = async (req: Request, res: Response) => {
+  const result = await printShipmentLabelViaAgent(
+    req.params.shipmentId,
+    toPrintPreparationInput(req.body),
+    getRequestAuditActor(req),
+  );
   res.json(result);
 };
 
