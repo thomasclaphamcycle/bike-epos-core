@@ -58,8 +58,10 @@ npm run dev
 Optional web-order shipping-label print agent for local dispatch testing:
 
 ```bash
-COREPOS_PRINT_AGENT_TRANSPORT=DRY_RUN npm run print-agent:start
+npm run print-agent:start
 ```
+
+Then register a dispatch printer in Store Settings and make it the default shipping-label printer for the web-order dispatch flow.
 
 6. In a second terminal, run the React frontend:
 

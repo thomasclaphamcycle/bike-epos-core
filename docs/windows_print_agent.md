@@ -8,10 +8,11 @@ CorePOS now supports a real backend-to-agent print handoff for shipment labels:
 
 - CorePOS still owns shipment lifecycle and print orchestration.
 - The prepared shipment print payload remains a stable backend contract.
+- CorePOS now resolves that payload through registered printer records and a default shipping-label printer setting.
 - A repo-local Windows-oriented print agent can accept that payload over HTTP.
 - The print agent can either:
   - simulate printing safely in `DRY_RUN`, or
-  - send raw ZPL to a configured Zebra-style target over raw TCP.
+  - send raw ZPL to the registered Zebra target over raw TCP.
 - Successful agent prints mark the shipment as printed in CorePOS.
 - Failed agent prints do not set `printedAt`.
 
@@ -19,7 +20,7 @@ This is intentionally the first operational slice, not the final multi-device pr
 
 ## Architecture
 
-The shipping-label print path is now split into five layers:
+The shipping-label print path is now split into six layers:
 
 1. Shipment orchestration
    - `src/services/orderService.ts`
@@ -31,16 +32,20 @@ The shipping-label print path is now split into five layers:
    - current label generation is still `INTERNAL_MOCK_ZPL`
 
 3. Print preparation contract
-   - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata
+   - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
    - payloads remain fetchable and previewable from CorePOS
 
-4. CorePOS print-agent delivery
+4. Printer registration and default selection
+   - `src/services/printerService.ts`
+   - manages the registered printer list, shipping-label capability, active status, and default shipping-label printer
+
+5. CorePOS print-agent delivery
    - `src/services/shipping/printAgentDeliveryService.ts`
    - delivers prepared print jobs to the configured agent URL with timeout handling and normalized errors
 
-5. Local Windows print agent
+6. Local Windows print agent
    - `print-agent/src/`
-   - validates the payload, checks the optional shared secret, and sends ZPL through the selected transport mode
+   - validates the payload, checks the optional shared secret, and sends ZPL through the transport declared by the resolved printer record
 
 ## Current agent API
 
@@ -76,7 +81,7 @@ This is the first real Zebra-oriented transport.
 
 Behavior:
 
-- connects to `COREPOS_PRINT_AGENT_RAW_TCP_HOST:COREPOS_PRINT_AGENT_RAW_TCP_PORT`
+- connects to the `rawTcpHost:rawTcpPort` declared by the registered printer record
 - sends raw ZPL bytes directly
 - is appropriate for a Zebra printer or print server that accepts raw TCP/9100-style traffic
 
@@ -108,54 +113,71 @@ COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS=7000
 COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET=replace-me
 ```
 
+## Printer registration in CorePOS
+
+CorePOS now owns the operational printer registry for shipment labels.
+
+Each registered printer record includes:
+
+- name
+- internal key/code
+- printer family and model hint
+- shipping-label capability
+- active/inactive status
+- transport mode (`DRY_RUN` or `RAW_TCP`)
+- current target details for the supported transport
+- location and notes
+
+Current dispatch behavior:
+
+- staff can choose a registered printer explicitly on `/online-store/orders`
+- if they do not choose one, CorePOS uses the default shipping-label printer
+- inactive or non-shipping-capable printers are rejected before the agent is called
+
 ## Print agent configuration
 
 Set these where the local print agent runs:
 
 - `COREPOS_PRINT_AGENT_BIND_HOST` (default `127.0.0.1`)
 - `COREPOS_PRINT_AGENT_PORT` (default `3211`)
-- `COREPOS_PRINT_AGENT_TRANSPORT` (`DRY_RUN` or `RAW_TCP`)
-- `COREPOS_PRINT_AGENT_DEFAULT_PRINTER_NAME` (optional label only)
 - `COREPOS_PRINT_AGENT_SHARED_SECRET` (optional but recommended)
 - `COREPOS_PRINT_AGENT_OUTPUT_DIR` for `DRY_RUN`
-- `COREPOS_PRINT_AGENT_RAW_TCP_HOST` for `RAW_TCP`
-- `COREPOS_PRINT_AGENT_RAW_TCP_PORT` for `RAW_TCP` (default `9100`)
-- `COREPOS_PRINT_AGENT_RAW_TCP_TIMEOUT_MS` for `RAW_TCP` (default `5000`)
+- `COREPOS_PRINT_AGENT_RAW_TCP_TIMEOUT_MS` for `RAW_TCP` jobs (default `5000`)
 
 Example dry-run setup:
 
 ```bash
 COREPOS_PRINT_AGENT_BIND_HOST=127.0.0.1
 COREPOS_PRINT_AGENT_PORT=3211
-COREPOS_PRINT_AGENT_TRANSPORT=DRY_RUN
 COREPOS_PRINT_AGENT_OUTPUT_DIR=tmp/print-agent-output
 COREPOS_PRINT_AGENT_SHARED_SECRET=replace-me
 npm run print-agent:start
 ```
 
-Example raw TCP setup:
+Example raw TCP-capable agent setup:
 
 ```bash
 COREPOS_PRINT_AGENT_BIND_HOST=127.0.0.1
 COREPOS_PRINT_AGENT_PORT=3211
-COREPOS_PRINT_AGENT_TRANSPORT=RAW_TCP
-COREPOS_PRINT_AGENT_RAW_TCP_HOST=192.168.1.50
-COREPOS_PRINT_AGENT_RAW_TCP_PORT=9100
+COREPOS_PRINT_AGENT_RAW_TCP_TIMEOUT_MS=5000
 COREPOS_PRINT_AGENT_SHARED_SECRET=replace-me
 npm run print-agent:start
 ```
+
+The actual target printer host and port now come from the registered CorePOS printer record, not from global print-agent env vars.
 
 ## How the current flow works
 
 1. Manager generates a shipment label for a shipping web order.
 2. CorePOS stores the ZPL label content and shipment metadata.
-3. Manager can still call `prepare-print` to inspect the exact backend-owned print payload.
-4. Manager clicks the real print action.
-5. CorePOS:
+3. CorePOS resolves the selected or default registered printer.
+4. Manager can still call `prepare-print` to inspect the exact backend-owned print payload.
+5. Manager clicks the real print action.
+6. CorePOS:
    - prepares the print payload
    - sends it to the configured agent
    - only records the shipment as printed if the agent succeeds
-6. Manager can then dispatch the shipment separately.
+7. Manager can then dispatch the shipment separately.
 
 Reprints stay supported by sending the same stored label content through the same flow again.
 
@@ -174,7 +196,7 @@ If CorePOS backend and the print agent are on different machines, the backend mu
 Still future work:
 
 - real courier/provider integrations
-- printer/device mappings beyond a single configured target
+- richer local printer/device mappings for multi-station environments
 - durable local queueing or job retry policy inside the agent
 - direct Windows spooler / USB Zebra transport
 - richer dispatch batching and packing workflows

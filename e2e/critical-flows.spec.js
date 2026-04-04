@@ -2657,6 +2657,26 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
     role: "MANAGER",
     prefix: "online-store-dispatch",
   });
+  const printerToken = uniqueToken("dispatch-printer");
+  const registeredPrinter = await apiJsonWithHeaderBypass(request, "POST", "/api/settings/printers", "ADMIN", {
+    data: {
+      name: `Dispatch Zebra ${printerToken}`.slice(0, 48),
+      key: `DISPATCH_${printerToken}`.toUpperCase(),
+      transportMode: "DRY_RUN",
+      location: "Playwright dispatch bench",
+    },
+  });
+  await apiJsonWithHeaderBypass(
+    request,
+    "PUT",
+    "/api/settings/printers/default-shipping-label",
+    "ADMIN",
+    {
+      data: {
+        printerId: registeredPrinter.printer.id,
+      },
+    },
+  );
 
   const token = uniqueToken("web-order");
   const createdOrder = await apiJsonWithHeaderBypass(request, "POST", "/api/online-store/orders", "MANAGER", {
@@ -2704,6 +2724,7 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
 
   await page.getByTestId("online-store-prepare-print").click();
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"transport": "WINDOWS_LOCAL_AGENT"');
+  await expect(page.getByTestId("online-store-print-request-preview")).toContainText(`"printerId": "${registeredPrinter.printer.id}"`);
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"printerFamily": "ZEBRA_LABEL"');
 
   await page.getByTestId("online-store-print").click();

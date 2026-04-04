@@ -53,15 +53,9 @@ const run = async () => {
   const agent = await startPrintAgentServer({
     bindHost: "127.0.0.1",
     port: 0,
-    transportMode: "RAW_TCP",
     sharedSecret: "print-agent-smoke-secret",
-    defaultPrinterName: "Smoke Zebra GK420d",
     dryRunOutputDir: path.resolve(process.cwd(), "tmp", "print-agent-smoke"),
-    rawTcp: {
-      host: "127.0.0.1",
-      port: printerAddress.port,
-      timeoutMs: 5000,
-    },
+    rawTcpTimeoutMs: 5000,
   });
 
   try {
@@ -74,9 +68,14 @@ const run = async () => {
       trackingNumber: "MOCKTRACK001",
       printer: {
         transport: "WINDOWS_LOCAL_AGENT",
+        printerId: "printer-smoke-1",
+        printerKey: "DISPATCH_ZEBRA_GK420D",
         printerFamily: "ZEBRA_LABEL",
         printerModelHint: "GK420D_OR_COMPATIBLE",
         printerName: "Dispatch Zebra GK420d",
+        transportMode: "RAW_TCP",
+        rawTcpHost: "127.0.0.1",
+        rawTcpPort: printerAddress.port,
         copies: 2,
       },
       document: {
@@ -126,6 +125,8 @@ const run = async () => {
     assert.equal(payload.ok, true);
     assert.equal(payload.job.transportMode, "RAW_TCP");
     assert.equal(payload.job.simulated, false);
+    assert.equal(payload.job.printerId, "printer-smoke-1");
+    assert.equal(payload.job.printerKey, "DISPATCH_ZEBRA_GK420D");
     assert.equal(payload.job.printerTarget, `127.0.0.1:${printerAddress.port}`);
     assert.equal(payload.job.copies, 2);
 

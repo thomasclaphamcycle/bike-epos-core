@@ -54,6 +54,7 @@ const baselineSteps = [
   "test:stock-transfers",
   "test:bike-hire",
   "test:print-agent",
+  "test:dispatch-printers",
   "test:online-store",
   "test:settings",
   "test:rota-foundation",

@@ -38,8 +38,7 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
-      transportMode: config.transportMode,
-      printerName: config.defaultPrinterName,
+      supportedTransportModes: ["DRY_RUN", "RAW_TCP"],
       bindHost: config.bindHost,
       port: config.port,
     });

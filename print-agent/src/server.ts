@@ -5,7 +5,7 @@ const main = async () => {
   const config = loadPrintAgentConfig();
   const handle = await startPrintAgentServer(config);
   console.log(
-    `[print-agent] Listening on http://${handle.host}:${handle.port} using ${config.transportMode} transport for ${config.defaultPrinterName}`,
+    `[print-agent] Listening on http://${handle.host}:${handle.port} with DRY_RUN and RAW_TCP shipment-label support`,
   );
 };
 

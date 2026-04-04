@@ -17,15 +17,11 @@ const buildJobId = () => `printjob-${Date.now()}-${Math.random().toString(36).sl
 const buildPrintableContent = (request: ShipmentPrintRequest) =>
   Array.from({ length: request.printer.copies }, () => request.document.content).join("\n");
 
-const buildPrinterName = (request: ShipmentPrintRequest, config: PrintAgentConfig) =>
-  request.printer.printerName ?? config.defaultPrinterName;
-
 const executeDryRun = async (
   request: ShipmentPrintRequest,
   config: PrintAgentConfig,
   acceptedAt: string,
 ): Promise<ShipmentPrintAgentJob> => {
-  const printerName = buildPrinterName(request, config);
   const jobId = buildJobId();
   const payload = buildPrintableContent(request);
   const outputDir = config.dryRunOutputDir;
@@ -40,7 +36,9 @@ const executeDryRun = async (
     acceptedAt,
     completedAt: new Date().toISOString(),
     transportMode: "DRY_RUN",
-    printerName,
+    printerId: request.printer.printerId,
+    printerKey: request.printer.printerKey,
+    printerName: request.printer.printerName,
     printerTarget: `dry-run:${outputDir}`,
     copies: request.printer.copies,
     documentFormat: SHIPMENT_LABEL_DOCUMENT_FORMAT,
@@ -101,23 +99,28 @@ const executeRawTcp = async (
   config: PrintAgentConfig,
   acceptedAt: string,
 ): Promise<ShipmentPrintAgentJob> => {
-  const rawTcpHost = config.rawTcp.host;
+  const rawTcpHost = request.printer.rawTcpHost;
   if (!rawTcpHost) {
     throw new Error("Raw TCP printer host is not configured");
   }
+  const rawTcpPort = request.printer.rawTcpPort;
+  if (!rawTcpPort) {
+    throw new Error("Raw TCP printer port is not configured");
+  }
 
-  const printerName = buildPrinterName(request, config);
   const jobId = buildJobId();
   const payload = buildPrintableContent(request);
-  await sendRawTcpPayload(rawTcpHost, config.rawTcp.port, config.rawTcp.timeoutMs, payload);
+  await sendRawTcpPayload(rawTcpHost, rawTcpPort, config.rawTcpTimeoutMs, payload);
 
   return {
     jobId,
     acceptedAt,
     completedAt: new Date().toISOString(),
     transportMode: "RAW_TCP",
-    printerName,
-    printerTarget: `${rawTcpHost}:${config.rawTcp.port}`,
+    printerId: request.printer.printerId,
+    printerKey: request.printer.printerKey,
+    printerName: request.printer.printerName,
+    printerTarget: `${rawTcpHost}:${rawTcpPort}`,
     copies: request.printer.copies,
     documentFormat: SHIPMENT_LABEL_DOCUMENT_FORMAT,
     bytesSent: Buffer.byteLength(payload, "utf8"),
@@ -135,7 +138,7 @@ export const submitShipmentPrintJob = async (
   }
 
   const acceptedAt = new Date().toISOString();
-  switch (config.transportMode) {
+  switch (request.printer.transportMode) {
     case "RAW_TCP":
       return executeRawTcp(request, config, acceptedAt);
     case "DRY_RUN":

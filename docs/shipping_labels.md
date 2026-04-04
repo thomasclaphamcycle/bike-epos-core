@@ -9,6 +9,7 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - persist web orders independently of workshop or POS sales
 - create one active shipment label per shipping order
 - generate a stored label artifact through a provider abstraction
+- register dispatch printers and choose a default shipping-label target
 - return a backend-owned print-preparation payload
 - hand that payload off to a repo-local Windows-oriented print agent
 - record printed and dispatched timestamps with audit events
@@ -18,7 +19,7 @@ The current implementation is intentionally still mock/dev on the courier side, 
 
 ## Current architecture
 
-The flow is now split into five layers:
+The flow is now split into six layers:
 
 1. CorePOS shipment orchestration
    - `src/services/orderService.ts`
@@ -31,15 +32,20 @@ The flow is now split into five layers:
 
 3. Print-preparation contract
    - shipment label payloads can be fetched directly from CorePOS
-   - print preparation returns a stable `SHIPMENT_LABEL_PRINT` payload with printer intent metadata
+   - print preparation resolves a registered printer and returns a stable `SHIPMENT_LABEL_PRINT` payload with printer intent metadata
    - current transport target is declared as `WINDOWS_LOCAL_AGENT`
 
-4. CorePOS print-agent delivery
+4. Printer registration and default resolution
+   - `src/services/printerService.ts`
+   - registered printers are stored in CorePOS with capability, active status, transport mode, and target details
+   - shipment printing can resolve either a chosen printer or the default shipping-label printer
+
+5. CorePOS print-agent delivery
    - `src/services/shipping/printAgentDeliveryService.ts`
    - sends prepared shipment print requests to the configured local agent endpoint
    - normalizes timeout, unreachable-agent, and bad-response cases
 
-5. Local Windows print agent
+6. Local Windows print agent
    - `print-agent/src/`
    - validates shipment print payloads and performs the actual transport
    - currently supports `DRY_RUN` plus real `RAW_TCP` ZPL delivery
@@ -70,6 +76,7 @@ ZPL is the preferred intermediate artifact because it:
 The first API slice lives under `/api/online-store` and supports:
 
 - listing and creating web orders
+- listing, creating, editing, and defaulting registered shipping-label printers via settings APIs
 - generating a shipment label for an order
 - fetching shipment metadata and stored label content
 - preparing a print-intent payload
@@ -85,6 +92,7 @@ It currently supports:
 - selecting a web order
 - generating a shipment label for shipping orders
 - viewing shipment/tracking state
+- seeing which registered printer will be used
 - previewing stored ZPL
 - preparing a Windows-local-agent print payload
 - sending the print job through the real agent path
@@ -100,7 +108,7 @@ The intended next steps are:
    - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references
 
 2. richer print-agent/device support
-   - printer/device mappings beyond a single configured target
+   - local printer/device mappings beyond the first CorePOS-managed target model
    - durable local queueing or retry behavior
    - direct Windows spooler / USB Zebra support in addition to raw TCP
 

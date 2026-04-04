@@ -166,13 +166,15 @@ const toPrintPreparationInput = (body: unknown) => {
   }
 
   const record = body as Record<string, unknown>;
-  assertOptionalString(record.printerName, "printerName");
+  assertOptionalString(record.printerId, "printerId");
+  assertOptionalString(record.printerKey, "printerKey");
   if (record.copies !== undefined && (!Number.isInteger(record.copies) || Number(record.copies) <= 0)) {
     throw new HttpError(400, "copies must be a positive integer", "INVALID_WEB_ORDER_SHIPMENT");
   }
 
   return {
-    printerName: record.printerName as string | undefined,
+    printerId: record.printerId as string | undefined,
+    printerKey: record.printerKey as string | undefined,
     copies: record.copies as number | undefined,
   };
 };
