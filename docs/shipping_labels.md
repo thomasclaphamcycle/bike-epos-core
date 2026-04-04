@@ -179,9 +179,11 @@ Operational rules:
 It currently supports:
 
 - selecting a web order
+- seeing a recommended next dispatch action plus compact shipment/print/dispatch readiness states
 - generating a shipment label for shipping orders
 - choosing between the built-in mock provider and configured provider-backed shipment creation paths
 - viewing shipment/tracking state
+- seeing a compact shipment activity timeline built from persisted lifecycle timestamps
 - seeing which registered printer will be used
 - previewing stored ZPL
 - refreshing provider status
