@@ -14,6 +14,7 @@ The current delivered slice includes:
 - default shipping-provider resolution inside CorePOS
 - provider-backed shipment metadata persisted on `WebOrderShipment`
 - provider lifecycle refresh/void hooks with adapter-level capability flags
+- webhook-ready provider sync with idempotent event receipts
 - continued use of stored inline ZPL for reliable reprints
 - compatibility with the existing registered-printer and Windows print-agent flow
 
@@ -116,13 +117,17 @@ Current configurable fields for `EASYPOST`:
 - default service code
 - default service name
 - default parcel weight/length/width/height
+- webhook secret for HMAC-validated inbound sync
 - API key
 
 Security behavior:
 
 - API keys are stored but masked on API readback
+- webhook secrets are stored but masked on API readback
 - API responses expose `hasApiKey` plus a masked hint instead of the raw secret
+- API responses expose `hasWebhookSecret` plus a masked hint instead of the raw secret
 - clearing a stored API key is explicit
+- clearing a stored webhook secret is explicit
 - disabled or incomplete providers cannot be resolved for shipment creation
 
 ## Shipment data stored now
@@ -145,6 +150,15 @@ Security behavior:
 
 This keeps the persistence model ready for future real carrier adapters without forcing the print path to depend on remote label retrieval.
 
+CorePOS now also persists inbound provider event receipts in `ShippingProviderSyncEvent`, including:
+
+- provider event ID and type
+- matched shipment reference fields
+- verified-signature flag
+- deduplicated processing status
+- delivery count / timestamps
+- last processing error for troubleshooting
+
 ## Shipment lifecycle operations
 
 CorePOS now supports three distinct provider-facing shipment operations:
@@ -161,6 +175,12 @@ CorePOS now supports three distinct provider-facing shipment operations:
 3. void shipment
    - requests provider-side shipment void/refund when the adapter supports it
    - does not silently mark the shipment voided unless the provider confirms a successful outcome
+
+4. inbound provider sync
+   - accepts provider webhook events through a dedicated inbound path
+   - verifies signatures where supported
+   - reconciles delayed provider outcomes idempotently
+   - keeps manual refresh available as a fallback
 
 CorePOS keeps these separate from print and dispatch:
 
@@ -242,13 +262,33 @@ Dispatch/API:
 - provider void under `/api/online-store/shipments/:shipmentId/cancel`
 - replacement shipment generation under `/api/online-store/shipments/:shipmentId/regenerate`
 - print preparation and print execution remain on the existing shipment-print endpoints
+- inbound provider webhook ingestion under `/api/shipping/providers/:providerKey/webhooks`
 
 UI:
 
 - `/management/settings` now includes shipping-provider configuration alongside dispatch-printer management
 - `/online-store/orders` shows provider selection/readiness plus persisted provider references on created shipments
 - `/online-store/orders` now also surfaces provider refund state, last sync outcome, void controls, refresh controls, and replacement-shipment recovery
-- EasyPost configuration now includes carrier account, service, and parcel-default controls required for a usable shipment purchase flow
+- EasyPost configuration now includes carrier account, service, parcel-default, and webhook-secret controls required for a usable shipment purchase and sync flow
+
+## Provider sync foundation
+
+CorePOS now includes a dedicated provider-sync service layer that sits between provider adapters and shipment persistence.
+
+Current responsibilities:
+
+- normalize fetched lifecycle results and inbound provider events into the existing shipment lifecycle fields
+- apply state transitions safely without collapsing print or dispatch semantics
+- record `providerSyncedAt` / `providerSyncError`
+- persist idempotent inbound event receipts
+- ignore duplicate or unmatched events safely
+
+EasyPost support now includes:
+
+- HMAC-validated inbound webhook handling using `x-timestamp`, `x-path`, and `x-hmac-signature-v2`
+- mapped `tracker.updated` events for shipment/tracker status freshness
+- mapped `refund.successful` events for delayed void/refund completion
+- manual refresh remaining available when webhook sync is not configured or when staff want an explicit fallback check
 
 ## Relationship to Windows/Zebra printing
 
@@ -268,7 +308,7 @@ The Zebra GK420d path therefore stays stable while the courier layer evolves.
 This milestone does not yet provide:
 
 - rate shopping or service availability lookup
-- provider webhook/status sync
+- webhook coverage beyond the first EasyPost tracker/refund events
 - remote label re-fetch logic
 - carrier-specific packaging/compliance features
 - multi-carrier production rollout beyond the first EasyPost path
@@ -280,7 +320,7 @@ This milestone does not yet provide:
 The next realistic follow-on work is:
 
 1. expand EasyPost service/rate handling beyond a configured default service
-2. add richer provider status sync and operational troubleshooting surfaces, including webhook ingestion
+2. expand provider sync coverage beyond the first EasyPost events and add richer troubleshooting surfaces
 3. add carrier-specific regeneration/void policies where adapters differ materially
 4. add the next branded carrier adapter on top of the current contracts
 5. keep the print-agent contract stable while printer/device support expands

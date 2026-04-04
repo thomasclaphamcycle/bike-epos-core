@@ -147,8 +147,14 @@ const toShippingProviderSettingsInput = (body: unknown) => {
       throw new HttpError(400, `${numericField} must be a number`, "INVALID_SHIPPING_PROVIDER_SETTINGS");
     }
   }
+  if (record.webhookSecret !== undefined && record.webhookSecret !== null && typeof record.webhookSecret !== "string") {
+    throw new HttpError(400, "webhookSecret must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
   if (record.apiKey !== undefined && record.apiKey !== null && typeof record.apiKey !== "string") {
     throw new HttpError(400, "apiKey must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  }
+  if (record.clearWebhookSecret !== undefined && typeof record.clearWebhookSecret !== "boolean") {
+    throw new HttpError(400, "clearWebhookSecret must be a boolean", "INVALID_SHIPPING_PROVIDER_SETTINGS");
   }
   if (record.clearApiKey !== undefined && typeof record.clearApiKey !== "boolean") {
     throw new HttpError(400, "clearApiKey must be a boolean", "INVALID_SHIPPING_PROVIDER_SETTINGS");
@@ -168,7 +174,9 @@ const toShippingProviderSettingsInput = (body: unknown) => {
     parcelLengthIn: record.parcelLengthIn as number | null | undefined,
     parcelWidthIn: record.parcelWidthIn as number | null | undefined,
     parcelHeightIn: record.parcelHeightIn as number | null | undefined,
+    webhookSecret: record.webhookSecret as string | null | undefined,
     apiKey: record.apiKey as string | null | undefined,
+    clearWebhookSecret: record.clearWebhookSecret as boolean | undefined,
     clearApiKey: record.clearApiKey as boolean | undefined,
   };
 };

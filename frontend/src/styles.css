@@ -15148,8 +15148,158 @@ body.rota-row-drag-copy-active {
   font-weight: 700;
 }
 
+.online-orders-next-step {
+  display: grid;
+  gap: var(--cp-space-2);
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: linear-gradient(180deg, rgba(230, 241, 255, 0.92), rgba(255, 255, 255, 0.94));
+}
+
+.online-orders-next-step strong,
+.online-orders-readiness-card strong,
+.online-orders-dispatch-action-card strong,
+.online-orders-timeline__meta strong {
+  color: var(--cp-shell-deep);
+}
+
+.online-orders-next-step p,
+.online-orders-readiness-card p,
+.online-orders-dispatch-action-card p,
+.online-orders-timeline__item p {
+  margin: 0;
+  color: #526273;
+}
+
+.online-orders-next-step__eyebrow,
+.online-orders-readiness-card__label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #627184;
+  font-weight: 700;
+}
+
+.online-orders-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cp-space-3);
+}
+
+.online-orders-readiness-card {
+  display: grid;
+  gap: var(--cp-space-2);
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.online-orders-readiness-card--ready {
+  border-color: rgba(31, 111, 64, 0.16);
+  background: rgba(229, 245, 235, 0.95);
+}
+
+.online-orders-readiness-card--pending {
+  border-color: rgba(176, 121, 15, 0.18);
+  background: rgba(255, 245, 220, 0.95);
+}
+
+.online-orders-readiness-card--blocked {
+  border-color: rgba(157, 36, 25, 0.16);
+  background: rgba(255, 237, 234, 0.95);
+}
+
+.online-orders-readiness-card--complete {
+  border-color: rgba(46, 124, 246, 0.16);
+  background: rgba(232, 241, 255, 0.96);
+}
+
 .online-orders-dispatch-printer-info {
   margin-top: var(--cp-space-3);
+}
+
+.online-orders-dispatch-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cp-space-3);
+}
+
+.online-orders-dispatch-action-card {
+  display: grid;
+  gap: var(--cp-space-3);
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.online-orders-dispatch-action-card--disabled {
+  background: rgba(247, 249, 251, 0.92);
+}
+
+.online-orders-dispatch-action-card__copy {
+  display: grid;
+  gap: var(--cp-space-2);
+}
+
+.online-orders-dispatch-action-card__header,
+.online-orders-timeline__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cp-space-3);
+  flex-wrap: wrap;
+}
+
+.online-orders-timeline {
+  display: grid;
+  gap: var(--cp-space-3);
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.online-orders-timeline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--cp-space-3);
+}
+
+.online-orders-timeline__item {
+  display: grid;
+  gap: var(--cp-space-2);
+  padding: var(--cp-space-3);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.online-orders-timeline__item--success {
+  border-color: rgba(31, 111, 64, 0.14);
+}
+
+.online-orders-timeline__item--warning {
+  border-color: rgba(176, 121, 15, 0.18);
+}
+
+.online-orders-timeline__item--danger {
+  border-color: rgba(157, 36, 25, 0.16);
+  background: rgba(255, 241, 239, 0.96);
+}
+
+.online-orders-timeline__meta time,
+.online-orders-timeline__empty {
+  color: #627184;
+  font-size: 0.9rem;
+}
+
+.online-orders-timeline__empty {
+  margin: 0;
 }
 
 @media (max-width: 720px) {
@@ -15232,6 +15382,11 @@ body.rota-row-drag-copy-active {
   .online-orders-layout,
   .online-orders-detail__grid,
   .online-orders-detail__preview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-orders-readiness-grid,
+  .online-orders-dispatch-action-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

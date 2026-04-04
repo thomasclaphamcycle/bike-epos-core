@@ -88,6 +88,7 @@ export class InternalMockShippingLabelProvider implements ShippingLabelProvider 
   readonly requiresConfiguration = false;
   readonly supportsShipmentRefresh = true;
   readonly supportsShipmentVoid = true;
+  readonly supportsWebhookEvents = false;
 
   async createLabel(
     input: ShippingLabelGenerationInput,

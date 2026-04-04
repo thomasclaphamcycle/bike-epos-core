@@ -28,7 +28,7 @@ The current codebase already contains substantial implementation across the earl
 - workshop operations are substantially implemented
 - staff/admin/reporting surfaces are substantially implemented
 - customer and communication features are now substantially implemented for workshop operations, with broader portal/self-service depth still future work
-- rental remains future work, and the online-store phase is still incomplete overall, though a first web-order shipping-label dispatch foundation, an initial Windows/Zebra print-agent path, registered dispatch-printer management, a configurable courier-integration scaffold, a first live carrier adapter path, initial shipment lifecycle hardening for refresh/void/replacement recovery, and a first packed-queue / bulk-dispatch operator flow now exist
+- rental remains future work, and the online-store phase is still incomplete overall, though a first web-order shipping-label dispatch foundation, an initial Windows/Zebra print-agent path, registered dispatch-printer management, a configurable courier-integration scaffold, a first live carrier adapter path, initial shipment lifecycle hardening for refresh/void/replacement recovery, and the first provider-sync/webhook reconciliation foundation now exist
 
 The roadmap below remains the canonical planning structure even where current implementation is ahead in some areas and behind in others.
 The phase count should not be collapsed or reduced unless the product strategy itself is intentionally changed.

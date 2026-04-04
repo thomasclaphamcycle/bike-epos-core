@@ -55,6 +55,7 @@ X-Staff-Id: demo-admin
   "parcelLengthIn": 10,
   "parcelWidthIn": 8,
   "parcelHeightIn": 4,
+  "webhookSecret": "replace-with-easypost-webhook-secret",
   "apiKey": "EZTK_replace_me"
 }
 
