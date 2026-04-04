@@ -2711,6 +2711,7 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
     expectedPath: "/online-store/orders",
   });
 
+  await page.getByLabel("Search orders").fill(createdOrder.order.orderNumber);
   await expect(page.getByTestId(`online-store-order-row-${createdOrder.order.id}`)).toBeVisible();
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
