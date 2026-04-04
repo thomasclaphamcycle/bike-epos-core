@@ -60,6 +60,26 @@ It currently expects a provider endpoint that accepts a normalized shipment requ
 - provider status
 - inline ZPL document content
 
+### `EASYPOST`
+
+Purpose:
+
+- first genuine carrier-backed shipment adapter in CorePOS
+- provides a real sandbox/live credential model, shipment purchase flow, provider shipment/tracking references, and ZPL-compatible label handling
+
+Characteristics:
+
+- mode: `integration`
+- implementation state: `live`
+- requires configuration: yes
+
+Current behavior:
+
+- CorePOS creates an EasyPost shipment from the web-order shipping address plus Store Info ship-from details
+- CorePOS buys the requested EasyPost rate from the configured carrier account
+- CorePOS prefers `label_zpl_url` and stores the downloaded ZPL inline for safe reprints
+- if EasyPost does not return a ZPL URL directly but does support PNG purchase output, CorePOS can request ZPL conversion through the EasyPost shipment label endpoint
+
 ## Provider settings model
 
 Provider configuration is managed through CorePOS settings and stored in `AppConfig`.
@@ -68,6 +88,7 @@ Current config keys:
 
 - `shipping.defaultProviderKey`
 - `shipping.provider.genericHttpZpl`
+- `shipping.provider.easyPost`
 
 Current configurable fields for `GENERIC_HTTP_ZPL`:
 
@@ -76,6 +97,18 @@ Current configurable fields for `GENERIC_HTTP_ZPL`:
 - display name
 - endpoint base URL
 - account ID
+- API key
+
+Current configurable fields for `EASYPOST`:
+
+- enabled
+- environment: `SANDBOX` or `LIVE`
+- display name
+- optional API base URL override
+- carrier account ID
+- default service code
+- default service name
+- default parcel weight/length/width/height
 - API key
 
 Security behavior:
@@ -117,6 +150,23 @@ CorePOS now keeps three layers separate:
 
 This means later carrier adapters can differ internally without changing shipment orchestration or the print-agent contract.
 
+For EasyPost specifically, the mapping is now:
+
+1. CorePOS shipment request
+   - order, recipient, ship-from, service, and parcel defaults
+
+2. EasyPost adapter mapping
+   - `/shipments`
+   - rate selection from returned `rates`
+   - `/shipments/:id/buy`
+   - ZPL label retrieval
+
+3. normalized CorePOS result
+   - shipment/provider references
+   - tracking number
+   - provider status
+   - stored inline ZPL document
+
 ## Current shipment generation flow
 
 1. A manager chooses a provider explicitly, or CorePOS falls back to the configured default provider.
@@ -132,6 +182,7 @@ Important safety behavior:
 - provider creation failures do not create a false successful shipment
 - shipment print and shipment dispatch remain separate actions
 - reprints use the stored CorePOS-owned label artifact
+- EasyPost credential/config readiness is validated before shipment creation is attempted
 
 ## API and UI surfaces
 
@@ -151,6 +202,7 @@ UI:
 
 - `/management/settings` now includes shipping-provider configuration alongside dispatch-printer management
 - `/online-store/orders` shows provider selection/readiness plus persisted provider references on created shipments
+- EasyPost configuration now includes carrier account, service, and parcel-default controls required for a usable shipment purchase flow
 
 ## Relationship to Windows/Zebra printing
 
@@ -169,21 +221,21 @@ The Zebra GK420d path therefore stays stable while the courier layer evolves.
 
 This milestone does not yet provide:
 
-- a branded live courier adapter
 - rate shopping or service availability lookup
 - shipment cancellation / void APIs
 - provider webhook/status sync
 - remote label re-fetch logic
 - carrier-specific packaging/compliance features
+- multi-carrier production rollout beyond the first EasyPost path
 
-`GENERIC_HTTP_ZPL` is a strong foundation, not the final production courier rollout.
+`EASYPOST` is the first real carrier adapter, but the overall courier platform is still intentionally narrow and shipping-label focused.
 
 ## Recommended next steps
 
 The next realistic follow-on work is:
 
-1. add the first branded carrier adapter on top of the current contracts
-2. expand provider-specific service/method mapping and validation
-3. add shipment cancellation/regeneration rules where the carrier permits them
-4. add richer provider status sync and operational troubleshooting surfaces
+1. expand EasyPost service/rate handling beyond a configured default service
+2. add shipment cancellation/regeneration rules where the carrier permits them
+3. add richer provider status sync and operational troubleshooting surfaces
+4. add the next branded carrier adapter on top of the current contracts
 5. keep the print-agent contract stable while printer/device support expands

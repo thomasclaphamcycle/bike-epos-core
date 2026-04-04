@@ -30,7 +30,7 @@ The shipping-label print path is now split into six layers:
    - `src/services/shipping/contracts.ts`
    - `src/services/shipping/providerRegistry.ts`
    - `src/services/shipping/providerConfigService.ts`
-   - label generation can come from the built-in `INTERNAL_MOCK_ZPL` path or from a configured provider-backed adapter such as `GENERIC_HTTP_ZPL`
+   - label generation can come from the built-in `INTERNAL_MOCK_ZPL` path, the `GENERIC_HTTP_ZPL` scaffold, or the first live `EASYPOST` adapter
 
 3. Print preparation contract
    - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
@@ -210,7 +210,7 @@ If CorePOS backend and the print agent are on different machines, the backend mu
 
 Still future work:
 
-- real branded courier/provider integrations beyond the current generic scaffold
+- additional branded courier/provider integrations beyond the current EasyPost path
 - richer local printer/device mappings for multi-station environments
 - durable local queueing or job retry policy inside the agent
 - direct Windows spooler / USB Zebra transport

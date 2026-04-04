@@ -136,7 +136,15 @@ type ShippingProviderConfiguration = {
   environment: ShippingProviderEnvironment;
   displayName: string | null;
   endpointBaseUrl: string | null;
+  apiBaseUrl: string | null;
   accountId: string | null;
+  carrierAccountId: string | null;
+  defaultServiceCode: string | null;
+  defaultServiceName: string | null;
+  parcelWeightOz: number | null;
+  parcelLengthIn: number | null;
+  parcelWidthIn: number | null;
+  parcelHeightIn: number | null;
   hasApiKey: boolean;
   apiKeyHint: string | null;
   updatedAt: string;
@@ -170,7 +178,15 @@ type ShippingProviderFormState = {
   environment: ShippingProviderEnvironment;
   displayName: string;
   endpointBaseUrl: string;
+  apiBaseUrl: string;
   accountId: string;
+  carrierAccountId: string;
+  defaultServiceCode: string;
+  defaultServiceName: string;
+  parcelWeightOz: string;
+  parcelLengthIn: string;
+  parcelWidthIn: string;
+  parcelHeightIn: string;
   apiKey: string;
   clearApiKey: boolean;
 };
@@ -201,7 +217,15 @@ const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
   environment: "SANDBOX",
   displayName: "",
   endpointBaseUrl: "",
+  apiBaseUrl: "",
   accountId: "",
+  carrierAccountId: "",
+  defaultServiceCode: "",
+  defaultServiceName: "",
+  parcelWeightOz: "",
+  parcelLengthIn: "",
+  parcelWidthIn: "",
+  parcelHeightIn: "",
   apiKey: "",
   clearApiKey: false,
 };
@@ -393,7 +417,15 @@ const toShippingProviderFormState = (
     environment: provider.configuration.environment,
     displayName: provider.configuration.displayName ?? "",
     endpointBaseUrl: provider.configuration.endpointBaseUrl ?? "",
+    apiBaseUrl: provider.configuration.apiBaseUrl ?? "",
     accountId: provider.configuration.accountId ?? "",
+    carrierAccountId: provider.configuration.carrierAccountId ?? "",
+    defaultServiceCode: provider.configuration.defaultServiceCode ?? "",
+    defaultServiceName: provider.configuration.defaultServiceName ?? "",
+    parcelWeightOz: provider.configuration.parcelWeightOz ? String(provider.configuration.parcelWeightOz) : "",
+    parcelLengthIn: provider.configuration.parcelLengthIn ? String(provider.configuration.parcelLengthIn) : "",
+    parcelWidthIn: provider.configuration.parcelWidthIn ? String(provider.configuration.parcelWidthIn) : "",
+    parcelHeightIn: provider.configuration.parcelHeightIn ? String(provider.configuration.parcelHeightIn) : "",
     apiKey: "",
     clearApiKey: false,
   };
@@ -614,27 +646,67 @@ export const SystemSettingsPage = () => {
     () => providerSettingsPayload?.providers.find((provider) => provider.key === selectedProviderKey) ?? null,
     [providerSettingsPayload?.providers, selectedProviderKey],
   );
+  const selectedProviderIsEasyPost = selectedProvider?.key === "EASYPOST";
   const providerValidationErrors = useMemo(() => {
     const errors: Partial<Record<keyof ShippingProviderFormState, string>> = {};
     if (!selectedProvider?.requiresConfiguration) {
       return errors;
     }
 
+    const hasStoredApiKey = Boolean(selectedProvider.configuration?.hasApiKey);
+    const needsReplacementApiKey = providerForm.clearApiKey && providerForm.enabled && !providerForm.apiKey.trim();
+
+    const parsePositiveNumberInput = (value: string) => {
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+
     if (providerForm.enabled) {
-      if (!providerForm.endpointBaseUrl.trim()) {
-        errors.endpointBaseUrl = "Enabled providers need an endpoint URL.";
-      } else if (!isValidUrl(providerForm.endpointBaseUrl)) {
-        errors.endpointBaseUrl = "Endpoint URL must start with http:// or https://";
+      if (selectedProvider.key === "GENERIC_HTTP_ZPL") {
+        if (!providerForm.endpointBaseUrl.trim()) {
+          errors.endpointBaseUrl = "Enabled providers need an endpoint URL.";
+        } else if (!isValidUrl(providerForm.endpointBaseUrl)) {
+          errors.endpointBaseUrl = "Endpoint URL must start with http:// or https://";
+        }
       }
-      const hasStoredApiKey = Boolean(selectedProvider.configuration?.hasApiKey);
+
+      if (selectedProvider.key === "EASYPOST") {
+        if (providerForm.apiBaseUrl.trim() && !isValidUrl(providerForm.apiBaseUrl)) {
+          errors.apiBaseUrl = "API base URL must start with http:// or https://";
+        }
+        if (!providerForm.carrierAccountId.trim()) {
+          errors.carrierAccountId = "Carrier account ID is required for EasyPost.";
+        }
+        if (!providerForm.defaultServiceCode.trim()) {
+          errors.defaultServiceCode = "Default service code is required for EasyPost.";
+        }
+        if (!parsePositiveNumberInput(providerForm.parcelWeightOz)) {
+          errors.parcelWeightOz = "Parcel weight must be a positive number of ounces.";
+        }
+        if (!parsePositiveNumberInput(providerForm.parcelLengthIn)) {
+          errors.parcelLengthIn = "Parcel length must be a positive number of inches.";
+        }
+        if (!parsePositiveNumberInput(providerForm.parcelWidthIn)) {
+          errors.parcelWidthIn = "Parcel width must be a positive number of inches.";
+        }
+        if (!parsePositiveNumberInput(providerForm.parcelHeightIn)) {
+          errors.parcelHeightIn = "Parcel height must be a positive number of inches.";
+        }
+      }
+
       if (!hasStoredApiKey && !providerForm.apiKey.trim()) {
         errors.apiKey = "Provide an API key before enabling this provider.";
       }
-      if (providerForm.clearApiKey && !providerForm.apiKey.trim()) {
+      if (needsReplacementApiKey) {
         errors.apiKey = "Enter a replacement API key or untick clear API key.";
       }
-    } else if (providerForm.endpointBaseUrl.trim() && !isValidUrl(providerForm.endpointBaseUrl)) {
-      errors.endpointBaseUrl = "Endpoint URL must start with http:// or https://";
+    } else {
+      if (providerForm.endpointBaseUrl.trim() && !isValidUrl(providerForm.endpointBaseUrl)) {
+        errors.endpointBaseUrl = "Endpoint URL must start with http:// or https://";
+      }
+      if (providerForm.apiBaseUrl.trim() && !isValidUrl(providerForm.apiBaseUrl)) {
+        errors.apiBaseUrl = "API base URL must start with http:// or https://";
+      }
     }
 
     return errors;
@@ -902,8 +974,36 @@ export const SystemSettingsPage = () => {
       enabled: providerForm.enabled,
       environment: providerForm.environment,
       displayName: providerForm.displayName.trim() || null,
-      endpointBaseUrl: providerForm.endpointBaseUrl.trim() || null,
-      accountId: providerForm.accountId.trim() || null,
+      endpointBaseUrl: selectedProvider.key === "GENERIC_HTTP_ZPL"
+        ? providerForm.endpointBaseUrl.trim() || null
+        : null,
+      apiBaseUrl: selectedProvider.key === "EASYPOST"
+        ? providerForm.apiBaseUrl.trim() || null
+        : null,
+      accountId: selectedProvider.key === "GENERIC_HTTP_ZPL"
+        ? providerForm.accountId.trim() || null
+        : null,
+      carrierAccountId: selectedProvider.key === "EASYPOST"
+        ? providerForm.carrierAccountId.trim() || null
+        : null,
+      defaultServiceCode: selectedProvider.key === "EASYPOST"
+        ? providerForm.defaultServiceCode.trim() || null
+        : null,
+      defaultServiceName: selectedProvider.key === "EASYPOST"
+        ? providerForm.defaultServiceName.trim() || null
+        : null,
+      parcelWeightOz: selectedProvider.key === "EASYPOST"
+        ? Number.parseFloat(providerForm.parcelWeightOz)
+        : null,
+      parcelLengthIn: selectedProvider.key === "EASYPOST"
+        ? Number.parseFloat(providerForm.parcelLengthIn)
+        : null,
+      parcelWidthIn: selectedProvider.key === "EASYPOST"
+        ? Number.parseFloat(providerForm.parcelWidthIn)
+        : null,
+      parcelHeightIn: selectedProvider.key === "EASYPOST"
+        ? Number.parseFloat(providerForm.parcelHeightIn)
+        : null,
       apiKey: providerForm.apiKey.trim() || undefined,
       clearApiKey: providerForm.clearApiKey,
     };
@@ -1612,25 +1712,130 @@ export const SystemSettingsPage = () => {
                         placeholder={selectedProvider.displayName}
                       />
                     </label>
-                    <label className="store-info-grid-span">
-                      Endpoint base URL
-                      <input
-                        value={providerForm.endpointBaseUrl}
-                        onChange={(event) => setProviderField("endpointBaseUrl", event.target.value)}
-                        placeholder="http://127.0.0.1:4110"
-                      />
-                      {providerValidationErrors.endpointBaseUrl ? (
-                        <span className="field-error">{providerValidationErrors.endpointBaseUrl}</span>
-                      ) : null}
-                    </label>
-                    <label>
-                      Account / tenant ID
-                      <input
-                        value={providerForm.accountId}
-                        onChange={(event) => setProviderField("accountId", event.target.value)}
-                        placeholder="dispatch-sandbox-1"
-                      />
-                    </label>
+                    {selectedProvider.key === "GENERIC_HTTP_ZPL" ? (
+                      <>
+                        <label className="store-info-grid-span">
+                          Endpoint base URL
+                          <input
+                            value={providerForm.endpointBaseUrl}
+                            onChange={(event) => setProviderField("endpointBaseUrl", event.target.value)}
+                            placeholder="http://127.0.0.1:4110"
+                          />
+                          {providerValidationErrors.endpointBaseUrl ? (
+                            <span className="field-error">{providerValidationErrors.endpointBaseUrl}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Account / tenant ID
+                          <input
+                            value={providerForm.accountId}
+                            onChange={(event) => setProviderField("accountId", event.target.value)}
+                            placeholder="dispatch-sandbox-1"
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    {selectedProviderIsEasyPost ? (
+                      <>
+                        <label className="store-info-grid-span">
+                          API base URL override
+                          <input
+                            value={providerForm.apiBaseUrl}
+                            onChange={(event) => setProviderField("apiBaseUrl", event.target.value)}
+                            placeholder="Leave blank for https://api.easypost.com/v2"
+                          />
+                          {providerValidationErrors.apiBaseUrl ? (
+                            <span className="field-error">{providerValidationErrors.apiBaseUrl}</span>
+                          ) : (
+                            <span className="table-secondary">
+                              Leave blank for the official EasyPost API. This is mainly for sandbox stubs and smoke tests.
+                            </span>
+                          )}
+                        </label>
+                        <label>
+                          Carrier account ID
+                          <input
+                            value={providerForm.carrierAccountId}
+                            onChange={(event) => setProviderField("carrierAccountId", event.target.value)}
+                            placeholder="ca_1234567890abcdef"
+                          />
+                          {providerValidationErrors.carrierAccountId ? (
+                            <span className="field-error">{providerValidationErrors.carrierAccountId}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Default service code
+                          <input
+                            value={providerForm.defaultServiceCode}
+                            onChange={(event) => setProviderField("defaultServiceCode", event.target.value)}
+                            placeholder="GroundAdvantage"
+                          />
+                          {providerValidationErrors.defaultServiceCode ? (
+                            <span className="field-error">{providerValidationErrors.defaultServiceCode}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Default service name
+                          <input
+                            value={providerForm.defaultServiceName}
+                            onChange={(event) => setProviderField("defaultServiceName", event.target.value)}
+                            placeholder="Ground Advantage"
+                          />
+                        </label>
+                        <label>
+                          Parcel weight (oz)
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={providerForm.parcelWeightOz}
+                            onChange={(event) => setProviderField("parcelWeightOz", event.target.value)}
+                          />
+                          {providerValidationErrors.parcelWeightOz ? (
+                            <span className="field-error">{providerValidationErrors.parcelWeightOz}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Parcel length (in)
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={providerForm.parcelLengthIn}
+                            onChange={(event) => setProviderField("parcelLengthIn", event.target.value)}
+                          />
+                          {providerValidationErrors.parcelLengthIn ? (
+                            <span className="field-error">{providerValidationErrors.parcelLengthIn}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Parcel width (in)
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={providerForm.parcelWidthIn}
+                            onChange={(event) => setProviderField("parcelWidthIn", event.target.value)}
+                          />
+                          {providerValidationErrors.parcelWidthIn ? (
+                            <span className="field-error">{providerValidationErrors.parcelWidthIn}</span>
+                          ) : null}
+                        </label>
+                        <label>
+                          Parcel height (in)
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={providerForm.parcelHeightIn}
+                            onChange={(event) => setProviderField("parcelHeightIn", event.target.value)}
+                          />
+                          {providerValidationErrors.parcelHeightIn ? (
+                            <span className="field-error">{providerValidationErrors.parcelHeightIn}</span>
+                          ) : null}
+                        </label>
+                      </>
+                    ) : null}
                     <label>
                       API key
                       <input
@@ -1678,7 +1883,9 @@ export const SystemSettingsPage = () => {
                   </div>
 
                   <div className="restricted-panel info-panel">
-                    This milestone adds a production-shaped courier adapter foundation. The first integration path is a generic HTTP ZPL scaffold, so CorePOS can manage provider-backed shipment creation, normalize references, tracking, and labels, and keep the downstream Windows Zebra print flow unchanged.
+                    {selectedProviderIsEasyPost
+                      ? "EasyPost is the first real carrier adapter path. CorePOS uses Store Info as the ship-from address, buys the requested EasyPost rate, stores the resulting ZPL locally for safe reprints, and then hands the same label into the registered-printer and Windows Zebra print-agent flow."
+                      : "This provider keeps the production-shaped courier adapter contract available for local testing and scaffold integrations. CorePOS still stores the returned ZPL locally so downstream Windows Zebra printing stays stable."}
                   </div>
                 </>
               )}

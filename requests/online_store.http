@@ -58,6 +58,16 @@ X-Staff-Id: {{managerId}}
   "serviceName": "Next Day Dispatch"
 }
 
+### Generate an EasyPost-backed shipment label using configured defaults (MANAGER+)
+POST {{baseUrl}}/api/online-store/orders/{{orderId}}/shipments
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "providerKey": "EASYPOST"
+}
+
 ### Get stored shipment label payload (MANAGER+)
 GET {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/label
 X-Staff-Role: {{managerRole}}

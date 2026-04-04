@@ -994,7 +994,7 @@ export const OnlineStoreOrdersPage = () => {
                       <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
                         {selectedProvider
                           ? selectedProvider.isAvailable
-                            ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}.`
+                            ? `Shipment provider: ${selectedProvider.displayName}${selectedProvider.configuration?.environment ? ` (${selectedProvider.configuration.environment})` : ""}${selectedProvider.defaultServiceName ? ` · default service ${selectedProvider.defaultServiceName}` : ""}.`
                             : `Shipment provider: ${selectedProvider.displayName} is not ready. Configure its credentials/endpoint in Settings or choose an available provider.`
                           : "No shipment provider is currently selected."}
                       </div>
