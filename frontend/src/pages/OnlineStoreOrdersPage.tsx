@@ -46,6 +46,7 @@ type WebOrderShipment = {
   labelPayloadPath: string;
   labelContentPath: string;
   preparePrintPath: string;
+  printPath: string;
   recordPrintedPath: string;
   dispatchPath: string;
 };
@@ -182,6 +183,22 @@ type ShipmentPrintRequestResponse = {
   };
 };
 
+type ShipmentPrintExecutionResponse = ShipmentPrintRequestResponse & {
+  printJob: {
+    jobId: string;
+    acceptedAt: string;
+    completedAt: string;
+    transportMode: "DRY_RUN" | "RAW_TCP";
+    printerName: string | null;
+    printerTarget: string;
+    copies: number;
+    documentFormat: "ZPL";
+    bytesSent: number;
+    simulated: boolean;
+    outputPath: string | null;
+  };
+};
+
 const formatMoney = (pence: number) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -245,6 +262,8 @@ export const OnlineStoreOrdersPage = () => {
   const [detailPayload, setDetailPayload] = useState<OrderDetailResponse | null>(null);
   const [labelPayload, setLabelPayload] = useState<ShipmentLabelPayloadResponse | null>(null);
   const [printPayload, setPrintPayload] = useState<ShipmentPrintRequestResponse | null>(null);
+  const [printJob, setPrintJob] = useState<ShipmentPrintExecutionResponse["printJob"] | null>(null);
+  const [printNotice, setPrintNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [printerName, setPrinterName] = useState("Dispatch Zebra GK420d");
   const [copies, setCopies] = useState("1");
@@ -354,6 +373,8 @@ export const OnlineStoreOrdersPage = () => {
   useEffect(() => {
     setLabelPayload(null);
     setPrintPayload(null);
+    setPrintJob(null);
+    setPrintNotice(null);
 
     if (!selectedOrderId) {
       setDetailPayload(null);
@@ -445,27 +466,58 @@ export const OnlineStoreOrdersPage = () => {
 
     const parsedCopies = Math.max(1, Number.parseInt(copies, 10) || 1);
     await runAction("prepare-print", async () => {
+      setPrintNotice(null);
       const payload = await apiPost<ShipmentPrintRequestResponse>(selectedShipment.preparePrintPath, {
         printerName: printerName.trim() || undefined,
         copies: parsedCopies,
       });
       setCopies(String(payload.printRequest.printer.copies));
       setPrintPayload(payload);
+      setPrintJob(null);
       success(`Print payload prepared for ${selectedShipment.trackingNumber}.`);
       await refreshSelectedOrder(selectedOrder.id);
     });
   };
 
-  const handleRecordPrinted = async () => {
+  const handlePrintShipment = async () => {
     if (!selectedOrder || !selectedShipment) {
       return;
     }
 
-    await runAction("record-printed", async () => {
-      await apiPost(selectedShipment.recordPrintedPath);
-      success(`Printed timestamp recorded for ${selectedShipment.trackingNumber}.`);
+    const parsedCopies = Math.max(1, Number.parseInt(copies, 10) || 1);
+    setPendingAction("print");
+    setPrintNotice(null);
+
+    try {
+      const payload = await apiPost<ShipmentPrintExecutionResponse>(selectedShipment.printPath, {
+        printerName: printerName.trim() || undefined,
+        copies: parsedCopies,
+      });
+      setCopies(String(payload.printRequest.printer.copies));
+      setPrintPayload(payload);
+      setPrintJob(payload.printJob);
+      setPrintNotice({
+        tone: "success",
+        text: payload.printJob.simulated
+          ? `Dry-run print completed for ${selectedShipment.trackingNumber}. Output stored at ${payload.printJob.outputPath ?? payload.printJob.printerTarget}.`
+          : `Print job sent to ${payload.printJob.printerTarget} for ${selectedShipment.trackingNumber}.`,
+      });
+      success(
+        payload.printJob.simulated
+          ? `Dry-run print completed for ${selectedShipment.trackingNumber}.`
+          : `Shipment label printed via ${payload.printJob.printerTarget}.`,
+      );
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "Shipment label print failed";
+      setPrintNotice({
+        tone: "error",
+        text: message,
+      });
+      error(message);
+    } finally {
       await refreshSelectedOrder(selectedOrder.id);
-    });
+      setPendingAction("");
+    }
   };
 
   const handleDispatchShipment = async () => {
@@ -487,7 +539,7 @@ export const OnlineStoreOrdersPage = () => {
       && !selectedShipment,
   );
   const canPreparePrint = Boolean(selectedShipment && selectedShipment.status !== "VOIDED");
-  const canRecordPrinted = Boolean(selectedShipment && selectedShipment.status !== "VOIDED");
+  const canPrintShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED");
   const canDispatchShipment = Boolean(selectedShipment && selectedShipment.status !== "VOIDED" && selectedShipment.printedAt);
 
   return (
@@ -496,7 +548,7 @@ export const OnlineStoreOrdersPage = () => {
         <PageHeader
           eyebrow="Online Store / Web Dispatch"
           title="Shipping Labels"
-          description="Create, inspect, and reprint web-order shipment labels through a CorePOS-owned dispatch flow. The current provider is intentionally mock/dev only, but the payloads are shaped for later Windows local-agent printing to a Zebra GK420d-class printer."
+          description="Create, inspect, and reprint web-order shipment labels through a CorePOS-owned dispatch flow. The current provider is intentionally mock/dev only, but the print path now hands Zebra-oriented payloads to a Windows/local agent without using the browser print dialog."
           actions={(
             <div className="actions-inline">
               <Link to="/online-store/products">Products</Link>
@@ -529,7 +581,7 @@ export const OnlineStoreOrdersPage = () => {
         </div>
 
         <div className="restricted-panel info-panel online-orders-info-panel">
-          This first slice keeps shipment orchestration inside CorePOS, returns ZPL for reliable thermal-label output, and stops short of browser-print-dialog transport. A future Windows local print agent can consume the prepared print payload directly.
+          This flow keeps shipment orchestration inside CorePOS, returns ZPL for reliable thermal-label output, and hands prepared shipment labels to the configured Windows/local print agent without routing through the browser print dialog.
         </div>
       </SurfaceCard>
 
@@ -613,7 +665,7 @@ export const OnlineStoreOrdersPage = () => {
         <SurfaceCard className="online-orders-panel online-orders-detail-panel">
           <SectionHeader
             title="Dispatch Detail"
-            description="Generate a shipment label, prepare a Zebra-style print payload, and record print or dispatch events with audit-friendly timestamps."
+            description="Generate a shipment label, prepare a Zebra-style print payload, send it through the Windows print-agent path, and keep print/dispatch timestamps audit-safe."
             actions={selectedOrder ? <span className="status-badge">{selectedOrder.orderNumber}</span> : null}
           />
 
@@ -808,11 +860,11 @@ export const OnlineStoreOrdersPage = () => {
                         <button
                           type="button"
                           className="button-link"
-                          onClick={() => void handleRecordPrinted()}
-                          disabled={!canRecordPrinted || pendingAction.length > 0}
-                          data-testid="online-store-record-printed"
+                          onClick={() => void handlePrintShipment()}
+                          disabled={!canPrintShipment || pendingAction.length > 0}
+                          data-testid="online-store-print"
                         >
-                          {pendingAction === "record-printed" ? "Saving..." : "Record Printed"}
+                          {pendingAction === "print" ? "Printing..." : "Print via Windows Agent"}
                         </button>
                         <button
                           type="button"
@@ -824,6 +876,15 @@ export const OnlineStoreOrdersPage = () => {
                           {pendingAction === "dispatch" ? "Dispatching..." : "Mark Dispatched"}
                         </button>
                       </div>
+
+                      {printNotice ? (
+                        <div
+                          className={`online-orders-print-notice online-orders-print-notice--${printNotice.tone}`}
+                          data-testid="online-store-print-status-message"
+                        >
+                          {printNotice.text}
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </section>
@@ -849,13 +910,33 @@ export const OnlineStoreOrdersPage = () => {
                     <span className="status-badge">Windows local-agent contract</span>
                   </div>
                   <p className="online-orders-preview-card__description">
-                    This payload is the backend-owned print intent that a future dispatch-station agent can consume without routing through the browser print dialog.
+                    This payload is the backend-owned print intent that the Windows dispatch print agent consumes without routing through the browser print dialog.
                   </p>
                   <pre className="online-orders-preview" data-testid="online-store-print-request-preview">
                     {printPayload
                       ? JSON.stringify(printPayload.printRequest, null, 2)
                       : "Prepare print to view the print-request payload for this shipment."}
                   </pre>
+                  {printJob ? (
+                    <dl className="online-orders-print-job-summary" data-testid="online-store-print-job-result">
+                      <div>
+                        <dt>Print job</dt>
+                        <dd>{printJob.jobId}</dd>
+                      </div>
+                      <div>
+                        <dt>Transport</dt>
+                        <dd>{printJob.transportMode}</dd>
+                      </div>
+                      <div>
+                        <dt>Target</dt>
+                        <dd>{printJob.printerTarget}</dd>
+                      </div>
+                      <div>
+                        <dt>Completed</dt>
+                        <dd>{formatDateTime(printJob.completedAt)}</dd>
+                      </div>
+                    </dl>
+                  ) : null}
                 </section>
               </div>
             </div>

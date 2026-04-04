@@ -1,6 +1,6 @@
 # Web-Order Shipping Labels
 
-This document describes the first CorePOS foundation for shipping-label-driven web-order dispatch.
+This document describes the current CorePOS foundation for shipping-label-driven web-order dispatch.
 
 ## Scope implemented now
 
@@ -9,15 +9,16 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - persist web orders independently of workshop or POS sales
 - create one active shipment label per shipping order
 - generate a stored label artifact through a provider abstraction
-- return a backend-owned print-preparation payload for later local-agent delivery
+- return a backend-owned print-preparation payload
+- hand that payload off to a repo-local Windows-oriented print agent
 - record printed and dispatched timestamps with audit events
 - expose a minimal manager-facing UI at `/online-store/orders`
 
-The current implementation is intentionally a development foundation, not a production courier integration.
+The current implementation is intentionally still mock/dev on the courier side, but it now includes a real print-agent handoff path for Zebra-oriented shipment labels.
 
 ## Current architecture
 
-The flow is split into three layers:
+The flow is now split into five layers:
 
 1. CorePOS shipment orchestration
    - `src/services/orderService.ts`
@@ -32,6 +33,16 @@ The flow is split into three layers:
    - shipment label payloads can be fetched directly from CorePOS
    - print preparation returns a stable `SHIPMENT_LABEL_PRINT` payload with printer intent metadata
    - current transport target is declared as `WINDOWS_LOCAL_AGENT`
+
+4. CorePOS print-agent delivery
+   - `src/services/shipping/printAgentDeliveryService.ts`
+   - sends prepared shipment print requests to the configured local agent endpoint
+   - normalizes timeout, unreachable-agent, and bad-response cases
+
+5. Local Windows print agent
+   - `print-agent/src/`
+   - validates shipment print payloads and performs the actual transport
+   - currently supports `DRY_RUN` plus real `RAW_TCP` ZPL delivery
 
 ## Mock provider status
 
@@ -52,7 +63,7 @@ ZPL is the preferred intermediate artifact because it:
 
 - matches the intended printer family well
 - avoids brittle browser print scaling for label stock
-- can be handed off to a lightweight local print agent later
+- can be handed off to a lightweight local print agent without going through the browser print dialog
 
 ## Current API shape
 
@@ -62,6 +73,7 @@ The first API slice lives under `/api/online-store` and supports:
 - generating a shipment label for an order
 - fetching shipment metadata and stored label content
 - preparing a print-intent payload
+- printing through the configured Windows/local agent path
 - recording print and dispatch milestones
 
 ## Current UI slice
@@ -75,7 +87,8 @@ It currently supports:
 - viewing shipment/tracking state
 - previewing stored ZPL
 - preparing a Windows-local-agent print payload
-- recording printed and dispatched timestamps
+- sending the print job through the real agent path
+- dispatching separately after print succeeds
 
 This is intentionally a narrow dispatch workflow, not a broader storefront or fulfilment dashboard redesign.
 
@@ -86,10 +99,10 @@ The intended next steps are:
 1. real courier/provider adapters
    - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references
 
-2. local Windows print agent
-   - a small trusted companion process on the dispatch PC
-   - consumes the prepared print payload from CorePOS
-   - sends ZPL directly to the configured Zebra printer without using the browser print dialog
+2. richer print-agent/device support
+   - printer/device mappings beyond a single configured target
+   - durable local queueing or retry behavior
+   - direct Windows spooler / USB Zebra support in addition to raw TCP
 
 3. richer fulfilment operations
    - packing workflow
@@ -108,3 +121,5 @@ The current implementation does not attempt to be:
 - a browser-print-based final architecture
 
 It is a backend-first shipping foundation for web-order dispatch that stays honest about the current mock/dev stage while pointing cleanly toward real courier and Windows print-agent integrations.
+
+For the current Windows/Zebra print-agent setup, configuration, and limitations, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).

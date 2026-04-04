@@ -1,3 +1,7 @@
+import type { ShippingLabelDocument, ShipmentPrintRequest } from "../../../shared/shippingPrintContract";
+
+export type { ShippingLabelDocument, ShipmentPrintRequest };
+
 export type ShippingPartyAddress = {
   name: string;
   addressLine1: string;
@@ -6,13 +10,6 @@ export type ShippingPartyAddress = {
   region?: string | null;
   postcode: string;
   country: string;
-};
-
-export type ShippingLabelDocument = {
-  format: "ZPL";
-  mimeType: "application/zpl";
-  fileName: string;
-  content: string;
 };
 
 export type ShippingShipmentContext = {
@@ -61,28 +58,4 @@ export interface ShippingLabelProvider {
 export type ShippingPrintPreparationInput = {
   printerName?: string | null;
   copies?: number;
-};
-
-export type ShipmentPrintRequest = {
-  version: 1;
-  intentType: "SHIPMENT_LABEL_PRINT";
-  shipmentId: string;
-  orderId: string;
-  orderNumber: string;
-  trackingNumber: string;
-  printer: {
-    transport: "WINDOWS_LOCAL_AGENT";
-    printerFamily: "ZEBRA_LABEL";
-    printerModelHint: "GK420D_OR_COMPATIBLE";
-    printerName: string | null;
-    copies: number;
-  };
-  document: ShippingLabelDocument;
-  metadata: {
-    providerKey: string;
-    providerDisplayName: string;
-    serviceCode: string;
-    serviceName: string;
-    sourceChannel: string;
-  };
 };

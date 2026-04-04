@@ -14954,6 +14954,50 @@ body.rota-row-drag-copy-active {
   word-break: break-word;
 }
 
+.online-orders-print-notice {
+  padding: var(--cp-space-3) var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  font-weight: 700;
+}
+
+.online-orders-print-notice--success {
+  background: rgba(223, 243, 230, 0.95);
+  border: 1px solid rgba(25, 107, 52, 0.18);
+  color: #18522a;
+}
+
+.online-orders-print-notice--error {
+  background: rgba(255, 235, 233, 0.96);
+  border: 1px solid rgba(157, 36, 25, 0.18);
+  color: #8b2118;
+}
+
+.online-orders-print-job-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cp-space-3);
+  margin: var(--cp-space-4) 0 0;
+}
+
+.online-orders-print-job-summary div {
+  display: grid;
+  gap: 2px;
+}
+
+.online-orders-print-job-summary dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #627184;
+}
+
+.online-orders-print-job-summary dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--cp-shell-deep);
+  word-break: break-word;
+}
+
 @media (max-width: 1080px) {
   .online-orders-layout,
   .online-orders-detail__grid,
@@ -14965,7 +15009,8 @@ body.rota-row-drag-copy-active {
 @media (max-width: 720px) {
   .online-orders-toolbar,
   .online-orders-dispatch-controls,
-  .online-orders-detail__facts {
+  .online-orders-detail__facts,
+  .online-orders-print-job-summary {
     grid-template-columns: minmax(0, 1fr);
   }
 }

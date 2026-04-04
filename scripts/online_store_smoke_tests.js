@@ -2,12 +2,15 @@
 require("dotenv/config");
 
 const assert = require("node:assert/strict");
+const http = require("node:http");
+const { randomUUID } = require("node:crypto");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+const PRINT_AGENT_SECRET = "online-store-smoke-print-secret";
 const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": "online-store-smoke-manager",
@@ -25,11 +28,6 @@ if (process.env.ALLOW_NON_TEST_DB !== "1" && !DATABASE_URL.toLowerCase().include
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
-});
-const serverController = createSmokeServerController({
-  label: "online-store-smoke",
-  baseUrl: BASE_URL,
-  databaseUrl: DATABASE_URL,
 });
 
 const fetchJson = async (path, options = {}) => {
@@ -49,66 +47,173 @@ const fetchText = async (path, options = {}) => {
   };
 };
 
+const readJsonBody = async (req) => {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+
+  const body = Buffer.concat(chunks).toString("utf8");
+  return body ? JSON.parse(body) : null;
+};
+
+const startFakePrintAgent = async () => {
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    if (req.method === "POST" && req.url === "/jobs/shipment-label") {
+      if (req.headers["x-corepos-print-agent-secret"] !== PRINT_AGENT_SECRET) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { code: "PRINT_AGENT_UNAUTHORIZED", message: "Secret mismatch" } }));
+        return;
+      }
+
+      const payload = await readJsonBody(req);
+      requests.push(payload);
+      const printRequest = payload?.printRequest;
+
+      if (printRequest?.printer?.printerName === "Force Failing Zebra") {
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          error: {
+            code: "PRINT_AGENT_TRANSPORT_FAILED",
+            message: "Simulated print transport failure",
+          },
+        }));
+        return;
+      }
+
+      const documentContent = String(printRequest?.document?.content ?? "");
+      const copies = Number(printRequest?.printer?.copies ?? 1);
+      const printableContent = Array.from({ length: copies }, () => documentContent).join("\n");
+      res.writeHead(201, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        ok: true,
+        job: {
+          jobId: `fake-agent-${randomUUID()}`,
+          acceptedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          transportMode: "DRY_RUN",
+          printerName: printRequest?.printer?.printerName ?? "Dispatch Zebra GK420d",
+          printerTarget: "dry-run://online-store-smoke",
+          copies,
+          documentFormat: "ZPL",
+          bytesSent: Buffer.byteLength(printableContent, "utf8"),
+          simulated: true,
+          outputPath: null,
+        },
+      }));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: { code: "NOT_FOUND", message: "Not found" } }));
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Fake print agent did not expose a TCP address");
+  }
+
+  return {
+    requests,
+    url: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+  };
+};
+
+const createOrderBody = (token, overrides = {}) => ({
+  orderNumber: `WEB-${token}`.toUpperCase(),
+  sourceChannel: "INTERNAL_MOCK_WEB_STORE",
+  externalOrderRef: `checkout-${token}`,
+  customerName: "Online Store Smoke",
+  customerEmail: `${token}@example.com`,
+  customerPhone: "07123 456789",
+  shippingRecipientName: "Online Store Smoke",
+  shippingAddressLine1: "12 Dispatch Lane",
+  shippingCity: "Clapham",
+  shippingRegion: "London",
+  shippingPostcode: "SW4 0HY",
+  shippingCountry: "United Kingdom",
+  shippingPricePence: 495,
+  items: [
+    {
+      sku: `SHIP-${token}`.toUpperCase(),
+      productName: "Shipping Test Product",
+      variantName: "Standard",
+      quantity: 2,
+      unitPricePence: 1499,
+    },
+  ],
+  ...overrides,
+});
+
 const run = async () => {
-  const token = `smoke-${Date.now()}`;
-  const orderNumber = `WEB-${token}`.toUpperCase();
-  let createdOrderId = null;
+  const createdOrderIds = [];
+  const fakePrintAgent = await startFakePrintAgent();
+  const serverController = createSmokeServerController({
+    label: "online-store-smoke",
+    baseUrl: BASE_URL,
+    databaseUrl: DATABASE_URL,
+    envOverrides: {
+      COREPOS_SHIPPING_PRINT_AGENT_URL: fakePrintAgent.url,
+      COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET: PRINT_AGENT_SECRET,
+    },
+  });
 
   try {
     await serverController.startIfNeeded();
 
+    const successToken = `smoke-${Date.now()}`;
+    const successOrderBody = createOrderBody(successToken);
     const createOrderRes = await fetchJson("/api/online-store/orders", {
       method: "POST",
       headers: {
         ...MANAGER_HEADERS,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        orderNumber,
-        sourceChannel: "INTERNAL_MOCK_WEB_STORE",
-        externalOrderRef: `checkout-${token}`,
-        customerName: "Online Store Smoke",
-        customerEmail: `${token}@example.com`,
-        customerPhone: "07123 456789",
-        shippingRecipientName: "Online Store Smoke",
-        shippingAddressLine1: "12 Dispatch Lane",
-        shippingCity: "Clapham",
-        shippingRegion: "London",
-        shippingPostcode: "SW4 0HY",
-        shippingCountry: "United Kingdom",
-        shippingPricePence: 495,
-        items: [
-          {
-            sku: `SHIP-${token}`.toUpperCase(),
-            productName: "Shipping Test Product",
-            variantName: "Standard",
-            quantity: 2,
-            unitPricePence: 1499,
-          },
-        ],
-      }),
+      body: JSON.stringify(successOrderBody),
     });
     assert.equal(createOrderRes.status, 201, JSON.stringify(createOrderRes.json));
-    assert.equal(createOrderRes.json.order.orderNumber, orderNumber);
+    assert.equal(createOrderRes.json.order.orderNumber, successOrderBody.orderNumber);
     assert.equal(createOrderRes.json.order.status, "READY_FOR_DISPATCH");
-    createdOrderId = createOrderRes.json.order.id;
+    createdOrderIds.push(createOrderRes.json.order.id);
 
-    const listRes = await fetchJson(`/api/online-store/orders?q=${encodeURIComponent(orderNumber)}`, {
+    const listRes = await fetchJson(`/api/online-store/orders?q=${encodeURIComponent(successOrderBody.orderNumber)}`, {
       headers: MANAGER_HEADERS,
     });
     assert.equal(listRes.status, 200, JSON.stringify(listRes.json));
     assert.equal(listRes.json.orders.length, 1);
-    assert.equal(listRes.json.orders[0].orderNumber, orderNumber);
+    assert.equal(listRes.json.orders[0].orderNumber, successOrderBody.orderNumber);
     assert.equal(listRes.json.summary.readyForDispatchCount >= 1, true);
     assert.equal(Array.isArray(listRes.json.supportedProviders), true);
 
-    const detailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createdOrderId)}`, {
+    const detailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}`, {
       headers: MANAGER_HEADERS,
     });
     assert.equal(detailRes.status, 200, JSON.stringify(detailRes.json));
     assert.equal(detailRes.json.order.shipments.length, 0);
 
-    const createShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createdOrderId)}/shipments`, {
+    const createShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`, {
       method: "POST",
       headers: {
         ...MANAGER_HEADERS,
@@ -127,7 +232,7 @@ const run = async () => {
     assert.match(createShipmentRes.json.shipment.trackingNumber, /^MOCK/);
     const shipmentId = createShipmentRes.json.shipment.id;
 
-    const duplicateShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createdOrderId)}/shipments`, {
+    const duplicateShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`, {
       method: "POST",
       headers: {
         ...MANAGER_HEADERS,
@@ -173,18 +278,35 @@ const run = async () => {
     assert.equal(preparePrintRes.json.printRequest.printer.copies, 2);
     assert.equal(preparePrintRes.json.printRequest.document.format, "ZPL");
 
-    const recordPrintedRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/record-printed`, {
+    const printRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/print`, {
       method: "POST",
-      headers: MANAGER_HEADERS,
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerName: "Dispatch Zebra GK420d",
+        copies: 2,
+      }),
     });
-    assert.equal(recordPrintedRes.status, 200, JSON.stringify(recordPrintedRes.json));
-    assert.equal(recordPrintedRes.json.shipment.status, "PRINTED");
-    assert.equal(Boolean(recordPrintedRes.json.shipment.printedAt), true);
-    assert.equal(recordPrintedRes.json.shipment.reprintCount, 0);
+    assert.equal(printRes.status, 200, JSON.stringify(printRes.json));
+    assert.equal(printRes.json.shipment.status, "PRINTED");
+    assert.equal(Boolean(printRes.json.shipment.printedAt), true);
+    assert.equal(printRes.json.shipment.reprintCount, 0);
+    assert.equal(printRes.json.printJob.transportMode, "DRY_RUN");
+    assert.equal(printRes.json.printJob.simulated, true);
+    assert.equal(printRes.json.printJob.printerTarget, "dry-run://online-store-smoke");
 
-    const reprintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/record-printed`, {
+    const reprintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/print`, {
       method: "POST",
-      headers: MANAGER_HEADERS,
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerName: "Dispatch Zebra GK420d",
+        copies: 1,
+      }),
     });
     assert.equal(reprintRes.status, 200, JSON.stringify(reprintRes.json));
     assert.equal(reprintRes.json.shipment.status, "PRINTED");
@@ -198,25 +320,77 @@ const run = async () => {
     assert.equal(dispatchRes.json.shipment.status, "DISPATCHED");
     assert.equal(Boolean(dispatchRes.json.shipment.dispatchedAt), true);
 
-    const dispatchedDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createdOrderId)}`, {
+    const dispatchedDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}`, {
       headers: MANAGER_HEADERS,
     });
     assert.equal(dispatchedDetailRes.status, 200, JSON.stringify(dispatchedDetailRes.json));
     assert.equal(dispatchedDetailRes.json.order.status, "DISPATCHED");
     assert.equal(dispatchedDetailRes.json.order.shipments[0].status, "DISPATCHED");
+
+    const failureToken = `smoke-failure-${Date.now()}`;
+    const failureOrderBody = createOrderBody(failureToken, {
+      customerName: "Online Store Print Failure",
+      shippingRecipientName: "Online Store Print Failure",
+    });
+    const createFailureOrderRes = await fetchJson("/api/online-store/orders", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(failureOrderBody),
+    });
+    assert.equal(createFailureOrderRes.status, 201, JSON.stringify(createFailureOrderRes.json));
+    createdOrderIds.push(createFailureOrderRes.json.order.id);
+
+    const createFailureShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createFailureOrderRes.json.order.id)}/shipments`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        providerKey: "INTERNAL_MOCK_ZPL",
+      }),
+    });
+    assert.equal(createFailureShipmentRes.status, 201, JSON.stringify(createFailureShipmentRes.json));
+    const failureShipmentId = createFailureShipmentRes.json.shipment.id;
+
+    const failedPrintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(failureShipmentId)}/print`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerName: "Force Failing Zebra",
+        copies: 1,
+      }),
+    });
+    assert.equal(failedPrintRes.status, 502, JSON.stringify(failedPrintRes.json));
+    assert.equal(failedPrintRes.json.error.code, "SHIPPING_PRINT_AGENT_REJECTED");
+
+    const failedDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createFailureOrderRes.json.order.id)}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(failedDetailRes.status, 200, JSON.stringify(failedDetailRes.json));
+    assert.equal(failedDetailRes.json.order.shipments[0].status, "PRINT_PREPARED");
+    assert.equal(failedDetailRes.json.order.shipments[0].printedAt, null);
+    assert.equal(failedDetailRes.json.order.shipments[0].reprintCount, 0);
+
+    assert.equal(fakePrintAgent.requests.length >= 3, true);
   } finally {
-    if (createdOrderId) {
+    if (createdOrderIds.length > 0) {
       await prisma.webOrder.deleteMany({
-        where: { id: createdOrderId },
-      });
-    } else {
-      await prisma.webOrder.deleteMany({
-        where: { orderNumber },
+        where: { id: { in: createdOrderIds } },
       });
     }
 
     await prisma.$disconnect();
-    await serverController.stop();
+    await Promise.allSettled([
+      serverController.stop(),
+      fakePrintAgent.close(),
+    ]);
   }
 };
 
