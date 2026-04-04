@@ -34,6 +34,7 @@ type EasyPostProviderConfig = ProviderConfigBase & {
   parcelLengthIn: number | null;
   parcelWidthIn: number | null;
   parcelHeightIn: number | null;
+  webhookSecret: string | null;
 };
 
 const DEFAULT_PROVIDER_KEY_CONFIG_KEY = "shipping.defaultProviderKey";
@@ -124,7 +125,11 @@ const normalizeOptionalUrl = (value: unknown, field: string) => {
   return parsed.toString().replace(/\/$/, "");
 };
 
-const normalizeApiKeyInput = (value: unknown) => {
+const normalizeSecretInput = (
+  value: unknown,
+  field: "apiKey" | "webhookSecret",
+  { maxLength = 400 }: { maxLength?: number } = {},
+) => {
   if (value === undefined) {
     return undefined;
   }
@@ -132,23 +137,30 @@ const normalizeApiKeyInput = (value: unknown) => {
     return null;
   }
   if (typeof value !== "string") {
-    throw new HttpError(400, "apiKey must be a string", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+    throw new HttpError(400, `${field} must be a string`, "INVALID_SHIPPING_PROVIDER_SETTINGS");
   }
 
   const trimmed = value.trim();
   if (trimmed.length === 0) {
     throw new HttpError(
       400,
-      "apiKey cannot be empty. Omit apiKey to preserve the existing value or use clearApiKey to remove it.",
+      `${field} cannot be empty. Omit ${field} to preserve the existing value or use clear${field === "apiKey" ? "ApiKey" : "WebhookSecret"} to remove it.`,
       "INVALID_SHIPPING_PROVIDER_SETTINGS",
     );
   }
-  if (trimmed.length > 400) {
-    throw new HttpError(400, "apiKey must be 400 characters or fewer", "INVALID_SHIPPING_PROVIDER_SETTINGS");
+  if (trimmed.length > maxLength) {
+    throw new HttpError(
+      400,
+      `${field} must be ${maxLength} characters or fewer`,
+      "INVALID_SHIPPING_PROVIDER_SETTINGS",
+    );
   }
 
   return trimmed;
 };
+
+const normalizeApiKeyInput = (value: unknown) => normalizeSecretInput(value, "apiKey");
+const normalizeWebhookSecretInput = (value: unknown) => normalizeSecretInput(value, "webhookSecret", { maxLength: 512 });
 
 const normalizeOptionalPositiveNumber = (value: unknown, field: string) => {
   if (value === undefined || value === null || value === "") {
@@ -233,6 +245,9 @@ const parseStoredEasyPostConfig = (value: Prisma.JsonValue | null): EasyPostProv
     parcelLengthIn: parsePositiveNumber(value.parcelLengthIn),
     parcelWidthIn: parsePositiveNumber(value.parcelWidthIn),
     parcelHeightIn: parsePositiveNumber(value.parcelHeightIn),
+    webhookSecret: typeof value.webhookSecret === "string" && value.webhookSecret.trim().length > 0
+      ? value.webhookSecret.trim()
+      : null,
   };
 };
 
@@ -319,6 +334,9 @@ const isEasyPostConfigReady = (config: EasyPostProviderConfig | null) =>
 const isEasyPostLifecycleConfigReady = (config: EasyPostProviderConfig | null) =>
   Boolean(config?.apiKey);
 
+const isEasyPostWebhookConfigReady = (config: EasyPostProviderConfig | null) =>
+  Boolean(config?.webhookSecret);
+
 const isGenericHttpZplLifecycleConfigReady = (config: GenericHttpZplProviderConfig | null) =>
   Boolean(config?.endpointBaseUrl && config.apiKey);
 
@@ -338,6 +356,8 @@ const buildConfigurationResponse = (
   parcelLengthIn: "parcelLengthIn" in config ? config.parcelLengthIn : null,
   parcelWidthIn: "parcelWidthIn" in config ? config.parcelWidthIn : null,
   parcelHeightIn: "parcelHeightIn" in config ? config.parcelHeightIn : null,
+  hasWebhookSecret: "webhookSecret" in config ? Boolean(config.webhookSecret) : false,
+  webhookSecretHint: "webhookSecret" in config ? maskSecret(config.webhookSecret) : null,
   hasApiKey: Boolean(config.apiKey),
   apiKeyHint: maskSecret(config.apiKey),
   updatedAt: config.updatedAt,
@@ -450,8 +470,10 @@ export type ShippingProviderSettingsInput = {
   parcelLengthIn?: number | null;
   parcelWidthIn?: number | null;
   parcelHeightIn?: number | null;
+  webhookSecret?: string | null;
   apiKey?: string | null;
   clearApiKey?: boolean;
+  clearWebhookSecret?: boolean;
 };
 
 export type ResolvedShippingProvider = {
@@ -619,6 +641,62 @@ export const resolveShippingProviderForShipmentLifecycle = async (
         parcelLengthIn: config?.parcelLengthIn ?? null,
         parcelWidthIn: config?.parcelWidthIn ?? null,
         parcelHeightIn: config?.parcelHeightIn ?? null,
+        webhookSecret: config?.webhookSecret ?? null,
+      },
+    };
+  }
+
+  return {
+    provider,
+    providerKey: requestedProviderKey,
+    providerDisplayName: provider.providerDisplayName,
+    providerEnvironment: null,
+    runtimeConfig: null,
+  };
+};
+
+export const resolveShippingProviderForInboundSync = async (
+  providerKey: string,
+): Promise<ResolvedShippingProvider> => {
+  const requestedProviderKey = providerKey.trim();
+  const provider = getShippingLabelProviderOrThrow(requestedProviderKey);
+  if (!provider.supportsWebhookEvents || !provider.parseWebhookEvent) {
+    throw new HttpError(
+      409,
+      `${provider.providerDisplayName} does not support inbound provider sync in CorePOS yet`,
+      "SHIPPING_PROVIDER_WEBHOOK_UNSUPPORTED",
+    );
+  }
+
+  if (requestedProviderKey === "EASYPOST") {
+    const config = await getStoredEasyPostConfig();
+    if (!isEasyPostWebhookConfigReady(config)) {
+      throw new HttpError(
+        409,
+        "EasyPost webhook sync requires webhookSecret in Settings",
+        "SHIPPING_PROVIDER_NOT_CONFIGURED",
+      );
+    }
+
+    return {
+      provider,
+      providerKey: requestedProviderKey,
+      providerDisplayName: config?.displayName ?? provider.providerDisplayName,
+      providerEnvironment: config?.environment ?? "SANDBOX",
+      runtimeConfig: {
+        providerKey: requestedProviderKey,
+        environment: config?.environment ?? "SANDBOX",
+        displayName: config?.displayName ?? null,
+        apiKey: config?.apiKey ?? null,
+        apiBaseUrl: config?.apiBaseUrl ?? null,
+        carrierAccountId: config?.carrierAccountId ?? null,
+        defaultServiceCode: config?.defaultServiceCode ?? null,
+        defaultServiceName: config?.defaultServiceName ?? null,
+        parcelWeightOz: config?.parcelWeightOz ?? null,
+        parcelLengthIn: config?.parcelLengthIn ?? null,
+        parcelWidthIn: config?.parcelWidthIn ?? null,
+        parcelHeightIn: config?.parcelHeightIn ?? null,
+        webhookSecret: config?.webhookSecret ?? null,
       },
     };
   }
@@ -649,6 +727,7 @@ export const updateShippingProviderSettings = async (
 
   const result = await prisma.$transaction(async (tx) => {
     const clearApiKey = normalizeBoolean(input.clearApiKey, "clearApiKey", false);
+    const clearWebhookSecret = normalizeBoolean(input.clearWebhookSecret, "clearWebhookSecret", false);
 
     if (providerKey === "GENERIC_HTTP_ZPL") {
       const existing = await getStoredGenericHttpZplConfig(tx);
@@ -757,6 +836,15 @@ export const updateShippingProviderSettings = async (
         input.parcelHeightIn !== undefined
           ? normalizeOptionalPositiveNumber(input.parcelHeightIn, "parcelHeightIn")
           : (existing?.parcelHeightIn ?? null),
+      webhookSecret: clearWebhookSecret
+        ? null
+        : (() => {
+            const nextWebhookSecret = normalizeWebhookSecretInput(input.webhookSecret);
+            if (nextWebhookSecret !== undefined) {
+              return nextWebhookSecret;
+            }
+            return existing?.webhookSecret ?? null;
+          })(),
       apiKey: clearApiKey
         ? null
         : (() => {
@@ -799,6 +887,7 @@ export const updateShippingProviderSettings = async (
           parcelLengthIn: nextConfig.parcelLengthIn,
           parcelWidthIn: nextConfig.parcelWidthIn,
           parcelHeightIn: nextConfig.parcelHeightIn,
+          hasWebhookSecret: Boolean(nextConfig.webhookSecret),
           hasApiKey: Boolean(nextConfig.apiKey),
           apiBaseUrl: nextConfig.apiBaseUrl,
         },

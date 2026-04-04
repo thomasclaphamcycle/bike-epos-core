@@ -30,6 +30,7 @@ export const listSupportedShippingProviders = () =>
     requiresConfiguration: provider.requiresConfiguration,
     supportsShipmentRefresh: provider.supportsShipmentRefresh,
     supportsShipmentVoid: provider.supportsShipmentVoid,
+    supportsWebhookEvents: provider.supportsWebhookEvents,
     supportedLabelFormats: ["ZPL"] as const,
     defaultServiceCode: provider.providerKey === "EASYPOST" ? "GroundAdvantage" : "STANDARD",
     defaultServiceName: provider.providerKey === "EASYPOST" ? "Ground Advantage" : "Standard Dispatch",

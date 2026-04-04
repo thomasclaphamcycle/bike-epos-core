@@ -16,12 +16,18 @@ import {
   type ShippingProviderSettingsResponse,
 } from "./shipping/providerConfigService";
 import { deliverShipmentPrintRequestToAgent } from "./shipping/printAgentDeliveryService";
+import {
+  applyShipmentLifecycleResult,
+  buildShipmentLifecycleInput,
+  getShipmentForProviderLifecycleOrThrow,
+  normalizeProviderLifecycleToken,
+  persistShipmentLifecycleFailure,
+} from "./shipping/providerSyncService";
 import type {
   ShipmentPrintRequest,
   ShippingLabelDocument,
   ShippingPartyAddress,
   ShippingPrintPreparationInput,
-  ShippingProviderShipmentLifecycleInput,
   ShippingProviderShipmentLifecycleResult,
 } from "./shipping/contracts";
 import { HttpError } from "../utils/http";
@@ -697,67 +703,6 @@ const buildPrintRequest = (
   },
 });
 
-const asProviderMetadataRecord = (value: Prisma.JsonValue | null): Record<string, unknown> | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-};
-
-const normalizeProviderLifecycleToken = (value: string | null | undefined) => {
-  const normalized = normalizeOptionalText(value);
-  if (!normalized) {
-    return null;
-  }
-
-  return normalized.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase() || null;
-};
-
-const deriveShipmentStatusFromPrintState = (shipment: {
-  printPreparedAt: Date | null;
-  printedAt: Date | null;
-  dispatchedAt: Date | null;
-}): WebOrderShipmentStatus => {
-  if (shipment.dispatchedAt) {
-    return "DISPATCHED";
-  }
-  if (shipment.printedAt) {
-    return "PRINTED";
-  }
-  if (shipment.printPreparedAt) {
-    return "PRINT_PREPARED";
-  }
-  return "LABEL_READY";
-};
-
-const deriveShipmentStatusFromProviderLifecycle = (
-  shipment: {
-    status: WebOrderShipmentStatus;
-    printPreparedAt: Date | null;
-    printedAt: Date | null;
-    dispatchedAt: Date | null;
-  },
-  result: ShippingProviderShipmentLifecycleResult,
-) => {
-  if (shipment.dispatchedAt) {
-    return "DISPATCHED" as const;
-  }
-
-  const refundStatus = normalizeProviderLifecycleToken(result.providerRefundStatus);
-  if (refundStatus === "REFUNDED") {
-    return "VOIDED" as const;
-  }
-  if (refundStatus === "SUBMITTED") {
-    return "VOID_PENDING" as const;
-  }
-  if (shipment.status === "VOID_PENDING" && refundStatus && FAILED_PROVIDER_VOID_STATUSES.has(refundStatus)) {
-    return deriveShipmentStatusFromPrintState(shipment);
-  }
-
-  return shipment.status;
-};
-
 const isSuccessfulProviderVoidResult = (result: ShippingProviderShipmentLifecycleResult) => {
   const refundStatus = normalizeProviderLifecycleToken(result.providerRefundStatus);
   if (refundStatus && SUCCESSFUL_PROVIDER_VOID_STATUSES.has(refundStatus)) {
@@ -782,34 +727,6 @@ const buildProviderVoidFailureMessage = (result: ShippingProviderShipmentLifecyc
 
   return null;
 };
-
-const buildShipmentLifecycleInput = (
-  shipment: Prisma.WebOrderShipmentGetPayload<{ select: typeof webOrderShipmentWithOrderAndContentSelect }>,
-): ShippingProviderShipmentLifecycleInput => ({
-  order: {
-    id: shipment.webOrder.id,
-    orderNumber: shipment.webOrder.orderNumber,
-    sourceChannel: shipment.webOrder.sourceChannel,
-  },
-  shipment: {
-    shipmentId: shipment.id,
-    shipmentNumber: shipment.shipmentNumber,
-    providerKey: shipment.providerKey,
-    providerDisplayName: shipment.providerDisplayName,
-    providerEnvironment: shipment.providerEnvironment as ShippingProviderShipmentLifecycleInput["shipment"]["providerEnvironment"],
-    serviceCode: shipment.serviceCode,
-    serviceName: shipment.serviceName,
-    trackingNumber: shipment.trackingNumber,
-    providerReference: shipment.providerReference ?? null,
-    providerShipmentReference: shipment.providerShipmentReference ?? null,
-    providerTrackingReference: shipment.providerTrackingReference ?? null,
-    providerLabelReference: shipment.providerLabelReference ?? null,
-    providerStatus: shipment.providerStatus ?? null,
-    providerRefundStatus: shipment.providerRefundStatus ?? null,
-    providerMetadata: asProviderMetadataRecord(shipment.providerMetadata),
-    labelGeneratedAt: shipment.labelGeneratedAt,
-  },
-});
 
 const assertShipmentActionable = (shipment: { status: WebOrderShipmentStatus }) => {
   if (shipment.status === "VOID_PENDING") {
@@ -896,148 +813,6 @@ const getShipmentWithOrderOrThrow = async (shipmentId: string) => {
   }
 
   return shipment;
-};
-
-const buildShipmentLifecycleUpdateData = (
-  shipment: Prisma.WebOrderShipmentGetPayload<{ select: typeof webOrderShipmentWithOrderAndContentSelect }>,
-  result: ShippingProviderShipmentLifecycleResult,
-  syncedAt: Date,
-  syncError: string | null,
-): Prisma.WebOrderShipmentUpdateInput => {
-  const refundStatus =
-    result.providerRefundStatus !== undefined
-      ? normalizeProviderLifecycleToken(result.providerRefundStatus)
-      : (shipment.providerRefundStatus ?? null);
-  const nextStatus = deriveShipmentStatusFromProviderLifecycle(shipment, {
-    ...result,
-    providerRefundStatus: refundStatus,
-  });
-
-  const update: Prisma.WebOrderShipmentUpdateInput = {
-    status: nextStatus,
-    trackingNumber:
-      normalizeOptionalText(result.trackingNumber ?? undefined)
-      ?? shipment.trackingNumber,
-    serviceCode:
-      normalizeOptionalText(result.normalizedServiceCode ?? undefined)
-      ?? shipment.serviceCode,
-    serviceName:
-      normalizeOptionalText(result.normalizedServiceName ?? undefined)
-      ?? shipment.serviceName,
-    providerReference:
-      result.providerReference !== undefined
-        ? (result.providerReference ?? null)
-        : (shipment.providerReference ?? null),
-    providerShipmentReference:
-      result.providerShipmentReference !== undefined
-        ? (result.providerShipmentReference ?? null)
-        : (shipment.providerShipmentReference ?? null),
-    providerTrackingReference:
-      result.providerTrackingReference !== undefined
-        ? (result.providerTrackingReference ?? null)
-        : (shipment.providerTrackingReference ?? null),
-    providerLabelReference:
-      result.providerLabelReference !== undefined
-        ? (result.providerLabelReference ?? null)
-        : (shipment.providerLabelReference ?? null),
-    providerStatus:
-      result.providerStatus !== undefined
-        ? (normalizeProviderLifecycleToken(result.providerStatus) ?? null)
-        : (shipment.providerStatus ?? null),
-    providerRefundStatus: refundStatus,
-    providerMetadata:
-      result.providerMetadata !== undefined
-        ? (result.providerMetadata as Prisma.InputJsonValue | null)
-        : (shipment.providerMetadata as Prisma.InputJsonValue | null),
-    providerSyncedAt: syncedAt,
-    providerSyncError: syncError,
-    voidRequestedAt:
-      refundStatus === "SUBMITTED" || refundStatus === "REFUNDED"
-        ? (shipment.voidRequestedAt ?? syncedAt)
-        : shipment.voidRequestedAt,
-    voidedAt:
-      refundStatus === "REFUNDED"
-        ? (shipment.voidedAt ?? syncedAt)
-        : shipment.voidedAt,
-  };
-
-  if (result.document) {
-    update.labelFormat = result.document.format;
-    update.labelMimeType = result.document.mimeType;
-    update.labelFileName = result.document.fileName;
-    update.labelContent = result.document.content;
-    update.labelGeneratedAt = syncedAt;
-  }
-
-  return update;
-};
-
-const persistShipmentLifecycleFailure = async (
-  shipmentId: string,
-  action: "SYNC" | "VOID",
-  error: unknown,
-  auditActor?: AuditActor,
-) => {
-  const normalizedShipmentId = parseRequiredUuid(shipmentId, "shipmentId", "INVALID_WEB_ORDER_SHIPMENT_ID");
-  const failureMessage = error instanceof Error ? error.message : String(error);
-  const failureCode = error instanceof HttpError ? error.code : `SHIPMENT_${action}_FAILED`;
-
-  const saved = await prisma.$transaction(async (tx) => {
-    const shipment = await tx.webOrderShipment.findUnique({
-      where: { id: normalizedShipmentId },
-      select: {
-        id: true,
-        webOrderId: true,
-        trackingNumber: true,
-        status: true,
-        providerKey: true,
-      },
-    });
-
-    if (!shipment) {
-      return null;
-    }
-
-    await tx.webOrderShipment.update({
-      where: { id: shipment.id },
-      data: {
-        providerSyncError: failureMessage,
-      },
-    });
-
-    await createAuditEventTx(
-      tx,
-      {
-        action: action === "SYNC" ? "WEB_ORDER_SHIPMENT_PROVIDER_SYNC_FAILED" : "WEB_ORDER_SHIPMENT_VOID_FAILED",
-        entityType: "WEB_ORDER_SHIPMENT",
-        entityId: shipment.id,
-        metadata: {
-          webOrderId: shipment.webOrderId,
-          trackingNumber: shipment.trackingNumber,
-          providerKey: shipment.providerKey,
-          status: shipment.status,
-          failureCode,
-          failureMessage,
-        },
-      },
-      auditActor,
-    );
-
-    return shipment;
-  });
-
-  if (saved) {
-    logOperationalEvent(
-      action === "SYNC" ? "online_store.shipment.provider_sync_failed" : "online_store.shipment.void_failed",
-      {
-        entityId: saved.id,
-        shipmentId: saved.id,
-        webOrderId: saved.webOrderId,
-        providerKey: saved.providerKey,
-        failureCode,
-      },
-    );
-  }
 };
 
 export const listOnlineStoreOrders = async (input: {
@@ -1436,170 +1211,109 @@ export const getShipmentLabelPayload = async (shipmentId: string) => {
 };
 
 export const refreshShipmentProviderState = async (shipmentId: string, auditActor?: AuditActor) => {
-  const shipmentWithOrder = await getShipmentWithOrderOrThrow(shipmentId);
-  const resolvedProvider = await resolveShippingProviderForShipmentLifecycle(shipmentWithOrder.providerKey);
+  const shipment = await getShipmentForProviderLifecycleOrThrow(shipmentId);
+  const resolvedProvider = await resolveShippingProviderForShipmentLifecycle(shipment.providerKey);
   if (!resolvedProvider.provider.supportsShipmentRefresh || !resolvedProvider.provider.syncShipment) {
     throw new HttpError(
       409,
-      `${shipmentWithOrder.providerDisplayName} does not support shipment refresh in CorePOS yet`,
+      `${shipment.providerDisplayName} does not support shipment refresh in CorePOS yet`,
       "SHIPMENT_PROVIDER_REFRESH_UNSUPPORTED",
     );
   }
 
   try {
     const lifecycleResult = await resolvedProvider.provider.syncShipment(
-      buildShipmentLifecycleInput(shipmentWithOrder),
+      buildShipmentLifecycleInput(shipment),
       {
         runtimeConfig: resolvedProvider.runtimeConfig,
       },
     );
 
-    const syncedAt = new Date();
-    const saved = await prisma.$transaction(async (tx) => {
-      const currentShipment = await tx.webOrderShipment.findUnique({
-        where: { id: shipmentWithOrder.id },
-        select: webOrderShipmentWithOrderAndContentSelect,
-      });
-
-      if (!currentShipment) {
-        throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
-      }
-
-      const savedShipment = await tx.webOrderShipment.update({
-        where: { id: currentShipment.id },
-        data: buildShipmentLifecycleUpdateData(currentShipment, lifecycleResult, syncedAt, null),
-        select: webOrderShipmentWithOrderAndContentSelect,
-      });
-
-      await createAuditEventTx(
-        tx,
-        {
-          action: "WEB_ORDER_SHIPMENT_PROVIDER_SYNCED",
-          entityType: "WEB_ORDER_SHIPMENT",
-          entityId: savedShipment.id,
-          metadata: {
-            webOrderId: savedShipment.webOrder.id,
-            orderNumber: savedShipment.webOrder.orderNumber,
-            providerKey: savedShipment.providerKey,
-            status: savedShipment.status,
-            providerStatus: savedShipment.providerStatus,
-            providerRefundStatus: savedShipment.providerRefundStatus,
-            providerSyncedAt: syncedAt.toISOString(),
-          },
-        },
-        auditActor,
-      );
-
-      return savedShipment;
+    const saved = await applyShipmentLifecycleResult({
+      shipmentId: shipment.id,
+      lifecycleResult,
+      action: "SYNC",
+      syncSource: "MANUAL_REFRESH",
+      auditActor,
     });
+    const savedDetail = await getShipmentWithOrderOrThrow(saved.id);
 
     logOperationalEvent("online_store.shipment.provider_synced", {
-      entityId: saved.id,
-      shipmentId: saved.id,
-      webOrderId: saved.webOrder.id,
-      providerKey: saved.providerKey,
-      status: saved.status,
+      entityId: savedDetail.id,
+      shipmentId: savedDetail.id,
+      webOrderId: savedDetail.webOrder.id,
+      providerKey: savedDetail.providerKey,
+      status: savedDetail.status,
     });
 
     return {
-      order: toOrderDetail(saved.webOrder),
-      shipment: toShipmentResponse(saved),
+      order: toOrderDetail(savedDetail.webOrder),
+      shipment: toShipmentResponse(savedDetail),
     };
   } catch (error) {
-    await persistShipmentLifecycleFailure(shipmentWithOrder.id, "SYNC", error, auditActor);
+    await persistShipmentLifecycleFailure(shipment.id, "SYNC", error, auditActor);
     throw error;
   }
 };
 
 export const cancelShipment = async (shipmentId: string, auditActor?: AuditActor) => {
-  const shipmentWithOrder = await getShipmentWithOrderOrThrow(shipmentId);
-  assertShipmentCancellable(shipmentWithOrder);
+  const shipment = await getShipmentForProviderLifecycleOrThrow(shipmentId);
+  assertShipmentCancellable(shipment);
 
-  const resolvedProvider = await resolveShippingProviderForShipmentLifecycle(shipmentWithOrder.providerKey);
+  const resolvedProvider = await resolveShippingProviderForShipmentLifecycle(shipment.providerKey);
   if (!resolvedProvider.provider.supportsShipmentVoid || !resolvedProvider.provider.voidShipment) {
     throw new HttpError(
       409,
-      `${shipmentWithOrder.providerDisplayName} does not support shipment voiding in CorePOS yet`,
+      `${shipment.providerDisplayName} does not support shipment voiding in CorePOS yet`,
       "SHIPMENT_PROVIDER_VOID_UNSUPPORTED",
     );
   }
 
   try {
     const lifecycleResult = await resolvedProvider.provider.voidShipment(
-      buildShipmentLifecycleInput(shipmentWithOrder),
+      buildShipmentLifecycleInput(shipment),
       {
         runtimeConfig: resolvedProvider.runtimeConfig,
       },
     );
 
     const syncError = buildProviderVoidFailureMessage(lifecycleResult);
-    const syncedAt = new Date();
-
-    const saved = await prisma.$transaction(async (tx) => {
-      const currentShipment = await tx.webOrderShipment.findUnique({
-        where: { id: shipmentWithOrder.id },
-        select: webOrderShipmentWithOrderAndContentSelect,
-      });
-
-      if (!currentShipment) {
-        throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
-      }
-      assertShipmentCancellable(currentShipment);
-
-      const savedShipment = await tx.webOrderShipment.update({
-        where: { id: currentShipment.id },
-        data: buildShipmentLifecycleUpdateData(currentShipment, lifecycleResult, syncedAt, syncError),
-        select: webOrderShipmentWithOrderAndContentSelect,
-      });
-
-      await createAuditEventTx(
-        tx,
-        {
-          action: syncError ? "WEB_ORDER_SHIPMENT_VOID_FAILED" : "WEB_ORDER_SHIPMENT_VOID_REQUESTED",
-          entityType: "WEB_ORDER_SHIPMENT",
-          entityId: savedShipment.id,
-          metadata: {
-            webOrderId: savedShipment.webOrder.id,
-            orderNumber: savedShipment.webOrder.orderNumber,
-            providerKey: savedShipment.providerKey,
-            status: savedShipment.status,
-            providerStatus: savedShipment.providerStatus,
-            providerRefundStatus: savedShipment.providerRefundStatus,
-            providerSyncedAt: syncedAt.toISOString(),
-            failureMessage: syncError,
-          },
-        },
-        auditActor,
-      );
-
-      return savedShipment;
+    const saved = await applyShipmentLifecycleResult({
+      shipmentId: shipment.id,
+      lifecycleResult,
+      action: "VOID",
+      syncSource: "VOID_REQUEST",
+      syncError,
+      auditActor,
+      assertCurrentShipment: assertShipmentCancellable,
     });
+    const savedDetail = await getShipmentWithOrderOrThrow(saved.id);
 
     if (syncError || !isSuccessfulProviderVoidResult(lifecycleResult)) {
       logOperationalEvent("online_store.shipment.void_rejected", {
-        entityId: saved.id,
-        shipmentId: saved.id,
-        webOrderId: saved.webOrder.id,
-        providerKey: saved.providerKey,
+        entityId: savedDetail.id,
+        shipmentId: savedDetail.id,
+        webOrderId: savedDetail.webOrder.id,
+        providerKey: savedDetail.providerKey,
       });
       throw new HttpError(409, syncError ?? "The courier did not confirm that the shipment was voided", "SHIPMENT_VOID_REJECTED");
     }
 
     logOperationalEvent("online_store.shipment.void_requested", {
-      entityId: saved.id,
-      shipmentId: saved.id,
-      webOrderId: saved.webOrder.id,
-      providerKey: saved.providerKey,
-      status: saved.status,
+      entityId: savedDetail.id,
+      shipmentId: savedDetail.id,
+      webOrderId: savedDetail.webOrder.id,
+      providerKey: savedDetail.providerKey,
+      status: savedDetail.status,
     });
 
     return {
-      order: toOrderDetail(saved.webOrder),
-      shipment: toShipmentResponse(saved),
+      order: toOrderDetail(savedDetail.webOrder),
+      shipment: toShipmentResponse(savedDetail),
     };
   } catch (error) {
     if (!(error instanceof HttpError && error.code === "SHIPMENT_VOID_REJECTED")) {
-      await persistShipmentLifecycleFailure(shipmentWithOrder.id, "VOID", error, auditActor);
+      await persistShipmentLifecycleFailure(shipment.id, "VOID", error, auditActor);
     }
     throw error;
   }

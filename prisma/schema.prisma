@@ -1003,6 +1003,13 @@ enum ShipmentLabelStorageKind {
   INLINE_TEXT
 }
 
+enum ShippingProviderSyncEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
 enum RegisteredPrinterFamily {
   ZEBRA_LABEL
 }
@@ -1107,12 +1114,46 @@ model WebOrderShipment {
 
   webOrder       WebOrder @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
   createdByStaff User?    @relation("WebOrderShipmentCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  syncEvents     ShippingProviderSyncEvent[]
 
   @@unique([webOrderId, shipmentNumber])
   @@index([webOrderId, status, createdAt])
   @@index([createdByStaffId])
   @@index([providerKey, status, createdAt])
   @@index([providerKey, providerStatus, createdAt])
+}
+
+model ShippingProviderSyncEvent {
+  id                        String                         @id @default(uuid()) @db.Uuid
+  providerKey               String
+  providerEventId           String
+  providerEventType         String
+  shipmentId                String?                        @db.Uuid
+  providerShipmentReference String?
+  providerTrackingReference String?
+  trackingNumber            String?
+  signatureVerified         Boolean                        @default(false)
+  status                    ShippingProviderSyncEventStatus @default(RECEIVED)
+  occurredAt                DateTime?
+  firstReceivedAt           DateTime                       @default(now())
+  lastReceivedAt            DateTime                       @default(now())
+  processedAt               DateTime?
+  syncAppliedAt             DateTime?
+  deliveryCount             Int                            @default(1)
+  errorCode                 String?
+  errorMessage              String?
+  payload                   Json?
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
+
+  shipment WebOrderShipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+
+  @@unique([providerKey, providerEventId])
+  @@index([providerKey, status, lastReceivedAt])
+  @@index([shipmentId, createdAt])
+  @@index([providerKey, providerShipmentReference])
+  @@index([providerKey, providerTrackingReference])
+  @@index([providerKey, trackingNumber])
 }
 
 model Printer {

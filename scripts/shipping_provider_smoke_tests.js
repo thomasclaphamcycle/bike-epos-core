@@ -3,7 +3,7 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const http = require("node:http");
-const { randomUUID } = require("node:crypto");
+const { createHmac, randomUUID } = require("node:crypto");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { createSmokeServerController } = require("./smoke_server_helper");
@@ -14,6 +14,7 @@ const PRINT_AGENT_SECRET = "shipping-provider-smoke-print-secret";
 const PROVIDER_API_KEY = "shipping-provider-smoke-api-key";
 const EASYPOST_API_KEY = "EZTKshippingprovidersmoketest";
 const EASYPOST_CARRIER_ACCOUNT_ID = "ca_shipping_provider_smoke";
+const EASYPOST_WEBHOOK_SECRET = "shipping-provider-smoke-webhook-secret";
 const ADMIN_HEADERS = {
   "X-Staff-Role": "ADMIN",
   "X-Staff-Id": "shipping-provider-smoke-admin",
@@ -42,6 +43,26 @@ const fetchJson = async (path, options = {}) => {
   const text = await response.text();
   const json = text ? JSON.parse(text) : null;
   return { status: response.status, json };
+};
+
+const postSignedEasyPostWebhook = async (payload, options = {}) => {
+  const path = options.path || "/api/shipping/providers/EASYPOST/webhooks";
+  const timestamp = options.timestamp || new Date().toUTCString();
+  const body = JSON.stringify(payload);
+  const signature = createHmac("sha256", options.secret || EASYPOST_WEBHOOK_SECRET)
+    .update(`${timestamp}POST${path}${body}`, "utf8")
+    .digest("hex");
+
+  return fetchJson(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Timestamp": timestamp,
+      "X-Path": path,
+      "X-Hmac-Signature-V2": `hmac-sha256-hex=${signature}`,
+    },
+    body,
+  });
 };
 
 const readJsonBody = async (req) => {
@@ -219,6 +240,24 @@ const startFakeCourierProvider = async () => {
   return {
     requests,
     url: `http://127.0.0.1:${address.port}`,
+    setTrackerStatus: (shipmentId, trackerStatus) => {
+      const shipment = shipments.get(shipmentId);
+      if (!shipment) {
+        throw new Error(`Unknown fake EasyPost shipment: ${shipmentId}`);
+      }
+      shipment.status = trackerStatus;
+      shipment.trackerStatus = trackerStatus;
+    },
+    finalizeRefund: (shipmentId) => {
+      const shipment = shipments.get(shipmentId);
+      if (!shipment) {
+        throw new Error(`Unknown fake EasyPost shipment: ${shipmentId}`);
+      }
+      shipment.pendingRefundFinalization = false;
+      shipment.refundStatus = "refunded";
+      shipment.status = "cancelled";
+      shipment.trackerStatus = "cancelled";
+    },
     close: () =>
       new Promise((resolve, reject) => {
         server.close((error) => {
@@ -483,6 +522,24 @@ const startFakeEasyPostProvider = async () => {
   return {
     requests,
     url: `http://127.0.0.1:${address.port}`,
+    setTrackerStatus: (shipmentId, trackerStatus) => {
+      const shipment = shipments.get(shipmentId);
+      if (!shipment) {
+        throw new Error(`Unknown fake EasyPost shipment: ${shipmentId}`);
+      }
+      shipment.status = trackerStatus;
+      shipment.trackerStatus = trackerStatus;
+    },
+    finalizeRefund: (shipmentId) => {
+      const shipment = shipments.get(shipmentId);
+      if (!shipment) {
+        throw new Error(`Unknown fake EasyPost shipment: ${shipmentId}`);
+      }
+      shipment.pendingRefundFinalization = false;
+      shipment.refundStatus = "refunded";
+      shipment.status = "cancelled";
+      shipment.trackerStatus = "cancelled";
+    },
     close: () =>
       new Promise((resolve, reject) => {
         server.close((error) => {
@@ -537,6 +594,7 @@ const createPrinter = async (body) => {
 const run = async () => {
   const createdOrderIds = [];
   const createdPrinterIds = [];
+  const createdProviderEventIds = [];
   const fakePrintAgent = await startFakePrintAgent();
   const fakeProvider = await startFakeCourierProvider();
   const fakeEasyPost = await startFakeEasyPostProvider();
@@ -586,6 +644,10 @@ const run = async () => {
     );
     assert.equal(
       listBefore.json.providers.find((provider) => provider.key === "EASYPOST").supportsShipmentVoid,
+      true,
+    );
+    assert.equal(
+      listBefore.json.providers.find((provider) => provider.key === "EASYPOST").supportsWebhookEvents,
       true,
     );
 
@@ -783,12 +845,14 @@ const run = async () => {
         parcelLengthIn: 10,
         parcelWidthIn: 8,
         parcelHeightIn: 4,
+        webhookSecret: EASYPOST_WEBHOOK_SECRET,
         apiKey: EASYPOST_API_KEY,
       }),
     });
     assert.equal(validEasyPostConfig.status, 200, JSON.stringify(validEasyPostConfig.json));
     assert.equal(validEasyPostConfig.json.provider.isAvailable, true);
     assert.equal(validEasyPostConfig.json.provider.configuration.carrierAccountId, EASYPOST_CARRIER_ACCOUNT_ID);
+    assert.equal(validEasyPostConfig.json.provider.configuration.hasWebhookSecret, true);
 
     const setEasyPostDefault = await fetchJson("/api/settings/shipping-providers/default", {
       method: "PUT",
@@ -873,6 +937,118 @@ const run = async () => {
     assert.equal(easyPostRefreshRes.json.shipment.providerStatus, "PRE_TRANSIT");
     assert.equal(easyPostRefreshRes.json.shipment.providerRefundStatus, null);
 
+    const easyPostShipmentReference = easyPostRefreshRes.json.shipment.providerShipmentReference;
+    const easyPostTrackingReference = easyPostRefreshRes.json.shipment.providerTrackingReference;
+    const easyPostTrackingNumber = easyPostRefreshRes.json.shipment.trackingNumber;
+
+    const invalidWebhookRes = await postSignedEasyPostWebhook(
+      {
+        id: `evt_invalid_${randomUUID().replace(/-/g, "").slice(0, 18)}`,
+        object: "Event",
+        description: "tracker.updated",
+        created_at: new Date().toISOString(),
+        result: {
+          id: easyPostTrackingReference,
+          object: "Tracker",
+          tracking_code: easyPostTrackingNumber,
+          status: "in_transit",
+          shipment_id: easyPostShipmentReference,
+        },
+      },
+      { secret: "wrong-secret" },
+    );
+    assert.equal(invalidWebhookRes.status, 401, JSON.stringify(invalidWebhookRes.json));
+    assert.equal(invalidWebhookRes.json.error.code, "SHIPPING_PROVIDER_WEBHOOK_UNAUTHORIZED");
+
+    fakeEasyPost.setTrackerStatus(easyPostShipmentReference, "in_transit");
+    const trackerEventId = `evt_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    createdProviderEventIds.push(trackerEventId);
+    const trackerWebhookRes = await postSignedEasyPostWebhook({
+      id: trackerEventId,
+      object: "Event",
+      description: "tracker.updated",
+      created_at: new Date().toISOString(),
+      result: {
+        id: easyPostTrackingReference,
+        object: "Tracker",
+        tracking_code: easyPostTrackingNumber,
+        status: "in_transit",
+        shipment_id: easyPostShipmentReference,
+      },
+    });
+    assert.equal(trackerWebhookRes.status, 200, JSON.stringify(trackerWebhookRes.json));
+    assert.equal(trackerWebhookRes.json.applied, true);
+    assert.equal(trackerWebhookRes.json.duplicate, false);
+    assert.equal(trackerWebhookRes.json.event.status, "PROCESSED");
+
+    const trackerWebhookDuplicateRes = await postSignedEasyPostWebhook({
+      id: trackerEventId,
+      object: "Event",
+      description: "tracker.updated",
+      created_at: new Date().toISOString(),
+      result: {
+        id: easyPostTrackingReference,
+        object: "Tracker",
+        tracking_code: easyPostTrackingNumber,
+        status: "in_transit",
+        shipment_id: easyPostShipmentReference,
+      },
+    });
+    assert.equal(trackerWebhookDuplicateRes.status, 200, JSON.stringify(trackerWebhookDuplicateRes.json));
+    assert.equal(trackerWebhookDuplicateRes.json.applied, false);
+    assert.equal(trackerWebhookDuplicateRes.json.duplicate, true);
+
+    const trackerSyncEvent = await prisma.shippingProviderSyncEvent.findUnique({
+      where: {
+        providerKey_providerEventId: {
+          providerKey: "EASYPOST",
+          providerEventId: trackerEventId,
+        },
+      },
+    });
+    assert.equal(Boolean(trackerSyncEvent), true);
+    assert.equal(trackerSyncEvent.status, "PROCESSED");
+    assert.equal(trackerSyncEvent.deliveryCount, 2);
+
+    const trackerDetail = await fetchJson(
+      `/api/online-store/orders/${encodeURIComponent(easyPostOrderRes.json.order.id)}`,
+      { headers: MANAGER_HEADERS },
+    );
+    assert.equal(trackerDetail.status, 200, JSON.stringify(trackerDetail.json));
+    assert.equal(trackerDetail.json.order.shipments[0].providerStatus, "IN_TRANSIT");
+
+    const unmatchedEventId = `evt_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    createdProviderEventIds.push(unmatchedEventId);
+    const unmatchedWebhookRes = await postSignedEasyPostWebhook({
+      id: unmatchedEventId,
+      object: "Event",
+      description: "tracker.updated",
+      created_at: new Date().toISOString(),
+      result: {
+        id: "trk_unmatched_corepos",
+        object: "Tracker",
+        tracking_code: "EZUNMATCHED123456",
+        status: "in_transit",
+        shipment_id: "shp_unmatched_corepos",
+      },
+    });
+    assert.equal(unmatchedWebhookRes.status, 202, JSON.stringify(unmatchedWebhookRes.json));
+    assert.equal(unmatchedWebhookRes.json.applied, false);
+    assert.equal(unmatchedWebhookRes.json.duplicate, false);
+    assert.equal(unmatchedWebhookRes.json.event.status, "IGNORED");
+
+    const unmatchedSyncEvent = await prisma.shippingProviderSyncEvent.findUnique({
+      where: {
+        providerKey_providerEventId: {
+          providerKey: "EASYPOST",
+          providerEventId: unmatchedEventId,
+        },
+      },
+    });
+    assert.equal(Boolean(unmatchedSyncEvent), true);
+    assert.equal(unmatchedSyncEvent.status, "IGNORED");
+    assert.equal(unmatchedSyncEvent.errorCode, "SHIPPING_PROVIDER_EVENT_UNMATCHED");
+
     const easyPostVoidRes = await fetchJson(
       `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/cancel`,
       {
@@ -899,17 +1075,34 @@ const run = async () => {
     assert.equal(blockedVoidPrintRes.status, 409, JSON.stringify(blockedVoidPrintRes.json));
     assert.equal(blockedVoidPrintRes.json.error.code, "SHIPMENT_VOID_PENDING");
 
-    const easyPostVoidRefreshRes = await fetchJson(
-      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/refresh`,
-      {
-        method: "POST",
-        headers: MANAGER_HEADERS,
+    fakeEasyPost.finalizeRefund(easyPostShipmentReference);
+    const refundEventId = `evt_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    createdProviderEventIds.push(refundEventId);
+    const easyPostRefundWebhookRes = await postSignedEasyPostWebhook({
+      id: refundEventId,
+      object: "Event",
+      description: "refund.successful",
+      created_at: new Date().toISOString(),
+      result: {
+        id: `rfnd_${randomUUID().replace(/-/g, "").slice(0, 18)}`,
+        object: "Refund",
+        tracking_code: easyPostTrackingNumber,
+        shipment_id: easyPostShipmentReference,
+        status: "refunded",
       },
+    });
+    assert.equal(easyPostRefundWebhookRes.status, 200, JSON.stringify(easyPostRefundWebhookRes.json));
+    assert.equal(easyPostRefundWebhookRes.json.applied, true);
+    assert.equal(easyPostRefundWebhookRes.json.duplicate, false);
+
+    const easyPostVoidWebhookDetail = await fetchJson(
+      `/api/online-store/orders/${encodeURIComponent(easyPostOrderRes.json.order.id)}`,
+      { headers: MANAGER_HEADERS },
     );
-    assert.equal(easyPostVoidRefreshRes.status, 200, JSON.stringify(easyPostVoidRefreshRes.json));
-    assert.equal(easyPostVoidRefreshRes.json.shipment.status, "VOIDED");
-    assert.equal(easyPostVoidRefreshRes.json.shipment.providerRefundStatus, "REFUNDED");
-    assert.equal(Boolean(easyPostVoidRefreshRes.json.shipment.voidedAt), true);
+    assert.equal(easyPostVoidWebhookDetail.status, 200, JSON.stringify(easyPostVoidWebhookDetail.json));
+    assert.equal(easyPostVoidWebhookDetail.json.order.shipments[0].status, "VOIDED");
+    assert.equal(easyPostVoidWebhookDetail.json.order.shipments[0].providerRefundStatus, "REFUNDED");
+    assert.equal(Boolean(easyPostVoidWebhookDetail.json.order.shipments[0].voidedAt), true);
 
     const easyPostReplacementRes = await fetchJson(
       `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/regenerate`,
@@ -954,7 +1147,7 @@ const run = async () => {
     assert.equal(easyPostPrintRes.json.shipment.status, "PRINTED");
     assert.equal(Boolean(easyPostPrintRes.json.shipment.printedAt), true);
     assert.equal(easyPostPrintRes.json.printJob.transportMode, "DRY_RUN");
-    assert.equal(fakeEasyPost.requests.refresh.length >= 2, true);
+    assert.equal(fakeEasyPost.requests.refresh.length >= 1, true);
     assert.equal(fakeEasyPost.requests.refund.length, 1);
 
     const easyPostFailureToken = `EPFAIL-${randomUUID().slice(0, 6).toUpperCase()}`;
@@ -994,8 +1187,14 @@ const run = async () => {
     assert.equal(easyPostFailureDetail.status, 200, JSON.stringify(easyPostFailureDetail.json));
     assert.equal(easyPostFailureDetail.json.order.shipments.length, 0);
 
-    console.log("shipping provider foundation, EasyPost adapter flow, and provider-backed shipment printing passed");
+    console.log("shipping provider sync foundation, EasyPost webhook flow, and provider-backed shipment printing passed");
   } finally {
+    await prisma.shippingProviderSyncEvent.deleteMany({
+      where: {
+        providerKey: "EASYPOST",
+        providerEventId: { in: createdProviderEventIds },
+      },
+    });
     await prisma.webOrderShipment.deleteMany({
       where: {
         webOrderId: { in: createdOrderIds },

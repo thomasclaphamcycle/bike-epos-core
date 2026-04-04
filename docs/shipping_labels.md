@@ -16,6 +16,7 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - hand that payload off to a repo-local Windows-oriented print agent
 - record printed and dispatched timestamps with audit events
 - refresh provider-backed shipment state from CorePOS
+- accept automated provider-sync updates through a webhook-ready inbound path
 - request shipment void/cancel where the provider supports it
 - block print/dispatch cleanly while a void outcome is pending
 - generate a replacement shipment only after the prior shipment is fully voided
@@ -30,7 +31,7 @@ The current implementation now includes a real courier-integration foundation:
 
 ## Current architecture
 
-The flow is now split into six layers:
+The flow is now split into seven layers:
 
 1. CorePOS shipment orchestration
    - `src/services/orderService.ts`
@@ -43,22 +44,28 @@ The flow is now split into six layers:
    - provider implementations generate a normalized label artifact for CorePOS to store
    - provider configuration, enablement, and default-provider resolution stay in CorePOS settings rather than loose env-only flags
 
-3. Print-preparation contract
+3. Provider sync and reconciliation
+   - `src/services/shipping/providerSyncService.ts`
+   - accepts fetched lifecycle results plus inbound provider events
+   - applies idempotent lifecycle reconciliation into the existing shipment state fields
+   - stores inbound provider event receipts for audit/troubleshooting
+
+4. Print-preparation contract
    - shipment label payloads can be fetched directly from CorePOS
    - print preparation resolves a registered printer and returns a stable `SHIPMENT_LABEL_PRINT` payload with printer intent metadata
    - current transport target is declared as `WINDOWS_LOCAL_AGENT`
 
-4. Printer registration and default resolution
+5. Printer registration and default resolution
    - `src/services/printerService.ts`
    - registered printers are stored in CorePOS with capability, active status, transport mode, and target details
    - shipment printing can resolve either a chosen printer or the default shipping-label printer
 
-5. CorePOS print-agent delivery
+6. CorePOS print-agent delivery
    - `src/services/shipping/printAgentDeliveryService.ts`
    - sends prepared shipment print requests to the configured local agent endpoint
    - normalizes timeout, unreachable-agent, and bad-response cases
 
-6. Local Windows print agent
+7. Local Windows print agent
    - `print-agent/src/`
    - validates shipment print payloads and performs the actual transport
    - currently supports `DRY_RUN` plus real `RAW_TCP` ZPL delivery
@@ -149,6 +156,12 @@ Additional persisted lifecycle fields now track:
 - void-requested timestamp
 - voided timestamp
 
+Automated provider sync now adds:
+
+- idempotent inbound event receipts
+- verified-signature tracking for provider webhooks
+- duplicate/unmatched event handling without corrupting shipment state
+
 Operational rules:
 
 - printing never implies dispatch
@@ -157,6 +170,7 @@ Operational rules:
 - reprints stay available for active or already-dispatched shipments
 - replacement shipment generation is only allowed once the previous shipment is fully voided
 - provider refresh can restore a `VOID_PENDING` shipment back to its last active local print state if the carrier rejects the void/refund
+- provider webhooks do not imply print or dispatch; they only reconcile provider-side shipment state
 
 ## Current UI slice
 
@@ -173,6 +187,7 @@ It currently supports:
 - seeing which registered printer will be used
 - previewing stored ZPL
 - refreshing provider status
+- receiving automated provider sync updates once the current provider webhook secret is configured
 - voiding/cancelling shipments where supported
 - generating a replacement shipment after void
 - preparing a Windows-local-agent print payload
@@ -186,7 +201,7 @@ This is intentionally a narrow dispatch workflow, not a broader storefront or fu
 The intended next steps are:
 
 1. real branded courier/provider adapters
-   - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references, richer provider-status sync
+   - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references, broader provider-status sync
 
 2. richer print-agent/device support
    - local printer/device mappings beyond the first CorePOS-managed target model
