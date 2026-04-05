@@ -2733,6 +2733,13 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await expect(page.getByTestId("online-store-label-preview")).toContainText("COREPOS DEV SHIPMENT LABEL");
   await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("Shipment created");
 
+  const blockedTrackingNumber = ((await page.getByTestId("online-store-tracking-number").textContent()) ?? "").trim();
+  await page.getByTestId("online-store-scan-input").fill(blockedTrackingNumber);
+  await page.getByTestId("online-store-scan-input").press("Enter");
+  await expect(page.getByTestId("online-store-scan-notice")).toContainText("printed before dispatch");
+  await expect(page.getByTestId("online-store-scan-blocked")).toContainText("printed before dispatch");
+  await expect(page.getByTestId("online-store-scan-history")).toContainText("Blocked");
+
   await page.getByTestId("online-store-prepare-print").click();
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText('"transport": "WINDOWS_LOCAL_AGENT"');
   await expect(page.getByTestId("online-store-print-request-preview")).toContainText(`"printerId": "${registeredPrinter.printer.id}"`);
@@ -2747,15 +2754,21 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
 
   const scannedTrackingNumber = ((await page.getByTestId("online-store-tracking-number").textContent()) ?? "").trim();
   await page.getByTestId("online-store-scan-input").fill(scannedTrackingNumber);
-  await page.getByTestId("online-store-scan-submit").click();
+  await page.getByTestId("online-store-scan-input").press("Enter");
   await expect(page.getByTestId("online-store-scan-result")).toContainText(createdOrder.order.orderNumber);
   await expect(page.getByTestId("online-store-scan-result")).toContainText("Ready To Dispatch");
-  await page.getByTestId("online-store-scan-dispatch").click();
+  await expect(page.getByTestId("online-store-scan-notice")).toContainText("Press Enter again");
+  await page.getByTestId("online-store-scan-input").press("Enter");
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Dispatched");
   await expect(page.getByTestId("online-store-next-action")).toContainText("Shipment workflow complete");
   await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("Dispatched");
+  await expect(page.getByTestId("online-store-scan-input")).toHaveValue("");
+  await expect(page.getByTestId("online-store-scan-input")).toBeFocused();
+  await expect(page.getByTestId("online-store-scan-notice")).toContainText("ready for the next scan");
+  await expect(page.getByTestId("online-store-scan-session")).toContainText("1 dispatched");
+  await expect(page.getByTestId("online-store-scan-history")).toContainText("Dispatch confirmed");
 
   const finalOrder = await apiJsonWithHeaderBypass(
     request,

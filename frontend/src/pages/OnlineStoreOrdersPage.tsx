@@ -330,6 +330,17 @@ type DispatchScanLookupResponse = {
   candidates: DispatchScanCandidate[];
 };
 
+type DispatchScanSessionEntry = {
+  id: string;
+  scanValue: string;
+  outcome: "DISPATCHED" | "READY" | "BLOCKED" | "NO_MATCH" | "AMBIGUOUS";
+  orderId: string | null;
+  orderNumber: string | null;
+  trackingNumber: string | null;
+  detail: string;
+  timestamp: string;
+};
+
 const formatMoney = (pence: number) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -465,6 +476,21 @@ const getBulkActionLabel = (action: BulkShipmentOperationResponse["action"]) => 
       return "Bulk dispatch confirmation";
     default:
       return "Bulk dispatch action";
+  }
+};
+
+const getScanSessionOutcomeClassName = (outcome: DispatchScanSessionEntry["outcome"]) => {
+  switch (outcome) {
+    case "DISPATCHED":
+      return "online-orders-scan-session__item online-orders-scan-session__item--success";
+    case "READY":
+      return "online-orders-scan-session__item online-orders-scan-session__item--ready";
+    case "BLOCKED":
+    case "AMBIGUOUS":
+      return "online-orders-scan-session__item online-orders-scan-session__item--warning";
+    case "NO_MATCH":
+    default:
+      return "online-orders-scan-session__item online-orders-scan-session__item--danger";
   }
 };
 
@@ -1002,6 +1028,8 @@ export const OnlineStoreOrdersPage = () => {
   const [bulkResult, setBulkResult] = useState<BulkShipmentOperationResponse | null>(null);
   const [scanValue, setScanValue] = useState("");
   const [scanResult, setScanResult] = useState<DispatchScanLookupResponse | null>(null);
+  const [scanNotice, setScanNotice] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
+  const [scanSession, setScanSession] = useState<DispatchScanSessionEntry[]>([]);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
   const [copies, setCopies] = useState("1");
@@ -1155,6 +1183,20 @@ export const OnlineStoreOrdersPage = () => {
     scanInputRef.current?.focus();
   }, []);
 
+  const focusScanInput = useCallback((selectContents = false) => {
+    const input = scanInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      input.focus();
+      if (selectContents) {
+        input.select();
+      }
+    });
+  }, []);
+
   useEffect(() => {
     void loadPrinters();
   }, [loadPrinters]);
@@ -1281,6 +1323,28 @@ export const OnlineStoreOrdersPage = () => {
   ]);
   const detailNextStep = selectedOrder ? getDetailNextStep(selectedOrder, selectedShipment) : null;
   const bulkResultGuidance = getBulkResultGuidance(bulkResult);
+  const scanSessionSummary = useMemo(() => ({
+    dispatchedCount: scanSession.filter((entry) => entry.outcome === "DISPATCHED").length,
+    blockedCount: scanSession.filter((entry) => entry.outcome === "BLOCKED").length,
+    noMatchCount: scanSession.filter((entry) => entry.outcome === "NO_MATCH").length,
+    ambiguousCount: scanSession.filter((entry) => entry.outcome === "AMBIGUOUS").length,
+  }), [scanSession]);
+
+  const appendScanSessionEntry = useCallback((entry: Omit<DispatchScanSessionEntry, "id">) => {
+    setScanSession((current) => [
+      {
+        id: `${entry.timestamp}-${entry.scanValue}-${Math.random().toString(36).slice(2, 8)}`,
+        ...entry,
+      },
+      ...current,
+    ].slice(0, 6));
+  }, []);
+
+  const clearScanLoop = useCallback((selectContents = false) => {
+    setScanValue("");
+    setScanResult(null);
+    focusScanInput(selectContents);
+  }, [focusScanInput]);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     await Promise.all([
@@ -1566,7 +1630,7 @@ export const OnlineStoreOrdersPage = () => {
     const value = scanValue.trim();
     if (!value) {
       error("Scan or type a tracking, provider, or order reference first.");
-      scanInputRef.current?.focus();
+      focusScanInput();
       return;
     }
 
@@ -1579,9 +1643,66 @@ export const OnlineStoreOrdersPage = () => {
         await loadOrderDetail(payload.order.id);
       }
 
-      if (payload.status === "AMBIGUOUS") {
+      if (payload.status === "MATCHED" && payload.dispatchable) {
+        setScanNotice({
+          tone: "success",
+          text: `Matched ${payload.order?.orderNumber ?? "shipment"}. Press Enter again or use Confirm Dispatch once the parcel has physically left the store.`,
+        });
+        appendScanSessionEntry({
+          scanValue: payload.scanValue,
+          outcome: "READY",
+          orderId: payload.order?.id ?? null,
+          orderNumber: payload.order?.orderNumber ?? null,
+          trackingNumber: payload.shipment?.trackingNumber ?? null,
+          detail: "Ready to dispatch",
+          timestamp: new Date().toISOString(),
+        });
+      } else if (payload.status === "MATCHED") {
+        setScanNotice({
+          tone: "warning",
+          text: payload.dispatchBlockedReason ?? "CorePOS is blocking dispatch for this scan right now.",
+        });
+        appendScanSessionEntry({
+          scanValue: payload.scanValue,
+          outcome: "BLOCKED",
+          orderId: payload.order?.id ?? null,
+          orderNumber: payload.order?.orderNumber ?? null,
+          trackingNumber: payload.shipment?.trackingNumber ?? null,
+          detail: payload.dispatchBlockedReason ?? "Dispatch blocked",
+          timestamp: new Date().toISOString(),
+        });
+      } else if (payload.status === "AMBIGUOUS") {
+        setScanNotice({
+          tone: "warning",
+          text: "More than one order matched that scan. Review the candidates before dispatch.",
+        });
+        appendScanSessionEntry({
+          scanValue: payload.scanValue,
+          outcome: "AMBIGUOUS",
+          orderId: null,
+          orderNumber: null,
+          trackingNumber: null,
+          detail: payload.dispatchBlockedReason ?? "More than one order matched this scan.",
+          timestamp: new Date().toISOString(),
+        });
         error("More than one order matched that scan. Review the candidates before dispatch.");
+      } else {
+        setScanNotice({
+          tone: "error",
+          text: payload.dispatchBlockedReason ?? "No shipment or order matched that scan value.",
+        });
+        appendScanSessionEntry({
+          scanValue: payload.scanValue,
+          outcome: "NO_MATCH",
+          orderId: null,
+          orderNumber: null,
+          trackingNumber: null,
+          detail: payload.dispatchBlockedReason ?? "No dispatch match found",
+          timestamp: new Date().toISOString(),
+        });
       }
+
+      focusScanInput(true);
     });
   };
 
@@ -1590,19 +1711,31 @@ export const OnlineStoreOrdersPage = () => {
       return;
     }
 
-    const scannedValue = scanResult.scanValue;
     await runAction("scan-dispatch", async () => {
       await apiPost(scanResult.shipment.dispatchPath);
       success(`Shipment ${scanResult.shipment.trackingNumber} marked as dispatched from the scan bench.`);
-      setScanValue("");
-      await refreshSelectedOrder(scanResult.order.id);
-      const refreshedResult = await apiPost<DispatchScanLookupResponse>("/api/online-store/dispatch-scan", {
-        value: scannedValue,
+      setScanNotice({
+        tone: "success",
+        text: `Dispatch confirmed for ${scanResult.order.orderNumber}. Bench is ready for the next scan.`,
       });
-      setScanResult(refreshedResult);
-      scanInputRef.current?.focus();
+      appendScanSessionEntry({
+        scanValue: scanResult.scanValue,
+        outcome: "DISPATCHED",
+        orderId: scanResult.order.id,
+        orderNumber: scanResult.order.orderNumber,
+        trackingNumber: scanResult.shipment.trackingNumber,
+        detail: "Dispatch confirmed",
+        timestamp: new Date().toISOString(),
+      });
+      await refreshSelectedOrder(scanResult.order.id);
+      clearScanLoop();
     });
   };
+
+  const handleResetScanPanel = useCallback(() => {
+    setScanNotice(null);
+    clearScanLoop();
+  }, [clearScanLoop]);
 
   const handleOpenScanCandidate = async (orderId: string) => {
     setSelectedOrderId(orderId);
@@ -1940,6 +2073,16 @@ export const OnlineStoreOrdersPage = () => {
               className="online-orders-scan-panel__form"
               onSubmit={(event) => {
                 event.preventDefault();
+                const normalizedInput = scanValue.trim().toUpperCase();
+                if (
+                  scanResult?.status === "MATCHED"
+                  && scanResult.dispatchable
+                  && normalizedInput.length > 0
+                  && normalizedInput === scanResult.normalizedValue
+                ) {
+                  void handleDispatchScannedShipment();
+                  return;
+                }
                 void handleSubmitScanLookup();
               }}
             >
@@ -1967,6 +2110,50 @@ export const OnlineStoreOrdersPage = () => {
               </button>
             </form>
 
+            {scanNotice ? (
+              <div
+                className={`online-orders-print-notice online-orders-print-notice--${scanNotice.tone}`}
+                data-testid="online-store-scan-notice"
+              >
+                {scanNotice.text}
+              </div>
+            ) : null}
+
+            <div className="online-orders-scan-session" data-testid="online-store-scan-session">
+              <div className="online-orders-scan-session__summary">
+                <strong>Dispatch bench session</strong>
+                <span>
+                  {scanSessionSummary.dispatchedCount} dispatched
+                  {` · ${scanSessionSummary.blockedCount} blocked`}
+                  {` · ${scanSessionSummary.noMatchCount} no match`}
+                  {scanSessionSummary.ambiguousCount ? ` · ${scanSessionSummary.ambiguousCount} ambiguous` : ""}
+                </span>
+              </div>
+              {scanSession.length > 0 ? (
+                <ol className="online-orders-scan-session__list" data-testid="online-store-scan-history">
+                  {scanSession.map((entry) => (
+                    <li key={entry.id} className={getScanSessionOutcomeClassName(entry.outcome)}>
+                      <div className="online-orders-scan-session__item-header">
+                        <strong>{entry.orderNumber ?? entry.scanValue}</strong>
+                        <span className="status-badge">
+                          {entry.outcome === "NO_MATCH" ? "No Match" : humanizeToken(entry.outcome)}
+                        </span>
+                      </div>
+                      <span>
+                        {entry.trackingNumber ? `${entry.trackingNumber} · ` : ""}
+                        {entry.detail}
+                      </span>
+                      <time dateTime={entry.timestamp}>{formatDateTime(entry.timestamp)}</time>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="online-orders-scan-session__empty">
+                  The scan loop is idle. Scan a parcel identifier to load the next shipment and keep this session context warm.
+                </p>
+              )}
+            </div>
+
             {scanResult ? (
               <div
                 className={`online-orders-scan-result online-orders-scan-result--${scanResult.status.toLowerCase()}`}
@@ -1976,6 +2163,16 @@ export const OnlineStoreOrdersPage = () => {
                   <>
                     <strong>No dispatch match found</strong>
                     <p>{scanResult.dispatchBlockedReason ?? "No shipment or order matched that scan value."}</p>
+                    <div className="online-orders-scan-result__actions">
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => handleResetScanPanel()}
+                        disabled={pendingAction.length > 0}
+                      >
+                        Ready For Next Scan
+                      </button>
+                    </div>
                   </>
                 ) : null}
 
@@ -2008,6 +2205,16 @@ export const OnlineStoreOrdersPage = () => {
                         </li>
                       ))}
                     </ul>
+                    <div className="online-orders-scan-result__actions">
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => handleResetScanPanel()}
+                        disabled={pendingAction.length > 0}
+                      >
+                        Ready For Next Scan
+                      </button>
+                    </div>
                   </>
                 ) : null}
 
@@ -2033,7 +2240,7 @@ export const OnlineStoreOrdersPage = () => {
                     </div>
                     <p>
                       {scanResult.dispatchable
-                        ? "This scan resolved to an active printed shipment. Confirm dispatch only after the parcel has physically left the store."
+                        ? "This scan resolved to an active printed shipment. Press Enter again or use Confirm Dispatch once the parcel has physically left the store."
                         : scanResult.dispatchBlockedReason ?? "CorePOS is blocking dispatch for this scan right now."}
                     </p>
                     {!scanResult.dispatchable ? (
@@ -2061,6 +2268,14 @@ export const OnlineStoreOrdersPage = () => {
                         data-testid="online-store-scan-dispatch"
                       >
                         {pendingAction === "scan-dispatch" ? "Dispatching..." : "Confirm Dispatch For Scanned Shipment"}
+                      </button>
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => handleResetScanPanel()}
+                        disabled={pendingAction.length > 0}
+                      >
+                        Ready For Next Scan
                       </button>
                     </div>
                   </>
