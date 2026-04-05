@@ -23,6 +23,14 @@ import { deliverProductLabelPrintRequestToAgent } from "./productLabelPrintAgent
 const MAX_PRODUCT_LABEL_COPIES = 20;
 const PRODUCT_LABEL_LOGO_TIMEOUT_MS = 3000;
 const PRODUCT_LABEL_LOGO_MAX_BYTES = 1024 * 1024;
+const DEFAULT_PRODUCT_LABEL_LOGO_PATH = path.join(
+  process.cwd(),
+  "frontend",
+  "src",
+  "assets",
+  "branding",
+  "corepos-logo-light.png",
+);
 
 const LOGO_MIME_BY_EXTENSION = new Map<string, string>([
   [".png", "image/png"],
@@ -30,6 +38,8 @@ const LOGO_MIME_BY_EXTENSION = new Map<string, string>([
   [".jpeg", "image/jpeg"],
   [".webp", "image/webp"],
 ]);
+
+let defaultProductLabelLogoDataUrlPromise: Promise<string | null> | null = null;
 
 export type ProductLabelDirectPrintInput = ResolvePrinterSelectionInput & {
   copies?: number;
@@ -117,18 +127,38 @@ const resolveRemoteStoreLogoDataUrl = async (logoUrl: string) => {
 const resolveProductLabelLogoDataUrl = async (preferredLogoUrl: string | null | undefined) => {
   const trimmed = preferredLogoUrl?.trim() ?? "";
   if (!trimmed) {
-    return null;
+    if (!defaultProductLabelLogoDataUrlPromise) {
+      defaultProductLabelLogoDataUrlPromise = fs
+        .readFile(DEFAULT_PRODUCT_LABEL_LOGO_PATH)
+        .then((buffer) => normalizeLogoBufferToDataUrl(buffer, "image/png"))
+        .catch(() => null);
+    }
+    return defaultProductLabelLogoDataUrlPromise;
   }
 
   if (trimmed.startsWith("/uploads/store-logos/")) {
-    return resolveLocalStoreLogoDataUrl(trimmed);
+    return (await resolveLocalStoreLogoDataUrl(trimmed))
+      ?? (defaultProductLabelLogoDataUrlPromise
+        ??= fs.readFile(DEFAULT_PRODUCT_LABEL_LOGO_PATH)
+          .then((buffer) => normalizeLogoBufferToDataUrl(buffer, "image/png"))
+          .catch(() => null));
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return resolveRemoteStoreLogoDataUrl(trimmed);
+    return (await resolveRemoteStoreLogoDataUrl(trimmed))
+      ?? (defaultProductLabelLogoDataUrlPromise
+        ??= fs.readFile(DEFAULT_PRODUCT_LABEL_LOGO_PATH)
+          .then((buffer) => normalizeLogoBufferToDataUrl(buffer, "image/png"))
+          .catch(() => null));
   }
 
-  return null;
+  if (!defaultProductLabelLogoDataUrlPromise) {
+    defaultProductLabelLogoDataUrlPromise = fs
+      .readFile(DEFAULT_PRODUCT_LABEL_LOGO_PATH)
+      .then((buffer) => normalizeLogoBufferToDataUrl(buffer, "image/png"))
+      .catch(() => null);
+  }
+  return defaultProductLabelLogoDataUrlPromise;
 };
 
 const buildProductLabelPrintRequest = async (
