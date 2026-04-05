@@ -561,6 +561,34 @@ const humanizeToken = (value: string) =>
 
 const isShipmentPrintable = (status: WebOrderShipmentStatus) => PRINTABLE_SHIPMENT_STATUSES.has(status);
 
+const shipmentHasStoredLabelContent = (shipment: { labelContent: string | null | undefined }) =>
+  typeof shipment.labelContent === "string" && shipment.labelContent.trim().length > 0;
+
+const buildMissingLabelContentError = (shipment: {
+  providerKey: string;
+  providerDisplayName: string;
+}) => {
+  const recoveryHint = shipment.providerKey === "INTERNAL_MOCK_ZPL"
+    ? "Generate a replacement shipment if this label still needs to be used."
+    : `${shipment.providerDisplayName} can usually restore the label on refresh. Refresh provider status before trying to print again.`;
+
+  return new HttpError(
+    409,
+    `Stored label content is missing for this shipment. ${recoveryHint}`,
+    "SHIPMENT_LABEL_CONTENT_MISSING",
+  );
+};
+
+const assertShipmentHasStoredLabelContent = (shipment: {
+  providerKey: string;
+  providerDisplayName: string;
+  labelContent: string | null | undefined;
+}) => {
+  if (!shipmentHasStoredLabelContent(shipment)) {
+    throw buildMissingLabelContentError(shipment);
+  }
+};
+
 const buildShipmentApiPath = (shipmentId: string) => `/api/online-store/shipments/${shipmentId}`;
 
 const toShipmentResponse = (shipment: WebOrderShipmentRecord): WebOrderShipmentResponse => ({
@@ -2010,6 +2038,7 @@ export const createShipmentLabelForOrder = async (
 
 export const getShipmentLabelPayload = async (shipmentId: string) => {
   const shipmentWithOrder = await getShipmentWithOrderOrThrow(shipmentId);
+  assertShipmentHasStoredLabelContent(shipmentWithOrder);
   const shipment = toShipmentResponse(shipmentWithOrder);
   const order = toOrderDetail(shipmentWithOrder.webOrder);
 
@@ -2200,6 +2229,7 @@ export const prepareShipmentLabelPrint = async (
       throw new HttpError(404, "Web order shipment not found", "WEB_ORDER_SHIPMENT_NOT_FOUND");
     }
     assertShipmentActionable(shipment);
+    assertShipmentHasStoredLabelContent(shipment);
 
     const nextStatus = shipment.status === "LABEL_READY" ? "PRINT_PREPARED" : shipment.status;
     const saved = await tx.webOrderShipment.update({

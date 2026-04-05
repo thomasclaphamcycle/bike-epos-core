@@ -171,9 +171,11 @@ Operational rules:
 - printing never implies dispatch
 - dispatch never recreates a shipment
 - void-pending and voided shipments cannot be prepared or printed
+- missing stored label content now blocks raw-label access and print preparation with an explicit recovery error instead of letting an empty print payload through
 - reprints stay available for active or already-dispatched shipments
 - replacement shipment generation is only allowed once the previous shipment is fully voided
 - provider refresh can restore a `VOID_PENDING` shipment back to its last active local print state if the carrier rejects the void/refund
+- EasyPost refresh can also re-fetch the stored ZPL document if the local label content has gone missing and the provider still exposes the purchased label
 - provider webhooks do not imply print or dispatch; they only reconcile provider-side shipment state
 
 ## Current UI slice
@@ -188,6 +190,7 @@ It currently supports:
 - choosing between the built-in mock provider and configured provider-backed shipment creation paths
 - viewing shipment/tracking state
 - seeing a compact shipment activity timeline built from persisted lifecycle timestamps
+- surfacing provider-sync exceptions more clearly in queue hints, next-step guidance, and shipment readiness
 - seeing which registered printer will be used
 - previewing stored ZPL
 - refreshing provider status

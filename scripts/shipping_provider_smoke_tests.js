@@ -932,6 +932,20 @@ const run = async () => {
     assert.equal(Boolean(easyPostShipmentRes.json.shipment.providerSyncedAt), true);
     const easyPostShipmentId = easyPostShipmentRes.json.shipment.id;
 
+    await prisma.webOrderShipment.update({
+      where: { id: easyPostShipmentId },
+      data: { labelContent: "   " },
+    });
+
+    const missingEasyPostLabelRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/label`,
+      {
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(missingEasyPostLabelRes.status, 409, JSON.stringify(missingEasyPostLabelRes.json));
+    assert.equal(missingEasyPostLabelRes.json.error.code, "SHIPMENT_LABEL_CONTENT_MISSING");
+
     assert.equal(fakeEasyPost.requests.create.length, 1);
     assert.equal(fakeEasyPost.requests.buy.length, 1);
     assert.equal(fakeEasyPost.requests.labelDownloads.length, 1);
@@ -966,6 +980,16 @@ const run = async () => {
     assert.equal(easyPostRefreshRes.json.shipment.status, "LABEL_READY");
     assert.equal(easyPostRefreshRes.json.shipment.providerStatus, "PRE_TRANSIT");
     assert.equal(easyPostRefreshRes.json.shipment.providerRefundStatus, null);
+    assert.equal(easyPostRefreshRes.json.shipment.providerMetadata.labelRecoveredOnSync, true);
+
+    const recoveredEasyPostLabelRes = await fetchJson(
+      `/api/online-store/shipments/${encodeURIComponent(easyPostShipmentId)}/label`,
+      {
+        headers: MANAGER_HEADERS,
+      },
+    );
+    assert.equal(recoveredEasyPostLabelRes.status, 200, JSON.stringify(recoveredEasyPostLabelRes.json));
+    assert.equal(recoveredEasyPostLabelRes.json.document.content.includes("EASYPOST"), true);
 
     const easyPostShipmentReference = easyPostRefreshRes.json.shipment.providerShipmentReference;
     const easyPostTrackingReference = easyPostRefreshRes.json.shipment.providerTrackingReference;

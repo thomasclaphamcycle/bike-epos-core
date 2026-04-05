@@ -76,6 +76,7 @@ export type ShippingProviderShipmentLifecycleInput = {
     providerStatus?: string | null;
     providerRefundStatus?: string | null;
     providerMetadata?: Record<string, unknown> | null;
+    hasStoredLabelDocument: boolean;
     labelGeneratedAt: Date;
   };
 };

@@ -428,15 +428,28 @@ const needsCloseoutReviewForOrder = (order: WebOrderSummary) =>
     || order.latestShipment?.status === "VOIDED"
   );
 
+const getShipmentRecoveryHint = (shipment: WebOrderShipment) => {
+  if (shipment.providerSyncError) {
+    return `Provider review needed: ${shipment.providerSyncError}`;
+  }
+  if (shipment.status === "VOID_PENDING") {
+    return "Void pending provider confirmation";
+  }
+  if (shipment.status === "VOIDED") {
+    return "Voided shipment; replacement may be needed";
+  }
+  return null;
+};
+
 const getOrderDispatchQueueHint = (order: WebOrderSummary) => {
   if (order.latestShipment?.dispatchedAt || order.status === "DISPATCHED") {
     return "Dispatched";
   }
-  if (order.latestShipment?.status === "VOID_PENDING") {
-    return "Void pending provider confirmation";
-  }
-  if (order.latestShipment?.status === "VOIDED") {
-    return "Voided shipment; replacement may be needed";
+  if (order.latestShipment) {
+    const recoveryHint = getShipmentRecoveryHint(order.latestShipment);
+    if (recoveryHint) {
+      return recoveryHint;
+    }
   }
   if (order.latestShipment?.printedAt) {
     return "Printed and ready to dispatch";
@@ -488,6 +501,12 @@ const getDetailNextStep = (order: WebOrderDetail, shipment: WebOrderShipment | n
     return {
       title: "Next: regenerate if still shipping",
       detail: "Voided shipments cannot be printed or dispatched. Generate a replacement shipment if the order still needs to go out.",
+    };
+  }
+  if (shipment.providerSyncError) {
+    return {
+      title: "Next: review provider mismatch",
+      detail: `CorePOS kept the shipment available, but the last provider sync needs review: ${shipment.providerSyncError}`,
     };
   }
   if (!shipment.printedAt) {
@@ -700,6 +719,12 @@ const getDispatchRecommendation = (
       detail: "This shipment is no longer active. Create a replacement only if the order still needs to be shipped.",
     };
   }
+  if (shipment.providerSyncError) {
+    return {
+      title: "Review the provider exception before closeout",
+      detail: `CorePOS still has a usable shipment record, but the last provider sync reported an issue: ${shipment.providerSyncError}`,
+    };
+  }
 
   if (!printer) {
     return {
@@ -841,6 +866,13 @@ const getDispatchReadiness = (
                   headline: "Voided",
                   detail: "This label is no longer active and cannot be printed or dispatched.",
                 }
+              : shipment.providerSyncError
+                ? {
+                    label: "Shipment",
+                    state: "pending",
+                    headline: "Provider review needed",
+                    detail: shipment.providerSyncError,
+                  }
               : {
                   label: "Shipment",
                   state: "ready",
@@ -2979,7 +3011,7 @@ export const OnlineStoreOrdersPage = () => {
 
                       {selectedShipment?.providerSyncError ? (
                         <div className="online-orders-print-notice online-orders-print-notice--error">
-                          {selectedShipment.providerSyncError}
+                          {selectedShipment.providerSyncError} Refresh provider status before closeout, reprint, or replacement work.
                         </div>
                       ) : null}
 

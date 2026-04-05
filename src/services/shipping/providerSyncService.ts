@@ -137,6 +137,9 @@ const normalizeOptionalText = (value: string | null | undefined) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const shipmentHasStoredLabelContent = (shipment: { labelContent: string | null | undefined }) =>
+  typeof shipment.labelContent === "string" && shipment.labelContent.trim().length > 0;
+
 const asProviderMetadataRecord = (value: Prisma.JsonValue | null): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -310,6 +313,7 @@ export const buildShipmentLifecycleInput = (
     providerStatus: shipment.providerStatus ?? null,
     providerRefundStatus: shipment.providerRefundStatus ?? null,
     providerMetadata: asProviderMetadataRecord(shipment.providerMetadata),
+    hasStoredLabelDocument: shipmentHasStoredLabelContent(shipment),
     labelGeneratedAt: shipment.labelGeneratedAt,
   },
 });
