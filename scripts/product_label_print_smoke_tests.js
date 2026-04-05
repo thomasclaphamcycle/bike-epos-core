@@ -127,16 +127,30 @@ const run = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        copies: 1,
+        copies: 3,
       }),
     });
     assert.equal(printRes.status, 201, JSON.stringify(printRes.json));
     assert.equal(printRes.json.printer.transportMode, "DRY_RUN");
     assert.equal(printRes.json.printJob.simulated, true);
+    assert.equal(printRes.json.printJob.copies, 3);
     assert.equal(printRes.json.printJob.outputPath.endsWith(".png"), true);
 
     const renderedLabel = await fs.readFile(printRes.json.printJob.outputPath);
     assert.equal(renderedLabel.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+
+    const invalidCopiesRes = await fetchJson(`/api/variants/${encodeURIComponent(product.variants[0].id)}/product-label/print`, {
+      method: "POST",
+      headers: {
+        ...STAFF_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        copies: 0,
+      }),
+    });
+    assert.equal(invalidCopiesRes.status, 400, JSON.stringify(invalidCopiesRes.json));
+    assert.equal(invalidCopiesRes.json.error.code, "INVALID_PRODUCT_LABEL_PRINT");
 
     const clearDefaultRes = await fetchJson("/api/settings/printers/default-product-label", {
       method: "PUT",

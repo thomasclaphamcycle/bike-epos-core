@@ -240,6 +240,39 @@ npm run print-agent:package:dymo
 
 This gives the Windows Dymo host a small copyable EXE folder instead of a repo checkout and npm workflow.
 
+## Dymo ops note
+
+Keep the roles split clearly:
+
+- Mac/CorePOS backend host:
+  - runs the main CorePOS backend
+  - owns inventory search, product-label print requests, and printer selection
+  - sends product-label jobs to the Windows Dymo helper over `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL`
+- Windows Dymo helper host:
+  - runs `corepos-dymo-product-label-agent.exe`
+  - must have the Dymo printer installed in Windows
+  - accepts `/jobs/product-label` and prints to the configured Windows printer name
+
+For day-to-day reliability, give the Windows Dymo host a fixed IP or DHCP reservation and point:
+
+```bash
+COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL=http://<fixed-windows-ip>:3212
+```
+
+Quick health check from the CorePOS host:
+
+```bash
+curl http://<fixed-windows-ip>:3212/health
+```
+
+If direct product-label printing stops working:
+
+1. Confirm the Windows Dymo helper EXE is running on the Windows host.
+2. Open `http://<fixed-windows-ip>:3212/health` and confirm it responds.
+3. Check the configured Dymo printer is still installed in Windows and matches the registered CorePOS printer record.
+4. Confirm the Windows host IP and shared secret still match the CorePOS backend environment.
+5. If labels are urgent, use the existing browser-print fallback from the product-label page while the helper route is being fixed.
+
 ## Relationship to courier integration
 
 The print agent remains deliberately downstream of courier generation.

@@ -11,6 +11,7 @@ const {
   loginViaUi,
   markWebOrderPackedViaBypass,
   parseDateKeyAtNoon,
+  searchInventoryRows,
   searchOnlineStoreOrders,
   seedCatalogVariant,
   uniqueToken,
@@ -2384,6 +2385,72 @@ test("Login then inventory adjust page can increment on-hand quantity", async ({
 
   await expect(page.locator("#submit-status")).toContainText("Adjustment recorded.");
   await expect(page.locator("#onhand-result")).toContainText(String(beforeOnHand + 1));
+});
+
+test("Inventory search can direct-print multiple product-label copies without leaving the workflow", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "inventory-direct-print-ui",
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "inventory-direct-print",
+    initialOnHand: 3,
+  });
+  const printerKey = `E2E_DYMO_${uniqueToken("dymo-ui").replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`;
+
+  await apiJsonWithHeaderBypass(request, "POST", "/api/settings/printers", "ADMIN", {
+    data: {
+      name: "E2E Dymo Product Labels",
+      key: printerKey,
+      printerFamily: "DYMO_LABEL",
+      transportMode: "DRY_RUN",
+      location: "Playwright packing bench",
+      notes: "Inventory direct-print Playwright printer",
+      setAsDefaultProductLabel: true,
+    },
+  });
+
+  await loginViaUi(page, credentials, "/inventory", { surface: "frontend" });
+  await searchInventoryRows(page, seeded.sku);
+  await expect(page.getByTestId(`inventory-row-${seeded.variant.id}`)).toBeVisible();
+
+  await page.getByTestId(`inventory-direct-print-3-${seeded.variant.id}`).click();
+
+  await expect(page.locator(".toast.toast-success").last()).toContainText("3 copies");
+  await expect(page.getByTestId(`inventory-print-feedback-${seeded.variant.id}`)).toContainText("3 copies");
+  await expect(page.getByTestId(`inventory-open-label-page-${seeded.variant.id}`)).toBeVisible();
+});
+
+test("Inventory direct-print shows a clear fallback message when the Dymo helper is unavailable", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "STAFF",
+    prefix: "inventory-direct-print-offline",
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "inventory-direct-print-offline",
+    initialOnHand: 2,
+  });
+
+  await loginViaUi(page, credentials, "/inventory", { surface: "frontend" });
+  await searchInventoryRows(page, seeded.sku);
+  await expect(page.getByTestId(`inventory-row-${seeded.variant.id}`)).toBeVisible();
+
+  await page.route(`**/api/variants/${seeded.variant.id}/product-label/print`, async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "PRODUCT_LABEL_PRINT_AGENT_UNREACHABLE",
+          message: "Product-label print agent could not be reached: connect ECONNREFUSED",
+        },
+      }),
+    });
+  });
+
+  await page.getByTestId(`inventory-direct-print-1-${seeded.variant.id}`).click();
+  await expect(page.locator(".toast.toast-error").last()).toContainText("Label print helper unavailable");
+  await expect(page.getByTestId(`inventory-print-feedback-${seeded.variant.id}`)).toContainText("Label print helper unavailable");
 });
 
 test("Stocktake scan mode and bulk import build counted lines quickly", async ({ page, request }) => {

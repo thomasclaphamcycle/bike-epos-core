@@ -684,6 +684,12 @@ body {
   gap: 12px;
 }
 
+.product-label-print-page__quantity-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .product-label-print-page__copy {
   display: grid;
   gap: 8px;
@@ -872,6 +878,10 @@ body {
 
   .product-label-print-page__actions {
     align-items: stretch;
+  }
+
+  .product-label-print-page__quantity-actions {
+    width: 100%;
   }
 
   .product-label {
@@ -11406,6 +11416,35 @@ body.rota-row-drag-copy-active {
 .button-link-compact {
   padding: 6px 10px;
   font-size: 0.88rem;
+}
+
+.inventory-row-actions {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.inventory-row-actions__group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.inventory-row-actions__print-primary {
+  font-weight: 700;
+}
+
+.inventory-row-actions__feedback {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.inventory-row-actions__feedback-success {
+  color: #15603a;
+}
+
+.inventory-row-actions__feedback-error {
+  color: #8b1f1f;
 }
 
 .customer-site-shell {

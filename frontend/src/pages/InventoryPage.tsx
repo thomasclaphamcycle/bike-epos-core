@@ -5,6 +5,11 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { useAppConfig } from "../config/appConfig";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
+import {
+  getProductLabelDirectPrintErrorMessage,
+  getProductLabelDirectPrintSuccessMessage,
+  printProductLabelDirect,
+} from "../features/labels/productLabelPrinting";
 
 type InventoryRow = {
   variantId: string;
@@ -88,7 +93,7 @@ export const InventoryPage = () => {
   const appConfig = useAppConfig();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { error } = useToasts();
+  const { error, success } = useToasts();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
@@ -100,6 +105,8 @@ export const InventoryPage = () => {
 
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [printingState, setPrintingState] = useState<{ variantId: string; copies: number } | null>(null);
+  const [rowPrintFeedback, setRowPrintFeedback] = useState<Record<string, { message: string; tone: "success" | "error" }>>({});
   const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const query = useMemo(() => {
@@ -245,6 +252,34 @@ export const InventoryPage = () => {
     [lowStockThreshold, visibleRows],
   );
 
+  const handleDirectPrint = async (row: InventoryRow, copies: number) => {
+    setPrintingState({ variantId: row.variantId, copies });
+    try {
+      const payload = await printProductLabelDirect(row.variantId, { copies });
+      const message = getProductLabelDirectPrintSuccessMessage(payload);
+      setRowPrintFeedback((current) => ({
+        ...current,
+        [row.variantId]: {
+          message,
+          tone: "success",
+        },
+      }));
+      success(message);
+    } catch (printError) {
+      const message = getProductLabelDirectPrintErrorMessage(printError);
+      setRowPrintFeedback((current) => ({
+        ...current,
+        [row.variantId]: {
+          message,
+          tone: "error",
+        },
+      }));
+      error(message);
+    } finally {
+      setPrintingState(null);
+    }
+  };
+
   return (
     <div className="page-shell">
       <section className="card">
@@ -271,6 +306,7 @@ export const InventoryPage = () => {
           <label className="grow">
             Search
             <input
+              data-testid="inventory-search-input"
               ref={searchInputRef}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -404,6 +440,7 @@ export const InventoryPage = () => {
                 visibleRows.map((row) => (
                   <tr
                     key={row.variantId}
+                    data-testid={`inventory-row-${row.variantId}`}
                     className="clickable-row"
                     onClick={() => navigate(`/inventory/${row.variantId}`)}
                   >
@@ -449,27 +486,66 @@ export const InventoryPage = () => {
                       </div>
                     </td>
                     <td>
-                      <div className="actions-inline">
-                        <button
-                          type="button"
-                          className="button-link button-link-compact"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            navigate(`/inventory/${row.variantId}?mode=count`);
-                          }}
-                        >
-                          Stocktake
-                        </button>
-                        <button
-                          type="button"
-                          className="button-link button-link-compact"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            navigate(`/inventory/${row.variantId}`);
-                          }}
-                        >
-                          Adjust stock
-                        </button>
+                      <div className="inventory-row-actions">
+                        <div className="inventory-row-actions__group">
+                          {[1, 2, 3].map((copies) => {
+                            const isPrinting = printingState?.variantId === row.variantId && printingState.copies === copies;
+                            const isRowPrinting = printingState?.variantId === row.variantId;
+                            return (
+                              <button
+                                key={copies}
+                                type="button"
+                                data-testid={`inventory-direct-print-${copies}-${row.variantId}`}
+                                className={copies === 1 ? "button-link button-link-compact inventory-row-actions__print-primary" : "button-link button-link-compact"}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleDirectPrint(row, copies);
+                                }}
+                                disabled={isRowPrinting}
+                              >
+                                {isPrinting ? `Printing ${copies}...` : copies === 1 ? "Print label" : `Print ${copies}`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="inventory-row-actions__group">
+                          <button
+                            type="button"
+                            className="button-link button-link-compact"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/inventory/${row.variantId}?mode=count`);
+                            }}
+                          >
+                            Stocktake
+                          </button>
+                          <button
+                            type="button"
+                            className="button-link button-link-compact"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              navigate(`/inventory/${row.variantId}`);
+                            }}
+                          >
+                            Adjust stock
+                          </button>
+                          <Link
+                            className="button-link button-link-compact"
+                            data-testid={`inventory-open-label-page-${row.variantId}`}
+                            to={`/inventory/${row.variantId}/label`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Label page
+                          </Link>
+                        </div>
+                        {rowPrintFeedback[row.variantId] ? (
+                          <div
+                            className={`inventory-row-actions__feedback inventory-row-actions__feedback-${rowPrintFeedback[row.variantId].tone}`}
+                            data-testid={`inventory-print-feedback-${row.variantId}`}
+                          >
+                            {rowPrintFeedback[row.variantId].message}
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
