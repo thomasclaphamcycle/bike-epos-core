@@ -77,7 +77,7 @@ reportRouter.get(
   requireRoleAtLeast("MANAGER"),
   getWorkshopDailyReportCsvHandler,
 );
-reportRouter.get("/inventory/on-hand", getInventoryOnHandReportHandler);
+reportRouter.get("/inventory/on-hand", requireRoleAtLeast("MANAGER"), getInventoryOnHandReportHandler);
 reportRouter.get(
   "/inventory/on-hand.csv",
   requireRoleAtLeast("MANAGER"),

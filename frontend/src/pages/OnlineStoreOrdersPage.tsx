@@ -2336,18 +2336,22 @@ export const OnlineStoreOrdersPage = () => {
           ) : null}
 
           {loadingOrders ? (
-            <EmptyState title="Loading web orders" description="Pulling the current dispatch queue from CorePOS." />
+            <div data-testid="online-store-orders-loading">
+              <EmptyState title="Loading web orders" description="Pulling the current dispatch queue from CorePOS." />
+            </div>
           ) : null}
 
           {!loadingOrders && (!ordersPayload || ordersPayload.orders.length === 0) ? (
-            <EmptyState
-              title="No web orders yet"
-              description="Create one through POST /api/online-store/orders or run the demo seed to populate a dispatch-friendly test queue."
-            />
+            <div data-testid="online-store-orders-empty">
+              <EmptyState
+                title="No web orders yet"
+                description="Create one through POST /api/online-store/orders or run the demo seed to populate a dispatch-friendly test queue."
+              />
+            </div>
           ) : null}
 
           {!loadingOrders && ordersPayload && ordersPayload.orders.length > 0 ? (
-            <div className="online-orders-list" role="list">
+            <div className="online-orders-list" role="list" data-testid="online-store-orders-list">
               {ordersPayload.orders.map((order) => {
                 const isSelected = order.id === selectedOrderId;
                 const isChecked = selectedOrderIds.includes(order.id);

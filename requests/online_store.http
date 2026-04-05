@@ -5,6 +5,9 @@
 @shipmentId = 00000000-0000-4000-8000-000000000000
 @printerId = 00000000-0000-4000-8000-000000000000
 
+### These request examples intentionally use the dev/test header-auth fallback described in docs/auth.md.
+### Outside NODE_ENV=test, also send X-Internal-Auth when ALLOW_HEADER_AUTH=1 is enabled.
+
 ### List web orders (MANAGER+)
 GET {{baseUrl}}/api/online-store/orders?take=20&skip=0
 X-Staff-Role: {{managerRole}}
