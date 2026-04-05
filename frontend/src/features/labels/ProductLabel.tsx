@@ -1,5 +1,3 @@
-import { useState } from "react";
-import CorePosLogo from "../../components/branding/CorePosLogo";
 import { BarcodeGraphic } from "./BarcodeGraphic";
 
 type ProductLabelProps = {
@@ -14,47 +12,50 @@ type ProductLabelProps = {
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
+const normalizeShopName = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^corepos demo store ltd$/i.test(trimmed)) {
+    return "CorePOS";
+  }
+  return trimmed;
+};
+
+const normalizeVariantName = (productName: string, variantName?: string | null) => {
+  const trimmed = variantName?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.localeCompare(productName.trim(), undefined, { sensitivity: "accent" }) === 0) {
+    return "";
+  }
+  return trimmed;
+};
+
 export const ProductLabel = ({
   shopName = "CorePOS",
   productName,
   variantName,
-  brand,
   sku,
   pricePence,
   barcode,
 }: ProductLabelProps) => {
-  const [showLogo, setShowLogo] = useState(true);
-  const title = [productName, variantName].filter(Boolean).join(" · ") || productName;
-  const secondaryLine = [brand, sku].filter(Boolean).join(" · ") || "Preferred operational barcode";
-  const barcodeText = barcode || "Barcode pending";
+  const shopLine = normalizeShopName(shopName);
+  const variantLine = normalizeVariantName(productName, variantName);
+  const barcodeText = sku || barcode || "Barcode pending";
 
   return (
     <article className="product-label" data-testid="product-label">
       <div className="product-label__header">
-        <div className="product-label__brand-block">
-          {showLogo ? (
-            <CorePosLogo
-              variant="icon"
-              size={24}
-              className="product-label__logo"
-              onError={() => setShowLogo(false)}
-            />
-          ) : (
-            <div className="product-label__logo-fallback" aria-hidden="true">
-              CP
-            </div>
-          )}
-          <div className="product-label__brand-copy">
-            <span className="product-label__brand-name">{shopName}</span>
-            <span className="product-label__brand-subtitle">57 x 32 label</span>
-          </div>
-        </div>
+        {shopLine ? <span className="product-label__brand-name">{shopLine}</span> : <span />}
         <div className="product-label__price">{formatMoney(pricePence)}</div>
       </div>
 
       <div className="product-label__body">
-        <p className="product-label__secondary">{secondaryLine}</p>
-        <h1 className="product-label__title">{title}</h1>
+        <h1 className="product-label__title">{productName}</h1>
+        {variantLine ? <p className="product-label__variant">{variantLine}</p> : null}
       </div>
 
       <div className="product-label__barcode">
