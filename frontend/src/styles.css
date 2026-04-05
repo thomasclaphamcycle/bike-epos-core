@@ -730,16 +730,18 @@ body {
 }
 
 .product-label__logo-wrap {
-  min-height: 24mm;
+  flex: 0 0 auto;
+  min-height: 0;
   display: grid;
   place-items: start center;
-  margin-bottom: 1.95mm;
+  margin-top: 0.85mm;
+  margin-bottom: 1.85mm;
 }
 
 .product-label__logo {
   display: block;
   max-width: 34mm;
-  max-height: 15.2mm;
+  max-height: 8.6mm;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -762,7 +764,7 @@ body {
 
 .product-label__body {
   display: grid;
-  gap: 1.15mm;
+  gap: 0.7mm;
   min-height: 0;
   align-content: start;
 }
@@ -785,7 +787,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-top: 0.15mm;
+  margin-top: 0.05mm;
   margin-bottom: 0.05mm;
   min-height: 2.2mm;
   color: #6b7280;
@@ -817,13 +819,13 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 1.2mm;
+  margin-bottom: 1.65mm;
 }
 
 .product-label__barcode {
   display: grid;
   gap: 0.45mm;
-  padding-top: 0.8mm;
+  padding-top: 0.25mm;
   justify-items: center;
 }
 
@@ -932,13 +934,15 @@ body {
   }
 
   .product-label__logo-wrap {
-    min-height: 21mm;
-    margin-bottom: 1.45mm;
+    flex: 0 0 auto;
+    min-height: 0;
+    margin-top: 0.65mm;
+    margin-bottom: 1.35mm;
   }
 
   .product-label__logo {
     max-width: 30.5mm;
-    max-height: 13.6mm;
+    max-height: 7.4mm;
   }
 
   .product-label__meta-line {
@@ -948,7 +952,7 @@ body {
   }
 
   .product-label__body {
-    gap: 0.9mm;
+    gap: 0.55mm;
   }
 
   .product-label__title {
@@ -957,7 +961,7 @@ body {
   }
 
   .product-label__detail-line {
-    margin-top: 0.1mm;
+    margin-top: 0;
     margin-bottom: 0.05mm;
     min-height: 2mm;
   }
@@ -971,7 +975,7 @@ body {
   }
 
   .product-label__price-band {
-    margin-bottom: 1mm;
+    margin-bottom: 1.35mm;
   }
 
   .barcode-graphic {
