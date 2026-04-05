@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api/client";
+import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { ProductLabel } from "../features/labels/ProductLabel";
+import {
+  getProductLabelDirectPrintErrorMessage,
+  getProductLabelDirectPrintSuccessMessage,
+  printProductLabelDirect,
+  type ProductLabelDirectPrintResponse,
+} from "../features/labels/productLabelPrinting";
 
 type VariantLabelDetail = {
   id: string;
@@ -20,28 +26,12 @@ type VariantLabelDetail = {
   };
 };
 
-type ProductLabelDirectPrintResponse = {
-  printer: {
-    id: string;
-    key: string;
-    name: string;
-    transportMode: "DRY_RUN" | "WINDOWS_PRINTER";
-    resolutionSource: "selected" | "default";
-  };
-  printJob: {
-    jobId: string;
-    printerTarget: string;
-    simulated: boolean;
-    outputPath: string | null;
-  };
-};
-
 export const ProductLabelPrintPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
   const { error, success } = useToasts();
   const [variant, setVariant] = useState<VariantLabelDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [directPrinting, setDirectPrinting] = useState(false);
+  const [directPrintingCopies, setDirectPrintingCopies] = useState<number | null>(null);
   const [lastDirectPrint, setLastDirectPrint] = useState<ProductLabelDirectPrintResponse | null>(null);
 
   useEffect(() => {
@@ -105,26 +95,20 @@ export const ProductLabelPrintPage = () => {
     return <div className="page-shell"><p>Missing product label id.</p></div>;
   }
 
-  const handleDirectPrint = async () => {
+  const handleDirectPrint = async (copies: number) => {
     if (!variantId || !variant) {
       return;
     }
 
-    setDirectPrinting(true);
+    setDirectPrintingCopies(copies);
     try {
-      const payload = await apiPost<ProductLabelDirectPrintResponse>(
-        `/api/variants/${encodeURIComponent(variantId)}/product-label/print`,
-      );
+      const payload = await printProductLabelDirect(variantId, { copies });
       setLastDirectPrint(payload);
-      success(
-        payload.printJob.simulated
-          ? `Dry-run product label rendered for ${payload.printer.name}.`
-          : `Product label sent to ${payload.printer.name}.`,
-      );
+      success(getProductLabelDirectPrintSuccessMessage(payload));
     } catch (printError) {
-      error(printError instanceof Error ? printError.message : "Failed to direct-print product label");
+      error(getProductLabelDirectPrintErrorMessage(printError));
     } finally {
-      setDirectPrinting(false);
+      setDirectPrintingCopies(null);
     }
   };
 
@@ -132,15 +116,24 @@ export const ProductLabelPrintPage = () => {
     <div className="product-label-print-page">
       <div className="product-label-print-page__actions">
         <Link to={`/inventory/${variantId}`}>Back to inventory detail</Link>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void handleDirectPrint()}
-          disabled={!variant || loading || directPrinting}
-        >
-          {directPrinting ? "Printing..." : "Direct print to Dymo"}
-        </button>
-        <button type="button" onClick={() => window.print()} disabled={!variant || loading || directPrinting}>
+        <div className="product-label-print-page__quantity-actions">
+          {[1, 2, 3].map((copies) => (
+            <button
+              key={copies}
+              type="button"
+              className={copies === 1 ? "primary" : undefined}
+              onClick={() => void handleDirectPrint(copies)}
+              disabled={!variant || loading || directPrintingCopies !== null}
+            >
+              {directPrintingCopies === copies
+                ? `Printing ${copies}...`
+                : copies === 1
+                  ? "Direct print 1"
+                  : `Print ${copies}`}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => window.print()} disabled={!variant || loading || directPrintingCopies !== null}>
           {loading ? "Loading..." : "Browser print fallback"}
         </button>
       </div>
@@ -161,7 +154,7 @@ export const ProductLabelPrintPage = () => {
               : `Sent to ${lastDirectPrint.printer.name} via ${lastDirectPrint.printer.transportMode}.`}
           </p>
           <p className="muted-text">
-            Job {lastDirectPrint.printJob.jobId} · target {lastDirectPrint.printJob.printerTarget}
+            Job {lastDirectPrint.printJob.jobId} · {lastDirectPrint.printJob.copies} cop{lastDirectPrint.printJob.copies === 1 ? "y" : "ies"} · target {lastDirectPrint.printJob.printerTarget}
             {lastDirectPrint.printJob.outputPath ? ` · ${lastDirectPrint.printJob.outputPath}` : ""}
           </p>
         </div>
