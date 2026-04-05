@@ -51,6 +51,11 @@ export type ProductLabelDirectPrintResponse = {
   printJob: ProductLabelPrintAgentJob;
 };
 
+export type ProductLabelRenderedDocumentResponse = {
+  variant: Awaited<ReturnType<typeof getVariantById>>;
+  renderedDocument: ReturnType<typeof renderProductLabelDocument>;
+};
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -165,29 +170,12 @@ const buildProductLabelPrintRequest = async (
   variantId: string,
   input: ProductLabelDirectPrintInput,
 ): Promise<{ variant: Awaited<ReturnType<typeof getVariantById>>; printer: ResolvedProductLabelPrinter; printRequest: ProductLabelPrintRequest }> => {
-  const [variant, store, printer] = await Promise.all([
-    getVariantById(variantId),
-    listStoreInfoSettings(),
+  const [{ variant, renderedDocument, label }, printer] = await Promise.all([
+    renderProductLabelDocumentForVariant(variantId),
     resolveProductLabelPrinterSelection(input),
   ]);
 
   const copies = normalizeCopies(input.copies);
-  const shopName = store.businessName || store.name || "CorePOS";
-  const variantName = variant.name || variant.option || null;
-  const logoDataUrl = await resolveProductLabelLogoDataUrl(store.preferredLogoUrl);
-  const label = {
-    shopName,
-    productName: variant.product?.name || variant.sku,
-    variantName,
-    brand: variant.product?.brand || null,
-    sku: variant.sku,
-    pricePence: variant.retailPricePence,
-    barcode: variant.barcode,
-  };
-  const renderedDocument = renderProductLabelDocument({
-    ...label,
-    logoDataUrl,
-  } satisfies ProductLabelRenderInput);
 
   return {
     variant,
@@ -221,6 +209,37 @@ const buildProductLabelPrintRequest = async (
         sourceLabel: variant.sku,
       },
     },
+  };
+};
+
+export const renderProductLabelDocumentForVariant = async (
+  variantId: string,
+): Promise<ProductLabelRenderedDocumentResponse & { label: ProductLabelPrintRequest["label"] }> => {
+  const [variant, store] = await Promise.all([
+    getVariantById(variantId),
+    listStoreInfoSettings(),
+  ]);
+  const shopName = store.businessName || store.name || "CorePOS";
+  const variantName = variant.name || variant.option || null;
+  const logoDataUrl = await resolveProductLabelLogoDataUrl(store.preferredLogoUrl);
+  const label = {
+    shopName,
+    productName: variant.product?.name || variant.sku,
+    variantName,
+    brand: variant.product?.brand || null,
+    sku: variant.sku,
+    pricePence: variant.retailPricePence,
+    barcode: variant.barcode,
+  };
+  const renderedDocument = renderProductLabelDocument({
+    ...label,
+    logoDataUrl,
+  } satisfies ProductLabelRenderInput);
+
+  return {
+    variant,
+    renderedDocument,
+    label,
   };
 };
 

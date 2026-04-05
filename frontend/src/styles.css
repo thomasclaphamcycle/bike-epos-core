@@ -711,6 +711,21 @@ body {
   max-width: 57mm;
 }
 
+.product-label-print-page__image-preview {
+  display: block;
+  width: 57mm;
+  height: 32mm;
+  min-height: 32mm;
+  max-height: 32mm;
+  border-radius: 2mm;
+  border: 1px solid rgba(8, 23, 40, 0.12);
+  box-shadow:
+    0 16px 40px rgba(8, 23, 40, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  background: #ffffff;
+  object-fit: contain;
+}
+
 .product-label {
   width: 57mm;
   height: 32mm;
@@ -922,6 +937,12 @@ body {
     place-items: start stretch;
     width: 57mm;
     max-width: 57mm;
+  }
+
+  .product-label-print-page__image-preview {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .product-label {

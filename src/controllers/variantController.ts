@@ -5,7 +5,7 @@ import {
   listVariants,
   updateVariantById,
 } from "../services/productService";
-import { printProductLabelDirect } from "../services/productLabelPrintService";
+import { printProductLabelDirect, renderProductLabelDocumentForVariant } from "../services/productLabelPrintService";
 import { HttpError } from "../utils/http";
 import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
@@ -183,6 +183,17 @@ export const printVariantProductLabelDirectHandler = async (req: Request, res: R
   });
 
   res.status(201).json(response);
+};
+
+export const getVariantProductLabelDocumentHandler = async (req: Request, res: Response) => {
+  const payload = await renderProductLabelDocumentForVariant(req.params.id);
+  res.setHeader("Content-Type", payload.renderedDocument.mimeType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename=\"product-label-${payload.variant.sku}.${payload.renderedDocument.extension}\"`,
+  );
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).send(payload.renderedDocument.buffer);
 };
 
 export const patchVariantHandler = async (req: Request, res: Response) => {

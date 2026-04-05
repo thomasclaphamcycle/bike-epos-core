@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createVariantHandler,
   getVariantHandler,
+  getVariantProductLabelDocumentHandler,
   listVariantsHandler,
   printVariantProductLabelDirectHandler,
   patchVariantHandler,
@@ -13,5 +14,6 @@ export const variantRouter = Router();
 variantRouter.get("/", requireRoleAtLeast("STAFF"), listVariantsHandler);
 variantRouter.post("/", requireRoleAtLeast("MANAGER"), createVariantHandler);
 variantRouter.get("/:id", requireRoleAtLeast("STAFF"), getVariantHandler);
+variantRouter.get("/:id/product-label/document", requireRoleAtLeast("STAFF"), getVariantProductLabelDocumentHandler);
 variantRouter.post("/:id/product-label/print", requireRoleAtLeast("STAFF"), printVariantProductLabelDirectHandler);
 variantRouter.patch("/:id", requireRoleAtLeast("MANAGER"), patchVariantHandler);

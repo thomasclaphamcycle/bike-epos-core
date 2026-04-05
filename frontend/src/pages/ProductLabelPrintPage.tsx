@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { apiGet, apiGetBlob } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
-import { useAppConfig } from "../config/appConfig";
-import { ProductLabel } from "../features/labels/ProductLabel";
 import {
   getProductLabelDirectPrintErrorMessage,
   getProductLabelDirectPrintSuccessMessage,
@@ -30,11 +28,12 @@ type VariantLabelDetail = {
 export const ProductLabelPrintPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
   const { error, success } = useToasts();
-  const appConfig = useAppConfig();
   const [variant, setVariant] = useState<VariantLabelDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [directPrintingCopies, setDirectPrintingCopies] = useState<number | null>(null);
   const [lastDirectPrint, setLastDirectPrint] = useState<ProductLabelDirectPrintResponse | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!variantId) {
@@ -93,6 +92,45 @@ export const ProductLabelPrintPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!variantId) {
+      return undefined;
+    }
+
+    let active = true;
+    let objectUrl: string | null = null;
+
+    const loadPreview = async () => {
+      setPreviewLoading(true);
+      try {
+        const blob = await apiGetBlob(`/api/variants/${encodeURIComponent(variantId)}/product-label/document`);
+        if (!active) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      } catch (loadError) {
+        if (active) {
+          setPreviewUrl(null);
+          error(loadError instanceof Error ? loadError.message : "Failed to load product label preview");
+        }
+      } finally {
+        if (active) {
+          setPreviewLoading(false);
+        }
+      }
+    };
+
+    void loadPreview();
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [error, variantId]);
+
   if (!variantId) {
     return <div className="page-shell"><p>Missing product label id.</p></div>;
   }
@@ -143,7 +181,7 @@ export const ProductLabelPrintPage = () => {
       <div className="product-label-print-page__copy">
         <h1>Product Label</h1>
         <p className="muted-text">
-          Direct print uses the default registered Dymo product-label printer plus the configured local Dymo print helper from Settings. Browser print stays available as a fallback when you need to preview or troubleshoot layout.
+          This preview now uses the same rendered label document as the Dymo direct-print path. Browser print stays available as a fallback when you need a paper preview or troubleshooting path.
         </p>
       </div>
 
@@ -163,18 +201,13 @@ export const ProductLabelPrintPage = () => {
       ) : null}
 
       <div className="product-label-print-page__sheet">
-        {variant ? (
-          <ProductLabel
-            shopName={appConfig.store.businessName || appConfig.store.name}
-            productName={variant.product?.name || variant.sku}
-            variantName={variant.name || variant.option || null}
-            brand={variant.product?.brand || null}
-            logoUrl={appConfig.store.preferredLogoUrl || null}
-            sku={variant.sku}
-            pricePence={variant.retailPricePence}
-            barcode={variant.barcode}
+        {previewUrl ? (
+          <img
+            className="product-label-print-page__image-preview"
+            src={previewUrl}
+            alt={variant ? `${variant.product?.name || variant.sku} label preview` : "Product label preview"}
           />
-        ) : loading ? (
+        ) : loading || previewLoading ? (
           <div className="card">Loading label…</div>
         ) : (
           <div className="card">Product label is not available.</div>
