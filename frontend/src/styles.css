@@ -701,10 +701,13 @@ body {
 .product-label-print-page__sheet {
   display: grid;
   place-items: start center;
+  width: 57mm;
+  max-width: 57mm;
 }
 
 .product-label {
   width: 57mm;
+  height: 32mm;
   min-height: 32mm;
   max-height: 32mm;
   padding: 1.8mm 1.8mm 1.3mm;
@@ -837,7 +840,9 @@ body {
 .barcode-graphic svg {
   display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-height: 100%;
+  max-width: 100%;
 }
 
 .barcode-graphic--empty,
@@ -876,10 +881,24 @@ body {
 
 @media print {
   body.product-label-print-body {
+    margin: 0;
+    width: 57mm;
+    min-width: 57mm;
+    max-width: 57mm;
+    height: 32mm;
+    min-height: 32mm;
+    max-height: 32mm;
     background: #fff;
+    overflow: hidden;
+  }
+
+  body.product-label-print-body #root {
+    width: 57mm;
+    height: 32mm;
   }
 
   .product-label-print-page {
+    width: 57mm;
     min-height: auto;
     padding: 0;
     background: #fff;
@@ -892,16 +911,57 @@ body {
 
   .product-label-print-page__sheet {
     place-items: start stretch;
+    width: 57mm;
+    max-width: 57mm;
   }
 
   .product-label {
+    padding: 1.1mm 1.2mm 0.9mm;
+    gap: 0.7mm;
     box-shadow: none;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+  }
+
+  .product-label__logo,
+  .product-label__brand-subtitle {
+    display: none;
+  }
+
+  .product-label__brand-block {
+    gap: 0;
+  }
+
+  .product-label__brand-name {
+    font-size: 5.6px;
+  }
+
+  .product-label__price {
+    font-size: 13px;
+  }
+
+  .product-label__secondary {
+    font-size: 4.4px;
+    letter-spacing: 0.04em;
+  }
+
+  .product-label__title {
+    font-size: 7.1px;
+    line-height: 1.1;
+  }
+
+  .barcode-graphic {
+    min-height: 12.6mm;
+    height: 12.6mm;
+    padding: 0.3mm 0.2mm 0;
     border: 0;
     border-radius: 0;
   }
 
-  .barcode-graphic {
-    border-color: transparent;
+  .product-label__barcode-number {
+    font-size: 5px;
+    letter-spacing: 0.04em;
   }
 }
 
