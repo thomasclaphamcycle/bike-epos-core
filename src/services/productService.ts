@@ -461,12 +461,14 @@ export const createProduct = async (input: CreateProductInput) => {
     && Object.values(input.defaultVariant).some((value) => value !== undefined);
 
   return prisma.$transaction(async (tx) => {
+    const brand = normalizeOptionalText(input.brand);
+    const description = normalizeOptionalText(input.description);
     const product = await tx.product.create({
       data: {
         name,
-        category,
-        brand: normalizeOptionalText(input.brand),
-        description: normalizeOptionalText(input.description),
+        ...(category !== undefined ? { category } : {}),
+        ...(brand !== undefined ? { brand } : {}),
+        ...(description !== undefined ? { description } : {}),
         isActive: input.isActive ?? true,
       },
     });
@@ -575,7 +577,7 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
     const product = await tx.product.create({
       data: {
         name,
-        category,
+        ...(category !== undefined ? { category } : {}),
         isActive: true,
       },
     });
@@ -624,7 +626,7 @@ export const createImportedProductRow = async (input: CreateImportedProductRowIn
           referenceType: "PRODUCT_IMPORT",
           referenceId: importReferenceId,
           note: "Product CSV import opening stock",
-          createdByStaffId,
+          ...(createdByStaffId !== undefined ? { createdByStaffId } : {}),
         },
       });
     }
@@ -685,15 +687,15 @@ export const updateProductById = async (productId: string, input: UpdateProductI
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "category")) {
-    data.category = normalizeOptionalNullableText(input.category);
+    data.category = normalizeOptionalNullableText(input.category) ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "brand")) {
-    data.brand = normalizeOptionalNullableText(input.brand);
+    data.brand = normalizeOptionalNullableText(input.brand) ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "description")) {
-    data.description = normalizeOptionalNullableText(input.description);
+    data.description = normalizeOptionalNullableText(input.description) ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "isActive")) {
@@ -1139,21 +1141,23 @@ export const createVariant = async (input: CreateVariantInput) => {
     });
 
     try {
+      const variantCreateData: Prisma.VariantUncheckedCreateInput = {
+        productId,
+        sku,
+        barcode: barcodeState.barcode,
+        manufacturerBarcode: barcodeState.manufacturerBarcode,
+        internalBarcode: barcodeState.internalBarcode,
+        retailPrice: parsedRetailPrice.retailPrice,
+        retailPricePence: parsedRetailPrice.retailPricePence,
+        ...(name !== undefined ? { name } : {}),
+        ...(option !== undefined ? { option } : {}),
+        ...(input.costPricePence !== undefined ? { costPricePence: input.costPricePence } : {}),
+        ...(taxCode !== undefined ? { taxCode } : {}),
+        isActive: input.isActive ?? true,
+      };
+
       const variant = await tx.variant.create({
-        data: {
-          productId,
-          sku,
-          barcode: barcodeState.barcode,
-          manufacturerBarcode: barcodeState.manufacturerBarcode,
-          internalBarcode: barcodeState.internalBarcode,
-          name,
-          option,
-          retailPrice: parsedRetailPrice.retailPrice,
-          retailPricePence: parsedRetailPrice.retailPricePence,
-          costPricePence: input.costPricePence,
-          taxCode,
-          isActive: input.isActive ?? true,
-        },
+        data: variantCreateData,
       });
 
       await syncVariantBarcodeRegistryTx(tx, variant.id, {
@@ -1238,7 +1242,11 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
         throw new HttpError(400, "productId cannot be empty", "INVALID_VARIANT_UPDATE");
       }
       await ensureProductExists(tx, normalizedProductId);
-      data.productId = normalizedProductId;
+      data.product = {
+        connect: {
+          id: normalizedProductId,
+        },
+      };
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "sku")) {
@@ -1280,11 +1288,11 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "name")) {
-      data.name = normalizeOptionalNullableText(input.name);
+      data.name = normalizeOptionalNullableText(input.name) ?? null;
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "option")) {
-      data.option = normalizeOptionalNullableText(input.option);
+      data.option = normalizeOptionalNullableText(input.option) ?? null;
     }
 
     const retailPricePatch = parseRetailPricePatch(input, "INVALID_VARIANT_UPDATE");
@@ -1306,11 +1314,11 @@ export const updateVariantById = async (variantId: string, input: UpdateVariantI
           "INVALID_VARIANT_UPDATE",
         );
       }
-      data.costPricePence = input.costPricePence;
+      data.costPricePence = input.costPricePence ?? null;
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "taxCode")) {
-      data.taxCode = normalizeOptionalNullableText(input.taxCode);
+      data.taxCode = normalizeOptionalNullableText(input.taxCode) ?? null;
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "isActive")) {

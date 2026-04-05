@@ -4,7 +4,12 @@ import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
 import { emitEvent } from "../utils/domainEvent";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  assertNonNegativeProjectedStockTx,
+  lockInventoryPositionsTx,
+} from "./inventoryLedgerService";
 import { ensureDefaultLocationTx } from "./locationService";
+import { toPosLineItemType } from "./posLineItemType";
 import {
   recordCashRefundMovementForPaymentTx,
   recordCashSaleMovementForSaleTx,
@@ -94,6 +99,99 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const lockBasketForCheckoutTx = async (
+  tx: Prisma.TransactionClient,
+  basketId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string; status: BasketStatus }>>`
+    SELECT id, status
+    FROM "Basket"
+    WHERE id = ${basketId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Basket not found", "BASKET_NOT_FOUND");
+  }
+
+  return lockedRows[0];
+};
+
+export const lockSaleForUpdateTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "Sale"
+    WHERE id = ${saleId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+  }
+};
+
+const assertBasketStockAvailableTx = async (
+  tx: Prisma.TransactionClient,
+  basketItems: Array<{ variantId: string; quantity: number }>,
+  locationId: string,
+) => {
+  const groupedBasketItems = Array.from(
+    basketItems.reduce((map, item) => {
+      map.set(item.variantId, (map.get(item.variantId) ?? 0) + item.quantity);
+      return map;
+    }, new Map<string, number>()),
+  ).map(([variantId, quantity]) => ({ variantId, quantity }));
+
+  await lockInventoryPositionsTx(
+    tx,
+    groupedBasketItems.map((item) => ({
+      variantId: item.variantId,
+      locationId,
+    })),
+  );
+
+  for (const item of groupedBasketItems) {
+    await assertNonNegativeProjectedStockTx(tx, {
+      variantId: item.variantId,
+      locationId,
+      quantityDelta: -item.quantity,
+      message: "Checkout would reduce stock below zero",
+      code: "SALE_STOCK_INSUFFICIENT",
+    });
+  }
+};
+
+const getNonStockVariantIdsTx = async (
+  tx: Prisma.TransactionClient,
+  variantIds: string[],
+) => {
+  const uniqueVariantIds = Array.from(new Set(variantIds));
+  if (uniqueVariantIds.length === 0) {
+    return new Set<string>();
+  }
+
+  const variants = await tx.variant.findMany({
+    where: {
+      id: {
+        in: uniqueVariantIds,
+      },
+    },
+    select: {
+      id: true,
+      sku: true,
+    },
+  });
+
+  return new Set(
+    variants
+      .filter((variant) => toPosLineItemType(variant.sku) === "LABOUR")
+      .map((variant) => variant.id),
+  );
 };
 
 const toCustomerName = (customer: { firstName: string; lastName: string }) =>
@@ -656,6 +754,8 @@ export const completeSaleIfEligibleTx = async (
   const requireTenders = input.requireTenders ?? true;
   const staffActorId = normalizeOptionalText(input.staffActorId);
 
+  await lockSaleForUpdateTx(tx, saleId);
+
   const sale = await tx.sale.findUnique({
     where: { id: saleId },
     select: {
@@ -822,6 +922,8 @@ export const addSaleTender = async (
   const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
 
   return prisma.$transaction(async (tx) => {
+    await lockSaleForUpdateTx(tx, saleId);
+
     const sale = await tx.sale.findUnique({
       where: { id: saleId },
       select: {
@@ -868,6 +970,8 @@ export const deleteSaleTender = async (saleId: string, tenderId: string) => {
   }
 
   return prisma.$transaction(async (tx) => {
+    await lockSaleForUpdateTx(tx, saleId);
+
     const sale = await tx.sale.findUnique({
       where: { id: saleId },
       select: {
@@ -915,6 +1019,8 @@ export const checkoutBasketToSale = async (
   const requestedLocationId = normalizeOptionalText(locationId);
 
   const txResult = await prisma.$transaction(async (tx) => {
+    await lockBasketForCheckoutTx(tx, basketId);
+
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
     if (existingSale) {
       const workshopJob = await getWorkshopJobForBasketTx(tx, basketId);
@@ -1043,6 +1149,20 @@ export const checkoutBasketToSale = async (
       throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
     }
 
+    const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    const nonStockVariantIds = await getNonStockVariantIdsTx(
+      tx,
+      basket.items.map((item) => item.variantId),
+    );
+
+    if (!workshopJob) {
+      await assertBasketStockAvailableTx(
+        tx,
+        basket.items.filter((item) => !nonStockVariantIds.has(item.variantId)),
+        defaultLocation.id,
+      );
+    }
+
     const sale = await tx.sale.create({
       data: {
         basketId: basket.id,
@@ -1069,8 +1189,6 @@ export const checkoutBasketToSale = async (
       );
     }
 
-    const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
-
     for (const item of basket.items) {
       const saleItem = await tx.saleItem.create({
         data: {
@@ -1082,27 +1200,30 @@ export const checkoutBasketToSale = async (
         },
       });
 
-      await tx.stockLedgerEntry.create({
-        data: {
-          variantId: item.variantId,
-          locationId: defaultLocation.id,
-          type: "SALE",
-          quantityDelta: -item.quantity,
-          referenceType: "SALE_ITEM",
-          referenceId: saleItem.id,
-        },
-      });
+      const shouldMoveInventory = !workshopJob && !nonStockVariantIds.has(item.variantId);
+      if (shouldMoveInventory) {
+        await tx.stockLedgerEntry.create({
+          data: {
+            variantId: item.variantId,
+            locationId: defaultLocation.id,
+            type: "SALE",
+            quantityDelta: -item.quantity,
+            referenceType: "SALE_ITEM",
+            referenceId: saleItem.id,
+          },
+        });
 
-      await tx.inventoryMovement.create({
-        data: {
-          variantId: item.variantId,
-          locationId: defaultLocation.id,
-          type: "SALE",
-          quantity: -item.quantity,
-          referenceType: "SALE_ITEM",
-          referenceId: saleItem.id,
-        },
-      });
+        await tx.inventoryMovement.create({
+          data: {
+            variantId: item.variantId,
+            locationId: defaultLocation.id,
+            type: "SALE",
+            quantity: -item.quantity,
+            referenceType: "SALE_ITEM",
+            referenceId: saleItem.id,
+          },
+        });
+      }
     }
 
     if (payment) {
@@ -1287,6 +1408,10 @@ export const createExchangeSale = async (
     });
 
     const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    const nonStockVariantIds = await getNonStockVariantIdsTx(
+      tx,
+      sourceSale.items.map((item) => item.variantId),
+    );
     for (const item of sourceSale.items) {
       const saleItem = await tx.saleItem.create({
         data: {
@@ -1298,27 +1423,29 @@ export const createExchangeSale = async (
         },
       });
 
-      await tx.stockLedgerEntry.create({
-        data: {
-          variantId: item.variantId,
-          locationId: defaultLocation.id,
-          type: "SALE",
-          quantityDelta: -item.quantity,
-          referenceType: "SALE_ITEM",
-          referenceId: saleItem.id,
-        },
-      });
+      if (!nonStockVariantIds.has(item.variantId)) {
+        await tx.stockLedgerEntry.create({
+          data: {
+            variantId: item.variantId,
+            locationId: defaultLocation.id,
+            type: "SALE",
+            quantityDelta: -item.quantity,
+            referenceType: "SALE_ITEM",
+            referenceId: saleItem.id,
+          },
+        });
 
-      await tx.inventoryMovement.create({
-        data: {
-          variantId: item.variantId,
-          locationId: defaultLocation.id,
-          type: "SALE",
-          quantity: -item.quantity,
-          referenceType: "SALE_ITEM",
-          referenceId: saleItem.id,
-        },
-      });
+        await tx.inventoryMovement.create({
+          data: {
+            variantId: item.variantId,
+            locationId: defaultLocation.id,
+            type: "SALE",
+            quantity: -item.quantity,
+            referenceType: "SALE_ITEM",
+            referenceId: saleItem.id,
+          },
+        });
+      }
     }
 
     await tx.basket.update({
@@ -1382,6 +1509,8 @@ export const createSaleReturn = async (
   }
 
   const txResult = await prisma.$transaction(async (tx) => {
+    await lockSaleForUpdateTx(tx, saleId);
+
     const sale = await tx.sale.findUnique({
       where: { id: saleId },
       include: {
@@ -1468,6 +1597,10 @@ export const createSaleReturn = async (
       createdAt: Date;
     }> = [];
     const defaultLocation = await getOrCreateDefaultStockLocationTx(tx);
+    const nonStockVariantIds = await getNonStockVariantIdsTx(
+      tx,
+      computedItems.map((item) => item.variantId),
+    );
 
     for (const item of computedItems) {
       const returnItem = await tx.saleReturnItem.create({
@@ -1481,27 +1614,29 @@ export const createSaleReturn = async (
       });
       createdReturnItems.push(returnItem);
 
-      await tx.stockLedgerEntry.create({
-        data: {
-          variantId: item.variantId,
-          locationId: defaultLocation.id,
-          type: "RETURN",
-          quantityDelta: item.quantity,
-          referenceType: "SALE_RETURN_ITEM",
-          referenceId: returnItem.id,
-        },
-      });
+      if (!nonStockVariantIds.has(item.variantId)) {
+        await tx.stockLedgerEntry.create({
+          data: {
+            variantId: item.variantId,
+            locationId: defaultLocation.id,
+            type: "RETURN",
+            quantityDelta: item.quantity,
+            referenceType: "SALE_RETURN_ITEM",
+            referenceId: returnItem.id,
+          },
+        });
 
-      await tx.inventoryMovement.create({
-        data: {
-          variantId: item.variantId,
-          locationId: defaultLocation.id,
-          type: "RETURN",
-          quantity: item.quantity,
-          referenceType: "SALE_RETURN_ITEM",
-          referenceId: returnItem.id,
-        },
-      });
+        await tx.inventoryMovement.create({
+          data: {
+            variantId: item.variantId,
+            locationId: defaultLocation.id,
+            type: "RETURN",
+            quantity: item.quantity,
+            referenceType: "SALE_RETURN_ITEM",
+            referenceId: returnItem.id,
+          },
+        });
+      }
     }
 
     let refundPayment: {

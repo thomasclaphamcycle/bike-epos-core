@@ -60,6 +60,27 @@ Business-specific statuses such as reorder urgency or reminder status can still 
    - workshop
    - customer profile
 
+## Data Integrity Guardrails
+
+CorePOS now blocks a small set of high-risk inventory and money writes earlier and more explicitly.
+
+- POS basket checkout now refuses to post sale stock movements that would drive on-hand below zero at the active stock location.
+  - blocked code: `SALE_STOCK_INSUFFICIENT`
+- Purchase-order receiving now serializes receive requests on the same PO lines so concurrent receive calls cannot over-receive the same item.
+  - blocked code: `PURCHASE_ORDER_OVER_RECEIVE`
+- Payment intents now refuse to attach new payment collection to sales that are already settled or already completed through another route.
+  - blocked codes: `SALE_ALREADY_PAID`, `SALE_ALREADY_COMPLETED`
+- Sale completion and sale-tender mutation now share the same sale-row lock so tenders cannot race in after a sale has already been completed.
+- Workshop-linked checkout now treats workshop finalization as the inventory-consumption boundary.
+  - workshop part stock is consumed once at finalize time, not again when the linked sale is checked out
+  - synthetic workshop labour lines are excluded from stock guards and stock movements
+
+These guardrails are intentionally narrow:
+
+- they protect against silent stock drift, duplicate financial side effects, and stale-state writes
+- they do not add new approval steps or hidden auto-corrections
+- they preserve explicit override-style behavior only where the existing service already supports it, such as intentional negative stock in dedicated inventory mutation flows
+
 ## Reminder Groundwork
 
 Automated reminder groundwork is now present behind the event bus and is intentionally internal only.

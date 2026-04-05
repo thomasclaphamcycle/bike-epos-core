@@ -257,6 +257,11 @@ const run = async () => {
         const purchaseOrderItemId = addItemsRes.json.items[0].id;
         state.purchaseOrderItemIds.add(purchaseOrderItemId);
 
+        await prisma.purchaseOrder.update({
+          where: { id: poRes.json.id },
+          data: { status: "SENT" },
+        });
+
         const receivePartialRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}/receive`, {
           method: "POST",
           body: JSON.stringify({
@@ -423,6 +428,11 @@ const run = async () => {
         state.purchaseOrderItemIds.add(withCostItem.id);
         state.purchaseOrderItemIds.add(noCostItem.id);
 
+        await prisma.purchaseOrder.update({
+          where: { id: poRes.json.id },
+          data: { status: "SENT" },
+        });
+
         const receiveRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}/receive`, {
           method: "POST",
           body: JSON.stringify({
@@ -548,6 +558,128 @@ const run = async () => {
 
         assert.equal(receiveRes.status, 409);
         assert.equal(receiveRes.json.error.code, "PURCHASE_ORDER_CANCELLED");
+      },
+      results,
+    );
+
+    await runTest(
+      "concurrent receiving cannot over-receive the same purchase order line",
+      async () => {
+        const location = await prisma.stockLocation.create({
+          data: {
+            name: `M17 Concurrent Receive Location ${uniqueRef()}`,
+          },
+        });
+        state.locationIds.add(location.id);
+
+        const supplierRes = await fetchJson("/api/suppliers", {
+          method: "POST",
+          body: JSON.stringify({
+            name: `M17 Concurrent Supplier ${uniqueRef()}`,
+          }),
+        });
+        assert.equal(supplierRes.status, 201);
+        state.supplierIds.add(supplierRes.json.id);
+
+        const productRes = await fetchJson("/api/products", {
+          method: "POST",
+          body: JSON.stringify({
+            name: `M17 Concurrent Product ${uniqueRef()}`,
+          }),
+        });
+        assert.equal(productRes.status, 201);
+        state.productIds.add(productRes.json.id);
+
+        const variantRes = await fetchJson("/api/variants", {
+          method: "POST",
+          body: JSON.stringify({
+            productId: productRes.json.id,
+            sku: `M17-CONCURRENT-SKU-${uniqueRef()}`,
+            retailPricePence: 2450,
+          }),
+        });
+        assert.equal(variantRes.status, 201);
+        state.variantIds.add(variantRes.json.id);
+
+        const poRes = await fetchJson("/api/purchase-orders", {
+          method: "POST",
+          body: JSON.stringify({
+            supplierId: supplierRes.json.id,
+          }),
+        });
+        assert.equal(poRes.status, 201);
+        state.purchaseOrderIds.add(poRes.json.id);
+
+        const addItemsRes = await fetchJson(`/api/purchase-orders/${poRes.json.id}/items`, {
+          method: "POST",
+          body: JSON.stringify({
+            lines: [
+              {
+                variantId: variantRes.json.id,
+                quantityOrdered: 1,
+              },
+            ],
+          }),
+        });
+        assert.equal(addItemsRes.status, 200);
+        const purchaseOrderItemId = addItemsRes.json.items[0].id;
+        state.purchaseOrderItemIds.add(purchaseOrderItemId);
+
+        await prisma.purchaseOrder.update({
+          where: { id: poRes.json.id },
+          data: { status: "SENT" },
+        });
+
+        const receivePayload = JSON.stringify({
+          locationId: location.id,
+          lines: [
+            {
+              purchaseOrderItemId,
+              quantity: 1,
+            },
+          ],
+        });
+
+        const receiveResponses = await Promise.all([
+          fetchJson(`/api/purchase-orders/${poRes.json.id}/receive`, {
+            method: "POST",
+            body: receivePayload,
+          }),
+          fetchJson(`/api/purchase-orders/${poRes.json.id}/receive`, {
+            method: "POST",
+            body: receivePayload,
+          }),
+        ]);
+
+        const succeeded = receiveResponses.filter((response) => response.status === 200);
+        const blocked = receiveResponses.filter((response) => response.status === 409);
+
+        assert.equal(succeeded.length, 1, JSON.stringify(receiveResponses));
+        assert.equal(blocked.length, 1, JSON.stringify(receiveResponses));
+        assert.ok(
+          blocked[0].json.error.code === "PURCHASE_ORDER_OVER_RECEIVE"
+            || blocked[0].json.error.code === "PURCHASE_ORDER_RECEIVED",
+          JSON.stringify(blocked[0].json),
+        );
+
+        const persistedItem = await prisma.purchaseOrderItem.findUnique({
+          where: { id: purchaseOrderItemId },
+          select: {
+            quantityOrdered: true,
+            quantityReceived: true,
+          },
+        });
+        assert.ok(persistedItem);
+        assert.equal(persistedItem.quantityOrdered, 1);
+        assert.equal(persistedItem.quantityReceived, 1);
+
+        const persistedLedgerRows = await prisma.stockLedgerEntry.findMany({
+          where: {
+            referenceType: "PURCHASE_ORDER_ITEM",
+            referenceId: purchaseOrderItemId,
+          },
+        });
+        assert.equal(persistedLedgerRows.length, 1, JSON.stringify(persistedLedgerRows));
       },
       results,
     );

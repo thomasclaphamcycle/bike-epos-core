@@ -2,7 +2,11 @@ import { PaymentIntentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { CashProvider } from "../payments/providers/cashProvider";
-import { completeSaleIfEligibleTx, emitSaleCompletedEvent } from "./salesService";
+import {
+  completeSaleIfEligibleTx,
+  emitSaleCompletedEvent,
+  lockSaleForUpdateTx,
+} from "./salesService";
 import { recordCashSaleMovementForPaymentTx } from "./tillService";
 
 type PaymentIntentProvider = "CASH" | "CARD";
@@ -124,12 +128,31 @@ const getCapturedIntentTotalForSaleTx = async (
   return aggregate._sum.amountPence ?? 0;
 };
 
+const getNetSettledPaymentTotalForSaleTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+): Promise<number> => {
+  const payments = await tx.payment.findMany({
+    where: { saleId },
+    select: {
+      amountPence: true,
+      refundedTotalPence: true,
+    },
+  });
+
+  return payments.reduce((sum, payment) => {
+    const netSettledPence = Math.max(0, payment.amountPence - payment.refundedTotalPence);
+    return sum + netSettledPence;
+  }, 0);
+};
+
 const ensureSaleExistsTx = async (tx: Prisma.TransactionClient, saleId: string) => {
   const sale = await tx.sale.findUnique({
     where: { id: saleId },
     select: {
       id: true,
       totalPence: true,
+      completedAt: true,
     },
   });
 
@@ -187,16 +210,37 @@ const upsertSalePaymentForIntentTx = async (
 
 const getSalePaymentSummaryTx = async (tx: Prisma.TransactionClient, saleId: string) => {
   const sale = await ensureSaleExistsTx(tx, saleId);
-  const capturedTotal = await getCapturedIntentTotalForSaleTx(tx, saleId);
-  const outstandingPence = Math.max(0, sale.totalPence - capturedTotal);
+  const netSettledPaymentTotalPence = await getNetSettledPaymentTotalForSaleTx(tx, saleId);
+  const capturedIntentTotalPence = await getCapturedIntentTotalForSaleTx(tx, saleId);
+  const effectiveCapturedTotalPence = Math.max(
+    netSettledPaymentTotalPence,
+    capturedIntentTotalPence,
+  );
+  const outstandingPence = Math.max(0, sale.totalPence - effectiveCapturedTotalPence);
 
   return {
     saleId,
     saleTotalPence: sale.totalPence,
-    capturedTotalPence: capturedTotal,
+    capturedTotalPence: effectiveCapturedTotalPence,
     outstandingPence,
     paid: outstandingPence === 0,
   };
+};
+
+const lockPaymentIntentForUpdateTx = async (
+  tx: Prisma.TransactionClient,
+  intentId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "PaymentIntent"
+    WHERE id = ${intentId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Payment intent not found", "PAYMENT_INTENT_NOT_FOUND");
+  }
 };
 
 const toCompleteSaleInput = (staffActorId?: string) =>
@@ -224,9 +268,18 @@ export const createPaymentIntent = async (
   const cashProvider = new CashProvider();
 
   const result = await prisma.$transaction(async (tx) => {
+    await lockSaleForUpdateTx(tx, saleId);
     const sale = await ensureSaleExistsTx(tx, saleId);
-    const capturedTotal = await getCapturedIntentTotalForSaleTx(tx, saleId);
-    const outstandingPence = Math.max(0, sale.totalPence - capturedTotal);
+    if (sale.completedAt) {
+      throw new HttpError(
+        409,
+        "Completed sales cannot create new payment intents",
+        "SALE_ALREADY_COMPLETED",
+      );
+    }
+
+    const settledTotalPence = await getNetSettledPaymentTotalForSaleTx(tx, saleId);
+    const outstandingPence = Math.max(0, sale.totalPence - settledTotalPence);
     if (outstandingPence <= 0) {
       throw new HttpError(409, "Sale is already fully paid", "SALE_ALREADY_PAID");
     }
@@ -309,6 +362,7 @@ export const capturePaymentIntentById = async (
   const cashProvider = new CashProvider();
 
   const result = await prisma.$transaction(async (tx) => {
+    await lockPaymentIntentForUpdateTx(tx, intentId);
     const intent = await tx.paymentIntent.findUnique({
       where: { id: intentId },
     });
@@ -325,6 +379,7 @@ export const capturePaymentIntentById = async (
     }
 
     if (intent.status === "CAPTURED") {
+      await lockSaleForUpdateTx(tx, intent.saleId);
       await upsertSalePaymentForIntentTx(tx, {
         intentId: intent.id,
         saleId: intent.saleId,
@@ -344,9 +399,18 @@ export const capturePaymentIntentById = async (
       };
     }
 
+    await lockSaleForUpdateTx(tx, intent.saleId);
     const sale = await ensureSaleExistsTx(tx, intent.saleId);
-    const capturedTotal = await getCapturedIntentTotalForSaleTx(tx, intent.saleId);
-    const remaining = Math.max(0, sale.totalPence - capturedTotal);
+    if (sale.completedAt) {
+      throw new HttpError(
+        409,
+        "Completed sales cannot capture additional payment intents",
+        "SALE_ALREADY_COMPLETED",
+      );
+    }
+
+    const settledTotalPence = await getNetSettledPaymentTotalForSaleTx(tx, intent.saleId);
+    const remaining = Math.max(0, sale.totalPence - settledTotalPence);
     if (intent.amountPence > remaining) {
       throw new HttpError(
         409,
@@ -413,6 +477,7 @@ export const cancelPaymentIntentById = async (intentId: string) => {
   const cashProvider = new CashProvider();
 
   return prisma.$transaction(async (tx) => {
+    await lockPaymentIntentForUpdateTx(tx, intentId);
     const intent = await tx.paymentIntent.findUnique({
       where: { id: intentId },
     });
