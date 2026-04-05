@@ -96,3 +96,26 @@ export const apiDelete = <T>(path: string, body?: unknown) =>
     method: "DELETE",
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
+export const apiGetBlob = async (path: string): Promise<Blob> => {
+  const response = await fetch(path, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = text;
+      }
+    }
+
+    throw new ApiError(toErrorMessage(response.status, payload), response.status, payload);
+  }
+
+  return response.blob();
+};

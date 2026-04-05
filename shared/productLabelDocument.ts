@@ -16,30 +16,34 @@ const LABEL_HEIGHT_MM = 32;
 const LABEL_DPI = 300;
 const PADDING_X = 20;
 const PADDING_Y = 14;
+const LOGO_TOP_PADDING = 18;
+const META_TOP_PADDING = 8;
 const META_FONT = "600 10px Arial";
-const TITLE_FONT = "bold 29px Arial";
+const TITLE_FONT = "700 24px Arial";
 const VARIANT_FONT = "600 15px Arial";
+const PRICE_FONT = "bold 29px Arial";
 const BARCODE_TEXT_FONT = "600 13px monospace";
 const PRODUCT_NAME_MAX_LINES = 2;
-const PRODUCT_LINE_HEIGHT = 26;
-const PRICE_FONT_FAMILY = "Arial";
-const PRICE_FONT_START_SIZE = 44;
-const PRICE_FONT_MIN_SIZE = 34;
-const LOGO_MAX_HEIGHT = 36;
-const LOGO_MAX_WIDTH = 172;
+const PRODUCT_LINE_HEIGHT = 23;
+const LOGO_MAX_HEIGHT = 117;
+const LOGO_MAX_WIDTH = 346;
 const LOGO_FALLBACK_HEIGHT = 18;
-const TITLE_SECTION_GAP = 12;
-const VARIANT_SECTION_GAP = 7;
-const PRICE_SECTION_GAP = 18;
+const TITLE_SECTION_GAP = 20;
+const VARIANT_SECTION_GAP = 4;
+const PRICE_SECTION_GAP = 3;
+const PRICE_LINE_HEIGHT = 24;
+const BARCODE_TOP_GAP = 18;
+const BARCODE_WIDTH_RATIO = 0.82;
+const LOGO_WHITE_THRESHOLD = 245;
 
 const mmToPx = (value: number) => Math.round((value / 25.4) * LABEL_DPI);
 
 export const PRODUCT_LABEL_WIDTH_PX = mmToPx(LABEL_WIDTH_MM);
 export const PRODUCT_LABEL_HEIGHT_PX = mmToPx(LABEL_HEIGHT_MM);
 
-const BARCODE_REGION_HEIGHT = 90;
-const BARCODE_TEXT_HEIGHT = 14;
-const BARCODE_REGION_TOP = PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_REGION_HEIGHT - BARCODE_TEXT_HEIGHT;
+const BARCODE_REGION_HEIGHT = 72;
+const BARCODE_TEXT_HEIGHT = 12;
+const BARCODE_TEXT_GAP = 3;
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
@@ -91,22 +95,7 @@ const getBarcodeLineWidth = (value: string) => {
   return 1.6;
 };
 
-const getBarcodeHeight = (value: string) => (value.length >= 20 ? 72 : 78);
-
-const setFittedPriceFont = (
-  ctx: ReturnType<typeof createCanvas>["getContext"],
-  text: string,
-  maxWidth: number,
-) => {
-  for (let size = PRICE_FONT_START_SIZE; size >= PRICE_FONT_MIN_SIZE; size -= 2) {
-    ctx.font = `bold ${size}px ${PRICE_FONT_FAMILY}`;
-    if (ctx.measureText(text).width <= maxWidth) {
-      return;
-    }
-  }
-
-  ctx.font = `bold ${PRICE_FONT_MIN_SIZE}px ${PRICE_FONT_FAMILY}`;
-};
+const getBarcodeHeight = (value: string) => (value.length >= 20 ? 58 : 64);
 
 const loadLogoImage = (logoDataUrl: string | null | undefined) => {
   const normalized = sanitizeLine(logoDataUrl);
@@ -121,6 +110,95 @@ const loadLogoImage = (logoDataUrl: string | null | undefined) => {
   } catch {
     return null;
   }
+};
+
+const toThermalGray = (red: number, green: number, blue: number) => {
+  const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+  return Math.max(0, Math.min(255, Math.round(luminance * 0.78)));
+};
+
+const createThermalLogoCanvas = (image: Image) => {
+  const scratch = createCanvas(image.width, image.height);
+  const scratchCtx = scratch.getContext("2d");
+  scratchCtx.drawImage(image, 0, 0, image.width, image.height);
+  const imageData = scratchCtx.getImageData(0, 0, image.width, image.height);
+  const { data, width, height } = imageData;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const alpha = data[offset + 3];
+      const red = data[offset];
+      const green = data[offset + 1];
+      const blue = data[offset + 2];
+      const isVisibleInk =
+        alpha > 20
+        && !(red >= LOGO_WHITE_THRESHOLD && green >= LOGO_WHITE_THRESHOLD && blue >= LOGO_WHITE_THRESHOLD);
+
+      if (!isVisibleInk) {
+        continue;
+      }
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return scratch;
+  }
+
+  for (let i = 0; i < data.length; i += 4) {
+    const alpha = data[i + 3];
+    if (alpha <= 20) {
+      continue;
+    }
+
+    const red = data[i];
+    const green = data[i + 1];
+    const blue = data[i + 2];
+    if (red >= LOGO_WHITE_THRESHOLD && green >= LOGO_WHITE_THRESHOLD && blue >= LOGO_WHITE_THRESHOLD) {
+      continue;
+    }
+    const gray = toThermalGray(red, green, blue);
+    data[i] = gray;
+    data[i + 1] = gray;
+    data[i + 2] = gray;
+  }
+
+  scratchCtx.putImageData(imageData, 0, 0);
+
+  const sx = minX;
+  const sy = minY;
+  const sw = maxX - minX + 1;
+  const sh = maxY - minY + 1;
+  const cropped = createCanvas(sw, sh);
+  const croppedCtx = cropped.getContext("2d");
+  croppedCtx.drawImage(scratch, sx, sy, sw, sh, 0, 0, sw, sh);
+  return cropped;
+};
+
+const drawThermalLogo = (
+  ctx: ReturnType<typeof createCanvas>["getContext"],
+  image: Image,
+  centerX: number,
+  cursorY: number,
+) => {
+  const logoCanvas = createThermalLogoCanvas(image);
+  const widthRatio = LOGO_MAX_WIDTH / logoCanvas.width;
+  const heightRatio = LOGO_MAX_HEIGHT / logoCanvas.height;
+  const scale = Math.min(widthRatio, heightRatio, 1);
+  const drawWidth = Math.round(logoCanvas.width * scale);
+  const drawHeight = Math.round(logoCanvas.height * scale);
+  ctx.drawImage(logoCanvas, Math.round(centerX - drawWidth / 2), cursorY, drawWidth, drawHeight);
+  return drawHeight;
 };
 
 const drawCenteredText = (
@@ -241,6 +319,10 @@ export const renderProductLabelDocument = (label: ProductLabelRenderInput): Rend
   const skuLine = sanitizeLine(label.sku);
   const contentWidth = PRODUCT_LABEL_WIDTH_PX - PADDING_X * 2;
   const centerX = PRODUCT_LABEL_WIDTH_PX / 2;
+  const barcodeWidth = Math.round(contentWidth * BARCODE_WIDTH_RATIO);
+  const barcodeX = Math.round(centerX - barcodeWidth / 2);
+  const maxBarcodeY =
+    PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_REGION_HEIGHT - BARCODE_TEXT_GAP - BARCODE_TEXT_HEIGHT;
 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, PRODUCT_LABEL_WIDTH_PX, PRODUCT_LABEL_HEIGHT_PX);
@@ -250,14 +332,11 @@ export const renderProductLabelDocument = (label: ProductLabelRenderInput): Rend
   let cursorY = PADDING_Y;
 
   if (logoImage && logoImage.width > 0 && logoImage.height > 0) {
-    const widthRatio = LOGO_MAX_WIDTH / logoImage.width;
-    const heightRatio = LOGO_MAX_HEIGHT / logoImage.height;
-    const scale = Math.min(widthRatio, heightRatio, 1);
-    const drawWidth = Math.round(logoImage.width * scale);
-    const drawHeight = Math.round(logoImage.height * scale);
-    ctx.drawImage(logoImage, Math.round(centerX - drawWidth / 2), cursorY, drawWidth, drawHeight);
+    cursorY = LOGO_TOP_PADDING;
+    const drawHeight = drawThermalLogo(ctx, logoImage, centerX, cursorY);
     cursorY += drawHeight + TITLE_SECTION_GAP;
   } else if (metaLine) {
+    cursorY = META_TOP_PADDING;
     ctx.font = META_FONT;
     ctx.fillStyle = "#6b7280";
     drawCenteredText(ctx, metaLine.toUpperCase(), centerX, cursorY, contentWidth);
@@ -272,40 +351,39 @@ export const renderProductLabelDocument = (label: ProductLabelRenderInput): Rend
   });
   cursorY += productLines.length * PRODUCT_LINE_HEIGHT;
 
+  cursorY += VARIANT_SECTION_GAP;
   if (variantLine) {
     ctx.font = VARIANT_FONT;
     ctx.fillStyle = "#6b7280";
-    cursorY += VARIANT_SECTION_GAP;
     drawCenteredText(ctx, variantLine, centerX, cursorY, contentWidth);
-    cursorY += 20;
-  } else {
-    cursorY += 10;
+    cursorY += 18;
   }
 
   const priceText = formatMoney(label.pricePence);
-  setFittedPriceFont(ctx, priceText, contentWidth);
+  ctx.font = PRICE_FONT;
   ctx.fillStyle = "#111111";
-  const priceWidth = ctx.measureText(priceText).width;
-  ctx.fillText(priceText, PADDING_X + Math.max(0, (contentWidth - priceWidth) / 2), cursorY);
-  cursorY += PRICE_SECTION_GAP;
+  drawCenteredText(ctx, priceText, centerX, cursorY + PRICE_SECTION_GAP, contentWidth);
+  cursorY += PRICE_LINE_HEIGHT;
 
   if (barcodeValue) {
-    drawBarcode(ctx, barcodeValue, PADDING_X, BARCODE_REGION_TOP, contentWidth);
+    const barcodeY = Math.min(maxBarcodeY, cursorY + BARCODE_TOP_GAP);
+    drawBarcode(ctx, barcodeValue, barcodeX, barcodeY, barcodeWidth);
     ctx.font = BARCODE_TEXT_FONT;
     ctx.fillStyle = "#4b5563";
-    const barcodeText = fitText(ctx, barcodeValue, contentWidth);
+    const barcodeText = fitText(ctx, barcodeValue, barcodeWidth);
     const barcodeTextWidth = ctx.measureText(barcodeText).width;
     ctx.fillText(
       barcodeText,
-      Math.max(PADDING_X, (PRODUCT_LABEL_WIDTH_PX - barcodeTextWidth) / 2),
-      PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 1,
+      Math.max(barcodeX, (PRODUCT_LABEL_WIDTH_PX - barcodeTextWidth) / 2),
+      barcodeY + BARCODE_REGION_HEIGHT + BARCODE_TEXT_GAP,
     );
   } else {
     ctx.font = "bold 18px Arial";
     ctx.fillStyle = "#6b7280";
     const fallbackText = "BARCODE PENDING";
     const fallbackWidth = ctx.measureText(fallbackText).width;
-    ctx.fillText(fallbackText, PADDING_X + Math.max(0, (contentWidth - fallbackWidth) / 2), BARCODE_REGION_TOP + 34);
+    const fallbackY = Math.min(maxBarcodeY, cursorY + BARCODE_TOP_GAP);
+    ctx.fillText(fallbackText, PADDING_X + Math.max(0, (contentWidth - fallbackWidth) / 2), fallbackY + 24);
     if (skuLine) {
       ctx.font = BARCODE_TEXT_FONT;
       const fallbackSku = fitText(ctx, skuLine, contentWidth);
@@ -313,7 +391,7 @@ export const renderProductLabelDocument = (label: ProductLabelRenderInput): Rend
       ctx.fillText(
         fallbackSku,
         PADDING_X + Math.max(0, (contentWidth - fallbackSkuWidth) / 2),
-        PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 1,
+        fallbackY + BARCODE_REGION_HEIGHT + BARCODE_TEXT_GAP,
       );
     }
   }

@@ -184,6 +184,14 @@ const run = async () => {
     const renderedLabel = await fs.readFile(printRes.json.printJob.outputPath);
     assert.equal(renderedLabel.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
 
+    const previewRes = await fetch(`${BASE_URL}/api/variants/${encodeURIComponent(product.variants[0].id)}/product-label/document`, {
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(previewRes.status, 200);
+    assert.equal(previewRes.headers.get("content-type"), "image/png");
+    const previewBuffer = Buffer.from(await previewRes.arrayBuffer());
+    assert.equal(previewBuffer.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+
     const clearStoredConfigRes = await fetchJson("/api/settings/product-label-print-agent", {
       method: "PUT",
       headers: {
