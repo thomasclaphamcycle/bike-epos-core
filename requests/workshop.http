@@ -3,7 +3,8 @@
 @managerRole = MANAGER
 
 ### Temporary role header auth (M13)
-### TODO(auth): replace X-Staff-Role/X-Staff-Id with real authenticated user roles.
+### These request examples intentionally use the dev/test header-auth fallback described in docs/auth.md.
+### Outside NODE_ENV=test, also send X-Internal-Auth when ALLOW_HEADER_AUTH=1 is enabled.
 
 ### Availability for a date range
 GET {{baseUrl}}/api/workshop/availability?from=2026-03-06&to=2026-03-10

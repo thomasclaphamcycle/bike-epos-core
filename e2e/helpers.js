@@ -258,7 +258,31 @@ const markWebOrderPackedViaBypass = async (request, orderId, role = "MANAGER") =
   );
 
 const searchOnlineStoreOrders = async (page, query) => {
-  await page.getByTestId("online-store-search-orders").fill(query);
+  const normalizedQuery = query.trim();
+  const searchInput = page.getByTestId("online-store-search-orders");
+  const existingValue = await searchInput.inputValue();
+
+  if (existingValue === normalizedQuery) {
+    await page.getByTestId("online-store-orders-loading").waitFor({ state: "detached" }).catch(() => {});
+    return;
+  }
+
+  const listResponsePromise = page.waitForResponse((response) => {
+    if (!response.ok() || !response.url().includes("/api/online-store/orders?")) {
+      return false;
+    }
+
+    try {
+      const responseUrl = new URL(response.url());
+      return (responseUrl.searchParams.get("q") ?? "") === normalizedQuery;
+    } catch {
+      return false;
+    }
+  });
+
+  await searchInput.fill(normalizedQuery);
+  await listResponsePromise;
+  await page.getByTestId("online-store-orders-loading").waitFor({ state: "detached" }).catch(() => {});
 };
 
 module.exports = {

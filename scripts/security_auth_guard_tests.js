@@ -156,6 +156,7 @@ const run = async () => {
     const unauthChecks = [
       { name: "unauth workshop parts", path: `/api/workshop-jobs/${fixtures.workshopJobId}/parts` },
       { name: "unauth sales report", path: `/api/reports/sales/daily${REPORT_RANGE_QUERY}` },
+      { name: "unauth inventory on-hand report", path: "/api/reports/inventory/on-hand" },
       {
         name: "unauth workshop payments report",
         path: `/api/reports/workshop/payments${REPORT_RANGE_QUERY}`,
@@ -263,6 +264,14 @@ const run = async () => {
       403,
     );
     expectStatus(
+      "staff inventory on-hand report forbidden",
+      await request({
+        path: "/api/reports/inventory/on-hand",
+        headers: staffHeaders,
+      }),
+      403,
+    );
+    expectStatus(
       "staff inventory value report forbidden",
       await request({
         path: `/api/reports/inventory/value?locationId=${fixtures.customerId}`,
@@ -313,6 +322,14 @@ const run = async () => {
       "manager reports allowed",
       await request({
         path: `/api/reports/sales/daily${REPORT_RANGE_QUERY}`,
+        headers: managerHeaders,
+      }),
+      200,
+    );
+    expectStatus(
+      "manager inventory on-hand report allowed",
+      await request({
+        path: "/api/reports/inventory/on-hand",
         headers: managerHeaders,
       }),
       200,
