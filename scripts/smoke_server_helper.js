@@ -177,7 +177,11 @@ const createSmokeServerController = ({
       await sleep(shutdownPollMs);
     }
 
-    throw new Error(`Server still responded on /health after ${shutdownTimeoutMs}ms`);
+    throw new Error(
+      `Server still responded on /health after ${shutdownTimeoutMs}ms${
+        lastProbeDetail ? `\nlast probe: ${lastProbeDetail}` : ""
+      }`,
+    );
   };
 
   const listLingeringServerPids = () =>
@@ -248,12 +252,15 @@ const createSmokeServerController = ({
       const alreadyHealthy = await probeHealthyBaseUrl();
       if (alreadyHealthy && process.env.ALLOW_EXISTING_SERVER !== "1") {
         throw new Error(
-          "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
+          `Refusing to run against an already-running server at ${alreadyHealthy}. Stop it first or set ALLOW_EXISTING_SERVER=1.${
+            lastProbeDetail ? `\nlast probe: ${lastProbeDetail}` : ""
+          }`,
         );
       }
 
       if (alreadyHealthy) {
         activeBaseUrl = alreadyHealthy;
+        log(`Reusing existing API server at ${alreadyHealthy}`);
         return false;
       }
 

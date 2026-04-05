@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { prisma } from "../lib/prisma";
+import { getRuntimeDiagnosticsSnapshot } from "./runtimeDiagnosticsService";
 
 type HealthCheckStatus = "ok" | "pending" | "error";
 
@@ -77,6 +78,7 @@ export const getHealthStatus = async (includeDetails = false): Promise<HealthRes
 
   const checks: Record<string, unknown> = {};
   let hasError = false;
+  const runtimeDiagnostics = getRuntimeDiagnosticsSnapshot();
 
   const databaseStartedAt = process.hrtime.bigint();
   try {
@@ -115,15 +117,24 @@ export const getHealthStatus = async (includeDetails = false): Promise<HealthRes
 
   checks.runtime = {
     status: "ok",
-    pid: process.pid,
-    nodeVersion: process.version,
-    uptimeSeconds: Number(process.uptime().toFixed(3)),
+    ...runtimeDiagnostics.runtime,
+    appVersion: runtimeDiagnostics.app.version,
+    appRevision: runtimeDiagnostics.app.revision,
+    releaseLabel: runtimeDiagnostics.app.releaseLabel,
+  };
+
+  checks.configuration = {
+    status: "ok",
+    ...runtimeDiagnostics.diagnostics,
+    ...runtimeDiagnostics.features,
   };
 
   return {
     httpStatus: hasError ? 503 : 200,
     body: {
       status: hasError ? "degraded" : "ok",
+      app: runtimeDiagnostics.app,
+      runtime: runtimeDiagnostics.runtime,
       checks,
     },
   };

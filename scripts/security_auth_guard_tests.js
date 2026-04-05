@@ -339,11 +339,16 @@ const run = async () => {
       403,
       `manager inventory value report should reach the handler, got ${managerInventoryValueReport.status}`,
     );
-    expectStatus(
-      "manager metrics allowed",
-      await request({ path: "/metrics", headers: managerHeaders }),
-      200,
-    );
+    const managerMetrics = await request({ path: "/metrics", headers: managerHeaders });
+    expectStatus("manager metrics allowed", managerMetrics, 200);
+    assert.equal(managerMetrics.json?.status, "ok");
+    assert.match(managerMetrics.json?.app?.version ?? "", /^\d+\.\d+\.\d+$/);
+    assert.equal(managerMetrics.json?.app?.label, `v${managerMetrics.json?.app?.version}`);
+    assert.equal(managerMetrics.json?.runtime?.environment, "test");
+    assert.equal(managerMetrics.json?.checks?.database?.status, "ok");
+    assert.equal(managerMetrics.json?.checks?.migrations?.status, "ok");
+    assert.equal(typeof managerMetrics.json?.diagnostics?.requestIdHeader, "string");
+    assert.equal(typeof managerMetrics.json?.features?.shippingPrintAgentConfigured, "boolean");
 
     expectStatus(
       "manager export sales forbidden",

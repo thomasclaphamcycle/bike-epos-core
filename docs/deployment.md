@@ -79,6 +79,29 @@ npm run print-agent:start
 
 Then register a printer in `/management/settings`, mark it shipping-label capable, and set it as the default shipping-label printer. For the full Windows/Zebra agent setup and raw TCP configuration, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
+## Runtime Diagnostics
+
+CorePOS keeps diagnostics lightweight and repo-native:
+
+- `GET /health`
+  - low-noise liveness check
+  - returns only `{ "status": "ok" }` when the app is responsive
+- `GET /health?details=1`
+  - adds database, migration, runtime, and configuration checks
+  - includes safe runtime metadata such as app version, revision, uptime, environment, frontend serving mode, and whether the shipping print agent is configured
+- `GET /api/system/version`
+  - safe runtime snapshot used by the app shell and support/debugging flows
+  - returns app version plus runtime/feature metadata without exposing secrets
+- `GET /metrics`
+  - manager-protected diagnostics snapshot
+  - mirrors detailed health plus diagnostics/feature flags for operator troubleshooting
+
+Logging notes:
+
+- `OPS_LOGGING=1` keeps concise structured lifecycle logs on
+- `COREPOS_DEBUG=1` adds richer request/startup/error detail for incident sessions
+- successful routine hits to `/health`, `/api/system/version`, and `/metrics` are suppressed from normal request logs unless debug mode is enabled, so repeated probes do not bury real failures
+
 5. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 
 ```bash

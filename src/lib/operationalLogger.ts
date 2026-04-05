@@ -2,7 +2,7 @@ import { getRequestContext } from "./requestContext";
 
 type OperationalLogPayload = Record<string, unknown>;
 
-const isOperationalLoggingEnabled = () => process.env.OPS_LOGGING === "1";
+export const isOperationalLoggingEnabled = () => process.env.OPS_LOGGING === "1";
 export const isCorePosDebugEnabled = () => process.env.COREPOS_DEBUG === "1";
 
 const RESERVED_KEYS = new Set(["operation", "entityId", "resultStatus"]);

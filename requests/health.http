@@ -1,5 +1,5 @@
 ### Basic health
 GET {{baseUrl}}/health
 
-### Health with database and migration checks
+### Health with database, migration, runtime, and configuration checks
 GET {{baseUrl}}/health?details=1

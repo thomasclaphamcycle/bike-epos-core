@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { execSync } from "node:child_process";
 import type { Server as HttpServer } from "node:http";
 import express from "express";
 import * as fs from "node:fs";
@@ -73,22 +72,9 @@ import { HttpError } from "./utils/http";
 import { logger } from "./utils/logger";
 import { bootstrapHandler } from "./controllers/authController";
 import { registerInternalEventSubscribers } from "./core/eventSubscribers";
-
-const resolveVersion = () => {
-  const explicitVersion = process.env.APP_VERSION ?? process.env.GIT_SHA ?? process.env.GITHUB_SHA;
-  if (explicitVersion && explicitVersion.trim().length > 0) {
-    return explicitVersion.trim();
-  }
-
-  try {
-    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
-  } catch {
-    return "unknown";
-  }
-};
+import { getRuntimeDiagnosticsSnapshot } from "./services/runtimeDiagnosticsService";
 
 const app = express();
-const appVersion = resolveVersion();
 registerInternalEventSubscribers();
 app.use(requestContextMiddleware);
 app.use(requestLoggingMiddleware);
@@ -173,15 +159,19 @@ app.get("/health", async (req, res, next) => {
   }
 });
 
-app.get("/metrics", requireRoleAtLeast("MANAGER"), (req, res) =>
-  res.json({
-    status: "ok",
-    uptime: Number(process.uptime().toFixed(3)),
-    env: process.env.NODE_ENV ?? "development",
-    version: appVersion,
-    time: new Date().toISOString(),
-  }),
-);
+app.get("/metrics", requireRoleAtLeast("MANAGER"), async (req, res, next) => {
+  try {
+    const healthStatus = await getHealthStatus(true);
+    const runtimeDiagnostics = getRuntimeDiagnosticsSnapshot();
+    res.status(healthStatus.httpStatus).json({
+      ...healthStatus.body,
+      diagnostics: runtimeDiagnostics.diagnostics,
+      features: runtimeDiagnostics.features,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/", (req, res) => {
   if (serveFrontendSpa) {
@@ -426,12 +416,22 @@ const registerRuntimeDiagnostics = () => {
 };
 
 const startServer = async () => {
+  const runtimeDiagnostics = getRuntimeDiagnosticsSnapshot();
   const startupPayload: Record<string, unknown> = {
-    environment: process.env.NODE_ENV || "development",
+    environment: runtimeDiagnostics.runtime.environment,
     port,
-    pid: process.pid,
-    version: appVersion,
-    nodeVersion: process.version,
+    pid: runtimeDiagnostics.runtime.pid,
+    version: runtimeDiagnostics.app.version,
+    revision: runtimeDiagnostics.app.revision,
+    releaseLabel: runtimeDiagnostics.app.releaseLabel,
+    nodeVersion: runtimeDiagnostics.runtime.nodeVersion,
+    frontendServingMode: runtimeDiagnostics.features.frontendServingMode,
+    frontendBundlePresent: runtimeDiagnostics.features.frontendBundlePresent,
+    authMode: runtimeDiagnostics.features.authMode,
+    shippingPrintAgentConfigured: runtimeDiagnostics.features.shippingPrintAgentConfigured,
+    opsLoggingEnabled: runtimeDiagnostics.diagnostics.opsLoggingEnabled,
+    corePosDebugEnabled: runtimeDiagnostics.diagnostics.corePosDebugEnabled,
+    startedAt: runtimeDiagnostics.runtime.startedAt,
   };
 
   try {
@@ -487,6 +487,7 @@ const startServer = async () => {
     logger.info("server.listening", {
       ...startupPayload,
       resultStatus: "succeeded",
+      bindHost: "0.0.0.0",
       url: `http://localhost:${port}`,
     });
   });
