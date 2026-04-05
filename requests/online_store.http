@@ -91,6 +91,16 @@ X-Staff-Id: {{managerId}}
   "providerKey": "EASYPOST"
 }
 
+### Resolve a scanned dispatch identifier before confirming dispatch (MANAGER+)
+POST {{baseUrl}}/api/online-store/dispatch-scan
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+{
+  "value": "TRACKING-OR-ORDER-REFERENCE"
+}
+
 ### Get stored shipment label payload (MANAGER+)
 GET {{baseUrl}}/api/online-store/shipments/{{shipmentId}}/label
 X-Staff-Role: {{managerRole}}

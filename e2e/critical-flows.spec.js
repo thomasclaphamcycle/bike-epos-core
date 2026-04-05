@@ -2745,7 +2745,12 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await expect(page.getByTestId("online-store-next-action")).toContainText("Mark the parcel dispatched after handoff");
   await expect(page.getByTestId("online-store-print-job-result")).toContainText("DRY_RUN");
 
-  await page.getByTestId("online-store-dispatch").click();
+  const scannedTrackingNumber = ((await page.getByTestId("online-store-tracking-number").textContent()) ?? "").trim();
+  await page.getByTestId("online-store-scan-input").fill(scannedTrackingNumber);
+  await page.getByTestId("online-store-scan-submit").click();
+  await expect(page.getByTestId("online-store-scan-result")).toContainText(createdOrder.order.orderNumber);
+  await expect(page.getByTestId("online-store-scan-result")).toContainText("Ready To Dispatch");
+  await page.getByTestId("online-store-scan-dispatch").click();
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Dispatched");

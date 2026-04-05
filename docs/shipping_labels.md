@@ -18,6 +18,7 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - mark web orders as packed before shipment processing
 - bulk-create shipment labels across packed web orders
 - bulk-print shipment labels across packed web orders with per-order outcomes
+- resolve scanned tracking, provider, or order references into the correct dispatch record before confirming dispatch
 - refresh provider-backed shipment state from CorePOS
 - accept automated provider-sync updates through a webhook-ready inbound path
 - request shipment void/cancel where the provider supports it
@@ -198,6 +199,7 @@ It currently supports:
 - selecting multiple packed orders for bulk shipment creation, bulk print, or bulk dispatch confirmation in sequence
 - seeing per-order bulk outcomes with safe skip/failure isolation plus concise retry/recovery cues
 - dispatching separately after print succeeds, including a ready-to-dispatch batch queue for printed labels
+- scanning a tracking number, provider reference, or order reference to load the matched shipment and confirm dispatch explicitly from a scan-first bench flow
 
 This is intentionally a narrow dispatch workflow, not a broader storefront or fulfilment dashboard redesign.
 
@@ -215,7 +217,7 @@ The intended next steps are:
 
 3. richer fulfilment operations
    - deeper pack/bench/station workflows beyond the first packed queue
-   - more advanced batching, wave handling, or scan-driven dispatch controls
+   - more advanced batching, wave handling, or scan-assisted exception handling beyond the first scan-first bench flow
    - eventual customer-facing online-order history and notifications
 
 ## Constraints kept intentionally

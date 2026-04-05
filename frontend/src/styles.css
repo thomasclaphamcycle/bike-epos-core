@@ -15196,6 +15196,85 @@ body.rota-row-drag-copy-active {
   color: var(--cp-shell-deep);
 }
 
+.online-orders-scan-panel,
+.online-orders-scan-result {
+  display: grid;
+  gap: var(--cp-space-3);
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.online-orders-scan-panel__copy {
+  margin: 0;
+  color: #526273;
+}
+
+.online-orders-scan-panel__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--cp-space-3);
+  align-items: end;
+}
+
+.online-orders-scan-panel__field {
+  display: grid;
+  gap: var(--cp-space-2);
+  font-weight: 700;
+}
+
+.online-orders-scan-result--matched {
+  border-color: rgba(46, 124, 246, 0.18);
+  background: rgba(232, 241, 255, 0.92);
+}
+
+.online-orders-scan-result--no_match {
+  border-color: rgba(157, 36, 25, 0.16);
+  background: rgba(255, 241, 239, 0.96);
+}
+
+.online-orders-scan-result--ambiguous {
+  border-color: rgba(176, 121, 15, 0.18);
+  background: rgba(255, 245, 220, 0.96);
+}
+
+.online-orders-scan-result__header,
+.online-orders-scan-result__facts,
+.online-orders-scan-result__actions,
+.online-orders-scan-result__candidate-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cp-space-3);
+  flex-wrap: wrap;
+}
+
+.online-orders-scan-result__header > div,
+.online-orders-scan-result__candidate-list li > div {
+  display: grid;
+  gap: 4px;
+}
+
+.online-orders-scan-result__facts {
+  color: #526273;
+}
+
+.online-orders-scan-result__candidate-list {
+  list-style: none;
+  display: grid;
+  gap: var(--cp-space-2);
+  padding: 0;
+  margin: 0;
+}
+
+.online-orders-scan-result__candidate-list li {
+  padding: var(--cp-space-3);
+  border-radius: var(--cp-radius-sm);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+}
+
 .online-orders-next-step p,
 .online-orders-readiness-card p,
 .online-orders-dispatch-action-card p,
@@ -15419,6 +15498,10 @@ body.rota-row-drag-copy-active {
 
   .online-orders-readiness-grid,
   .online-orders-dispatch-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-orders-scan-panel__form {
     grid-template-columns: minmax(0, 1fr);
   }
 }

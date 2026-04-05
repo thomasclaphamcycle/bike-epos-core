@@ -324,6 +324,23 @@ const run = async () => {
     assert.equal(Boolean(createShipmentRes.json.shipment.providerSyncedAt), true);
     const shipmentId = createShipmentRes.json.shipment.id;
 
+    const blockedScanRes = await fetchJson("/api/online-store/dispatch-scan", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        value: createShipmentRes.json.shipment.trackingNumber,
+      }),
+    });
+    assert.equal(blockedScanRes.status, 200, JSON.stringify(blockedScanRes.json));
+    assert.equal(blockedScanRes.json.status, "MATCHED");
+    assert.equal(blockedScanRes.json.matchedBy, "TRACKING_NUMBER");
+    assert.equal(blockedScanRes.json.order.orderNumber, successOrderBody.orderNumber);
+    assert.equal(blockedScanRes.json.dispatchable, false);
+    assert.equal(blockedScanRes.json.dispatchBlockedCode, "SHIPMENT_NOT_PRINTED");
+
     const duplicateShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`, {
       method: "POST",
       headers: {
@@ -394,6 +411,24 @@ const run = async () => {
     assert.equal(printRes.json.printJob.printerKey, defaultPrinter.key);
     assert.equal(printRes.json.printJob.printerTarget, "dry-run://online-store-smoke");
 
+    const dispatchableScanRes = await fetchJson("/api/online-store/dispatch-scan", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        value: printRes.json.shipment.providerShipmentReference,
+      }),
+    });
+    assert.equal(dispatchableScanRes.status, 200, JSON.stringify(dispatchableScanRes.json));
+    assert.equal(dispatchableScanRes.json.status, "MATCHED");
+    assert.equal(dispatchableScanRes.json.matchedBy, "PROVIDER_SHIPMENT_REFERENCE");
+    assert.equal(dispatchableScanRes.json.order.id, createOrderRes.json.order.id);
+    assert.equal(dispatchableScanRes.json.shipment.id, shipmentId);
+    assert.equal(dispatchableScanRes.json.dispatchable, true);
+    assert.equal(dispatchableScanRes.json.dispatchBlockedCode, null);
+
     const reprintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/print`, {
       method: "POST",
       headers: {
@@ -423,6 +458,36 @@ const run = async () => {
     assert.equal(dispatchedDetailRes.status, 200, JSON.stringify(dispatchedDetailRes.json));
     assert.equal(dispatchedDetailRes.json.order.status, "DISPATCHED");
     assert.equal(dispatchedDetailRes.json.order.shipments[0].status, "DISPATCHED");
+
+    const dispatchedScanRes = await fetchJson("/api/online-store/dispatch-scan", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        value: dispatchedDetailRes.json.order.shipments[0].trackingNumber,
+      }),
+    });
+    assert.equal(dispatchedScanRes.status, 200, JSON.stringify(dispatchedScanRes.json));
+    assert.equal(dispatchedScanRes.json.status, "MATCHED");
+    assert.equal(dispatchedScanRes.json.dispatchable, false);
+    assert.equal(dispatchedScanRes.json.dispatchBlockedCode, "SHIPMENT_ALREADY_DISPATCHED");
+
+    const noMatchScanRes = await fetchJson("/api/online-store/dispatch-scan", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        value: `missing-${Date.now()}`,
+      }),
+    });
+    assert.equal(noMatchScanRes.status, 200, JSON.stringify(noMatchScanRes.json));
+    assert.equal(noMatchScanRes.json.status, "NO_MATCH");
+    assert.equal(noMatchScanRes.json.order, null);
+    assert.equal(noMatchScanRes.json.shipment, null);
 
     const voidToken = `smoke-void-${Date.now()}`;
     const voidOrderBody = createOrderBody(voidToken, {

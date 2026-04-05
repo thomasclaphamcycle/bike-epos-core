@@ -299,6 +299,37 @@ type BulkShipmentOperationResponse = {
   results: BulkShipmentActionResult[];
 };
 
+type DispatchScanMatchType =
+  | "TRACKING_NUMBER"
+  | "PROVIDER_TRACKING_REFERENCE"
+  | "PROVIDER_SHIPMENT_REFERENCE"
+  | "PROVIDER_REFERENCE"
+  | "ORDER_NUMBER"
+  | "EXTERNAL_ORDER_REFERENCE";
+
+type DispatchScanCandidate = {
+  orderId: string;
+  orderNumber: string;
+  shipmentId: string | null;
+  trackingNumber: string | null;
+  shipmentStatus: WebOrderShipmentStatus | null;
+  dispatchedAt: string | null;
+  matchedBy: DispatchScanMatchType;
+};
+
+type DispatchScanLookupResponse = {
+  status: "MATCHED" | "NO_MATCH" | "AMBIGUOUS";
+  scanValue: string;
+  normalizedValue: string;
+  matchedBy: DispatchScanMatchType | null;
+  dispatchable: boolean;
+  dispatchBlockedCode: string | null;
+  dispatchBlockedReason: string | null;
+  order: WebOrderSummary | null;
+  shipment: WebOrderShipment | null;
+  candidates: DispatchScanCandidate[];
+};
+
 const formatMoney = (pence: number) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -953,6 +984,7 @@ export const OnlineStoreOrdersPage = () => {
   const listRequestSequenceRef = useRef(0);
   const detailRequestSequenceRef = useRef(0);
   const labelRequestSequenceRef = useRef(0);
+  const scanInputRef = useRef<HTMLInputElement | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -968,6 +1000,8 @@ export const OnlineStoreOrdersPage = () => {
   const [printJob, setPrintJob] = useState<ShipmentPrintExecutionResponse["printJob"] | null>(null);
   const [printNotice, setPrintNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkShipmentOperationResponse | null>(null);
+  const [scanValue, setScanValue] = useState("");
+  const [scanResult, setScanResult] = useState<DispatchScanLookupResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
   const [copies, setCopies] = useState("1");
@@ -1116,6 +1150,10 @@ export const OnlineStoreOrdersPage = () => {
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    scanInputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     void loadPrinters();
@@ -1524,6 +1562,53 @@ export const OnlineStoreOrdersPage = () => {
     });
   };
 
+  const handleSubmitScanLookup = async () => {
+    const value = scanValue.trim();
+    if (!value) {
+      error("Scan or type a tracking, provider, or order reference first.");
+      scanInputRef.current?.focus();
+      return;
+    }
+
+    await runAction("scan-lookup", async () => {
+      const payload = await apiPost<DispatchScanLookupResponse>("/api/online-store/dispatch-scan", { value });
+      setScanResult(payload);
+
+      if (payload.status === "MATCHED" && payload.order) {
+        setSelectedOrderId(payload.order.id);
+        await loadOrderDetail(payload.order.id);
+      }
+
+      if (payload.status === "AMBIGUOUS") {
+        error("More than one order matched that scan. Review the candidates before dispatch.");
+      }
+    });
+  };
+
+  const handleDispatchScannedShipment = async () => {
+    if (scanResult?.status !== "MATCHED" || !scanResult.shipment || !scanResult.order || !scanResult.dispatchable) {
+      return;
+    }
+
+    const scannedValue = scanResult.scanValue;
+    await runAction("scan-dispatch", async () => {
+      await apiPost(scanResult.shipment.dispatchPath);
+      success(`Shipment ${scanResult.shipment.trackingNumber} marked as dispatched from the scan bench.`);
+      setScanValue("");
+      await refreshSelectedOrder(scanResult.order.id);
+      const refreshedResult = await apiPost<DispatchScanLookupResponse>("/api/online-store/dispatch-scan", {
+        value: scannedValue,
+      });
+      setScanResult(refreshedResult);
+      scanInputRef.current?.focus();
+    });
+  };
+
+  const handleOpenScanCandidate = async (orderId: string) => {
+    setSelectedOrderId(orderId);
+    await loadOrderDetail(orderId);
+  };
+
   const canGenerateShipment = Boolean(
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
@@ -1842,6 +1927,147 @@ export const OnlineStoreOrdersPage = () => {
             description="Generate a shipment label, prepare a Zebra-style print payload, send it through the Windows print-agent path, and keep print/dispatch timestamps audit-safe."
             actions={selectedOrder ? <span className="status-badge">{selectedOrder.orderNumber}</span> : null}
           />
+
+          <section className="online-orders-scan-panel" data-testid="online-store-scan-panel">
+            <div className="online-orders-detail__section-header">
+              <h3>Scan To Confirm Dispatch</h3>
+              <span className="status-badge">Scan-first bench flow</span>
+            </div>
+            <p className="online-orders-scan-panel__copy">
+              Scan a tracking number, provider shipment reference, provider tracking reference, provider reference, order number, or external order reference to load the right shipment before confirming dispatch.
+            </p>
+            <form
+              className="online-orders-scan-panel__form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSubmitScanLookup();
+              }}
+            >
+              <label className="online-orders-scan-panel__field">
+                Scan or type identifier
+                <input
+                  ref={scanInputRef}
+                  value={scanValue}
+                  onChange={(event) => setScanValue(event.target.value)}
+                  placeholder="Scan tracking, provider ref, or order number"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-testid="online-store-scan-input"
+                />
+              </label>
+              <button
+                type="submit"
+                className="button-link"
+                disabled={pendingAction.length > 0}
+                data-testid="online-store-scan-submit"
+              >
+                {pendingAction === "scan-lookup" ? "Looking Up..." : "Lookup Scan"}
+              </button>
+            </form>
+
+            {scanResult ? (
+              <div
+                className={`online-orders-scan-result online-orders-scan-result--${scanResult.status.toLowerCase()}`}
+                data-testid="online-store-scan-result"
+              >
+                {scanResult.status === "NO_MATCH" ? (
+                  <>
+                    <strong>No dispatch match found</strong>
+                    <p>{scanResult.dispatchBlockedReason ?? "No shipment or order matched that scan value."}</p>
+                  </>
+                ) : null}
+
+                {scanResult.status === "AMBIGUOUS" ? (
+                  <>
+                    <strong>More than one order matched</strong>
+                    <p>
+                      {scanResult.dispatchBlockedReason ?? "Review the matched orders and open the correct one before dispatch."}
+                    </p>
+                    <ul className="online-orders-scan-result__candidate-list">
+                      {scanResult.candidates.map((candidate) => (
+                        <li key={`${candidate.orderId}-${candidate.shipmentId ?? "none"}-${candidate.matchedBy}`}>
+                          <div>
+                            <strong>{candidate.orderNumber}</strong>
+                            <span>
+                              {humanizeToken(candidate.matchedBy)}
+                              {candidate.trackingNumber ? ` · ${candidate.trackingNumber}` : ""}
+                              {candidate.shipmentStatus ? ` · ${humanizeToken(candidate.shipmentStatus)}` : ""}
+                              {candidate.dispatchedAt ? " · dispatched" : ""}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="button-link"
+                            onClick={() => void handleOpenScanCandidate(candidate.orderId)}
+                            disabled={pendingAction.length > 0}
+                          >
+                            Open Order
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+
+                {scanResult.status === "MATCHED" && scanResult.order ? (
+                  <>
+                    <div className="online-orders-scan-result__header">
+                      <div>
+                        <span className="online-orders-next-step__eyebrow">
+                          Matched by {scanResult.matchedBy ? humanizeToken(scanResult.matchedBy) : "scan"}
+                        </span>
+                        <strong>{scanResult.order.orderNumber}</strong>
+                      </div>
+                      <span className={`status-badge${scanResult.dispatchable ? " status-ready" : ""}`}>
+                        {scanResult.dispatchable ? "Ready To Dispatch" : "Review Required"}
+                      </span>
+                    </div>
+                    <div className="online-orders-scan-result__facts">
+                      <span>{scanResult.order.customerName}</span>
+                      <span>{scanResult.shipment?.trackingNumber ?? "No shipment yet"}</span>
+                      <span>
+                        {scanResult.shipment ? humanizeToken(scanResult.shipment.status) : humanizeToken(scanResult.order.status)}
+                      </span>
+                    </div>
+                    <p>
+                      {scanResult.dispatchable
+                        ? "This scan resolved to an active printed shipment. Confirm dispatch only after the parcel has physically left the store."
+                        : scanResult.dispatchBlockedReason ?? "CorePOS is blocking dispatch for this scan right now."}
+                    </p>
+                    {!scanResult.dispatchable ? (
+                      <div
+                        className="online-orders-print-notice online-orders-print-notice--error"
+                        data-testid="online-store-scan-blocked"
+                      >
+                        {scanResult.dispatchBlockedReason}
+                      </div>
+                    ) : null}
+                    <div className="online-orders-scan-result__actions">
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => void handleOpenScanCandidate(scanResult.order!.id)}
+                        disabled={pendingAction.length > 0}
+                      >
+                        Open Matched Order
+                      </button>
+                      <button
+                        type="button"
+                        className="button-link"
+                        onClick={() => void handleDispatchScannedShipment()}
+                        disabled={!scanResult.dispatchable || pendingAction.length > 0}
+                        data-testid="online-store-scan-dispatch"
+                      >
+                        {pendingAction === "scan-dispatch" ? "Dispatching..." : "Confirm Dispatch For Scanned Shipment"}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
 
           {loadingDetail ? (
             <EmptyState title="Loading order detail" description="Fetching the selected order, shipment state, and shipping provider options." />

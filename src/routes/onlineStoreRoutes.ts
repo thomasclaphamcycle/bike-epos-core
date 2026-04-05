@@ -13,6 +13,7 @@ import {
   getShipmentLabelContentHandler,
   getShipmentLabelPayloadHandler,
   listOnlineStoreOrdersHandler,
+  lookupDispatchScanHandler,
   prepareShipmentLabelPrintHandler,
   printShipmentLabelViaAgentHandler,
   refreshShipmentProviderStateHandler,
@@ -25,6 +26,7 @@ export const onlineStoreRouter = Router();
 
 onlineStoreRouter.get("/orders", requireRoleAtLeast("MANAGER"), listOnlineStoreOrdersHandler);
 onlineStoreRouter.post("/orders", requireRoleAtLeast("MANAGER"), createOnlineStoreOrderHandler);
+onlineStoreRouter.post("/dispatch-scan", requireRoleAtLeast("MANAGER"), lookupDispatchScanHandler);
 onlineStoreRouter.post("/orders/bulk/shipments", requireRoleAtLeast("MANAGER"), bulkCreateShipmentLabelsHandler);
 onlineStoreRouter.post("/orders/bulk/print", requireRoleAtLeast("MANAGER"), bulkPrintShipmentLabelsHandler);
 onlineStoreRouter.post("/orders/bulk/dispatch", requireRoleAtLeast("MANAGER"), bulkDispatchShipmentsHandler);
