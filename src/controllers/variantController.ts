@@ -5,6 +5,7 @@ import {
   listVariants,
   updateVariantById,
 } from "../services/productService";
+import { printProductLabelDirect } from "../services/productLabelPrintService";
 import { HttpError } from "../utils/http";
 import { parseOptionalIntegerQuery } from "../utils/requestParsing";
 
@@ -151,6 +152,37 @@ export const createVariantForProductHandler = async (req: Request, res: Response
 export const getVariantHandler = async (req: Request, res: Response) => {
   const variant = await getVariantById(req.params.id);
   res.json(variant);
+};
+
+export const printVariantProductLabelDirectHandler = async (req: Request, res: Response) => {
+  const body = req.body ?? {};
+  if (body && (typeof body !== "object" || Array.isArray(body))) {
+    throw new HttpError(400, "product label print body must be an object", "INVALID_PRODUCT_LABEL_PRINT");
+  }
+
+  const record = body as {
+    printerId?: unknown;
+    printerKey?: unknown;
+    copies?: unknown;
+  };
+
+  if (record.printerId !== undefined && record.printerId !== null && typeof record.printerId !== "string") {
+    throw new HttpError(400, "printerId must be a string or null", "INVALID_PRODUCT_LABEL_PRINT");
+  }
+  if (record.printerKey !== undefined && record.printerKey !== null && typeof record.printerKey !== "string") {
+    throw new HttpError(400, "printerKey must be a string or null", "INVALID_PRODUCT_LABEL_PRINT");
+  }
+  if (record.copies !== undefined && !Number.isInteger(record.copies)) {
+    throw new HttpError(400, "copies must be an integer", "INVALID_PRODUCT_LABEL_PRINT");
+  }
+
+  const response = await printProductLabelDirect(req.params.id, {
+    printerId: (record.printerId as string | null | undefined) ?? undefined,
+    printerKey: (record.printerKey as string | null | undefined) ?? undefined,
+    copies: record.copies as number | undefined,
+  });
+
+  res.status(201).json(response);
 };
 
 export const patchVariantHandler = async (req: Request, res: Response) => {

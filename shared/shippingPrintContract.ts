@@ -1,46 +1,10 @@
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const expectRecord = (value: unknown, field: string) => {
-  if (!isRecord(value)) {
-    throw new Error(`${field} must be an object`);
-  }
-
-  return value;
-};
-
-const expectString = (value: unknown, field: string) => {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string`);
-  }
-
-  return value;
-};
-
-const expectNullableString = (value: unknown, field: string) => {
-  if (value === null) {
-    return null;
-  }
-
-  return expectString(value, field);
-};
-
-const expectPositiveInteger = (value: unknown, field: string) => {
-  if (!Number.isInteger(value) || Number(value) <= 0) {
-    throw new Error(`${field} must be a positive integer`);
-  }
-
-  return Number(value);
-};
-
-const expectIsoDateString = (value: unknown, field: string) => {
-  const normalized = expectString(value, field);
-  if (Number.isNaN(new Date(normalized).getTime())) {
-    throw new Error(`${field} must be a valid ISO date string`);
-  }
-
-  return normalized;
-};
+import {
+  expectIsoDateString,
+  expectNullableString,
+  expectPositiveInteger,
+  expectRecord,
+  expectString,
+} from "./printContractUtils";
 
 export const SHIPMENT_LABEL_DOCUMENT_FORMAT = "ZPL" as const;
 export const SHIPMENT_LABEL_MIME_TYPE = "application/zpl" as const;

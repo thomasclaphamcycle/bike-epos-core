@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { ProductLabel } from "../features/labels/ProductLabel";
 
@@ -20,11 +20,29 @@ type VariantLabelDetail = {
   };
 };
 
+type ProductLabelDirectPrintResponse = {
+  printer: {
+    id: string;
+    key: string;
+    name: string;
+    transportMode: "DRY_RUN" | "WINDOWS_PRINTER";
+    resolutionSource: "selected" | "default";
+  };
+  printJob: {
+    jobId: string;
+    printerTarget: string;
+    simulated: boolean;
+    outputPath: string | null;
+  };
+};
+
 export const ProductLabelPrintPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
-  const { error } = useToasts();
+  const { error, success } = useToasts();
   const [variant, setVariant] = useState<VariantLabelDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [directPrinting, setDirectPrinting] = useState(false);
+  const [lastDirectPrint, setLastDirectPrint] = useState<ProductLabelDirectPrintResponse | null>(null);
 
   useEffect(() => {
     if (!variantId) {
@@ -87,21 +105,67 @@ export const ProductLabelPrintPage = () => {
     return <div className="page-shell"><p>Missing product label id.</p></div>;
   }
 
+  const handleDirectPrint = async () => {
+    if (!variantId || !variant) {
+      return;
+    }
+
+    setDirectPrinting(true);
+    try {
+      const payload = await apiPost<ProductLabelDirectPrintResponse>(
+        `/api/variants/${encodeURIComponent(variantId)}/product-label/print`,
+      );
+      setLastDirectPrint(payload);
+      success(
+        payload.printJob.simulated
+          ? `Dry-run product label rendered for ${payload.printer.name}.`
+          : `Product label sent to ${payload.printer.name}.`,
+      );
+    } catch (printError) {
+      error(printError instanceof Error ? printError.message : "Failed to direct-print product label");
+    } finally {
+      setDirectPrinting(false);
+    }
+  };
+
   return (
     <div className="product-label-print-page">
       <div className="product-label-print-page__actions">
         <Link to={`/inventory/${variantId}`}>Back to inventory detail</Link>
-        <button type="button" className="primary" onClick={() => window.print()} disabled={!variant || loading}>
-          {loading ? "Loading..." : "Print label"}
+        <button
+          type="button"
+          className="primary"
+          onClick={() => void handleDirectPrint()}
+          disabled={!variant || loading || directPrinting}
+        >
+          {directPrinting ? "Printing..." : "Direct print to Dymo"}
+        </button>
+        <button type="button" onClick={() => window.print()} disabled={!variant || loading || directPrinting}>
+          {loading ? "Loading..." : "Browser print fallback"}
         </button>
       </div>
 
       <div className="product-label-print-page__copy">
         <h1>Product Label</h1>
         <p className="muted-text">
-          Prints the preferred operational barcode as a live Code 128 label. Manufacturer barcodes stay preferred when present; CorePOS internal barcodes are only used as fallback.
+          Direct print uses the default registered Dymo product-label printer from Settings. Browser print stays available as a fallback when you need to preview or troubleshoot layout.
         </p>
       </div>
+
+      {lastDirectPrint ? (
+        <div className="card">
+          <strong>Last direct print</strong>
+          <p className="muted-text">
+            {lastDirectPrint.printJob.simulated
+              ? `Rendered in DRY_RUN mode for ${lastDirectPrint.printer.name}.`
+              : `Sent to ${lastDirectPrint.printer.name} via ${lastDirectPrint.printer.transportMode}.`}
+          </p>
+          <p className="muted-text">
+            Job {lastDirectPrint.printJob.jobId} · target {lastDirectPrint.printJob.printerTarget}
+            {lastDirectPrint.printJob.outputPath ? ` · ${lastDirectPrint.printJob.outputPath}` : ""}
+          </p>
+        </div>
+      ) : null}
 
       <div className="product-label-print-page__sheet">
         {variant ? (

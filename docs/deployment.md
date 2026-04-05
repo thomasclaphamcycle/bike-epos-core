@@ -16,6 +16,9 @@ Backend:
 - `COREPOS_SHIPPING_PRINT_AGENT_URL` (optional, enables backend handoff for web-order shipping-label printing)
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional but recommended when using a remote agent over a trusted LAN)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (optional, enables backend handoff for direct Dymo product-label printing and falls back to `COREPOS_SHIPPING_PRINT_AGENT_URL`)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
 
 Frontend (optional build-time customizations):
 
@@ -71,13 +74,13 @@ npm --prefix frontend run dev
 
 The React app proxies `/api` to `http://localhost:3100` in development and is the recommended trial/evaluation surface on `http://localhost:5173/login`.
 
-Optional shipping-label print agent for web-order dispatch:
+Optional local print agent for web-order shipment labels and direct Dymo product labels:
 
 ```bash
 npm run print-agent:start
 ```
 
-Then register a printer in `/management/settings`, mark it shipping-label capable, and set it as the default shipping-label printer. For the full Windows/Zebra agent setup and raw TCP configuration, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
+Then register a printer in `/management/settings`, mark it shipping-label capable or product-label capable as appropriate, and set it as the default printer for that workflow. For the full Windows/Zebra and Dymo local-agent setup, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
 ## Runtime Diagnostics
 

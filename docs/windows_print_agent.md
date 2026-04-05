@@ -1,26 +1,31 @@
-# Windows Zebra Print Agent
+# Windows Local Print Agent
 
-This document describes the first real CorePOS print-agent path for web-order shipping labels.
+This document describes the current real CorePOS local print-agent paths for:
+
+- web-order Zebra shipment labels
+- Dymo product labels printed from the product-label page
 
 ## What is implemented now
 
-CorePOS now supports a real backend-to-agent print handoff for shipment labels:
+CorePOS now supports real backend-to-agent print handoff for two narrow workflows:
 
-- CorePOS still owns shipment lifecycle and print orchestration.
-- The prepared shipment print payload remains a stable backend contract.
-- CorePOS now resolves that payload through registered printer records and a default shipping-label printer setting.
+- CorePOS still owns shipment lifecycle, product-label intent preparation, and print orchestration.
+- Shipment and product-label print payloads remain separate stable backend contracts.
+- CorePOS resolves both through registered printer records and workflow-specific defaults.
 - A repo-local Windows-oriented print agent can accept that payload over HTTP.
 - The print agent can either:
-  - simulate printing safely in `DRY_RUN`, or
-  - send raw ZPL to the registered Zebra target over raw TCP.
+  - simulate printing safely in `DRY_RUN`
+  - send Zebra ZPL to the registered shipment printer over raw TCP
+  - render a Dymo-style 57x32 product label and hand it to the installed Windows printer by name
 - Successful agent prints mark the shipment as printed in CorePOS.
 - Failed agent prints do not set `printedAt`.
+- Product-label direct prints stay separate from shipment state and keep the browser-print fallback available.
 
 This is intentionally the first operational slice, not the final multi-device print platform.
 
 ## Architecture
 
-The shipping-label print path is now split into six layers:
+The local print-agent path is now split into six layers:
 
 1. Shipment orchestration
    - `src/services/orderService.ts`
@@ -32,21 +37,23 @@ The shipping-label print path is now split into six layers:
    - `src/services/shipping/providerConfigService.ts`
    - label generation can come from the built-in `INTERNAL_MOCK_ZPL` path, the `GENERIC_HTTP_ZPL` scaffold, or the first live `EASYPOST` adapter
 
-3. Print preparation contract
+3. Print preparation contracts
    - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
-   - payloads remain fetchable and previewable from CorePOS
+   - CorePOS also prepares a separate `PRODUCT_LABEL_PRINT` payload for Dymo-style product labels
+   - shipment payloads remain fetchable and previewable from CorePOS
 
 4. Printer registration and default selection
    - `src/services/printerService.ts`
-   - manages the registered printer list, shipping-label capability, active status, and default shipping-label printer
+   - manages the registered printer list, shipping-label or product-label capability, active status, and workflow-specific defaults
 
 5. CorePOS print-agent delivery
    - `src/services/shipping/printAgentDeliveryService.ts`
+   - `src/services/productLabelPrintAgentDeliveryService.ts`
    - delivers prepared print jobs to the configured agent URL with timeout handling and normalized errors
 
 6. Local Windows print agent
    - `print-agent/src/`
-   - validates the payload, checks the optional shared secret, and sends ZPL through the transport declared by the resolved printer record
+   - validates the payload, checks the optional shared secret, and sends either Zebra ZPL or Dymo PNG output through the transport declared by the resolved printer record
 
 ## Current agent API
 
@@ -54,10 +61,12 @@ The local print agent exposes:
 
 - `GET /health`
 - `POST /jobs/shipment-label`
+- `POST /jobs/product-label`
 
 The print-job endpoint accepts:
 
 - `{ "printRequest": <SHIPMENT_LABEL_PRINT payload> }`
+- `{ "printRequest": <PRODUCT_LABEL_PRINT payload> }`
 
 If `COREPOS_PRINT_AGENT_SHARED_SECRET` is set, CorePOS must send the same value in:
 
@@ -86,15 +95,31 @@ Behavior:
 - sends raw ZPL bytes directly
 - is appropriate for a Zebra printer or print server that accepts raw TCP/9100-style traffic
 
+### `WINDOWS_PRINTER`
+
+This is the narrow Dymo-oriented direct-print path for product labels.
+
+Behavior:
+
+- CorePOS sends a `PRODUCT_LABEL_PRINT` request to the local agent
+- the agent renders the 57x32 product label as a PNG using the same content intent as the browser label page
+- on Windows, the agent invokes `powershell.exe` and prints that PNG to the installed printer named on the registered Dymo printer record
+- this avoids the browser print popup and its paper-size handling limits
+
 ## Important limitation of the first version
 
-The first real transport is `RAW_TCP` only.
+The two real transports are intentionally narrow:
+
+- shipment labels: `RAW_TCP`
+- product labels: `WINDOWS_PRINTER`
 
 That means:
 
 - USB-only or Windows spooler-only Zebra setups are not directly supported yet
 - if your dispatch Zebra is connected only by USB, this first milestone is not the final answer
 - for now, the clean supported real path is a raw TCP reachable Zebra target or Zebra-compatible print server path
+- Dymo product-label direct printing currently assumes a Windows machine with the Dymo printer installed in the local Windows printer list
+- product-label direct printing is intentionally raster-based and targeted at the current Dymo 57x32 use case, not a generic label-designer subsystem
 
 This is intentional. It keeps the contract and orchestration correct without pretending that browser printing or a fragile pseudo-driver path is production-ready.
 
@@ -105,6 +130,9 @@ Set these in the CorePOS backend environment when you want CorePOS to hand off s
 - `COREPOS_SHIPPING_PRINT_AGENT_URL`
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional but recommended)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_URL`)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
 
 Example:
 
@@ -123,9 +151,9 @@ Each registered printer record includes:
 - name
 - internal key/code
 - printer family and model hint
-- shipping-label capability
+- shipping-label or product-label capability
 - active/inactive status
-- transport mode (`DRY_RUN` or `RAW_TCP`)
+- transport mode (`DRY_RUN`, `RAW_TCP`, or `WINDOWS_PRINTER`)
 - current target details for the supported transport
 - location and notes
 
@@ -134,6 +162,13 @@ Current dispatch behavior:
 - staff can choose a registered printer explicitly on `/online-store/orders`
 - if they do not choose one, CorePOS uses the default shipping-label printer
 - inactive or non-shipping-capable printers are rejected before the agent is called
+
+Current product-label behavior:
+
+- staff can direct-print from `/inventory/:variantId/label-print`
+- CorePOS uses the default product-label printer unless a later caller explicitly selects another registered Dymo target
+- the registered Dymo printer record stores the installed Windows printer name when `WINDOWS_PRINTER` transport is used
+- if no default product-label printer is configured, CorePOS fails clearly and staff can still use the browser-print fallback
 
 ## Print agent configuration
 
@@ -214,6 +249,7 @@ Still future work:
 - richer local printer/device mappings for multi-station environments
 - durable local queueing or job retry policy inside the agent
 - direct Windows spooler / USB Zebra transport
+- richer Dymo label-template variations or multi-printer product-label selection in the UI
 - richer dispatch batching and packing workflows
 
-The current milestone is the honest first operational bridge between CorePOS shipment orchestration and Zebra-oriented local printing.
+The current milestone is the honest first operational bridge between CorePOS print orchestration and workflow-specific local printing for Zebra shipment labels and Dymo product labels.
