@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 import { WorkshopCheckInModal } from "../features/workshop/WorkshopCheckInModal";
 import {
   buildDashboardQuery,
@@ -31,10 +32,12 @@ import { type WorkshopCheckInScheduleDraft } from "./WorkshopCheckInPage";
 export const WorkshopPage = () => {
   const { user } = useAuth();
   const { error } = useToasts();
+  const appConfig = useAppConfig();
   const navigate = useNavigate();
+  const workshopTimeZone = appConfig.store.timeZone || "Europe/London";
 
   const [view, setView] = useState<CalendarViewMode>("week");
-  const [anchorDateKey, setAnchorDateKey] = useState(getWorkshopOperationalWeekStartDateKey());
+  const [anchorDateKey, setAnchorDateKey] = useState(() => getWorkshopOperationalWeekStartDateKey(new Date(), workshopTimeZone));
   const [quickFilter, setQuickFilter] = useState<QuickFilterKey>("ALL");
   const [status, setStatus] = useState<(typeof statusOptions)[number]>("");
   const [search, setSearch] = useState("");
@@ -114,7 +117,9 @@ export const WorkshopPage = () => {
   );
 
   const currentTodayAnchorDateKey =
-    view === "week" ? getWorkshopOperationalWeekStartDateKey() : workshopTodayDateKey();
+    view === "week"
+      ? getWorkshopOperationalWeekStartDateKey(new Date(), workshopTimeZone)
+      : workshopTodayDateKey(workshopTimeZone);
 
   const handleRefresh = async () => {
     await loadJobs();
@@ -126,7 +131,7 @@ export const WorkshopPage = () => {
     setStatus("");
     setSearch("");
     setSelectedTechnicianId("");
-    setAnchorDateKey(getWorkshopOperationalWeekStartDateKey());
+    setAnchorDateKey(getWorkshopOperationalWeekStartDateKey(new Date(), workshopTimeZone));
     setView("week");
     setPostCreateJobId(jobId);
     setSchedulerRefreshToken((current) => current + 1);

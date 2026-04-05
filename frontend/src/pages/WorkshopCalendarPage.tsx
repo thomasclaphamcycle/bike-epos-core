@@ -2,6 +2,7 @@ import { type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEv
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 import { WorkshopJobOverlay, type WorkshopJobOverlaySummary } from "../features/workshop/WorkshopJobOverlay";
 import {
   getWorkshopDisplayStatus,
@@ -319,7 +320,10 @@ const parseDateKey = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
-export const workshopTodayDateKey = () => formatDateKey(new Date());
+const DEFAULT_WORKSHOP_TIME_ZONE = "Europe/London";
+
+export const workshopTodayDateKey = (timeZone = DEFAULT_WORKSHOP_TIME_ZONE) =>
+  getDateKeyInTimeZone(new Date(), timeZone) || formatDateKey(new Date());
 
 const clampPickerPosition = (value: number, min: number, max: number) => {
   if (max < min) {
@@ -744,8 +748,17 @@ const getOperationalWeekStart = (anchor: Date) => {
 
 const getStandaloneWeekStart = (anchor: Date) => addDays(anchor, -2);
 
-export const getWorkshopOperationalWeekStartDateKey = (referenceDate = new Date()) =>
-  formatDateKey(getOperationalWeekStart(referenceDate));
+export const getWorkshopOperationalWeekStartDateKey = (
+  referenceDate = new Date(),
+  timeZone = DEFAULT_WORKSHOP_TIME_ZONE,
+) => {
+  const referenceDateKey = getDateKeyInTimeZone(referenceDate, timeZone);
+  if (!referenceDateKey) {
+    return formatDateKey(getOperationalWeekStart(referenceDate));
+  }
+
+  return formatDateKey(getOperationalWeekStart(parseDateKey(referenceDateKey)));
+};
 
 const getAnchorDateForVisibleWeekStart = (
   start: Date,
@@ -1383,6 +1396,7 @@ export const WorkshopSchedulerScreen = ({
   onRequestCreateAtSlot,
 }: WorkshopSchedulerScreenProps) => {
   const { success, error } = useToasts();
+  const appConfig = useAppConfig();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
@@ -1419,8 +1433,9 @@ export const WorkshopSchedulerScreen = ({
     setDragState(nextState);
   };
 
+  const configuredWorkshopTimeZone = appConfig.store.timeZone || DEFAULT_WORKSHOP_TIME_ZONE;
   const standaloneView = searchParams.get("view") === "day" ? "day" : "week";
-  const standaloneAnchorDateKey = searchParams.get("date") || workshopTodayDateKey();
+  const standaloneAnchorDateKey = searchParams.get("date") || workshopTodayDateKey(configuredWorkshopTimeZone);
   const standaloneOverview = !embedded;
   const view = controlledView ?? standaloneView;
   const anchorDateKey = controlledAnchorDateKey ?? standaloneAnchorDateKey;
@@ -1435,8 +1450,8 @@ export const WorkshopSchedulerScreen = ({
   );
   const pxPerMinute = schedulerZoomOption.pxPerMinute;
   const minBookingBlockHeight = getMinimumBookingBlockHeight(pxPerMinute);
-  const calendarTimeZone = calendar?.range.timeZone;
-  const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey();
+  const calendarTimeZone = calendar?.range.timeZone || configuredWorkshopTimeZone;
+  const todayKey = getDateKeyInTimeZone(new Date(), calendarTimeZone) || workshopTodayDateKey(configuredWorkshopTimeZone);
 
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -2599,7 +2614,7 @@ export const WorkshopSchedulerScreen = ({
               ) : null}
               <button
                 type="button"
-                onClick={() => changeAnchorDateKey(workshopTodayDateKey())}
+                onClick={() => changeAnchorDateKey(todayKey)}
                 disabled={anchorDateKey === todayKey}
               >
                 Today
