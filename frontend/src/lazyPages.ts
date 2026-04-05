@@ -1,15 +1,27 @@
-import { lazy, type ComponentType } from "react";
+import { lazy, type ComponentType, type LazyExoticComponent } from "react";
+
+type PreloadableLazyComponent = LazyExoticComponent<ComponentType<any>> & {
+  preload: () => Promise<void>;
+};
 
 const lazyPage = (
   loader: () => Promise<Record<string, unknown>>,
   exportName: string,
-) =>
-  lazy(async () => {
+) => {
+  const load = async () => {
     const mod = await loader();
     return {
       default: mod[exportName] as ComponentType<any>,
     };
-  });
+  };
+
+  const Component = lazy(load) as PreloadableLazyComponent;
+  Component.preload = async () => {
+    await loader();
+  };
+
+  return Component;
+};
 
 export const LoginPage = lazyPage(() => import("./pages/LoginPage"), "LoginPage");
 export const HomeRedirectPage = lazyPage(
@@ -259,6 +271,58 @@ export const OpsHealthPage = lazyPage(
   () => import("./pages/OpsHealthPage"),
   "OpsHealthPage",
 );
+export const preloadPrimaryRoute = async (path: string) => {
+  const normalizedPath = path.trim();
+
+  const preloaders: Array<[matcher: (value: string) => boolean, preload: () => Promise<void>]> = [
+    [(value) => value === "/" || value === "/home" || value === "/dashboard", DashboardPage.preload],
+    [(value) => value === "/pos", PosPage.preload],
+    [(value) => value === "/management/cash", CashOversightPage.preload],
+    [(value) => value.startsWith("/sales-history"), NavigationPlaceholderPage.preload],
+    [(value) => value === "/workshop", WorkshopPage.preload],
+    [(value) => value === "/workshop/queue", WorkshopQueuePage.preload],
+    [(value) => value === "/workshop/technician" || value === "/tasks", WorkshopTechnicianPage.preload],
+    [(value) => value === "/workshop/new" || value === "/workshop/analytics", NavigationPlaceholderPage.preload],
+    [(value) => value === "/management/workshop", WorkshopPerformancePage.preload],
+    [(value) => value === "/management/workshop/templates", WorkshopServiceTemplatesPage.preload],
+    [(value) => value === "/inventory", InventoryPage.preload],
+    [(value) => value === "/inventory/stocktakes", InventoryStocktakesPage.preload],
+    [(value) => value === "/inventory/locations", InventoryLocationsPage.preload],
+    [(value) => value === "/management/transfers", TransferQueuePage.preload],
+    [(value) => value.startsWith("/inventory/products") || value === "/inventory/adjustments", NavigationPlaceholderPage.preload],
+    [(value) => value === "/customers", CustomersPage.preload],
+    [(value) => value.startsWith("/customers/") && !value.includes("/timeline"), CustomerProfilePage.preload],
+    [(value) => value === "/customers/bikes" || value === "/customers/service-history" || value === "/customers/loyalty", NavigationPlaceholderPage.preload],
+    [(value) => value === "/suppliers", SuppliersPage.preload],
+    [(value) => value === "/purchasing", PurchasingPage.preload],
+    [(value) => value === "/purchasing/receiving", SupplierReceivingPage.preload],
+    [(value) => value.startsWith("/purchasing/") && value !== "/purchasing/receiving", PurchaseOrderPage.preload],
+    [(value) => value === "/reports/business-intelligence", BusinessIntelligencePage.preload],
+    [(value) => value === "/reports/financial", FinancialReportsPage.preload],
+    [(value) => value === "/reports/sales" || value === "/management/sales", SalesAnalyticsPage.preload],
+    [(value) => value === "/reports/inventory" || value === "/management/inventory", InventoryVelocityPage.preload],
+    [(value) => value === "/reports/workshop", WorkshopPerformancePage.preload],
+    [(value) => value === "/reports/staff-performance" || value === "/management/staff-performance", StaffPerformancePage.preload],
+    [(value) => value === "/management/staff-rota", StaffRotaPage.preload],
+    [(value) => value === "/management/staff-rota/tools", StaffRotaToolsPage.preload],
+    [(value) => value === "/rental/calendar" || value === "/management/hire", BikeHirePage.preload],
+    [(value) => value.startsWith("/rental/") && value !== "/rental/calendar", NavigationPlaceholderPage.preload],
+    [(value) => value === "/online-store/orders", OnlineStoreOrdersPage.preload],
+    [(value) => value.startsWith("/online-store/") && value !== "/online-store/orders", NavigationPlaceholderPage.preload],
+    [(value) => value === "/settings/store-info" || value === "/management/settings", SystemSettingsPage.preload],
+    [(value) => value === "/management/staff", StaffManagementPage.preload],
+    [(value) => value === "/management/admin-review", AdminReviewPage.preload],
+    [(value) => value === "/settings/system-diagnostics" || value === "/management/health", OpsHealthPage.preload],
+    [(value) => value.startsWith("/settings/"), NavigationPlaceholderPage.preload],
+  ];
+
+  const matched = preloaders.find(([matcher]) => matcher(normalizedPath));
+  if (!matched) {
+    return;
+  }
+
+  await matched[1]();
+};
 export const DailyTradeClosePage = lazyPage(
   () => import("./pages/DailyTradeClosePage"),
   "DailyTradeClosePage",
