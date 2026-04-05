@@ -201,6 +201,7 @@ It currently supports:
 - dispatching separately after print succeeds, including a ready-to-dispatch batch queue for printed labels
 - scanning a tracking number, provider reference, or order reference to load the matched shipment and confirm dispatch explicitly from a scan-first bench flow
 - keeping the scan bench warm with clearer blocked/no-match feedback, keyboard-friendly repeat confirmation, and a small recent-scan session summary for quick operator recovery
+- keeping the packing station explicit with clearer packed-vs-needs-packing cues, ready-to-create queue shortcuts, and a small recent-packing handoff summary before shipment creation
 
 This is intentionally a narrow dispatch workflow, not a broader storefront or fulfilment dashboard redesign.
 
