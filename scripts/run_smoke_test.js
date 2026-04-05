@@ -34,12 +34,28 @@ const SMOKE_TEST_KILL_WAIT_MS = Number.parseInt(
   10,
 );
 
+const formatDuration = (durationMs) => {
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  }
+
+  const totalSeconds = durationMs / 1000;
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds - minutes * 60;
+  return `${minutes}m ${seconds.toFixed(1)}s`;
+};
+
 const log = (message) => {
   console.error(`[run_smoke_test] ${message}`);
 };
 
 const run = async () => {
   const beforeSnapshot = snapshotManagedRepoProcesses();
+  const startedAt = Date.now();
   const child = spawnManagedProcess(process.execPath, [smokeScript, ...smokeArgs], {
     stdio: "inherit",
     env,
@@ -95,10 +111,19 @@ const run = async () => {
 
     child.once("exit", (code, signal) => {
       if (signal) {
-        resolve(signalCodeToExitCode(signal));
+        const exitCode = signalCodeToExitCode(signal);
+        log(`${smokeScript} exited via ${signal} after ${formatDuration(Date.now() - startedAt)}`);
+        resolve(exitCode);
         return;
       }
-      resolve(code ?? 1);
+      const exitCode = code ?? 1;
+      const durationMs = Date.now() - startedAt;
+      if (exitCode === 0) {
+        log(`${smokeScript} completed in ${formatDuration(durationMs)}`);
+      } else {
+        log(`${smokeScript} failed with exit code ${exitCode} after ${formatDuration(durationMs)}`);
+      }
+      resolve(exitCode);
     });
   });
 

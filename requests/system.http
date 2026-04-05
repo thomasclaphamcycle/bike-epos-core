@@ -1,4 +1,11 @@
 @baseUrl = http://localhost:3100
+@managerRole = MANAGER
+@managerId = diagnostics-manager
 
-### Get runtime app version
+### Get runtime app version and safe diagnostics metadata
 GET {{baseUrl}}/api/system/version
+
+### Get manager diagnostics snapshot
+GET {{baseUrl}}/metrics
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}

@@ -35,6 +35,7 @@ const baselineSteps = [
   "test:m83",
   "test:domain-events",
   "test:security",
+  "test:health-monitoring",
   "test:sale-customer-capture",
   "test:customer-accounts",
   "test:workshop-commercial-intelligence",
@@ -83,9 +84,25 @@ const SHUTDOWN_TIMEOUT_MS = Number.parseInt(
 );
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const formatDuration = (durationMs) => {
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  }
+
+  const totalSeconds = durationMs / 1000;
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds - minutes * 60;
+  return `${minutes}m ${seconds.toFixed(1)}s`;
+};
 const log = (message) => {
   console.log(`[smoke-suite] ${message}`);
 };
+
+let lastHealthProbeDetail = "";
 
 const serverIsHealthy = async () => {
   const controller = new AbortController();
@@ -95,12 +112,17 @@ const serverIsHealthy = async () => {
     const response = await fetch(HEALTH_URL, {
       signal: controller.signal,
     });
+    lastHealthProbeDetail = `${HEALTH_URL} -> ${response.status}`;
     return response.ok;
   } catch (error) {
     if (error && typeof error === "object" && error.name === "AbortError") {
+      lastHealthProbeDetail = `${HEALTH_URL} -> timeout after ${HEALTH_CHECK_TIMEOUT_MS}ms`;
       log(`Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms for ${HEALTH_URL}`);
       return true;
     }
+    lastHealthProbeDetail = `${HEALTH_URL} -> ${
+      error instanceof Error ? error.message : String(error)
+    }`;
     return false;
   } finally {
     clearTimeout(timeout);
@@ -129,7 +151,7 @@ const waitForServerShutdown = async (step) => {
 
   log(`Timed out waiting for API server shutdown after ${step}`);
   throw new Error(
-    `Smoke suite timed out after ${SHUTDOWN_TIMEOUT_MS}ms waiting for API server shutdown after ${step}. A smoke test likely did not shut its server down cleanly.`,
+    `Smoke suite timed out after ${SHUTDOWN_TIMEOUT_MS}ms waiting for API server shutdown after ${step}. A smoke test likely did not shut its server down cleanly.${lastHealthProbeDetail ? ` Last probe: ${lastHealthProbeDetail}` : ""}`,
   );
 };
 
@@ -138,7 +160,7 @@ const main = async () => {
   const existing = await serverIsHealthy();
   if (existing && env.ALLOW_EXISTING_SERVER !== "1") {
     throw new Error(
-      "Refusing to run against an already-running server. Stop it first or set ALLOW_EXISTING_SERVER=1.",
+      `Refusing to run against an already-running server at ${HEALTH_URL}. Stop it first or set ALLOW_EXISTING_SERVER=1.${lastHealthProbeDetail ? ` Last probe: ${lastHealthProbeDetail}` : ""}`,
     );
   }
 
@@ -187,6 +209,7 @@ const main = async () => {
 
   const runStep = async (step) => {
     currentStep = step;
+    const startedAt = Date.now();
     currentChild = spawnManagedProcess("npm", ["run", step], {
       stdio: "inherit",
       env,
@@ -202,10 +225,19 @@ const main = async () => {
         currentChild = null;
         currentStep = null;
         if (signal) {
-          resolve(signalCodeToExitCode(signal));
+          const exitCode = signalCodeToExitCode(signal);
+          log(`${step} exited via ${signal} after ${formatDuration(Date.now() - startedAt)}`);
+          resolve(exitCode);
           return;
         }
-        resolve(code ?? 1);
+        const exitCode = code ?? 1;
+        const durationMs = Date.now() - startedAt;
+        if (exitCode === 0) {
+          log(`Completed ${step} in ${formatDuration(durationMs)}`);
+        } else {
+          log(`Step ${step} failed with exit code ${exitCode} after ${formatDuration(durationMs)}`);
+        }
+        resolve(exitCode);
       });
     });
   };

@@ -11,6 +11,16 @@ const getRouteLabel = (req: Request) => {
   return req.originalUrl || req.url;
 };
 
+const isRoutineDiagnosticRequest = (req: Request) => {
+  const requestPath = req.path || req.originalUrl || req.url;
+  return (
+    req.method === "GET" &&
+    (requestPath === "/health" ||
+      requestPath === "/metrics" ||
+      requestPath === "/api/system/version")
+  );
+};
+
 export const requestLoggingMiddleware = (
   req: Request,
   res: Response,
@@ -41,6 +51,15 @@ export const requestLoggingMiddleware = (
       payload.userAgent = req.get("user-agent") ?? null;
       payload.contentLength = res.getHeader("content-length") ?? null;
       logCorePosDebug("http.request.detail", payload);
+    }
+
+    if (
+      !isCorePosDebugEnabled() &&
+      resultStatus === "completed" &&
+      res.statusCode < 500 &&
+      isRoutineDiagnosticRequest(req)
+    ) {
+      return;
     }
 
     logCorePosEvent("http.request", payload, res.statusCode >= 500 ? "error" : "info");

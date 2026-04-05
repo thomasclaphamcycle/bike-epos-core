@@ -133,8 +133,11 @@ Minimum operational check after deploy:
 
 - confirm the server starts cleanly
 - confirm `/health` responds successfully
-- use `/health?details=1` when you want an operator-facing confirmation of database connectivity and migration status
+- use `/health?details=1` when you want an operator-facing confirmation of database connectivity, migration status, app version, runtime uptime, and safe configuration hints such as frontend serving mode or shipping-print-agent readiness
+- use `/api/system/version` when support or staff need a quick version/runtime snapshot without requiring manager auth
+- use manager-only `/metrics` when you want the same detailed health checks plus diagnostics/feature metadata in one response
 - confirm there are no repeated Prisma or auth errors in the first few minutes
+- note that successful routine `/health`, `/api/system/version`, and `/metrics` probes are intentionally suppressed from default request logs unless `COREPOS_DEBUG=1`, so the remaining logs stay easier to scan during incidents
 
 ## 6. Production Upgrade Procedure
 
@@ -188,6 +191,7 @@ If CorePOS fails during startup:
 2. confirm PostgreSQL is reachable from the app host
 3. check whether pending migrations failed
 4. inspect recent logs for Prisma, auth, or port-binding errors
+5. compare `/health?details=1` and `/api/system/version` to confirm the running version/revision, environment, runtime uptime, and whether shipping-print-agent support is configured as expected
 
 If the database is corrupted or a bad release must be reversed:
 
