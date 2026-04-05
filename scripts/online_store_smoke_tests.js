@@ -258,6 +258,7 @@ const run = async () => {
     assert.equal(createOrderRes.status, 201, JSON.stringify(createOrderRes.json));
     assert.equal(createOrderRes.json.order.orderNumber, successOrderBody.orderNumber);
     assert.equal(createOrderRes.json.order.status, "READY_FOR_DISPATCH");
+    assert.equal(createOrderRes.json.order.packedAt, null);
     createdOrderIds.push(createOrderRes.json.order.id);
 
     const listRes = await fetchJson(`/api/online-store/orders?q=${encodeURIComponent(successOrderBody.orderNumber)}`, {
@@ -274,6 +275,33 @@ const run = async () => {
     });
     assert.equal(detailRes.status, 200, JSON.stringify(detailRes.json));
     assert.equal(detailRes.json.order.shipments.length, 0);
+    assert.equal(detailRes.json.order.packedAt, null);
+
+    const unpackedCreateShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        providerKey: "INTERNAL_MOCK_ZPL",
+        serviceCode: "STANDARD",
+        serviceName: "Standard Dispatch",
+      }),
+    });
+    assert.equal(unpackedCreateShipmentRes.status, 409, JSON.stringify(unpackedCreateShipmentRes.json));
+    assert.equal(unpackedCreateShipmentRes.json.error.code, "WEB_ORDER_NOT_PACKED");
+
+    const packOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packOrderRes.status, 200, JSON.stringify(packOrderRes.json));
+    assert.equal(Boolean(packOrderRes.json.order.packedAt), true);
 
     const createShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createOrderRes.json.order.id)}/shipments`, {
       method: "POST",
@@ -412,6 +440,16 @@ const run = async () => {
     assert.equal(createVoidOrderRes.status, 201, JSON.stringify(createVoidOrderRes.json));
     createdOrderIds.push(createVoidOrderRes.json.order.id);
 
+    const packVoidOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createVoidOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packVoidOrderRes.status, 200, JSON.stringify(packVoidOrderRes.json));
+
     const createVoidShipmentRes = await fetchJson(
       `/api/online-store/orders/${encodeURIComponent(createVoidOrderRes.json.order.id)}/shipments`,
       {
@@ -492,6 +530,16 @@ const run = async () => {
     });
     assert.equal(createFailureOrderRes.status, 201, JSON.stringify(createFailureOrderRes.json));
     createdOrderIds.push(createFailureOrderRes.json.order.id);
+
+    const packFailureOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createFailureOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packFailureOrderRes.status, 200, JSON.stringify(packFailureOrderRes.json));
 
     const createFailureShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createFailureOrderRes.json.order.id)}/shipments`, {
       method: "POST",
@@ -592,6 +640,123 @@ const run = async () => {
     assert.equal(failedDetailRes.json.order.shipments[0].status, "PRINT_PREPARED");
     assert.equal(failedDetailRes.json.order.shipments[0].printedAt, null);
     assert.equal(failedDetailRes.json.order.shipments[0].reprintCount, 0);
+
+    const bulkReadyToken = `smoke-bulk-ready-${Date.now()}`;
+    const bulkReadyOrderRes = await fetchJson("/api/online-store/orders", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(createOrderBody(bulkReadyToken, {
+        customerName: "Bulk Ready Dispatch",
+        shippingRecipientName: "Bulk Ready Dispatch",
+      })),
+    });
+    assert.equal(bulkReadyOrderRes.status, 201, JSON.stringify(bulkReadyOrderRes.json));
+    createdOrderIds.push(bulkReadyOrderRes.json.order.id);
+
+    const bulkUnpackedToken = `smoke-bulk-unpacked-${Date.now()}`;
+    const bulkUnpackedOrderRes = await fetchJson("/api/online-store/orders", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(createOrderBody(bulkUnpackedToken, {
+        customerName: "Bulk Unpacked Dispatch",
+        shippingRecipientName: "Bulk Unpacked Dispatch",
+      })),
+    });
+    assert.equal(bulkUnpackedOrderRes.status, 201, JSON.stringify(bulkUnpackedOrderRes.json));
+    createdOrderIds.push(bulkUnpackedOrderRes.json.order.id);
+
+    const markBulkReadyPackedRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(bulkReadyOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(markBulkReadyPackedRes.status, 200, JSON.stringify(markBulkReadyPackedRes.json));
+    assert.equal(Boolean(markBulkReadyPackedRes.json.order.packedAt), true);
+
+    const packedListRes = await fetchJson("/api/online-store/orders?packed=true", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(packedListRes.status, 200, JSON.stringify(packedListRes.json));
+    assert.equal(packedListRes.json.orders.some((order) => order.id === bulkReadyOrderRes.json.order.id), true);
+    assert.equal(packedListRes.json.orders.some((order) => order.id === bulkUnpackedOrderRes.json.order.id), false);
+
+    const bulkCreateRes = await fetchJson("/api/online-store/orders/bulk/shipments", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        orderIds: [bulkReadyOrderRes.json.order.id, bulkUnpackedOrderRes.json.order.id, randomUUID()],
+        providerKey: "INTERNAL_MOCK_ZPL",
+        serviceCode: "STANDARD",
+        serviceName: "Standard Dispatch",
+      }),
+    });
+    assert.equal(bulkCreateRes.status, 200, JSON.stringify(bulkCreateRes.json));
+    assert.equal(bulkCreateRes.json.action, "CREATE_SHIPMENTS");
+    assert.equal(bulkCreateRes.json.summary.requestedCount, 3);
+    assert.equal(bulkCreateRes.json.summary.succeededCount, 1);
+    assert.equal(bulkCreateRes.json.summary.skippedCount, 1);
+    assert.equal(bulkCreateRes.json.summary.failedCount, 1);
+
+    const bulkCreatedOrderDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(bulkReadyOrderRes.json.order.id)}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(bulkCreatedOrderDetailRes.status, 200, JSON.stringify(bulkCreatedOrderDetailRes.json));
+    assert.equal(bulkCreatedOrderDetailRes.json.order.shipments[0].status, "LABEL_READY");
+
+    const bulkPrintRes = await fetchJson("/api/online-store/orders/bulk/print", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        orderIds: [bulkReadyOrderRes.json.order.id, bulkUnpackedOrderRes.json.order.id, randomUUID()],
+        printerId: defaultPrinter.id,
+        copies: 1,
+      }),
+    });
+    assert.equal(bulkPrintRes.status, 200, JSON.stringify(bulkPrintRes.json));
+    assert.equal(bulkPrintRes.json.action, "PRINT_SHIPMENTS");
+    assert.equal(bulkPrintRes.json.summary.requestedCount, 3);
+    assert.equal(bulkPrintRes.json.summary.succeededCount, 1);
+    assert.equal(bulkPrintRes.json.summary.skippedCount, 1);
+    assert.equal(bulkPrintRes.json.summary.failedCount, 1);
+
+    const bulkDispatchRes = await fetchJson("/api/online-store/orders/bulk/dispatch", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        orderIds: [bulkReadyOrderRes.json.order.id, bulkUnpackedOrderRes.json.order.id, randomUUID()],
+      }),
+    });
+    assert.equal(bulkDispatchRes.status, 200, JSON.stringify(bulkDispatchRes.json));
+    assert.equal(bulkDispatchRes.json.action, "DISPATCH_SHIPMENTS");
+    assert.equal(bulkDispatchRes.json.summary.requestedCount, 3);
+    assert.equal(bulkDispatchRes.json.summary.succeededCount, 1);
+    assert.equal(bulkDispatchRes.json.summary.skippedCount, 1);
+    assert.equal(bulkDispatchRes.json.summary.failedCount, 1);
+
+    const bulkDispatchedOrderDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(bulkReadyOrderRes.json.order.id)}`, {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(bulkDispatchedOrderDetailRes.status, 200, JSON.stringify(bulkDispatchedOrderDetailRes.json));
+    assert.equal(bulkDispatchedOrderDetailRes.json.order.status, "DISPATCHED");
+    assert.equal(bulkDispatchedOrderDetailRes.json.order.shipments[0].status, "DISPATCHED");
 
     assert.equal(fakePrintAgent.requests.length >= 3, true);
   } finally {

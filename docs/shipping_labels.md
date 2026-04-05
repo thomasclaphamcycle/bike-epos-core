@@ -15,6 +15,9 @@ CorePOS now includes a dedicated web-order shipment slice that can:
 - return a backend-owned print-preparation payload
 - hand that payload off to a repo-local Windows-oriented print agent
 - record printed and dispatched timestamps with audit events
+- mark web orders as packed before shipment processing
+- bulk-create shipment labels across packed web orders
+- bulk-print shipment labels across packed web orders with per-order outcomes
 - refresh provider-backed shipment state from CorePOS
 - accept automated provider-sync updates through a webhook-ready inbound path
 - request shipment void/cancel where the provider supports it
@@ -192,7 +195,9 @@ It currently supports:
 - generating a replacement shipment after void
 - preparing a Windows-local-agent print payload
 - sending the print job through the real agent path
-- dispatching separately after print succeeds
+- selecting multiple packed orders for bulk shipment creation, bulk print, or bulk dispatch confirmation in sequence
+- seeing per-order bulk outcomes with safe skip/failure isolation plus concise retry/recovery cues
+- dispatching separately after print succeeds, including a ready-to-dispatch batch queue for printed labels
 
 This is intentionally a narrow dispatch workflow, not a broader storefront or fulfilment dashboard redesign.
 
@@ -209,8 +214,8 @@ The intended next steps are:
    - direct Windows spooler / USB Zebra support in addition to raw TCP
 
 3. richer fulfilment operations
-   - packing workflow
-   - dispatch batching
+   - deeper pack/bench/station workflows beyond the first packed queue
+   - more advanced batching, wave handling, or scan-driven dispatch controls
    - eventual customer-facing online-order history and notifications
 
 ## Constraints kept intentionally
