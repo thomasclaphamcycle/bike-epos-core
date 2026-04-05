@@ -50,7 +50,7 @@ export const BarcodeGraphic = ({ value, className }: BarcodeGraphicProps) => {
       });
       svg.removeAttribute("width");
       svg.removeAttribute("height");
-      svg.setAttribute("preserveAspectRatio", "none");
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
       setRenderError(false);
     } catch {
       svg.innerHTML = "";
