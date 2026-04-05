@@ -181,8 +181,8 @@ const normalizeCountry = (value: string) => {
 const buildBasicAuthHeader = (apiKey: string) =>
   `Basic ${Buffer.from(`${apiKey}:`, "utf8").toString("base64")}`;
 
-const buildLabelFileName = (input: ShippingLabelGenerationInput, trackingNumber: string) => {
-  const orderToken = normalizeToken(input.order.orderNumber).slice(-16) || "ORDER";
+const buildLabelFileName = (orderNumber: string, trackingNumber: string) => {
+  const orderToken = normalizeToken(orderNumber).slice(-16) || "ORDER";
   const trackingToken = normalizeToken(trackingNumber).slice(-20) || "TRACKING";
   return `shipment-${orderToken}-${trackingToken}.zpl`;
 };
@@ -406,6 +406,47 @@ const fetchZplDocument = async (
     throw new HttpError(502, "EasyPost returned an empty ZPL label document", "SHIPPING_PROVIDER_INVALID_RESPONSE");
   }
   return content;
+};
+
+const resolveEasyPostZplUrl = async (
+  shipment: EasyPostShipmentResponse,
+  config: ReturnType<typeof resolveLabelRuntimeConfig> | ReturnType<typeof resolveLifecycleRuntimeConfig>,
+  controller: AbortController,
+  authorization: string,
+) => {
+  let refreshedShipment = shipment;
+  let labelZplUrl = refreshedShipment.postageLabel?.labelZplUrl ?? null;
+  let usedLabelConversion = false;
+
+  if (!labelZplUrl) {
+    if (refreshedShipment.postageLabel?.labelFileType !== "image/png") {
+      return {
+        shipment: refreshedShipment,
+        labelZplUrl: null,
+        usedLabelConversion,
+      };
+    }
+
+    const convertedPayload = await requestJson(
+      `${config.apiBaseUrl}/shipments/${encodeURIComponent(refreshedShipment.id)}/label?file_format=ZPL`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: authorization,
+        },
+      },
+      controller,
+    );
+    refreshedShipment = parseEasyPostShipmentResponse(convertedPayload);
+    labelZplUrl = refreshedShipment.postageLabel?.labelZplUrl ?? null;
+    usedLabelConversion = true;
+  }
+
+  return {
+    shipment: refreshedShipment,
+    labelZplUrl,
+    usedLabelConversion,
+  };
 };
 
 const requestJson = async (
@@ -715,32 +756,14 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
       );
 
       let purchasedShipment = parseEasyPostShipmentResponse(buyPayload);
-      let labelZplUrl = purchasedShipment.postageLabel?.labelZplUrl ?? null;
-      let usedLabelConversion = false;
-
-      if (!labelZplUrl) {
-        if (purchasedShipment.postageLabel?.labelFileType !== "image/png") {
-          throw new HttpError(
-            502,
-            "EasyPost did not return a ZPL label and the purchased label was not convertible from PNG",
-            "SHIPPING_PROVIDER_INVALID_RESPONSE",
-          );
-        }
-
-        const convertedPayload = await requestJson(
-          `${config.apiBaseUrl}/shipments/${encodeURIComponent(purchasedShipment.id)}/label?file_format=ZPL`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: authorization,
-            },
-          },
-          controller,
-        );
-        purchasedShipment = parseEasyPostShipmentResponse(convertedPayload);
-        labelZplUrl = purchasedShipment.postageLabel?.labelZplUrl ?? null;
-        usedLabelConversion = true;
-      }
+      const zplResolution = await resolveEasyPostZplUrl(
+        purchasedShipment,
+        config,
+        controller,
+        authorization,
+      );
+      purchasedShipment = zplResolution.shipment;
+      const { labelZplUrl, usedLabelConversion } = zplResolution;
 
       if (!labelZplUrl) {
         throw new HttpError(
@@ -763,7 +786,7 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
       const document: ShippingLabelDocument = {
         format: "ZPL",
         mimeType: "application/zpl",
-        fileName: buildLabelFileName(input, trackingNumber),
+        fileName: buildLabelFileName(input.order.orderNumber, trackingNumber),
         content: labelContent,
       };
 
@@ -848,12 +871,36 @@ export class EasyPostShippingLabelProvider implements ShippingLabelProvider {
         controller,
       );
 
-      const shipment = parseEasyPostShipmentResponse(payload);
-      return buildLifecycleResult(
+      let shipment = parseEasyPostShipmentResponse(payload);
+      const lifecycleResult = buildLifecycleResult(
         shipment,
         config.environment,
         input.shipment.providerMetadata ?? null,
       );
+      if (!input.shipment.hasStoredLabelDocument) {
+        const zplResolution = await resolveEasyPostZplUrl(
+          shipment,
+          config,
+          controller,
+          authorization,
+        );
+        shipment = zplResolution.shipment;
+        if (zplResolution.labelZplUrl) {
+          const trackingNumber = shipment.trackingCode ?? input.shipment.trackingNumber;
+          lifecycleResult.document = {
+            format: "ZPL",
+            mimeType: "application/zpl",
+            fileName: buildLabelFileName(input.order.orderNumber, trackingNumber),
+            content: await fetchZplDocument(zplResolution.labelZplUrl, controller),
+          };
+          lifecycleResult.providerMetadata = {
+            ...(lifecycleResult.providerMetadata ?? {}),
+            labelRecoveredOnSync: true,
+            labelConvertedFromPng: zplResolution.usedLabelConversion,
+          };
+        }
+      }
+      return lifecycleResult;
     } catch (error) {
       if (error instanceof HttpError) {
         throw error;
