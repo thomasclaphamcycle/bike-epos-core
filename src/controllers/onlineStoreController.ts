@@ -10,6 +10,7 @@ import {
   dispatchShipment,
   getOnlineStoreOrderDetail,
   getShipmentLabelPayload,
+  lookupDispatchScan,
   listOnlineStoreOrders,
   prepareShipmentLabelPrint,
   printShipmentLabelViaAgent,
@@ -18,10 +19,11 @@ import {
   recordShipmentPrinted,
   setWebOrderPackedState,
   type BulkCreateShipmentsInput,
-  type BulkDispatchShipmentsInput,
+type BulkDispatchShipmentsInput,
   type BulkPrintShipmentsInput,
   type CreateWebOrderInput,
   type CreateShipmentLabelInput,
+  type DispatchScanLookupResponse,
   type SetWebOrderPackedInput,
 } from "../services/orderService";
 import { HttpError } from "../utils/http";
@@ -273,6 +275,21 @@ const toBulkDispatchShipmentsInput = (body: unknown): BulkDispatchShipmentsInput
   };
 };
 
+const toDispatchScanInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "dispatch scan body must be an object", "INVALID_WEB_ORDER");
+  }
+
+  const record = body as Record<string, unknown>;
+  if (typeof record.value !== "string") {
+    throw new HttpError(400, "value must be a string", "INVALID_WEB_ORDER");
+  }
+
+  return {
+    value: record.value,
+  };
+};
+
 export const listOnlineStoreOrdersHandler = async (req: Request, res: Response) => {
   const payload = await listOnlineStoreOrders({
     q: typeof req.query.q === "string" ? req.query.q : undefined,
@@ -340,6 +357,11 @@ export const bulkPrintShipmentLabelsHandler = async (req: Request, res: Response
 export const bulkDispatchShipmentsHandler = async (req: Request, res: Response) => {
   const result = await bulkDispatchShipments(toBulkDispatchShipmentsInput(req.body), getRequestAuditActor(req));
   res.json(result);
+};
+
+export const lookupDispatchScanHandler = async (req: Request, res: Response<DispatchScanLookupResponse>) => {
+  const payload = await lookupDispatchScan(toDispatchScanInput(req.body).value);
+  res.json(payload);
 };
 
 export const getShipmentLabelPayloadHandler = async (req: Request, res: Response) => {

@@ -183,9 +183,17 @@ const webOrderShipmentWithOrderAndContentSelect = Prisma.validator<Prisma.WebOrd
   },
 });
 
+const webOrderShipmentScanSelect = Prisma.validator<Prisma.WebOrderShipmentSelect>()({
+  ...webOrderShipmentSelect,
+  webOrder: {
+    select: webOrderListSelect,
+  },
+});
+
 type WebOrderListRecord = Prisma.WebOrderGetPayload<{ select: typeof webOrderListSelect }>;
 type WebOrderDetailRecord = Prisma.WebOrderGetPayload<{ select: typeof webOrderDetailSelect }>;
 type WebOrderShipmentRecord = Prisma.WebOrderShipmentGetPayload<{ select: typeof webOrderShipmentSelect }>;
+type WebOrderShipmentScanRecord = Prisma.WebOrderShipmentGetPayload<{ select: typeof webOrderShipmentScanSelect }>;
 
 export type WebOrderItemResponse = {
   id: string;
@@ -368,6 +376,37 @@ export type BulkShipmentOperationResponse = {
   results: BulkShipmentActionResult[];
 };
 
+export type DispatchScanMatchType =
+  | "TRACKING_NUMBER"
+  | "PROVIDER_TRACKING_REFERENCE"
+  | "PROVIDER_SHIPMENT_REFERENCE"
+  | "PROVIDER_REFERENCE"
+  | "ORDER_NUMBER"
+  | "EXTERNAL_ORDER_REFERENCE";
+
+export type DispatchScanCandidateResponse = {
+  orderId: string;
+  orderNumber: string;
+  shipmentId: string | null;
+  trackingNumber: string | null;
+  shipmentStatus: WebOrderShipmentStatus | null;
+  dispatchedAt: Date | null;
+  matchedBy: DispatchScanMatchType;
+};
+
+export type DispatchScanLookupResponse = {
+  status: "MATCHED" | "NO_MATCH" | "AMBIGUOUS";
+  scanValue: string;
+  normalizedValue: string;
+  matchedBy: DispatchScanMatchType | null;
+  dispatchable: boolean;
+  dispatchBlockedCode: string | null;
+  dispatchBlockedReason: string | null;
+  order: WebOrderSummaryResponse | null;
+  shipment: WebOrderShipmentResponse | null;
+  candidates: DispatchScanCandidateResponse[];
+};
+
 export type BulkCreateShipmentsInput = CreateShipmentLabelInput & {
   orderIds: string[];
 };
@@ -383,6 +422,12 @@ export type BulkDispatchShipmentsInput = {
 type RecordShipmentPrintedOptions = {
   printRequest?: ShipmentPrintRequest;
   printJob?: ShipmentPrintAgentJob;
+};
+
+type ShipmentDispatchEligibility = {
+  canDispatch: boolean;
+  code: string | null;
+  message: string | null;
 };
 
 const normalizeOptionalText = (value: string | undefined | null) => {
@@ -673,18 +718,7 @@ const canBulkDispatchShipmentForOrder = (order: {
     printedAt: Date | null;
     dispatchedAt: Date | null;
   } | null;
-}) => (
-  order.status === "READY_FOR_DISPATCH"
-  && order.fulfillmentMethod === "SHIPPING"
-  && isOrderPacked(order)
-  && Boolean(order.latestShipment)
-  && Boolean(order.latestShipment?.printedAt)
-  && !order.latestShipment?.dispatchedAt
-  && isShipmentPrintable(order.latestShipment?.status ?? "VOIDED")
-  && order.latestShipment?.status !== "VOID_PENDING"
-  && order.latestShipment?.status !== "VOIDED"
-  && order.latestShipment?.status !== "DISPATCHED"
-);
+}) => getShipmentDispatchEligibility(order, order.latestShipment ?? null).canDispatch;
 
 const parseBulkOrderIds = (orderIds: string[]) => {
   const normalizedIds = orderIds.map((orderId, index) =>
@@ -888,6 +922,114 @@ const assertShipmentActionable = (shipment: { status: WebOrderShipmentStatus }) 
   }
 };
 
+const getShipmentDispatchEligibility = (
+  order: {
+    status: WebOrderStatus;
+    fulfillmentMethod: WebOrderFulfillmentMethod;
+    packedAt: Date | null;
+  },
+  shipment: {
+    status: WebOrderShipmentStatus;
+    printedAt: Date | null;
+    dispatchedAt: Date | null;
+  } | null,
+): ShipmentDispatchEligibility => {
+  if (!isOrderPacked(order)) {
+    return {
+      canDispatch: false,
+      code: "ORDER_NOT_PACKED",
+      message: "Order is not packed yet",
+    };
+  }
+  if (order.fulfillmentMethod !== "SHIPPING") {
+    return {
+      canDispatch: false,
+      code: "WEB_ORDER_NOT_SHIPPING",
+      message: "Only shipping orders can be dispatched here",
+    };
+  }
+  if (!shipment) {
+    return {
+      canDispatch: false,
+      code: "WEB_ORDER_SHIPMENT_NOT_FOUND",
+      message: "No shipment exists yet",
+    };
+  }
+  if (shipment.dispatchedAt || shipment.status === "DISPATCHED" || order.status === "DISPATCHED") {
+    return {
+      canDispatch: false,
+      code: "SHIPMENT_ALREADY_DISPATCHED",
+      message: "Shipment is already dispatched",
+    };
+  }
+  if (order.status !== "READY_FOR_DISPATCH") {
+    return {
+      canDispatch: false,
+      code: order.status === "CANCELLED" ? "WEB_ORDER_CANCELLED" : "INVALID_WEB_ORDER_STATE",
+      message: order.status === "CANCELLED" ? "Order is cancelled" : `Order is ${humanizeToken(order.status)}`,
+    };
+  }
+  if (!shipment.printedAt) {
+    return {
+      canDispatch: false,
+      code: "SHIPMENT_NOT_PRINTED",
+      message: "Shipment label must be printed before dispatch",
+    };
+  }
+  if (shipment.status === "VOID_PENDING") {
+    return {
+      canDispatch: false,
+      code: "SHIPMENT_VOID_PENDING",
+      message: "Shipment is waiting for provider void confirmation",
+    };
+  }
+  if (!isShipmentPrintable(shipment.status)) {
+    return {
+      canDispatch: false,
+      code: "SHIPMENT_VOIDED",
+      message: "Shipment is voided and can no longer be dispatched",
+    };
+  }
+
+  return {
+    canDispatch: true,
+    code: null,
+    message: null,
+  };
+};
+
+const normalizeDispatchScanValue = (value: string) =>
+  normalizeRequiredText(value, "scanValue", 160).toUpperCase();
+
+const matchesDispatchScanValue = (candidate: string | null | undefined, needle: string) =>
+  normalizeOptionalText(candidate)?.toUpperCase() === needle;
+
+const toDispatchScanCandidateFromShipment = (
+  shipment: WebOrderShipmentScanRecord,
+  matchedBy: DispatchScanMatchType,
+): DispatchScanCandidateResponse => ({
+  orderId: shipment.webOrder.id,
+  orderNumber: shipment.webOrder.orderNumber,
+  shipmentId: shipment.id,
+  trackingNumber: shipment.trackingNumber,
+  shipmentStatus: shipment.status,
+  dispatchedAt: shipment.dispatchedAt ?? null,
+  matchedBy,
+});
+
+const toDispatchScanCandidateFromOrder = (
+  order: WebOrderListRecord,
+  matchedBy: DispatchScanMatchType,
+): DispatchScanCandidateResponse => ({
+  orderId: order.id,
+  orderNumber: order.orderNumber,
+  shipmentId: order.shipments[0]?.id ?? null,
+  trackingNumber: order.shipments[0]?.trackingNumber ?? null,
+  shipmentStatus: order.shipments[0]?.status ?? null,
+  dispatchedAt: order.shipments[0]?.dispatchedAt ?? null,
+  matchedBy,
+});
+
 const assertShipmentCancellable = (shipment: {
   status: WebOrderShipmentStatus;
   dispatchedAt: Date | null;
@@ -1074,6 +1216,139 @@ export const getOnlineStoreOrderDetail = async (orderId: string) => {
   return {
     order: toOrderDetail(order),
     supportedProviders: providerSettings.providers,
+  };
+};
+
+export const lookupDispatchScan = async (scanValue: string): Promise<DispatchScanLookupResponse> => {
+  const normalizedValue = normalizeDispatchScanValue(scanValue);
+
+  const [shipments, orders] = await Promise.all([
+    prisma.webOrderShipment.findMany({
+      where: {
+        OR: [
+          { trackingNumber: { equals: normalizedValue, mode: "insensitive" } },
+          { providerTrackingReference: { equals: normalizedValue, mode: "insensitive" } },
+          { providerShipmentReference: { equals: normalizedValue, mode: "insensitive" } },
+          { providerReference: { equals: normalizedValue, mode: "insensitive" } },
+        ],
+      },
+      select: webOrderShipmentScanSelect,
+      orderBy: [{ createdAt: "desc" }],
+    }),
+    prisma.webOrder.findMany({
+      where: {
+        OR: [
+          { orderNumber: { equals: normalizedValue, mode: "insensitive" } },
+          { externalOrderRef: { equals: normalizedValue, mode: "insensitive" } },
+        ],
+      },
+      select: webOrderListSelect,
+      orderBy: [{ placedAt: "desc" }, { createdAt: "desc" }],
+    }),
+  ]);
+
+  const matchers: Array<{
+    matchedBy: DispatchScanMatchType;
+    candidates: DispatchScanCandidateResponse[];
+    matchedOrder?: WebOrderListRecord;
+    matchedShipment?: WebOrderShipmentRecord | null;
+  }> = [
+    {
+      matchedBy: "TRACKING_NUMBER",
+      candidates: shipments
+        .filter((shipment) => matchesDispatchScanValue(shipment.trackingNumber, normalizedValue))
+        .map((shipment) => toDispatchScanCandidateFromShipment(shipment, "TRACKING_NUMBER")),
+      matchedOrder: shipments.find((shipment) => matchesDispatchScanValue(shipment.trackingNumber, normalizedValue))?.webOrder,
+      matchedShipment: shipments.find((shipment) => matchesDispatchScanValue(shipment.trackingNumber, normalizedValue)) ?? null,
+    },
+    {
+      matchedBy: "PROVIDER_TRACKING_REFERENCE",
+      candidates: shipments
+        .filter((shipment) => matchesDispatchScanValue(shipment.providerTrackingReference, normalizedValue))
+        .map((shipment) => toDispatchScanCandidateFromShipment(shipment, "PROVIDER_TRACKING_REFERENCE")),
+      matchedOrder: shipments.find((shipment) => matchesDispatchScanValue(shipment.providerTrackingReference, normalizedValue))?.webOrder,
+      matchedShipment: shipments.find((shipment) => matchesDispatchScanValue(shipment.providerTrackingReference, normalizedValue)) ?? null,
+    },
+    {
+      matchedBy: "PROVIDER_SHIPMENT_REFERENCE",
+      candidates: shipments
+        .filter((shipment) => matchesDispatchScanValue(shipment.providerShipmentReference, normalizedValue))
+        .map((shipment) => toDispatchScanCandidateFromShipment(shipment, "PROVIDER_SHIPMENT_REFERENCE")),
+      matchedOrder: shipments.find((shipment) => matchesDispatchScanValue(shipment.providerShipmentReference, normalizedValue))?.webOrder,
+      matchedShipment: shipments.find((shipment) => matchesDispatchScanValue(shipment.providerShipmentReference, normalizedValue)) ?? null,
+    },
+    {
+      matchedBy: "PROVIDER_REFERENCE",
+      candidates: shipments
+        .filter((shipment) => matchesDispatchScanValue(shipment.providerReference, normalizedValue))
+        .map((shipment) => toDispatchScanCandidateFromShipment(shipment, "PROVIDER_REFERENCE")),
+      matchedOrder: shipments.find((shipment) => matchesDispatchScanValue(shipment.providerReference, normalizedValue))?.webOrder,
+      matchedShipment: shipments.find((shipment) => matchesDispatchScanValue(shipment.providerReference, normalizedValue)) ?? null,
+    },
+    {
+      matchedBy: "ORDER_NUMBER",
+      candidates: orders
+        .filter((order) => matchesDispatchScanValue(order.orderNumber, normalizedValue))
+        .map((order) => toDispatchScanCandidateFromOrder(order, "ORDER_NUMBER")),
+      matchedOrder: orders.find((order) => matchesDispatchScanValue(order.orderNumber, normalizedValue)),
+      matchedShipment: orders.find((order) => matchesDispatchScanValue(order.orderNumber, normalizedValue))?.shipments[0] ?? null,
+    },
+    {
+      matchedBy: "EXTERNAL_ORDER_REFERENCE",
+      candidates: orders
+        .filter((order) => matchesDispatchScanValue(order.externalOrderRef, normalizedValue))
+        .map((order) => toDispatchScanCandidateFromOrder(order, "EXTERNAL_ORDER_REFERENCE")),
+      matchedOrder: orders.find((order) => matchesDispatchScanValue(order.externalOrderRef, normalizedValue)),
+      matchedShipment: orders.find((order) => matchesDispatchScanValue(order.externalOrderRef, normalizedValue))?.shipments[0] ?? null,
+    },
+  ];
+
+  const firstResolvedMatch = matchers.find((matcher) => matcher.candidates.length > 0);
+  if (!firstResolvedMatch) {
+    return {
+      status: "NO_MATCH",
+      scanValue,
+      normalizedValue,
+      matchedBy: null,
+      dispatchable: false,
+      dispatchBlockedCode: null,
+      dispatchBlockedReason: "No web-order shipment matched that scan value.",
+      order: null,
+      shipment: null,
+      candidates: [],
+    };
+  }
+
+  if (firstResolvedMatch.candidates.length > 1 || !firstResolvedMatch.matchedOrder) {
+    return {
+      status: "AMBIGUOUS",
+      scanValue,
+      normalizedValue,
+      matchedBy: firstResolvedMatch.matchedBy,
+      dispatchable: false,
+      dispatchBlockedCode: "DISPATCH_SCAN_AMBIGUOUS",
+      dispatchBlockedReason: "More than one web order matched this scan value. Narrow the identifier before dispatch.",
+      order: null,
+      shipment: null,
+      candidates: firstResolvedMatch.candidates,
+    };
+  }
+
+  const matchedOrder = toOrderSummary(firstResolvedMatch.matchedOrder);
+  const matchedShipment = firstResolvedMatch.matchedShipment ? toShipmentResponse(firstResolvedMatch.matchedShipment) : null;
+  const eligibility = getShipmentDispatchEligibility(matchedOrder, matchedShipment);
+
+  return {
+    status: "MATCHED",
+    scanValue,
+    normalizedValue,
+    matchedBy: firstResolvedMatch.matchedBy,
+    dispatchable: eligibility.canDispatch,
+    dispatchBlockedCode: eligibility.code,
+    dispatchBlockedReason: eligibility.message,
+    order: matchedOrder,
+    shipment: matchedShipment,
+    candidates: firstResolvedMatch.candidates,
   };
 };
 
@@ -1508,41 +1783,14 @@ export const bulkDispatchShipments = async (
       continue;
     }
 
-    if (!canBulkDispatchShipmentForOrder(order)) {
+    const dispatchEligibility = getShipmentDispatchEligibility(order, order.latestShipment ?? null);
+    if (!dispatchEligibility.canDispatch) {
       results.push(
         toBulkShipmentActionResult(
           order,
           "SKIPPED",
-          !isOrderPacked(order)
-            ? "Order is not packed yet"
-            : order.fulfillmentMethod !== "SHIPPING"
-              ? "Only shipping orders can be dispatched here"
-              : order.status !== "READY_FOR_DISPATCH"
-                ? `Order is ${humanizeToken(order.status)}`
-                : !order.latestShipment
-                  ? "No shipment exists yet"
-                  : order.latestShipment.dispatchedAt || order.latestShipment.status === "DISPATCHED"
-                    ? "Shipment is already dispatched"
-                    : !order.latestShipment.printedAt
-                      ? "Shipment label must be printed before dispatch"
-                      : order.latestShipment.status === "VOID_PENDING"
-                        ? "Shipment is waiting for provider void confirmation"
-                        : "Shipment is not in a dispatchable state",
-          !isOrderPacked(order)
-            ? "ORDER_NOT_PACKED"
-            : order.fulfillmentMethod !== "SHIPPING"
-              ? "WEB_ORDER_NOT_SHIPPING"
-              : order.status !== "READY_FOR_DISPATCH"
-                ? "INVALID_WEB_ORDER_STATE"
-                : !order.latestShipment
-                  ? "WEB_ORDER_SHIPMENT_NOT_FOUND"
-                  : order.latestShipment.dispatchedAt || order.latestShipment.status === "DISPATCHED"
-                    ? "SHIPMENT_ALREADY_DISPATCHED"
-                    : !order.latestShipment.printedAt
-                      ? "SHIPMENT_NOT_PRINTED"
-                      : order.latestShipment.status === "VOID_PENDING"
-                        ? "SHIPMENT_VOID_PENDING"
-                        : "INVALID_SHIPMENT_STATE",
+          dispatchEligibility.message ?? "Shipment is not in a dispatchable state",
+          dispatchEligibility.code ?? "INVALID_SHIPMENT_STATE",
         ),
       );
       continue;
