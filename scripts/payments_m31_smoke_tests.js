@@ -367,6 +367,82 @@ const run = async () => {
     assert.ok(matchedPayment, "Expected payment row linked to captured intent");
     assert.equal(matchedPayment.amountPence, totalPence);
 
+    const paidBasketRes = await fetchJson("/api/baskets", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(paidBasketRes.status, 201, JSON.stringify(paidBasketRes.json));
+    const paidBasketId = paidBasketRes.json.id;
+    state.basketIds.add(paidBasketId);
+
+    const paidLineRes = await fetchJson(`/api/baskets/${paidBasketId}/lines`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        variantId: variantRes.json.id,
+        quantity: 1,
+      }),
+    });
+    assert.equal(paidLineRes.status, 201, JSON.stringify(paidLineRes.json));
+    const paidSaleTotalPence = paidLineRes.json.totals.totalPence;
+
+    const paidCheckoutRes = await fetchJson(`/api/baskets/${paidBasketId}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        paymentMethod: "CARD",
+        amountPence: paidSaleTotalPence,
+        providerRef: `m31-direct-${uniqueRef()}`,
+      }),
+    });
+    assert.equal(paidCheckoutRes.status, 201, JSON.stringify(paidCheckoutRes.json));
+    const paidSaleId = paidCheckoutRes.json.sale.id;
+    state.saleIds.add(paidSaleId);
+
+    const createIntentForPaidSaleRes = await fetchJson("/api/payments/intents", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        saleId: paidSaleId,
+        provider: "CARD",
+        amountPence: paidSaleTotalPence,
+      }),
+    });
+    assert.equal(createIntentForPaidSaleRes.status, 409, JSON.stringify(createIntentForPaidSaleRes.json));
+    assert.equal(
+      createIntentForPaidSaleRes.json.error.code,
+      "SALE_ALREADY_PAID",
+      JSON.stringify(createIntentForPaidSaleRes.json),
+    );
+
+    const completePaidSaleRes = await fetchJson(`/api/sales/${paidSaleId}/complete`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(completePaidSaleRes.status, 200, JSON.stringify(completePaidSaleRes.json));
+
+    const createIntentForCompletedSaleRes = await fetchJson("/api/payments/intents", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        saleId: paidSaleId,
+        provider: "CARD",
+        amountPence: paidSaleTotalPence,
+      }),
+    });
+    assert.equal(
+      createIntentForCompletedSaleRes.status,
+      409,
+      JSON.stringify(createIntentForCompletedSaleRes.json),
+    );
+    assert.equal(
+      createIntentForCompletedSaleRes.json.error.code,
+      "SALE_ALREADY_COMPLETED",
+      JSON.stringify(createIntentForCompletedSaleRes.json),
+    );
+
     console.log("M31 smoke tests passed.");
   } finally {
     try {

@@ -373,6 +373,46 @@ const run = async () => {
     assert.ok(saleMovement, "Expected SALE movement for checkout line");
     assert.equal(saleMovement.quantity, -3);
 
+    const oversellBasketRes = await fetchJson("/api/baskets", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(oversellBasketRes.status, 201, JSON.stringify(oversellBasketRes.json));
+    const oversellBasketId = oversellBasketRes.json.id;
+    state.basketIds.add(oversellBasketId);
+
+    const oversellLineRes = await fetchJson(`/api/baskets/${oversellBasketId}/lines`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        variantId: variantRes.json.id,
+        quantity: 8,
+      }),
+    });
+    assert.equal(oversellLineRes.status, 201, JSON.stringify(oversellLineRes.json));
+
+    const oversellCheckoutRes = await fetchJson(`/api/baskets/${oversellBasketId}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(oversellCheckoutRes.status, 409, JSON.stringify(oversellCheckoutRes.json));
+    assert.equal(
+      oversellCheckoutRes.json.error.code,
+      "SALE_STOCK_INSUFFICIENT",
+      JSON.stringify(oversellCheckoutRes.json),
+    );
+
+    const onHandAfterOversellAttemptRes = await fetchJson(
+      `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(onHandAfterOversellAttemptRes.status, 200, JSON.stringify(onHandAfterOversellAttemptRes.json));
+    assert.equal(onHandAfterOversellAttemptRes.json.onHand, 7);
+
     console.log("PASS m28 POS basket + checkout smoke tests");
   } finally {
     await cleanup(state);

@@ -74,6 +74,38 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const lockPurchaseOrderForUpdateTx = async (
+  tx: Prisma.TransactionClient,
+  purchaseOrderId: string,
+) => {
+  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "PurchaseOrder"
+    WHERE id = ${purchaseOrderId}
+    FOR UPDATE
+  `;
+
+  if (lockedRows.length === 0) {
+    throw new HttpError(404, "Purchase order not found", "PURCHASE_ORDER_NOT_FOUND");
+  }
+};
+
+const lockPurchaseOrderItemsForUpdateTx = async (
+  tx: Prisma.TransactionClient,
+  purchaseOrderItemIds: string[],
+) => {
+  if (purchaseOrderItemIds.length === 0) {
+    return;
+  }
+
+  await tx.$queryRaw`
+    SELECT id
+    FROM "PurchaseOrderItem"
+    WHERE id IN (${Prisma.join(purchaseOrderItemIds)})
+    FOR UPDATE
+  `;
+};
+
 const toDateOrUndefined = (value: string | undefined, fieldName: string): Date | undefined => {
   if (value === undefined) {
     return undefined;
@@ -1150,6 +1182,12 @@ export const receivePurchaseOrder = async (
   const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
 
   const updated = await prisma.$transaction(async (tx) => {
+    await lockPurchaseOrderForUpdateTx(tx, purchaseOrderId);
+    await lockPurchaseOrderItemsForUpdateTx(
+      tx,
+      parsedLines.map((line) => line.purchaseOrderItemId),
+    );
+
     const po = await tx.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
       include: {

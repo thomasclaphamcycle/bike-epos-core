@@ -168,6 +168,19 @@ const run = async () => {
     });
     created.variantId = variant.id;
 
+    await apiJson({
+      path: "/api/inventory/movements",
+      method: "POST",
+      body: {
+        variantId: variant.id,
+        type: "PURCHASE",
+        quantity: 3,
+        referenceType: "M39_TEST",
+        referenceId: `seed_${token}`,
+      },
+      cookie,
+    });
+
     const createSale = async () => {
       const basket = await apiJson({
         path: "/api/baskets",

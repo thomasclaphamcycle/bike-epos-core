@@ -17,7 +17,8 @@ const toInternalBarcodeSequence = (value: string | null | undefined) => {
   }
 
   const match = value.trim().toUpperCase().match(INTERNAL_BARCODE_PATTERN);
-  return match ? Number.parseInt(match[1], 10) : 0;
+  const sequence = match?.[1];
+  return sequence ? Number.parseInt(sequence, 10) : 0;
 };
 
 const toBarcodeConflictError = () =>

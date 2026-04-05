@@ -417,7 +417,9 @@ const recordMovementTx = async (
     variantId: input.variantId,
     locationId: location.id,
     quantityDelta: input.quantity,
-    allowNegativeStock: input.allowNegativeStock,
+    ...(input.allowNegativeStock !== undefined
+      ? { allowNegativeStock: input.allowNegativeStock }
+      : {}),
   });
 
   const movement = await tx.inventoryMovement.create({
@@ -471,6 +473,7 @@ export const recordMovement = async (input: RecordMovementInput) => {
   if (!input.type) {
     throw new HttpError(400, "type is required", "INVALID_INVENTORY_MOVEMENT");
   }
+  const type = input.type;
 
   if (!Number.isInteger(input.quantity) || (input.quantity ?? 0) === 0) {
     throw new HttpError(
@@ -479,19 +482,22 @@ export const recordMovement = async (input: RecordMovementInput) => {
       "INVALID_INVENTORY_MOVEMENT",
     );
   }
+  const quantity = input.quantity as number;
 
   const movement = await prisma.$transaction((tx) =>
     recordMovementTx(tx, {
       variantId,
-      locationId: input.locationId,
-      type: input.type,
-      quantity: input.quantity,
-      unitCost: input.unitCost,
-      referenceType: input.referenceType,
-      referenceId: input.referenceId,
-      note: input.note,
-      createdByStaffId: input.createdByStaffId,
-      allowNegativeStock: input.allowNegativeStock,
+      type,
+      quantity,
+      ...(input.locationId !== undefined ? { locationId: input.locationId } : {}),
+      ...(input.unitCost !== undefined ? { unitCost: input.unitCost } : {}),
+      ...(input.referenceType !== undefined ? { referenceType: input.referenceType } : {}),
+      ...(input.referenceId !== undefined ? { referenceId: input.referenceId } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.createdByStaffId !== undefined ? { createdByStaffId: input.createdByStaffId } : {}),
+      ...(input.allowNegativeStock !== undefined
+        ? { allowNegativeStock: input.allowNegativeStock }
+        : {}),
     }),
   );
 
@@ -510,6 +516,7 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
       "INVALID_INVENTORY_ADJUSTMENT",
     );
   }
+  const quantityDelta = input.quantityDelta as number;
   if (!input.reason || !VALID_ADJUSTMENT_REASONS.has(input.reason)) {
     throw new HttpError(
       400,
@@ -519,18 +526,22 @@ export const recordAdjustment = async (input: RecordAdjustmentInput) => {
   }
 
   const createdByStaffId = normalizeOptionalText(input.createdByStaffId);
+  const normalizedLocationId = normalizeOptionalText(input.locationId);
+  const normalizedNote = normalizeOptionalText(input.note);
 
   const result = await prisma.$transaction(async (tx) => {
     const movement = await recordMovementTx(tx, {
       variantId,
-      locationId: normalizeOptionalText(input.locationId),
       type: "ADJUSTMENT",
-      quantity: input.quantityDelta,
+      quantity: quantityDelta,
       referenceType: "ADJUSTMENT",
-      referenceId: input.reason,
-      note: normalizeOptionalText(input.note) ?? undefined,
-      createdByStaffId,
-      allowNegativeStock: input.allowNegativeStock,
+      ...(normalizedLocationId !== undefined ? { locationId: normalizedLocationId } : {}),
+      ...(input.reason !== undefined ? { referenceId: input.reason } : {}),
+      ...(normalizedNote !== undefined ? { note: normalizedNote } : {}),
+      ...(createdByStaffId !== undefined ? { createdByStaffId } : {}),
+      ...(input.allowNegativeStock !== undefined
+        ? { allowNegativeStock: input.allowNegativeStock }
+        : {}),
     });
 
     await createAuditEventTx(

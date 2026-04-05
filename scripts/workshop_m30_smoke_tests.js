@@ -432,6 +432,19 @@ const run = async () => {
     assert.equal(linkedSale?.basketId, finalizeRes.json.basket.id);
     assert.equal(linkedSale?.workshopJobId, workshopJobId);
 
+    const stockAfterCheckoutRes = await fetchJson(
+      `/api/stock/variants/${encodeURIComponent(variantRes.json.id)}`,
+      {
+        headers: staffHeaders,
+      },
+    );
+    assert.equal(stockAfterCheckoutRes.status, 200, JSON.stringify(stockAfterCheckoutRes.json));
+    assert.equal(
+      stockAfterCheckoutRes.json.onHand,
+      6,
+      "Workshop checkout should not decrement already-consumed part stock twice",
+    );
+
     const jobAfterCheckout = await prisma.workshopJob.findUnique({
       where: { id: workshopJobId },
       select: {
