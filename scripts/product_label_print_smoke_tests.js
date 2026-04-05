@@ -21,6 +21,11 @@ const ADMIN_HEADERS = {
   "X-Staff-Id": "product-label-admin",
 };
 
+const MANAGER_HEADERS = {
+  "X-Staff-Role": "MANAGER",
+  "X-Staff-Id": "product-label-manager",
+};
+
 const STAFF_HEADERS = {
   "X-Staff-Role": "STAFF",
   "X-Staff-Id": "product-label-staff",
@@ -48,11 +53,18 @@ const fetchJson = async (pathName, options = {}) => {
 };
 
 const run = async () => {
-  const printAgent = await startPrintAgentServer({
+  const envFallbackPrintAgent = await startPrintAgentServer({
     bindHost: "127.0.0.1",
     port: 0,
-    sharedSecret: "product-label-smoke-secret",
-    dryRunOutputDir: path.resolve(process.cwd(), "tmp", "product-label-smoke-agent"),
+    sharedSecret: "product-label-env-fallback-secret",
+    dryRunOutputDir: path.resolve(process.cwd(), "tmp", "product-label-smoke-agent", "env-fallback"),
+    rawTcpTimeoutMs: 5000,
+  });
+  const persistedSettingsPrintAgent = await startPrintAgentServer({
+    bindHost: "127.0.0.1",
+    port: 0,
+    sharedSecret: "product-label-settings-secret",
+    dryRunOutputDir: path.resolve(process.cwd(), "tmp", "product-label-smoke-agent", "settings"),
     rawTcpTimeoutMs: 5000,
   });
   const serverController = createSmokeServerController({
@@ -60,8 +72,8 @@ const run = async () => {
     baseUrl: BASE_URL,
     databaseUrl: DATABASE_URL,
     envOverrides: {
-      COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL: `http://${printAgent.host}:${printAgent.port}`,
-      COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET: "product-label-smoke-secret",
+      COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL: `http://${envFallbackPrintAgent.host}:${envFallbackPrintAgent.port}`,
+      COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET: "product-label-env-fallback-secret",
     },
   });
 
@@ -120,6 +132,38 @@ const run = async () => {
     createdPrinterIds.push(printerId);
     assert.equal(createPrinterRes.json.defaultProductLabelPrinterId, printerId);
 
+    const initialConfigRes = await fetchJson("/api/settings/product-label-print-agent", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(initialConfigRes.status, 200, JSON.stringify(initialConfigRes.json));
+    assert.equal(initialConfigRes.json.config.url, null);
+    assert.equal(initialConfigRes.json.config.effectiveSource, "environment");
+    assert.equal(
+      initialConfigRes.json.config.envFallbackUrl,
+      `http://${envFallbackPrintAgent.host}:${envFallbackPrintAgent.port}`,
+    );
+    assert.equal(initialConfigRes.json.config.envFallbackHasSharedSecret, true);
+
+    const saveConfigRes = await fetchJson("/api/settings/product-label-print-agent", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: `http://${persistedSettingsPrintAgent.host}:${persistedSettingsPrintAgent.port}`,
+        sharedSecret: "product-label-settings-secret",
+      }),
+    });
+    assert.equal(saveConfigRes.status, 200, JSON.stringify(saveConfigRes.json));
+    assert.equal(
+      saveConfigRes.json.config.url,
+      `http://${persistedSettingsPrintAgent.host}:${persistedSettingsPrintAgent.port}`,
+    );
+    assert.equal(saveConfigRes.json.config.effectiveSource, "settings");
+    assert.equal(saveConfigRes.json.config.hasSharedSecret, true);
+    assert.match(saveConfigRes.json.config.sharedSecretHint, /^••••/);
+
     const printRes = await fetchJson(`/api/variants/${encodeURIComponent(product.variants[0].id)}/product-label/print`, {
       method: "POST",
       headers: {
@@ -135,9 +179,39 @@ const run = async () => {
     assert.equal(printRes.json.printJob.simulated, true);
     assert.equal(printRes.json.printJob.copies, 3);
     assert.equal(printRes.json.printJob.outputPath.endsWith(".png"), true);
+    assert.match(printRes.json.printJob.outputPath, /product-label-smoke-agent\/settings\//);
 
     const renderedLabel = await fs.readFile(printRes.json.printJob.outputPath);
     assert.equal(renderedLabel.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+
+    const clearStoredConfigRes = await fetchJson("/api/settings/product-label-print-agent", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: null,
+        clearSharedSecret: true,
+      }),
+    });
+    assert.equal(clearStoredConfigRes.status, 200, JSON.stringify(clearStoredConfigRes.json));
+    assert.equal(clearStoredConfigRes.json.config.url, null);
+    assert.equal(clearStoredConfigRes.json.config.effectiveSource, "environment");
+
+    const envFallbackPrintRes = await fetchJson(`/api/variants/${encodeURIComponent(product.variants[0].id)}/product-label/print`, {
+      method: "POST",
+      headers: {
+        ...STAFF_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        copies: 2,
+      }),
+    });
+    assert.equal(envFallbackPrintRes.status, 201, JSON.stringify(envFallbackPrintRes.json));
+    assert.equal(envFallbackPrintRes.json.printJob.copies, 2);
+    assert.match(envFallbackPrintRes.json.printJob.outputPath, /product-label-smoke-agent\/env-fallback\//);
 
     const invalidCopiesRes = await fetchJson(`/api/variants/${encodeURIComponent(product.variants[0].id)}/product-label/print`, {
       method: "POST",
@@ -210,6 +284,7 @@ const run = async () => {
         key: {
           in: [
             "labels.defaultProductLabelPrinterId",
+            "labels.productLabelPrintAgent",
           ],
         },
       },
@@ -218,7 +293,8 @@ const run = async () => {
     await Promise.allSettled([
       prisma.$disconnect(),
       serverController.stop(),
-      printAgent.close(),
+      envFallbackPrintAgent.close(),
+      persistedSettingsPrintAgent.close(),
     ]);
   }
 };

@@ -209,6 +209,27 @@ type ShippingProviderFormState = {
   clearApiKey: boolean;
 };
 
+type ProductLabelPrintAgentConfig = {
+  url: string | null;
+  hasSharedSecret: boolean;
+  sharedSecretHint: string | null;
+  updatedAt: string | null;
+  effectiveUrl: string | null;
+  effectiveSource: "settings" | "environment" | "unconfigured";
+  envFallbackUrl: string | null;
+  envFallbackHasSharedSecret: boolean;
+};
+
+type ProductLabelPrintAgentSettingsResponse = {
+  config: ProductLabelPrintAgentConfig;
+};
+
+type ProductLabelPrintAgentFormState = {
+  url: string;
+  sharedSecret: string;
+  clearSharedSecret: boolean;
+};
+
 const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
@@ -251,6 +272,12 @@ const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
   clearWebhookSecret: false,
   apiKey: "",
   clearApiKey: false,
+};
+
+const DEFAULT_PRODUCT_LABEL_PRINT_AGENT_FORM: ProductLabelPrintAgentFormState = {
+  url: "",
+  sharedSecret: "",
+  clearSharedSecret: false,
 };
 
 const getPrinterCapabilitiesForFamily = (printerFamily: RegisteredPrinterFamily) => ({
@@ -475,6 +502,14 @@ const toShippingProviderFormState = (
   };
 };
 
+const toProductLabelPrintAgentFormState = (
+  config: ProductLabelPrintAgentConfig | null,
+): ProductLabelPrintAgentFormState => ({
+  url: config?.url ?? "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+});
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -485,6 +520,10 @@ export const SystemSettingsPage = () => {
   const [providerSettingsPayload, setProviderSettingsPayload] = useState<ShippingProviderSettingsListResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [providerForm, setProviderForm] = useState<ShippingProviderFormState>(DEFAULT_SHIPPING_PROVIDER_FORM);
+  const [productLabelPrintAgentConfig, setProductLabelPrintAgentConfig] = useState<ProductLabelPrintAgentConfig | null>(null);
+  const [productLabelPrintAgentForm, setProductLabelPrintAgentForm] = useState<ProductLabelPrintAgentFormState>(
+    DEFAULT_PRODUCT_LABEL_PRINT_AGENT_FORM,
+  );
   const [printersPayload, setPrintersPayload] = useState<RegisteredPrinterListResponse | null>(null);
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
   const [printerForm, setPrinterForm] = useState<PrinterFormState>(DEFAULT_PRINTER_FORM);
@@ -495,6 +534,7 @@ export const SystemSettingsPage = () => {
   const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
   const [settingDefaultProvider, setSettingDefaultProvider] = useState(false);
+  const [savingProductLabelPrintAgent, setSavingProductLabelPrintAgent] = useState(false);
   const [savingPrinter, setSavingPrinter] = useState(false);
   const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
 
@@ -504,10 +544,11 @@ export const SystemSettingsPage = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const [storePayload, settingsPayload, providerSettingsResponse, printersResponse] = await Promise.all([
+        const [storePayload, settingsPayload, providerSettingsResponse, productLabelPrintAgentResponse, printersResponse] = await Promise.all([
           apiGet<StoreInfoResponse>("/api/settings/store-info"),
           apiGet<SettingsResponse>("/api/settings"),
           apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers"),
+          apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent"),
           apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
         ]);
         if (cancelled) {
@@ -534,6 +575,8 @@ export const SystemSettingsPage = () => {
             providerSettingsResponse.providers.find((provider) => provider.key === preferredProviderKey) ?? null,
           ),
         );
+        setProductLabelPrintAgentConfig(productLabelPrintAgentResponse.config);
+        setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(productLabelPrintAgentResponse.config));
         setPrintersPayload(printersResponse);
         const preferredPrinterId =
           printersResponse.defaultShippingLabelPrinterId
@@ -758,6 +801,22 @@ export const SystemSettingsPage = () => {
     return errors;
   }, [providerForm, selectedProvider]);
   const hasProviderValidationErrors = Object.keys(providerValidationErrors).length > 0;
+  const productLabelPrintAgentValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof ProductLabelPrintAgentFormState, string>> = {};
+
+    if (productLabelPrintAgentForm.url.trim() && !isValidUrl(productLabelPrintAgentForm.url)) {
+      errors.url = "Helper URL must start with http:// or https://";
+    }
+    if (
+      productLabelPrintAgentForm.clearSharedSecret
+      && productLabelPrintAgentForm.sharedSecret.trim().length > 0
+    ) {
+      errors.sharedSecret = "Enter a new shared secret or clear the stored secret, not both.";
+    }
+
+    return errors;
+  }, [productLabelPrintAgentForm]);
+  const hasProductLabelPrintAgentValidationErrors = Object.keys(productLabelPrintAgentValidationErrors).length > 0;
   const selectedPrinter = useMemo(
     () => printersPayload?.printers.find((printer) => printer.id === selectedPrinterId) ?? null,
     [printersPayload?.printers, selectedPrinterId],
@@ -843,6 +902,13 @@ export const SystemSettingsPage = () => {
     setProviderForm((current) => ({ ...current, [key]: value }));
   };
 
+  const setProductLabelPrintAgentField = <K extends keyof ProductLabelPrintAgentFormState>(
+    key: K,
+    value: ProductLabelPrintAgentFormState[K],
+  ) => {
+    setProductLabelPrintAgentForm((current) => ({ ...current, [key]: value }));
+  };
+
   const setWorkshopCommercialField = <K extends keyof WorkshopCommercialSettings>(
     key: K,
     value: WorkshopCommercialSettings[K],
@@ -915,6 +981,13 @@ export const SystemSettingsPage = () => {
     return payload;
   };
 
+  const loadProductLabelPrintAgentSettings = async () => {
+    const payload = await apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent");
+    setProductLabelPrintAgentConfig(payload.config);
+    setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(payload.config));
+    return payload;
+  };
+
   const selectShippingProviderForEditing = (providerKey: string) => {
     const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
     setSelectedProviderKey(providerKey);
@@ -939,6 +1012,38 @@ export const SystemSettingsPage = () => {
       ...DEFAULT_PRINTER_FORM,
       setAsDefaultShippingLabel: printersPayload?.defaultShippingLabelPrinterId === null,
     });
+  };
+
+  const saveProductLabelPrintAgentSettings = async () => {
+    if (hasProductLabelPrintAgentValidationErrors) {
+      error("Fix the highlighted product-label print helper fields before saving.");
+      return;
+    }
+
+    setSavingProductLabelPrintAgent(true);
+    try {
+      const payload = await apiPut<ProductLabelPrintAgentSettingsResponse>(
+        "/api/settings/product-label-print-agent",
+        {
+          url: productLabelPrintAgentForm.url.trim() || null,
+          sharedSecret: productLabelPrintAgentForm.sharedSecret.trim() || undefined,
+          clearSharedSecret: productLabelPrintAgentForm.clearSharedSecret,
+        },
+      );
+      setProductLabelPrintAgentConfig(payload.config);
+      setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(payload.config));
+      success(
+        payload.config.effectiveSource === "settings"
+          ? "Product-label print helper settings updated."
+          : payload.config.effectiveSource === "environment"
+            ? "Stored helper settings cleared. CorePOS is using environment fallback."
+            : "Product-label print helper settings cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save product-label print helper settings");
+    } finally {
+      setSavingProductLabelPrintAgent(false);
+    }
   };
 
   const handleLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -2390,6 +2495,108 @@ export const SystemSettingsPage = () => {
             </section>
           </div>
         ) : null}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Product-Label Print Helper"
+          description="Persist the Windows Dymo helper URL in CorePOS so product-label direct printing does not rely on backend environment variables."
+          actions={(
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(productLabelPrintAgentConfig))}
+                disabled={savingProductLabelPrintAgent}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveProductLabelPrintAgentSettings()}
+                disabled={savingProductLabelPrintAgent || hasProductLabelPrintAgentValidationErrors}
+              >
+                {savingProductLabelPrintAgent ? "Saving..." : "Save Helper"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Product-Label Print Helper"
+            description="Fetching the persisted Dymo helper settings and any backend environment fallback."
+          />
+        ) : (
+          <div className="purchase-form-grid store-info-grid">
+            <label className="store-info-grid-span">
+              Helper base URL
+              <input
+                value={productLabelPrintAgentForm.url}
+                onChange={(event) => setProductLabelPrintAgentField("url", event.target.value)}
+                placeholder="http://192.168.1.45:3212"
+              />
+              {productLabelPrintAgentValidationErrors.url ? (
+                <span className="field-error">{productLabelPrintAgentValidationErrors.url}</span>
+              ) : (
+                <span className="table-secondary">
+                  CorePOS posts product-label print jobs to <code>/jobs/product-label</code> on this helper.
+                </span>
+              )}
+            </label>
+            <label>
+              Shared secret
+              <input
+                type="password"
+                value={productLabelPrintAgentForm.sharedSecret}
+                onChange={(event) => setProductLabelPrintAgentField("sharedSecret", event.target.value)}
+                placeholder={productLabelPrintAgentConfig?.sharedSecretHint ?? "Enter a new shared secret"}
+              />
+              {productLabelPrintAgentValidationErrors.sharedSecret ? (
+                <span className="field-error">{productLabelPrintAgentValidationErrors.sharedSecret}</span>
+              ) : productLabelPrintAgentConfig?.hasSharedSecret ? (
+                <span className="table-secondary">
+                  Stored secret: {productLabelPrintAgentConfig.sharedSecretHint}
+                </span>
+              ) : (
+                <span className="table-secondary">
+                  Optional, but recommended when the Windows helper is reachable over the local network.
+                </span>
+              )}
+            </label>
+            <label className="store-settings-checkbox">
+              <span>Clear stored shared secret on save</span>
+              <div className="table-secondary">
+                Leave unticked to preserve the current secret when you are only changing the helper URL.
+              </div>
+              <input
+                type="checkbox"
+                checked={productLabelPrintAgentForm.clearSharedSecret}
+                onChange={(event) => setProductLabelPrintAgentField("clearSharedSecret", event.target.checked)}
+              />
+            </label>
+            <div className="restricted-panel info-panel store-info-grid-span">
+              <strong>Effective helper:</strong>{" "}
+              {productLabelPrintAgentConfig?.effectiveUrl ? (
+                <>
+                  <code>{productLabelPrintAgentConfig.effectiveUrl}</code> via{" "}
+                  {productLabelPrintAgentConfig.effectiveSource === "settings"
+                    ? "persisted Settings"
+                    : "backend environment fallback"}
+                  . Health check: <code>{`${productLabelPrintAgentConfig.effectiveUrl}/health`}</code>
+                </>
+              ) : (
+                "No product-label print helper is configured yet. Browser print fallback stays available."
+              )}
+            </div>
+            {productLabelPrintAgentConfig?.effectiveSource === "environment" && productLabelPrintAgentConfig.envFallbackUrl ? (
+              <div className="restricted-panel warning-panel store-info-grid-span">
+                CorePOS is currently using legacy environment fallback at <code>{productLabelPrintAgentConfig.envFallbackUrl}</code>. Save a helper URL here to make the configuration persistent in CorePOS itself.
+              </div>
+            ) : null}
+          </div>
+        )}
       </SurfaceCard>
 
       <section className="card">

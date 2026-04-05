@@ -139,9 +139,9 @@ Set these in the CorePOS backend environment when you want CorePOS to hand off s
 - `COREPOS_SHIPPING_PRINT_AGENT_URL`
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional but recommended)
-- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_URL`)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (legacy fallback only; product-label direct printing can now be configured persistently in CorePOS Settings)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
-- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (legacy fallback only; falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
 
 Example:
 
@@ -151,12 +151,19 @@ COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS=7000
 COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET=replace-me
 ```
 
-For a separate Dymo host, point only the product-label URL at the standalone helper EXE host:
+For a separate Dymo host, the preferred setup is now:
+
+1. In CorePOS Settings, save the product-label helper URL and shared secret.
+2. Keep the env vars only as a temporary fallback for older deployments.
+
+Legacy env-only fallback example:
 
 ```bash
 COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL=http://dymo-host-or-ip:3212
 COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET=replace-me
 ```
+
+CorePOS uses persisted settings first and falls back to env only when no saved helper URL exists.
 
 ## Printer registration in CorePOS
 
@@ -236,7 +243,7 @@ npm run print-agent:package:dymo
    - set `sharedSecret` to match `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET`
    - choose a writable `dryRunOutputDir`
 5. Start the helper with `corepos-dymo-product-label-agent.exe`.
-6. Point the CorePOS backend at that helper with `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL`.
+6. In CorePOS, open Settings and save that helper URL plus shared secret under the Product-Label Print Helper section.
 
 This gives the Windows Dymo host a small copyable EXE folder instead of a repo checkout and npm workflow.
 
@@ -247,7 +254,8 @@ Keep the roles split clearly:
 - Mac/CorePOS backend host:
   - runs the main CorePOS backend
   - owns inventory search, product-label print requests, and printer selection
-  - sends product-label jobs to the Windows Dymo helper over `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL`
+  - stores the Dymo helper URL and shared secret in CorePOS Settings
+  - sends product-label jobs to the Windows Dymo helper over that persisted URL
 - Windows Dymo helper host:
   - runs `corepos-dymo-product-label-agent.exe`
   - must have the Dymo printer installed in Windows
@@ -255,9 +263,7 @@ Keep the roles split clearly:
 
 For day-to-day reliability, give the Windows Dymo host a fixed IP or DHCP reservation and point:
 
-```bash
-COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL=http://<fixed-windows-ip>:3212
-```
+`http://<fixed-windows-ip>:3212`
 
 Quick health check from the CorePOS host:
 
@@ -270,8 +276,9 @@ If direct product-label printing stops working:
 1. Confirm the Windows Dymo helper EXE is running on the Windows host.
 2. Open `http://<fixed-windows-ip>:3212/health` and confirm it responds.
 3. Check the configured Dymo printer is still installed in Windows and matches the registered CorePOS printer record.
-4. Confirm the Windows host IP and shared secret still match the CorePOS backend environment.
-5. If labels are urgent, use the existing browser-print fallback from the product-label page while the helper route is being fixed.
+4. Confirm the Product-Label Print Helper settings in CorePOS still match the Windows host IP and shared secret.
+5. If the helper URL was never saved in Settings, confirm any legacy fallback env vars on the CorePOS backend are still correct.
+6. If labels are urgent, use the existing browser-print fallback from the product-label page while the helper route is being fixed.
 
 ## Relationship to courier integration
 

@@ -4,51 +4,7 @@ import {
   type ProductLabelPrintRequest,
 } from "../../shared/productLabelPrintContract";
 import { HttpError } from "../utils/http";
-
-const DEFAULT_TIMEOUT_MS = 7000;
-
-const parsePositiveInteger = (value: string | undefined, fallback: number, field: string) => {
-  if (!value || value.trim().length === 0) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new HttpError(500, `${field} must be a positive integer`, "INVALID_PRODUCT_LABEL_PRINT_AGENT_CONFIG");
-  }
-
-  return parsed;
-};
-
-const readOptionalEnv = (...keys: string[]) => {
-  for (const key of keys) {
-    const value = process.env[key]?.trim();
-    if (value) {
-      return value;
-    }
-  }
-
-  return "";
-};
-
-const getPrintAgentConfig = () => {
-  const url = readOptionalEnv("COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL", "COREPOS_SHIPPING_PRINT_AGENT_URL");
-  const timeoutMs = parsePositiveInteger(
-    readOptionalEnv("COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS", "COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS") || undefined,
-    DEFAULT_TIMEOUT_MS,
-    "COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS",
-  );
-  const sharedSecret = readOptionalEnv(
-    "COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET",
-    "COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET",
-  ) || null;
-
-  return {
-    url,
-    timeoutMs,
-    sharedSecret,
-  };
-};
+import { resolveProductLabelPrintAgentRuntimeConfig } from "./productLabelPrintAgentConfigService";
 
 const extractRemoteErrorMessage = (status: number, payload: unknown) => {
   if (payload && typeof payload === "object") {
@@ -83,11 +39,11 @@ const parseResponseBody = async (response: Response) => {
 export const deliverProductLabelPrintRequestToAgent = async (
   printRequest: ProductLabelPrintRequest,
 ): Promise<ProductLabelPrintAgentSubmitResponse> => {
-  const config = getPrintAgentConfig();
-  if (!config.url) {
+  const config = await resolveProductLabelPrintAgentRuntimeConfig();
+  if (!config?.url) {
     throw new HttpError(
       503,
-      "Product-label print agent is not configured. Set COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL to the standalone Windows Dymo helper EXE (or another compatible local agent URL) to enable direct Dymo printing.",
+      "Product-label print agent is not configured. Save the Windows Dymo helper URL in Settings, or set COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL as a legacy fallback.",
       "PRODUCT_LABEL_PRINT_AGENT_NOT_CONFIGURED",
     );
   }
