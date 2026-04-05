@@ -1662,6 +1662,59 @@ textarea {
   min-height: 0;
 }
 
+.app-route-fallback {
+  min-height: clamp(280px, 46vh, 560px);
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.app-route-fallback--visible {
+  opacity: 1;
+}
+
+.app-route-fallback__line,
+.app-route-fallback__card {
+  border-radius: 18px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.62) 48%, rgba(255, 255, 255, 0.28) 100%),
+    linear-gradient(180deg, rgba(208, 219, 232, 0.9) 0%, rgba(221, 230, 240, 0.72) 100%);
+  background-size: 240% 100%;
+  animation: app-route-fallback-shimmer 1.8s ease-in-out infinite;
+}
+
+.app-route-fallback__line--title {
+  width: min(360px, 52%);
+  height: 34px;
+}
+
+.app-route-fallback__line--meta {
+  width: min(240px, 34%);
+  height: 16px;
+}
+
+.app-route-fallback__card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.app-route-fallback__card {
+  min-height: 124px;
+}
+
+@keyframes app-route-fallback-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .app-main--workspace {
   width: min(var(--cp-width-workspace), 100%);
   padding-inline: 16px;
@@ -1699,6 +1752,20 @@ textarea {
 .page-shell {
   display: grid;
   gap: var(--cp-space-4);
+}
+
+.app-main--workspace .app-route-fallback,
+.app-main--workspace-wide .app-route-fallback {
+  padding-top: 4px;
+}
+
+.app-main--pos .app-route-fallback {
+  padding: 8px;
+  min-height: 220px;
+}
+
+.app-main--pos .app-route-fallback__card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .page-shell-workspace {

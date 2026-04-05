@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
 import CorePosLogo from "./branding/CorePosLogo";
 import { useRuntimeVersionLabel } from "../hooks/useRuntimeVersionLabel";
+import { RouteContentFallback } from "./RouteContentFallback";
 import {
   canAccessNavigationRole,
   matchesNavigationPath,
   navigationSections,
 } from "../navigation/navigationConfig";
+import { preloadPrimaryRoute } from "../lazyPages";
 
 const envLabel = import.meta.env.MODE || "development";
 
@@ -77,6 +79,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
 
+  const prefetchRoute = (path: string) => {
+    void preloadPrimaryRoute(path).catch(() => {
+      // Best-effort chunk warming only; normal navigation still works if a preload fails.
+    });
+  };
+
   useEffect(() => {
     const activeExpandableSectionId = visibleSections.find(
       (section) => section.items?.length && isSectionActive(section),
@@ -97,6 +105,32 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       return null;
     });
   }, [currentPath, visibleSections]);
+
+  useEffect(() => {
+    const pathsToWarm = Array.from(new Set(visibleSections.map((section) => section.to)));
+    if (pathsToWarm.length === 0) {
+      return undefined;
+    }
+
+    const preload = () => {
+      void Promise.all(pathsToWarm.map((path) => preloadPrimaryRoute(path).catch(() => undefined)));
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(() => {
+        preload();
+      }, { timeout: 1200 });
+
+      return () => {
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timeoutId = window.setTimeout(preload, 300);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [visibleSections]);
 
   const userDisplayName = user?.name || user?.username || "Signed in";
 
@@ -134,6 +168,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           to={section.to}
                           end
                           className="sidebar-link sidebar-link--group"
+                          onMouseEnter={() => prefetchRoute(section.to)}
+                          onFocus={() => prefetchRoute(section.to)}
                         >
                           <span className="sidebar-link-label">{section.label}</span>
                         </NavLink>
@@ -164,6 +200,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           to={section.to}
                           end
                           className={isDirectlyActive ? "sidebar-link sidebar-link--active" : "sidebar-link"}
+                          onMouseEnter={() => prefetchRoute(section.to)}
+                          onFocus={() => prefetchRoute(section.to)}
                         >
                           {section.label}
                         </NavLink>
@@ -189,6 +227,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                               className={matchesNavigationPath(currentPath, item)
                                 ? "sidebar-submenu-link sidebar-submenu-link--active"
                                 : "sidebar-submenu-link"}
+                              onMouseEnter={() => prefetchRoute(item.to)}
+                              onFocus={() => prefetchRoute(item.to)}
                             >
                               {item.label}
                             </NavLink>
@@ -222,7 +262,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               ? "app-main app-main--workspace"
               : "app-main"}
         >
-          {children}
+          <Suspense fallback={<RouteContentFallback />}>
+            {children}
+          </Suspense>
         </main>
 
         <footer className="app-footer">
