@@ -181,35 +181,28 @@ const run = async () => {
     assert.equal(pageOne.status, 200, JSON.stringify(pageOne.json));
     assert.equal(pageOne.json.pagination.page, 1);
     assert.equal(pageOne.json.pagination.pageSize, 2);
-    assert.equal(pageOne.json.pagination.total, 3);
-    assert.equal(pageOne.json.pagination.totalPages, 2);
+    assert.equal(pageOne.json.pagination.total, 2);
+    assert.equal(pageOne.json.pagination.totalPages, 1);
     assert.equal(pageOne.json.data.length, 2);
     assert.equal(pageOne.json.data[0].id, workshopSale.id);
     assert.equal(pageOne.json.data[0].source, "workshop");
-    assert.equal(pageOne.json.data[0].reference, workshopJob.id);
+    assert.equal(pageOne.json.data[0].reference, workshopJob.id.slice(0, 8).toUpperCase());
     assert.equal(pageOne.json.data[0].store.id, branchLocation.id);
     assert.equal(pageOne.json.data[0].store.name, branchLocation.name);
     assert.equal(pageOne.json.data[0].soldBy.name, `Eric ${token}`);
     assert.equal(pageOne.json.data[0].status, "complete");
     assert.equal(pageOne.json.data[0].currency, "GBP");
     assert.equal(pageOne.json.data[0].total, 45);
-    assert.equal(pageOne.json.data[1].id, draftSale.id);
-    assert.equal(pageOne.json.data[1].status, "draft");
-    assert.equal(pageOne.json.data[1].customer.name, "Walk-in");
-    assert.match(pageOne.json.data[1].orderNo, /^SALE-/);
+    assert.equal(pageOne.json.data[1].id, completeSale.id);
+    assert.equal(pageOne.json.data[1].status, "complete");
+    assert.equal(pageOne.json.data[1].customer.name, `Alice Walker ${token}`);
+    assert.equal(pageOne.json.data[1].orderNo, `CL0200${token}`);
 
     const pageTwo = await fetchJson(`/api/sales/history?q=${encodeURIComponent(token)}&page=2&pageSize=2`, {
       headers: STAFF_HEADERS,
     });
     assert.equal(pageTwo.status, 200, JSON.stringify(pageTwo.json));
-    assert.equal(pageTwo.json.data.length, 1);
-    assert.equal(pageTwo.json.data[0].id, completeSale.id);
-    assert.equal(pageTwo.json.data[0].orderNo, `CL0200${token}`);
-    assert.equal(pageTwo.json.data[0].customer.id, alice.id);
-    assert.equal(pageTwo.json.data[0].customer.name, `Alice Walker ${token}`);
-    assert.equal(pageTwo.json.data[0].soldAt, "2026-04-04T17:56:26Z");
-    assert.equal(pageTwo.json.data[0].source, "pos");
-    assert.equal(pageTwo.json.data[0].reference, null);
+    assert.equal(pageTwo.json.data.length, 0);
 
     const byOrderNo = await fetchJson(`/api/sales/history?q=${encodeURIComponent(`CL0200${token}`)}`, {
       headers: STAFF_HEADERS,
@@ -222,7 +215,7 @@ const run = async () => {
       headers: STAFF_HEADERS,
     });
     assert.equal(byCustomer.status, 200, JSON.stringify(byCustomer.json));
-    assert.equal(byCustomer.json.pagination.total, 3);
+    assert.equal(byCustomer.json.pagination.total, 2);
     assert.equal(
       byCustomer.json.data.find((sale) => sale.id === completeSale.id)?.customer.name,
       `Alice Walker ${token}`,
@@ -241,6 +234,16 @@ const run = async () => {
     assert.equal(completeOnly.json.pagination.total, 2);
     assert.ok(completeOnly.json.data.every((sale) => sale.status === "complete"));
 
+    const draftOnly = await fetchJson(`/api/sales/history?q=${encodeURIComponent(token)}&status=draft`, {
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(draftOnly.status, 200, JSON.stringify(draftOnly.json));
+    assert.equal(draftOnly.json.pagination.total, 1);
+    assert.equal(draftOnly.json.data[0].id, draftSale.id);
+    assert.equal(draftOnly.json.data[0].status, "draft");
+    assert.match(draftOnly.json.data[0].orderNo, /^SALE-/);
+    assert.equal(draftOnly.json.data[0].customer.name, "Walk-in");
+
     const branchOnly = await fetchJson(
       `/api/sales/history?q=${encodeURIComponent(token)}&storeId=${encodeURIComponent(branchLocation.id)}`,
       {
@@ -256,8 +259,8 @@ const run = async () => {
       { headers: STAFF_HEADERS },
     );
     assert.equal(onFifth.status, 200, JSON.stringify(onFifth.json));
-    assert.equal(onFifth.json.pagination.total, 2);
-    assert.deepEqual(onFifth.json.data.map((sale) => sale.id), [workshopSale.id, draftSale.id]);
+    assert.equal(onFifth.json.pagination.total, 1);
+    assert.deepEqual(onFifth.json.data.map((sale) => sale.id), [workshopSale.id]);
 
     const invalidStatus = await fetchJson("/api/sales/history?status=unknown", {
       headers: STAFF_HEADERS,

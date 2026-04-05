@@ -2,7 +2,7 @@
 @staffRole = STAFF
 @storeId = REPLACE_WITH_LOCATION_ID
 
-### Sales history default page (STAFF+)
+### Sales history default page (STAFF+, completed/finalised sales only)
 GET {{baseUrl}}/api/sales/history
 X-Staff-Role: {{staffRole}}
 
@@ -12,6 +12,10 @@ X-Staff-Role: {{staffRole}}
 
 ### Sales history filtered by status and date range (STAFF+)
 GET {{baseUrl}}/api/sales/history?status=complete&dateFrom=2026-04-01T00:00:00.000Z&dateTo=2026-04-05T23:59:59.999Z
+X-Staff-Role: {{staffRole}}
+
+### Sales history including drafts explicitly (STAFF+)
+GET {{baseUrl}}/api/sales/history?status=draft,complete
 X-Staff-Role: {{staffRole}}
 
 ### Sales history filtered to one store with pagination (STAFF+)

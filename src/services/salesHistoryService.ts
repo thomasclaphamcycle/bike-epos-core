@@ -4,6 +4,7 @@ import { HttpError } from "../utils/http";
 
 export const SALES_HISTORY_STATUS_VALUES = ["draft", "complete"] as const;
 export type SalesHistoryStatus = typeof SALES_HISTORY_STATUS_VALUES[number];
+const DEFAULT_SALES_HISTORY_STATUSES: SalesHistoryStatus[] = ["complete"];
 
 export type ListSalesHistoryInput = {
   q?: string;
@@ -140,6 +141,8 @@ const toIsoSeconds = (value: Date | string) => {
 };
 
 const toFallbackOrderNo = (id: string) => `SALE-${id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+const toWorkshopReference = (workshopJobId: string | null) =>
+  workshopJobId ? workshopJobId.slice(0, 8).toUpperCase() : null;
 
 const toCustomerName = (row: RawSalesHistoryRow) => {
   const directName = normalizeOptionalText(row.customerName);
@@ -167,7 +170,14 @@ export const listSalesHistory = async (input: ListSalesHistoryInput) => {
   const page = input.page ?? 1;
   const pageSize = input.pageSize ?? 20;
   const skip = (page - 1) * pageSize;
-  const whereSql = buildSalesHistoryWhereSql(input);
+  const statuses =
+    input.statuses && input.statuses.length > 0
+      ? input.statuses
+      : DEFAULT_SALES_HISTORY_STATUSES;
+  const whereSql = buildSalesHistoryWhereSql({
+    ...input,
+    statuses,
+  });
 
   const countRows = await prisma.$queryRaw<RawSalesHistoryCountRow[]>(Prisma.sql`
     SELECT COUNT(*)::int AS total
@@ -232,7 +242,7 @@ export const listSalesHistory = async (input: ListSalesHistoryInput) => {
         id: row.storeId,
         name: row.storeName,
       },
-      reference: row.workshopJobId,
+      reference: toWorkshopReference(row.workshopJobId),
       source: row.workshopJobId ? "workshop" : "pos",
     })),
     pagination: {
