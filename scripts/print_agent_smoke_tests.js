@@ -160,6 +160,15 @@ const run = async () => {
         pricePence: 1299,
         barcode: "123456789012",
       },
+      document: {
+        format: "PNG",
+        mimeType: "image/png",
+        fileName: "tube-700-48.png",
+        bytesBase64:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nm4cAAAAASUVORK5CYII=",
+        widthPx: 1,
+        heightPx: 1,
+      },
       metadata: {
         source: "PRINT_AGENT_SMOKE",
         sourceLabel: "TUBE-700-48",

@@ -14,12 +14,34 @@ const expectNonNegativeInteger = (value: unknown, field: string) => {
   return Number(value);
 };
 
+const expectNonEmptyBase64String = (value: unknown, field: string) => {
+  const text = expectString(value, field).trim();
+  if (text.length === 0) {
+    throw new Error(`${field} must be a non-empty base64 string`);
+  }
+
+  let bytes;
+  try {
+    bytes = Buffer.from(text, "base64");
+  } catch {
+    throw new Error(`${field} must be valid base64`);
+  }
+
+  if (bytes.length === 0) {
+    throw new Error(`${field} must decode to non-empty content`);
+  }
+
+  return text;
+};
+
 export const PRODUCT_LABEL_PRINT_REQUEST_VERSION = 1 as const;
 export const PRODUCT_LABEL_PRINT_INTENT = "PRODUCT_LABEL_PRINT" as const;
 export const PRODUCT_LABEL_WINDOWS_LOCAL_AGENT_TRANSPORT = "WINDOWS_LOCAL_AGENT" as const;
 export const DYMO_LABEL_PRINTER_FAMILY = "DYMO_LABEL" as const;
 export const DYMO_57X32_MODEL_HINT = "LABELWRITER_57X32_OR_COMPATIBLE" as const;
 export const PRODUCT_LABEL_RENDER_FORMAT = "DYMO_PRODUCT_LABEL" as const;
+export const PRODUCT_LABEL_DOCUMENT_FORMAT = "PNG" as const;
+export const PRODUCT_LABEL_DOCUMENT_MIME_TYPE = "image/png" as const;
 
 export type ProductLabelPrintTransportMode = "DRY_RUN" | "WINDOWS_PRINTER";
 
@@ -31,6 +53,15 @@ export type ProductLabelPayload = {
   sku: string | null;
   pricePence: number;
   barcode: string | null;
+};
+
+export type ProductLabelPrintDocument = {
+  format: typeof PRODUCT_LABEL_DOCUMENT_FORMAT;
+  mimeType: typeof PRODUCT_LABEL_DOCUMENT_MIME_TYPE;
+  fileName: string;
+  bytesBase64: string;
+  widthPx: number;
+  heightPx: number;
 };
 
 export type ProductLabelPrintRequest = {
@@ -49,6 +80,7 @@ export type ProductLabelPrintRequest = {
     copies: number;
   };
   label: ProductLabelPayload;
+  document: ProductLabelPrintDocument;
   metadata: {
     source: string;
     sourceLabel: string;
@@ -91,6 +123,28 @@ const validateProductLabelPayload = (value: unknown): ProductLabelPayload => {
     sku: expectNullableString(record.sku, "label.sku"),
     pricePence: expectNonNegativeInteger(record.pricePence, "label.pricePence"),
     barcode: expectNullableString(record.barcode, "label.barcode"),
+  };
+};
+
+export const validateProductLabelPrintDocument = (value: unknown): ProductLabelPrintDocument => {
+  const record = expectRecord(value, "document");
+  const format = expectString(record.format, "document.format");
+  const mimeType = expectString(record.mimeType, "document.mimeType");
+
+  if (format !== PRODUCT_LABEL_DOCUMENT_FORMAT) {
+    throw new Error(`document.format must be ${PRODUCT_LABEL_DOCUMENT_FORMAT}`);
+  }
+  if (mimeType !== PRODUCT_LABEL_DOCUMENT_MIME_TYPE) {
+    throw new Error(`document.mimeType must be ${PRODUCT_LABEL_DOCUMENT_MIME_TYPE}`);
+  }
+
+  return {
+    format: PRODUCT_LABEL_DOCUMENT_FORMAT,
+    mimeType: PRODUCT_LABEL_DOCUMENT_MIME_TYPE,
+    fileName: expectString(record.fileName, "document.fileName"),
+    bytesBase64: expectNonEmptyBase64String(record.bytesBase64, "document.bytesBase64"),
+    widthPx: expectPositiveInteger(record.widthPx, "document.widthPx"),
+    heightPx: expectPositiveInteger(record.heightPx, "document.heightPx"),
   };
 };
 
@@ -149,6 +203,7 @@ export const validateProductLabelPrintRequest = (value: unknown): ProductLabelPr
       copies: expectPositiveInteger(printerRecord.copies, "printRequest.printer.copies"),
     },
     label: validateProductLabelPayload(record.label),
+    document: validateProductLabelPrintDocument(record.document),
     metadata: {
       source: expectString(metadataRecord.source, "printRequest.metadata.source"),
       sourceLabel: expectString(metadataRecord.sourceLabel, "printRequest.metadata.sourceLabel"),

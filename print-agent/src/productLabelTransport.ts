@@ -3,9 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ProductLabelPrintAgentJob, ProductLabelPrintRequest } from "../../shared/productLabelPrintContract";
-import { PRODUCT_LABEL_RENDER_FORMAT } from "../../shared/productLabelPrintContract";
+import {
+  PRODUCT_LABEL_DOCUMENT_FORMAT,
+  PRODUCT_LABEL_RENDER_FORMAT,
+} from "../../shared/productLabelPrintContract";
 import type { PrintAgentConfig } from "./config";
-import { renderProductLabelDocument } from "./productLabelRenderer";
 
 const LABEL_WIDTH_MM = 57;
 const LABEL_HEIGHT_MM = 32;
@@ -26,6 +28,19 @@ const createTempImagePath = async (fileName: string) => {
     tempDir,
     imagePath: path.join(tempDir, fileName),
   };
+};
+
+const decodeDocumentBytes = (request: ProductLabelPrintRequest) => {
+  if (request.document.format !== PRODUCT_LABEL_DOCUMENT_FORMAT) {
+    throw new Error(`Unsupported product-label document format: ${request.document.format}`);
+  }
+
+  const bytes = Buffer.from(request.document.bytesBase64, "base64");
+  if (bytes.length === 0) {
+    throw new Error("Product-label document content was empty");
+  }
+
+  return bytes;
 };
 
 const runWindowsPrinterJob = async (
@@ -93,14 +108,14 @@ const executeDryRun = async (
   config: PrintAgentConfig,
   acceptedAt: string,
 ): Promise<ProductLabelPrintAgentJob> => {
-  const rendered = renderProductLabelDocument(request);
+  const documentBytes = decodeDocumentBytes(request);
   const jobId = buildJobId();
   const outputDir = path.join(config.dryRunOutputDir, "product-labels");
-  const fileName = `${new Date().toISOString().replace(/[:.]/g, "-")}-${slugify(request.label.productName)}-${slugify(request.label.sku ?? request.variantId)}.png`;
+  const fileName = request.document.fileName?.trim() || `${new Date().toISOString().replace(/[:.]/g, "-")}-${slugify(request.label.productName)}-${slugify(request.label.sku ?? request.variantId)}.png`;
   const outputPath = path.join(outputDir, fileName);
 
   await fs.mkdir(outputDir, { recursive: true });
-  await fs.writeFile(outputPath, rendered.buffer);
+  await fs.writeFile(outputPath, documentBytes);
 
   return {
     jobId,
@@ -113,7 +128,7 @@ const executeDryRun = async (
     printerTarget: `dry-run:${outputDir}`,
     copies: request.printer.copies,
     documentFormat: PRODUCT_LABEL_RENDER_FORMAT,
-    bytesSent: rendered.buffer.length,
+    bytesSent: documentBytes.length,
     simulated: true,
     outputPath,
   };
@@ -128,13 +143,13 @@ const executeWindowsPrinter = async (
     throw new Error("Installed Windows printer name is missing for this Dymo product-label job");
   }
 
-  const rendered = renderProductLabelDocument(request);
+  const documentBytes = decodeDocumentBytes(request);
   const jobId = buildJobId();
-  const fileName = `${slugify(request.label.productName)}-${slugify(request.label.sku ?? request.variantId)}.png`;
+  const fileName = request.document.fileName?.trim() || `${slugify(request.label.productName)}-${slugify(request.label.sku ?? request.variantId)}.png`;
   const { tempDir, imagePath } = await createTempImagePath(fileName);
 
   try {
-    await fs.writeFile(imagePath, rendered.buffer);
+    await fs.writeFile(imagePath, documentBytes);
     await runWindowsPrinterJob(printerTarget, imagePath, request.printer.copies);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -151,7 +166,7 @@ const executeWindowsPrinter = async (
     printerTarget,
     copies: request.printer.copies,
     documentFormat: PRODUCT_LABEL_RENDER_FORMAT,
-    bytesSent: rendered.buffer.length,
+    bytesSent: documentBytes.length,
     simulated: false,
     outputPath: null,
   };

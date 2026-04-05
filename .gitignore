@@ -96,4 +96,6 @@ uploads/
 frontend/.env.local
 tmp-pos-check/
 tmp/dev-local/
+tmp/dymo-product-label-agent-bundle/
+tmp/dymo-product-label-agent-bundle-smoke/
 .DS_Store

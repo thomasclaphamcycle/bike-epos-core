@@ -6,6 +6,7 @@ import {
   PRODUCT_LABEL_PRINT_REQUEST_VERSION,
   PRODUCT_LABEL_WINDOWS_LOCAL_AGENT_TRANSPORT,
 } from "../../shared/productLabelPrintContract";
+import { renderProductLabelDocument } from "../../shared/productLabelDocument";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import { listStoreInfoSettings } from "./configurationService";
@@ -26,9 +27,15 @@ export type ProductLabelDirectPrintInput = ResolvePrinterSelectionInput & {
 export type ProductLabelDirectPrintResponse = {
   variant: Awaited<ReturnType<typeof getVariantById>>;
   printer: ResolvedProductLabelPrinter;
-  printRequest: ProductLabelPrintRequest;
   printJob: ProductLabelPrintAgentJob;
 };
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "product-label";
 
 const normalizeCopies = (value: unknown) => {
   if (value === undefined || value === null) {
@@ -58,6 +65,16 @@ const buildProductLabelPrintRequest = async (
   const copies = normalizeCopies(input.copies);
   const shopName = store.businessName || store.name || "CorePOS";
   const variantName = variant.name || variant.option || null;
+  const label = {
+    shopName,
+    productName: variant.product?.name || variant.sku,
+    variantName,
+    brand: variant.product?.brand || null,
+    sku: variant.sku,
+    pricePence: variant.retailPricePence,
+    barcode: variant.barcode,
+  };
+  const renderedDocument = renderProductLabelDocument(label);
 
   return {
     variant,
@@ -77,14 +94,14 @@ const buildProductLabelPrintRequest = async (
         windowsPrinterName: printer.windowsPrinterName,
         copies,
       },
-      label: {
-        shopName,
-        productName: variant.product?.name || variant.sku,
-        variantName,
-        brand: variant.product?.brand || null,
-        sku: variant.sku,
-        pricePence: variant.retailPricePence,
-        barcode: variant.barcode,
+      label,
+      document: {
+        format: renderedDocument.imageFormat,
+        mimeType: renderedDocument.mimeType,
+        fileName: `${slugify(variant.product?.name || variant.sku)}-${slugify(variant.sku)}.${renderedDocument.extension}`,
+        bytesBase64: renderedDocument.buffer.toString("base64"),
+        widthPx: renderedDocument.widthPx,
+        heightPx: renderedDocument.heightPx,
       },
       metadata: {
         source: "COREPOS_PRODUCT_LABEL_PAGE",
@@ -117,7 +134,6 @@ export const printProductLabelDirect = async (
     return {
       variant: prepared.variant,
       printer: prepared.printer,
-      printRequest: prepared.printRequest,
       printJob: printAgentResponse.job,
     };
   } catch (error) {

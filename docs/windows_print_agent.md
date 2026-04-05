@@ -12,11 +12,12 @@ CorePOS now supports real backend-to-agent print handoff for two narrow workflow
 - CorePOS still owns shipment lifecycle, product-label intent preparation, and print orchestration.
 - Shipment and product-label print payloads remain separate stable backend contracts.
 - CorePOS resolves both through registered printer records and workflow-specific defaults.
-- A repo-local Windows-oriented print agent can accept that payload over HTTP.
-- The print agent can either:
+- A repo-local Windows-oriented print agent can accept that payload over HTTP for development and combined local setups.
+- A standalone Windows Dymo helper bundle can accept the product-label payload without needing a CorePOS repo checkout or npm on the printer host.
+- The print host can either:
   - simulate printing safely in `DRY_RUN`
   - send Zebra ZPL to the registered shipment printer over raw TCP
-  - render a Dymo-style 57x32 product label and hand it to the installed Windows printer by name
+  - receive a CorePOS-rendered Dymo 57x32 PNG and hand it to the installed Windows printer by name
 - Successful agent prints mark the shipment as printed in CorePOS.
 - Failed agent prints do not set `printedAt`.
 - Product-label direct prints stay separate from shipment state and keep the browser-print fallback available.
@@ -39,7 +40,7 @@ The local print-agent path is now split into six layers:
 
 3. Print preparation contracts
    - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
-   - CorePOS also prepares a separate `PRODUCT_LABEL_PRINT` payload for Dymo-style product labels
+   - CorePOS also prepares a separate `PRODUCT_LABEL_PRINT` payload for Dymo-style product labels, including the rendered PNG document that the host should print
    - shipment payloads remain fetchable and previewable from CorePOS
 
 4. Printer registration and default selection
@@ -51,13 +52,14 @@ The local print-agent path is now split into six layers:
    - `src/services/productLabelPrintAgentDeliveryService.ts`
    - delivers prepared print jobs to the configured agent URL with timeout handling and normalized errors
 
-6. Local Windows print agent
-   - `print-agent/src/`
-   - validates the payload, checks the optional shared secret, and sends either Zebra ZPL or Dymo PNG output through the transport declared by the resolved printer record
+6. Local Windows print hosts
+   - repo-local Node agent in `print-agent/src/`
+   - standalone Dymo helper bundle in `print-agent/windows-dymo-agent/`
+   - both validate the payload, check the optional shared secret, and send workflow-specific output through the transport declared by the resolved printer record
 
 ## Current agent API
 
-The local print agent exposes:
+The repo-local Node print agent exposes:
 
 - `GET /health`
 - `POST /jobs/shipment-label`
@@ -71,6 +73,13 @@ The print-job endpoint accepts:
 If `COREPOS_PRINT_AGENT_SHARED_SECRET` is set, CorePOS must send the same value in:
 
 - `X-CorePOS-Print-Agent-Secret`
+
+The standalone Dymo helper bundle implements the narrow product-label subset only:
+
+- `GET /health`
+- `POST /jobs/product-label`
+
+That is intentional. It keeps the Windows Dymo host focused on direct product-label printing and leaves the Zebra shipment path untouched.
 
 ## Supported transport modes now
 
@@ -102,7 +111,7 @@ This is the narrow Dymo-oriented direct-print path for product labels.
 Behavior:
 
 - CorePOS sends a `PRODUCT_LABEL_PRINT` request to the local agent
-- the agent renders the 57x32 product label as a PNG using the same content intent as the browser label page
+- CorePOS includes the already-rendered 57x32 PNG document in that request
 - on Windows, the agent invokes `powershell.exe` and prints that PNG to the installed printer named on the registered Dymo printer record
 - this avoids the browser print popup and its paper-size handling limits
 
@@ -140,6 +149,13 @@ Example:
 COREPOS_SHIPPING_PRINT_AGENT_URL=http://127.0.0.1:3211
 COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS=7000
 COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET=replace-me
+```
+
+For a separate Dymo host, point only the product-label URL at the standalone helper bundle:
+
+```bash
+COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL=http://dymo-host-or-ip:3212
+COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET=replace-me
 ```
 
 ## Printer registration in CorePOS
@@ -201,6 +217,28 @@ npm run print-agent:start
 ```
 
 The actual target printer host and port now come from the registered CorePOS printer record, not from global print-agent env vars.
+
+## Standalone Dymo helper bundle
+
+For a practical Windows Dymo deployment without the CorePOS repo or npm on the printer host:
+
+1. On a CorePOS dev/release machine, build the bundle:
+
+```bash
+npm run print-agent:package:dymo
+```
+
+2. Copy the generated folder from `tmp/dymo-product-label-agent-bundle/` to the Windows Dymo host.
+3. Copy `corepos-dymo-product-label-agent.config.example.json` to `corepos-dymo-product-label-agent.config.json`.
+4. Edit the config file:
+   - keep `bindHost` as `127.0.0.1` unless you deliberately need LAN access
+   - default `port` is `3212` so it can live beside the Zebra shipment agent on `3211`
+   - set `sharedSecret` to match `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET`
+   - choose a writable `dryRunOutputDir`
+5. Start the helper with `corepos-dymo-product-label-agent.cmd`.
+6. Point the CorePOS backend at that helper with `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL`.
+
+This gives the Windows Dymo host a small copyable helper folder instead of a repo checkout and npm workflow.
 
 ## Relationship to courier integration
 

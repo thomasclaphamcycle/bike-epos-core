@@ -1,0 +1,7 @@
+{
+  "bindHost": "127.0.0.1",
+  "port": 3212,
+  "sharedSecret": "replace-me",
+  "dryRunOutputDir": "C:\\CorePOS-Dymo-Agent\\output",
+  "logRequests": true
+}
