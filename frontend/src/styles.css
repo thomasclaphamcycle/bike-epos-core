@@ -15275,6 +15275,72 @@ body.rota-row-drag-copy-active {
   background: rgba(255, 255, 255, 0.92);
 }
 
+.online-orders-scan-session {
+  display: grid;
+  gap: var(--cp-space-3);
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.online-orders-scan-session__summary,
+.online-orders-scan-session__item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cp-space-3);
+  flex-wrap: wrap;
+}
+
+.online-orders-scan-session__summary span,
+.online-orders-scan-session__item span,
+.online-orders-scan-session__item time,
+.online-orders-scan-session__empty {
+  color: #526273;
+}
+
+.online-orders-scan-session__list {
+  list-style: none;
+  display: grid;
+  gap: var(--cp-space-2);
+  padding: 0;
+  margin: 0;
+}
+
+.online-orders-scan-session__item {
+  display: grid;
+  gap: var(--cp-space-1);
+  padding: var(--cp-space-3);
+  border-radius: var(--cp-radius-sm);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.online-orders-scan-session__item--success {
+  border-color: rgba(31, 111, 64, 0.14);
+  background: rgba(229, 245, 235, 0.95);
+}
+
+.online-orders-scan-session__item--ready {
+  border-color: rgba(46, 124, 246, 0.16);
+  background: rgba(232, 241, 255, 0.95);
+}
+
+.online-orders-scan-session__item--warning {
+  border-color: rgba(176, 121, 15, 0.18);
+  background: rgba(255, 245, 220, 0.95);
+}
+
+.online-orders-scan-session__item--danger {
+  border-color: rgba(157, 36, 25, 0.16);
+  background: rgba(255, 241, 239, 0.96);
+}
+
+.online-orders-scan-session__empty {
+  margin: 0;
+}
+
 .online-orders-next-step p,
 .online-orders-readiness-card p,
 .online-orders-dispatch-action-card p,
@@ -15461,6 +15527,12 @@ body.rota-row-drag-copy-active {
   background: rgba(255, 235, 233, 0.96);
   border: 1px solid rgba(157, 36, 25, 0.18);
   color: #8b2118;
+}
+
+.online-orders-print-notice--warning {
+  background: rgba(255, 245, 220, 0.96);
+  border: 1px solid rgba(176, 121, 15, 0.18);
+  color: #7b5700;
 }
 
 .online-orders-print-job-summary {
