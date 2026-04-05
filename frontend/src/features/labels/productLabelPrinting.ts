@@ -74,7 +74,7 @@ export const getProductLabelDirectPrintErrorMessage = (error: unknown) => {
   switch (code) {
     case "DEFAULT_PRODUCT_LABEL_PRINTER_NOT_CONFIGURED":
     case "PRODUCT_LABEL_PRINT_AGENT_NOT_CONFIGURED":
-      return "Direct label print is not set up here. Use Browser print fallback or ask a manager to check the Dymo setup.";
+      return "Direct label print is not set up here. Ask a manager to check the Dymo printer and Product-Label Print Helper settings, or use Browser print fallback.";
     case "PRODUCT_LABEL_PRINT_AGENT_UNREACHABLE":
     case "PRODUCT_LABEL_PRINT_AGENT_TIMEOUT":
       return "Label print helper unavailable. Check the Windows Dymo helper, then try again. Use Browser print fallback if needed.";

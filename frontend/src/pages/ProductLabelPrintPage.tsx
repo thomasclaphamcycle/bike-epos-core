@@ -141,7 +141,7 @@ export const ProductLabelPrintPage = () => {
       <div className="product-label-print-page__copy">
         <h1>Product Label</h1>
         <p className="muted-text">
-          Direct print uses the default registered Dymo product-label printer from Settings plus the configured local Dymo print helper. Browser print stays available as a fallback when you need to preview or troubleshoot layout.
+          Direct print uses the default registered Dymo product-label printer plus the configured local Dymo print helper from Settings. Browser print stays available as a fallback when you need to preview or troubleshoot layout.
         </p>
       </div>
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
   createRegisteredPrinterHandler,
+  listProductLabelPrintAgentSettingsHandler,
   listRegisteredPrintersHandler,
   listShippingProvidersHandler,
   listSettingsHandler,
@@ -11,6 +12,7 @@ import {
   setDefaultShippingProviderHandler,
   setDefaultShippingLabelPrinterHandler,
   uploadStoreLogoHandler,
+  updateProductLabelPrintAgentSettingsHandler,
   updateRegisteredPrinterHandler,
   updateShippingProviderSettingsHandler,
   updateSettingsHandler,
@@ -24,6 +26,8 @@ settingsRouter.patch("/", requireRoleAtLeast("MANAGER"), updateSettingsHandler);
 settingsRouter.get("/shipping-providers", requireRoleAtLeast("MANAGER"), listShippingProvidersHandler);
 settingsRouter.put("/shipping-providers/default", requireRoleAtLeast("ADMIN"), setDefaultShippingProviderHandler);
 settingsRouter.put("/shipping-providers/:providerKey", requireRoleAtLeast("ADMIN"), updateShippingProviderSettingsHandler);
+settingsRouter.get("/product-label-print-agent", requireRoleAtLeast("MANAGER"), listProductLabelPrintAgentSettingsHandler);
+settingsRouter.put("/product-label-print-agent", requireRoleAtLeast("ADMIN"), updateProductLabelPrintAgentSettingsHandler);
 settingsRouter.get("/printers", requireRoleAtLeast("MANAGER"), listRegisteredPrintersHandler);
 settingsRouter.post("/printers", requireRoleAtLeast("ADMIN"), createRegisteredPrinterHandler);
 settingsRouter.patch("/printers/:printerId", requireRoleAtLeast("ADMIN"), updateRegisteredPrinterHandler);
