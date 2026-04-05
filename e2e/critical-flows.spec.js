@@ -2709,7 +2709,6 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
       ],
     },
   });
-  await markWebOrderPackedViaBypass(request, createdOrder.order.id);
 
   await loginViaUi(page, managerCredentials, "/online-store/orders", {
     surface: "frontend",
@@ -2721,9 +2720,18 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
   await expect(page.getByTestId("online-store-order-detail")).toContainText(createdOrder.order.orderNumber);
-  await expect(page.getByTestId("online-store-next-action")).toContainText("Generate the first shipment label");
-  await expect(page.getByTestId("online-store-readiness")).toContainText("Ready to create");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Mark packed before shipment creation");
+  await expect(page.getByTestId("online-store-readiness")).toContainText("Needs packing");
   await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("No shipment activity yet");
+  await expect(page.getByTestId("online-store-packing-handoff")).toContainText("Packing must be confirmed first");
+  await page.getByTestId("online-store-mark-packed").click();
+  await expect(page.getByTestId("online-store-packing-notice")).toContainText("Generate the shipment label below");
+  await expect(page.getByTestId("online-store-packing-session")).toContainText("1 packed");
+  await expect(page.getByTestId("online-store-packing-session")).toContainText(createdOrder.order.orderNumber);
+  await expect(page.getByTestId("online-store-packing-handoff")).toContainText("Packed and ready for shipment creation");
+  await expect(page.getByTestId("online-store-readiness")).toContainText("Packed and ready");
+  await expect(page.getByTestId("online-store-readiness")).toContainText("Ready to create");
+  await page.getByTestId("online-store-jump-to-shipment").click();
   await page.getByTestId("online-store-generate-label").click();
 
   await expect.poll(async () => {

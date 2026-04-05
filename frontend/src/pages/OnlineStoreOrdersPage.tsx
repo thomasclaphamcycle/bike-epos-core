@@ -341,6 +341,15 @@ type DispatchScanSessionEntry = {
   timestamp: string;
 };
 
+type PackingSessionEntry = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  outcome: "PACKED" | "UNPACKED";
+  detail: string;
+  timestamp: string;
+};
+
 const formatMoney = (pence: number) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -372,6 +381,11 @@ const canBulkCreateShipmentForOrder = (order: WebOrderSummary) =>
   && order.fulfillmentMethod === "SHIPPING"
   && isOrderPacked(order)
   && !order.latestShipment;
+
+const canPackOrderFromSummary = (order: WebOrderSummary) =>
+  order.status === "READY_FOR_DISPATCH"
+  && order.fulfillmentMethod === "SHIPPING"
+  && !isOrderPacked(order);
 
 const canBulkPrintShipmentForOrder = (order: WebOrderSummary) =>
   order.status === "READY_FOR_DISPATCH"
@@ -412,9 +426,9 @@ const getOrderDispatchQueueHint = (order: WebOrderSummary) => {
     return "Label ready, needs print";
   }
   if (isOrderPacked(order)) {
-    return "Packed and waiting for shipment";
+    return "Packed and ready to create shipment";
   }
-  return "Waiting for packing";
+  return "Needs packing before shipment work";
 };
 
 const getDetailNextStep = (order: WebOrderDetail, shipment: WebOrderShipment | null) => {
@@ -632,6 +646,13 @@ const getDispatchRecommendation = (
     };
   }
 
+  if (!isOrderPacked(order)) {
+    return {
+      title: "Mark packed before shipment creation",
+      detail: "Packing is the first gate for shipping orders. Confirm packing before generating a shipment label or moving this parcel into dispatch-bench work.",
+    };
+  }
+
   if (!shipment) {
     return provider?.isAvailable
       ? {
@@ -698,6 +719,50 @@ const getDispatchReadiness = (
   provider: SupportedShippingProvider | null,
   printer: RegisteredPrinter | null,
 ): DispatchReadinessItem[] => {
+  const packingItem: DispatchReadinessItem = !order
+    ? {
+        label: "Packing",
+        state: "pending",
+        headline: "Select an order",
+        detail: "Packing state appears once an order is selected.",
+      }
+    : order.fulfillmentMethod !== "SHIPPING"
+      ? {
+          label: "Packing",
+          state: "blocked",
+          headline: "Not a shipping order",
+          detail: "Click & collect orders stay outside the shipping packing queue.",
+        }
+      : order.status === "CANCELLED"
+        ? {
+            label: "Packing",
+            state: "blocked",
+            headline: "Order cancelled",
+            detail: "Cancelled orders should not move into shipment packing or dispatch work.",
+          }
+        : order.status === "DISPATCHED"
+          ? {
+              label: "Packing",
+              state: "complete",
+              headline: "Already dispatched",
+              detail: "Packing and handoff were completed earlier for this order.",
+            }
+          : isOrderPacked(order)
+            ? {
+                label: "Packing",
+                state: "complete",
+                headline: shipment ? "Packed and handed off" : "Packed and ready",
+                detail: shipment
+                  ? "Packing is recorded and this order is already in shipment handling."
+                  : "Packing is recorded. Shipment creation is now the next bench step.",
+              }
+            : {
+                label: "Packing",
+                state: "ready",
+                headline: "Needs packing",
+                detail: "Confirm packing before shipment creation, bulk creation, or dispatch-bench work.",
+              };
+
   const shipmentItem: DispatchReadinessItem = !order
     ? {
         label: "Shipment",
@@ -720,19 +785,26 @@ const getDispatchReadiness = (
             detail: "Shipment creation is blocked because the order itself is cancelled.",
           }
         : !shipment
-          ? provider?.isAvailable
+          ? !isOrderPacked(order)
             ? {
                 label: "Shipment",
-                state: "pending",
-                headline: "Ready to create",
-                detail: "Generate the first provider-backed shipment label.",
-              }
-            : {
-                label: "Shipment",
                 state: "blocked",
-                headline: "Provider not ready",
-                detail: "Choose or configure an available provider before creating a shipment.",
+                headline: "Pack first",
+                detail: "Shipment creation stays blocked until packing has been confirmed for this parcel.",
               }
+            : provider?.isAvailable
+              ? {
+                  label: "Shipment",
+                  state: "pending",
+                  headline: "Ready to create",
+                  detail: "Generate the first provider-backed shipment label.",
+                }
+              : {
+                  label: "Shipment",
+                  state: "blocked",
+                  headline: "Provider not ready",
+                  detail: "Choose or configure an available provider before creating a shipment.",
+                }
           : shipment.status === "VOID_PENDING"
             ? {
                 label: "Shipment",
@@ -831,7 +903,7 @@ const getDispatchReadiness = (
               detail: "Dispatch confirmation only unlocks after a successful print record exists.",
             };
 
-  return [shipmentItem, printItem, dispatchItem];
+  return [packingItem, shipmentItem, printItem, dispatchItem];
 };
 
 const getDispatchActionCards = (
@@ -943,6 +1015,8 @@ const getDispatchActionCards = (
           ? "Click & collect orders do not create shipping labels."
           : order.status === "CANCELLED"
             ? "Cancelled orders cannot create shipments."
+            : !isOrderPacked(order)
+              ? "Mark the parcel packed first so shipment creation and bulk bench handoff stay deliberate."
             : !provider?.isAvailable
               ? "Choose or configure an available provider before creating the shipment."
               : "Creates the first active shipment label and stores the result locally in CorePOS.",
@@ -1005,12 +1079,18 @@ const buildShipmentTimeline = (shipment: WebOrderShipment | null): ShipmentTimel
   return entries.sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime());
 };
 
+const getPackingSessionOutcomeClassName = (outcome: PackingSessionEntry["outcome"]) =>
+  outcome === "PACKED"
+    ? "online-orders-packing-session__item online-orders-packing-session__item--success"
+    : "online-orders-packing-session__item online-orders-packing-session__item--warning";
+
 export const OnlineStoreOrdersPage = () => {
   const { error, success } = useToasts();
   const listRequestSequenceRef = useRef(0);
   const detailRequestSequenceRef = useRef(0);
   const labelRequestSequenceRef = useRef(0);
   const scanInputRef = useRef<HTMLInputElement | null>(null);
+  const shipmentSectionRef = useRef<HTMLElement | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1025,6 +1105,8 @@ export const OnlineStoreOrdersPage = () => {
   const [printPayload, setPrintPayload] = useState<ShipmentPrintRequestResponse | null>(null);
   const [printJob, setPrintJob] = useState<ShipmentPrintExecutionResponse["printJob"] | null>(null);
   const [printNotice, setPrintNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [packingNotice, setPackingNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
+  const [packingSession, setPackingSession] = useState<PackingSessionEntry[]>([]);
   const [bulkResult, setBulkResult] = useState<BulkShipmentOperationResponse | null>(null);
   const [scanValue, setScanValue] = useState("");
   const [scanResult, setScanResult] = useState<DispatchScanLookupResponse | null>(null);
@@ -1206,6 +1288,7 @@ export const OnlineStoreOrdersPage = () => {
     setPrintPayload(null);
     setPrintJob(null);
     setPrintNotice(null);
+    setPackingNotice(null);
 
     if (!selectedOrderId) {
       setDetailPayload(null);
@@ -1216,6 +1299,12 @@ export const OnlineStoreOrdersPage = () => {
   }, [loadOrderDetail, selectedOrderId]);
 
   const selectedShipmentId = detailPayload?.order.shipments[0]?.id ?? "";
+
+  useEffect(() => {
+    if (selectedShipmentId) {
+      setPackingNotice(null);
+    }
+  }, [selectedShipmentId]);
 
   useEffect(() => {
     if (!selectedShipmentId) {
@@ -1275,6 +1364,14 @@ export const OnlineStoreOrdersPage = () => {
     () => visibleOrders.filter((order) => selectedOrderIds.includes(order.id)),
     [selectedOrderIds, visibleOrders],
   );
+  const visibleNeedsPackingOrders = useMemo(
+    () => visibleOrders.filter(canPackOrderFromSummary),
+    [visibleOrders],
+  );
+  const visibleCreateEligibleOrders = useMemo(
+    () => visibleOrders.filter(canBulkCreateShipmentForOrder),
+    [visibleOrders],
+  );
   const selectedCreateEligibleOrders = useMemo(
     () => selectedOrders.filter(canBulkCreateShipmentForOrder),
     [selectedOrders],
@@ -1323,6 +1420,10 @@ export const OnlineStoreOrdersPage = () => {
   ]);
   const detailNextStep = selectedOrder ? getDetailNextStep(selectedOrder, selectedShipment) : null;
   const bulkResultGuidance = getBulkResultGuidance(bulkResult);
+  const packingSessionSummary = useMemo(() => ({
+    packedCount: packingSession.filter((entry) => entry.outcome === "PACKED").length,
+    unpackedCount: packingSession.filter((entry) => entry.outcome === "UNPACKED").length,
+  }), [packingSession]);
   const scanSessionSummary = useMemo(() => ({
     dispatchedCount: scanSession.filter((entry) => entry.outcome === "DISPATCHED").length,
     blockedCount: scanSession.filter((entry) => entry.outcome === "BLOCKED").length,
@@ -1338,6 +1439,16 @@ export const OnlineStoreOrdersPage = () => {
       },
       ...current,
     ].slice(0, 6));
+  }, []);
+
+  const appendPackingSessionEntry = useCallback((entry: Omit<PackingSessionEntry, "id">) => {
+    setPackingSession((current) => [
+      {
+        id: `${entry.timestamp}-${entry.orderId}-${entry.outcome}`,
+        ...entry,
+      },
+      ...current,
+    ].slice(0, 5));
   }, []);
 
   const clearScanLoop = useCallback((selectContents = false) => {
@@ -1374,6 +1485,10 @@ export const OnlineStoreOrdersPage = () => {
 
   const selectPackedQueue = useCallback(() => {
     setSelectedOrderIds(visibleOrders.filter(canBulkCreateShipmentForOrder).map((order) => order.id));
+  }, [visibleOrders]);
+
+  const selectNeedsPackingQueue = useCallback(() => {
+    setSelectedOrderIds(visibleOrders.filter(canPackOrderFromSummary).map((order) => order.id));
   }, [visibleOrders]);
 
   const selectPrintableQueue = useCallback(() => {
@@ -1415,6 +1530,19 @@ export const OnlineStoreOrdersPage = () => {
     await runAction(packed ? "pack" : "unpack", async () => {
       await apiPost(`/api/online-store/orders/${encodeURIComponent(selectedOrder.id)}/packing`, { packed });
       setBulkResult(null);
+      setPackingNotice({
+        tone: packed ? "success" : "warning",
+        text: packed
+          ? `${selectedOrder.orderNumber} is packed. Generate the shipment label below or include it in the ready-to-create queue.`
+          : `${selectedOrder.orderNumber} was removed from the packed queue. Shipment creation stays blocked until packing is confirmed again.`,
+      });
+      appendPackingSessionEntry({
+        orderId: selectedOrder.id,
+        orderNumber: selectedOrder.orderNumber,
+        outcome: packed ? "PACKED" : "UNPACKED",
+        detail: packed ? "Packed and ready for shipment creation" : "Removed from packed queue",
+        timestamp: new Date().toISOString(),
+      });
       success(
         packed
           ? `${selectedOrder.orderNumber} marked as packed and ready for shipment processing.`
@@ -1423,6 +1551,10 @@ export const OnlineStoreOrdersPage = () => {
       await refreshSelectedOrder(selectedOrder.id);
     });
   };
+
+  const handleJumpToShipmentSection = useCallback(() => {
+    shipmentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const handleRefreshShipment = async () => {
     if (!selectedOrder || !selectedShipment) {
@@ -1746,6 +1878,7 @@ export const OnlineStoreOrdersPage = () => {
     selectedOrder
       && selectedOrder.fulfillmentMethod === "SHIPPING"
       && selectedOrder.status === "READY_FOR_DISPATCH"
+      && isOrderPacked(selectedOrder)
       && selectedProvider?.isAvailable
       && !selectedShipment,
   );
@@ -1911,9 +2044,18 @@ export const OnlineStoreOrdersPage = () => {
                 {` · ${bulkSelectionSummary.dispatchableCount} ready to dispatch`}
               </span>
             </div>
+            <div className="online-orders-bulk-toolbar__queue-summary" data-testid="online-store-queue-shortcuts">
+              <span>{visibleNeedsPackingOrders.length} need packing</span>
+              <span>{visibleCreateEligibleOrders.length} ready to create</span>
+              <span>{ordersPayload?.summary.labelReadyCount ?? 0} ready to print</span>
+              <span>{ordersPayload?.summary.readyToDispatchCount ?? 0} ready to dispatch</span>
+            </div>
             <div className="online-orders-bulk-toolbar__actions">
               <button type="button" className="button-link" onClick={selectPackedQueue} disabled={loadingOrders || pendingAction.length > 0}>
-                Select Packed Queue
+                Select Ready To Create
+              </button>
+              <button type="button" className="button-link" onClick={selectNeedsPackingQueue} disabled={loadingOrders || pendingAction.length > 0}>
+                Select Needs Packing
               </button>
               <button type="button" className="button-link" onClick={selectPrintableQueue} disabled={loadingOrders || pendingAction.length > 0}>
                 Select Printable Queue
@@ -2351,6 +2493,84 @@ export const OnlineStoreOrdersPage = () => {
                       {pendingAction === "unpack" ? "Updating..." : "Remove From Packed Queue"}
                     </button>
                   </div>
+                  {packingNotice ? (
+                    <div
+                      className={`online-orders-print-notice online-orders-print-notice--${packingNotice.tone}`}
+                      data-testid="online-store-packing-notice"
+                    >
+                      {packingNotice.text}
+                    </div>
+                  ) : null}
+                  <div className="online-orders-packing-handoff" data-testid="online-store-packing-handoff">
+                    <div className="online-orders-packing-handoff__header">
+                      <div>
+                        <span className="online-orders-next-step__eyebrow">Packing handoff</span>
+                        <strong>
+                          {!isOrderPacked(selectedOrder)
+                            ? "Packing must be confirmed first"
+                            : !selectedShipment
+                              ? "Packed and ready for shipment creation"
+                              : selectedShipment.printedAt
+                                ? "Packed order is in the dispatch-ready flow"
+                                : "Packed order is active in shipment handling"}
+                        </strong>
+                      </div>
+                      <span className={`status-badge ${isOrderPacked(selectedOrder) ? "status-ready" : "status-warning"}`}>
+                        {isOrderPacked(selectedOrder) ? "Packed Gate Complete" : "Packing Gate Open"}
+                      </span>
+                    </div>
+                    <p>
+                      {!isOrderPacked(selectedOrder)
+                        ? "Shipment creation, bulk create, and dispatch-bench work stay blocked until this parcel is marked packed."
+                        : !selectedShipment
+                          ? "Packing is recorded. The shipment section below is now ready for label creation and the order can join the ready-to-create queue."
+                          : selectedShipment.printedAt
+                            ? "Packing is complete and the printed label is already in the final dispatch flow."
+                            : "Packing is complete and this order has already moved into shipment handling below."}
+                    </p>
+                    {isOrderPacked(selectedOrder) ? (
+                      <div className="online-orders-packing-handoff__actions">
+                        <button
+                          type="button"
+                          className="button-link"
+                          onClick={handleJumpToShipmentSection}
+                          disabled={pendingAction.length > 0}
+                          data-testid="online-store-jump-to-shipment"
+                        >
+                          Jump To Shipment Actions
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="online-orders-packing-session" data-testid="online-store-packing-session">
+                    <div className="online-orders-packing-session__summary">
+                      <strong>Packing session</strong>
+                      <span>
+                        {packingSessionSummary.packedCount} packed
+                        {packingSessionSummary.unpackedCount ? ` · ${packingSessionSummary.unpackedCount} unpacked` : ""}
+                      </span>
+                    </div>
+                    {packingSession.length > 0 ? (
+                      <ol className="online-orders-packing-session__list">
+                        {packingSession.map((entry) => (
+                          <li key={entry.id} className={getPackingSessionOutcomeClassName(entry.outcome)}>
+                            <div className="online-orders-packing-session__item-header">
+                              <strong>{entry.orderNumber}</strong>
+                              <span className="status-badge">
+                                {entry.outcome === "PACKED" ? "Packed" : "Unpacked"}
+                              </span>
+                            </div>
+                            <span>{entry.detail}</span>
+                            <time dateTime={entry.timestamp}>{formatDateTime(entry.timestamp)}</time>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="online-orders-packing-session__empty">
+                        Recent packing changes appear here so the packing station can confirm what just moved into or out of the shipment queue.
+                      </p>
+                    )}
+                  </div>
                   <div className="restricted-panel info-panel online-orders-dispatch-printer-info">
                     {isOrderPacked(selectedOrder)
                       ? selectedShipment
@@ -2387,7 +2607,10 @@ export const OnlineStoreOrdersPage = () => {
                   </div>
                 </section>
 
-                <section className="online-orders-detail__section online-orders-detail__section--shipment">
+                <section
+                  ref={shipmentSectionRef}
+                  className="online-orders-detail__section online-orders-detail__section--shipment"
+                >
                   <div className="online-orders-detail__section-header">
                     <h3>Shipment</h3>
                     {selectedShipment ? (
