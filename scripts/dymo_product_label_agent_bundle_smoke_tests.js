@@ -12,10 +12,14 @@ const outDir = path.join(repoRoot, 'tmp', 'dymo-product-label-agent-bundle-smoke
 
 const runPackager = () =>
   new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['scripts/package_dymo_product_label_agent.js', '--out-dir', outDir], {
-      cwd: repoRoot,
-      stdio: 'inherit',
-    });
+    const child = spawn(
+      process.execPath,
+      ['scripts/package_dymo_product_label_agent.js', '--out-dir', outDir, '--skip-exe-build'],
+      {
+        cwd: repoRoot,
+        stdio: 'inherit',
+      },
+    );
 
     child.once('error', reject);
     child.once('exit', (code) => {
@@ -33,11 +37,9 @@ const run = async () => {
     await runPackager();
 
     const expectedFiles = [
-      'Start-CorePOSDymoProductLabelAgent.ps1',
-      'corepos-dymo-product-label-agent.cmd',
       'corepos-dymo-product-label-agent.config.example.json',
-      'print_product_label_windows.ps1',
       'README.txt',
+      'exe-build-skipped.txt',
       'bundle-manifest.json',
     ];
 
@@ -48,10 +50,17 @@ const run = async () => {
     const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'bundle-manifest.json'), 'utf8'));
     assert.equal(manifest.name, 'corepos-dymo-product-label-agent');
     assert.equal(manifest.version, packageJson.version);
-    assert.deepEqual(manifest.files, expectedFiles.slice(0, 5));
+    assert.equal(manifest.buildMode, 'layout-only');
+    assert.equal(manifest.target, 'node18-win-x64');
+    assert.deepEqual(manifest.runtimeFiles, [
+      'corepos-dymo-product-label-agent.exe',
+      'corepos-dymo-product-label-agent.config.example.json',
+      'README.txt',
+    ]);
 
     const readme = await fs.readFile(path.join(outDir, 'README.txt'), 'utf8');
     assert.match(readme, /does not require the CorePOS repo checkout or npm/i);
+    assert.match(readme, /corepos-dymo-product-label-agent\.exe/i);
     assert.match(readme, /COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL/);
 
     const configExample = JSON.parse(
@@ -60,7 +69,7 @@ const run = async () => {
     assert.equal(configExample.port, 3212);
     assert.equal(configExample.bindHost, '127.0.0.1');
 
-    console.log('dymo product-label agent bundle packaging passed');
+    console.log('dymo product-label agent exe packaging layout passed');
   } finally {
     await fs.rm(outDir, { recursive: true, force: true }).catch(() => undefined);
   }

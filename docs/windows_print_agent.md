@@ -13,7 +13,7 @@ CorePOS now supports real backend-to-agent print handoff for two narrow workflow
 - Shipment and product-label print payloads remain separate stable backend contracts.
 - CorePOS resolves both through registered printer records and workflow-specific defaults.
 - A repo-local Windows-oriented print agent can accept that payload over HTTP for development and combined local setups.
-- A standalone Windows Dymo helper bundle can accept the product-label payload without needing a CorePOS repo checkout or npm on the printer host.
+- A standalone Windows Dymo helper EXE package can accept the product-label payload without needing a CorePOS repo checkout or npm on the printer host.
 - The print host can either:
   - simulate printing safely in `DRY_RUN`
   - send Zebra ZPL to the registered shipment printer over raw TCP
@@ -54,7 +54,7 @@ The local print-agent path is now split into six layers:
 
 6. Local Windows print hosts
    - repo-local Node agent in `print-agent/src/`
-   - standalone Dymo helper bundle in `print-agent/windows-dymo-agent/`
+   - standalone Dymo helper EXE package built from source assets in `print-agent/windows-dymo-agent/`
    - both validate the payload, check the optional shared secret, and send workflow-specific output through the transport declared by the resolved printer record
 
 ## Current agent API
@@ -74,7 +74,7 @@ If `COREPOS_PRINT_AGENT_SHARED_SECRET` is set, CorePOS must send the same value 
 
 - `X-CorePOS-Print-Agent-Secret`
 
-The standalone Dymo helper bundle implements the narrow product-label subset only:
+The standalone Dymo helper EXE package implements the narrow product-label subset only:
 
 - `GET /health`
 - `POST /jobs/product-label`
@@ -151,7 +151,7 @@ COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS=7000
 COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET=replace-me
 ```
 
-For a separate Dymo host, point only the product-label URL at the standalone helper bundle:
+For a separate Dymo host, point only the product-label URL at the standalone helper EXE host:
 
 ```bash
 COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL=http://dymo-host-or-ip:3212
@@ -218,11 +218,11 @@ npm run print-agent:start
 
 The actual target printer host and port now come from the registered CorePOS printer record, not from global print-agent env vars.
 
-## Standalone Dymo helper bundle
+## Standalone Dymo helper EXE package
 
 For a practical Windows Dymo deployment without the CorePOS repo or npm on the printer host:
 
-1. On a CorePOS dev/release machine, build the bundle:
+1. On a CorePOS dev/release machine, build the EXE package:
 
 ```bash
 npm run print-agent:package:dymo
@@ -235,10 +235,10 @@ npm run print-agent:package:dymo
    - default `port` is `3212` so it can live beside the Zebra shipment agent on `3211`
    - set `sharedSecret` to match `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET`
    - choose a writable `dryRunOutputDir`
-5. Start the helper with `corepos-dymo-product-label-agent.cmd`.
+5. Start the helper with `corepos-dymo-product-label-agent.exe`.
 6. Point the CorePOS backend at that helper with `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL`.
 
-This gives the Windows Dymo host a small copyable helper folder instead of a repo checkout and npm workflow.
+This gives the Windows Dymo host a small copyable EXE folder instead of a repo checkout and npm workflow.
 
 ## Relationship to courier integration
 

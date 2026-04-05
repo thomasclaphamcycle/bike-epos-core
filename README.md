@@ -66,11 +66,13 @@ npm run print-agent:start
 
 Then register the relevant printer in Store Settings and make it the default shipping-label or product-label printer for the workflow you want to test.
 
-For a Windows Dymo host that should run without a CorePOS repo checkout or npm, build the standalone Dymo helper bundle instead:
+For a Windows Dymo host that should run without a CorePOS repo checkout or npm, build the standalone Dymo helper EXE package instead:
 
 ```bash
 npm run print-agent:package:dymo
 ```
+
+That command produces a copyable Windows-host folder under `tmp/dymo-product-label-agent-bundle/` centered on `corepos-dymo-product-label-agent.exe`.
 
 6. In a second terminal, run the React frontend:
 

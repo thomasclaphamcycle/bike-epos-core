@@ -82,13 +82,13 @@ npm run print-agent:start
 
 Then register a printer in `/management/settings`, mark it shipping-label capable or product-label capable as appropriate, and set it as the default printer for that workflow. For the full Windows/Zebra and Dymo local-agent setup, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
-For a Windows Dymo host that should not keep a CorePOS repo checkout or run npm, build the standalone Dymo helper bundle from a CorePOS dev/release machine:
+For a Windows Dymo host that should not keep a CorePOS repo checkout or run npm, build the standalone Dymo helper EXE package from a CorePOS dev/release machine:
 
 ```bash
 npm run print-agent:package:dymo
 ```
 
-That command stages a copyable bundle under `tmp/dymo-product-label-agent-bundle/`. Copy the resulting folder to the Windows Dymo host, create `corepos-dymo-product-label-agent.config.json` from the example, and point `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` at that helper.
+That command stages a copyable folder under `tmp/dymo-product-label-agent-bundle/` with `corepos-dymo-product-label-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Dymo host, create `corepos-dymo-product-label-agent.config.json` from the example, and point `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` at that helper.
 
 ## Runtime Diagnostics
 
