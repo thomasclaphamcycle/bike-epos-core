@@ -1,0 +1,19 @@
+@baseUrl = http://localhost:3100
+@staffRole = STAFF
+@storeId = REPLACE_WITH_LOCATION_ID
+
+### Sales history default page (STAFF+)
+GET {{baseUrl}}/api/sales/history
+X-Staff-Role: {{staffRole}}
+
+### Sales history search by order number, customer, or staff (STAFF+)
+GET {{baseUrl}}/api/sales/history?q=eric
+X-Staff-Role: {{staffRole}}
+
+### Sales history filtered by status and date range (STAFF+)
+GET {{baseUrl}}/api/sales/history?status=complete&dateFrom=2026-04-01T00:00:00.000Z&dateTo=2026-04-05T23:59:59.999Z
+X-Staff-Role: {{staffRole}}
+
+### Sales history filtered to one store with pagination (STAFF+)
+GET {{baseUrl}}/api/sales/history?storeId={{storeId}}&page=2&pageSize=20
+X-Staff-Role: {{staffRole}}

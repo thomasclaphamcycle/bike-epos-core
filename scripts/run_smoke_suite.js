@@ -18,6 +18,7 @@ const baselineSteps = [
   "test:m13",
   "test:m28",
   "test:m32",
+  "test:sales-history-api",
   "test:m34",
   "test:m35",
   "test:m36",

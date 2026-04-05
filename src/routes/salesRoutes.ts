@@ -7,6 +7,7 @@ import {
   createSaleReturnHandler,
   deleteSaleTenderHandler,
   getSaleHandler,
+  listSaleHistoryHandler,
   listSaleTendersHandler,
   listSalesHandler,
 } from "../controllers/salesController";
@@ -16,6 +17,7 @@ import { saleCustomerCaptureRouter } from "./saleCustomerCaptureRoutes";
 
 export const salesRouter = Router();
 
+salesRouter.get("/history", requireRoleAtLeast("STAFF"), listSaleHistoryHandler);
 salesRouter.get("/", requireRoleAtLeast("STAFF"), listSalesHandler);
 salesRouter.post("/:saleId/exchange", requireRoleAtLeast("MANAGER"), createExchangeSaleHandler);
 salesRouter.post("/:saleId/returns", requireRoleAtLeast("MANAGER"), createSaleReturnHandler);

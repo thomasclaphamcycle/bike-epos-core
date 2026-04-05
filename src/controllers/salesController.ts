@@ -11,6 +11,11 @@ import {
   listSaleTenders,
   listSales,
 } from "../services/salesService";
+import {
+  SALES_HISTORY_STATUS_VALUES,
+  listSalesHistory,
+  type SalesHistoryStatus,
+} from "../services/salesHistoryService";
 import { HttpError } from "../utils/http";
 import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
 import { resolveRequestLocation } from "../services/locationService";
@@ -27,6 +32,96 @@ export const listSalesHandler = async (req: Request, res: Response) => {
 
   const location = await resolveRequestLocation(req);
   const result = await listSales({ from, to, locationId: location.locationId ?? location.id });
+  res.json(result);
+};
+
+const parsePositiveIntegerQuery = (
+  value: unknown,
+  field: "page" | "pageSize",
+  fallback: number,
+) => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(
+      400,
+      `${field} must be a positive integer`,
+      `INVALID_SALES_HISTORY_${field.toUpperCase()}`,
+    );
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new HttpError(
+      400,
+      `${field} must be a positive integer`,
+      `INVALID_SALES_HISTORY_${field.toUpperCase()}`,
+    );
+  }
+
+  return field === "pageSize" ? Math.min(parsed, 100) : parsed;
+};
+
+const parseSalesHistoryStatuses = (value: unknown): SalesHistoryStatus[] | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(
+      400,
+      "status must be a comma-separated list of draft or complete",
+      "INVALID_SALES_HISTORY_STATUS",
+    );
+  }
+
+  const statuses = Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.length > 0),
+    ),
+  );
+
+  if (statuses.length === 0) {
+    return undefined;
+  }
+
+  const invalidStatus = statuses.find(
+    (status) => !SALES_HISTORY_STATUS_VALUES.includes(status as SalesHistoryStatus),
+  );
+  if (invalidStatus) {
+    throw new HttpError(
+      400,
+      "status must be a comma-separated list of draft or complete",
+      "INVALID_SALES_HISTORY_STATUS",
+    );
+  }
+
+  return statuses as SalesHistoryStatus[];
+};
+
+export const listSaleHistoryHandler = async (req: Request, res: Response) => {
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const status = parseSalesHistoryStatuses(req.query.status);
+  const storeId = typeof req.query.storeId === "string" ? req.query.storeId : undefined;
+  const dateFrom = typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined;
+  const dateTo = typeof req.query.dateTo === "string" ? req.query.dateTo : undefined;
+  const page = parsePositiveIntegerQuery(req.query.page, "page", 1);
+  const pageSize = parsePositiveIntegerQuery(req.query.pageSize, "pageSize", 20);
+
+  const result = await listSalesHistory({
+    q,
+    statuses: status,
+    storeId,
+    dateFrom,
+    dateTo,
+    page,
+    pageSize,
+  });
   res.json(result);
 };
 
