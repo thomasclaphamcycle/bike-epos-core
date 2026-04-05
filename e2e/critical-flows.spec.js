@@ -4,11 +4,14 @@ const {
   apiJson,
   apiJsonWithHeaderBypass,
   ensureUserViaAdminBypass,
+  getFirstOpenWorkshopDateKeyViaBypass,
   getLondonDateKey,
   getMondayDateKey,
   getOperationalWeekStartDateKey,
   loginViaUi,
+  markWebOrderPackedViaBypass,
   parseDateKeyAtNoon,
+  searchOnlineStoreOrders,
   seedCatalogVariant,
   uniqueToken,
 } = require("./helpers");
@@ -1229,7 +1232,7 @@ test("Workshop technician view keeps assigned, blocked, and handoff work executi
     prefix: "workshop-technician",
   });
   const token = uniqueToken("workshop-technician");
-  const assignmentDateKey = getMondayDateKey(getLondonDateKey());
+  const assignmentDateKey = await getFirstOpenWorkshopDateKeyViaBypass(request);
   const rotaOverview = await apiJsonWithHeaderBypass(request, "GET", "/api/rota", "MANAGER");
   const currentRotaPeriod = rotaOverview.periods?.find((period) => period.isCurrent) ?? null;
   const createdRotaPeriod = currentRotaPeriod
@@ -1371,9 +1374,7 @@ test("Workshop scheduler double click opens intake with a prefilled 30 minute sl
   });
   const token = uniqueToken("workshop-double-click");
   const todayKey = getLondonDateKey();
-  const schedulerDateKey = parseDateKeyAtNoon(todayKey).getDay() === 0
-    ? addDaysToDateKey(todayKey, 1)
-    : todayKey;
+  const schedulerDateKey = await getFirstOpenWorkshopDateKeyViaBypass(request, "MANAGER", todayKey);
   const seededJob = await apiJsonWithHeaderBypass(request, "POST", "/api/workshop/jobs", "MANAGER", {
     data: {
       customerName: `Double Click Existing ${token}`,
@@ -2708,20 +2709,14 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
       ],
     },
   });
-  await apiJsonWithHeaderBypass(
-    request,
-    "POST",
-    `/api/online-store/orders/${encodeURIComponent(createdOrder.order.id)}/packing`,
-    "MANAGER",
-    { data: { packed: true } },
-  );
+  await markWebOrderPackedViaBypass(request, createdOrder.order.id);
 
   await loginViaUi(page, managerCredentials, "/online-store/orders", {
     surface: "frontend",
     expectedPath: "/online-store/orders",
   });
 
-  await page.getByPlaceholder("Order number, customer, email, tracking").fill(createdOrder.order.orderNumber);
+  await searchOnlineStoreOrders(page, createdOrder.order.orderNumber);
   await expect(page.getByTestId(`online-store-order-row-${createdOrder.order.id}`)).toBeVisible();
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
@@ -2825,13 +2820,7 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
       },
     });
     orderIds.push(createdOrder.order.id);
-    await apiJsonWithHeaderBypass(
-      request,
-      "POST",
-      `/api/online-store/orders/${encodeURIComponent(createdOrder.order.id)}/packing`,
-      "MANAGER",
-      { data: { packed: true } },
-    );
+    await markWebOrderPackedViaBypass(request, createdOrder.order.id);
   }
 
   await loginViaUi(page, managerCredentials, "/online-store/orders", {
@@ -2839,7 +2828,7 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
     expectedPath: "/online-store/orders",
   });
 
-  await page.getByPlaceholder("Order number, customer, email, tracking").fill(bulkToken);
+  await searchOnlineStoreOrders(page, bulkToken);
   await expect(page.getByTestId(`online-store-order-row-${orderIds[0]}`)).toBeVisible();
   await expect(page.getByTestId(`online-store-order-row-${orderIds[1]}`)).toBeVisible();
   await page.getByTestId(`online-store-select-order-${orderIds[0]}`).check();

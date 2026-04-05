@@ -1218,20 +1218,29 @@ export const OnlineStoreOrdersPage = () => {
     selectedOrders.length,
     selectedPrintEligibleOrders.length,
   ]);
-  const canBulkCreateSelected = Boolean(
-    selectedProvider
-    && selectedOrders.length > 0
-    && selectedCreateEligibleOrders.length === selectedOrders.length,
-  );
-  const canBulkPrintSelected = Boolean(
-    selectedPrinter
-    && selectedOrders.length > 0
-    && selectedPrintEligibleOrders.length === selectedOrders.length,
-  );
-  const canBulkDispatchSelected = Boolean(
-    selectedOrders.length > 0
-    && selectedDispatchEligibleOrders.length === selectedOrders.length,
-  );
+  const bulkActionState = useMemo(() => ({
+    canCreateSelected: Boolean(
+      selectedProvider
+      && selectedOrders.length > 0
+      && selectedCreateEligibleOrders.length === selectedOrders.length,
+    ),
+    canPrintSelected: Boolean(
+      selectedPrinter
+      && selectedOrders.length > 0
+      && selectedPrintEligibleOrders.length === selectedOrders.length,
+    ),
+    canDispatchSelected: Boolean(
+      selectedOrders.length > 0
+      && selectedDispatchEligibleOrders.length === selectedOrders.length,
+    ),
+  }), [
+    selectedCreateEligibleOrders.length,
+    selectedDispatchEligibleOrders.length,
+    selectedOrders.length,
+    selectedPrintEligibleOrders.length,
+    selectedPrinter,
+    selectedProvider,
+  ]);
   const detailNextStep = selectedOrder ? getDetailNextStep(selectedOrder, selectedShipment) : null;
   const bulkResultGuidance = getBulkResultGuidance(bulkResult);
 
@@ -1540,19 +1549,21 @@ export const OnlineStoreOrdersPage = () => {
       && selectedShipment.printedAt
       && !selectedShipment.dispatchedAt,
   );
-  const canPackOrder = Boolean(
-    selectedOrder
-      && selectedOrder.fulfillmentMethod === "SHIPPING"
-      && selectedOrder.status === "READY_FOR_DISPATCH"
-      && !isOrderPacked(selectedOrder),
-  );
-  const canUnpackOrder = Boolean(
-    selectedOrder
-      && selectedOrder.fulfillmentMethod === "SHIPPING"
-      && selectedOrder.status === "READY_FOR_DISPATCH"
-      && isOrderPacked(selectedOrder)
-      && !selectedShipment,
-  );
+  const packingActionState = useMemo(() => ({
+    canPackOrder: Boolean(
+      selectedOrder
+        && selectedOrder.fulfillmentMethod === "SHIPPING"
+        && selectedOrder.status === "READY_FOR_DISPATCH"
+        && !isOrderPacked(selectedOrder),
+    ),
+    canUnpackOrder: Boolean(
+      selectedOrder
+        && selectedOrder.fulfillmentMethod === "SHIPPING"
+        && selectedOrder.status === "READY_FOR_DISPATCH"
+        && isOrderPacked(selectedOrder)
+        && !selectedShipment,
+    ),
+  }), [selectedOrder, selectedShipment]);
   const dispatchRecommendation = getDispatchRecommendation(
     selectedOrder,
     selectedShipment,
@@ -1643,6 +1654,7 @@ export const OnlineStoreOrdersPage = () => {
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Order number, customer, email, tracking"
+            data-testid="online-store-search-orders"
           />
         </label>
         <label className="online-orders-toolbar__field online-orders-toolbar__field--compact">
@@ -1698,7 +1710,7 @@ export const OnlineStoreOrdersPage = () => {
                 type="button"
                 className="button-link"
                 onClick={() => void handleBulkCreateShipments()}
-                disabled={!canBulkCreateSelected || pendingAction.length > 0}
+                disabled={!bulkActionState.canCreateSelected || pendingAction.length > 0}
                 data-testid="online-store-bulk-create"
               >
                 {pendingAction === "bulk-create" ? "Creating..." : "Bulk Create Shipments"}
@@ -1707,7 +1719,7 @@ export const OnlineStoreOrdersPage = () => {
                 type="button"
                 className="button-link"
                 onClick={() => void handleBulkPrintShipments()}
-                disabled={!canBulkPrintSelected || pendingAction.length > 0}
+                disabled={!bulkActionState.canPrintSelected || pendingAction.length > 0}
                 data-testid="online-store-bulk-print"
               >
                 {pendingAction === "bulk-print" ? "Printing..." : "Bulk Print Labels"}
@@ -1716,7 +1728,7 @@ export const OnlineStoreOrdersPage = () => {
                 type="button"
                 className="button-link"
                 onClick={() => void handleBulkDispatchShipments()}
-                disabled={!canBulkDispatchSelected || pendingAction.length > 0}
+                disabled={!bulkActionState.canDispatchSelected || pendingAction.length > 0}
                 data-testid="online-store-bulk-dispatch"
               >
                 {pendingAction === "bulk-dispatch" ? "Dispatching..." : "Bulk Confirm Dispatch"}
@@ -1883,7 +1895,7 @@ export const OnlineStoreOrdersPage = () => {
                       type="button"
                       className="button-link"
                       onClick={() => void handleSetPackedState(true)}
-                      disabled={!canPackOrder || pendingAction.length > 0}
+                      disabled={!packingActionState.canPackOrder || pendingAction.length > 0}
                       data-testid="online-store-mark-packed"
                     >
                       {pendingAction === "pack" ? "Marking..." : "Mark Packed"}
@@ -1892,7 +1904,7 @@ export const OnlineStoreOrdersPage = () => {
                       type="button"
                       className="button-link"
                       onClick={() => void handleSetPackedState(false)}
-                      disabled={!canUnpackOrder || pendingAction.length > 0}
+                      disabled={!packingActionState.canUnpackOrder || pendingAction.length > 0}
                       data-testid="online-store-unmark-packed"
                     >
                       {pendingAction === "unpack" ? "Updating..." : "Remove From Packed Queue"}
