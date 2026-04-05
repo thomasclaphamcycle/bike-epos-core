@@ -311,6 +311,103 @@ const searchInventoryRows = async (page, query) => {
   await listResponsePromise;
 };
 
+const seedPosSaleViaBypass = async (
+  request,
+  {
+    variantId,
+    role = "MANAGER",
+    staffId,
+    quantity = 1,
+    complete = true,
+  },
+) => {
+  const headers = staffId ? { "X-Staff-Id": staffId } : {};
+  const basket = await apiJsonWithHeaderBypass(request, "POST", "/api/baskets", role, {
+    headers,
+    data: {},
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/baskets/${encodeURIComponent(basket.id)}/items`,
+    role,
+    {
+      headers,
+      data: {
+        variantId,
+        quantity,
+      },
+    },
+  );
+
+  const checkout = await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/baskets/${encodeURIComponent(basket.id)}/checkout`,
+    role,
+    {
+      headers,
+      data: {},
+    },
+  );
+
+  if (!complete) {
+    return {
+      basketId: basket.id,
+      saleId: checkout.sale.id,
+      totalPence: checkout.sale.totalPence,
+      receiptNumber: null,
+    };
+  }
+
+  const paymentIntent = await apiJsonWithHeaderBypass(request, "POST", "/api/payments/intents", role, {
+    headers,
+    data: {
+      saleId: checkout.sale.id,
+      provider: "CASH",
+      amountPence: checkout.sale.totalPence,
+    },
+  });
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/payments/intents/${encodeURIComponent(paymentIntent.intent.id)}/capture`,
+    role,
+    {
+      headers,
+      data: {},
+    },
+  );
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/sales/${encodeURIComponent(checkout.sale.id)}/complete`,
+    role,
+    {
+      headers,
+      data: {},
+    },
+  );
+
+  const receipt = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/sales/${encodeURIComponent(checkout.sale.id)}/receipt`,
+    role,
+    { headers },
+  );
+
+  return {
+    basketId: basket.id,
+    saleId: checkout.sale.id,
+    totalPence: checkout.sale.totalPence,
+    receiptNumber: receipt.receiptNumber,
+  };
+};
+
 module.exports = {
   addDaysToDateKey,
   apiJson,
@@ -327,5 +424,6 @@ module.exports = {
   searchInventoryRows,
   searchOnlineStoreOrders,
   seedCatalogVariant,
+  seedPosSaleViaBypass,
   uniqueToken,
 };

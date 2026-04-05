@@ -14,6 +14,7 @@ const {
   searchInventoryRows,
   searchOnlineStoreOrders,
   seedCatalogVariant,
+  seedPosSaleViaBypass,
   uniqueToken,
 } = require("./helpers");
 
@@ -341,6 +342,55 @@ test("Login page stays PIN-only and hides users without a PIN", async ({ page, r
   await expect(page.getByTestId("login-password-value")).toHaveCount(0);
   await expect(page.getByTestId("login-password-submit")).toHaveCount(0);
   await expect(page.getByTestId("login-pin")).toBeDisabled();
+});
+
+test("Sales History page lists completed sales by default, exposes draft filtering, and opens the receipt route", async ({
+  page,
+  request,
+}) => {
+  const token = uniqueToken("sales-history-page");
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "sales-history-page",
+    name: `Morgan ${token}`,
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "sales-history-page",
+    retailPricePence: 899,
+  });
+  await ensureOpenRegisterSession(request);
+
+  const completedSale = await seedPosSaleViaBypass(request, {
+    variantId: seeded.variant.id,
+    role: "MANAGER",
+    staffId: credentials.user.id,
+    complete: true,
+  });
+  const draftSale = await seedPosSaleViaBypass(request, {
+    variantId: seeded.variant.id,
+    role: "MANAGER",
+    staffId: credentials.user.id,
+    complete: false,
+  });
+
+  await loginViaUi(page, credentials, "/sales-history/transactions", { surface: "frontend" });
+  await expect(page.getByRole("heading", { name: "Sales History" })).toBeVisible();
+  await expect(page.getByTestId("sales-history-status-filter")).toHaveValue("complete");
+
+  await page.getByTestId("sales-history-search").fill(token);
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(token);
+  await expect(page.getByTestId(`sales-history-row-${completedSale.saleId}`)).toBeVisible();
+  await expect(page.getByTestId(`sales-history-row-${draftSale.saleId}`)).toHaveCount(0);
+
+  await page.getByTestId("sales-history-status-filter").selectOption("complete,draft");
+  await expect.poll(() => new URL(page.url()).searchParams.get("status")).toBe("complete,draft");
+  await expect(page.getByTestId(`sales-history-row-${draftSale.saleId}`)).toBeVisible();
+  await expect(page.getByTestId(`sales-history-row-${draftSale.saleId}`)).toContainText("Draft");
+
+  await page.getByTestId(`sales-history-row-${completedSale.saleId}`).click();
+  await expect(page).toHaveURL(new RegExp(`/sales/${completedSale.saleId}/receipt/print`));
+  await expect(page.getByRole("button", { name: "Print receipt" })).toBeVisible();
+  await expect(page.locator("body")).toContainText(completedSale.receiptNumber);
 });
 
 test("Login then POS page loads and can search products", async ({ page, request }) => {

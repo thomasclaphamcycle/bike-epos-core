@@ -67,6 +67,10 @@ export const ProductLabelPrintPage = lazyPage(
   () => import("./pages/ProductLabelPrintPage"),
   "ProductLabelPrintPage",
 );
+export const SalesHistoryPage = lazyPage(
+  () => import("./pages/SalesHistoryPage"),
+  "SalesHistoryPage",
+);
 export const SalesReceiptPrintPage = lazyPage(
   () => import("./pages/SalesReceiptPrintPage"),
   "SalesReceiptPrintPage",
@@ -278,6 +282,7 @@ export const preloadPrimaryRoute = async (path: string) => {
     [(value) => value === "/" || value === "/home" || value === "/dashboard", DashboardPage.preload],
     [(value) => value === "/pos", PosPage.preload],
     [(value) => value === "/management/cash", CashOversightPage.preload],
+    [(value) => value === "/sales-history/transactions", SalesHistoryPage.preload],
     [(value) => value.startsWith("/sales-history"), NavigationPlaceholderPage.preload],
     [(value) => value === "/workshop", WorkshopPage.preload],
     [(value) => value === "/workshop/queue", WorkshopQueuePage.preload],
