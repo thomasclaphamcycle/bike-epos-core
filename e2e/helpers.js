@@ -224,17 +224,57 @@ const seedCatalogVariant = async (request, options = {}) => {
   };
 };
 
+const getFirstOpenWorkshopDateKeyViaBypass = async (
+  request,
+  role = "MANAGER",
+  anchorDateKey = getLondonDateKey(),
+) => {
+  const visibleStart = getOperationalWeekStartDateKey(anchorDateKey);
+  const visibleEnd = addDaysToDateKey(visibleStart, 6);
+  const calendar = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/workshop/calendar?from=${encodeURIComponent(visibleStart)}&to=${encodeURIComponent(visibleEnd)}`,
+    role,
+  );
+  const firstOpenDay = Array.isArray(calendar.days)
+    ? calendar.days.find((day) => day && day.isClosed === false && typeof day.date === "string")
+    : null;
+
+  if (!firstOpenDay?.date) {
+    throw new Error(`Expected workshop calendar to expose at least one open day between ${visibleStart} and ${visibleEnd}.`);
+  }
+
+  return firstOpenDay.date;
+};
+
+const markWebOrderPackedViaBypass = async (request, orderId, role = "MANAGER") =>
+  apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/online-store/orders/${encodeURIComponent(orderId)}/packing`,
+    role,
+    { data: { packed: true } },
+  );
+
+const searchOnlineStoreOrders = async (page, query) => {
+  await page.getByTestId("online-store-search-orders").fill(query);
+};
+
 module.exports = {
   addDaysToDateKey,
   apiJson,
   apiJsonWithHeaderBypass,
   buildHeaderBypassHeaders,
   ensureUserViaAdminBypass,
+  getFirstOpenWorkshopDateKeyViaBypass,
   getLondonDateKey,
   getMondayDateKey,
   getOperationalWeekStartDateKey,
   loginViaUi,
+  markWebOrderPackedViaBypass,
   parseDateKeyAtNoon,
+  searchOnlineStoreOrders,
   seedCatalogVariant,
   uniqueToken,
 };
