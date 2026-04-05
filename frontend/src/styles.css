@@ -716,63 +716,43 @@ body {
   height: 32mm;
   min-height: 32mm;
   max-height: 32mm;
-  padding: 1.8mm 1.9mm 1.3mm;
+  padding: 1.55mm 1.8mm 1.15mm;
   border-radius: 2mm;
   background: #ffffff;
   border: 1px solid rgba(8, 23, 40, 0.12);
   box-shadow:
     0 16px 40px rgba(8, 23, 40, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 1.15mm;
+  display: flex;
+  flex-direction: column;
+  gap: 0.95mm;
   overflow: hidden;
 }
 
-.product-label__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 4.2mm;
-}
-
-.product-label__brand-name {
-  font-size: 5.4px;
+.product-label__meta-line {
+  font-size: 4.9px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #6b7280;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 23mm;
-}
-
-.product-label__price {
-  font-size: 18px;
-  line-height: 1;
-  font-weight: 900;
-  color: #0b1f33;
-  white-space: nowrap;
-  flex-shrink: 0;
-  letter-spacing: -0.03em;
-  text-align: right;
+  min-height: 1em;
 }
 
 .product-label__body {
   display: grid;
-  gap: 0.75mm;
+  gap: 0.95mm;
   min-height: 0;
   align-content: start;
-  padding-top: 0.4mm;
 }
 
 .product-label__title {
   margin: 0;
-  font-size: 9.8px;
-  line-height: 1.12;
+  font-size: 10.2px;
+  line-height: 1.08;
   font-weight: 800;
   color: #0f1f2f;
   display: -webkit-box;
@@ -784,26 +764,45 @@ body {
 
 .product-label__variant {
   margin: 0;
-  font-size: 5.9px;
-  line-height: 1.1;
+  font-size: 5.6px;
+  line-height: 1.12;
+  font-weight: 600;
   color: #677789;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.product-label__barcode {
-  display: grid;
-  gap: 0.7mm;
+.product-label__price-band {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin-top: 0.45mm;
 }
 
+.product-label__price {
+  font-size: 21px;
+  line-height: 0.95;
+  font-weight: 900;
+  color: #0b1f33;
+  white-space: nowrap;
+  letter-spacing: -0.045em;
+  text-align: center;
+}
+
+.product-label__barcode {
+  display: grid;
+  gap: 0.6mm;
+  margin-top: auto;
+  padding-top: 0.65mm;
+}
+
 .barcode-graphic {
-  min-height: 12.4mm;
-  height: 12.4mm;
+  min-height: 11.5mm;
+  height: 11.5mm;
   width: 100%;
-  padding: 0.35mm 0.4mm 0.1mm;
-  border-radius: 1mm;
+  padding: 0.15mm 0.1mm 0;
+  border-radius: 0;
   border: 0;
   background: #ffffff;
   display: grid;
@@ -830,9 +829,9 @@ body {
 
 .product-label__barcode-number {
   text-align: center;
-  font-size: 4.9px;
+  font-size: 4.2px;
   line-height: 1;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   color: #4b5563;
   white-space: nowrap;
   overflow: hidden;
@@ -894,46 +893,49 @@ body {
   }
 
   .product-label {
-    padding: 1.05mm 1.2mm 0.85mm;
-    gap: 0.9mm;
+    padding: 0.95mm 1.15mm 0.75mm;
+    gap: 0.75mm;
     box-shadow: none;
     border: 0;
     border-radius: 0;
     background: #fff;
   }
 
-  .product-label__brand-name {
-    font-size: 4.8px;
-    max-width: 22mm;
-  }
-
-  .product-label__price {
-    font-size: 17px;
+  .product-label__meta-line {
+    font-size: 4.2px;
+    letter-spacing: 0.11em;
   }
 
   .product-label__body {
-    gap: 0.55mm;
-    padding-top: 0.2mm;
+    gap: 0.65mm;
   }
 
   .product-label__title {
-    font-size: 8.5px;
-    line-height: 1.05;
+    font-size: 8.8px;
+    line-height: 1.03;
   }
 
   .product-label__variant {
-    font-size: 5.2px;
+    font-size: 5px;
+  }
+
+  .product-label__price-band {
+    margin-top: 0.2mm;
+  }
+
+  .product-label__price {
+    font-size: 18.5px;
   }
 
   .barcode-graphic {
-    min-height: 12.2mm;
-    height: 12.2mm;
+    min-height: 11.3mm;
+    height: 11.3mm;
     padding: 0.15mm 0.05mm 0;
     border-radius: 0;
   }
 
   .product-label__barcode-number {
-    font-size: 4.5px;
+    font-size: 4px;
     letter-spacing: 0.02em;
   }
 }

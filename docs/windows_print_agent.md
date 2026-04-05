@@ -114,6 +114,7 @@ Behavior:
 - CorePOS includes the already-rendered 57x32 PNG document in that request
 - on Windows, the agent invokes `powershell.exe` and prints that PNG to the installed printer named on the registered Dymo printer record
 - this avoids the browser print popup and its paper-size handling limits
+- the current product-label renderer is intentionally retail-first: subtle brand line only when useful, stronger product-and-price hierarchy, and a cleaner barcode footer sized for the Dymo 57x32 stock
 
 ## Important limitation of the first version
 

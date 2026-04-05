@@ -17,10 +17,18 @@ const normalizeShopName = (value: string) => {
   if (!trimmed) {
     return "";
   }
-  if (/^corepos demo store ltd$/i.test(trimmed)) {
-    return "CorePOS";
+  if (/^corepos(?: demo store ltd)?$/i.test(trimmed)) {
+    return "";
   }
   return trimmed;
+};
+
+const normalizeMetaLine = (brand: string | null | undefined, shopName: string) => {
+  const trimmedBrand = brand?.trim() ?? "";
+  if (trimmedBrand) {
+    return trimmedBrand;
+  }
+  return normalizeShopName(shopName);
 };
 
 const normalizeVariantName = (productName: string, variantName?: string | null) => {
@@ -38,24 +46,26 @@ export const ProductLabel = ({
   shopName = "CorePOS",
   productName,
   variantName,
+  brand,
   sku,
   pricePence,
   barcode,
 }: ProductLabelProps) => {
-  const shopLine = normalizeShopName(shopName);
+  const metaLine = normalizeMetaLine(brand, shopName);
   const variantLine = normalizeVariantName(productName, variantName);
   const barcodeText = sku || barcode || "Barcode pending";
 
   return (
     <article className="product-label" data-testid="product-label">
-      <div className="product-label__header">
-        {shopLine ? <span className="product-label__brand-name">{shopLine}</span> : <span />}
-        <div className="product-label__price">{formatMoney(pricePence)}</div>
-      </div>
+      {metaLine ? <div className="product-label__meta-line">{metaLine}</div> : null}
 
       <div className="product-label__body">
         <h1 className="product-label__title">{productName}</h1>
         {variantLine ? <p className="product-label__variant">{variantLine}</p> : null}
+      </div>
+
+      <div className="product-label__price-band">
+        <div className="product-label__price">{formatMoney(pricePence)}</div>
       </div>
 
       <div className="product-label__barcode">

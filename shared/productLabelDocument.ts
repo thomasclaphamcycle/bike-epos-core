@@ -10,23 +10,25 @@ import {
 const LABEL_WIDTH_MM = 57;
 const LABEL_HEIGHT_MM = 32;
 const LABEL_DPI = 300;
-const PADDING_X = 18;
-const PADDING_Y = 16;
-const PRICE_FONT = "bold 38px Arial";
-const SHOP_FONT = "600 12px Arial";
-const TITLE_FONT = "bold 29px Arial";
-const VARIANT_FONT = "16px Arial";
-const BARCODE_TEXT_FONT = "15px monospace";
+const PADDING_X = 20;
+const PADDING_Y = 14;
+const META_FONT = "600 11px Arial";
+const TITLE_FONT = "bold 31px Arial";
+const VARIANT_FONT = "600 15px Arial";
+const BARCODE_TEXT_FONT = "600 13px monospace";
 const PRODUCT_NAME_MAX_LINES = 2;
-const PRODUCT_LINE_HEIGHT = 30;
+const PRODUCT_LINE_HEIGHT = 28;
+const PRICE_FONT_FAMILY = "Arial";
+const PRICE_FONT_START_SIZE = 46;
+const PRICE_FONT_MIN_SIZE = 34;
 
 const mmToPx = (value: number) => Math.round((value / 25.4) * LABEL_DPI);
 
 export const PRODUCT_LABEL_WIDTH_PX = mmToPx(LABEL_WIDTH_MM);
 export const PRODUCT_LABEL_HEIGHT_PX = mmToPx(LABEL_HEIGHT_MM);
 
-const BARCODE_REGION_HEIGHT = 112;
-const BARCODE_TEXT_HEIGHT = 20;
+const BARCODE_REGION_HEIGHT = 102;
+const BARCODE_TEXT_HEIGHT = 16;
 const BARCODE_REGION_TOP = PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_REGION_HEIGHT - BARCODE_TEXT_HEIGHT;
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
@@ -39,10 +41,18 @@ const normalizeShopLine = (value: string) => {
   if (!trimmed) {
     return "";
   }
-  if (/^corepos demo store ltd$/i.test(trimmed)) {
-    return "CorePOS";
+  if (/^corepos(?: demo store ltd)?$/i.test(trimmed)) {
+    return "";
   }
   return trimmed;
+};
+
+const normalizeMetaLine = (brand: string | null | undefined, shopName: string) => {
+  const trimmedBrand = sanitizeLine(brand);
+  if (trimmedBrand) {
+    return trimmedBrand;
+  }
+  return normalizeShopLine(shopName);
 };
 
 const normalizeVariantLine = (productName: string, variantName: string | null) => {
@@ -72,6 +82,21 @@ const getBarcodeLineWidth = (value: string) => {
 };
 
 const getBarcodeHeight = (value: string) => (value.length >= 20 ? 86 : 92);
+
+const setFittedPriceFont = (
+  ctx: ReturnType<typeof createCanvas>["getContext"],
+  text: string,
+  maxWidth: number,
+) => {
+  for (let size = PRICE_FONT_START_SIZE; size >= PRICE_FONT_MIN_SIZE; size -= 2) {
+    ctx.font = `bold ${size}px ${PRICE_FONT_FAMILY}`;
+    if (ctx.measureText(text).width <= maxWidth) {
+      return;
+    }
+  }
+
+  ctx.font = `bold ${PRICE_FONT_MIN_SIZE}px ${PRICE_FONT_FAMILY}`;
+};
 
 const fitText = (
   ctx: ReturnType<typeof createCanvas>["getContext"],
@@ -174,9 +199,8 @@ export const renderProductLabelDocument = (label: ProductLabelPayload): Rendered
   const barcodeValue = sanitizeBarcode(label.barcode);
   const productName = sanitizeLine(label.productName) || "Unnamed product";
   const variantLine = normalizeVariantLine(productName, label.variantName);
-  const shopLine = normalizeShopLine(label.shopName);
+  const metaLine = normalizeMetaLine(label.brand, label.shopName);
   const skuLine = sanitizeLine(label.sku);
-  const rightEdge = PRODUCT_LABEL_WIDTH_PX - PADDING_X;
   const contentWidth = PRODUCT_LABEL_WIDTH_PX - PADDING_X * 2;
 
   ctx.fillStyle = "#ffffff";
@@ -184,33 +208,38 @@ export const renderProductLabelDocument = (label: ProductLabelPayload): Rendered
   ctx.textBaseline = "top";
   ctx.fillStyle = "#111111";
 
-  if (shopLine) {
-    ctx.font = SHOP_FONT;
+  let cursorY = PADDING_Y;
+
+  if (metaLine) {
+    ctx.font = META_FONT;
     ctx.fillStyle = "#6b7280";
-    ctx.fillText(fitText(ctx, shopLine, contentWidth), PADDING_X, PADDING_Y);
+    ctx.fillText(fitText(ctx, metaLine.toUpperCase(), contentWidth), PADDING_X, cursorY);
+    cursorY += 24;
   }
 
   ctx.font = TITLE_FONT;
   ctx.fillStyle = "#111111";
   const productLines = wrapTextLines(ctx, productName, contentWidth, PRODUCT_NAME_MAX_LINES);
-  const productStartY = 48;
   productLines.forEach((line, index) => {
-    ctx.fillText(line, PADDING_X, productStartY + index * PRODUCT_LINE_HEIGHT);
+    ctx.fillText(line, PADDING_X, cursorY + index * PRODUCT_LINE_HEIGHT);
   });
+  cursorY += productLines.length * PRODUCT_LINE_HEIGHT;
 
-  const variantY = productStartY + productLines.length * PRODUCT_LINE_HEIGHT + 10;
   if (variantLine) {
     ctx.font = VARIANT_FONT;
     ctx.fillStyle = "#6b7280";
-    ctx.fillText(fitText(ctx, variantLine, contentWidth), PADDING_X, variantY);
+    cursorY += 8;
+    ctx.fillText(fitText(ctx, variantLine, contentWidth), PADDING_X, cursorY);
+    cursorY += 22;
+  } else {
+    cursorY += 12;
   }
 
-  ctx.font = PRICE_FONT;
-  ctx.fillStyle = "#111111";
   const priceText = formatMoney(label.pricePence);
+  setFittedPriceFont(ctx, priceText, contentWidth);
+  ctx.fillStyle = "#111111";
   const priceWidth = ctx.measureText(priceText).width;
-  const priceY = variantLine ? variantY + 30 : productStartY + productLines.length * PRODUCT_LINE_HEIGHT + 10;
-  ctx.fillText(priceText, rightEdge - priceWidth, priceY);
+  ctx.fillText(priceText, PADDING_X + Math.max(0, (contentWidth - priceWidth) / 2), cursorY);
 
   if (barcodeValue) {
     drawBarcode(ctx, barcodeValue, PADDING_X, BARCODE_REGION_TOP, contentWidth);
@@ -221,15 +250,23 @@ export const renderProductLabelDocument = (label: ProductLabelPayload): Rendered
     ctx.fillText(
       barcodeText,
       Math.max(PADDING_X, (PRODUCT_LABEL_WIDTH_PX - barcodeTextWidth) / 2),
-      PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 2,
+      PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 1,
     );
   } else {
-    ctx.font = "bold 20px Arial";
+    ctx.font = "bold 18px Arial";
     ctx.fillStyle = "#6b7280";
-    ctx.fillText("BARCODE PENDING", PADDING_X, BARCODE_REGION_TOP + 30);
+    const fallbackText = "BARCODE PENDING";
+    const fallbackWidth = ctx.measureText(fallbackText).width;
+    ctx.fillText(fallbackText, PADDING_X + Math.max(0, (contentWidth - fallbackWidth) / 2), BARCODE_REGION_TOP + 34);
     if (skuLine) {
       ctx.font = BARCODE_TEXT_FONT;
-      ctx.fillText(fitText(ctx, skuLine, contentWidth), PADDING_X, PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 2);
+      const fallbackSku = fitText(ctx, skuLine, contentWidth);
+      const fallbackSkuWidth = ctx.measureText(fallbackSku).width;
+      ctx.fillText(
+        fallbackSku,
+        PADDING_X + Math.max(0, (contentWidth - fallbackSkuWidth) / 2),
+        PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 1,
+      );
     }
   }
 
