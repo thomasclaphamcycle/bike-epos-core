@@ -87,7 +87,7 @@ export const deliverProductLabelPrintRequestToAgent = async (
   if (!config.url) {
     throw new HttpError(
       503,
-      "Product-label print agent is not configured. Set COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL to the standalone Windows Dymo helper (or another compatible local agent URL) to enable direct Dymo printing.",
+      "Product-label print agent is not configured. Set COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL to the standalone Windows Dymo helper EXE (or another compatible local agent URL) to enable direct Dymo printing.",
       "PRODUCT_LABEL_PRINT_AGENT_NOT_CONFIGURED",
     );
   }
