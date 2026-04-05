@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BarcodeGraphic } from "./BarcodeGraphic";
 
 type ProductLabelProps = {
@@ -5,6 +6,7 @@ type ProductLabelProps = {
   productName: string;
   variantName?: string | null;
   brand?: string | null;
+  logoUrl?: string | null;
   sku?: string | null;
   pricePence: number;
   barcode: string | null;
@@ -47,17 +49,34 @@ export const ProductLabel = ({
   productName,
   variantName,
   brand,
+  logoUrl,
   sku,
   pricePence,
   barcode,
 }: ProductLabelProps) => {
   const metaLine = normalizeMetaLine(brand, shopName);
   const variantLine = normalizeVariantName(productName, variantName);
-  const barcodeText = sku || barcode || "Barcode pending";
+  const barcodeText = barcode || sku || "Barcode pending";
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [logoUrl]);
 
   return (
     <article className="product-label" data-testid="product-label">
-      {metaLine ? <div className="product-label__meta-line">{metaLine}</div> : null}
+      {logoUrl && !logoFailed ? (
+        <div className="product-label__logo-wrap">
+          <img
+            className="product-label__logo"
+            src={logoUrl}
+            alt={`${metaLine || shopName} logo`}
+            onError={() => setLogoFailed(true)}
+          />
+        </div>
+      ) : metaLine ? (
+        <div className="product-label__meta-line">{metaLine}</div>
+      ) : null}
 
       <div className="product-label__body">
         <h1 className="product-label__title">{productName}</h1>
