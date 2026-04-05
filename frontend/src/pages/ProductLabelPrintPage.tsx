@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
+import { useAppConfig } from "../config/appConfig";
 import { ProductLabel } from "../features/labels/ProductLabel";
 import {
   getProductLabelDirectPrintErrorMessage,
@@ -29,6 +30,7 @@ type VariantLabelDetail = {
 export const ProductLabelPrintPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
   const { error, success } = useToasts();
+  const appConfig = useAppConfig();
   const [variant, setVariant] = useState<VariantLabelDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [directPrintingCopies, setDirectPrintingCopies] = useState<number | null>(null);
@@ -163,9 +165,11 @@ export const ProductLabelPrintPage = () => {
       <div className="product-label-print-page__sheet">
         {variant ? (
           <ProductLabel
+            shopName={appConfig.store.businessName || appConfig.store.name}
             productName={variant.product?.name || variant.sku}
             variantName={variant.name || variant.option || null}
             brand={variant.product?.brand || null}
+            logoUrl={appConfig.store.preferredLogoUrl || null}
             sku={variant.sku}
             pricePence={variant.retailPricePence}
             barcode={variant.barcode}

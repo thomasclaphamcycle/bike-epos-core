@@ -1,3 +1,5 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { ProductLabelPrintAgentJob, ProductLabelPrintRequest } from "../../shared/productLabelPrintContract";
 import {
   DYMO_57X32_MODEL_HINT,
@@ -6,7 +8,7 @@ import {
   PRODUCT_LABEL_PRINT_REQUEST_VERSION,
   PRODUCT_LABEL_WINDOWS_LOCAL_AGENT_TRANSPORT,
 } from "../../shared/productLabelPrintContract";
-import { renderProductLabelDocument } from "../../shared/productLabelDocument";
+import { renderProductLabelDocument, type ProductLabelRenderInput } from "../../shared/productLabelDocument";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import { listStoreInfoSettings } from "./configurationService";
@@ -19,6 +21,15 @@ import {
 import { deliverProductLabelPrintRequestToAgent } from "./productLabelPrintAgentDeliveryService";
 
 const MAX_PRODUCT_LABEL_COPIES = 20;
+const PRODUCT_LABEL_LOGO_TIMEOUT_MS = 3000;
+const PRODUCT_LABEL_LOGO_MAX_BYTES = 1024 * 1024;
+
+const LOGO_MIME_BY_EXTENSION = new Map<string, string>([
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"],
+]);
 
 export type ProductLabelDirectPrintInput = ResolvePrinterSelectionInput & {
   copies?: number;
@@ -52,6 +63,74 @@ const normalizeCopies = (value: unknown) => {
   return Number(value);
 };
 
+const normalizeLogoBufferToDataUrl = (buffer: Buffer, mimeType: string) => {
+  if (buffer.byteLength === 0 || buffer.byteLength > PRODUCT_LABEL_LOGO_MAX_BYTES) {
+    return null;
+  }
+
+  return `data:${mimeType};base64,${buffer.toString("base64")}`;
+};
+
+const resolveLocalStoreLogoDataUrl = async (logoPath: string) => {
+  if (!logoPath.startsWith("/uploads/store-logos/")) {
+    return null;
+  }
+
+  const normalizedRelativePath = logoPath.replace(/^\/+/, "");
+  const extension = path.extname(normalizedRelativePath).toLowerCase();
+  const mimeType = LOGO_MIME_BY_EXTENSION.get(extension);
+  if (!mimeType) {
+    return null;
+  }
+
+  try {
+    const buffer = await fs.readFile(path.join(process.cwd(), normalizedRelativePath));
+    return normalizeLogoBufferToDataUrl(buffer, mimeType);
+  } catch {
+    return null;
+  }
+};
+
+const resolveRemoteStoreLogoDataUrl = async (logoUrl: string) => {
+  try {
+    const response = await fetch(logoUrl, {
+      signal: AbortSignal.timeout(PRODUCT_LABEL_LOGO_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+    if (!LOGO_MIME_BY_EXTENSION.has(path.extname(new URL(logoUrl).pathname).toLowerCase())
+      && !Array.from(LOGO_MIME_BY_EXTENSION.values()).includes(contentType)) {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return normalizeLogoBufferToDataUrl(buffer, contentType || "image/png");
+  } catch {
+    return null;
+  }
+};
+
+const resolveProductLabelLogoDataUrl = async (preferredLogoUrl: string | null | undefined) => {
+  const trimmed = preferredLogoUrl?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/uploads/store-logos/")) {
+    return resolveLocalStoreLogoDataUrl(trimmed);
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return resolveRemoteStoreLogoDataUrl(trimmed);
+  }
+
+  return null;
+};
+
 const buildProductLabelPrintRequest = async (
   variantId: string,
   input: ProductLabelDirectPrintInput,
@@ -65,6 +144,7 @@ const buildProductLabelPrintRequest = async (
   const copies = normalizeCopies(input.copies);
   const shopName = store.businessName || store.name || "CorePOS";
   const variantName = variant.name || variant.option || null;
+  const logoDataUrl = await resolveProductLabelLogoDataUrl(store.preferredLogoUrl);
   const label = {
     shopName,
     productName: variant.product?.name || variant.sku,
@@ -74,7 +154,10 @@ const buildProductLabelPrintRequest = async (
     pricePence: variant.retailPricePence,
     barcode: variant.barcode,
   };
-  const renderedDocument = renderProductLabelDocument(label);
+  const renderedDocument = renderProductLabelDocument({
+    ...label,
+    logoDataUrl,
+  } satisfies ProductLabelRenderInput);
 
   return {
     variant,
