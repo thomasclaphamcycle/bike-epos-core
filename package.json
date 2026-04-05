@@ -1,11 +1,12 @@
 {
   "name": "bike-epos-core",
-  "version": "1.2.29",
+  "version": "1.2.31",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "print-agent:start": "ts-node --transpile-only print-agent/src/server.ts",
+    "print-agent:package:dymo": "node scripts/package_dymo_product_label_agent.js",
     "dev:start": "bash scripts/dev_start_local.sh",
     "dev:stop": "bash scripts/dev_stop_local.sh",
     "dev:guard": "bash scripts/dev_codex_guard.sh",
@@ -110,6 +111,8 @@
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
     "test:business-intelligence": "node scripts/run_smoke_test.js scripts/business_intelligence_phase1_smoke_tests.js",
     "test:print-agent": "node scripts/run_smoke_test.js scripts/print_agent_smoke_tests.js",
+    "test:product-label-print": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/product_label_print_smoke_tests.js",
+    "test:dymo-agent-bundle": "node scripts/dymo_product_label_agent_bundle_smoke_tests.js",
     "test:shipping-providers": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/shipping_provider_smoke_tests.js",
     "test:dispatch-printers": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/dispatch_printer_smoke_tests.js",
     "test:online-store": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/online_store_smoke_tests.js",
@@ -144,6 +147,7 @@
     "chartjs-plugin-datalabels": "^2.2.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "jsbarcode": "^3.12.3",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.3",
     "pg": "^8.19.0"

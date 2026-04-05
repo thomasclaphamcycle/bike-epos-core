@@ -55,13 +55,22 @@ npm run db:seed:dev
 npm run dev
 ```
 
-Optional web-order shipping-label print agent for local dispatch testing:
+Optional repo-local print agent for development/testing of:
+
+- web-order Zebra shipment labels
+- Dymo product labels from the product-label page
 
 ```bash
 npm run print-agent:start
 ```
 
-Then register a dispatch printer in Store Settings and make it the default shipping-label printer for the web-order dispatch flow.
+Then register the relevant printer in Store Settings and make it the default shipping-label or product-label printer for the workflow you want to test.
+
+For a Windows Dymo host that should run without a CorePOS repo checkout or npm, build the standalone Dymo helper bundle instead:
+
+```bash
+npm run print-agent:package:dymo
+```
 
 6. In a second terminal, run the React frontend:
 
@@ -78,7 +87,7 @@ Production-style serving still comes from the backend after `npm run build`.
 
 For a real shop deployment, use the concise production runbook in [docs/production_setup.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/production_setup.md).
 
-For the current Windows/Zebra shipping-label print-agent setup, use [docs/windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
+For the current Windows local print-agent setup covering Zebra shipment labels and Dymo product labels, use [docs/windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
 It covers:
 

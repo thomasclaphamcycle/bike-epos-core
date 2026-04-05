@@ -1,11 +1,16 @@
 import express, { type ErrorRequestHandler } from "express";
 import type { AddressInfo } from "node:net";
 import {
+  validateProductLabelPrintAgentSubmitRequest,
+  type ProductLabelPrintAgentSubmitResponse,
+} from "../../shared/productLabelPrintContract";
+import {
   validateShipmentPrintAgentSubmitRequest,
   type ShipmentPrintAgentSubmitResponse,
 } from "../../shared/shippingPrintContract";
 import type { PrintAgentConfig } from "./config";
 import { loadPrintAgentConfig } from "./config";
+import { submitProductLabelPrintJob } from "./productLabelTransport";
 import { submitShipmentPrintJob } from "./transport";
 
 type PrintAgentError = Error & {
@@ -38,7 +43,11 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
-      supportedTransportModes: ["DRY_RUN", "RAW_TCP"],
+      supportedTransportModes: ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"],
+      supportedJobs: {
+        shipmentLabels: ["DRY_RUN", "RAW_TCP"],
+        productLabels: ["DRY_RUN", "WINDOWS_PRINTER"],
+      },
       bindHost: config.bindHost,
       port: config.port,
     });
@@ -70,6 +79,41 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
       }
 
       const response: ShipmentPrintAgentSubmitResponse = {
+        ok: true,
+        job,
+      };
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/jobs/product-label", async (req, res, next) => {
+    try {
+      requireSecret(req.header("X-CorePOS-Print-Agent-Secret") ?? undefined, config);
+      let payload;
+      try {
+        payload = validateProductLabelPrintAgentSubmitRequest(req.body);
+      } catch (error) {
+        throw createHttpError(
+          400,
+          "PRINT_AGENT_REQUEST_INVALID",
+          error instanceof Error ? error.message : "Product label print request payload was invalid",
+        );
+      }
+
+      let job;
+      try {
+        job = await submitProductLabelPrintJob(payload.printRequest, config);
+      } catch (error) {
+        throw createHttpError(
+          502,
+          "PRINT_AGENT_TRANSPORT_FAILED",
+          error instanceof Error ? error.message : "Product label print transport failed",
+        );
+      }
+
+      const response: ProductLabelPrintAgentSubmitResponse = {
         ok: true,
         job,
       };

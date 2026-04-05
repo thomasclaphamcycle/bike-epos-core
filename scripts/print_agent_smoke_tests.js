@@ -2,6 +2,7 @@
 require("dotenv").config({ path: ".env.test" });
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
 const net = require("node:net");
 const path = require("node:path");
 const { register } = require("ts-node");
@@ -134,6 +135,68 @@ const run = async () => {
     const expectedPayload = `${printRequest.document.content}\n${printRequest.document.content}`;
     assert.equal(received, expectedPayload);
     assert.equal(payload.job.bytesSent, Buffer.byteLength(expectedPayload, "utf8"));
+
+    const productLabelRequest = {
+      version: 1,
+      intentType: "PRODUCT_LABEL_PRINT",
+      variantId: "variant-smoke-1",
+      printer: {
+        transport: "WINDOWS_LOCAL_AGENT",
+        printerId: "printer-product-label-1",
+        printerKey: "DYMO_PRODUCT_LABEL",
+        printerFamily: "DYMO_LABEL",
+        printerModelHint: "LABELWRITER_57X32_OR_COMPATIBLE",
+        printerName: "Packing Bench Dymo",
+        transportMode: "DRY_RUN",
+        windowsPrinterName: "DYMO LabelWriter 550",
+        copies: 1,
+      },
+      label: {
+        shopName: "CorePOS Cycles",
+        productName: "Inner Tube 700x25",
+        variantName: "48mm presta",
+        brand: "Continental",
+        sku: "TUBE-700-48",
+        pricePence: 1299,
+        barcode: "123456789012",
+      },
+      document: {
+        format: "PNG",
+        mimeType: "image/png",
+        fileName: "tube-700-48.png",
+        bytesBase64:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nm4cAAAAASUVORK5CYII=",
+        widthPx: 1,
+        heightPx: 1,
+      },
+      metadata: {
+        source: "PRINT_AGENT_SMOKE",
+        sourceLabel: "TUBE-700-48",
+      },
+    };
+
+    const productLabelRes = await fetch(`http://${agent.host}:${agent.port}/jobs/product-label`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+      },
+      body: JSON.stringify({ printRequest: productLabelRequest }),
+    });
+    const productLabelPayload = await productLabelRes.json();
+    assert.equal(productLabelRes.status, 201, JSON.stringify(productLabelPayload));
+    assert.equal(productLabelPayload.ok, true);
+    assert.equal(productLabelPayload.job.transportMode, "DRY_RUN");
+    assert.equal(productLabelPayload.job.simulated, true);
+    assert.equal(productLabelPayload.job.printerId, "printer-product-label-1");
+    assert.equal(productLabelPayload.job.printerKey, "DYMO_PRODUCT_LABEL");
+    assert.equal(productLabelPayload.job.printerTarget, "dry-run:" + path.resolve(process.cwd(), "tmp", "print-agent-smoke", "product-labels"));
+    assert.equal(productLabelPayload.job.documentFormat, "DYMO_PRODUCT_LABEL");
+    assert.equal(productLabelPayload.job.outputPath.endsWith(".png"), true);
+    assert.equal(productLabelPayload.job.bytesSent > 0, true);
+
+    const renderedLabel = await fs.readFile(productLabelPayload.job.outputPath);
+    assert.equal(renderedLabel.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
   } finally {
     for (const socket of printerConnections) {
       socket.destroy();

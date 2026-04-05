@@ -129,6 +129,37 @@ const run = async () => {
     const nonShippingPrinterId = createNonShippingPrinterRes.json.printer.id;
     createdPrinterIds.push(nonShippingPrinterId);
 
+    const createDymoPrinterRes = await fetchJson("/api/settings/printers", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Packing Bench Dymo",
+        key: "PACKING_BENCH_DYMO",
+        printerFamily: "DYMO_LABEL",
+        transportMode: "WINDOWS_PRINTER",
+        windowsPrinterName: "DYMO LabelWriter 550",
+        location: "Packing bench",
+        notes: "Primary product-label printer",
+        setAsDefaultProductLabel: true,
+      }),
+    });
+    assert.equal(createDymoPrinterRes.status, 201, JSON.stringify(createDymoPrinterRes.json));
+    const dymoPrinterId = createDymoPrinterRes.json.printer.id;
+    createdPrinterIds.push(dymoPrinterId);
+    assert.equal(createDymoPrinterRes.json.printer.supportsShippingLabels, false);
+    assert.equal(createDymoPrinterRes.json.printer.supportsProductLabels, true);
+    assert.equal(createDymoPrinterRes.json.printer.transportMode, "WINDOWS_PRINTER");
+    assert.equal(createDymoPrinterRes.json.defaultProductLabelPrinterId, dymoPrinterId);
+
+    const productLabelOnlyList = await fetchJson("/api/settings/printers?activeOnly=true&productLabelOnly=true", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(productLabelOnlyList.status, 200, JSON.stringify(productLabelOnlyList.json));
+    assert.equal(productLabelOnlyList.json.printers.some((printer) => printer.id === dymoPrinterId), true);
+
     const setNonShippingDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
       method: "PUT",
       headers: {
@@ -141,6 +172,19 @@ const run = async () => {
     });
     assert.equal(setNonShippingDefaultRes.status, 409, JSON.stringify(setNonShippingDefaultRes.json));
     assert.equal(setNonShippingDefaultRes.json.error.code, "PRINTER_NOT_SHIPPING_LABEL_CAPABLE");
+
+    const setShippingPrinterAsProductDefaultRes = await fetchJson("/api/settings/printers/default-product-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: dryRunPrinterId,
+      }),
+    });
+    assert.equal(setShippingPrinterAsProductDefaultRes.status, 409, JSON.stringify(setShippingPrinterAsProductDefaultRes.json));
+    assert.equal(setShippingPrinterAsProductDefaultRes.json.error.code, "PRINTER_NOT_PRODUCT_LABEL_CAPABLE");
 
     const deactivateDefaultRes = await fetchJson(`/api/settings/printers/${encodeURIComponent(dryRunPrinterId)}`, {
       method: "PATCH",
@@ -155,6 +199,19 @@ const run = async () => {
     assert.equal(deactivateDefaultRes.status, 200, JSON.stringify(deactivateDefaultRes.json));
     assert.equal(deactivateDefaultRes.json.printer.isActive, false);
     assert.equal(deactivateDefaultRes.json.defaultShippingLabelPrinterId, null);
+
+    const clearProductDefaultRes = await fetchJson("/api/settings/printers/default-product-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: null,
+      }),
+    });
+    assert.equal(clearProductDefaultRes.status, 200, JSON.stringify(clearProductDefaultRes.json));
+    assert.equal(clearProductDefaultRes.json.defaultProductLabelPrinterId, null);
 
     const clearDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
       method: "PUT",
@@ -189,7 +246,12 @@ const run = async () => {
     }
     await prisma.appConfig.deleteMany({
       where: {
-        key: "dispatch.defaultShippingLabelPrinterId",
+        key: {
+          in: [
+            "dispatch.defaultShippingLabelPrinterId",
+            "labels.defaultProductLabelPrinterId",
+          ],
+        },
       },
     });
 

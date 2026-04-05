@@ -1012,11 +1012,13 @@ enum ShippingProviderSyncEventStatus {
 
 enum RegisteredPrinterFamily {
   ZEBRA_LABEL
+  DYMO_LABEL
 }
 
 enum RegisteredPrinterTransportMode {
   DRY_RUN
   RAW_TCP
+  WINDOWS_PRINTER
 }
 
 model WebOrder {
@@ -1168,8 +1170,10 @@ model Printer {
   printerFamily          RegisteredPrinterFamily        @default(ZEBRA_LABEL)
   printerModelHint       String                         @default("GK420D_OR_COMPATIBLE")
   supportsShippingLabels Boolean                        @default(true)
+  supportsProductLabels  Boolean                        @default(false)
   isActive               Boolean                        @default(true)
   transportMode          RegisteredPrinterTransportMode @default(DRY_RUN)
+  windowsPrinterName     String?
   rawTcpHost             String?
   rawTcpPort             Int?
   location               String?
@@ -1178,6 +1182,8 @@ model Printer {
   updatedAt              DateTime                       @updatedAt
 
   @@index([supportsShippingLabels, isActive])
+  @@index([supportsProductLabels, isActive])
+  @@index([printerFamily, isActive])
   @@index([transportMode, isActive])
 }
 

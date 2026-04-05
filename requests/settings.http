@@ -89,6 +89,23 @@ X-Staff-Id: demo-admin
   "setAsDefaultShippingLabel": true
 }
 
+### Create a registered Dymo product-label printer (ADMIN)
+POST {{baseUrl}}/api/settings/printers
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "name": "Packing Bench Dymo",
+  "key": "PACKING_BENCH_DYMO",
+  "printerFamily": "DYMO_LABEL",
+  "transportMode": "WINDOWS_PRINTER",
+  "windowsPrinterName": "DYMO LabelWriter 550",
+  "location": "Packing bench",
+  "notes": "Primary product-label printer",
+  "setAsDefaultProductLabel": true
+}
+
 ### Update a registered dispatch printer (ADMIN)
 PATCH {{baseUrl}}/api/settings/printers/{{printerId}}
 Content-Type: application/json
@@ -104,6 +121,16 @@ X-Staff-Id: demo-admin
 
 ### Set the default shipping-label printer (ADMIN)
 PUT {{baseUrl}}/api/settings/printers/default-shipping-label
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "printerId": "{{printerId}}"
+}
+
+### Set the default product-label printer (ADMIN)
+PUT {{baseUrl}}/api/settings/printers/default-product-label
 Content-Type: application/json
 X-Staff-Role: ADMIN
 X-Staff-Id: demo-admin

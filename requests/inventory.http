@@ -48,6 +48,16 @@ Content-Type: application/json
 ### Get variant by id
 GET {{baseUrl}}/api/variants/{{variantId}}
 
+### Direct-print a product label (STAFF+)
+POST {{baseUrl}}/api/variants/{{variantId}}/product-label/print
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: demo-staff
+
+{
+  "copies": 1
+}
+
 ### Patch variant
 PATCH {{baseUrl}}/api/variants/{{variantId}}
 Content-Type: application/json
