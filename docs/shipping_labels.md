@@ -202,6 +202,7 @@ It currently supports:
 - scanning a tracking number, provider reference, or order reference to load the matched shipment and confirm dispatch explicitly from a scan-first bench flow
 - keeping the scan bench warm with clearer blocked/no-match feedback, keyboard-friendly repeat confirmation, and a small recent-scan session summary for quick operator recovery
 - keeping the packing station explicit with clearer packed-vs-needs-packing cues, ready-to-create queue shortcuts, and a small recent-packing handoff summary before shipment creation
+- showing a closeout / handoff summary for the visible dispatch queue, including today’s dispatched count, outstanding-work buckets, and a copy-friendly summary block for shift handover
 
 This is intentionally a narrow dispatch workflow, not a broader storefront or fulfilment dashboard redesign.
 

@@ -14908,6 +14908,75 @@ body.rota-row-drag-copy-active {
   gap: var(--cp-space-5);
 }
 
+.online-orders-closeout-card {
+  display: grid;
+  gap: var(--cp-space-4);
+}
+
+.online-orders-closeout-card__header,
+.online-orders-closeout-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cp-space-3);
+  flex-wrap: wrap;
+}
+
+.online-orders-closeout-card__header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.online-orders-closeout-card__header h2 {
+  margin: 0;
+  color: var(--cp-shell-deep);
+  font-size: 1.1rem;
+}
+
+.online-orders-closeout-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--cp-space-3);
+}
+
+.online-orders-closeout-card__metric {
+  display: grid;
+  gap: 6px;
+  padding: var(--cp-space-3);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.online-orders-closeout-card__metric span {
+  color: #627184;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.online-orders-closeout-card__metric strong {
+  color: var(--cp-shell-deep);
+  font-size: 1.4rem;
+}
+
+.online-orders-closeout-card__guidance {
+  display: grid;
+  gap: var(--cp-space-3);
+}
+
+.online-orders-closeout-card__summary {
+  margin: 0;
+  padding: var(--cp-space-4);
+  border-radius: var(--cp-radius-md);
+  border: 1px solid rgba(11, 31, 51, 0.08);
+  background: rgba(244, 248, 252, 0.88);
+  color: #425467;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .online-orders-list {
   display: grid;
   gap: var(--cp-space-3);
@@ -15566,6 +15635,8 @@ body.rota-row-drag-copy-active {
 }
 
 @media (max-width: 720px) {
+  .online-orders-closeout-card__header,
+  .online-orders-closeout-card__actions,
   .online-orders-bulk-toolbar__summary,
   .online-orders-bulk-results__summary {
     flex-direction: column;
@@ -15663,6 +15734,7 @@ body.rota-row-drag-copy-active {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .online-orders-closeout-card__metrics,
   .online-orders-readiness-grid,
   .online-orders-dispatch-action-grid {
     grid-template-columns: minmax(0, 1fr);

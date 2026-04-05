@@ -2855,6 +2855,9 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
   });
 
   await searchOnlineStoreOrders(page, bulkToken);
+  await expect(page.getByTestId("online-store-closeout")).toContainText("Dispatch closeout / handoff");
+  await expect(page.getByTestId("online-store-closeout-summary-text")).toContainText("0 dispatched today");
+  await expect(page.getByTestId("online-store-closeout-summary-text")).toContainText("2 packed and ready for shipment creation");
   await expect(page.getByTestId(`online-store-order-row-${orderIds[0]}`)).toBeVisible();
   await expect(page.getByTestId(`online-store-order-row-${orderIds[1]}`)).toBeVisible();
   await page.getByTestId(`online-store-select-order-${orderIds[0]}`).check();
@@ -2869,6 +2872,10 @@ test("Manager can bulk-create, bulk-print, and bulk-dispatch packed web orders",
   await page.getByTestId("online-store-bulk-dispatch").click();
   await expect(page.getByTestId("online-store-bulk-results")).toContainText("Bulk dispatch confirmation");
   await expect(page.getByTestId("online-store-bulk-results")).toContainText("2 succeeded");
+  await expect(page.getByTestId("online-store-closeout")).toContainText("Bench clear in visible scope");
+  await expect(page.getByTestId("online-store-closeout-summary-text")).toContainText("2 dispatched today");
+  await expect(page.getByTestId("online-store-closeout-summary-text")).toContainText("0 printed but not dispatched");
+  await expect(page.getByTestId("online-store-closeout-summary-text")).toContainText("0 blocked or review-needed");
 
   const firstOrder = await apiJsonWithHeaderBypass(
     request,

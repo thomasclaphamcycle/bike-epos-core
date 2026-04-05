@@ -364,6 +364,17 @@ const formatDateTime = (value: string | null | undefined) => {
   return new Date(value).toLocaleString();
 };
 
+const isSameLocalCalendarDay = (value: string | null | undefined, referenceDate: Date) => {
+  if (!value) {
+    return false;
+  }
+
+  const candidate = new Date(value);
+  return candidate.getFullYear() === referenceDate.getFullYear()
+    && candidate.getMonth() === referenceDate.getMonth()
+    && candidate.getDate() === referenceDate.getDate();
+};
+
 const humanizeToken = (value: string) =>
   value
     .toLowerCase()
@@ -405,6 +416,17 @@ const canBulkDispatchShipmentForOrder = (order: WebOrderSummary) =>
   && order.latestShipment?.status !== "VOIDED"
   && order.latestShipment?.status !== "VOID_PENDING"
   && order.latestShipment?.status !== "DISPATCHED";
+
+const needsCloseoutReviewForOrder = (order: WebOrderSummary) =>
+  order.status === "READY_FOR_DISPATCH"
+  && order.fulfillmentMethod === "SHIPPING"
+  && Boolean(order.latestShipment)
+  && !order.latestShipment?.dispatchedAt
+  && (
+    Boolean(order.latestShipment?.providerSyncError)
+    || order.latestShipment?.status === "VOID_PENDING"
+    || order.latestShipment?.status === "VOIDED"
+  );
 
 const getOrderDispatchQueueHint = (order: WebOrderSummary) => {
   if (order.latestShipment?.dispatchedAt || order.status === "DISPATCHED") {
@@ -1372,6 +1394,10 @@ export const OnlineStoreOrdersPage = () => {
     () => visibleOrders.filter(canBulkCreateShipmentForOrder),
     [visibleOrders],
   );
+  const visibleBlockedCloseoutOrders = useMemo(
+    () => visibleOrders.filter(needsCloseoutReviewForOrder),
+    [visibleOrders],
+  );
   const selectedCreateEligibleOrders = useMemo(
     () => selectedOrders.filter(canBulkCreateShipmentForOrder),
     [selectedOrders],
@@ -1420,6 +1446,63 @@ export const OnlineStoreOrdersPage = () => {
   ]);
   const detailNextStep = selectedOrder ? getDetailNextStep(selectedOrder, selectedShipment) : null;
   const bulkResultGuidance = getBulkResultGuidance(bulkResult);
+  const closeoutDateLabel = useMemo(
+    () => new Date().toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }),
+    [],
+  );
+  const closeoutSummary = useMemo(() => {
+    const today = new Date();
+    const dispatchedTodayCount = visibleOrders.filter((order) => isSameLocalCalendarDay(order.latestShipment?.dispatchedAt, today)).length;
+    const readyToDispatchCount = visibleOrders.filter(canBulkDispatchShipmentForOrder).length;
+    const readyToCreateCount = visibleCreateEligibleOrders.length;
+    const readyToPrintCount = visibleOrders.filter(canBulkPrintShipmentForOrder).length;
+    const needsPackingCount = visibleNeedsPackingOrders.length;
+    const blockedCount = visibleBlockedCloseoutOrders.length;
+    const outstandingCount =
+      readyToDispatchCount
+      + readyToCreateCount
+      + readyToPrintCount
+      + needsPackingCount
+      + blockedCount;
+    const completedBenchCount = visibleOrders.filter((order) => order.status === "DISPATCHED" || Boolean(order.latestShipment?.dispatchedAt)).length;
+
+    return {
+      dispatchedTodayCount,
+      readyToDispatchCount,
+      readyToCreateCount,
+      readyToPrintCount,
+      needsPackingCount,
+      blockedCount,
+      outstandingCount,
+      completedBenchCount,
+    };
+  }, [visibleBlockedCloseoutOrders.length, visibleCreateEligibleOrders.length, visibleNeedsPackingOrders.length, visibleOrders]);
+  const closeoutHandoffText = useMemo(() => {
+    const lines = [
+      `Dispatch closeout for ${closeoutDateLabel} (current visible queue)`,
+      `- ${closeoutSummary.dispatchedTodayCount} dispatched today`,
+      `- ${closeoutSummary.readyToDispatchCount} printed but not dispatched`,
+      `- ${closeoutSummary.readyToPrintCount} shipment labels created but not printed`,
+      `- ${closeoutSummary.readyToCreateCount} packed and ready for shipment creation`,
+      `- ${closeoutSummary.needsPackingCount} still need packing`,
+      `- ${closeoutSummary.blockedCount} blocked or review-needed`,
+    ];
+
+    if (closeoutSummary.outstandingCount === 0) {
+      lines.push("Handoff: the visible dispatch bench is clear. No outstanding parcels require immediate action in this scope.");
+    } else {
+      lines.push(
+        "Handoff: ready-to-dispatch parcels should be completed before bench sign-off where possible. Blocked items need manager or provider review, and packing or label-creation work can be handed into the next shift if carriers are already closed.",
+      );
+    }
+
+    return lines.join("\n");
+  }, [closeoutDateLabel, closeoutSummary]);
   const packingSessionSummary = useMemo(() => ({
     packedCount: packingSession.filter((entry) => entry.outcome === "PACKED").length,
     unpackedCount: packingSession.filter((entry) => entry.outcome === "UNPACKED").length,
@@ -1499,6 +1582,10 @@ export const OnlineStoreOrdersPage = () => {
     setSelectedOrderIds(visibleOrders.filter(canBulkDispatchShipmentForOrder).map((order) => order.id));
   }, [visibleOrders]);
 
+  const selectBlockedReviewQueue = useCallback(() => {
+    setSelectedOrderIds(visibleOrders.filter(needsCloseoutReviewForOrder).map((order) => order.id));
+  }, [visibleOrders]);
+
   const clearBulkSelection = useCallback(() => {
     setSelectedOrderIds([]);
   }, []);
@@ -1555,6 +1642,18 @@ export const OnlineStoreOrdersPage = () => {
   const handleJumpToShipmentSection = useCallback(() => {
     shipmentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
+
+  const handleCopyCloseoutSummary = useCallback(async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard copy is not available here. The handoff summary text remains visible for manual copy.");
+      }
+      await navigator.clipboard.writeText(closeoutHandoffText);
+      success("Dispatch closeout summary copied for handoff.");
+    } catch (copyError) {
+      error(copyError instanceof Error ? copyError.message : "Failed to copy the dispatch closeout summary");
+    }
+  }, [closeoutHandoffText, error, success]);
 
   const handleRefreshShipment = async () => {
     if (!selectedOrder || !selectedShipment) {
@@ -2026,6 +2125,82 @@ export const OnlineStoreOrdersPage = () => {
           </select>
         </label>
       </div>
+
+      <SurfaceCard className="online-orders-closeout-card" data-testid="online-store-closeout">
+        <div className="online-orders-closeout-card__header">
+          <div>
+            <span className="online-orders-next-step__eyebrow">Dispatch closeout / handoff</span>
+            <h2>Bench closeout for {closeoutDateLabel}</h2>
+          </div>
+          <span className={`status-badge${closeoutSummary.outstandingCount === 0 ? " status-ready" : ""}`}>
+            {closeoutSummary.outstandingCount === 0 ? "Bench clear in visible scope" : `${closeoutSummary.outstandingCount} outstanding`}
+          </span>
+        </div>
+        <div className="online-orders-closeout-card__metrics">
+          <article className="online-orders-closeout-card__metric">
+            <span>Dispatched today</span>
+            <strong>{closeoutSummary.dispatchedTodayCount}</strong>
+          </article>
+          <article className="online-orders-closeout-card__metric">
+            <span>Printed, not dispatched</span>
+            <strong>{closeoutSummary.readyToDispatchCount}</strong>
+          </article>
+          <article className="online-orders-closeout-card__metric">
+            <span>Packed, no shipment</span>
+            <strong>{closeoutSummary.readyToCreateCount}</strong>
+          </article>
+          <article className="online-orders-closeout-card__metric">
+            <span>Shipment created, not printed</span>
+            <strong>{closeoutSummary.readyToPrintCount}</strong>
+          </article>
+          <article className="online-orders-closeout-card__metric">
+            <span>Needs packing</span>
+            <strong>{closeoutSummary.needsPackingCount}</strong>
+          </article>
+          <article className="online-orders-closeout-card__metric">
+            <span>Blocked / review</span>
+            <strong>{closeoutSummary.blockedCount}</strong>
+          </article>
+        </div>
+        <div className="online-orders-closeout-card__guidance">
+          <div className="restricted-panel info-panel online-orders-info-panel">
+            {closeoutSummary.outstandingCount === 0
+              ? `All currently visible dispatch work is closed out. ${closeoutSummary.completedBenchCount} orders in this scope have already been completed or handed off cleanly.`
+              : closeoutSummary.blockedCount > 0
+                ? "Outstanding blocked rows need review before the bench is considered fully handed over. Printed-but-not-dispatched parcels should be resolved first, then provider or void issues can be handed to the next shift or a manager."
+                : "Outstanding work remains, but it is still in a normal operational state. Finish ready-to-dispatch parcels first, then decide whether remaining packing or label work can safely wait until tomorrow."}
+          </div>
+          <div className="online-orders-closeout-card__actions">
+            <button type="button" className="button-link" onClick={selectNeedsPackingQueue} disabled={loadingOrders || pendingAction.length > 0}>
+              Review Needs Packing
+            </button>
+            <button type="button" className="button-link" onClick={selectPackedQueue} disabled={loadingOrders || pendingAction.length > 0}>
+              Review Ready To Create
+            </button>
+            <button type="button" className="button-link" onClick={selectPrintableQueue} disabled={loadingOrders || pendingAction.length > 0}>
+              Review Ready To Print
+            </button>
+            <button type="button" className="button-link" onClick={selectDispatchQueue} disabled={loadingOrders || pendingAction.length > 0}>
+              Review Ready To Dispatch
+            </button>
+            <button type="button" className="button-link" onClick={selectBlockedReviewQueue} disabled={loadingOrders || pendingAction.length > 0}>
+              Review Blocked Items
+            </button>
+            <button
+              type="button"
+              className="button-link"
+              onClick={() => void handleCopyCloseoutSummary()}
+              disabled={pendingAction.length > 0}
+              data-testid="online-store-closeout-copy"
+            >
+              Copy Handoff Summary
+            </button>
+          </div>
+        </div>
+        <pre className="online-orders-closeout-card__summary" data-testid="online-store-closeout-summary-text">
+          {closeoutHandoffText}
+        </pre>
+      </SurfaceCard>
 
       <div className="online-orders-layout">
         <SurfaceCard className="online-orders-panel">
