@@ -12,26 +12,51 @@ const LABEL_HEIGHT_MM = 32;
 const LABEL_DPI = 300;
 const PADDING_X = 18;
 const PADDING_Y = 16;
-const PRICE_FONT = "bold 30px Arial";
-const SHOP_FONT = "bold 16px Arial";
-const TITLE_FONT = "bold 26px Arial";
-const SECONDARY_FONT = "16px Arial";
-const BARCODE_TEXT_FONT = "18px monospace";
-const TITLE_MAX_LINES = 2;
-const LINE_HEIGHT = 28;
+const PRICE_FONT = "bold 38px Arial";
+const SHOP_FONT = "600 12px Arial";
+const TITLE_FONT = "bold 29px Arial";
+const VARIANT_FONT = "16px Arial";
+const BARCODE_TEXT_FONT = "15px monospace";
+const PRODUCT_NAME_MAX_LINES = 2;
+const PRODUCT_LINE_HEIGHT = 30;
 
 const mmToPx = (value: number) => Math.round((value / 25.4) * LABEL_DPI);
 
 export const PRODUCT_LABEL_WIDTH_PX = mmToPx(LABEL_WIDTH_MM);
 export const PRODUCT_LABEL_HEIGHT_PX = mmToPx(LABEL_HEIGHT_MM);
 
-const BARCODE_REGION_HEIGHT = 120;
-const BARCODE_TEXT_HEIGHT = 28;
+const BARCODE_REGION_HEIGHT = 112;
+const BARCODE_TEXT_HEIGHT = 20;
 const BARCODE_REGION_TOP = PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_REGION_HEIGHT - BARCODE_TEXT_HEIGHT;
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const sanitizeBarcode = (value: string | null) => value?.trim() ?? "";
+const sanitizeLine = (value: string | null | undefined) => value?.trim() ?? "";
+
+const normalizeShopLine = (value: string) => {
+  const trimmed = sanitizeLine(value);
+  if (!trimmed) {
+    return "";
+  }
+  if (/^corepos demo store ltd$/i.test(trimmed)) {
+    return "CorePOS";
+  }
+  return trimmed;
+};
+
+const normalizeVariantLine = (productName: string, variantName: string | null) => {
+  const trimmedVariant = sanitizeLine(variantName);
+  if (!trimmedVariant) {
+    return "";
+  }
+
+  if (trimmedVariant.localeCompare(productName.trim(), undefined, { sensitivity: "accent" }) === 0) {
+    return "";
+  }
+
+  return trimmedVariant;
+};
 
 const getBarcodeLineWidth = (value: string) => {
   if (value.length >= 24) {
@@ -69,12 +94,11 @@ const fitText = (
   return "…";
 };
 
-const drawWrappedTitle = (
+const wrapTextLines = (
   ctx: ReturnType<typeof createCanvas>["getContext"],
   text: string,
-  x: number,
-  y: number,
   maxWidth: number,
+  maxLines: number,
 ) => {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -95,23 +119,21 @@ const drawWrappedTitle = (
       currentLine = "";
     }
 
-    if (lines.length === TITLE_MAX_LINES) {
+    if (lines.length === maxLines) {
       break;
     }
   }
 
-  if (lines.length < TITLE_MAX_LINES && currentLine) {
+  if (lines.length < maxLines && currentLine) {
     lines.push(currentLine);
   }
 
-  const finalLines = lines.slice(0, TITLE_MAX_LINES);
-  if (finalLines.length === TITLE_MAX_LINES && words.length > finalLines.join(" ").split(/\s+/).length) {
-    finalLines[TITLE_MAX_LINES - 1] = fitText(ctx, finalLines[TITLE_MAX_LINES - 1], maxWidth);
+  const finalLines = lines.slice(0, maxLines);
+  if (finalLines.length === maxLines && words.length > finalLines.join(" ").split(/\s+/).length) {
+    finalLines[maxLines - 1] = fitText(ctx, finalLines[maxLines - 1], maxWidth);
   }
 
-  finalLines.forEach((line, index) => {
-    ctx.fillText(fitText(ctx, line, maxWidth), x, y + index * LINE_HEIGHT);
-  });
+  return finalLines.map((line) => fitText(ctx, line, maxWidth));
 };
 
 const drawBarcode = (
@@ -150,6 +172,10 @@ export const renderProductLabelDocument = (label: ProductLabelPayload): Rendered
   const canvas = createCanvas(PRODUCT_LABEL_WIDTH_PX, PRODUCT_LABEL_HEIGHT_PX);
   const ctx = canvas.getContext("2d");
   const barcodeValue = sanitizeBarcode(label.barcode);
+  const productName = sanitizeLine(label.productName) || "Unnamed product";
+  const variantLine = normalizeVariantLine(productName, label.variantName);
+  const shopLine = normalizeShopLine(label.shopName);
+  const skuLine = sanitizeLine(label.sku);
   const rightEdge = PRODUCT_LABEL_WIDTH_PX - PADDING_X;
   const contentWidth = PRODUCT_LABEL_WIDTH_PX - PADDING_X * 2;
 
@@ -158,50 +184,53 @@ export const renderProductLabelDocument = (label: ProductLabelPayload): Rendered
   ctx.textBaseline = "top";
   ctx.fillStyle = "#111111";
 
-  ctx.font = SHOP_FONT;
-  ctx.fillText(fitText(ctx, label.shopName, contentWidth - 140), PADDING_X, PADDING_Y);
-
-  ctx.font = PRICE_FONT;
-  const priceText = formatMoney(label.pricePence);
-  const priceWidth = ctx.measureText(priceText).width;
-  ctx.fillText(priceText, rightEdge - priceWidth, PADDING_Y - 4);
-
-  const secondaryParts = [label.brand, label.sku].filter(Boolean);
-  const secondaryLine = secondaryParts.length > 0 ? secondaryParts.join(" · ") : "Preferred operational barcode";
-
-  ctx.font = SECONDARY_FONT;
-  ctx.fillStyle = "#4b5563";
-  ctx.fillText(fitText(ctx, secondaryLine, contentWidth), PADDING_X, 58);
+  if (shopLine) {
+    ctx.font = SHOP_FONT;
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(fitText(ctx, shopLine, contentWidth), PADDING_X, PADDING_Y);
+  }
 
   ctx.font = TITLE_FONT;
   ctx.fillStyle = "#111111";
-  const title = label.variantName ? `${label.productName} · ${label.variantName}` : label.productName;
-  drawWrappedTitle(ctx, title, PADDING_X, 84, contentWidth);
+  const productLines = wrapTextLines(ctx, productName, contentWidth, PRODUCT_NAME_MAX_LINES);
+  const productStartY = 48;
+  productLines.forEach((line, index) => {
+    ctx.fillText(line, PADDING_X, productStartY + index * PRODUCT_LINE_HEIGHT);
+  });
 
-  ctx.strokeStyle = "#d1d5db";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(PADDING_X, BARCODE_REGION_TOP - 8);
-  ctx.lineTo(rightEdge, BARCODE_REGION_TOP - 8);
-  ctx.stroke();
+  const variantY = productStartY + productLines.length * PRODUCT_LINE_HEIGHT + 10;
+  if (variantLine) {
+    ctx.font = VARIANT_FONT;
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(fitText(ctx, variantLine, contentWidth), PADDING_X, variantY);
+  }
+
+  ctx.font = PRICE_FONT;
+  ctx.fillStyle = "#111111";
+  const priceText = formatMoney(label.pricePence);
+  const priceWidth = ctx.measureText(priceText).width;
+  const priceY = variantLine ? variantY + 30 : productStartY + productLines.length * PRODUCT_LINE_HEIGHT + 10;
+  ctx.fillText(priceText, rightEdge - priceWidth, priceY);
 
   if (barcodeValue) {
     drawBarcode(ctx, barcodeValue, PADDING_X, BARCODE_REGION_TOP, contentWidth);
     ctx.font = BARCODE_TEXT_FONT;
-    ctx.fillStyle = "#111111";
-    const barcodeText = fitText(ctx, barcodeValue, contentWidth);
+    ctx.fillStyle = "#4b5563";
+    const barcodeText = fitText(ctx, skuLine || barcodeValue, contentWidth);
     const barcodeTextWidth = ctx.measureText(barcodeText).width;
     ctx.fillText(
       barcodeText,
       Math.max(PADDING_X, (PRODUCT_LABEL_WIDTH_PX - barcodeTextWidth) / 2),
-      PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 4,
+      PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 2,
     );
   } else {
     ctx.font = "bold 20px Arial";
     ctx.fillStyle = "#6b7280";
-    ctx.fillText("BARCODE PENDING", PADDING_X, BARCODE_REGION_TOP + 26);
-    ctx.font = SECONDARY_FONT;
-    ctx.fillText("Add a preferred barcode before direct-printing this label.", PADDING_X, BARCODE_REGION_TOP + 62);
+    ctx.fillText("BARCODE PENDING", PADDING_X, BARCODE_REGION_TOP + 30);
+    if (skuLine) {
+      ctx.font = BARCODE_TEXT_FONT;
+      ctx.fillText(fitText(ctx, skuLine, contentWidth), PADDING_X, PRODUCT_LABEL_HEIGHT_PX - PADDING_Y - BARCODE_TEXT_HEIGHT + 2);
+    }
   }
 
   return {
