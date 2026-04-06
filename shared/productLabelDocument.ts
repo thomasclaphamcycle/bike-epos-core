@@ -22,7 +22,7 @@ const META_FONT = "600 10px Arial";
 const TITLE_FONT = "700 24px Arial";
 const VARIANT_FONT = "600 15px Arial";
 const PRICE_FONT = "bold 29px Arial";
-const BARCODE_TEXT_FONT = "600 13px monospace";
+const BARCODE_TEXT_FONT = "700 19px monospace";
 const PRODUCT_NAME_MAX_LINES = 2;
 const PRODUCT_LINE_HEIGHT = 23;
 const LOGO_MAX_HEIGHT = 117;
@@ -42,7 +42,7 @@ export const PRODUCT_LABEL_WIDTH_PX = mmToPx(LABEL_WIDTH_MM);
 export const PRODUCT_LABEL_HEIGHT_PX = mmToPx(LABEL_HEIGHT_MM);
 
 const BARCODE_REGION_HEIGHT = 72;
-const BARCODE_TEXT_HEIGHT = 12;
+const BARCODE_TEXT_HEIGHT = 20;
 const BARCODE_TEXT_GAP = 3;
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;

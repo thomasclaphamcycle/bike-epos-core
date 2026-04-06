@@ -876,7 +876,7 @@ body {
 
 .product-label__barcode-number {
   text-align: center;
-  font-size: 3.9px;
+  font-size: 5.6px;
   line-height: 1;
   letter-spacing: 0.02em;
   color: #4b5563;
@@ -1008,7 +1008,7 @@ body {
   }
 
   .product-label__barcode-number {
-    font-size: 3.7px;
+    font-size: 5.2px;
     letter-spacing: 0.02em;
   }
 }
