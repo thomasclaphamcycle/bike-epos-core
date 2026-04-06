@@ -67,6 +67,10 @@ export const ProductLabelPrintPage = lazyPage(
   () => import("./pages/ProductLabelPrintPage"),
   "ProductLabelPrintPage",
 );
+export const BikeTagPrintPage = lazyPage(
+  () => import("./pages/BikeTagPrintPage"),
+  "BikeTagPrintPage",
+);
 export const SalesHistoryPage = lazyPage(
   () => import("./pages/SalesHistoryPage"),
   "SalesHistoryPage",

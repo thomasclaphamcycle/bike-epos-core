@@ -1517,6 +1517,227 @@ body {
   }
 }
 
+.bike-tag-print-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  background: linear-gradient(180deg, #eff4f8 0%, #dde7f0 100%);
+}
+
+.bike-tag-print-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.bike-tag-print-page__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.bike-tag-print-page__copy h1,
+.bike-tag-print-page__copy p {
+  margin: 0;
+}
+
+.bike-tag-print-page__sheet {
+  display: grid;
+  place-items: start center;
+}
+
+.bike-tag-print-page__state-card {
+  width: min(148mm, 100%);
+}
+
+.bike-tag-document {
+  width: 148mm;
+  min-height: 210mm;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+.bike-tag-document__panel {
+  padding: 10mm 9mm;
+  display: grid;
+  gap: 8mm;
+}
+
+.bike-tag-document__panel--front {
+  background: linear-gradient(180deg, #f7fbff 0%, #eef4fa 100%);
+  align-content: space-between;
+}
+
+.bike-tag-document__panel--back {
+  border-top: 1.5px dashed rgba(100, 116, 139, 0.55);
+  align-content: space-between;
+}
+
+.bike-tag-document__brand-strip,
+.bike-tag-document__back-copy {
+  display: grid;
+  gap: 4mm;
+}
+
+.bike-tag-document__brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+}
+
+.bike-tag-document__store-logo {
+  max-width: 44mm;
+  max-height: 13mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.bike-tag-document__fallback-logo {
+  flex: 0 0 auto;
+}
+
+.bike-tag-document__brand-copy {
+  display: grid;
+  gap: 1mm;
+}
+
+.bike-tag-document__brand-name,
+.bike-tag-document__price-eyebrow,
+.bike-tag-document__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.bike-tag-document__brand-subtitle,
+.bike-tag-document__front-note,
+.bike-tag-document__price-support,
+.bike-tag-document__variant-line,
+.bike-tag-document__barcode-value {
+  color: #475569;
+}
+
+.bike-tag-document__front-note {
+  font-size: 0.9rem;
+}
+
+.bike-tag-document__price-block {
+  display: grid;
+  gap: 3mm;
+  text-align: center;
+}
+
+.bike-tag-document__price-value {
+  font-size: 2.9rem;
+  line-height: 0.95;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.bike-tag-document__price-support {
+  font-size: 0.92rem;
+}
+
+.bike-tag-document__back-copy h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.08;
+}
+
+.bike-tag-document__variant-line {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+
+.bike-tag-document__spec-list {
+  margin: 0;
+  padding-left: 5mm;
+  display: grid;
+  gap: 2mm;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+
+.bike-tag-document__barcode-panel {
+  display: grid;
+  gap: 3mm;
+  justify-items: center;
+  padding-top: 2mm;
+}
+
+.bike-tag-document__barcode-art {
+  width: 100%;
+  max-width: 104mm;
+}
+
+.bike-tag-document__barcode-art svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.bike-tag-document__barcode-fallback {
+  width: 100%;
+  padding: 7mm 5mm;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  display: grid;
+  gap: 2mm;
+  justify-items: center;
+  text-align: center;
+  background: #f8fafc;
+}
+
+@media (max-width: 960px) {
+  .bike-tag-print-page {
+    padding: 16px;
+  }
+
+  .bike-tag-print-page__actions {
+    align-items: stretch;
+  }
+
+  .bike-tag-document {
+    width: min(148mm, 100%);
+    min-height: auto;
+  }
+}
+
+@media print {
+  .bike-tag-print-page {
+    min-height: auto;
+    padding: 0;
+    background: #fff;
+  }
+
+  .bike-tag-print-page__actions,
+  .bike-tag-print-page__copy {
+    display: none;
+  }
+
+  .bike-tag-print-page__sheet {
+    place-items: start;
+  }
+
+  .bike-tag-document {
+    width: auto;
+    min-height: auto;
+    border: 0;
+    box-shadow: none;
+  }
+}
+
 a {
   color: var(--cp-blue);
 }

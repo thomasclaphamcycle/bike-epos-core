@@ -8,6 +8,7 @@ import {
   AdminReviewPage,
   AlertsCentrePage,
   BackupToolkitPage,
+  BikeTagPrintPage,
   BusinessIntelligencePage,
   BikeHistoryPage,
   BikeHirePage,
@@ -749,6 +750,14 @@ export const App = () => {
         <Route path="/site/workshop" element={<CustomerSitePage variant="workshop" />} />
         <Route path="/site/contact" element={<CustomerSitePage variant="contact" />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/variants/:variantId/bike-tag/print"
+          element={(
+            <ProtectedRoute>
+              <BikeTagPrintPage />
+            </ProtectedRoute>
+          )}
+        />
         <Route
           path="/inventory/:variantId/label"
           element={(
