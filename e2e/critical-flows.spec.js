@@ -416,7 +416,7 @@ test("Login then POS page loads and can search products", async ({ page, request
   await expect(page.locator("#search-table-wrap")).toContainText(seeded.sku);
 });
 
-test("Inventory detail opens the folded A5 bike tag print page", async ({ page, request }) => {
+test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
     prefix: "bike-tag-print",
@@ -438,11 +438,14 @@ test("Inventory detail opens the folded A5 bike tag print page", async ({ page, 
   await page.getByRole("link", { name: "Print bike tag" }).click();
   await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
   await expect(page.getByRole("heading", { name: "Bike Tag" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Print A5 bike tag" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print 2-up bike tags" })).toBeVisible();
+  await expect(page.getByText("2 identical A6 bike tags side by side", { exact: false })).toBeVisible();
   await expect(page.getByTestId("bike-tag-document")).toBeVisible();
-  await expect(page.getByTestId("bike-tag-document")).toContainText(seeded.product.name);
-  await expect(page.getByTestId("bike-tag-document")).toContainText("£2,499.00");
-  await expect(page.getByTestId("barcode-graphic")).toBeVisible();
+  await expect(page.getByTestId("bike-tag-card")).toHaveCount(2);
+  await expect(page.getByTestId("bike-tag-card").first()).toContainText(seeded.product.name);
+  await expect(page.getByTestId("bike-tag-card").nth(1)).toContainText(seeded.product.name);
+  await expect(page.getByTestId("bike-tag-card").first()).toContainText("£2,499.00");
+  await expect(page.getByTestId("barcode-graphic")).toHaveCount(2);
   await expect(page.locator(".app-sidebar")).toHaveCount(0);
 });
 
