@@ -75,6 +75,7 @@ const run = async () => {
         printerModelHint: "GK420D_OR_COMPATIBLE",
         printerName: "Dispatch Zebra GK420d",
         transportMode: "RAW_TCP",
+        windowsPrinterName: null,
         rawTcpHost: "127.0.0.1",
         rawTcpPort: printerAddress.port,
         copies: 2,
@@ -135,6 +136,35 @@ const run = async () => {
     const expectedPayload = `${printRequest.document.content}\n${printRequest.document.content}`;
     assert.equal(received, expectedPayload);
     assert.equal(payload.job.bytesSent, Buffer.byteLength(expectedPayload, "utf8"));
+
+    if (process.platform !== "win32") {
+      const windowsPrinterRequest = {
+        ...printRequest,
+        printer: {
+          ...printRequest.printer,
+          transportMode: "WINDOWS_PRINTER",
+          rawTcpHost: null,
+          rawTcpPort: null,
+          windowsPrinterName: "ZDesigner GK420d",
+        },
+      };
+
+      const windowsPrinterRes = await fetch(`http://${agent.host}:${agent.port}/jobs/shipment-label`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+        },
+        body: JSON.stringify({ printRequest: windowsPrinterRequest }),
+      });
+      const windowsPrinterPayload = await windowsPrinterRes.json();
+      assert.equal(windowsPrinterRes.status, 502, JSON.stringify(windowsPrinterPayload));
+      assert.equal(windowsPrinterPayload.error.code, "PRINT_AGENT_TRANSPORT_FAILED");
+      assert.match(
+        windowsPrinterPayload.error.message,
+        /require a Windows host running the CorePOS shipment print helper/i,
+      );
+    }
 
     const productLabelRequest = {
       version: 1,

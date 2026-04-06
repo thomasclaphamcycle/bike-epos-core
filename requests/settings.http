@@ -105,6 +105,21 @@ X-Staff-Id: demo-admin
   "setAsDefaultShippingLabel": true
 }
 
+### Create a registered USB Zebra helper printer (ADMIN)
+POST {{baseUrl}}/api/settings/printers
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "name": "Dispatch Zebra USB Helper",
+  "key": "DISPATCH_ZEBRA_USB_HELPER",
+  "transportMode": "WINDOWS_PRINTER",
+  "windowsPrinterName": "ZDesigner GK420d",
+  "location": "Dispatch bench",
+  "notes": "USB Zebra running through the Windows helper host"
+}
+
 ### Create a registered Dymo product-label printer (ADMIN)
 POST {{baseUrl}}/api/settings/printers
 Content-Type: application/json

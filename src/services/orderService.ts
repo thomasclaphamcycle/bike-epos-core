@@ -898,6 +898,7 @@ const buildPrintRequest = (
     printerModelHint: printer.printerModelHint,
     printerName: printer.name,
     transportMode: printer.transportMode,
+    windowsPrinterName: printer.windowsPrinterName,
     rawTcpHost: printer.rawTcpHost,
     rawTcpPort: printer.rawTcpPort,
     copies: Number.isInteger(input.copies) && input.copies && input.copies > 0 ? input.copies : 1,
