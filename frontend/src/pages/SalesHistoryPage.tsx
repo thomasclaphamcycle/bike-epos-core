@@ -471,6 +471,21 @@ export const SalesHistoryPage = () => {
                       <td>
                         <div className="table-primary mono-text">{row.orderNo}</div>
                         <div className="table-secondary">{describeSource(row.source)}</div>
+                        {row.status === "complete" ? (
+                          <div className="sales-history-row-actions">
+                            <button
+                              type="button"
+                              className="link-button"
+                              data-testid={`sales-history-invoice-link-${row.id}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                navigate(`/sales/${encodeURIComponent(row.id)}/invoice/print`);
+                              }}
+                            >
+                              A4 invoice
+                            </button>
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         <div className="table-primary">{row.soldBy.name || "-"}</div>

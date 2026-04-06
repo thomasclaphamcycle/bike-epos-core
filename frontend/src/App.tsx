@@ -61,6 +61,7 @@ import {
   ReorderSuggestionsPage,
   SalesAnalyticsPage,
   SalesHistoryPage,
+  SalesInvoicePrintPage,
   SavedViewsPage,
   SalesReceiptPrintPage,
   ServiceRemindersPage,
@@ -753,6 +754,14 @@ export const App = () => {
           element={(
             <ProtectedRoute>
               <ProductLabelPrintPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/sales/:saleId/invoice/print"
+          element={(
+            <ProtectedRoute>
+              <SalesInvoicePrintPage />
             </ProtectedRoute>
           )}
         />
