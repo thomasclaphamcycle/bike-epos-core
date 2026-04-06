@@ -518,6 +518,7 @@ export const InventoryItemPage = () => {
             <Link to="/management/reordering">Reordering</Link>
             <Link to="/management/inventory">Inventory intel</Link>
             <Link to="/inventory/stocktakes">Stocktake sessions</Link>
+            <Link to={`/variants/${variantId}/bike-tag/print`}>Print bike tag</Link>
             <Link to={`/inventory/${variantId}/label`}>Print label</Link>
             <Link to={`/inventory/${variantId}?mode=count`}>Cycle count</Link>
             <Link to="/inventory">Back to Inventory</Link>

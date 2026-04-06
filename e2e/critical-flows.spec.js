@@ -416,6 +416,36 @@ test("Login then POS page loads and can search products", async ({ page, request
   await expect(page.locator("#search-table-wrap")).toContainText(seeded.sku);
 });
 
+test("Inventory detail opens the folded A5 bike tag print page", async ({ page, request }) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "bike-tag-print",
+  });
+  const seeded = await seedCatalogVariant(request, {
+    prefix: "bike-tag-print",
+    retailPricePence: 249900,
+  });
+
+  await apiJsonWithHeaderBypass(request, "PATCH", `/api/products/${encodeURIComponent(seeded.product.id)}`, "MANAGER", {
+    data: {
+      description: "Full carbon gravel bike, Shimano 105 Di2, hydraulic disc brakes, tubeless-ready wheels",
+    },
+  });
+
+  await loginViaUi(page, credentials, `/inventory/${seeded.variant.id}`, { surface: "frontend" });
+  await expect(page.getByRole("heading", { name: "Inventory Detail" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Print bike tag" }).click();
+  await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
+  await expect(page.getByRole("heading", { name: "Bike Tag" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print A5 bike tag" })).toBeVisible();
+  await expect(page.getByTestId("bike-tag-document")).toBeVisible();
+  await expect(page.getByTestId("bike-tag-document")).toContainText(seeded.product.name);
+  await expect(page.getByTestId("bike-tag-document")).toContainText("£2,499.00");
+  await expect(page.getByTestId("barcode-graphic")).toBeVisible();
+  await expect(page.locator(".app-sidebar")).toHaveCount(0);
+});
+
 test("Login then POS add to basket, checkout cash, and open receipt page", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",
