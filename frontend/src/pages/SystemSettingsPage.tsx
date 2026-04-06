@@ -230,6 +230,27 @@ type ProductLabelPrintAgentFormState = {
   clearSharedSecret: boolean;
 };
 
+type ShippingPrintAgentConfig = {
+  url: string | null;
+  hasSharedSecret: boolean;
+  sharedSecretHint: string | null;
+  updatedAt: string | null;
+  effectiveUrl: string | null;
+  effectiveSource: "settings" | "environment" | "unconfigured";
+  envFallbackUrl: string | null;
+  envFallbackHasSharedSecret: boolean;
+};
+
+type ShippingPrintAgentSettingsResponse = {
+  config: ShippingPrintAgentConfig;
+};
+
+type ShippingPrintAgentFormState = {
+  url: string;
+  sharedSecret: string;
+  clearSharedSecret: boolean;
+};
+
 const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
@@ -275,6 +296,12 @@ const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
 };
 
 const DEFAULT_PRODUCT_LABEL_PRINT_AGENT_FORM: ProductLabelPrintAgentFormState = {
+  url: "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+};
+
+const DEFAULT_SHIPPING_PRINT_AGENT_FORM: ShippingPrintAgentFormState = {
   url: "",
   sharedSecret: "",
   clearSharedSecret: false,
@@ -510,6 +537,14 @@ const toProductLabelPrintAgentFormState = (
   clearSharedSecret: false,
 });
 
+const toShippingPrintAgentFormState = (
+  config: ShippingPrintAgentConfig | null,
+): ShippingPrintAgentFormState => ({
+  url: config?.url ?? "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+});
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -520,6 +555,10 @@ export const SystemSettingsPage = () => {
   const [providerSettingsPayload, setProviderSettingsPayload] = useState<ShippingProviderSettingsListResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [providerForm, setProviderForm] = useState<ShippingProviderFormState>(DEFAULT_SHIPPING_PROVIDER_FORM);
+  const [shippingPrintAgentConfig, setShippingPrintAgentConfig] = useState<ShippingPrintAgentConfig | null>(null);
+  const [shippingPrintAgentForm, setShippingPrintAgentForm] = useState<ShippingPrintAgentFormState>(
+    DEFAULT_SHIPPING_PRINT_AGENT_FORM,
+  );
   const [productLabelPrintAgentConfig, setProductLabelPrintAgentConfig] = useState<ProductLabelPrintAgentConfig | null>(null);
   const [productLabelPrintAgentForm, setProductLabelPrintAgentForm] = useState<ProductLabelPrintAgentFormState>(
     DEFAULT_PRODUCT_LABEL_PRINT_AGENT_FORM,
@@ -534,6 +573,7 @@ export const SystemSettingsPage = () => {
   const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
   const [settingDefaultProvider, setSettingDefaultProvider] = useState(false);
+  const [savingShippingPrintAgent, setSavingShippingPrintAgent] = useState(false);
   const [savingProductLabelPrintAgent, setSavingProductLabelPrintAgent] = useState(false);
   const [savingPrinter, setSavingPrinter] = useState(false);
   const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
@@ -544,10 +584,18 @@ export const SystemSettingsPage = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const [storePayload, settingsPayload, providerSettingsResponse, productLabelPrintAgentResponse, printersResponse] = await Promise.all([
+        const [
+          storePayload,
+          settingsPayload,
+          providerSettingsResponse,
+          shippingPrintAgentResponse,
+          productLabelPrintAgentResponse,
+          printersResponse,
+        ] = await Promise.all([
           apiGet<StoreInfoResponse>("/api/settings/store-info"),
           apiGet<SettingsResponse>("/api/settings"),
           apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers"),
+          apiGet<ShippingPrintAgentSettingsResponse>("/api/settings/shipping-print-agent"),
           apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent"),
           apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
         ]);
@@ -575,6 +623,8 @@ export const SystemSettingsPage = () => {
             providerSettingsResponse.providers.find((provider) => provider.key === preferredProviderKey) ?? null,
           ),
         );
+        setShippingPrintAgentConfig(shippingPrintAgentResponse.config);
+        setShippingPrintAgentForm(toShippingPrintAgentFormState(shippingPrintAgentResponse.config));
         setProductLabelPrintAgentConfig(productLabelPrintAgentResponse.config);
         setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(productLabelPrintAgentResponse.config));
         setPrintersPayload(printersResponse);
@@ -801,6 +851,22 @@ export const SystemSettingsPage = () => {
     return errors;
   }, [providerForm, selectedProvider]);
   const hasProviderValidationErrors = Object.keys(providerValidationErrors).length > 0;
+  const shippingPrintAgentValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof ShippingPrintAgentFormState, string>> = {};
+
+    if (shippingPrintAgentForm.url.trim() && !isValidUrl(shippingPrintAgentForm.url)) {
+      errors.url = "Helper URL must start with http:// or https://";
+    }
+    if (
+      shippingPrintAgentForm.clearSharedSecret
+      && shippingPrintAgentForm.sharedSecret.trim().length > 0
+    ) {
+      errors.sharedSecret = "Enter a new shared secret or clear the stored secret, not both.";
+    }
+
+    return errors;
+  }, [shippingPrintAgentForm]);
+  const hasShippingPrintAgentValidationErrors = Object.keys(shippingPrintAgentValidationErrors).length > 0;
   const productLabelPrintAgentValidationErrors = useMemo(() => {
     const errors: Partial<Record<keyof ProductLabelPrintAgentFormState, string>> = {};
 
@@ -902,6 +968,13 @@ export const SystemSettingsPage = () => {
     setProviderForm((current) => ({ ...current, [key]: value }));
   };
 
+  const setShippingPrintAgentField = <K extends keyof ShippingPrintAgentFormState>(
+    key: K,
+    value: ShippingPrintAgentFormState[K],
+  ) => {
+    setShippingPrintAgentForm((current) => ({ ...current, [key]: value }));
+  };
+
   const setProductLabelPrintAgentField = <K extends keyof ProductLabelPrintAgentFormState>(
     key: K,
     value: ProductLabelPrintAgentFormState[K],
@@ -988,6 +1061,13 @@ export const SystemSettingsPage = () => {
     return payload;
   };
 
+  const loadShippingPrintAgentSettings = async () => {
+    const payload = await apiGet<ShippingPrintAgentSettingsResponse>("/api/settings/shipping-print-agent");
+    setShippingPrintAgentConfig(payload.config);
+    setShippingPrintAgentForm(toShippingPrintAgentFormState(payload.config));
+    return payload;
+  };
+
   const selectShippingProviderForEditing = (providerKey: string) => {
     const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
     setSelectedProviderKey(providerKey);
@@ -1043,6 +1123,38 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to save product-label print helper settings");
     } finally {
       setSavingProductLabelPrintAgent(false);
+    }
+  };
+
+  const saveShippingPrintAgentSettings = async () => {
+    if (hasShippingPrintAgentValidationErrors) {
+      error("Fix the highlighted shipping print helper fields before saving.");
+      return;
+    }
+
+    setSavingShippingPrintAgent(true);
+    try {
+      const payload = await apiPut<ShippingPrintAgentSettingsResponse>(
+        "/api/settings/shipping-print-agent",
+        {
+          url: shippingPrintAgentForm.url.trim() || null,
+          sharedSecret: shippingPrintAgentForm.sharedSecret.trim() || undefined,
+          clearSharedSecret: shippingPrintAgentForm.clearSharedSecret,
+        },
+      );
+      setShippingPrintAgentConfig(payload.config);
+      setShippingPrintAgentForm(toShippingPrintAgentFormState(payload.config));
+      success(
+        payload.config.effectiveSource === "settings"
+          ? "Shipping print helper settings updated."
+          : payload.config.effectiveSource === "environment"
+            ? "Stored shipping helper settings cleared. CorePOS is using environment fallback."
+            : "Shipping print helper settings cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save shipping print helper settings");
+    } finally {
+      setSavingShippingPrintAgent(false);
     }
   };
 
@@ -2495,6 +2607,108 @@ export const SystemSettingsPage = () => {
             </section>
           </div>
         ) : null}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Shipping Print Helper (Zebra)"
+          description="Persist the Windows Zebra helper URL in CorePOS so shipment-label printing does not rely on backend environment variables."
+          actions={(
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => setShippingPrintAgentForm(toShippingPrintAgentFormState(shippingPrintAgentConfig))}
+                disabled={savingShippingPrintAgent}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveShippingPrintAgentSettings()}
+                disabled={savingShippingPrintAgent || hasShippingPrintAgentValidationErrors}
+              >
+                {savingShippingPrintAgent ? "Saving..." : "Save Helper"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Shipping Print Helper"
+            description="Fetching the persisted Zebra helper settings and any backend environment fallback."
+          />
+        ) : (
+          <div className="purchase-form-grid store-info-grid">
+            <label className="store-info-grid-span">
+              Helper base URL
+              <input
+                value={shippingPrintAgentForm.url}
+                onChange={(event) => setShippingPrintAgentField("url", event.target.value)}
+                placeholder="http://192.168.1.45:3211"
+              />
+              {shippingPrintAgentValidationErrors.url ? (
+                <span className="field-error">{shippingPrintAgentValidationErrors.url}</span>
+              ) : (
+                <span className="table-secondary">
+                  CorePOS posts shipment-label print jobs to <code>/jobs/shipment-label</code> on this helper.
+                </span>
+              )}
+            </label>
+            <label>
+              Shared secret
+              <input
+                type="password"
+                value={shippingPrintAgentForm.sharedSecret}
+                onChange={(event) => setShippingPrintAgentField("sharedSecret", event.target.value)}
+                placeholder={shippingPrintAgentConfig?.sharedSecretHint ?? "Enter a new shared secret"}
+              />
+              {shippingPrintAgentValidationErrors.sharedSecret ? (
+                <span className="field-error">{shippingPrintAgentValidationErrors.sharedSecret}</span>
+              ) : shippingPrintAgentConfig?.hasSharedSecret ? (
+                <span className="table-secondary">
+                  Stored secret: {shippingPrintAgentConfig.sharedSecretHint}
+                </span>
+              ) : (
+                <span className="table-secondary">
+                  Optional, but recommended when the Windows helper is reachable over the local network.
+                </span>
+              )}
+            </label>
+            <label className="store-settings-checkbox">
+              <span>Clear stored shared secret on save</span>
+              <div className="table-secondary">
+                Leave unticked to preserve the current secret when you are only changing the helper URL.
+              </div>
+              <input
+                type="checkbox"
+                checked={shippingPrintAgentForm.clearSharedSecret}
+                onChange={(event) => setShippingPrintAgentField("clearSharedSecret", event.target.checked)}
+              />
+            </label>
+            <div className="restricted-panel info-panel store-info-grid-span">
+              <strong>Effective helper:</strong>{" "}
+              {shippingPrintAgentConfig?.effectiveUrl ? (
+                <>
+                  <code>{shippingPrintAgentConfig.effectiveUrl}</code> via{" "}
+                  {shippingPrintAgentConfig.effectiveSource === "settings"
+                    ? "persisted Settings"
+                    : "backend environment fallback"}
+                  . Health check: <code>{`${shippingPrintAgentConfig.effectiveUrl}/health`}</code>
+                </>
+              ) : (
+                "No shipping print helper is configured yet. Save the Zebra helper URL in Settings before using Windows-hosted shipment printing."
+              )}
+            </div>
+            {shippingPrintAgentConfig?.effectiveSource === "environment" && shippingPrintAgentConfig.envFallbackUrl ? (
+              <div className="restricted-panel warning-panel store-info-grid-span">
+                CorePOS is currently using legacy environment fallback at <code>{shippingPrintAgentConfig.envFallbackUrl}</code>. Save a helper URL here to make the Zebra helper configuration persistent in CorePOS itself.
+              </div>
+            ) : null}
+          </div>
+        )}
       </SurfaceCard>
 
       <SurfaceCard>

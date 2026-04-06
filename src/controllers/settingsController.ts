@@ -11,6 +11,10 @@ import {
   updateProductLabelPrintAgentSettings,
 } from "../services/productLabelPrintAgentConfigService";
 import {
+  listShippingPrintAgentSettings,
+  updateShippingPrintAgentSettings,
+} from "../services/shipping/printAgentConfigService";
+import {
   createRegisteredPrinter,
   listRegisteredPrinters,
   setDefaultProductLabelPrinter,
@@ -231,6 +235,41 @@ const toProductLabelPrintAgentSettingsInput = (body: unknown) => {
   };
 };
 
+const toShippingPrintAgentSettingsInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(
+      400,
+      "shipping print agent body must be an object",
+      "INVALID_SHIPPING_PRINT_AGENT_SETTINGS",
+    );
+  }
+
+  const record = body as Record<string, unknown>;
+  if (record.url !== undefined && record.url !== null && typeof record.url !== "string") {
+    throw new HttpError(400, "url must be a string or null", "INVALID_SHIPPING_PRINT_AGENT_SETTINGS");
+  }
+  if (
+    record.sharedSecret !== undefined
+    && record.sharedSecret !== null
+    && typeof record.sharedSecret !== "string"
+  ) {
+    throw new HttpError(400, "sharedSecret must be a string or null", "INVALID_SHIPPING_PRINT_AGENT_SETTINGS");
+  }
+  if (record.clearSharedSecret !== undefined && typeof record.clearSharedSecret !== "boolean") {
+    throw new HttpError(
+      400,
+      "clearSharedSecret must be a boolean",
+      "INVALID_SHIPPING_PRINT_AGENT_SETTINGS",
+    );
+  }
+
+  return {
+    url: record.url as string | null | undefined,
+    sharedSecret: record.sharedSecret as string | null | undefined,
+    clearSharedSecret: record.clearSharedSecret as boolean | undefined,
+  };
+};
+
 export const listSettingsHandler = async (_req: Request, res: Response) => {
   const settings = await listShopSettings();
   res.json({ settings });
@@ -252,6 +291,11 @@ export const listStoreInfoHandler = async (_req: Request, res: Response) => {
 
 export const listProductLabelPrintAgentSettingsHandler = async (_req: Request, res: Response) => {
   const config = await listProductLabelPrintAgentSettings();
+  res.json({ config });
+};
+
+export const listShippingPrintAgentSettingsHandler = async (_req: Request, res: Response) => {
+  const config = await listShippingPrintAgentSettings();
   res.json({ config });
 };
 
@@ -353,6 +397,14 @@ export const setDefaultProductLabelPrinterHandler = async (req: Request, res: Re
 export const updateProductLabelPrintAgentSettingsHandler = async (req: Request, res: Response) => {
   const config = await updateProductLabelPrintAgentSettings(
     toProductLabelPrintAgentSettingsInput(req.body),
+    getRequestAuditActor(req),
+  );
+  res.json({ config });
+};
+
+export const updateShippingPrintAgentSettingsHandler = async (req: Request, res: Response) => {
+  const config = await updateShippingPrintAgentSettings(
+    toShippingPrintAgentSettingsInput(req.body),
     getRequestAuditActor(req),
   );
   res.json({ config });

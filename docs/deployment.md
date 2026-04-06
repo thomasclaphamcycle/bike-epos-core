@@ -13,10 +13,10 @@ Backend:
 - `NODE_ENV` (`development`, `test`, or `production`)
 - `OPS_LOGGING=1` (optional, enables concise structured operational logs for auth, workshop, purchasing, and inventory lifecycle events)
 - `COREPOS_DEBUG=1` (optional, adds concise request, error, and startup diagnostics for support/debug sessions)
-- `COREPOS_SHIPPING_PRINT_AGENT_URL` (optional, enables backend handoff for web-order shipping-label printing)
+- `COREPOS_SHIPPING_PRINT_AGENT_URL` (optional legacy fallback for web-order shipping-label printing when Shipping Print Helper settings are empty)
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
-- `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional but recommended when using a remote agent over a trusted LAN)
-- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (optional, enables backend handoff for direct Dymo product-label printing and falls back to `COREPOS_SHIPPING_PRINT_AGENT_URL`)
+- `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional legacy fallback secret when using a remote agent over a trusted LAN)
+- `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (optional legacy fallback for direct Dymo product-label printing and falls back to `COREPOS_SHIPPING_PRINT_AGENT_URL`)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
 
@@ -88,7 +88,7 @@ For a Windows Dymo host that should not keep a CorePOS repo checkout or run npm,
 npm run print-agent:package:dymo
 ```
 
-That command stages a copyable folder under `tmp/dymo-product-label-agent-bundle/` with `corepos-dymo-product-label-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Dymo host, create `corepos-dymo-product-label-agent.config.json` from the example, and point `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` at that helper.
+That command stages a copyable folder under `tmp/dymo-product-label-agent-bundle/` with `corepos-dymo-product-label-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Dymo host, create `corepos-dymo-product-label-agent.config.json` from the example, then save the helper URL and shared secret in CorePOS Settings under `Product-Label Print Helper`.
 
 For a Windows Zebra host running a USB-connected GK420d without a repo checkout or npm, build the standalone shipment helper EXE package from a CorePOS dev/release machine:
 
@@ -96,7 +96,7 @@ For a Windows Zebra host running a USB-connected GK420d without a repo checkout 
 npm run print-agent:package:zebra
 ```
 
-That command stages a copyable folder under `tmp/zebra-shipment-agent-bundle/` with `corepos-zebra-shipment-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Zebra host, create `corepos-zebra-shipment-agent.config.json` from the example, point `COREPOS_SHIPPING_PRINT_AGENT_URL` at that helper, and register the Zebra printer in CorePOS Settings with transport mode `WINDOWS_PRINTER`.
+That command stages a copyable folder under `tmp/zebra-shipment-agent-bundle/` with `corepos-zebra-shipment-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Zebra host, create `corepos-zebra-shipment-agent.config.json` from the example, save that helper URL and shared secret in CorePOS Settings under `Shipping Print Helper (Zebra)`, and register the Zebra printer in CorePOS Settings with transport mode `WINDOWS_PRINTER`.
 
 ## Runtime Diagnostics
 

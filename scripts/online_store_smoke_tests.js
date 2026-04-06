@@ -10,7 +10,8 @@ const { createSmokeServerController } = require("./smoke_server_helper");
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
-const PRINT_AGENT_SECRET = "online-store-smoke-print-secret";
+const ENV_PRINT_AGENT_SECRET = "online-store-smoke-env-print-secret";
+const PERSISTED_PRINT_AGENT_SECRET = "online-store-smoke-settings-print-secret";
 const ADMIN_HEADERS = {
   "X-Staff-Role": "ADMIN",
   "X-Staff-Id": "online-store-smoke-admin",
@@ -61,11 +62,11 @@ const readJsonBody = async (req) => {
   return body ? JSON.parse(body) : null;
 };
 
-const startFakePrintAgent = async () => {
+const startFakePrintAgent = async ({ sharedSecret }) => {
   const requests = [];
   const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/jobs/shipment-label") {
-      if (req.headers["x-corepos-print-agent-secret"] !== PRINT_AGENT_SECRET) {
+      if (req.headers["x-corepos-print-agent-secret"] !== sharedSecret) {
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: { code: "PRINT_AGENT_UNAUTHORIZED", message: "Secret mismatch" } }));
         return;
@@ -192,19 +193,61 @@ const createPrinter = async (body) => {
 const run = async () => {
   const createdOrderIds = [];
   const createdPrinterIds = [];
-  const fakePrintAgent = await startFakePrintAgent();
+  const envFallbackPrintAgent = await startFakePrintAgent({
+    sharedSecret: ENV_PRINT_AGENT_SECRET,
+  });
+  const persistedSettingsPrintAgent = await startFakePrintAgent({
+    sharedSecret: PERSISTED_PRINT_AGENT_SECRET,
+  });
   const serverController = createSmokeServerController({
     label: "online-store-smoke",
     baseUrl: BASE_URL,
     databaseUrl: DATABASE_URL,
     envOverrides: {
-      COREPOS_SHIPPING_PRINT_AGENT_URL: fakePrintAgent.url,
-      COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET: PRINT_AGENT_SECRET,
+      COREPOS_SHIPPING_PRINT_AGENT_URL: envFallbackPrintAgent.url,
+      COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET: ENV_PRINT_AGENT_SECRET,
     },
   });
 
   try {
+    await prisma.appConfig.deleteMany({
+      where: {
+        key: {
+          in: [
+            "dispatch.defaultShippingLabelPrinterId",
+            "dispatch.shippingPrintAgent",
+          ],
+        },
+      },
+    });
+
     await serverController.startIfNeeded();
+
+    const initialConfigRes = await fetchJson("/api/settings/shipping-print-agent", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(initialConfigRes.status, 200, JSON.stringify(initialConfigRes.json));
+    assert.equal(initialConfigRes.json.config.url, null);
+    assert.equal(initialConfigRes.json.config.effectiveSource, "environment");
+    assert.equal(initialConfigRes.json.config.envFallbackUrl, envFallbackPrintAgent.url);
+    assert.equal(initialConfigRes.json.config.envFallbackHasSharedSecret, true);
+
+    const saveConfigRes = await fetchJson("/api/settings/shipping-print-agent", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: persistedSettingsPrintAgent.url,
+        sharedSecret: PERSISTED_PRINT_AGENT_SECRET,
+      }),
+    });
+    assert.equal(saveConfigRes.status, 200, JSON.stringify(saveConfigRes.json));
+    assert.equal(saveConfigRes.json.config.url, persistedSettingsPrintAgent.url);
+    assert.equal(saveConfigRes.json.config.effectiveSource, "settings");
+    assert.equal(saveConfigRes.json.config.hasSharedSecret, true);
+    assert.match(saveConfigRes.json.config.sharedSecretHint, /^••••/);
 
     const defaultPrinter = await createPrinter({
       name: "Dispatch Zebra GK420d",
@@ -561,10 +604,26 @@ const run = async () => {
     assert.equal(helperPrintRes.json.printJob.simulated, false);
     assert.equal(helperPrintRes.json.printJob.printerTarget, "ZDesigner GK420d");
 
-    const helperPrintAgentRequest = fakePrintAgent.requests.at(-1);
+    const helperPrintAgentRequest = persistedSettingsPrintAgent.requests.at(-1);
     assert.equal(helperPrintAgentRequest?.printRequest?.printer?.transportMode, "WINDOWS_PRINTER");
     assert.equal(helperPrintAgentRequest?.printRequest?.printer?.windowsPrinterName, "ZDesigner GK420d");
     assert.equal(helperPrintAgentRequest?.printRequest?.printer?.printerId, windowsPrinter.id);
+
+    const clearStoredConfigRes = await fetchJson("/api/settings/shipping-print-agent", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: null,
+        clearSharedSecret: true,
+      }),
+    });
+    assert.equal(clearStoredConfigRes.status, 200, JSON.stringify(clearStoredConfigRes.json));
+    assert.equal(clearStoredConfigRes.json.config.url, null);
+    assert.equal(clearStoredConfigRes.json.config.effectiveSource, "environment");
+    assert.equal(clearStoredConfigRes.json.config.envFallbackUrl, envFallbackPrintAgent.url);
 
     const noMatchScanRes = await fetchJson("/api/online-store/dispatch-scan", {
       method: "POST",
@@ -789,6 +848,8 @@ const run = async () => {
     });
     assert.equal(failedPrintRes.status, 502, JSON.stringify(failedPrintRes.json));
     assert.equal(failedPrintRes.json.error.code, "SHIPPING_PRINT_AGENT_REJECTED");
+    const envFallbackPrintAgentRequest = envFallbackPrintAgent.requests.at(-1);
+    assert.equal(envFallbackPrintAgentRequest?.printRequest?.printer?.printerKey, "FORCE_FAILING_ZEBRA");
 
     const failedDetailRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createFailureOrderRes.json.order.id)}`, {
       headers: MANAGER_HEADERS,
@@ -915,7 +976,7 @@ const run = async () => {
     assert.equal(bulkDispatchedOrderDetailRes.json.order.status, "DISPATCHED");
     assert.equal(bulkDispatchedOrderDetailRes.json.order.shipments[0].status, "DISPATCHED");
 
-    assert.equal(fakePrintAgent.requests.length >= 3, true);
+    assert.equal(persistedSettingsPrintAgent.requests.length >= 3, true);
   } finally {
     if (createdOrderIds.length > 0) {
       await prisma.webOrder.deleteMany({
@@ -929,14 +990,20 @@ const run = async () => {
     }
     await prisma.appConfig.deleteMany({
       where: {
-        key: "dispatch.defaultShippingLabelPrinterId",
+        key: {
+          in: [
+            "dispatch.defaultShippingLabelPrinterId",
+            "dispatch.shippingPrintAgent",
+          ],
+        },
       },
     });
 
     await prisma.$disconnect();
     await Promise.allSettled([
       serverController.stop(),
-      fakePrintAgent.close(),
+      envFallbackPrintAgent.close(),
+      persistedSettingsPrintAgent.close(),
     ]);
   }
 };

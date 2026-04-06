@@ -74,6 +74,22 @@ GET {{baseUrl}}/api/settings/printers
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Get persisted shipping print helper settings (MANAGER+)
+GET {{baseUrl}}/api/settings/shipping-print-agent
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Update persisted shipping print helper settings (ADMIN)
+PUT {{baseUrl}}/api/settings/shipping-print-agent
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "url": "http://192.168.1.45:3211",
+  "sharedSecret": "replace-with-shared-secret"
+}
+
 ### Get persisted product-label print helper settings (MANAGER+)
 GET {{baseUrl}}/api/settings/product-label-print-agent
 X-Staff-Role: MANAGER
