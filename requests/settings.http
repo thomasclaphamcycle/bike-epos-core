@@ -79,6 +79,22 @@ GET {{baseUrl}}/api/settings/shipping-print-agent
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Get persisted bike-tag print helper settings (MANAGER+)
+GET {{baseUrl}}/api/settings/bike-tag-print-agent
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Update persisted bike-tag print helper settings (ADMIN)
+PUT {{baseUrl}}/api/settings/bike-tag-print-agent
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "url": "http://192.168.1.45:3213",
+  "sharedSecret": "replace-with-shared-secret"
+}
+
 ### Update persisted shipping print helper settings (ADMIN)
 PUT {{baseUrl}}/api/settings/shipping-print-agent
 Content-Type: application/json
@@ -153,6 +169,23 @@ X-Staff-Id: demo-admin
   "setAsDefaultProductLabel": true
 }
 
+### Create a registered office bike-tag printer (ADMIN)
+POST {{baseUrl}}/api/settings/printers
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "name": "Xerox VersaLink C405",
+  "key": "XEROX_BIKE_TAG",
+  "printerFamily": "OFFICE_DOCUMENT",
+  "transportMode": "WINDOWS_PRINTER",
+  "windowsPrinterName": "Xerox VersaLink C405",
+  "location": "Back office",
+  "notes": "Primary bike-tag office printer",
+  "setAsDefaultBikeTag": true
+}
+
 ### Update a registered dispatch printer (ADMIN)
 PATCH {{baseUrl}}/api/settings/printers/{{printerId}}
 Content-Type: application/json
@@ -178,6 +211,16 @@ X-Staff-Id: demo-admin
 
 ### Set the default product-label printer (ADMIN)
 PUT {{baseUrl}}/api/settings/printers/default-product-label
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "printerId": "{{printerId}}"
+}
+
+### Set the default bike-tag printer (ADMIN)
+PUT {{baseUrl}}/api/settings/printers/default-bike-tag
 Content-Type: application/json
 X-Staff-Role: ADMIN
 X-Staff-Id: demo-admin

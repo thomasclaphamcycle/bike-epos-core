@@ -16,6 +16,9 @@ Backend:
 - `COREPOS_SHIPPING_PRINT_AGENT_URL` (optional legacy fallback for web-order shipping-label printing when Shipping Print Helper settings are empty)
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional legacy fallback secret when using a remote agent over a trusted LAN)
+- `COREPOS_BIKE_TAG_PRINT_AGENT_URL` (optional legacy fallback for one-click office-printer bike-tag printing when Bike-Tag Print Helper settings are empty)
+- `COREPOS_BIKE_TAG_PRINT_AGENT_TIMEOUT_MS` (optional, default `10000`)
+- `COREPOS_BIKE_TAG_PRINT_AGENT_SHARED_SECRET` (optional legacy fallback secret when using a remote bike-tag helper over a trusted LAN)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (optional legacy fallback for direct Dymo product-label printing and falls back to `COREPOS_SHIPPING_PRINT_AGENT_URL`)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (optional, falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
@@ -74,13 +77,21 @@ npm --prefix frontend run dev
 
 The React app proxies `/api` to `http://localhost:3100` in development and is the recommended trial/evaluation surface on `http://localhost:5173/login`.
 
-Optional repo-local print agent for local development of web-order shipment labels and direct Dymo product labels:
+Optional repo-local print agent for local development of web-order shipment labels, office-printer bike tags, and direct Dymo product labels:
 
 ```bash
 npm run print-agent:start
 ```
 
-Then register a printer in `/management/settings`, mark it shipping-label capable or product-label capable as appropriate, and set it as the default printer for that workflow. For the full Windows/Zebra and Dymo local-agent setup, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
+Then register a printer in `/management/settings`, mark it shipping-label, bike-tag, or product-label capable as appropriate, and set it as the default printer for that workflow. For the full Windows helper setup, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
+
+For a Windows office-printer host that should print bike tags without a CorePOS repo checkout or npm, build the standalone bike-tag helper EXE package from a CorePOS dev/release machine:
+
+```bash
+npm run print-agent:package:bike-tag
+```
+
+That command stages a copyable folder under `tmp/bike-tag-agent-bundle/` with `corepos-bike-tag-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows office-printer host, create `corepos-bike-tag-agent.config.json` from the example, then save the helper URL and shared secret in CorePOS Settings under `Bike-Tag Print Helper`. Register the office printer in CorePOS Settings with printer family `OFFICE_DOCUMENT`, transport mode `WINDOWS_PRINTER`, and make it the default bike-tag printer.
 
 For a Windows Dymo host that should not keep a CorePOS repo checkout or run npm, build the standalone Dymo helper EXE package from a CorePOS dev/release machine:
 

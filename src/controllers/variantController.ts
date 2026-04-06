@@ -5,6 +5,7 @@ import {
   listVariants,
   updateVariantById,
 } from "../services/productService";
+import { printBikeTagDirect, renderBikeTagDocumentForVariant } from "../services/bikeTagPrintService";
 import { printProductLabelDirect, renderProductLabelDocumentForVariant } from "../services/productLabelPrintService";
 import { HttpError } from "../utils/http";
 import { parseOptionalIntegerQuery } from "../utils/requestParsing";
@@ -185,12 +186,54 @@ export const printVariantProductLabelDirectHandler = async (req: Request, res: R
   res.status(201).json(response);
 };
 
+export const printVariantBikeTagDirectHandler = async (req: Request, res: Response) => {
+  const body = req.body ?? {};
+  if (body && (typeof body !== "object" || Array.isArray(body))) {
+    throw new HttpError(400, "bike tag print body must be an object", "INVALID_BIKE_TAG_PRINT");
+  }
+
+  const record = body as {
+    printerId?: unknown;
+    printerKey?: unknown;
+    copies?: unknown;
+  };
+
+  if (record.printerId !== undefined && record.printerId !== null && typeof record.printerId !== "string") {
+    throw new HttpError(400, "printerId must be a string or null", "INVALID_BIKE_TAG_PRINT");
+  }
+  if (record.printerKey !== undefined && record.printerKey !== null && typeof record.printerKey !== "string") {
+    throw new HttpError(400, "printerKey must be a string or null", "INVALID_BIKE_TAG_PRINT");
+  }
+  if (record.copies !== undefined && !Number.isInteger(record.copies)) {
+    throw new HttpError(400, "copies must be an integer", "INVALID_BIKE_TAG_PRINT");
+  }
+
+  const response = await printBikeTagDirect(req.params.id, {
+    printerId: (record.printerId as string | null | undefined) ?? undefined,
+    printerKey: (record.printerKey as string | null | undefined) ?? undefined,
+    copies: record.copies as number | undefined,
+  });
+
+  res.status(201).json(response);
+};
+
 export const getVariantProductLabelDocumentHandler = async (req: Request, res: Response) => {
   const payload = await renderProductLabelDocumentForVariant(req.params.id);
   res.setHeader("Content-Type", payload.renderedDocument.mimeType);
   res.setHeader(
     "Content-Disposition",
     `inline; filename=\"product-label-${payload.variant.sku}.${payload.renderedDocument.extension}\"`,
+  );
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).send(payload.renderedDocument.buffer);
+};
+
+export const getVariantBikeTagDocumentHandler = async (req: Request, res: Response) => {
+  const payload = await renderBikeTagDocumentForVariant(req.params.id);
+  res.setHeader("Content-Type", payload.renderedDocument.mimeType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename=\"bike-tag-${payload.variant.sku}.${payload.renderedDocument.extension}\"`,
   );
   res.setHeader("Cache-Control", "no-store");
   res.status(200).send(payload.renderedDocument.buffer);

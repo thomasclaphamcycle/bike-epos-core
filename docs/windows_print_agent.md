@@ -3,25 +3,29 @@
 This document describes the current real CorePOS local print-agent paths for:
 
 - web-order Zebra shipment labels
+- office-printer bike tags
 - Dymo product labels printed from the product-label page
 
 ## What is implemented now
 
-CorePOS now supports real backend-to-agent print handoff for two narrow workflows:
+CorePOS now supports real backend-to-agent print handoff for three narrow workflows:
 
-- CorePOS still owns shipment lifecycle, product-label intent preparation, and print orchestration.
-- Shipment and product-label print payloads remain separate stable backend contracts.
-- CorePOS resolves both through registered printer records and workflow-specific defaults.
+- CorePOS still owns shipment lifecycle, bike-tag intent preparation, product-label intent preparation, and print orchestration.
+- Shipment, bike-tag, and product-label print payloads remain separate stable backend contracts.
+- CorePOS resolves all three through registered printer records and workflow-specific defaults.
 - A repo-local Windows-oriented print agent can accept that payload over HTTP for development and combined local setups.
 - A standalone Windows Zebra helper EXE package can now accept shipment-label payloads for a USB-connected GK420d without needing a CorePOS repo checkout or npm on the printer host.
+- A standalone Windows bike-tag helper EXE package can now accept rendered bike-tag sheet payloads for an installed office printer without needing a CorePOS repo checkout or npm on the printer host.
 - A standalone Windows Dymo helper EXE package can accept the product-label payload without needing a CorePOS repo checkout or npm on the printer host.
 - The print host can either:
   - simulate printing safely in `DRY_RUN`
   - send Zebra ZPL to the registered shipment printer over raw TCP
   - send Zebra ZPL to an installed Windows printer by name on a Windows helper host
+  - receive a CorePOS-rendered A5 landscape 2-up bike-tag PNG sheet and hand it to the installed Windows office printer by name
   - receive a CorePOS-rendered Dymo 57x32 PNG and hand it to the installed Windows printer by name
 - Successful agent prints mark the shipment as printed in CorePOS.
 - Failed agent prints do not set `printedAt`.
+- Bike-tag direct prints stay separate from shipment state and keep the preview/browser-print fallback available.
 - Product-label direct prints stay separate from shipment state and keep the browser-print fallback available.
 
 This is intentionally the first operational slice, not the final multi-device print platform.
@@ -42,6 +46,7 @@ The local print-agent path is now split into six layers:
 
 3. Print preparation contracts
    - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
+   - CorePOS prepares a `BIKE_TAG_PRINT` payload for the rendered A5 landscape 2-up bike-tag sheet
    - CorePOS also prepares a separate `PRODUCT_LABEL_PRINT` payload for Dymo-style product labels, including the rendered PNG document that the host should print
    - shipment payloads remain fetchable and previewable from CorePOS
 
@@ -51,12 +56,14 @@ The local print-agent path is now split into six layers:
 
 5. CorePOS print-agent delivery
    - `src/services/shipping/printAgentDeliveryService.ts`
+   - `src/services/bikeTagPrintAgentDeliveryService.ts`
    - `src/services/productLabelPrintAgentDeliveryService.ts`
    - delivers prepared print jobs to the configured agent URL with timeout handling and normalized errors
 
 6. Local Windows print hosts
    - repo-local Node agent in `print-agent/src/`
    - standalone Zebra shipment helper EXE package built from source assets in `print-agent/windows-zebra-agent/`
+   - standalone bike-tag helper EXE package built from source assets in `print-agent/windows-bike-tag-agent/`
    - standalone Dymo helper EXE package built from source assets in `print-agent/windows-dymo-agent/`
    - both validate the payload, check the optional shared secret, and send workflow-specific output through the transport declared by the resolved printer record
 
@@ -66,11 +73,13 @@ The repo-local Node print agent exposes:
 
 - `GET /health`
 - `POST /jobs/shipment-label`
+- `POST /jobs/bike-tag`
 - `POST /jobs/product-label`
 
 The print-job endpoint accepts:
 
 - `{ "printRequest": <SHIPMENT_LABEL_PRINT payload> }`
+- `{ "printRequest": <BIKE_TAG_PRINT payload> }`
 - `{ "printRequest": <PRODUCT_LABEL_PRINT payload> }`
 
 If `COREPOS_PRINT_AGENT_SHARED_SECRET` is set, CorePOS must send the same value in:
@@ -81,6 +90,11 @@ The standalone Zebra helper EXE package implements the narrow shipment-label sub
 
 - `GET /health`
 - `POST /jobs/shipment-label`
+
+The standalone bike-tag helper EXE package implements the narrow bike-tag subset:
+
+- `GET /health`
+- `POST /jobs/bike-tag`
 
 The standalone Dymo helper EXE package implements the narrow product-label subset:
 
@@ -123,6 +137,11 @@ Behavior:
   - CorePOS includes the prepared ZPL document in that request
   - on Windows, the agent invokes `powershell.exe` and sends that ZPL payload to the installed Windows printer named on the registered Zebra printer record
   - this is the practical bridge for a USB-connected Zebra GK420d that is not reachable over raw TCP
+- for bike tags:
+  - CorePOS sends a `BIKE_TAG_PRINT` request to the local agent
+  - CorePOS includes the already-rendered A5 landscape 2-up PNG document in that request
+  - on Windows, the helper invokes `powershell.exe` and prints that sheet to the installed office printer named on the registered office-document printer record
+  - this keeps paper size, orientation, and actual-size rendering on one controlled print host instead of relying on browser print dialogs on every device
 - CorePOS sends a `PRODUCT_LABEL_PRINT` request to the local agent
 - CorePOS includes the already-rendered 57x32 PNG document in that request
 - on Windows, the agent invokes `powershell.exe` and prints that PNG to the installed printer named on the registered Dymo printer record
@@ -134,11 +153,13 @@ Behavior:
 The real transports are still intentionally narrow:
 
 - shipment labels: `RAW_TCP` or `WINDOWS_PRINTER`
+- bike tags: `WINDOWS_PRINTER`
 - product labels: `WINDOWS_PRINTER`
 
 That means:
 
 - USB-only Zebra setups are now supported through the packaged Windows Zebra helper
+- office-printer bike tags are now supported through the packaged Windows bike-tag helper
 - raw TCP Zebra printing remains supported and unchanged for network-reachable devices
 - Dymo product-label direct printing currently assumes a Windows machine with the Dymo printer installed in the local Windows printer list
 - product-label direct printing is intentionally raster-based and targeted at the current Dymo 57x32 use case, not a generic label-designer subsystem
@@ -150,14 +171,18 @@ This is intentional. It keeps the contract and orchestration correct without tur
 The preferred setup is now:
 
 1. In CorePOS Settings, save the shipping helper URL and shared secret under `Shipping Print Helper (Zebra)`.
-2. In CorePOS Settings, save the product-label helper URL and shared secret under `Product-Label Print Helper`.
-3. Keep backend env vars only as a legacy fallback for older deployments.
+2. In CorePOS Settings, save the bike-tag helper URL and shared secret under `Bike-Tag Print Helper`.
+3. In CorePOS Settings, save the product-label helper URL and shared secret under `Product-Label Print Helper`.
+4. Keep backend env vars only as a legacy fallback for older deployments.
 
 Legacy backend env fallback keys remain supported:
 
 - `COREPOS_SHIPPING_PRINT_AGENT_URL`
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET` (optional but recommended)
+- `COREPOS_BIKE_TAG_PRINT_AGENT_URL` (legacy fallback only; bike-tag direct printing can now be configured persistently in CorePOS Settings)
+- `COREPOS_BIKE_TAG_PRINT_AGENT_TIMEOUT_MS` (optional, default `10000`)
+- `COREPOS_BIKE_TAG_PRINT_AGENT_SHARED_SECRET` (legacy fallback only; used when the bike-tag helper is reachable over the local network)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (legacy fallback only; product-label direct printing can now be configured persistently in CorePOS Settings)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (legacy fallback only; falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
@@ -188,7 +213,7 @@ Each registered printer record includes:
 - name
 - internal key/code
 - printer family and model hint
-- shipping-label or product-label capability
+- shipping-label, bike-tag, or product-label capability
 - active/inactive status
 - transport mode (`DRY_RUN`, `RAW_TCP`, or `WINDOWS_PRINTER`)
 - current target details for the supported transport
@@ -206,6 +231,13 @@ Current product-label behavior:
 - CorePOS uses the default product-label printer unless a later caller explicitly selects another registered Dymo target
 - the registered Dymo printer record stores the installed Windows printer name when `WINDOWS_PRINTER` transport is used
 - if no default product-label printer is configured, CorePOS fails clearly and staff can still use the browser-print fallback
+
+Current bike-tag behavior:
+
+- staff can one-click print from `/inventory/:variantId`
+- CorePOS uses the default bike-tag printer unless a later caller explicitly selects another registered office-document target
+- the registered office printer record stores the installed Windows printer name when `WINDOWS_PRINTER` transport is used
+- the fallback preview route still exists on `/variants/:variantId/bike-tag/print`, but it is now secondary to the controlled helper-driven print path
 
 ## Print agent configuration
 
@@ -266,6 +298,33 @@ npm run print-agent:package:zebra
 
 This gives the Windows Zebra host a small copyable EXE folder instead of a repo checkout and npm workflow.
 
+## Standalone bike-tag helper EXE package
+
+For a practical Windows office-printer deployment without the CorePOS repo or npm on the printer host:
+
+1. On a CorePOS dev/release machine, build the EXE package:
+
+```bash
+npm run print-agent:package:bike-tag
+```
+
+2. Copy the generated folder from `tmp/bike-tag-agent-bundle/` to the Windows office-printer host.
+3. Copy `corepos-bike-tag-agent.config.example.json` to `corepos-bike-tag-agent.config.json`.
+4. Edit the config file:
+   - keep `bindHost` as `127.0.0.1` unless you deliberately need LAN access
+   - default `port` is `3213` so it can live beside the Zebra shipment agent on `3211` and the Dymo helper on `3212`
+   - set `sharedSecret` to match the secret you will save in CorePOS Settings
+   - choose a writable `dryRunOutputDir`
+5. Start the helper with `corepos-bike-tag-agent.exe`.
+6. In CorePOS, open Settings and save that helper URL plus shared secret under the Bike-Tag Print Helper section.
+7. In CorePOS Settings, register the office printer with:
+   - printer family `OFFICE_DOCUMENT`
+   - transport mode `WINDOWS_PRINTER`
+   - `windowsPrinterName` matching the installed Windows office printer name, for example `Xerox VersaLink C405`
+8. Set that printer as the default bike-tag printer.
+
+This gives the Windows office-printer host a small copyable EXE folder instead of a repo checkout and npm workflow.
+
 ## Standalone Dymo helper EXE package
 
 For a practical Windows Dymo deployment without the CorePOS repo or npm on the printer host:
@@ -319,6 +378,38 @@ If shipment printing stops working:
 3. Check the configured Zebra printer is still installed in Windows and matches the registered CorePOS printer record.
 4. In CorePOS Settings, confirm the `Shipping Print Helper (Zebra)` URL and shared secret still match the running helper.
 5. If labels are urgent and the printer is network-reachable, switch the registered Zebra printer back to `RAW_TCP` temporarily instead of weakening shipment lifecycle rules.
+
+## Bike-tag ops note
+
+Keep the roles split clearly:
+
+- CorePOS backend host:
+  - runs the main CorePOS backend
+  - owns bike-tag rendering, printer selection, and job submission
+  - stores the bike-tag helper URL and shared secret in CorePOS Settings
+  - resolves the default or chosen office-document printer before sending the job
+- Windows office-printer helper host:
+  - runs `corepos-bike-tag-agent.exe`
+  - must have the Xerox or other office printer installed in Windows
+  - accepts `/jobs/bike-tag` and prints the A5 landscape 2-up sheet at controlled settings
+
+For day-to-day reliability, give the Windows office-printer host a fixed IP or DHCP reservation and point:
+
+`http://<fixed-windows-ip>:3213`
+
+Quick health check from the CorePOS host:
+
+```bash
+curl http://<fixed-windows-ip>:3213/health
+```
+
+If bike-tag printing stops working:
+
+1. Confirm the Windows bike-tag helper EXE is running on the office-printer host.
+2. Open `http://<fixed-windows-ip>:3213/health` and confirm it responds.
+3. Check the configured office printer is still installed in Windows and matches the registered CorePOS printer record.
+4. In CorePOS Settings, confirm the `Bike-Tag Print Helper` URL and shared secret still match the running helper.
+5. If tags are urgent, staff can still use the preview fallback on `/variants/:variantId/bike-tag/print` while the controlled helper path is repaired.
 
 ## Dymo ops note
 

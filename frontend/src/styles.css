@@ -1723,6 +1723,10 @@ body {
     align-items: stretch;
   }
 
+  .bike-tag-print-page__image-preview {
+    width: 100%;
+  }
+
   .bike-tag-document {
     width: min(210mm, 100%);
     min-height: auto;
@@ -1758,6 +1762,13 @@ body {
 
   .bike-tag-print-page__sheet {
     place-items: start;
+  }
+
+  .bike-tag-print-page__image-preview {
+    width: auto;
+    max-width: 100%;
+    border: 0;
+    box-shadow: none;
   }
 
   .bike-tag-document {

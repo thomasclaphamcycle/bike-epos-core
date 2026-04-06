@@ -227,6 +227,62 @@ const run = async () => {
 
     const renderedLabel = await fs.readFile(productLabelPayload.job.outputPath);
     assert.equal(renderedLabel.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+
+    const bikeTagRequest = {
+      version: 1,
+      intentType: "BIKE_TAG_PRINT",
+      variantId: "variant-bike-tag-1",
+      printer: {
+        transport: "WINDOWS_LOCAL_AGENT",
+        printerId: "printer-bike-tag-1",
+        printerKey: "XEROX_BIKE_TAG",
+        printerFamily: "OFFICE_DOCUMENT",
+        printerModelHint: "A5_LANDSCAPE_2UP_OR_COMPATIBLE",
+        printerName: "Xerox VersaLink C405",
+        transportMode: "DRY_RUN",
+        windowsPrinterName: "Xerox VersaLink C405",
+        copies: 1,
+      },
+      document: {
+        format: "PNG",
+        mimeType: "image/png",
+        fileName: "bike-tag-smoke.png",
+        bytesBase64:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nm4cAAAAASUVORK5CYII=",
+        widthPx: 1,
+        heightPx: 1,
+      },
+      metadata: {
+        source: "PRINT_AGENT_SMOKE",
+        sourceLabel: "BIKE-SMOKE-1",
+        paperSize: "A5",
+        orientation: "LANDSCAPE",
+        tagsPerSheet: 2,
+      },
+    };
+
+    const bikeTagRes = await fetch(`http://${agent.host}:${agent.port}/jobs/bike-tag`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+      },
+      body: JSON.stringify({ printRequest: bikeTagRequest }),
+    });
+    const bikeTagPayload = await bikeTagRes.json();
+    assert.equal(bikeTagRes.status, 201, JSON.stringify(bikeTagPayload));
+    assert.equal(bikeTagPayload.ok, true);
+    assert.equal(bikeTagPayload.job.transportMode, "DRY_RUN");
+    assert.equal(bikeTagPayload.job.simulated, true);
+    assert.equal(bikeTagPayload.job.printerId, "printer-bike-tag-1");
+    assert.equal(bikeTagPayload.job.printerKey, "XEROX_BIKE_TAG");
+    assert.equal(bikeTagPayload.job.printerTarget, "dry-run:" + path.resolve(process.cwd(), "tmp", "print-agent-smoke", "bike-tags"));
+    assert.equal(bikeTagPayload.job.documentFormat, "BIKE_TAG_SHEET");
+    assert.equal(bikeTagPayload.job.outputPath.endsWith(".png"), true);
+    assert.equal(bikeTagPayload.job.bytesSent > 0, true);
+
+    const renderedBikeTag = await fs.readFile(bikeTagPayload.job.outputPath);
+    assert.equal(renderedBikeTag.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
   } finally {
     for (const socket of printerConnections) {
       socket.destroy();
