@@ -147,7 +147,13 @@ This is intentional. It keeps the contract and orchestration correct without tur
 
 ## CorePOS backend configuration
 
-Set these in the CorePOS backend environment when you want CorePOS to hand off shipment label prints to the agent:
+The preferred setup is now:
+
+1. In CorePOS Settings, save the shipping helper URL and shared secret under `Shipping Print Helper (Zebra)`.
+2. In CorePOS Settings, save the product-label helper URL and shared secret under `Product-Label Print Helper`.
+3. Keep backend env vars only as a legacy fallback for older deployments.
+
+Legacy backend env fallback keys remain supported:
 
 - `COREPOS_SHIPPING_PRINT_AGENT_URL`
 - `COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
@@ -163,11 +169,6 @@ COREPOS_SHIPPING_PRINT_AGENT_URL=http://127.0.0.1:3211
 COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS=7000
 COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET=replace-me
 ```
-
-For a separate Dymo host, the preferred setup is now:
-
-1. In CorePOS Settings, save the product-label helper URL and shared secret.
-2. Keep the env vars only as a temporary fallback for older deployments.
 
 Legacy env-only fallback example:
 
@@ -253,14 +254,15 @@ npm run print-agent:package:zebra
 4. Edit the config file:
    - keep `bindHost` as `127.0.0.1` unless you deliberately need LAN access
    - default `port` is `3211`
-   - set `sharedSecret` to match `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`
+   - set `sharedSecret` to match the secret you will save in CorePOS Settings
    - choose a writable `dryRunOutputDir`
 5. Start the helper with `corepos-zebra-shipment-agent.exe`.
-6. In CorePOS Settings, register the Zebra shipment printer with:
+6. In CorePOS, open Settings and save that helper URL plus shared secret under `Shipping Print Helper (Zebra)`.
+7. In CorePOS Settings, register the Zebra shipment printer with:
    - printer family `ZEBRA_LABEL`
    - transport mode `WINDOWS_PRINTER`
    - `windowsPrinterName` matching the installed Windows Zebra printer name
-7. Set that printer as the default shipping-label printer, or choose it explicitly on the dispatch bench.
+8. Set that printer as the default shipping-label printer, or choose it explicitly on the dispatch bench.
 
 This gives the Windows Zebra host a small copyable EXE folder instead of a repo checkout and npm workflow.
 
@@ -279,7 +281,7 @@ npm run print-agent:package:dymo
 4. Edit the config file:
    - keep `bindHost` as `127.0.0.1` unless you deliberately need LAN access
    - default `port` is `3212` so it can live beside the Zebra shipment agent on `3211`
-   - set `sharedSecret` to match `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET`
+   - set `sharedSecret` to match the secret you will save in CorePOS Settings
    - choose a writable `dryRunOutputDir`
 5. Start the helper with `corepos-dymo-product-label-agent.exe`.
 6. In CorePOS, open Settings and save that helper URL plus shared secret under the Product-Label Print Helper section.
@@ -293,7 +295,7 @@ Keep the roles split clearly:
 - CorePOS backend host:
   - runs the main CorePOS backend
   - owns shipment preparation, shipment state, and dispatch workflow
-  - points `COREPOS_SHIPPING_PRINT_AGENT_URL` at the Windows Zebra helper
+  - stores the Zebra helper URL and shared secret in CorePOS Settings
   - resolves the default or chosen Zebra printer record before sending the job
 - Windows Zebra helper host:
   - runs `corepos-zebra-shipment-agent.exe`
@@ -315,7 +317,7 @@ If shipment printing stops working:
 1. Confirm the Windows Zebra helper EXE is running on the Windows host.
 2. Open `http://<fixed-windows-ip>:3211/health` and confirm it responds.
 3. Check the configured Zebra printer is still installed in Windows and matches the registered CorePOS printer record.
-4. Confirm the CorePOS backend still has the correct `COREPOS_SHIPPING_PRINT_AGENT_URL` and shared secret.
+4. In CorePOS Settings, confirm the `Shipping Print Helper (Zebra)` URL and shared secret still match the running helper.
 5. If labels are urgent and the printer is network-reachable, switch the registered Zebra printer back to `RAW_TCP` temporarily instead of weakening shipment lifecycle rules.
 
 ## Dymo ops note

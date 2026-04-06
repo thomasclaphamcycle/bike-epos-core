@@ -3,38 +3,8 @@ import {
   type ShipmentPrintAgentSubmitResponse,
   type ShipmentPrintRequest,
 } from "../../../shared/shippingPrintContract";
+import { resolveShippingPrintAgentRuntimeConfig } from "./printAgentConfigService";
 import { HttpError } from "../../utils/http";
-
-const DEFAULT_TIMEOUT_MS = 7000;
-
-const parsePositiveInteger = (value: string | undefined, fallback: number) => {
-  if (!value || value.trim().length === 0) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new HttpError(
-      500,
-      "COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS must be a positive integer",
-      "INVALID_SHIPPING_PRINT_AGENT_CONFIG",
-    );
-  }
-
-  return parsed;
-};
-
-const getPrintAgentConfig = () => {
-  const url = process.env.COREPOS_SHIPPING_PRINT_AGENT_URL?.trim() ?? "";
-  const timeoutMs = parsePositiveInteger(process.env.COREPOS_SHIPPING_PRINT_AGENT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
-  const sharedSecret = process.env.COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET?.trim() || null;
-
-  return {
-    url,
-    timeoutMs,
-    sharedSecret,
-  };
-};
 
 const extractRemoteErrorMessage = (status: number, payload: unknown) => {
   if (payload && typeof payload === "object") {
@@ -69,11 +39,11 @@ const parseResponseBody = async (response: Response) => {
 export const deliverShipmentPrintRequestToAgent = async (
   printRequest: ShipmentPrintRequest,
 ): Promise<ShipmentPrintAgentSubmitResponse> => {
-  const config = getPrintAgentConfig();
-  if (!config.url) {
+  const config = await resolveShippingPrintAgentRuntimeConfig();
+  if (!config?.url) {
     throw new HttpError(
       503,
-      "Shipping print agent is not configured. Set COREPOS_SHIPPING_PRINT_AGENT_URL to enable shipment printing.",
+      "Shipping print helper is not configured. Save the Windows Zebra helper URL in Settings, or set COREPOS_SHIPPING_PRINT_AGENT_URL as a legacy fallback.",
       "SHIPPING_PRINT_AGENT_NOT_CONFIGURED",
     );
   }

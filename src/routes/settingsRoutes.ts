@@ -4,6 +4,7 @@ import {
   createRegisteredPrinterHandler,
   listProductLabelPrintAgentSettingsHandler,
   listRegisteredPrintersHandler,
+  listShippingPrintAgentSettingsHandler,
   listShippingProvidersHandler,
   listSettingsHandler,
   listStoreInfoHandler,
@@ -14,6 +15,7 @@ import {
   uploadStoreLogoHandler,
   updateProductLabelPrintAgentSettingsHandler,
   updateRegisteredPrinterHandler,
+  updateShippingPrintAgentSettingsHandler,
   updateShippingProviderSettingsHandler,
   updateSettingsHandler,
   updateStoreInfoHandler,
@@ -26,6 +28,8 @@ settingsRouter.patch("/", requireRoleAtLeast("MANAGER"), updateSettingsHandler);
 settingsRouter.get("/shipping-providers", requireRoleAtLeast("MANAGER"), listShippingProvidersHandler);
 settingsRouter.put("/shipping-providers/default", requireRoleAtLeast("ADMIN"), setDefaultShippingProviderHandler);
 settingsRouter.put("/shipping-providers/:providerKey", requireRoleAtLeast("ADMIN"), updateShippingProviderSettingsHandler);
+settingsRouter.get("/shipping-print-agent", requireRoleAtLeast("MANAGER"), listShippingPrintAgentSettingsHandler);
+settingsRouter.put("/shipping-print-agent", requireRoleAtLeast("ADMIN"), updateShippingPrintAgentSettingsHandler);
 settingsRouter.get("/product-label-print-agent", requireRoleAtLeast("MANAGER"), listProductLabelPrintAgentSettingsHandler);
 settingsRouter.put("/product-label-print-agent", requireRoleAtLeast("ADMIN"), updateProductLabelPrintAgentSettingsHandler);
 settingsRouter.get("/printers", requireRoleAtLeast("MANAGER"), listRegisteredPrintersHandler);
