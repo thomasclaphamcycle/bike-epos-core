@@ -440,14 +440,19 @@ test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, re
   await page.getByRole("link", { name: "Open bike tag preview" }).click();
   await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
   await expect(page.getByRole("heading", { name: "Bike Tag" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Print 2-up bike tags" })).toBeVisible();
-  await expect(page.getByText("2 identical A6 bike tags side by side", { exact: false })).toBeVisible();
-  await expect(page.getByTestId("bike-tag-document")).toBeVisible();
-  await expect(page.getByTestId("bike-tag-card")).toHaveCount(2);
-  await expect(page.getByTestId("bike-tag-card").first()).toContainText(seeded.product.name);
-  await expect(page.getByTestId("bike-tag-card").nth(1)).toContainText(seeded.product.name);
-  await expect(page.getByTestId("bike-tag-card").first()).toContainText("£2,499.00");
-  await expect(page.getByTestId("barcode-graphic")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Direct print bike tag" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browser print fallback" })).toBeVisible();
+  await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
+    "A5 landscape 2-up bike-tag sheet",
+  );
+  await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
+    "Browser print stays available as a fallback",
+  );
+  await expect(page.getByTestId("bike-tag-preview-image")).toBeVisible();
+  await expect(page.getByTestId("bike-tag-preview-image")).toHaveAttribute(
+    "alt",
+    new RegExp(`${seeded.product.name}.*bike tag preview`, "i"),
+  );
   await expect(page.locator(".app-sidebar")).toHaveCount(0);
 });
 
