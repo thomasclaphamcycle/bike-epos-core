@@ -78,8 +78,11 @@ type SettingsResponse = {
   };
 };
 
-type RegisteredPrinterFamily = "ZEBRA_LABEL" | "DYMO_LABEL";
-type RegisteredPrinterModelHint = "GK420D_OR_COMPATIBLE" | "LABELWRITER_57X32_OR_COMPATIBLE";
+type RegisteredPrinterFamily = "ZEBRA_LABEL" | "DYMO_LABEL" | "OFFICE_DOCUMENT";
+type RegisteredPrinterModelHint =
+  | "GK420D_OR_COMPATIBLE"
+  | "LABELWRITER_57X32_OR_COMPATIBLE"
+  | "A5_LANDSCAPE_2UP_OR_COMPATIBLE";
 type RegisteredPrinterTransportMode = "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
 
 type RegisteredPrinter = {
@@ -90,6 +93,7 @@ type RegisteredPrinter = {
   printerModelHint: RegisteredPrinterModelHint;
   supportsShippingLabels: boolean;
   supportsProductLabels: boolean;
+  supportsBikeTags: boolean;
   isActive: boolean;
   transportMode: RegisteredPrinterTransportMode;
   windowsPrinterName: string | null;
@@ -101,6 +105,7 @@ type RegisteredPrinter = {
   updatedAt: string;
   isDefaultShippingLabelPrinter: boolean;
   isDefaultProductLabelPrinter: boolean;
+  isDefaultBikeTagPrinter: boolean;
 };
 
 type RegisteredPrinterListResponse = {
@@ -109,12 +114,15 @@ type RegisteredPrinterListResponse = {
   defaultShippingLabelPrinter: RegisteredPrinter | null;
   defaultProductLabelPrinterId: string | null;
   defaultProductLabelPrinter: RegisteredPrinter | null;
+  defaultBikeTagPrinterId: string | null;
+  defaultBikeTagPrinter: RegisteredPrinter | null;
 };
 
 type PrinterMutationResponse = {
   printer: RegisteredPrinter;
   defaultShippingLabelPrinterId: string | null;
   defaultProductLabelPrinterId: string | null;
+  defaultBikeTagPrinterId: string | null;
 };
 
 type DefaultPrinterResponse = {
@@ -122,6 +130,8 @@ type DefaultPrinterResponse = {
   defaultShippingLabelPrinter: RegisteredPrinter | null;
   defaultProductLabelPrinterId: string | null;
   defaultProductLabelPrinter: RegisteredPrinter | null;
+  defaultBikeTagPrinterId: string | null;
+  defaultBikeTagPrinter: RegisteredPrinter | null;
 };
 
 type PrinterFormState = {
@@ -131,6 +141,7 @@ type PrinterFormState = {
   printerModelHint: RegisteredPrinterModelHint;
   supportsShippingLabels: boolean;
   supportsProductLabels: boolean;
+  supportsBikeTags: boolean;
   isActive: boolean;
   transportMode: RegisteredPrinterTransportMode;
   windowsPrinterName: string;
@@ -140,6 +151,7 @@ type PrinterFormState = {
   notes: string;
   setAsDefaultShippingLabel: boolean;
   setAsDefaultProductLabel: boolean;
+  setAsDefaultBikeTag: boolean;
 };
 
 type ShippingProviderEnvironment = "SANDBOX" | "LIVE";
@@ -251,6 +263,27 @@ type ShippingPrintAgentFormState = {
   clearSharedSecret: boolean;
 };
 
+type BikeTagPrintAgentConfig = {
+  url: string | null;
+  hasSharedSecret: boolean;
+  sharedSecretHint: string | null;
+  updatedAt: string | null;
+  effectiveUrl: string | null;
+  effectiveSource: "settings" | "environment" | "unconfigured";
+  envFallbackUrl: string | null;
+  envFallbackHasSharedSecret: boolean;
+};
+
+type BikeTagPrintAgentSettingsResponse = {
+  config: BikeTagPrintAgentConfig;
+};
+
+type BikeTagPrintAgentFormState = {
+  url: string;
+  sharedSecret: string;
+  clearSharedSecret: boolean;
+};
+
 const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
@@ -264,6 +297,7 @@ const DEFAULT_PRINTER_FORM: PrinterFormState = {
   printerModelHint: "GK420D_OR_COMPATIBLE",
   supportsShippingLabels: true,
   supportsProductLabels: false,
+  supportsBikeTags: false,
   isActive: true,
   transportMode: "DRY_RUN",
   windowsPrinterName: "",
@@ -273,6 +307,7 @@ const DEFAULT_PRINTER_FORM: PrinterFormState = {
   notes: "",
   setAsDefaultShippingLabel: false,
   setAsDefaultProductLabel: false,
+  setAsDefaultBikeTag: false,
 };
 
 const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
@@ -307,18 +342,29 @@ const DEFAULT_SHIPPING_PRINT_AGENT_FORM: ShippingPrintAgentFormState = {
   clearSharedSecret: false,
 };
 
+const DEFAULT_BIKE_TAG_PRINT_AGENT_FORM: BikeTagPrintAgentFormState = {
+  url: "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+};
+
 const getPrinterCapabilitiesForFamily = (printerFamily: RegisteredPrinterFamily) => ({
   supportsShippingLabels: printerFamily === "ZEBRA_LABEL",
   supportsProductLabels: printerFamily === "DYMO_LABEL",
+  supportsBikeTags: printerFamily === "OFFICE_DOCUMENT",
 });
 
 const getPrinterModelHintForFamily = (printerFamily: RegisteredPrinterFamily): RegisteredPrinterModelHint =>
-  printerFamily === "DYMO_LABEL" ? "LABELWRITER_57X32_OR_COMPATIBLE" : "GK420D_OR_COMPATIBLE";
+  printerFamily === "DYMO_LABEL"
+    ? "LABELWRITER_57X32_OR_COMPATIBLE"
+    : printerFamily === "OFFICE_DOCUMENT"
+      ? "A5_LANDSCAPE_2UP_OR_COMPATIBLE"
+      : "GK420D_OR_COMPATIBLE";
 
 const getAllowedTransportModesForFamily = (
   printerFamily: RegisteredPrinterFamily,
 ): RegisteredPrinterTransportMode[] =>
-  printerFamily === "DYMO_LABEL"
+  printerFamily === "DYMO_LABEL" || printerFamily === "OFFICE_DOCUMENT"
     ? ["DRY_RUN", "WINDOWS_PRINTER"]
     : ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"];
 
@@ -477,6 +523,7 @@ const toPrinterFormState = (
   printer: RegisteredPrinter | null,
   defaultShippingLabelPrinterId: string | null,
   defaultProductLabelPrinterId: string | null,
+  defaultBikeTagPrinterId: string | null,
 ): PrinterFormState => {
   if (!printer) {
     return DEFAULT_PRINTER_FORM;
@@ -489,6 +536,7 @@ const toPrinterFormState = (
     printerModelHint: printer.printerModelHint,
     supportsShippingLabels: printer.supportsShippingLabels,
     supportsProductLabels: printer.supportsProductLabels,
+    supportsBikeTags: printer.supportsBikeTags,
     isActive: printer.isActive,
     transportMode: printer.transportMode,
     windowsPrinterName: printer.windowsPrinterName ?? "",
@@ -498,6 +546,7 @@ const toPrinterFormState = (
     notes: printer.notes ?? "",
     setAsDefaultShippingLabel: printer.id === defaultShippingLabelPrinterId,
     setAsDefaultProductLabel: printer.id === defaultProductLabelPrinterId,
+    setAsDefaultBikeTag: printer.id === defaultBikeTagPrinterId,
   };
 };
 
@@ -545,6 +594,14 @@ const toShippingPrintAgentFormState = (
   clearSharedSecret: false,
 });
 
+const toBikeTagPrintAgentFormState = (
+  config: BikeTagPrintAgentConfig | null,
+): BikeTagPrintAgentFormState => ({
+  url: config?.url ?? "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+});
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -558,6 +615,10 @@ export const SystemSettingsPage = () => {
   const [shippingPrintAgentConfig, setShippingPrintAgentConfig] = useState<ShippingPrintAgentConfig | null>(null);
   const [shippingPrintAgentForm, setShippingPrintAgentForm] = useState<ShippingPrintAgentFormState>(
     DEFAULT_SHIPPING_PRINT_AGENT_FORM,
+  );
+  const [bikeTagPrintAgentConfig, setBikeTagPrintAgentConfig] = useState<BikeTagPrintAgentConfig | null>(null);
+  const [bikeTagPrintAgentForm, setBikeTagPrintAgentForm] = useState<BikeTagPrintAgentFormState>(
+    DEFAULT_BIKE_TAG_PRINT_AGENT_FORM,
   );
   const [productLabelPrintAgentConfig, setProductLabelPrintAgentConfig] = useState<ProductLabelPrintAgentConfig | null>(null);
   const [productLabelPrintAgentForm, setProductLabelPrintAgentForm] = useState<ProductLabelPrintAgentFormState>(
@@ -574,6 +635,7 @@ export const SystemSettingsPage = () => {
   const [savingProvider, setSavingProvider] = useState(false);
   const [settingDefaultProvider, setSettingDefaultProvider] = useState(false);
   const [savingShippingPrintAgent, setSavingShippingPrintAgent] = useState(false);
+  const [savingBikeTagPrintAgent, setSavingBikeTagPrintAgent] = useState(false);
   const [savingProductLabelPrintAgent, setSavingProductLabelPrintAgent] = useState(false);
   const [savingPrinter, setSavingPrinter] = useState(false);
   const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
@@ -589,6 +651,7 @@ export const SystemSettingsPage = () => {
           settingsPayload,
           providerSettingsResponse,
           shippingPrintAgentResponse,
+          bikeTagPrintAgentResponse,
           productLabelPrintAgentResponse,
           printersResponse,
         ] = await Promise.all([
@@ -596,6 +659,7 @@ export const SystemSettingsPage = () => {
           apiGet<SettingsResponse>("/api/settings"),
           apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers"),
           apiGet<ShippingPrintAgentSettingsResponse>("/api/settings/shipping-print-agent"),
+          apiGet<BikeTagPrintAgentSettingsResponse>("/api/settings/bike-tag-print-agent"),
           apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent"),
           apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
         ]);
@@ -625,11 +689,14 @@ export const SystemSettingsPage = () => {
         );
         setShippingPrintAgentConfig(shippingPrintAgentResponse.config);
         setShippingPrintAgentForm(toShippingPrintAgentFormState(shippingPrintAgentResponse.config));
+        setBikeTagPrintAgentConfig(bikeTagPrintAgentResponse.config);
+        setBikeTagPrintAgentForm(toBikeTagPrintAgentFormState(bikeTagPrintAgentResponse.config));
         setProductLabelPrintAgentConfig(productLabelPrintAgentResponse.config);
         setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(productLabelPrintAgentResponse.config));
         setPrintersPayload(printersResponse);
         const preferredPrinterId =
-          printersResponse.defaultShippingLabelPrinterId
+          printersResponse.defaultBikeTagPrinterId
+          ?? printersResponse.defaultShippingLabelPrinterId
           ?? printersResponse.defaultProductLabelPrinterId
           ?? printersResponse.printers[0]?.id
           ?? "";
@@ -639,6 +706,7 @@ export const SystemSettingsPage = () => {
             printersResponse.printers.find((printer) => printer.id === preferredPrinterId) ?? null,
             printersResponse.defaultShippingLabelPrinterId,
             printersResponse.defaultProductLabelPrinterId,
+            printersResponse.defaultBikeTagPrinterId,
           ),
         );
       } catch (loadError) {
@@ -867,6 +935,22 @@ export const SystemSettingsPage = () => {
     return errors;
   }, [shippingPrintAgentForm]);
   const hasShippingPrintAgentValidationErrors = Object.keys(shippingPrintAgentValidationErrors).length > 0;
+  const bikeTagPrintAgentValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof BikeTagPrintAgentFormState, string>> = {};
+
+    if (bikeTagPrintAgentForm.url.trim() && !isValidUrl(bikeTagPrintAgentForm.url)) {
+      errors.url = "Helper URL must start with http:// or https://";
+    }
+    if (
+      bikeTagPrintAgentForm.clearSharedSecret
+      && bikeTagPrintAgentForm.sharedSecret.trim().length > 0
+    ) {
+      errors.sharedSecret = "Enter a new shared secret or clear the stored secret, not both.";
+    }
+
+    return errors;
+  }, [bikeTagPrintAgentForm]);
+  const hasBikeTagPrintAgentValidationErrors = Object.keys(bikeTagPrintAgentValidationErrors).length > 0;
   const productLabelPrintAgentValidationErrors = useMemo(() => {
     const errors: Partial<Record<keyof ProductLabelPrintAgentFormState, string>> = {};
 
@@ -919,7 +1003,7 @@ export const SystemSettingsPage = () => {
       }
     }
     if (printerForm.transportMode === "WINDOWS_PRINTER" && !printerForm.windowsPrinterName.trim()) {
-      errors.windowsPrinterName = "Enter the installed Windows printer name for direct Dymo printing.";
+      errors.windowsPrinterName = "Enter the installed Windows printer name for managed printing.";
     }
 
     return errors;
@@ -948,6 +1032,7 @@ export const SystemSettingsPage = () => {
         printerModelHint: getPrinterModelHintForFamily(printerFamily),
         supportsShippingLabels: capabilities.supportsShippingLabels,
         supportsProductLabels: capabilities.supportsProductLabels,
+        supportsBikeTags: capabilities.supportsBikeTags,
         transportMode: nextTransportMode,
         windowsPrinterName:
           nextTransportMode === "WINDOWS_PRINTER"
@@ -957,6 +1042,7 @@ export const SystemSettingsPage = () => {
         rawTcpPort: nextTransportMode === "RAW_TCP" ? current.rawTcpPort || "9100" : "9100",
         setAsDefaultShippingLabel: capabilities.supportsShippingLabels ? current.setAsDefaultShippingLabel : false,
         setAsDefaultProductLabel: capabilities.supportsProductLabels ? current.setAsDefaultProductLabel : false,
+        setAsDefaultBikeTag: capabilities.supportsBikeTags ? current.setAsDefaultBikeTag : false,
       };
     });
   };
@@ -973,6 +1059,13 @@ export const SystemSettingsPage = () => {
     value: ShippingPrintAgentFormState[K],
   ) => {
     setShippingPrintAgentForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const setBikeTagPrintAgentField = <K extends keyof BikeTagPrintAgentFormState>(
+    key: K,
+    value: BikeTagPrintAgentFormState[K],
+  ) => {
+    setBikeTagPrintAgentForm((current) => ({ ...current, [key]: value }));
   };
 
   const setProductLabelPrintAgentField = <K extends keyof ProductLabelPrintAgentFormState>(
@@ -1022,6 +1115,7 @@ export const SystemSettingsPage = () => {
     setPrintersPayload(payload);
     const nextPrinterId =
       preferredPrinterId
+      ?? payload.defaultBikeTagPrinterId
       ?? payload.defaultShippingLabelPrinterId
       ?? payload.defaultProductLabelPrinterId
       ?? payload.printers[0]?.id
@@ -1032,6 +1126,7 @@ export const SystemSettingsPage = () => {
         payload.printers.find((printer) => printer.id === nextPrinterId) ?? null,
         payload.defaultShippingLabelPrinterId,
         payload.defaultProductLabelPrinterId,
+        payload.defaultBikeTagPrinterId,
       ),
     );
     return payload;
@@ -1068,6 +1163,13 @@ export const SystemSettingsPage = () => {
     return payload;
   };
 
+  const loadBikeTagPrintAgentSettings = async () => {
+    const payload = await apiGet<BikeTagPrintAgentSettingsResponse>("/api/settings/bike-tag-print-agent");
+    setBikeTagPrintAgentConfig(payload.config);
+    setBikeTagPrintAgentForm(toBikeTagPrintAgentFormState(payload.config));
+    return payload;
+  };
+
   const selectShippingProviderForEditing = (providerKey: string) => {
     const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
     setSelectedProviderKey(providerKey);
@@ -1082,6 +1184,7 @@ export const SystemSettingsPage = () => {
         printer,
         printersPayload?.defaultShippingLabelPrinterId ?? null,
         printersPayload?.defaultProductLabelPrinterId ?? null,
+        printersPayload?.defaultBikeTagPrinterId ?? null,
       ),
     );
   };
@@ -1091,6 +1194,7 @@ export const SystemSettingsPage = () => {
     setPrinterForm({
       ...DEFAULT_PRINTER_FORM,
       setAsDefaultShippingLabel: printersPayload?.defaultShippingLabelPrinterId === null,
+      setAsDefaultBikeTag: printersPayload?.defaultBikeTagPrinterId === null,
     });
   };
 
@@ -1155,6 +1259,38 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to save shipping print helper settings");
     } finally {
       setSavingShippingPrintAgent(false);
+    }
+  };
+
+  const saveBikeTagPrintAgentSettings = async () => {
+    if (hasBikeTagPrintAgentValidationErrors) {
+      error("Fix the highlighted bike-tag print helper fields before saving.");
+      return;
+    }
+
+    setSavingBikeTagPrintAgent(true);
+    try {
+      const payload = await apiPut<BikeTagPrintAgentSettingsResponse>(
+        "/api/settings/bike-tag-print-agent",
+        {
+          url: bikeTagPrintAgentForm.url.trim() || null,
+          sharedSecret: bikeTagPrintAgentForm.sharedSecret.trim() || undefined,
+          clearSharedSecret: bikeTagPrintAgentForm.clearSharedSecret,
+        },
+      );
+      setBikeTagPrintAgentConfig(payload.config);
+      setBikeTagPrintAgentForm(toBikeTagPrintAgentFormState(payload.config));
+      success(
+        payload.config.effectiveSource === "settings"
+          ? "Bike-tag print helper settings updated."
+          : payload.config.effectiveSource === "environment"
+            ? "Stored bike-tag helper settings cleared. CorePOS is using environment fallback."
+            : "Bike-tag print helper settings cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save bike-tag print helper settings");
+    } finally {
+      setSavingBikeTagPrintAgent(false);
     }
   };
 
@@ -1381,6 +1517,7 @@ export const SystemSettingsPage = () => {
       printerModelHint: printerForm.printerModelHint,
       supportsShippingLabels: printerForm.supportsShippingLabels,
       supportsProductLabels: printerForm.supportsProductLabels,
+      supportsBikeTags: printerForm.supportsBikeTags,
       isActive: printerForm.isActive,
       transportMode: printerForm.transportMode,
       windowsPrinterName: printerForm.transportMode === "WINDOWS_PRINTER"
@@ -1394,6 +1531,7 @@ export const SystemSettingsPage = () => {
       notes: printerForm.notes.trim() || null,
       setAsDefaultShippingLabel: printerForm.setAsDefaultShippingLabel,
       setAsDefaultProductLabel: printerForm.setAsDefaultProductLabel,
+      setAsDefaultBikeTag: printerForm.setAsDefaultBikeTag,
     };
 
     setSavingPrinter(true);
@@ -1428,10 +1566,13 @@ export const SystemSettingsPage = () => {
           defaultShippingLabelPrinter: response.defaultShippingLabelPrinter,
           defaultProductLabelPrinterId: response.defaultProductLabelPrinterId,
           defaultProductLabelPrinter: response.defaultProductLabelPrinter,
+          defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
+          defaultBikeTagPrinter: response.defaultBikeTagPrinter,
           printers: current.printers.map((printer) => ({
             ...printer,
             isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
             isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
+            isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
           })),
         }
         : current);
@@ -1439,6 +1580,7 @@ export const SystemSettingsPage = () => {
         ...current,
         setAsDefaultShippingLabel: selectedPrinterId === printerId,
         setAsDefaultProductLabel: current.setAsDefaultProductLabel && selectedPrinterId === response.defaultProductLabelPrinterId,
+        setAsDefaultBikeTag: current.setAsDefaultBikeTag && selectedPrinterId === response.defaultBikeTagPrinterId,
       }));
       success(
         printerId
@@ -1466,10 +1608,13 @@ export const SystemSettingsPage = () => {
           defaultShippingLabelPrinter: response.defaultShippingLabelPrinter,
           defaultProductLabelPrinterId: response.defaultProductLabelPrinterId,
           defaultProductLabelPrinter: response.defaultProductLabelPrinter,
+          defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
+          defaultBikeTagPrinter: response.defaultBikeTagPrinter,
           printers: current.printers.map((printer) => ({
             ...printer,
             isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
             isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
+            isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
           })),
         }
         : current);
@@ -1477,6 +1622,7 @@ export const SystemSettingsPage = () => {
         ...current,
         setAsDefaultShippingLabel: current.setAsDefaultShippingLabel && selectedPrinterId === response.defaultShippingLabelPrinterId,
         setAsDefaultProductLabel: selectedPrinterId === printerId,
+        setAsDefaultBikeTag: current.setAsDefaultBikeTag && selectedPrinterId === response.defaultBikeTagPrinterId,
       }));
       success(
         printerId
@@ -1485,6 +1631,48 @@ export const SystemSettingsPage = () => {
       );
     } catch (saveError) {
       error(saveError instanceof Error ? saveError.message : "Failed to update default product-label printer");
+    } finally {
+      setSettingDefaultPrinter(false);
+    }
+  };
+
+  const updateDefaultBikeTagPrinter = async (printerId: string | null) => {
+    setSettingDefaultPrinter(true);
+    try {
+      const response = await apiPut<DefaultPrinterResponse>(
+        "/api/settings/printers/default-bike-tag",
+        { printerId },
+      );
+      setPrintersPayload((current) => current
+        ? {
+          ...current,
+          defaultShippingLabelPrinterId: response.defaultShippingLabelPrinterId,
+          defaultShippingLabelPrinter: response.defaultShippingLabelPrinter,
+          defaultProductLabelPrinterId: response.defaultProductLabelPrinterId,
+          defaultProductLabelPrinter: response.defaultProductLabelPrinter,
+          defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
+          defaultBikeTagPrinter: response.defaultBikeTagPrinter,
+          printers: current.printers.map((printer) => ({
+            ...printer,
+            isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
+            isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
+            isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
+          })),
+        }
+        : current);
+      setPrinterForm((current) => ({
+        ...current,
+        setAsDefaultShippingLabel: current.setAsDefaultShippingLabel && selectedPrinterId === response.defaultShippingLabelPrinterId,
+        setAsDefaultProductLabel: current.setAsDefaultProductLabel && selectedPrinterId === response.defaultProductLabelPrinterId,
+        setAsDefaultBikeTag: selectedPrinterId === printerId,
+      }));
+      success(
+        printerId
+          ? "Default bike-tag printer updated."
+          : "Default bike-tag printer cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to update default bike-tag printer");
     } finally {
       setSettingDefaultPrinter(false);
     }
@@ -2297,7 +2485,7 @@ export const SystemSettingsPage = () => {
       <SurfaceCard>
         <SectionHeader
           title="Registered Printers"
-          description="Register Zebra shipment printers and Dymo product-label printers, then choose the default target each workflow should use."
+          description="Register Zebra shipment printers, Dymo product-label printers, and office document printers, then choose the default target each workflow should use."
           actions={(
             <div className="actions-inline">
               <button type="button" className="button-link" onClick={resetPrinterForm}>
@@ -2345,6 +2533,9 @@ export const SystemSettingsPage = () => {
                           {printer.isDefaultProductLabelPrinter ? (
                             <span className="status-badge status-info">Default product label</span>
                           ) : null}
+                          {printer.isDefaultBikeTagPrinter ? (
+                            <span className="status-badge status-info">Default bike tag</span>
+                          ) : null}
                         </div>
                         <div className="dispatch-printer-row__meta">
                           <span>{printer.key}</span>
@@ -2353,11 +2544,11 @@ export const SystemSettingsPage = () => {
                         </div>
                         <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
                           <span>
-                            {printer.supportsShippingLabels
-                              ? "Shipping labels enabled"
-                              : printer.supportsProductLabels
-                                ? "Product labels enabled"
-                                : "No workflow capability"}
+                            {[
+                              printer.supportsShippingLabels ? "Shipping labels" : null,
+                              printer.supportsProductLabels ? "Product labels" : null,
+                              printer.supportsBikeTags ? "Bike tags" : null,
+                            ].filter(Boolean).join(" · ") || "No workflow capability"}
                           </span>
                           <span>{printer.isActive ? "Active" : "Inactive"}</span>
                         </div>
@@ -2412,6 +2603,7 @@ export const SystemSettingsPage = () => {
                   >
                     <option value="ZEBRA_LABEL">Zebra shipping label</option>
                     <option value="DYMO_LABEL">Dymo product label</option>
+                    <option value="OFFICE_DOCUMENT">Office document / bike tag</option>
                   </select>
                 </label>
                 <label>
@@ -2454,7 +2646,7 @@ export const SystemSettingsPage = () => {
                   <input
                     value={printerForm.windowsPrinterName}
                     onChange={(event) => setPrinterField("windowsPrinterName", event.target.value)}
-                    placeholder="DYMO LabelWriter 550"
+                    placeholder={printerForm.printerFamily === "OFFICE_DOCUMENT" ? "Xerox VersaLink C405" : "DYMO LabelWriter 550"}
                     disabled={printerForm.transportMode !== "WINDOWS_PRINTER"}
                   />
                   {printerValidationErrors.windowsPrinterName ? (
@@ -2520,6 +2712,17 @@ export const SystemSettingsPage = () => {
                   />
                 </label>
                 <label className="store-info-grid-span store-settings-checkbox">
+                  <span>Supports bike tags</span>
+                  <div className="table-secondary">
+                    Office document printers drive one-click bike-tag direct printing through the Windows print helper.
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={printerFamilyCapabilities.supportsBikeTags}
+                    disabled
+                  />
+                </label>
+                <label className="store-info-grid-span store-settings-checkbox">
                   <span>Printer is active</span>
                   <div className="table-secondary">
                     Inactive printers stay on record for audit/history but cannot be used for live printing.
@@ -2555,6 +2758,20 @@ export const SystemSettingsPage = () => {
                       checked={printerForm.setAsDefaultProductLabel}
                       onChange={(event) =>
                         setPrinterField("setAsDefaultProductLabel", event.target.checked)}
+                    />
+                  </label>
+                ) : null}
+                {printerFamilyCapabilities.supportsBikeTags ? (
+                  <label className="store-info-grid-span store-settings-checkbox">
+                    <span>Make this the default bike-tag printer</span>
+                    <div className="table-secondary">
+                      One-click bike-tag printing uses this office printer when staff do not choose another target.
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={printerForm.setAsDefaultBikeTag}
+                      onChange={(event) =>
+                        setPrinterField("setAsDefaultBikeTag", event.target.checked)}
                     />
                   </label>
                 ) : null}
@@ -2598,11 +2815,29 @@ export const SystemSettingsPage = () => {
                       </button>
                     </>
                   ) : null}
+                  {selectedPrinter.supportsBikeTags ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void updateDefaultBikeTagPrinter(selectedPrinter.id)}
+                        disabled={settingDefaultPrinter || !selectedPrinter.isActive || !selectedPrinter.supportsBikeTags}
+                      >
+                        {settingDefaultPrinter ? "Updating..." : "Set As Default Bike-Tag Printer"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateDefaultBikeTagPrinter(null)}
+                        disabled={settingDefaultPrinter || printersPayload?.defaultBikeTagPrinterId !== selectedPrinter.id}
+                      >
+                        Clear Bike-Tag Default
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
 
               <div className="restricted-panel info-panel">
-                Registered printers give CorePOS a stable local-print target. Zebra records drive shipment-label printing for dispatch, while Dymo records drive direct product-label printing without relying on browser paper-size prompts.
+                Registered printers give CorePOS a stable local-print target. Zebra records drive shipment-label printing for dispatch, Dymo records drive direct product-label printing, and office document records drive one-click bike-tag printing through the controlled Xerox-style helper path.
               </div>
             </section>
           </div>
@@ -2705,6 +2940,108 @@ export const SystemSettingsPage = () => {
             {shippingPrintAgentConfig?.effectiveSource === "environment" && shippingPrintAgentConfig.envFallbackUrl ? (
               <div className="restricted-panel warning-panel store-info-grid-span">
                 CorePOS is currently using legacy environment fallback at <code>{shippingPrintAgentConfig.envFallbackUrl}</code>. Save a helper URL here to make the Zebra helper configuration persistent in CorePOS itself.
+              </div>
+            ) : null}
+          </div>
+        )}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Bike-Tag Print Helper"
+          description="Persist the Windows office-printer helper URL in CorePOS so one-click bike-tag printing does not rely on backend environment variables."
+          actions={(
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => setBikeTagPrintAgentForm(toBikeTagPrintAgentFormState(bikeTagPrintAgentConfig))}
+                disabled={savingBikeTagPrintAgent}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveBikeTagPrintAgentSettings()}
+                disabled={savingBikeTagPrintAgent || hasBikeTagPrintAgentValidationErrors}
+              >
+                {savingBikeTagPrintAgent ? "Saving..." : "Save Helper"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Bike-Tag Print Helper"
+            description="Fetching the persisted office-printer helper settings and any backend environment fallback."
+          />
+        ) : (
+          <div className="purchase-form-grid store-info-grid">
+            <label className="store-info-grid-span">
+              Helper base URL
+              <input
+                value={bikeTagPrintAgentForm.url}
+                onChange={(event) => setBikeTagPrintAgentField("url", event.target.value)}
+                placeholder="http://192.168.1.45:3213"
+              />
+              {bikeTagPrintAgentValidationErrors.url ? (
+                <span className="field-error">{bikeTagPrintAgentValidationErrors.url}</span>
+              ) : (
+                <span className="table-secondary">
+                  CorePOS posts bike-tag print jobs to <code>/jobs/bike-tag</code> on this helper.
+                </span>
+              )}
+            </label>
+            <label>
+              Shared secret
+              <input
+                type="password"
+                value={bikeTagPrintAgentForm.sharedSecret}
+                onChange={(event) => setBikeTagPrintAgentField("sharedSecret", event.target.value)}
+                placeholder={bikeTagPrintAgentConfig?.sharedSecretHint ?? "Enter a new shared secret"}
+              />
+              {bikeTagPrintAgentValidationErrors.sharedSecret ? (
+                <span className="field-error">{bikeTagPrintAgentValidationErrors.sharedSecret}</span>
+              ) : bikeTagPrintAgentConfig?.hasSharedSecret ? (
+                <span className="table-secondary">
+                  Stored secret: {bikeTagPrintAgentConfig.sharedSecretHint}
+                </span>
+              ) : (
+                <span className="table-secondary">
+                  Optional, but recommended when the Windows helper is reachable over the local network.
+                </span>
+              )}
+            </label>
+            <label className="store-settings-checkbox">
+              <span>Clear stored shared secret on save</span>
+              <div className="table-secondary">
+                Leave unticked to preserve the current secret when you are only changing the helper URL.
+              </div>
+              <input
+                type="checkbox"
+                checked={bikeTagPrintAgentForm.clearSharedSecret}
+                onChange={(event) => setBikeTagPrintAgentField("clearSharedSecret", event.target.checked)}
+              />
+            </label>
+            <div className="restricted-panel info-panel store-info-grid-span">
+              <strong>Effective helper:</strong>{" "}
+              {bikeTagPrintAgentConfig?.effectiveUrl ? (
+                <>
+                  <code>{bikeTagPrintAgentConfig.effectiveUrl}</code> via{" "}
+                  {bikeTagPrintAgentConfig.effectiveSource === "settings"
+                    ? "persisted Settings"
+                    : "backend environment fallback"}
+                  . Health check: <code>{`${bikeTagPrintAgentConfig.effectiveUrl}/health`}</code>
+                </>
+              ) : (
+                "No bike-tag print helper is configured yet. Save the Windows office-printer helper URL in Settings before using one-click bike-tag printing."
+              )}
+            </div>
+            {bikeTagPrintAgentConfig?.effectiveSource === "environment" && bikeTagPrintAgentConfig.envFallbackUrl ? (
+              <div className="restricted-panel warning-panel store-info-grid-span">
+                CorePOS is currently using legacy environment fallback at <code>{bikeTagPrintAgentConfig.envFallbackUrl}</code>. Save a helper URL here to make the bike-tag helper configuration persistent in CorePOS itself.
               </div>
             ) : null}
           </div>

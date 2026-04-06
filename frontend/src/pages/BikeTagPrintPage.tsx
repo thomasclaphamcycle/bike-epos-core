@@ -1,21 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../api/client";
+import { apiGet, apiGetBlob } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
-import { useAppConfig } from "../config/appConfig";
 import {
-  BikeTagDocument,
-  type BikeTagProduct,
-  type BikeTagVariant,
-} from "../features/labels/BikeTagDocument";
+  getBikeTagDirectPrintErrorMessage,
+  getBikeTagDirectPrintSuccessMessage,
+  printBikeTagDirect,
+  type BikeTagDirectPrintResponse,
+} from "../features/labels/bikeTagPrinting";
+
+type BikeTagVariantDetail = {
+  id: string;
+  sku: string;
+  barcode: string | null;
+  manufacturerBarcode: string | null;
+  internalBarcode: string | null;
+  name: string | null;
+  option: string | null;
+  retailPricePence: number;
+  product?: {
+    id: string;
+    name: string;
+    brand: string | null;
+  };
+};
 
 export const BikeTagPrintPage = () => {
   const { variantId } = useParams<{ variantId: string }>();
-  const appConfig = useAppConfig();
-  const { error } = useToasts();
-  const [variant, setVariant] = useState<BikeTagVariant | null>(null);
-  const [product, setProduct] = useState<BikeTagProduct | null>(null);
+  const { error, success } = useToasts();
+  const [variant, setVariant] = useState<BikeTagVariantDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [directPrinting, setDirectPrinting] = useState(false);
+  const [lastDirectPrint, setLastDirectPrint] = useState<BikeTagDirectPrintResponse | null>(null);
 
   useEffect(() => {
     if (!variantId) {
@@ -23,29 +41,15 @@ export const BikeTagPrintPage = () => {
     }
 
     let active = true;
-    const loadData = async () => {
+    const loadVariant = async () => {
       setLoading(true);
       try {
-        const variantPayload = await apiGet<BikeTagVariant>(`/api/variants/${encodeURIComponent(variantId)}`);
-        if (!active) {
-          return;
-        }
-
-        setVariant(variantPayload);
-
-        if (variantPayload.product?.id || variantPayload.productId) {
-          const productId = variantPayload.product?.id || variantPayload.productId;
-          const productPayload = await apiGet<BikeTagProduct>(`/api/products/${encodeURIComponent(productId)}`);
-          if (active) {
-            setProduct(productPayload);
-          }
-        } else if (active) {
-          setProduct(null);
+        const payload = await apiGet<BikeTagVariantDetail>(`/api/variants/${encodeURIComponent(variantId)}`);
+        if (active) {
+          setVariant(payload);
         }
       } catch (loadError) {
         if (active) {
-          setVariant(null);
-          setProduct(null);
           error(loadError instanceof Error ? loadError.message : "Failed to load bike tag");
         }
       } finally {
@@ -55,7 +59,7 @@ export const BikeTagPrintPage = () => {
       }
     };
 
-    void loadData();
+    void loadVariant();
     return () => {
       active = false;
     };
@@ -73,10 +77,49 @@ export const BikeTagPrintPage = () => {
     };
   }, [variant]);
 
+  useEffect(() => {
+    if (!variantId) {
+      return undefined;
+    }
+
+    let active = true;
+    let objectUrl: string | null = null;
+
+    const loadPreview = async () => {
+      setPreviewLoading(true);
+      try {
+        const blob = await apiGetBlob(`/api/variants/${encodeURIComponent(variantId)}/bike-tag/document`);
+        if (!active) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      } catch (loadError) {
+        if (active) {
+          setPreviewUrl(null);
+          error(loadError instanceof Error ? loadError.message : "Failed to load bike tag preview");
+        }
+      } finally {
+        if (active) {
+          setPreviewLoading(false);
+        }
+      }
+    };
+
+    void loadPreview();
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [error, variantId]);
+
   const printPageStyle = useMemo(() => (
     `@media print {
       @page {
-        size: A5 portrait;
+        size: A5 landscape;
         margin: 6mm;
       }
     }`
@@ -85,6 +128,23 @@ export const BikeTagPrintPage = () => {
   if (!variantId) {
     return <div className="page-shell"><p>Missing bike tag id.</p></div>;
   }
+
+  const handleDirectPrint = async () => {
+    if (!variantId || !variant || directPrinting) {
+      return;
+    }
+
+    setDirectPrinting(true);
+    try {
+      const payload = await printBikeTagDirect(variantId);
+      setLastDirectPrint(payload);
+      success(getBikeTagDirectPrintSuccessMessage(payload));
+    } catch (printError) {
+      error(getBikeTagDirectPrintErrorMessage(printError));
+    } finally {
+      setDirectPrinting(false);
+    }
+  };
 
   return (
     <div className="bike-tag-print-page">
@@ -95,22 +155,52 @@ export const BikeTagPrintPage = () => {
           <Link to={`/inventory/${variantId}`}>Back to inventory detail</Link>
           <Link to={`/inventory/${variantId}/label`}>Open product label</Link>
         </div>
-        <button type="button" className="primary" onClick={() => window.print()} disabled={!variant || loading}>
-          {loading ? "Loading..." : "Print A5 bike tag"}
-        </button>
+        <div className="actions-inline">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void handleDirectPrint()}
+            disabled={!variant || loading || directPrinting}
+          >
+            {directPrinting ? "Printing bike tag..." : "Direct print bike tag"}
+          </button>
+          <button type="button" onClick={() => window.print()} disabled={!variant || loading || directPrinting}>
+            {loading ? "Loading..." : "Browser print fallback"}
+          </button>
+        </div>
       </div>
 
       <div className="bike-tag-print-page__copy">
         <h1>Bike Tag</h1>
         <p className="muted-text">
-          A5 portrait browser print layout designed to fold once into an A6 retail bike tag. Use the print dialog to choose the Xerox or other office printer.
+          This preview uses the same rendered A5 landscape 2-up bike-tag sheet as the direct-print helper path. Browser print stays available as a fallback when you need a manual Xerox print dialog.
         </p>
       </div>
 
+      {lastDirectPrint ? (
+        <div className="card">
+          <strong>Last direct print</strong>
+          <p className="muted-text">
+            {lastDirectPrint.printJob.simulated
+              ? `Rendered in DRY_RUN mode for ${lastDirectPrint.printer.name}.`
+              : `Sent to ${lastDirectPrint.printer.name} via ${lastDirectPrint.printer.transportMode}.`}
+          </p>
+          <p className="muted-text">
+            Job {lastDirectPrint.printJob.jobId} · {lastDirectPrint.printJob.copies} sheet{lastDirectPrint.printJob.copies === 1 ? "" : "s"} · target {lastDirectPrint.printJob.printerTarget}
+            {lastDirectPrint.printJob.outputPath ? ` · ${lastDirectPrint.printJob.outputPath}` : ""}
+          </p>
+        </div>
+      ) : null}
+
       <div className="bike-tag-print-page__sheet">
-        {variant ? (
-          <BikeTagDocument variant={variant} product={product} appConfig={appConfig} />
-        ) : loading ? (
+        {previewUrl ? (
+          <img
+            className="bike-tag-print-page__image-preview"
+            data-testid="bike-tag-preview-image"
+            src={previewUrl}
+            alt={variant ? `${variant.product?.name || variant.sku} bike tag preview` : "Bike tag preview"}
+          />
+        ) : loading || previewLoading ? (
           <div className="card bike-tag-print-page__state-card">Loading bike tag…</div>
         ) : (
           <div className="card bike-tag-print-page__state-card">Bike tag is not available.</div>

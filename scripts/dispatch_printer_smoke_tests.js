@@ -236,6 +236,38 @@ const run = async () => {
     assert.equal(productLabelOnlyList.status, 200, JSON.stringify(productLabelOnlyList.json));
     assert.equal(productLabelOnlyList.json.printers.some((printer) => printer.id === dymoPrinterId), true);
 
+    const createOfficeBikeTagPrinterRes = await fetchJson("/api/settings/printers", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Xerox VersaLink C405",
+        key: makePrinterKey("XEROX_BIKE_TAG"),
+        printerFamily: "OFFICE_DOCUMENT",
+        transportMode: "WINDOWS_PRINTER",
+        windowsPrinterName: "Xerox VersaLink C405",
+        location: "Back office",
+        notes: "Bike-tag office printer",
+        setAsDefaultBikeTag: true,
+      }),
+    });
+    assert.equal(createOfficeBikeTagPrinterRes.status, 201, JSON.stringify(createOfficeBikeTagPrinterRes.json));
+    const officeBikeTagPrinterId = createOfficeBikeTagPrinterRes.json.printer.id;
+    createdPrinterIds.push(officeBikeTagPrinterId);
+    assert.equal(createOfficeBikeTagPrinterRes.json.printer.printerFamily, "OFFICE_DOCUMENT");
+    assert.equal(createOfficeBikeTagPrinterRes.json.printer.supportsShippingLabels, false);
+    assert.equal(createOfficeBikeTagPrinterRes.json.printer.supportsProductLabels, false);
+    assert.equal(createOfficeBikeTagPrinterRes.json.printer.supportsBikeTags, true);
+    assert.equal(createOfficeBikeTagPrinterRes.json.defaultBikeTagPrinterId, officeBikeTagPrinterId);
+
+    const bikeTagOnlyList = await fetchJson("/api/settings/printers?activeOnly=true&bikeTagOnly=true", {
+      headers: MANAGER_HEADERS,
+    });
+    assert.equal(bikeTagOnlyList.status, 200, JSON.stringify(bikeTagOnlyList.json));
+    assert.equal(bikeTagOnlyList.json.printers.some((printer) => printer.id === officeBikeTagPrinterId), true);
+
     const setNonShippingDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
       method: "PUT",
       headers: {
@@ -261,6 +293,19 @@ const run = async () => {
     });
     assert.equal(setShippingPrinterAsProductDefaultRes.status, 409, JSON.stringify(setShippingPrinterAsProductDefaultRes.json));
     assert.equal(setShippingPrinterAsProductDefaultRes.json.error.code, "PRINTER_NOT_PRODUCT_LABEL_CAPABLE");
+
+    const setShippingPrinterAsBikeTagDefaultRes = await fetchJson("/api/settings/printers/default-bike-tag", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: dryRunPrinterId,
+      }),
+    });
+    assert.equal(setShippingPrinterAsBikeTagDefaultRes.status, 409, JSON.stringify(setShippingPrinterAsBikeTagDefaultRes.json));
+    assert.equal(setShippingPrinterAsBikeTagDefaultRes.json.error.code, "PRINTER_NOT_BIKE_TAG_CAPABLE");
 
     const deactivateDefaultRes = await fetchJson(`/api/settings/printers/${encodeURIComponent(dryRunPrinterId)}`, {
       method: "PATCH",
@@ -288,6 +333,19 @@ const run = async () => {
     });
     assert.equal(clearProductDefaultRes.status, 200, JSON.stringify(clearProductDefaultRes.json));
     assert.equal(clearProductDefaultRes.json.defaultProductLabelPrinterId, null);
+
+    const clearBikeTagDefaultRes = await fetchJson("/api/settings/printers/default-bike-tag", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: null,
+      }),
+    });
+    assert.equal(clearBikeTagDefaultRes.status, 200, JSON.stringify(clearBikeTagDefaultRes.json));
+    assert.equal(clearBikeTagDefaultRes.json.defaultBikeTagPrinterId, null);
 
     const clearDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
       method: "PUT",

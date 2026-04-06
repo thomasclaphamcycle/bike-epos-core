@@ -1013,6 +1013,7 @@ enum ShippingProviderSyncEventStatus {
 enum RegisteredPrinterFamily {
   ZEBRA_LABEL
   DYMO_LABEL
+  OFFICE_DOCUMENT
 }
 
 enum RegisteredPrinterTransportMode {
@@ -1171,6 +1172,7 @@ model Printer {
   printerModelHint       String                         @default("GK420D_OR_COMPATIBLE")
   supportsShippingLabels Boolean                        @default(true)
   supportsProductLabels  Boolean                        @default(false)
+  supportsBikeTags       Boolean                        @default(false)
   isActive               Boolean                        @default(true)
   transportMode          RegisteredPrinterTransportMode @default(DRY_RUN)
   windowsPrinterName     String?
@@ -1183,6 +1185,7 @@ model Printer {
 
   @@index([supportsShippingLabels, isActive])
   @@index([supportsProductLabels, isActive])
+  @@index([supportsBikeTags, isActive])
   @@index([printerFamily, isActive])
   @@index([transportMode, isActive])
 }

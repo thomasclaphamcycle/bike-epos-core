@@ -1,6 +1,10 @@
 import express, { type ErrorRequestHandler } from "express";
 import type { AddressInfo } from "node:net";
 import {
+  validateBikeTagPrintAgentSubmitRequest,
+  type BikeTagPrintAgentSubmitResponse,
+} from "../../shared/bikeTagPrintContract";
+import {
   validateProductLabelPrintAgentSubmitRequest,
   type ProductLabelPrintAgentSubmitResponse,
 } from "../../shared/productLabelPrintContract";
@@ -9,6 +13,7 @@ import {
   type ShipmentPrintAgentSubmitResponse,
 } from "../../shared/shippingPrintContract";
 import type { PrintAgentConfig } from "./config";
+import { submitBikeTagPrintJob } from "./bikeTagTransport";
 import { loadPrintAgentConfig } from "./config";
 import { submitProductLabelPrintJob } from "./productLabelTransport";
 import { submitShipmentPrintJob } from "./transport";
@@ -38,7 +43,7 @@ const requireSecret = (providedSecret: string | undefined, config: PrintAgentCon
 export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentConfig()) => {
   const app = express();
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "10mb" }));
 
   app.get("/health", (_req, res) => {
     res.json({
@@ -47,6 +52,7 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
       supportedJobs: {
         shipmentLabels: ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"],
         productLabels: ["DRY_RUN", "WINDOWS_PRINTER"],
+        bikeTags: ["DRY_RUN", "WINDOWS_PRINTER"],
       },
       bindHost: config.bindHost,
       port: config.port,
@@ -114,6 +120,41 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
       }
 
       const response: ProductLabelPrintAgentSubmitResponse = {
+        ok: true,
+        job,
+      };
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/jobs/bike-tag", async (req, res, next) => {
+    try {
+      requireSecret(req.header("X-CorePOS-Print-Agent-Secret") ?? undefined, config);
+      let payload;
+      try {
+        payload = validateBikeTagPrintAgentSubmitRequest(req.body);
+      } catch (error) {
+        throw createHttpError(
+          400,
+          "PRINT_AGENT_REQUEST_INVALID",
+          error instanceof Error ? error.message : "Bike-tag print request payload was invalid",
+        );
+      }
+
+      let job;
+      try {
+        job = await submitBikeTagPrintJob(payload.printRequest, config);
+      } catch (error) {
+        throw createHttpError(
+          502,
+          "PRINT_AGENT_TRANSPORT_FAILED",
+          error instanceof Error ? error.message : "Bike-tag print transport failed",
+        );
+      }
+
+      const response: BikeTagPrintAgentSubmitResponse = {
         ok: true,
         job,
       };
