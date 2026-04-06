@@ -755,8 +755,8 @@ body {
 
 .product-label__logo {
   display: block;
-  max-width: 34mm;
-  max-height: 8.6mm;
+  max-width: 30mm;
+  max-height: 7.65mm;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -786,7 +786,7 @@ body {
 
 .product-label__title {
   margin: 0;
-  font-size: 8.9px;
+  font-size: 10.7px;
   line-height: 1.08;
   font-weight: 700;
   color: #0f1f2f;
@@ -812,7 +812,7 @@ body {
 
 .product-label__variant {
   min-width: 0;
-  font-size: 5.2px;
+  font-size: 5.7px;
   line-height: 1.05;
   font-weight: 600;
   color: #677789;
@@ -823,7 +823,7 @@ body {
 }
 
 .product-label__price-inline {
-  font-size: 8.3px;
+  font-size: 10.05px;
   line-height: 1;
   font-weight: 800;
   color: #111827;
@@ -962,8 +962,8 @@ body {
   }
 
   .product-label__logo {
-    max-width: 30.5mm;
-    max-height: 7.4mm;
+    max-width: 27mm;
+    max-height: 6.55mm;
   }
 
   .product-label__meta-line {
@@ -977,7 +977,7 @@ body {
   }
 
   .product-label__title {
-    font-size: 7.8px;
+    font-size: 9.25px;
     line-height: 1.05;
   }
 
@@ -988,11 +988,11 @@ body {
   }
 
   .product-label__variant {
-    font-size: 4.5px;
+    font-size: 4.9px;
   }
 
   .product-label__price-inline {
-    font-size: 7.2px;
+    font-size: 8.6px;
   }
 
   .product-label__price-band {
