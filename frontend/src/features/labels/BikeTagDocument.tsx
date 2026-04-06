@@ -93,6 +93,79 @@ const buildSpecLines = (variant: BikeTagVariant, product: BikeTagProduct | null)
   return lines.slice(0, 4);
 };
 
+type BikeTagCardProps = {
+  shopName: string;
+  logoUrl: string;
+  productName: string;
+  variantLabel: string;
+  specLines: string[];
+  barcodeValue: string;
+  priceLabel: string;
+  supportLine: string;
+  variant: BikeTagVariant;
+};
+
+const BikeTagCard = ({
+  shopName,
+  logoUrl,
+  productName,
+  variantLabel,
+  specLines,
+  barcodeValue,
+  priceLabel,
+  supportLine,
+  variant,
+}: BikeTagCardProps) => (
+  <section className="bike-tag-document__tag" data-testid="bike-tag-card">
+    <div className="bike-tag-document__tag-header">
+      <div className="bike-tag-document__brand-lockup">
+        {logoUrl ? (
+          <img className="bike-tag-document__store-logo" src={logoUrl} alt={`${shopName} logo`} />
+        ) : (
+          <CorePosLogo variant="full" size={44} className="bike-tag-document__fallback-logo" />
+        )}
+        <div className="bike-tag-document__brand-copy">
+          <span className="bike-tag-document__brand-name">{shopName}</span>
+          <span className="bike-tag-document__brand-subtitle">Bike tag</span>
+        </div>
+      </div>
+      {supportLine ? (
+        <span className="bike-tag-document__front-note">{supportLine}</span>
+      ) : null}
+    </div>
+
+    <div className="bike-tag-document__price-block">
+      <div className="bike-tag-document__price-eyebrow">Retail price</div>
+      <div className="bike-tag-document__price-value">{priceLabel}</div>
+    </div>
+
+    <div className="bike-tag-document__back-copy">
+      <div className="bike-tag-document__eyebrow">Bike details</div>
+      <h1>{productName}</h1>
+      {variantLabel ? <p className="bike-tag-document__variant-line">{variantLabel}</p> : null}
+      <ul className="bike-tag-document__spec-list">
+        {specLines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </div>
+
+    <div className="bike-tag-document__barcode-panel">
+      {barcodeValue ? (
+        <>
+          <BarcodeGraphic value={barcodeValue} className="bike-tag-document__barcode-art" />
+          <div className="bike-tag-document__barcode-value mono-text">{barcodeValue}</div>
+        </>
+      ) : (
+        <div className="bike-tag-document__barcode-fallback">
+          <strong>No barcode stored</strong>
+          <span className="mono-text">SKU {variant.sku}</span>
+        </div>
+      )}
+    </div>
+  </section>
+);
+
 export const BikeTagDocument = ({ variant, product, appConfig }: BikeTagDocumentProps) => {
   const shopName = normalizeText(appConfig.store.businessName) || normalizeText(appConfig.store.name) || "CorePOS";
   const logoUrl = normalizeText(appConfig.store.preferredLogoUrl);
@@ -107,59 +180,28 @@ export const BikeTagDocument = ({ variant, product, appConfig }: BikeTagDocument
 
   return (
     <article className="bike-tag-document" data-testid="bike-tag-document">
-      <section className="bike-tag-document__panel bike-tag-document__panel--front">
-        <div className="bike-tag-document__brand-strip">
-          <div className="bike-tag-document__brand-lockup">
-            {logoUrl ? (
-              <img className="bike-tag-document__store-logo" src={logoUrl} alt={`${shopName} logo`} />
-            ) : (
-              <CorePosLogo variant="full" size={44} className="bike-tag-document__fallback-logo" />
-            )}
-            <div className="bike-tag-document__brand-copy">
-              <span className="bike-tag-document__brand-name">{shopName}</span>
-              <span className="bike-tag-document__brand-subtitle">Folded bike tag</span>
-            </div>
-          </div>
-          {supportLine ? (
-            <span className="bike-tag-document__front-note">{supportLine}</span>
-          ) : null}
-        </div>
-
-        <div className="bike-tag-document__price-block">
-          <div className="bike-tag-document__price-eyebrow">Retail price</div>
-          <div className="bike-tag-document__price-value">{priceLabel}</div>
-          <div className="bike-tag-document__price-support">
-            Ready for the shop floor. Print on A5 portrait and fold once to A6.
-          </div>
-        </div>
-      </section>
-
-      <section className="bike-tag-document__panel bike-tag-document__panel--back">
-        <div className="bike-tag-document__back-copy">
-          <div className="bike-tag-document__eyebrow">Bike details</div>
-          <h1>{productName}</h1>
-          {variantLabel ? <p className="bike-tag-document__variant-line">{variantLabel}</p> : null}
-          <ul className="bike-tag-document__spec-list">
-            {specLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="bike-tag-document__barcode-panel">
-          {barcodeValue ? (
-            <>
-              <BarcodeGraphic value={barcodeValue} className="bike-tag-document__barcode-art" />
-              <div className="bike-tag-document__barcode-value mono-text">{barcodeValue}</div>
-            </>
-          ) : (
-            <div className="bike-tag-document__barcode-fallback">
-              <strong>No barcode stored</strong>
-              <span className="mono-text">SKU {variant.sku}</span>
-            </div>
-          )}
-        </div>
-      </section>
+      <BikeTagCard
+        shopName={shopName}
+        logoUrl={logoUrl}
+        productName={productName}
+        variantLabel={variantLabel}
+        specLines={specLines}
+        barcodeValue={barcodeValue}
+        priceLabel={priceLabel}
+        supportLine={supportLine}
+        variant={variant}
+      />
+      <BikeTagCard
+        shopName={shopName}
+        logoUrl={logoUrl}
+        productName={productName}
+        variantLabel={variantLabel}
+        specLines={specLines}
+        barcodeValue={barcodeValue}
+        priceLabel={priceLabel}
+        supportLine={supportLine}
+        variant={variant}
+      />
     </article>
   );
 };

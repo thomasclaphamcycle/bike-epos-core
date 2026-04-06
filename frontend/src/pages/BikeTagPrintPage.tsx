@@ -155,25 +155,15 @@ export const BikeTagPrintPage = () => {
           <Link to={`/inventory/${variantId}`}>Back to inventory detail</Link>
           <Link to={`/inventory/${variantId}/label`}>Open product label</Link>
         </div>
-        <div className="actions-inline">
-          <button
-            type="button"
-            className="primary"
-            onClick={() => void handleDirectPrint()}
-            disabled={!variant || loading || directPrinting}
-          >
-            {directPrinting ? "Printing bike tag..." : "Direct print bike tag"}
-          </button>
-          <button type="button" onClick={() => window.print()} disabled={!variant || loading || directPrinting}>
-            {loading ? "Loading..." : "Browser print fallback"}
-          </button>
-        </div>
+        <button type="button" className="primary" onClick={() => window.print()} disabled={!variant || loading}>
+          {loading ? "Loading..." : "Print 2-up bike tags"}
+        </button>
       </div>
 
       <div className="bike-tag-print-page__copy">
         <h1>Bike Tag</h1>
         <p className="muted-text">
-          This preview uses the same rendered A5 landscape 2-up bike-tag sheet as the direct-print helper path. Browser print stays available as a fallback when you need a manual Xerox print dialog.
+          A5 landscape browser print layout with 2 identical A6 bike tags side by side, ready to print and cut. Use the print dialog to choose the Xerox or other office printer.
         </p>
       </div>
 
