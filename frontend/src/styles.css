@@ -15963,7 +15963,14 @@ body.rota-row-drag-copy-active {
 }
 
 .sales-history-filter-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.45fr) repeat(4, minmax(150px, 1fr));
   align-items: end;
+  gap: 12px;
+}
+
+.sales-history-filter-row label {
+  min-width: 0;
 }
 
 .sales-history-toolbar,
@@ -15973,6 +15980,10 @@ body.rota-row-drag-copy-active {
   align-items: center;
   gap: var(--cp-space-3);
   margin-top: var(--cp-space-3);
+}
+
+.sales-history-results-summary {
+  margin: 0;
 }
 
 .sales-history-page-size {
@@ -15987,13 +15998,29 @@ body.rota-row-drag-copy-active {
   margin-top: var(--cp-space-3);
 }
 
+.sales-history-page table th {
+  vertical-align: bottom;
+}
+
+.sales-history-page table td {
+  vertical-align: middle;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.sales-history-table__head--numeric,
+.sales-history-table__head--date {
+  text-align: right;
+}
+
 .sales-history-row {
   cursor: pointer;
+  transition: background 120ms ease;
 }
 
 .sales-history-row:hover,
 .sales-history-row:focus-visible {
-  background: rgba(22, 84, 156, 0.06);
+  background: rgba(22, 84, 156, 0.045);
   outline: none;
 }
 
@@ -16001,28 +16028,43 @@ body.rota-row-drag-copy-active {
   white-space: nowrap;
   text-align: right;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--cp-shell-deep);
+}
+
+.sales-history-date-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sales-history-reference {
+  letter-spacing: 0.01em;
 }
 
 .sales-history-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 88px;
-  padding: 6px 10px;
+  min-width: 78px;
+  padding: 5px 10px;
   border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 700;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .sales-history-status-complete {
-  background: rgba(223, 243, 230, 0.95);
-  color: #18522a;
+  background: rgba(223, 243, 230, 0.72);
+  border-color: rgba(24, 82, 42, 0.12);
+  color: #2b5e39;
 }
 
 .sales-history-status-draft {
-  background: rgba(240, 242, 245, 0.95);
-  color: #495769;
+  background: rgba(240, 242, 245, 0.78);
+  border-color: rgba(73, 87, 105, 0.1);
+  color: #556273;
 }
 
 .sales-history-state {
@@ -16042,10 +16084,37 @@ body.rota-row-drag-copy-active {
   background: rgba(255, 235, 233, 0.6);
 }
 
+.sales-history-inline-state {
+  display: grid;
+  gap: 4px;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .sales-history-filter-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sales-history-filter-row .grow {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 960px) {
+  .sales-history-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .sales-history-toolbar,
   .sales-history-pagination {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-history-filter-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
