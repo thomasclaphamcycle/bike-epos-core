@@ -2857,8 +2857,7 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await page.getByTestId(`online-store-order-row-${createdOrder.order.id}`).click();
 
   await expect(page.getByTestId("online-store-order-detail")).toContainText(createdOrder.order.orderNumber);
-  await expect(page.getByTestId("online-store-next-action")).toContainText("Mark packed before shipment creation");
-  await expect(page.getByTestId("online-store-action-focus")).toContainText("Confirm packing");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Confirm packing");
   await expect(page.getByTestId("online-store-focus-pack")).toBeVisible();
   await expect(page.getByTestId("online-store-readiness")).toContainText("Needs packing");
   await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("No shipment activity yet");
@@ -2870,14 +2869,14 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await expect(page.getByTestId("online-store-packing-handoff")).toContainText("Packed and ready for shipment creation");
   await expect(page.getByTestId("online-store-readiness")).toContainText("Packed and ready");
   await expect(page.getByTestId("online-store-readiness")).toContainText("Ready to create");
-  await expect(page.getByTestId("online-store-action-focus")).toContainText("Generate shipment label");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Generate shipment label");
   await page.getByTestId("online-store-jump-to-shipment").click();
   await page.getByTestId("online-store-generate-label").click();
 
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Label Ready");
-  await expect(page.getByTestId("online-store-action-focus")).toContainText("Print via Windows agent");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Print via Windows agent");
   await expect(page.getByTestId("online-store-prepare-print")).toBeVisible();
   await expect(page.getByTestId("online-store-label-preview")).toContainText("SHIP TO");
   await expect(page.getByTestId("online-store-label-preview")).toContainText("TRACKING NUMBER");
@@ -2901,7 +2900,7 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Printed");
-  await expect(page.getByTestId("online-store-action-focus")).toContainText("Confirm dispatch");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Confirm dispatch");
   await expect(page.getByTestId("online-store-print")).toContainText("Reprint label");
   await expect(page.getByTestId("online-store-dispatch")).toBeVisible();
   await expect(page.getByTestId("online-store-print-job-result")).toContainText("DRY_RUN");
@@ -2916,7 +2915,7 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
   await expect.poll(async () => {
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Dispatched");
-  await expect(page.getByTestId("online-store-action-focus")).toContainText("Shipment complete");
+  await expect(page.getByTestId("online-store-next-action")).toContainText("Shipment complete");
   await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("Dispatched");
   await expect(page.getByTestId("online-store-scan-input")).toHaveValue("");
   await expect(page.getByTestId("online-store-scan-input")).toBeFocused();
