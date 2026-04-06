@@ -625,7 +625,7 @@ type DispatchActionCard = {
 type DispatchActionFocus = {
   title: string;
   detail: string;
-  primaryActions: DispatchActionCard[];
+  primaryAction: DispatchActionCard | null;
   secondaryActions: DispatchActionCard[];
 };
 
@@ -635,25 +635,6 @@ type ShipmentTimelineEntry = {
   detail: string;
   timestamp: string;
   tone: "default" | "success" | "warning" | "danger";
-};
-
-type DispatchRecommendation = {
-  title: string;
-  detail: string;
-};
-
-const readinessClassName = (state: DispatchReadinessState) => {
-  switch (state) {
-    case "complete":
-      return "online-orders-readiness-card online-orders-readiness-card--complete";
-    case "ready":
-      return "online-orders-readiness-card online-orders-readiness-card--ready";
-    case "blocked":
-      return "online-orders-readiness-card online-orders-readiness-card--blocked";
-    case "pending":
-    default:
-      return "online-orders-readiness-card online-orders-readiness-card--pending";
-  }
 };
 
 const timelineToneClassName = (tone: ShipmentTimelineEntry["tone"]) => {
@@ -668,106 +649,6 @@ const timelineToneClassName = (tone: ShipmentTimelineEntry["tone"]) => {
     default:
       return "online-orders-timeline__item";
   }
-};
-
-const getDispatchRecommendation = (
-  order: WebOrderDetail | null,
-  shipment: WebOrderShipment | null,
-  provider: SupportedShippingProvider | null,
-  printer: RegisteredPrinter | null,
-): DispatchRecommendation => {
-  if (!order) {
-    return {
-      title: "Select an order",
-      detail: "Choose a web order to see shipment readiness, operator actions, and recent dispatch activity.",
-    };
-  }
-
-  if (order.fulfillmentMethod !== "SHIPPING") {
-    return {
-      title: "No shipping workflow required",
-      detail: "This order is click & collect, so the dispatch shipment flow does not apply.",
-    };
-  }
-
-  if (order.status === "CANCELLED") {
-    return {
-      title: "Order is cancelled",
-      detail: "No further dispatch action is expected unless the order itself is reinstated first.",
-    };
-  }
-
-  if (!isOrderPacked(order)) {
-    return {
-      title: "Mark packed before shipment creation",
-      detail: "Packing is the first gate for shipping orders. Confirm packing before generating a shipment label or moving this parcel into dispatch-bench work.",
-    };
-  }
-
-  if (!shipment) {
-    return provider?.isAvailable
-      ? {
-          title: "Generate the first shipment label",
-          detail: "Start by creating a provider-backed shipment so CorePOS can store the label and tracking locally.",
-        }
-      : {
-          title: "Configure or choose an available provider",
-          detail: "Shipment creation is blocked until the selected provider is available in Settings.",
-        };
-  }
-
-  if (shipment.status === "VOID_PENDING") {
-    return {
-      title: "Refresh provider status before doing anything else",
-      detail: "A void request is in flight. Printing and dispatch stay blocked until the provider confirms the final outcome.",
-    };
-  }
-
-  if (shipment.status === "VOIDED") {
-    return {
-      title: "Generate a replacement shipment when ready",
-      detail: "This shipment is no longer active. Create a replacement only if the order still needs to be shipped.",
-    };
-  }
-  if (shipment.providerSyncError) {
-    return {
-      title: "Review the provider exception before closeout",
-      detail: `CorePOS still has a usable shipment record, but the last provider sync reported an issue: ${shipment.providerSyncError}`,
-    };
-  }
-
-  if (!printer) {
-    return {
-      title: "Choose a dispatch printer",
-      detail: "Printing is the next step, but CorePOS needs an active shipping-label printer selected first.",
-    };
-  }
-
-  if (!shipment.printPreparedAt) {
-    return {
-      title: "Prepare the Zebra print payload",
-      detail: "This confirms the target printer and lets staff preview the exact backend-owned print contract before sending it.",
-    };
-  }
-
-  if (!shipment.printedAt) {
-    return {
-      title: "Print the shipment label",
-      detail: "Send the stored ZPL label to the Windows dispatch agent. Dispatch remains blocked until print succeeds.",
-    };
-  }
-
-  if (!shipment.dispatchedAt) {
-    return {
-      title: "Mark the parcel dispatched after handoff",
-      detail: "The label has been printed. Confirm dispatch only once the parcel has actually left the store.",
-    };
-  }
-
-  return {
-    title: "Shipment workflow complete",
-    detail: "This order has already been dispatched. Reprints remain available for operational follow-up if needed.",
-  };
 };
 
 const getDispatchReadiness = (
@@ -987,7 +868,7 @@ const getDispatchActionFocus = (
     return {
       title: "Select an order",
       detail: "Choose a web order to see the shipment workflow and the actions that are available right now.",
-      primaryActions: [],
+      primaryAction: null,
       secondaryActions: [],
     };
   }
@@ -996,7 +877,7 @@ const getDispatchActionFocus = (
     return {
       title: "No shipping action needed",
       detail: "Click & collect orders do not use the shipment-label dispatch flow.",
-      primaryActions: [],
+      primaryAction: null,
       secondaryActions: [],
     };
   }
@@ -1005,7 +886,7 @@ const getDispatchActionFocus = (
     return {
       title: "Order cancelled",
       detail: "Shipment actions stay unavailable because this order is cancelled.",
-      primaryActions: [],
+      primaryAction: null,
       secondaryActions: [],
     };
   }
@@ -1014,14 +895,12 @@ const getDispatchActionFocus = (
     return {
       title: "Confirm packing",
       detail: "Confirm packing first. Shipment creation, print, and dispatch stay blocked until the parcel is packed.",
-      primaryActions: [
-        {
-          key: "pack",
-          title: "Confirm packing",
-          detail: "Moves the order into the shipment workflow and makes label creation available.",
-          enabled: flags.canPackOrder,
-        },
-      ],
+      primaryAction: {
+        key: "pack",
+        title: "Confirm packing",
+        detail: "Moves the order into the shipment workflow and makes label creation available.",
+        enabled: flags.canPackOrder,
+      },
       secondaryActions: [],
     };
   }
@@ -1032,16 +911,14 @@ const getDispatchActionFocus = (
       detail: provider?.isAvailable
         ? "Packing is complete. Create the first shipment label now so tracking and the stored ZPL label exist in CorePOS."
         : "Packing is complete, but shipment creation is blocked until an available provider is selected.",
-      primaryActions: [
-        {
-          key: "generate",
-          title: "Generate shipment label",
-          detail: provider?.isAvailable
-            ? "Creates the active shipment and stores the label locally for print and reprint."
-            : "Select or configure an available provider first.",
-          enabled: flags.canGenerateShipment,
-        },
-      ],
+      primaryAction: {
+        key: "generate",
+        title: "Generate shipment label",
+        detail: provider?.isAvailable
+          ? "Creates the active shipment and stores the label locally for print and reprint."
+          : "Select or configure an available provider first.",
+        enabled: flags.canGenerateShipment,
+      },
       secondaryActions: [],
     };
   }
@@ -1050,14 +927,12 @@ const getDispatchActionFocus = (
     return {
       title: "Refresh provider status",
       detail: "This shipment is waiting on a void outcome. Refresh it before deciding whether to replace or print anything.",
-      primaryActions: [
-        {
-          key: "refresh",
-          title: "Refresh provider status",
-          detail: "Checks whether the courier has completed the pending void.",
-          enabled: true,
-        },
-      ],
+      primaryAction: {
+        key: "refresh",
+        title: "Refresh provider status",
+        detail: "Checks whether the courier has completed the pending void.",
+        enabled: true,
+      },
       secondaryActions: [],
     };
   }
@@ -1066,14 +941,12 @@ const getDispatchActionFocus = (
     return {
       title: "Generate replacement shipment",
       detail: "This shipment is no longer active. If the order still needs to go out, create a replacement shipment.",
-      primaryActions: [
-        {
-          key: "regenerate",
-          title: "Generate replacement shipment",
-          detail: "Creates a new active shipment using the same order and service.",
-          enabled: true,
-        },
-      ],
+      primaryAction: {
+        key: "regenerate",
+        title: "Generate replacement shipment",
+        detail: "Creates a new active shipment using the same order and service.",
+        enabled: true,
+      },
       secondaryActions: [],
     };
   }
@@ -1082,14 +955,12 @@ const getDispatchActionFocus = (
     return {
       title: "Review provider issue",
       detail: `CorePOS still has the shipment, but the last provider sync needs review: ${shipment.providerSyncError}`,
-      primaryActions: [
-        {
-          key: "refresh",
-          title: "Refresh provider status",
-          detail: "Re-check the latest provider state before continuing.",
-          enabled: true,
-        },
-      ],
+      primaryAction: {
+        key: "refresh",
+        title: "Refresh provider status",
+        detail: "Re-check the latest provider state before continuing.",
+        enabled: true,
+      },
       secondaryActions: [],
     };
   }
@@ -1100,16 +971,14 @@ const getDispatchActionFocus = (
       detail: printer
         ? "The label is ready. Print it now, or preview the Zebra payload first if you want to check the exact contract."
         : "The label is ready, but printing is blocked until an active shipping-label printer is selected.",
-      primaryActions: [
-        {
-          key: "print",
-          title: "Print via Windows agent",
-          detail: printer
-            ? "Sends the stored shipment label straight to the configured Zebra helper."
-            : "Select an active shipping-label printer first.",
-          enabled: flags.canPrintShipment,
-        },
-      ],
+      primaryAction: {
+        key: "print",
+        title: "Print via Windows agent",
+        detail: printer
+          ? "Sends the stored shipment label straight to the configured Zebra helper."
+          : "Select an active shipping-label printer first.",
+        enabled: flags.canPrintShipment,
+      },
       secondaryActions: [
         {
           key: "prepare-print",
@@ -1127,21 +996,19 @@ const getDispatchActionFocus = (
     return {
       title: "Confirm dispatch",
       detail: "The label has already been printed. Reprint if needed, then confirm dispatch once the parcel has physically left the store.",
-      primaryActions: [
+      primaryAction: {
+        key: "dispatch",
+        title: "Confirm dispatch",
+        detail: "Final step. Record that the parcel has actually left the store.",
+        enabled: flags.canDispatchShipment,
+      },
+      secondaryActions: [
         {
           key: "print",
           title: "Reprint label",
           detail: "Available for duplicate labels or bench recovery before dispatch.",
           enabled: flags.canPrintShipment,
         },
-        {
-          key: "dispatch",
-          title: "Confirm dispatch",
-          detail: "Final step. Record that the parcel has actually left the store.",
-          enabled: flags.canDispatchShipment,
-        },
-      ],
-      secondaryActions: [
         {
           key: "prepare-print",
           title: "Preview print payload",
@@ -1157,7 +1024,7 @@ const getDispatchActionFocus = (
   return {
     title: "Shipment complete",
     detail: "This order has already been dispatched. No further shipment workflow action is required.",
-    primaryActions: [],
+    primaryAction: null,
     secondaryActions: flags.canPrintShipment
       ? [
           {
@@ -1172,57 +1039,55 @@ const getDispatchActionFocus = (
 };
 
 const getDispatchSupportCards = (
-  order: WebOrderDetail | null,
   shipment: WebOrderShipment | null,
-  provider: SupportedShippingProvider | null,
   shipmentProvider: SupportedShippingProvider | null,
   flags: {
-    canGenerateShipment: boolean;
     canRefreshShipment: boolean;
     canCancelShipment: boolean;
     canRegenerateShipment: boolean;
   },
 ): DispatchActionCard[] => {
-  const cards: DispatchActionCard[] = [
-    {
+  const cards: DispatchActionCard[] = [];
+
+  if (
+    shipment
+    && (shipmentProvider?.supportsShipmentRefresh || shipment.status === "VOID_PENDING" || Boolean(shipment.providerSyncError))
+  ) {
+    cards.push({
       key: "refresh",
       title: "Refresh provider status",
-      detail: !shipment
-        ? "Available after a shipment exists."
-        : !shipmentProvider?.supportsShipmentRefresh
-          ? `${shipment.providerDisplayName} does not currently expose refresh support in CorePOS.`
-          : shipment.status === "VOID_PENDING"
-            ? "Recommended now: confirm whether the provider void/refund has completed."
-            : "Use when provider tracking or void status may have changed since the last sync.",
+      detail: !shipmentProvider?.supportsShipmentRefresh
+        ? "Use this to re-check the provider outcome before taking further action."
+        : shipment.status === "VOID_PENDING"
+          ? "Recommended now: confirm whether the provider void/refund has completed."
+          : "Use when provider tracking or void status may have changed since the last sync.",
       enabled: flags.canRefreshShipment,
-    },
-    {
+    });
+  }
+
+  if (shipment && shipmentProvider?.supportsShipmentVoid && !shipment.dispatchedAt) {
+    cards.push({
       key: "cancel",
       title: "Void shipment",
-      detail: !shipment
-        ? "Available after a shipment exists."
-        : !shipmentProvider?.supportsShipmentVoid
-          ? `${shipment.providerDisplayName} does not currently support voiding through CorePOS.`
-          : shipment.dispatchedAt
-            ? "Blocked because the shipment is already dispatched."
-            : shipment.status === "VOID_PENDING"
-              ? "Blocked until the current void request reaches a final provider outcome."
-              : shipment.status === "VOIDED"
-                ? "Already voided."
-                : "Use only when this exact shipment should no longer be used.",
+      detail: shipment.status === "VOID_PENDING"
+        ? "Blocked until the current void request reaches a final provider outcome."
+        : shipment.status === "VOIDED"
+          ? "Already voided."
+          : "Use only when this exact shipment should no longer be used.",
       enabled: flags.canCancelShipment,
-    },
-    {
+    });
+  }
+
+  if (shipment && (shipment.status === "VOIDED" || flags.canRegenerateShipment)) {
+    cards.push({
       key: "regenerate",
       title: "Replacement shipment",
-      detail: !shipment
-        ? "Available after a shipment exists."
-        : shipment.status === "VOIDED"
-          ? "Ready now. CorePOS will create a new shipment with the same provider and service."
-          : "Blocked until the current shipment is fully voided.",
+      detail: shipment.status === "VOIDED"
+        ? "Ready now. CorePOS will create a new shipment with the same provider and service."
+        : "Blocked until the current shipment is fully voided.",
       enabled: flags.canRegenerateShipment,
-    },
-  ];
+    });
+  }
 
   return cards;
 };
@@ -2192,12 +2057,6 @@ export const OnlineStoreOrdersPage = () => {
         && !selectedShipment,
     ),
   }), [selectedOrder, selectedShipment]);
-  const dispatchRecommendation = getDispatchRecommendation(
-    selectedOrder,
-    selectedShipment,
-    selectedShipment ? shipmentProvider : selectedProvider,
-    selectedPrinter,
-  );
   const dispatchReadiness = getDispatchReadiness(
     selectedOrder,
     selectedShipment,
@@ -2218,12 +2077,9 @@ export const OnlineStoreOrdersPage = () => {
     },
   );
   const dispatchSupportCards = getDispatchSupportCards(
-    selectedOrder,
     selectedShipment,
-    selectedProvider,
     shipmentProvider,
     {
-      canGenerateShipment,
       canRefreshShipment,
       canCancelShipment,
       canRegenerateShipment,
@@ -3077,19 +2933,55 @@ export const OnlineStoreOrdersPage = () => {
                     ) : null}
                   </div>
 
-                  <div className="online-orders-next-step" data-testid="online-store-next-action">
-                    <span className="online-orders-next-step__eyebrow">Recommended next step</span>
-                    <strong>{dispatchRecommendation.title}</strong>
-                    <p>{dispatchRecommendation.detail}</p>
+                  <div className="online-orders-action-focus" data-testid="online-store-next-action">
+                    <div className="online-orders-action-focus__header">
+                      <div>
+                        <span className="online-orders-next-step__eyebrow">Next step</span>
+                        <strong>{dispatchActionFocus.title}</strong>
+                      </div>
+                      <span className={`status-badge${dispatchActionFocus.primaryAction ? " status-ready" : ""}`}>
+                        {dispatchActionFocus.primaryAction ? "Action available" : "Complete"}
+                      </span>
+                    </div>
+                    <p className="online-orders-action-focus__detail">{dispatchActionFocus.detail}</p>
+
+                    {dispatchActionFocus.primaryAction ? (
+                      <div className="online-orders-action-focus__primary">
+                        <div className="online-orders-action-focus__primary-copy">
+                          <span className="online-orders-action-focus__label">Do now</span>
+                          <strong>{dispatchActionFocus.primaryAction.title}</strong>
+                          <p>{dispatchActionFocus.primaryAction.detail}</p>
+                        </div>
+                        {(() => {
+                          const { actionLabel, actionTestId, actionHandler } = resolveDispatchActionUi(dispatchActionFocus.primaryAction);
+
+                          return (
+                            <button
+                              type="button"
+                              className="button-link online-orders-primary-action-button"
+                              onClick={actionHandler ?? undefined}
+                              disabled={!dispatchActionFocus.primaryAction.enabled || pendingAction.length > 0}
+                              data-testid={actionTestId}
+                            >
+                              {actionLabel}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="online-orders-action-focus__complete">
+                        <strong>Shipment complete</strong>
+                        <span>The parcel has already been dispatched, so there is no next-step action to take here.</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="online-orders-readiness-grid" data-testid="online-store-readiness">
+                  <div className="online-orders-readiness-strip" data-testid="online-store-readiness">
                     {dispatchReadiness.map((item) => (
-                      <article key={item.label} className={readinessClassName(item.state)}>
-                        <span className="online-orders-readiness-card__label">{item.label}</span>
+                      <div key={item.label} className={`online-orders-readiness-pill online-orders-readiness-pill--${item.state}`}>
+                        <span className="online-orders-readiness-pill__label">{item.label}</span>
                         <strong>{item.headline}</strong>
-                        <p>{item.detail}</p>
-                      </article>
+                      </div>
                     ))}
                   </div>
 
@@ -3273,53 +3165,10 @@ export const OnlineStoreOrdersPage = () => {
                     </>
                   )}
 
-                  <div className="online-orders-action-focus" data-testid="online-store-action-focus">
-                    <div className="online-orders-action-focus__header">
-                      <div>
-                        <span className="online-orders-next-step__eyebrow">Shipment actions</span>
-                        <strong>{dispatchActionFocus.title}</strong>
-                      </div>
-                      <span className={`status-badge${dispatchActionFocus.primaryActions.length > 0 ? " status-ready" : ""}`}>
-                        {dispatchActionFocus.primaryActions.length > 0 ? "Action available" : "No action needed"}
-                      </span>
-                    </div>
-                    <p className="online-orders-action-focus__detail">{dispatchActionFocus.detail}</p>
-
-                    {dispatchActionFocus.primaryActions.length > 0 ? (
+                  {dispatchActionFocus.secondaryActions.length > 0 ? (
+                    <div className="online-orders-action-focus online-orders-action-focus--secondary" data-testid="online-store-action-focus">
                       <div className="online-orders-action-focus__group">
-                        <span className="online-orders-action-focus__label">Do now</span>
-                        <div className="online-orders-action-grid">
-                          {dispatchActionFocus.primaryActions.map((card) => {
-                            const { actionLabel, actionTestId, actionHandler } = resolveDispatchActionUi(card);
-
-                            return (
-                              <article
-                                key={card.key}
-                                className={`online-orders-action-card${card.enabled ? "" : " online-orders-action-card--disabled"}`}
-                              >
-                                <div className="online-orders-action-card__copy">
-                                  <strong>{card.title}</strong>
-                                  <p>{card.detail}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="button-link"
-                                  onClick={actionHandler ?? undefined}
-                                  disabled={!card.enabled || pendingAction.length > 0}
-                                  data-testid={actionTestId}
-                                >
-                                  {actionLabel}
-                                </button>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {dispatchActionFocus.secondaryActions.length > 0 ? (
-                      <div className="online-orders-action-focus__group">
-                        <span className="online-orders-action-focus__label">Also available</span>
+                        <span className="online-orders-action-focus__label">Other actions</span>
                         <div className="online-orders-action-grid online-orders-action-grid--secondary">
                           {dispatchActionFocus.secondaryActions.map((card) => {
                             const { actionLabel, actionTestId, actionHandler } = resolveDispatchActionUi(card);
@@ -3347,8 +3196,8 @@ export const OnlineStoreOrdersPage = () => {
                           })}
                         </div>
                       </div>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
 
                   {dispatchSupportCards.length > 0 ? (
                     <div className="online-orders-dispatch-support">
