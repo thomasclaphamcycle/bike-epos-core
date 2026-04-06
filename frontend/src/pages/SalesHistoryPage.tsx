@@ -82,10 +82,15 @@ const parsePositiveInteger = (value: string | null, fallback: number) => {
 
 const normalizeDateParam = (value: string | null) => (value && ISO_DATE_ONLY_PATTERN.test(value) ? value : "");
 
-const formatSalesHistoryDateTime = (value: string) =>
-  new Date(value).toLocaleString("en-GB", {
+const formatSalesHistoryDate = (value: string) =>
+  new Date(value).toLocaleDateString("en-GB", {
     dateStyle: "medium",
-    timeStyle: "short",
+  });
+
+const formatSalesHistoryTime = (value: string) =>
+  new Date(value).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
 const formatReference = (value: string | null) => {
@@ -237,7 +242,7 @@ export const SalesHistoryPage = () => {
   const resultsSummary = payload
     ? `${pagination.total} sale${pagination.total === 1 ? "" : "s"} found`
     : loading
-      ? "Loading sales…"
+      ? "Loading sales..."
       : "No results yet";
 
   const clearFilters = () => {
@@ -385,7 +390,7 @@ export const SalesHistoryPage = () => {
         </div>
 
         <div className="sales-history-toolbar">
-          <p className="muted-text">{resultsSummary}</p>
+          <p className="muted-text sales-history-results-summary">{resultsSummary}</p>
           <label className="sales-history-page-size">
             Show
             <select
@@ -427,8 +432,8 @@ export const SalesHistoryPage = () => {
                     <th>Sold by</th>
                     <th>Customer</th>
                     <th>Reference</th>
-                    <th>Total</th>
-                    <th>Date</th>
+                    <th className="sales-history-table__head--numeric">Total</th>
+                    <th className="sales-history-table__head--date">Date</th>
                     <th>Store</th>
                     <th>Status</th>
                   </tr>
@@ -436,13 +441,21 @@ export const SalesHistoryPage = () => {
                 <tbody>
                   {loading && rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} data-testid="sales-history-loading-state">Loading sales...</td>
+                      <td colSpan={8} data-testid="sales-history-loading-state">
+                        <div className="sales-history-inline-state">
+                          <strong>Loading sales...</strong>
+                          <span className="table-secondary">Fetching the latest transactions for this view.</span>
+                        </div>
+                      </td>
                     </tr>
                   ) : null}
                   {!loading && rows.length === 0 ? (
                     <tr>
                       <td colSpan={8} data-testid="sales-history-empty-state">
-                        No sales match the current filters.
+                        <div className="sales-history-inline-state">
+                          <strong>No sales match the current filters.</strong>
+                          <span className="table-secondary">Try widening the date range, changing the store, or clearing the search.</span>
+                        </div>
                       </td>
                     </tr>
                   ) : null}
@@ -459,14 +472,23 @@ export const SalesHistoryPage = () => {
                         <div className="table-primary mono-text">{row.orderNo}</div>
                         <div className="table-secondary">{describeSource(row.source)}</div>
                       </td>
-                      <td>{row.soldBy.name || "-"}</td>
-                      <td>{row.customer.name || "Walk-in"}</td>
-                      <td>{formatReference(row.reference)}</td>
-                      <td className="sales-history-total">{formatTotal(row)}</td>
                       <td>
-                        <div className="table-primary">{formatSalesHistoryDateTime(row.soldAt)}</div>
+                        <div className="table-primary">{row.soldBy.name || "-"}</div>
                       </td>
-                      <td>{row.store.name || "-"}</td>
+                      <td>
+                        <div className="table-primary">{row.customer.name || "Walk-in"}</div>
+                      </td>
+                      <td>
+                        <div className="table-primary mono-text sales-history-reference">{formatReference(row.reference)}</div>
+                      </td>
+                      <td className="sales-history-total">{formatTotal(row)}</td>
+                      <td className="sales-history-date-cell">
+                        <div className="table-primary">{formatSalesHistoryDate(row.soldAt)}</div>
+                        <div className="table-secondary">{formatSalesHistoryTime(row.soldAt)}</div>
+                      </td>
+                      <td>
+                        <div className="table-primary">{row.store.name || "-"}</div>
+                      </td>
                       <td>
                         <span className={getStatusClassName(row.status)}>{formatStatusLabel(row.status)}</span>
                       </td>
