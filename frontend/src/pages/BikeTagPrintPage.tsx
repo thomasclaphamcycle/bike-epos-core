@@ -76,7 +76,7 @@ export const BikeTagPrintPage = () => {
   const printPageStyle = useMemo(() => (
     `@media print {
       @page {
-        size: A5 portrait;
+        size: A5 landscape;
         margin: 6mm;
       }
     }`
@@ -96,14 +96,14 @@ export const BikeTagPrintPage = () => {
           <Link to={`/inventory/${variantId}/label`}>Open product label</Link>
         </div>
         <button type="button" className="primary" onClick={() => window.print()} disabled={!variant || loading}>
-          {loading ? "Loading..." : "Print A5 bike tag"}
+          {loading ? "Loading..." : "Print 2-up bike tags"}
         </button>
       </div>
 
       <div className="bike-tag-print-page__copy">
         <h1>Bike Tag</h1>
         <p className="muted-text">
-          A5 portrait browser print layout designed to fold once into an A6 retail bike tag. Use the print dialog to choose the Xerox or other office printer.
+          A5 landscape browser print layout with 2 identical A6 bike tags side by side, ready to print and cut. Use the print dialog to choose the Xerox or other office printer.
         </p>
       </div>
 
