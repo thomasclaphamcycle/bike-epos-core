@@ -418,7 +418,7 @@ const run = async () => {
     assert.match(labelPayloadRes.json.document.content, /\^LL1218/);
     assert.match(labelPayloadRes.json.document.content, /SHIP TO/);
     assert.match(labelPayloadRes.json.document.content, /TRACKING NUMBER/);
-    assert.match(labelPayloadRes.json.document.content, /\^BCN,176,N,N,N/);
+    assert.match(labelPayloadRes.json.document.content, /\^BCN,156,N,N,N/);
     assert.doesNotMatch(labelPayloadRes.json.document.content, /COREPOS DEV SHIPMENT LABEL/);
 
     const labelContentRes = await fetchText(`/api/online-store/shipments/${encodeURIComponent(shipmentId)}/label/content`, {

@@ -96,9 +96,9 @@ const buildItemSummary = (input: ShippingLabelGenerationInput) => {
       const descriptor = item.variantName ? `${item.productName} ${item.variantName}` : item.productName;
       return `${item.quantity}x ${descriptor}`;
     })
-    .join(" | ");
+    .join(", ");
   const remainingCount = Math.max(0, input.order.items.length - 3);
-  const summary = remainingCount > 0 ? `${visibleItems} | +${remainingCount} more items` : visibleItems;
+  const summary = remainingCount > 0 ? `${visibleItems}, +${remainingCount} more items` : visibleItems;
 
   return zplSafe(summary || "Order contents recorded in CorePOS");
 };
@@ -164,55 +164,55 @@ const buildDocument = (input: ShippingLabelGenerationInput, trackingNumber: stri
     "^PW812",
     "^LL1218",
     "^LH0,0",
-    "^FO36,28^A0N,24,24^FDDISPATCH FROM^FS",
-    `^FO36,60^A0N,32,32^FD${senderName}^FS`,
-    `^FO36,98^A0N,24,24^FD${senderLine}^FS`,
-    "^FO432,28^A0N,24,24^FDORDER NO^FS",
-    `^FO432,60^A0N,34,34^FD${orderLabel}^FS`,
-    `^FO432,102^A0N,24,24^FD${channelLabel} / ${shipmentLabel}^FS`,
-    "^FO36,138^GB740,0,2^FS",
-    "^FO36,166^A0N,28,28^FDSHIP TO^FS",
+    "^FO36,32^A0N,22,22^FDDISPATCH FROM^FS",
+    `^FO36,62^A0N,28,28^FD${senderName}^FS`,
+    `^FO36,96^A0N,22,22^FD${senderLine}^FS`,
+    "^FO432,32^A0N,22,22^FDORDER NO^FS",
+    `^FO432,60^A0N,32,32^FD${orderLabel}^FS`,
+    "^FO432,102^A0N,22,22^FDSHIPMENT^FS",
+    `^FO432,130^A0N,26,26^FD${truncateText(`${channelLabel} / ${shipmentLabel}`, 24)}^FS`,
+    "^FO36,158^GB740,0,2^FS",
+    "^FO36,188^A0N,26,26^FDSHIP TO^FS",
   ];
 
-  let recipientY = 210;
+  let recipientY = 226;
   for (const line of recipientNameLines) {
-    labelLines.push(`^FO36,${recipientY}^A0N,52,52^FD${line}^FS`);
-    recipientY += 58;
+    labelLines.push(`^FO36,${recipientY}^A0N,50,50^FD${line}^FS`);
+    recipientY += 56;
   }
 
-  recipientY += 8;
+  recipientY += 14;
   for (const line of recipientStreetLines) {
-    labelLines.push(`^FO36,${recipientY}^A0N,38,38^FD${line}^FS`);
-    recipientY += 46;
+    labelLines.push(`^FO36,${recipientY}^A0N,36,36^FD${line}^FS`);
+    recipientY += 44;
   }
 
-  labelLines.push(`^FO36,${recipientY + 8}^A0N,56,56^FD${recipientLocalityLine}^FS`);
-  recipientY += 78;
+  labelLines.push(`^FO36,${recipientY + 12}^A0N,54,54^FD${recipientLocalityLine}^FS`);
+  recipientY += 82;
 
   if (recipientCountryLine) {
-    labelLines.push(`^FO36,${recipientY}^A0N,30,30^FD${recipientCountryLine}^FS`);
+    labelLines.push(`^FO36,${recipientY}^A0N,26,26^FD${recipientCountryLine}^FS`);
   }
 
   labelLines.push(
-    "^FO36,540^GB740,0,2^FS",
-    "^FO36,568^A0N,24,24^FDTRACKING NUMBER^FS",
-    `^FO36,600^A0N,42,42^FD${trackingNumber}^FS`,
-    "^BY3,3,176",
-    `^FO86,668^BCN,176,N,N,N^FD${trackingNumber}^FS`,
-    `^FO176,868^A0N,36,36^FD${trackingNumber}^FS`,
-    "^FO36,914^GB740,0,2^FS",
-    "^FO36,944^A0N,24,24^FDSERVICE^FS",
-    `^FO36,976^A0N,30,30^FD${serviceLabel}^FS`,
-    "^FO420,944^A0N,24,24^FDPROVIDER^FS",
-    `^FO420,976^A0N,30,30^FD${providerLabel}^FS`,
-    "^FO390,936^GB0,112,2^FS",
-    "^FO36,1036^A0N,24,24^FDORDER / SHIPMENT^FS",
-    `^FO36,1068^A0N,30,30^FD${truncateText(`${orderLabel} / ${shipmentLabel}`, 44)}^FS`,
-    "^FO36,1114^GB740,0,2^FS",
-    "^FO36,1138^A0N,24,24^FDCONTENTS^FS",
+    "^FO36,584^GB740,0,2^FS",
+    "^FO36,614^A0N,22,22^FDTRACKING NUMBER^FS",
+    `^FO36,646^A0N,38,38^FD${trackingNumber}^FS`,
+    "^BY3,3,156",
+    `^FO110,708^BCN,156,N,N,N^FD${trackingNumber}^FS`,
+    `^FO96,892^FB620,1,0,C,0^A0N,34,34^FD${trackingNumber}^FS`,
+    "^FO36,952^GB740,0,2^FS",
+    "^FO36,980^A0N,22,22^FDSERVICE^FS",
+    `^FO36,1010^A0N,28,28^FD${serviceLabel}^FS`,
+    "^FO420,980^A0N,22,22^FDPROVIDER^FS",
+    `^FO420,1010^A0N,28,28^FD${providerLabel}^FS`,
+    "^FO390,972^GB0,78,2^FS",
+    "^FO36,1066^A0N,22,22^FDREFERENCE^FS",
+    `^FO36,1096^A0N,28,28^FD${truncateText(`${orderLabel} / ${shipmentLabel}`, 44)}^FS`,
+    "^FO36,1136^A0N,22,22^FDCONTENTS^FS",
   );
 
-  let itemSummaryY = 1170;
+  let itemSummaryY = 1164;
   for (const line of itemSummaryLines) {
     labelLines.push(`^FO36,${itemSummaryY}^A0N,24,24^FD${line}^FS`);
     itemSummaryY += 28;

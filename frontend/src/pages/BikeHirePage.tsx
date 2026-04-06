@@ -966,7 +966,11 @@ export const BikeHirePage = () => {
                       <div key={`${booking.id}-pickup`} className="rental-ops-calendar-item">
                         <span className={getStatusBadgeClass("RESERVED")}>Pickup</span>
                         <strong>{formatTime(booking.startsAt)} · {booking.customer.name}</strong>
-                        <span>{booking.hireAsset.assetTag} · {booking.hireAsset.variant.productName}</span>
+                        <strong className="rental-ops-calendar-asset-tag">{booking.hireAsset.assetTag}</strong>
+                        <span className="table-secondary">
+                          {booking.hireAsset.variant.productName}
+                          {booking.hireAsset.displayName ? ` · ${booking.hireAsset.displayName}` : ""}
+                        </span>
                       </div>
                     ))}
                     {day.returns.map((booking) => (
@@ -975,7 +979,11 @@ export const BikeHirePage = () => {
                           {booking.operational.overdue ? "Overdue" : "Return"}
                         </span>
                         <strong>{formatTime(booking.dueBackAt)} · {booking.customer.name}</strong>
-                        <span>{booking.hireAsset.assetTag} · {booking.hireAsset.variant.productName}</span>
+                        <strong className="rental-ops-calendar-asset-tag">{booking.hireAsset.assetTag}</strong>
+                        <span className="table-secondary">
+                          {booking.hireAsset.variant.productName}
+                          {booking.hireAsset.displayName ? ` · ${booking.hireAsset.displayName}` : ""}
+                        </span>
                       </div>
                     ))}
                   </>

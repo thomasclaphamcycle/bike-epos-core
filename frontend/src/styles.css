@@ -2123,6 +2123,11 @@ textarea {
   border: 1px solid #e2e8f0;
 }
 
+.rental-ops-calendar-asset-tag {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
 .rental-ops-highlight {
   display: grid;
   gap: 8px;
