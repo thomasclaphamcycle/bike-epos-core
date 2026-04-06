@@ -387,6 +387,14 @@ test("Sales History page lists completed sales by default, exposes draft filteri
   await expect(page.getByTestId(`sales-history-row-${draftSale.saleId}`)).toBeVisible();
   await expect(page.getByTestId(`sales-history-row-${draftSale.saleId}`)).toContainText("Draft");
 
+  await page.getByTestId(`sales-history-invoice-link-${completedSale.saleId}`).click();
+  await expect(page).toHaveURL(new RegExp(`/sales/${completedSale.saleId}/invoice/print`));
+  await expect(page.getByTestId("sales-invoice-document")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print A4 invoice" })).toBeVisible();
+  await expect(page.locator("body")).toContainText(completedSale.receiptNumber);
+
+  await page.goBack();
+  await expect(page.getByTestId(`sales-history-row-${completedSale.saleId}`)).toBeVisible();
   await page.getByTestId(`sales-history-row-${completedSale.saleId}`).click();
   await expect(page).toHaveURL(new RegExp(`/sales/${completedSale.saleId}/receipt/print`));
   await expect(page.getByRole("button", { name: "Print receipt" })).toBeVisible();
@@ -572,6 +580,18 @@ test("React POS checkout opens a printable thermal receipt page", async ({ page,
   await expect(printReceiptLink).toBeVisible();
   const printReceiptHref = await printReceiptLink.getAttribute("href");
   expect(printReceiptHref).toBeTruthy();
+
+  const printInvoiceLink = page.getByTestId("pos-print-invoice-link");
+  await expect(printInvoiceLink).toBeVisible();
+  const printInvoiceHref = await printInvoiceLink.getAttribute("href");
+  expect(printInvoiceHref).toBeTruthy();
+
+  await page.goto(`${frontendBaseUrl}${printInvoiceHref}`);
+  await expect(page.getByTestId("sales-invoice-document")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print A4 invoice" })).toBeVisible();
+  await expect(page.getByTestId("sales-invoice-document")).toContainText(firstVariant.product.name);
+  await expect(page.getByTestId("sales-invoice-document")).toContainText(secondVariant.product.name);
+  await expect(page.locator(".app-sidebar")).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}${printReceiptHref}`);
   await expect(page.getByTestId("sales-receipt")).toBeVisible();

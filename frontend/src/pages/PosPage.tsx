@@ -1618,6 +1618,14 @@ export const PosPage = () => {
                     >
                       Print receipt
                     </a>
+                    <a
+                      href={`/sales/${encodeURIComponent(completedSale.saleId)}/invoice/print`}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="pos-print-invoice-link"
+                    >
+                      Print A4 invoice
+                    </a>
                     <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
                       Open receipt
                     </a>

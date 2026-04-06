@@ -75,6 +75,10 @@ export const SalesReceiptPrintPage = lazyPage(
   () => import("./pages/SalesReceiptPrintPage"),
   "SalesReceiptPrintPage",
 );
+export const SalesInvoicePrintPage = lazyPage(
+  () => import("./pages/SalesInvoicePrintPage"),
+  "SalesInvoicePrintPage",
+);
 export const InventoryLocationsPage = lazyPage(
   () => import("./pages/InventoryLocationsPage"),
   "InventoryLocationsPage",
