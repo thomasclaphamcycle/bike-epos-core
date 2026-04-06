@@ -436,17 +436,20 @@ test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, re
   await expect(page.getByRole("heading", { name: "Inventory Detail" })).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Print bike tag" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open bike tag preview" })).toBeVisible();
 
   await page.getByRole("link", { name: "Open bike tag preview" }).click();
   await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
   await expect(page.getByRole("heading", { name: "Bike Tag" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Direct print bike tag" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Browser print fallback" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print 2-up bike tags" })).toBeVisible();
   await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
-    "A5 landscape 2-up bike-tag sheet",
+    "A5 landscape browser print layout",
   );
   await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
-    "Browser print stays available as a fallback",
+    "2 identical A6 bike tags side by side",
+  );
+  await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
+    "Use the print dialog to choose the Xerox",
   );
   await expect(page.getByTestId("bike-tag-preview-image")).toBeVisible();
   await expect(page.getByTestId("bike-tag-preview-image")).toHaveAttribute(
