@@ -2855,7 +2855,10 @@ test("Manager can generate, prepare, print via agent, and dispatch a web-order s
     return (await page.getByTestId("online-store-shipment-status").textContent())?.trim() ?? "";
   }).toContain("Label Ready");
   await expect(page.getByTestId("online-store-next-action")).toContainText("Prepare the Zebra print payload");
-  await expect(page.getByTestId("online-store-label-preview")).toContainText("COREPOS DEV SHIPMENT LABEL");
+  await expect(page.getByTestId("online-store-label-preview")).toContainText("SHIP TO");
+  await expect(page.getByTestId("online-store-label-preview")).toContainText("TRACKING NUMBER");
+  await expect(page.getByTestId("online-store-label-preview")).toContainText("CorePOS Shipping");
+  await expect(page.getByTestId("online-store-label-preview")).not.toContainText("COREPOS DEV SHIPMENT LABEL");
   await expect(page.getByTestId("online-store-shipment-timeline")).toContainText("Shipment created");
 
   const blockedTrackingNumber = ((await page.getByTestId("online-store-tracking-number").textContent()) ?? "").trim();
