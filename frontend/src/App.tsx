@@ -60,6 +60,7 @@ import {
   RefundOversightPage,
   ReorderSuggestionsPage,
   SalesAnalyticsPage,
+  SalesHistoryPage,
   SavedViewsPage,
   SalesReceiptPrintPage,
   ServiceRemindersPage,
@@ -346,16 +347,7 @@ const AuthedApp = () => (
         <Route path="/pos" element={<PosPage />} />
         <Route
           path="/sales-history/transactions"
-          element={(
-            <NavigationPlaceholderPage
-              title="Sales History · Transaction List"
-              description="Use this route as the future list/search workspace for completed sales, receipt lookup, and transaction review."
-              links={[
-                { label: "Open POS", to: "/pos" },
-                { label: "Sales reports", to: "/reports/sales" },
-              ]}
-            />
-          )}
+          element={<SalesHistoryPage />}
         />
         <Route
           path="/sales-history/receipt-view"
