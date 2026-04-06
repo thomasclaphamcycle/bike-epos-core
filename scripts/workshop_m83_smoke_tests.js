@@ -213,7 +213,7 @@ const toWorkshopDateKey = (value) => {
 
 const usedWorkshopDateKeys = new Set();
 
-const nextWorkshopWeekdayDistinct = (
+const nextWorkshopWeekdayDistinct = async (
   baseOffset,
   usedDateKeys = usedWorkshopDateKeys,
   transform = (candidate) => candidate,
@@ -223,7 +223,12 @@ const nextWorkshopWeekdayDistinct = (
   while (true) {
     const candidate = transform(nextWorkshopWeekday(offset));
     const dateKey = toWorkshopDateKey(candidate);
-    if (!usedDateKeys.has(dateKey)) {
+    const closedDay = await prisma.rotaClosedDay.findUnique({
+      where: { date: dateKey },
+      select: { id: true },
+    });
+
+    if (!usedDateKeys.has(dateKey) && !closedDay) {
       usedDateKeys.add(dateKey);
       return candidate;
     }
@@ -1843,7 +1848,7 @@ const run = async () => {
       assert.equal(estimatedDetail.json.currentEstimate.subtotalPence, 2299);
       assert.equal(estimatedDetail.json.currentEstimate.lineCount, 2);
 
-      const scheduledJobDate = nextWorkshopWeekdayDistinct(17);
+      const scheduledJobDate = await nextWorkshopWeekdayDistinct(17);
       const scheduledJobStart = toScheduledSlot(scheduledJobDate, 12, 0);
       const scheduledJobEnd = toScheduledSlot(scheduledJobDate, 13, 30);
       const { job: scheduledJob } = await createJob(state, {
@@ -2017,7 +2022,7 @@ const run = async () => {
     }, results);
 
     await runTest("timed workshop jobs derive schedule fields, reject store-closed slots, and validate end-time consistency", async () => {
-      const scheduledDate = nextWorkshopWeekdayDistinct(16);
+      const scheduledDate = await nextWorkshopWeekdayDistinct(16);
       const validStart = toScheduledSlot(scheduledDate, 11, 0);
 
       const scheduledJob = await fetchJson("/api/workshop/jobs", {
@@ -2078,7 +2083,7 @@ const run = async () => {
     }, results);
 
     await runTest("staff assignment to timed workshop jobs respects working hours, time off, and overlap rules", async () => {
-      const scheduledDate = nextWorkshopWeekdayDistinct(18);
+      const scheduledDate = await nextWorkshopWeekdayDistinct(18);
       const dateKey = toWorkshopDateKey(scheduledDate);
 
       const firstStart = toScheduledSlot(scheduledDate, 11, 0);
@@ -2152,7 +2157,7 @@ const run = async () => {
     }, results);
 
     await runTest("technician assignment honors scheduled slot day for rota validation", async () => {
-      const operationalDate = nextWorkshopWeekdayDistinct(
+      const operationalDate = await nextWorkshopWeekdayDistinct(
         33,
         usedWorkshopDateKeys,
         (candidate) => {
@@ -2204,7 +2209,7 @@ const run = async () => {
     }, results);
 
     await runTest("calendar api returns staff rows, scheduled jobs, and capacity clipped to working hours", async () => {
-      const scheduledDate = nextWorkshopWeekdayDistinct(23);
+      const scheduledDate = await nextWorkshopWeekdayDistinct(23);
       const dateKey = scheduledDate.toISOString().slice(0, 10);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
@@ -2330,7 +2335,7 @@ const run = async () => {
     }, results);
 
     await runTest("legacy workshop working hours stay as an explicit fallback when rota is missing", async () => {
-      const scheduledDate = nextWorkshopWeekdayDistinct(22);
+      const scheduledDate = await nextWorkshopWeekdayDistinct(22);
       const dateKey = toWorkshopDateKey(scheduledDate);
       const dayOfWeek = getWorkshopDayOfWeek(scheduledDate);
       assert.notEqual(dayOfWeek, undefined);
@@ -2373,7 +2378,7 @@ const run = async () => {
     }, results);
 
     await runTest("schedule patch endpoint supports assign, partial reschedule, clear, and overlap-safe validation", async () => {
-      const scheduledDate = nextWorkshopWeekdayDistinct(26);
+      const scheduledDate = await nextWorkshopWeekdayDistinct(26);
       await createWorkshopRotaAssignment(state, {
         staffId: managerUser.id,
         date: toWorkshopDateKey(scheduledDate),
