@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
+import { spawn } from "node:child_process";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import type { ShipmentPrintAgentJob, ShipmentPrintRequest } from "../../shared/shippingPrintContract";
 import { SHIPMENT_LABEL_DOCUMENT_FORMAT } from "../../shared/shippingPrintContract";
@@ -16,6 +18,8 @@ const buildJobId = () => `printjob-${Date.now()}-${Math.random().toString(36).sl
 
 const buildPrintableContent = (request: ShipmentPrintRequest) =>
   Array.from({ length: request.printer.copies }, () => request.document.content).join("\n");
+
+const shipmentWindowsPrintScriptPath = path.resolve(__dirname, "..", "scripts", "print_shipment_label_windows.ps1");
 
 const executeDryRun = async (
   request: ShipmentPrintRequest,
@@ -129,6 +133,96 @@ const executeRawTcp = async (
   };
 };
 
+const invokeWindowsPrinter = async (
+  printerName: string,
+  labelPath: string,
+) => {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        shipmentWindowsPrintScriptPath,
+        "-PrinterName",
+        printerName,
+        "-LabelPath",
+        labelPath,
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      },
+    );
+
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.stdout.on("data", () => {
+      // No-op: the helper script is intentionally quiet on success.
+    });
+
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `Windows printer job failed with exit code ${code ?? "unknown"}`));
+    });
+  });
+};
+
+const executeWindowsPrinter = async (
+  request: ShipmentPrintRequest,
+  _config: PrintAgentConfig,
+  acceptedAt: string,
+): Promise<ShipmentPrintAgentJob> => {
+  if (process.platform !== "win32") {
+    throw new Error("WINDOWS_PRINTER shipment jobs require a Windows host running the CorePOS shipment print helper.");
+  }
+
+  const windowsPrinterName = request.printer.windowsPrinterName;
+  if (!windowsPrinterName) {
+    throw new Error("Windows printer name is not configured");
+  }
+
+  const jobId = buildJobId();
+  const payload = buildPrintableContent(request);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "corepos-zebra-shipment-"));
+  const tempPath = path.join(
+    tempDir,
+    `${slugify(request.orderNumber)}-${slugify(request.trackingNumber)}.zpl`,
+  );
+
+  try {
+    await fs.writeFile(tempPath, payload, "utf8");
+    await invokeWindowsPrinter(windowsPrinterName, tempPath);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  return {
+    jobId,
+    acceptedAt,
+    completedAt: new Date().toISOString(),
+    transportMode: "WINDOWS_PRINTER",
+    printerId: request.printer.printerId,
+    printerKey: request.printer.printerKey,
+    printerName: request.printer.printerName,
+    printerTarget: windowsPrinterName,
+    copies: request.printer.copies,
+    documentFormat: SHIPMENT_LABEL_DOCUMENT_FORMAT,
+    bytesSent: Buffer.byteLength(payload, "utf8"),
+    simulated: false,
+    outputPath: null,
+  };
+};
+
 export const submitShipmentPrintJob = async (
   request: ShipmentPrintRequest,
   config: PrintAgentConfig,
@@ -139,6 +233,8 @@ export const submitShipmentPrintJob = async (
 
   const acceptedAt = new Date().toISOString();
   switch (request.printer.transportMode) {
+    case "WINDOWS_PRINTER":
+      return executeWindowsPrinter(request, config, acceptedAt);
     case "RAW_TCP":
       return executeRawTcp(request, config, acceptedAt);
     case "DRY_RUN":

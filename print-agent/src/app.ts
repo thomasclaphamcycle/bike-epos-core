@@ -45,7 +45,7 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
       status: "ok",
       supportedTransportModes: ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"],
       supportedJobs: {
-        shipmentLabels: ["DRY_RUN", "RAW_TCP"],
+        shipmentLabels: ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"],
         productLabels: ["DRY_RUN", "WINDOWS_PRINTER"],
       },
       bindHost: config.bindHost,

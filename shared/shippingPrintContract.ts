@@ -36,6 +36,7 @@ export type ShipmentPrintRequest = {
     printerModelHint: typeof ZEBRA_GK420D_MODEL_HINT;
     printerName: string;
     transportMode: PrintAgentTransportMode;
+    windowsPrinterName: string | null;
     rawTcpHost: string | null;
     rawTcpPort: number | null;
     copies: number;
@@ -50,7 +51,7 @@ export type ShipmentPrintRequest = {
   };
 };
 
-export type PrintAgentTransportMode = "DRY_RUN" | "RAW_TCP";
+export type PrintAgentTransportMode = "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
 
 export type ShipmentPrintAgentJob = {
   jobId: string;
@@ -126,11 +127,15 @@ export const validateShipmentPrintRequest = (value: unknown): ShipmentPrintReque
     printerRecord.transportMode,
     "printRequest.printer.transportMode",
   );
-  if (printerTransportMode !== "DRY_RUN" && printerTransportMode !== "RAW_TCP") {
-    throw new Error("printRequest.printer.transportMode must be DRY_RUN or RAW_TCP");
+  if (printerTransportMode !== "DRY_RUN" && printerTransportMode !== "RAW_TCP" && printerTransportMode !== "WINDOWS_PRINTER") {
+    throw new Error("printRequest.printer.transportMode must be DRY_RUN, RAW_TCP, or WINDOWS_PRINTER");
   }
 
   const metadataRecord = expectRecord(record.metadata, "printRequest.metadata");
+  const windowsPrinterName = expectNullableString(
+    printerRecord.windowsPrinterName,
+    "printRequest.printer.windowsPrinterName",
+  );
   const rawTcpHost = expectNullableString(printerRecord.rawTcpHost, "printRequest.printer.rawTcpHost");
   const rawTcpPort =
     printerRecord.rawTcpPort === null
@@ -139,6 +144,9 @@ export const validateShipmentPrintRequest = (value: unknown): ShipmentPrintReque
 
   if (printerTransportMode === "RAW_TCP" && (!rawTcpHost || !rawTcpPort)) {
     throw new Error("RAW_TCP print requests must include rawTcpHost and rawTcpPort");
+  }
+  if (printerTransportMode === "WINDOWS_PRINTER" && !windowsPrinterName) {
+    throw new Error("WINDOWS_PRINTER print requests must include windowsPrinterName");
   }
 
   return {
@@ -156,6 +164,7 @@ export const validateShipmentPrintRequest = (value: unknown): ShipmentPrintReque
       printerModelHint: ZEBRA_GK420D_MODEL_HINT,
       printerName: expectString(printerRecord.printerName, "printRequest.printer.printerName"),
       transportMode: printerTransportMode,
+      windowsPrinterName,
       rawTcpHost,
       rawTcpPort,
       copies: expectPositiveInteger(printerRecord.copies, "printRequest.printer.copies"),
@@ -184,8 +193,8 @@ export const validateShipmentPrintAgentJob = (value: unknown): ShipmentPrintAgen
   const transportMode = expectString(record.transportMode, "job.transportMode");
   const documentFormat = expectString(record.documentFormat, "job.documentFormat");
 
-  if (transportMode !== "DRY_RUN" && transportMode !== "RAW_TCP") {
-    throw new Error("job.transportMode must be DRY_RUN or RAW_TCP");
+  if (transportMode !== "DRY_RUN" && transportMode !== "RAW_TCP" && transportMode !== "WINDOWS_PRINTER") {
+    throw new Error("job.transportMode must be DRY_RUN, RAW_TCP, or WINDOWS_PRINTER");
   }
   if (documentFormat !== SHIPMENT_LABEL_DOCUMENT_FORMAT) {
     throw new Error(`job.documentFormat must be ${SHIPMENT_LABEL_DOCUMENT_FORMAT}`);

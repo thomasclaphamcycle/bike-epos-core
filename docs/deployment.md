@@ -90,6 +90,14 @@ npm run print-agent:package:dymo
 
 That command stages a copyable folder under `tmp/dymo-product-label-agent-bundle/` with `corepos-dymo-product-label-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Dymo host, create `corepos-dymo-product-label-agent.config.json` from the example, and point `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` at that helper.
 
+For a Windows Zebra host running a USB-connected GK420d without a repo checkout or npm, build the standalone shipment helper EXE package from a CorePOS dev/release machine:
+
+```bash
+npm run print-agent:package:zebra
+```
+
+That command stages a copyable folder under `tmp/zebra-shipment-agent-bundle/` with `corepos-zebra-shipment-agent.exe`, the config example, and the deployment notes. Copy the resulting folder to the Windows Zebra host, create `corepos-zebra-shipment-agent.config.json` from the example, point `COREPOS_SHIPPING_PRINT_AGENT_URL` at that helper, and register the Zebra printer in CorePOS Settings with transport mode `WINDOWS_PRINTER`.
+
 ## Runtime Diagnostics
 
 CorePOS keeps diagnostics lightweight and repo-native:

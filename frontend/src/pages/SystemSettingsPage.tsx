@@ -293,7 +293,7 @@ const getAllowedTransportModesForFamily = (
 ): RegisteredPrinterTransportMode[] =>
   printerFamily === "DYMO_LABEL"
     ? ["DRY_RUN", "WINDOWS_PRINTER"]
-    : ["DRY_RUN", "RAW_TCP"];
+    : ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"];
 
 const COMMON_TIME_ZONES = [
   "Europe/London",

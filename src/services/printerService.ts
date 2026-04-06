@@ -110,6 +110,7 @@ export type ResolvedShipmentPrinter = {
   printerFamily: typeof ZEBRA_LABEL_PRINTER_FAMILY;
   printerModelHint: typeof ZEBRA_GK420D_MODEL_HINT;
   transportMode: PrintAgentTransportMode;
+  windowsPrinterName: string | null;
   rawTcpHost: string | null;
   rawTcpPort: number | null;
   supportsShippingLabels: true;
@@ -278,10 +279,11 @@ const ensureTransportMatchesFamily = (
     printerFamily === RegisteredPrinterFamily.ZEBRA_LABEL
     && transportMode !== RegisteredPrinterTransportMode.DRY_RUN
     && transportMode !== RegisteredPrinterTransportMode.RAW_TCP
+    && transportMode !== RegisteredPrinterTransportMode.WINDOWS_PRINTER
   ) {
     throw new HttpError(
       400,
-      "Zebra printers must use DRY_RUN or RAW_TCP transport",
+      "Zebra printers must use DRY_RUN, RAW_TCP, or WINDOWS_PRINTER transport",
       "INVALID_PRINTER",
     );
   }
@@ -1025,10 +1027,11 @@ export const resolveShipmentLabelPrinterSelection = async (
   if (
     printer.transportMode !== RegisteredPrinterTransportMode.DRY_RUN
     && printer.transportMode !== RegisteredPrinterTransportMode.RAW_TCP
+    && printer.transportMode !== RegisteredPrinterTransportMode.WINDOWS_PRINTER
   ) {
     throw new HttpError(
       409,
-      "Only DRY_RUN and RAW_TCP transports are supported for shipment labels",
+      "Only DRY_RUN, RAW_TCP, and WINDOWS_PRINTER transports are supported for shipment labels",
       "PRINTER_TRANSPORT_NOT_SUPPORTED",
     );
   }
@@ -1036,6 +1039,16 @@ export const resolveShipmentLabelPrinterSelection = async (
     throw new HttpError(
       409,
       "This RAW_TCP printer is missing its host configuration",
+      "PRINTER_TARGET_MISCONFIGURED",
+    );
+  }
+  if (
+    printer.transportMode === RegisteredPrinterTransportMode.WINDOWS_PRINTER
+    && !printer.windowsPrinterName
+  ) {
+    throw new HttpError(
+      409,
+      "This Windows printer is missing its installed printer name",
       "PRINTER_TARGET_MISCONFIGURED",
     );
   }
@@ -1047,6 +1060,9 @@ export const resolveShipmentLabelPrinterSelection = async (
     printerFamily: ZEBRA_LABEL_PRINTER_FAMILY,
     printerModelHint: ZEBRA_GK420D_MODEL_HINT,
     transportMode: printer.transportMode,
+    windowsPrinterName: printer.transportMode === RegisteredPrinterTransportMode.WINDOWS_PRINTER
+      ? printer.windowsPrinterName ?? printer.name
+      : null,
     rawTcpHost: printer.rawTcpHost ?? null,
     rawTcpPort: printer.transportMode === RegisteredPrinterTransportMode.RAW_TCP
       ? printer.rawTcpPort ?? DEFAULT_RAW_TCP_PORT

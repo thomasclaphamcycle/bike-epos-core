@@ -58,6 +58,7 @@ const baselineSteps = [
   "test:print-agent",
   "test:product-label-print",
   "test:dymo-agent-bundle",
+  "test:zebra-agent-bundle",
   "test:shipping-providers",
   "test:dispatch-printers",
   "test:online-store",

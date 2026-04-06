@@ -69,10 +69,10 @@ The flow is now split into seven layers:
    - sends prepared shipment print requests to the configured local agent endpoint
    - normalizes timeout, unreachable-agent, and bad-response cases
 
-7. Local Windows print agent
+7. Local Windows print agent / helper
    - `print-agent/src/`
    - validates shipment print payloads and performs the actual transport
-   - currently supports `DRY_RUN` plus real `RAW_TCP` ZPL delivery
+   - now supports `DRY_RUN`, real `RAW_TCP` ZPL delivery, and Windows-helper `WINDOWS_PRINTER` delivery for USB-connected Zebra hosts
 
 ## Provider status
 
@@ -217,7 +217,7 @@ The intended next steps are:
    - e.g. carrier API credentials, service mapping, rate/service validation, production tracking references, broader provider-status sync
 
 2. richer print-agent/device support
-   - local printer/device mappings beyond the first CorePOS-managed target model
+   - local printer/device mappings beyond the current CorePOS-managed target model
    - durable local queueing or retry behavior
    - direct Windows spooler / USB Zebra support in addition to raw TCP
 

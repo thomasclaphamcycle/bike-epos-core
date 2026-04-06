@@ -210,7 +210,8 @@ type ShipmentPrintRequestResponse = {
       printerFamily: "ZEBRA_LABEL";
       printerModelHint: string;
       printerName: string;
-      transportMode: "DRY_RUN" | "RAW_TCP";
+      transportMode: "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
+      windowsPrinterName: string | null;
       rawTcpHost: string | null;
       rawTcpPort: number | null;
       copies: number;
@@ -236,7 +237,7 @@ type ShipmentPrintExecutionResponse = ShipmentPrintRequestResponse & {
     jobId: string;
     acceptedAt: string;
     completedAt: string;
-    transportMode: "DRY_RUN" | "RAW_TCP";
+    transportMode: "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
     printerId: string;
     printerKey: string;
     printerName: string;
@@ -257,7 +258,8 @@ type RegisteredPrinter = {
   printerModelHint: "GK420D_OR_COMPATIBLE";
   supportsShippingLabels: boolean;
   isActive: boolean;
-  transportMode: "DRY_RUN" | "RAW_TCP";
+  transportMode: "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
+  windowsPrinterName: string | null;
   rawTcpHost: string | null;
   rawTcpPort: number | null;
   location: string | null;

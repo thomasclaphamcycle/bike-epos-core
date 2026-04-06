@@ -96,15 +96,18 @@ const startFakePrintAgent = async () => {
           jobId: `fake-agent-${randomUUID()}`,
           acceptedAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
-          transportMode: "DRY_RUN",
+          transportMode: printRequest?.printer?.transportMode ?? "DRY_RUN",
           printerId: printRequest?.printer?.printerId ?? "unknown-printer-id",
           printerKey: printRequest?.printer?.printerKey ?? "UNKNOWN_PRINTER",
           printerName: printRequest?.printer?.printerName ?? "Dispatch Zebra GK420d",
-          printerTarget: "dry-run://online-store-smoke",
+          printerTarget:
+            printRequest?.printer?.transportMode === "WINDOWS_PRINTER"
+              ? printRequest?.printer?.windowsPrinterName ?? "ZDesigner GK420d"
+              : "dry-run://online-store-smoke",
           copies,
           documentFormat: "ZPL",
           bytesSent: Buffer.byteLength(printableContent, "utf8"),
-          simulated: true,
+          simulated: printRequest?.printer?.transportMode !== "WINDOWS_PRINTER",
           outputPath: null,
         },
       }));
@@ -210,6 +213,15 @@ const run = async () => {
       location: "Dispatch bench",
     });
     createdPrinterIds.push(defaultPrinter.id);
+    const windowsPrinter = await createPrinter({
+      name: "Dispatch Zebra USB Helper",
+      key: "DISPATCH_ZEBRA_USB_HELPER",
+      transportMode: "WINDOWS_PRINTER",
+      windowsPrinterName: "ZDesigner GK420d",
+      location: "Dispatch bench",
+      notes: "USB Zebra on Windows helper host",
+    });
+    createdPrinterIds.push(windowsPrinter.id);
     const failingPrinter = await createPrinter({
       name: "Force Failing Zebra",
       key: "FORCE_FAILING_ZEBRA",
@@ -473,6 +485,86 @@ const run = async () => {
     assert.equal(dispatchedScanRes.json.status, "MATCHED");
     assert.equal(dispatchedScanRes.json.dispatchable, false);
     assert.equal(dispatchedScanRes.json.dispatchBlockedCode, "SHIPMENT_ALREADY_DISPATCHED");
+
+    const helperToken = `smoke-helper-${Date.now()}`;
+    const helperOrderBody = createOrderBody(helperToken, {
+      customerName: "Online Store Zebra Helper",
+      shippingRecipientName: "Online Store Zebra Helper",
+    });
+    const createHelperOrderRes = await fetchJson("/api/online-store/orders", {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(helperOrderBody),
+    });
+    assert.equal(createHelperOrderRes.status, 201, JSON.stringify(createHelperOrderRes.json));
+    createdOrderIds.push(createHelperOrderRes.json.order.id);
+
+    const packHelperOrderRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createHelperOrderRes.json.order.id)}/packing`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ packed: true }),
+    });
+    assert.equal(packHelperOrderRes.status, 200, JSON.stringify(packHelperOrderRes.json));
+
+    const createHelperShipmentRes = await fetchJson(`/api/online-store/orders/${encodeURIComponent(createHelperOrderRes.json.order.id)}/shipments`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        providerKey: "INTERNAL_MOCK_ZPL",
+        serviceCode: "STANDARD",
+        serviceName: "Standard Dispatch",
+      }),
+    });
+    assert.equal(createHelperShipmentRes.status, 201, JSON.stringify(createHelperShipmentRes.json));
+    const helperShipmentId = createHelperShipmentRes.json.shipment.id;
+
+    const prepareHelperPrintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(helperShipmentId)}/prepare-print`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: windowsPrinter.id,
+        copies: 1,
+      }),
+    });
+    assert.equal(prepareHelperPrintRes.status, 200, JSON.stringify(prepareHelperPrintRes.json));
+    assert.equal(prepareHelperPrintRes.json.printRequest.printer.transportMode, "WINDOWS_PRINTER");
+    assert.equal(prepareHelperPrintRes.json.printRequest.printer.windowsPrinterName, "ZDesigner GK420d");
+    assert.equal(prepareHelperPrintRes.json.printRequest.printer.rawTcpHost, null);
+    assert.equal(prepareHelperPrintRes.json.printRequest.printer.rawTcpPort, null);
+
+    const helperPrintRes = await fetchJson(`/api/online-store/shipments/${encodeURIComponent(helperShipmentId)}/print`, {
+      method: "POST",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: windowsPrinter.id,
+        copies: 1,
+      }),
+    });
+    assert.equal(helperPrintRes.status, 200, JSON.stringify(helperPrintRes.json));
+    assert.equal(helperPrintRes.json.shipment.status, "PRINTED");
+    assert.equal(helperPrintRes.json.printJob.transportMode, "WINDOWS_PRINTER");
+    assert.equal(helperPrintRes.json.printJob.simulated, false);
+    assert.equal(helperPrintRes.json.printJob.printerTarget, "ZDesigner GK420d");
+
+    const helperPrintAgentRequest = fakePrintAgent.requests.at(-1);
+    assert.equal(helperPrintAgentRequest?.printRequest?.printer?.transportMode, "WINDOWS_PRINTER");
+    assert.equal(helperPrintAgentRequest?.printRequest?.printer?.windowsPrinterName, "ZDesigner GK420d");
+    assert.equal(helperPrintAgentRequest?.printRequest?.printer?.printerId, windowsPrinter.id);
 
     const noMatchScanRes = await fetchJson("/api/online-store/dispatch-scan", {
       method: "POST",

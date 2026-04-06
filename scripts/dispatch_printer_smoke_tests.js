@@ -47,6 +47,8 @@ const run = async () => {
     databaseUrl: DATABASE_URL,
   });
   const createdPrinterIds = [];
+  const uniqueToken = Date.now().toString(36).toUpperCase();
+  const makePrinterKey = (baseKey) => `${baseKey}_${uniqueToken}`;
 
   try {
     await serverController.startIfNeeded();
@@ -65,7 +67,7 @@ const run = async () => {
       },
       body: JSON.stringify({
         name: "Dispatch Zebra GK420d",
-        key: "DISPATCH_ZEBRA_GK420D",
+        key: makePrinterKey("DISPATCH_ZEBRA_GK420D"),
         transportMode: "DRY_RUN",
         location: "Packing bench",
         notes: "Primary shipping-label printer",
@@ -78,11 +80,35 @@ const run = async () => {
     assert.equal(createDryRunPrinterRes.json.printer.supportsShippingLabels, true);
     assert.equal(createDryRunPrinterRes.json.printer.isDefaultShippingLabelPrinter, false);
 
+    const createWindowsZebraPrinterRes = await fetchJson("/api/settings/printers", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Dispatch Zebra USB Helper",
+        key: makePrinterKey("DISPATCH_ZEBRA_USB_HELPER"),
+        transportMode: "WINDOWS_PRINTER",
+        windowsPrinterName: "ZDesigner GK420d",
+        location: "Dispatch bench",
+        notes: "USB Zebra on Windows helper host",
+      }),
+    });
+    assert.equal(createWindowsZebraPrinterRes.status, 201, JSON.stringify(createWindowsZebraPrinterRes.json));
+    const windowsZebraPrinterId = createWindowsZebraPrinterRes.json.printer.id;
+    createdPrinterIds.push(windowsZebraPrinterId);
+    assert.equal(createWindowsZebraPrinterRes.json.printer.transportMode, "WINDOWS_PRINTER");
+    assert.equal(createWindowsZebraPrinterRes.json.printer.windowsPrinterName, "ZDesigner GK420d");
+    assert.equal(createWindowsZebraPrinterRes.json.printer.supportsShippingLabels, true);
+    assert.equal(createWindowsZebraPrinterRes.json.printer.supportsProductLabels, false);
+
     const filteredList = await fetchJson("/api/settings/printers?activeOnly=true&shippingLabelOnly=true", {
       headers: MANAGER_HEADERS,
     });
     assert.equal(filteredList.status, 200, JSON.stringify(filteredList.json));
     assert.equal(filteredList.json.printers.some((printer) => printer.id === dryRunPrinterId), true);
+    assert.equal(filteredList.json.printers.some((printer) => printer.id === windowsZebraPrinterId), true);
 
     const setDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
       method: "PUT",
@@ -97,6 +123,32 @@ const run = async () => {
     assert.equal(setDefaultRes.status, 200, JSON.stringify(setDefaultRes.json));
     assert.equal(setDefaultRes.json.defaultShippingLabelPrinterId, dryRunPrinterId);
 
+    const setWindowsPrinterDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: windowsZebraPrinterId,
+      }),
+    });
+    assert.equal(setWindowsPrinterDefaultRes.status, 200, JSON.stringify(setWindowsPrinterDefaultRes.json));
+    assert.equal(setWindowsPrinterDefaultRes.json.defaultShippingLabelPrinterId, windowsZebraPrinterId);
+
+    const restoreDryRunDefaultRes = await fetchJson("/api/settings/printers/default-shipping-label", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        printerId: dryRunPrinterId,
+      }),
+    });
+    assert.equal(restoreDryRunDefaultRes.status, 200, JSON.stringify(restoreDryRunDefaultRes.json));
+    assert.equal(restoreDryRunDefaultRes.json.defaultShippingLabelPrinterId, dryRunPrinterId);
+
     const createRawTcpWithoutHostRes = await fetchJson("/api/settings/printers", {
       method: "POST",
       headers: {
@@ -105,7 +157,7 @@ const run = async () => {
       },
       body: JSON.stringify({
         name: "Broken RAW_TCP Printer",
-        key: "BROKEN_RAW_TCP",
+        key: makePrinterKey("BROKEN_RAW_TCP"),
         transportMode: "RAW_TCP",
       }),
     });
@@ -120,7 +172,7 @@ const run = async () => {
       },
       body: JSON.stringify({
         name: "Back Office Test Printer",
-        key: "BACK_OFFICE_TEST",
+        key: makePrinterKey("BACK_OFFICE_TEST"),
         transportMode: "DRY_RUN",
         supportsShippingLabels: false,
       }),
@@ -137,7 +189,7 @@ const run = async () => {
       },
       body: JSON.stringify({
         name: "Packing Bench Dymo",
-        key: "PACKING_BENCH_DYMO",
+        key: makePrinterKey("PACKING_BENCH_DYMO"),
         printerFamily: "DYMO_LABEL",
         transportMode: "WINDOWS_PRINTER",
         windowsPrinterName: "DYMO LabelWriter 550",
@@ -153,6 +205,30 @@ const run = async () => {
     assert.equal(createDymoPrinterRes.json.printer.supportsProductLabels, true);
     assert.equal(createDymoPrinterRes.json.printer.transportMode, "WINDOWS_PRINTER");
     assert.equal(createDymoPrinterRes.json.defaultProductLabelPrinterId, dymoPrinterId);
+
+    const createWindowsZebraWithoutPrinterNameRes = await fetchJson("/api/settings/printers", {
+      method: "POST",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Broken Zebra Helper Printer",
+        key: makePrinterKey("BROKEN_ZEBRA_HELPER"),
+        transportMode: "WINDOWS_PRINTER",
+      }),
+    });
+    assert.equal(
+      createWindowsZebraWithoutPrinterNameRes.status,
+      201,
+      JSON.stringify(createWindowsZebraWithoutPrinterNameRes.json),
+    );
+    const windowsPrinterFallbackId = createWindowsZebraWithoutPrinterNameRes.json.printer.id;
+    createdPrinterIds.push(windowsPrinterFallbackId);
+    assert.equal(
+      createWindowsZebraWithoutPrinterNameRes.json.printer.windowsPrinterName,
+      "Broken Zebra Helper Printer",
+    );
 
     const productLabelOnlyList = await fetchJson("/api/settings/printers?activeOnly=true&productLabelOnly=true", {
       headers: MANAGER_HEADERS,
