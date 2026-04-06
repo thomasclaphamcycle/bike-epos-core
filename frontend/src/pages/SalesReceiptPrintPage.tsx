@@ -77,7 +77,10 @@ export const SalesReceiptPrintPage = () => {
       <style media="print">{printPageStyle}</style>
 
       <div className="sales-receipt-print-page__actions">
-        <Link to="/pos">Back to POS</Link>
+        <div className="actions-inline">
+          <Link to="/pos">Back to POS</Link>
+          <Link to={`/sales/${encodeURIComponent(saleId)}/invoice/print`}>Open A4 invoice</Link>
+        </div>
         <button type="button" className="primary" onClick={() => window.print()} disabled={!receipt || loading}>
           {loading ? "Loading..." : "Print receipt"}
         </button>

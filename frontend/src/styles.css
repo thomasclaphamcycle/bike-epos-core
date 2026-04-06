@@ -1228,6 +1228,295 @@ body {
   }
 }
 
+.sales-invoice-print-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  background:
+    linear-gradient(180deg, #eef3f8 0%, #dfe8f1 100%);
+}
+
+.sales-invoice-print-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.sales-invoice-print-page__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.sales-invoice-print-page__copy h1,
+.sales-invoice-print-page__copy p {
+  margin: 0;
+}
+
+.sales-invoice-print-page__sheet {
+  display: grid;
+  place-items: start center;
+}
+
+.sales-invoice-print-page__state-card {
+  width: min(210mm, 100%);
+}
+
+.sales-invoice-document {
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+  color: #111827;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.14);
+  padding: 16mm 16mm 14mm;
+  display: grid;
+  gap: 12mm;
+}
+
+.sales-invoice-document__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+  gap: 10mm;
+  align-items: start;
+}
+
+.sales-invoice-document__brand {
+  display: grid;
+  gap: 5mm;
+}
+
+.sales-invoice-document__logo-wrap {
+  min-height: 18mm;
+  display: flex;
+  align-items: center;
+}
+
+.sales-invoice-document__logo {
+  max-width: 72mm;
+  max-height: 18mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.sales-invoice-document__brand-copy {
+  display: grid;
+  gap: 1.2mm;
+}
+
+.sales-invoice-document__brand-copy h1,
+.sales-invoice-document__meta-card h2 {
+  margin: 0;
+}
+
+.sales-invoice-document__brand-copy h1 {
+  font-size: 1.55rem;
+  line-height: 1.05;
+}
+
+.sales-invoice-document__muted-line,
+.sales-invoice-document__footer-note {
+  color: #4b5563;
+  line-height: 1.45;
+}
+
+.sales-invoice-document__meta-card,
+.sales-invoice-document__panel,
+.sales-invoice-document__totals-card {
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.sales-invoice-document__meta-card {
+  padding: 6mm;
+  display: grid;
+  gap: 4mm;
+}
+
+.sales-invoice-document__eyebrow,
+.sales-invoice-document__panel-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.sales-invoice-document__meta-list {
+  margin: 0;
+  display: grid;
+  gap: 3mm;
+}
+
+.sales-invoice-document__meta-list div {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 4mm;
+}
+
+.sales-invoice-document__meta-list dt {
+  color: #64748b;
+}
+
+.sales-invoice-document__meta-list dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.sales-invoice-document__summary-grid,
+.sales-invoice-document__footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.9fr);
+  gap: 8mm;
+}
+
+.sales-invoice-document__panel {
+  padding: 5mm;
+  display: grid;
+  gap: 2mm;
+}
+
+.sales-invoice-document__panel-line {
+  line-height: 1.45;
+}
+
+.sales-invoice-document__table-section {
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.sales-invoice-document__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sales-invoice-document__table thead {
+  background: #eff5fb;
+}
+
+.sales-invoice-document__table th,
+.sales-invoice-document__table td {
+  padding: 3.8mm 4.2mm;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.sales-invoice-document__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sales-invoice-document__table th {
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+
+.sales-invoice-document__table-primary {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sales-invoice-document__numeric {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.sales-invoice-document__payment-row,
+.sales-invoice-document__totals-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4mm;
+  align-items: start;
+}
+
+.sales-invoice-document__payment-row {
+  padding: 3mm 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.sales-invoice-document__payment-row:last-child {
+  border-bottom: 0;
+}
+
+.sales-invoice-document__totals-card {
+  padding: 5mm;
+  display: grid;
+  gap: 3mm;
+}
+
+.sales-invoice-document__totals-row--grand {
+  padding-top: 3mm;
+  border-top: 1px solid #cbd5e1;
+  font-size: 1.06rem;
+}
+
+.sales-invoice-document__footer-note {
+  border-top: 1px solid #dbe3ee;
+  padding-top: 5mm;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 960px) {
+  .sales-invoice-print-page {
+    padding: 16px;
+  }
+
+  .sales-invoice-print-page__actions {
+    align-items: stretch;
+  }
+
+  .sales-invoice-document {
+    width: min(210mm, 100%);
+    min-height: auto;
+    padding: 10mm;
+  }
+
+  .sales-invoice-document__header,
+  .sales-invoice-document__summary-grid,
+  .sales-invoice-document__footer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .sales-invoice-print-page {
+    min-height: auto;
+    padding: 0;
+    background: #fff;
+  }
+
+  .sales-invoice-print-page__actions,
+  .sales-invoice-print-page__copy {
+    display: none;
+  }
+
+  .sales-invoice-print-page__sheet {
+    place-items: start;
+  }
+
+  .sales-invoice-document {
+    width: auto;
+    min-height: auto;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .sales-invoice-document__meta-card,
+  .sales-invoice-document__panel,
+  .sales-invoice-document__totals-card,
+  .sales-invoice-document__table-section {
+    break-inside: avoid;
+  }
+}
+
 a {
   color: var(--cp-blue);
 }
@@ -16208,6 +16497,26 @@ body.rota-row-drag-copy-active {
 
 .sales-history-reference {
   letter-spacing: 0.01em;
+}
+
+.sales-history-row-actions {
+  margin-top: 6px;
+}
+
+.sales-history-row-actions .link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cp-blue);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sales-history-row-actions .link-button:hover,
+.sales-history-row-actions .link-button:focus-visible {
+  text-decoration: underline;
+  outline: none;
 }
 
 .sales-history-status {
