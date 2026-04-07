@@ -84,6 +84,30 @@ function Resolve-String {
   return $text
 }
 
+function Resolve-Boolean {
+  param(
+    [object]$Value,
+    [bool]$Fallback
+  )
+
+  if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+    return $Fallback
+  }
+
+  $text = ([string]$Value).Trim().ToLowerInvariant()
+  switch ($text) {
+    '1' { return $true }
+    'true' { return $true }
+    'yes' { return $true }
+    'on' { return $true }
+    '0' { return $false }
+    'false' { return $false }
+    'no' { return $false }
+    'off' { return $false }
+    default { throw "Boolean value '$Value' was not understood." }
+  }
+}
+
 function Require-String {
   param(
     [object]$Value,
@@ -164,6 +188,12 @@ function New-IsoTimestamp {
 
 function New-JobId {
   return 'bike-tag-job-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + '-' + ([Guid]::NewGuid().ToString('N').Substring(0, 8))
+}
+
+function Write-AgentLog {
+  param([string]$Message)
+
+  Write-Host "[corepos-bike-tag-agent] $(New-IsoTimestamp) $Message"
 }
 
 function Decode-DocumentBytes {
@@ -272,25 +302,15 @@ function Invoke-WindowsPrinterJob {
     throw "Print script '$printScriptPath' was not found."
   }
 
-  $arguments = @(
-    '-NoLogo',
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    $printScriptPath,
-    '-PrinterName',
-    $PrinterName,
-    '-ImagePath',
-    $ImagePath,
-    '-Copies',
-    [string]$Copies
-  )
+  Write-AgentLog "Launching bike-tag print script for printer '$PrinterName' with image '$ImagePath' ($Copies cop$(if ($Copies -eq 1) { 'y' } else { 'ies' }))."
 
-  $process = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
-  if ($process.ExitCode -ne 0) {
-    throw "Windows printer job failed with exit code $($process.ExitCode)."
+  try {
+    & $printScriptPath -PrinterName $PrinterName -ImagePath $ImagePath -Copies $Copies
+    Write-AgentLog "Bike-tag print script completed successfully for printer '$PrinterName'."
+  }
+  catch {
+    Write-AgentLog "Bike-tag print script failed for printer '$PrinterName': $($_.Exception.Message)"
+    throw
   }
 }
 
@@ -332,6 +352,7 @@ function Submit-BikeTagPrintJob {
 
   try {
     [System.IO.File]::WriteAllBytes($imagePath, $Request.documentBytes)
+    Write-AgentLog "Bike-tag artifact prepared at '$imagePath' ($($Request.documentBytes.Length) bytes)."
     Invoke-WindowsPrinterJob -PrinterName $Request.windowsPrinterName -ImagePath $imagePath -Copies $Request.copies
   }
   finally {
@@ -360,6 +381,7 @@ $bindHost = Resolve-String -Value (Get-ConfigProperty -Config $config -Name 'bin
 $port = Resolve-PositiveInteger -Value (Get-ConfigProperty -Config $config -Name 'port') -Fallback $defaultPort -Field 'port'
 $sharedSecret = Resolve-String -Value (Get-ConfigProperty -Config $config -Name 'sharedSecret')
 $dryRunOutputDir = Resolve-String -Value (Get-ConfigProperty -Config $config -Name 'dryRunOutputDir') -Fallback $defaultOutputDir
+$logRequests = Resolve-Boolean -Value (Get-ConfigProperty -Config $config -Name 'logRequests') -Fallback $true
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $listener = [System.Net.HttpListener]::new()
@@ -367,7 +389,8 @@ $prefixHost = if ($bindHost -eq '0.0.0.0' -or $bindHost -eq '::') { '+' } else {
 $listener.Prefixes.Add("http://${prefixHost}:${port}/")
 $listener.Start()
 
-Write-Host "[corepos-bike-tag-agent] Listening on http://${bindHost}:${port}"
+Write-AgentLog "Listening on http://${bindHost}:${port}"
+Write-AgentLog "Using config $ConfigPath"
 
 try {
   while ($listener.IsListening) {
@@ -377,6 +400,10 @@ try {
       $response = $context.Response
       $path = $request.Url.AbsolutePath
       $method = $request.HttpMethod.ToUpperInvariant()
+
+      if ($logRequests) {
+        Write-AgentLog "$method $path"
+      }
 
       if ($method -eq 'GET' -and $path -eq '/health') {
         Write-JsonResponse -Context $context -StatusCode 200 -Body @{
@@ -408,15 +435,33 @@ try {
 
         try {
           $body = $rawBody | ConvertFrom-Json
+        }
+        catch {
+          Write-ErrorResponse -Context $context -StatusCode 400 -Code 'PRINT_AGENT_REQUEST_INVALID' -Message 'Request body was not valid JSON.'
+          continue
+        }
+
+        try {
           $validated = Validate-BikeTagPrintRequest -Body $body
+        }
+        catch {
+          Write-ErrorResponse -Context $context -StatusCode 400 -Code 'PRINT_AGENT_REQUEST_INVALID' -Message $_.Exception.Message
+          continue
+        }
+
+        Write-AgentLog "Bike-tag request validated for printer '$($validated.printerName)' using transport '$($validated.transportMode)'."
+
+        try {
           $job = Submit-BikeTagPrintJob -Request $validated -OutputDir $dryRunOutputDir
+          Write-AgentLog "Bike-tag job $($job.jobId) completed with transport '$($job.transportMode)'."
           Write-JsonResponse -Context $context -StatusCode 201 -Body @{
             ok = $true
             job = $job
           }
         }
         catch {
-          Write-ErrorResponse -Context $context -StatusCode 400 -Code 'PRINT_AGENT_REQUEST_INVALID' -Message $_.Exception.Message
+          Write-AgentLog "Bike-tag job failed during execution: $($_.Exception.Message)"
+          Write-ErrorResponse -Context $context -StatusCode 502 -Code 'PRINT_AGENT_TRANSPORT_FAILED' -Message $_.Exception.Message
         }
         continue
       }

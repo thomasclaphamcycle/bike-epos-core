@@ -10,6 +10,7 @@ import {
 import type { PrintAgentConfig } from "./config";
 
 const WINDOWS_PRINT_SCRIPT_PATH = path.resolve(__dirname, "..", "scripts", "print_bike_tag_windows.ps1");
+const WINDOWS_PRINTER_SCRIPT_TIMEOUT_MS = 25000;
 
 const slugify = (value: string) =>
   value
@@ -51,6 +52,10 @@ const runWindowsPrinterJob = async (
   }
 
   await new Promise<void>((resolve, reject) => {
+    console.info(
+      `[print-agent] Bike-tag script launch printer="${printerName}" image="${imagePath}" copies=${copies}`,
+    );
+
     const child = spawn(
       "powershell.exe",
       [
@@ -75,6 +80,11 @@ const runWindowsPrinterJob = async (
 
     let stderr = "";
     let stdout = "";
+    let timeoutTriggered = false;
+    const timeout = setTimeout(() => {
+      timeoutTriggered = true;
+      child.kill();
+    }, WINDOWS_PRINTER_SCRIPT_TIMEOUT_MS);
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString("utf8");
@@ -83,9 +93,19 @@ const runWindowsPrinterJob = async (
       stderr += chunk.toString("utf8");
     });
     child.once("error", (error) => {
+      clearTimeout(timeout);
       reject(error instanceof Error ? error : new Error(String(error)));
     });
     child.once("close", (code) => {
+      clearTimeout(timeout);
+      if (timeoutTriggered) {
+        reject(new Error(`Bike-tag print script timed out after ${WINDOWS_PRINTER_SCRIPT_TIMEOUT_MS}ms`));
+        return;
+      }
+
+      console.info(
+        `[print-agent] Bike-tag script exit code=${code ?? "unknown"} printer="${printerName}"`,
+      );
       if (code === 0) {
         resolve();
         return;
@@ -144,6 +164,9 @@ const executeWindowsPrinter = async (
 
   try {
     await fs.writeFile(imagePath, documentBytes);
+    console.info(
+      `[print-agent] Bike-tag artifact prepared path="${imagePath}" bytes=${documentBytes.length}`,
+    );
     await runWindowsPrinterJob(printerTarget, imagePath, request.printer.copies);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);

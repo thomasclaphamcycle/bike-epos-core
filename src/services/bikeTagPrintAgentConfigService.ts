@@ -36,7 +36,7 @@ export type ResolvedBikeTagPrintAgentRuntimeConfig = {
 };
 
 const BIKE_TAG_PRINT_AGENT_CONFIG_KEY = "documents.bikeTagPrintAgent";
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 30000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

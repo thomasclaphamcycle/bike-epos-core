@@ -131,6 +131,7 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
 
   app.post("/jobs/bike-tag", async (req, res, next) => {
     try {
+      console.info("[print-agent] Bike-tag request received");
       requireSecret(req.header("X-CorePOS-Print-Agent-Secret") ?? undefined, config);
       let payload;
       try {
@@ -145,8 +146,14 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
 
       let job;
       try {
+        console.info(
+          `[print-agent] Bike-tag request validated for printer="${payload.printRequest.printer.printerName}" transport="${payload.printRequest.printer.transportMode}" copies=${payload.printRequest.printer.copies}`,
+        );
         job = await submitBikeTagPrintJob(payload.printRequest, config);
       } catch (error) {
+        console.error(
+          `[print-agent] Bike-tag transport failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         throw createHttpError(
           502,
           "PRINT_AGENT_TRANSPORT_FAILED",
@@ -158,6 +165,7 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
         ok: true,
         job,
       };
+      console.info(`[print-agent] Bike-tag job ${job.jobId} completed`);
       res.status(201).json(response);
     } catch (error) {
       next(error);

@@ -66,8 +66,12 @@ export const deliverBikeTagPrintRequestToAgent = async (
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  const helperJobUrl = new URL("/jobs/bike-tag", config.url).toString();
 
   try {
+    console.info(
+      `[corepos] Sending bike-tag job to helper ${helperJobUrl} via ${config.source} configuration`,
+    );
     const headers = new Headers({
       "Content-Type": "application/json",
     });
@@ -75,7 +79,7 @@ export const deliverBikeTagPrintRequestToAgent = async (
       headers.set("X-CorePOS-Print-Agent-Secret", config.sharedSecret);
     }
 
-    const response = await fetch(new URL("/jobs/bike-tag", config.url).toString(), {
+    const response = await fetch(helperJobUrl, {
       method: "POST",
       headers,
       body: JSON.stringify({ printRequest }),
@@ -103,7 +107,9 @@ export const deliverBikeTagPrintRequestToAgent = async (
     }
 
     try {
-      return validateBikeTagPrintAgentSubmitResponse(payload);
+      const validated = validateBikeTagPrintAgentSubmitResponse(payload);
+      console.info(`[corepos] Bike-tag helper accepted job ${validated.job.jobId}`);
+      return validated;
     } catch (error) {
       throw new HttpError(
         502,
@@ -116,6 +122,9 @@ export const deliverBikeTagPrintRequestToAgent = async (
       throw error;
     }
     if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
+      console.error(
+        `[corepos] Bike-tag helper timeout after ${config.timeoutMs}ms for ${helperJobUrl}`,
+      );
       throw new HttpError(
         504,
         `Bike-tag print agent timed out after ${config.timeoutMs}ms`,
