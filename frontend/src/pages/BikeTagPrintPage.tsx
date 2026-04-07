@@ -152,18 +152,21 @@ export const BikeTagPrintPage = () => {
 
       <div className="bike-tag-print-page__actions">
         <div className="actions-inline">
-          <Link to={`/inventory/${variantId}`}>Back to inventory detail</Link>
-          <Link to={`/inventory/${variantId}/label`}>Open product label</Link>
+          <Link className="button-link" to={`/inventory/${variantId}`}>Close preview</Link>
+          <Link className="button-link" to={`/inventory/${variantId}/label`}>Open product label</Link>
         </div>
         <button type="button" className="primary" onClick={() => window.print()} disabled={!variant || loading}>
-          {loading ? "Loading..." : "Print 2-up bike tags"}
+          {loading ? "Loading..." : "Print bike tag sheet"}
         </button>
       </div>
 
       <div className="bike-tag-print-page__copy">
-        <h1>Bike Tag</h1>
+        <h1>Bike Tag Preview</h1>
         <p className="muted-text">
-          A5 landscape browser print layout with 2 identical A6 bike tags side by side, ready to print and cut. Use the print dialog to choose the Xerox or other office printer.
+          Exact A5 landscape bike-tag sheet preview. This is the same rendered 2-up A6 image CorePOS sends to direct print.
+        </p>
+        <p className="muted-text">
+          Two identical A6 bike tags sit side by side on one A5 landscape sheet, ready to print and cut. Use Print to open the browser dialog if you need the fallback path.
         </p>
       </div>
 
@@ -184,12 +187,14 @@ export const BikeTagPrintPage = () => {
 
       <div className="bike-tag-print-page__sheet">
         {previewUrl ? (
-          <img
-            className="bike-tag-print-page__image-preview"
-            data-testid="bike-tag-preview-image"
-            src={previewUrl}
-            alt={variant ? `${variant.product?.name || variant.sku} bike tag preview` : "Bike tag preview"}
-          />
+          <div className="bike-tag-print-page__preview-stage">
+            <img
+              className="bike-tag-print-page__image-preview"
+              data-testid="bike-tag-preview-image"
+              src={previewUrl}
+              alt={variant ? `${variant.product?.name || variant.sku} bike tag preview` : "Bike tag preview"}
+            />
+          </div>
         ) : loading || previewLoading ? (
           <div className="card bike-tag-print-page__state-card">Loading bike tag…</div>
         ) : (

@@ -29,11 +29,11 @@ try {
     $document.PrinterSettings.Copies = [int16]$Copies
   }
 
-  $paperWidthHundredths = [int][Math]::Round(210 / 25.4 * 100)
-  $paperHeightHundredths = [int][Math]::Round(148 / 25.4 * 100)
+  $paperWidthHundredths = [int][Math]::Round(148 / 25.4 * 100)
+  $paperHeightHundredths = [int][Math]::Round(210 / 25.4 * 100)
   $paperSize = New-Object System.Drawing.Printing.PaperSize('CorePOSBikeTagA5Landscape', $paperWidthHundredths, $paperHeightHundredths)
 
-  $document.DefaultPageSettings.Landscape = $false
+  $document.DefaultPageSettings.Landscape = $true
   $document.DefaultPageSettings.PaperSize = $paperSize
   $document.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
   $document.OriginAtMargins = $false

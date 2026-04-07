@@ -548,7 +548,7 @@ export const InventoryItemPage = () => {
             >
               {printingBikeTag ? "Printing bike tag..." : "Print bike tag"}
             </button>
-            <Link to={`/variants/${variantId}/bike-tag/print`}>Open bike tag preview</Link>
+            <Link className="button-link" to={`/variants/${variantId}/bike-tag/print`}>Preview bike tag</Link>
             <Link to={`/inventory/${variantId}/label`}>Print label</Link>
             <Link to={`/inventory/${variantId}?mode=count`}>Cycle count</Link>
             <Link to="/inventory">Back to Inventory</Link>

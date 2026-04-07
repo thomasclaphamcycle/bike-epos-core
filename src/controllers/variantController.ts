@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { BIKE_TAG_DOCUMENT_MIME_TYPE } from "../../shared/bikeTagPrintContract";
 import {
   createVariant,
   getVariantById,
@@ -230,7 +231,7 @@ export const getVariantProductLabelDocumentHandler = async (req: Request, res: R
 
 export const getVariantBikeTagDocumentHandler = async (req: Request, res: Response) => {
   const payload = await renderBikeTagDocumentForVariant(req.params.id);
-  res.setHeader("Content-Type", payload.renderedDocument.mimeType);
+  res.setHeader("Content-Type", BIKE_TAG_DOCUMENT_MIME_TYPE);
   res.setHeader(
     "Content-Disposition",
     `inline; filename=\"bike-tag-${payload.variant.sku}.${payload.renderedDocument.extension}\"`,
