@@ -261,6 +261,20 @@ const run = async () => {
       },
     };
 
+    const bikeTagRawRes = await fetch(`http://${agent.host}:${agent.port}/jobs/bike-tag`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+      },
+      body: JSON.stringify(bikeTagRequest),
+    });
+    const bikeTagRawPayload = await bikeTagRawRes.json();
+    assert.equal(bikeTagRawRes.status, 201, JSON.stringify(bikeTagRawPayload));
+    assert.equal(bikeTagRawPayload.ok, true);
+    assert.equal(bikeTagRawPayload.job.transportMode, "DRY_RUN");
+    assert.equal(bikeTagRawPayload.job.documentFormat, "BIKE_TAG_SHEET");
+
     const bikeTagRes = await fetch(`http://${agent.host}:${agent.port}/jobs/bike-tag`, {
       method: "POST",
       headers: {

@@ -199,7 +199,13 @@ function Validate-BikeTagPrintRequest {
 
   $printRequest = Get-ConfigProperty -Config $Body -Name 'printRequest'
   if ($null -eq $printRequest) {
-    throw 'body.printRequest is required.'
+    $bodyIntentType = Resolve-String -Value (Get-ConfigProperty -Config $Body -Name 'intentType')
+    if ($bodyIntentType -eq 'BIKE_TAG_PRINT') {
+      $printRequest = $Body
+    }
+    else {
+      throw 'body.printRequest is required.'
+    }
   }
 
   $intentType = Require-String -Value (Get-ConfigProperty -Config $printRequest -Name 'intentType') -Field 'printRequest.intentType'

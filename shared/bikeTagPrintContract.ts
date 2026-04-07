@@ -203,9 +203,13 @@ export const validateBikeTagPrintAgentSubmitRequest = (
   value: unknown,
 ): BikeTagPrintAgentSubmitRequest => {
   const record = expectRecord(value, "body");
+  const requestCandidate =
+    record.printRequest !== undefined && record.printRequest !== null
+      ? record.printRequest
+      : record;
 
   return {
-    printRequest: validateBikeTagPrintRequest(record.printRequest),
+    printRequest: validateBikeTagPrintRequest(requestCandidate),
   };
 };
 
