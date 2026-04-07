@@ -6,21 +6,37 @@ import {
 import { HttpError } from "../utils/http";
 import { resolveBikeTagPrintAgentRuntimeConfig } from "./bikeTagPrintAgentConfigService";
 
-const extractRemoteErrorMessage = (status: number, payload: unknown) => {
+const extractRemoteErrorDetails = (status: number, payload: unknown) => {
   if (payload && typeof payload === "object") {
     const maybeError = (payload as { error?: unknown }).error;
     if (typeof maybeError === "string" && maybeError.trim().length > 0) {
-      return maybeError;
+      return {
+        code: null,
+        message: maybeError,
+      };
     }
     if (maybeError && typeof maybeError === "object") {
+      const maybeCode = (maybeError as { code?: unknown }).code;
       const maybeMessage = (maybeError as { message?: unknown }).message;
-      if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
-        return maybeMessage;
+      if (
+        (typeof maybeCode === "string" && maybeCode.trim().length > 0)
+        || (typeof maybeMessage === "string" && maybeMessage.trim().length > 0)
+      ) {
+        return {
+          code: typeof maybeCode === "string" && maybeCode.trim().length > 0 ? maybeCode : null,
+          message:
+            typeof maybeMessage === "string" && maybeMessage.trim().length > 0
+              ? maybeMessage
+              : `Bike tag print agent request failed (${status})`,
+        };
       }
     }
   }
 
-  return `Bike tag print agent request failed (${status})`;
+  return {
+    code: null,
+    message: `Bike tag print agent request failed (${status})`,
+  };
 };
 
 const parseResponseBody = async (response: Response) => {
@@ -68,9 +84,20 @@ export const deliverBikeTagPrintRequestToAgent = async (
 
     const payload = await parseResponseBody(response);
     if (!response.ok) {
+      const remoteError = extractRemoteErrorDetails(response.status, payload);
+      if (response.status === 400) {
+        throw new HttpError(
+          502,
+          remoteError.message,
+          remoteError.code === "PRINT_AGENT_REQUEST_INVALID"
+            ? "BIKE_TAG_PRINT_AGENT_REQUEST_INVALID"
+            : "BIKE_TAG_PRINT_AGENT_REJECTED",
+        );
+      }
+
       throw new HttpError(
         502,
-        extractRemoteErrorMessage(response.status, payload),
+        remoteError.message,
         "BIKE_TAG_PRINT_AGENT_REJECTED",
       );
     }

@@ -3,6 +3,7 @@ require("dotenv/config");
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
+const http = require("node:http");
 const path = require("node:path");
 const { PrismaClient, Prisma } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
@@ -52,6 +53,30 @@ const fetchJson = async (pathName, options = {}) => {
   return { status: response.status, json };
 };
 
+const listenServer = (server, host = "127.0.0.1") =>
+  new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, host, () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("Server did not expose a TCP address."));
+        return;
+      }
+      resolve(address);
+    });
+  });
+
+const closeServer = (server) =>
+  new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
 const run = async () => {
   const envFallbackPrintAgent = await startPrintAgentServer({
     bindHost: "127.0.0.1",
@@ -67,6 +92,28 @@ const run = async () => {
     dryRunOutputDir: path.resolve(process.cwd(), "tmp", "bike-tag-smoke-agent", "settings"),
     rawTcpTimeoutMs: 5000,
   });
+  const invalidRequestHelper = http.createServer((req, res) => {
+    if (req.method === "POST" && req.url === "/jobs/bike-tag") {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: {
+          code: "PRINT_AGENT_REQUEST_INVALID",
+          message: "body.printRequest is required.",
+        },
+      }));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: { code: "NOT_FOUND", message: "Not found" } }));
+  });
+  const invalidRequestHelperAddress = await listenServer(invalidRequestHelper);
   const serverController = createSmokeServerController({
     label: "bike-tag-print-smoke",
     baseUrl: BASE_URL,
@@ -226,6 +273,38 @@ const run = async () => {
     assert.equal(envFallbackPrintRes.status, 201, JSON.stringify(envFallbackPrintRes.json));
     assert.match(envFallbackPrintRes.json.printJob.outputPath, /bike-tag-smoke-agent\/env-fallback\//);
 
+    const invalidHelperConfigRes = await fetchJson("/api/settings/bike-tag-print-agent", {
+      method: "PUT",
+      headers: {
+        ...ADMIN_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: `http://${invalidRequestHelperAddress.address}:${invalidRequestHelperAddress.port}`,
+        clearSharedSecret: true,
+      }),
+    });
+    assert.equal(invalidHelperConfigRes.status, 200, JSON.stringify(invalidHelperConfigRes.json));
+    assert.equal(
+      invalidHelperConfigRes.json.config.url,
+      `http://${invalidRequestHelperAddress.address}:${invalidRequestHelperAddress.port}`,
+    );
+    assert.equal(invalidHelperConfigRes.json.config.effectiveSource, "settings");
+
+    const invalidHelperPrintRes = await fetchJson(`/api/variants/${encodeURIComponent(product.variants[0].id)}/bike-tag/print`, {
+      method: "POST",
+      headers: {
+        ...STAFF_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        copies: 1,
+      }),
+    });
+    assert.equal(invalidHelperPrintRes.status, 502, JSON.stringify(invalidHelperPrintRes.json));
+    assert.equal(invalidHelperPrintRes.json.error.code, "BIKE_TAG_PRINT_AGENT_REQUEST_INVALID");
+    assert.equal(invalidHelperPrintRes.json.error.message, "body.printRequest is required.");
+
     const invalidCopiesRes = await fetchJson(`/api/variants/${encodeURIComponent(product.variants[0].id)}/bike-tag/print`, {
       method: "POST",
       headers: {
@@ -308,6 +387,7 @@ const run = async () => {
       serverController.stop(),
       envFallbackPrintAgent.close(),
       persistedSettingsPrintAgent.close(),
+      closeServer(invalidRequestHelper),
     ]);
   }
 };

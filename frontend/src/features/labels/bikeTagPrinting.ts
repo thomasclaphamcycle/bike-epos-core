@@ -7,6 +7,7 @@ type BikeTagDirectPrintErrorCode =
   | "BIKE_TAG_PRINT_AGENT_NOT_CONFIGURED"
   | "BIKE_TAG_PRINT_AGENT_UNREACHABLE"
   | "BIKE_TAG_PRINT_AGENT_TIMEOUT"
+  | "BIKE_TAG_PRINT_AGENT_REQUEST_INVALID"
   | "BIKE_TAG_PRINT_AGENT_REJECTED"
   | "BIKE_TAG_PRINT_AGENT_INVALID_RESPONSE"
   | "PRINTER_INACTIVE"
@@ -76,6 +77,8 @@ export const getBikeTagDirectPrintErrorMessage = (error: unknown) => {
     case "BIKE_TAG_PRINT_AGENT_UNREACHABLE":
     case "BIKE_TAG_PRINT_AGENT_TIMEOUT":
       return "Bike-tag print helper unavailable. Check the Windows office-printer helper, then try again. Use the preview fallback if needed.";
+    case "BIKE_TAG_PRINT_AGENT_REQUEST_INVALID":
+      return "Bike-tag helper rejected this print job. Ask a manager to check the helper version and bike-tag settings, or use the preview fallback.";
     case "BIKE_TAG_PRINT_AGENT_REJECTED":
     case "BIKE_TAG_PRINT_AGENT_INVALID_RESPONSE":
       return "Bike-tag printer unavailable. Check the Windows helper and Xerox printer connection, then try again.";
