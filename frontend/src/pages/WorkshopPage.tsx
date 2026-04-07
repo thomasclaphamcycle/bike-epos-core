@@ -233,7 +233,6 @@ export const WorkshopPage = () => {
     <div className="page-shell page-shell-workspace workshop-primary-page" data-testid="workshop-operating-page">
       <section className="workshop-primary-topbar">
         <div className="workshop-primary-title">
-          <span className="ui-page-eyebrow">Workshop</span>
           <h1 className="ui-page-title">Workshop</h1>
         </div>
 
