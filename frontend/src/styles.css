@@ -1552,6 +1552,23 @@ body {
   width: min(210mm, 100%);
 }
 
+.bike-tag-print-page__preview-stage {
+  width: min(210mm, calc(100vw - 48px));
+  display: grid;
+  place-items: center;
+}
+
+.bike-tag-print-page__image-preview {
+  display: block;
+  width: min(210mm, 100%);
+  height: auto;
+  max-width: 100%;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.16);
+  background: #ffffff;
+  object-fit: contain;
+}
+
 .bike-tag-document {
   width: 210mm;
   min-height: 148mm;
@@ -1723,7 +1740,7 @@ body {
     align-items: stretch;
   }
 
-  .bike-tag-print-page__image-preview {
+  .bike-tag-print-page__preview-stage {
     width: 100%;
   }
 
@@ -1762,6 +1779,10 @@ body {
 
   .bike-tag-print-page__sheet {
     place-items: start;
+  }
+
+  .bike-tag-print-page__preview-stage {
+    width: auto;
   }
 
   .bike-tag-print-page__image-preview {

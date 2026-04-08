@@ -436,20 +436,21 @@ test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, re
   await expect(page.getByRole("heading", { name: "Inventory Detail" })).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Print bike tag" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open bike tag preview" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Preview bike tag" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Open bike tag preview" }).click();
+  await page.getByRole("link", { name: "Preview bike tag" }).click();
   await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
-  await expect(page.getByRole("heading", { name: "Bike Tag" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Print 2-up bike tags" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bike Tag Preview" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print bike tag sheet" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Close preview" })).toBeVisible();
   await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
-    "A5 landscape browser print layout",
+    "Exact A5 landscape bike-tag sheet preview",
   );
   await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
-    "2 identical A6 bike tags side by side",
+    "same rendered 2-up A6 image CorePOS sends to direct print",
   );
   await expect(page.locator(".bike-tag-print-page__copy")).toContainText(
-    "Use the print dialog to choose the Xerox",
+    "Two identical A6 bike tags sit side by side on one A5 landscape sheet",
   );
   await expect(page.getByTestId("bike-tag-preview-image")).toBeVisible();
   await expect(page.getByTestId("bike-tag-preview-image")).toHaveAttribute(
