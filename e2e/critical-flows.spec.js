@@ -436,9 +436,7 @@ test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, re
   await expect(page.getByRole("heading", { name: "Inventory Detail" })).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Print bike tag" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Preview bike tag" })).toBeVisible();
-
-  await page.getByRole("link", { name: "Preview bike tag" }).click();
+  await page.getByRole("button", { name: "Print bike tag" }).click();
   await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
   await expect(page.getByRole("heading", { name: "Bike Tag Preview" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Print bike tag sheet" })).toBeVisible();

@@ -25,11 +25,12 @@ const SHEET_PADDING = 52;
 const PANEL_GAP = 42;
 const PANEL_PADDING_X = 44;
 const PANEL_PADDING_Y = 38;
-const BARCODE_BLOCK_HEIGHT = 270;
+const BARCODE_BLOCK_HEIGHT = 112;
 const PANEL_RADIUS = 18;
-const LOGO_MAX_WIDTH = 264;
-const LOGO_MAX_HEIGHT = 90;
+const LOGO_MAX_WIDTH = 442;
+const LOGO_MAX_HEIGHT = 118;
 const CUT_GUIDE_MARGIN = 96;
+const LOWER_CLUSTER_SHIFT_MM = 30;
 
 const mmToPx = (value: number) => Math.round((value / 25.4) * SHEET_DPI);
 
@@ -190,8 +191,8 @@ const cropLogoCanvas = (image: Image) => {
 const drawLogo = (
   ctx: ReturnType<typeof createCanvas>["getContext"],
   image: Image,
-  centerX: number,
-  topY: number,
+  x: number,
+  bottomY: number,
 ) => {
   const cropped = cropLogoCanvas(image);
   const widthRatio = LOGO_MAX_WIDTH / cropped.width;
@@ -199,7 +200,7 @@ const drawLogo = (
   const scale = Math.min(widthRatio, heightRatio, 1);
   const drawWidth = Math.round(cropped.width * scale);
   const drawHeight = Math.round(cropped.height * scale);
-  ctx.drawImage(cropped, Math.round(centerX - drawWidth / 2), topY, drawWidth, drawHeight);
+  ctx.drawImage(cropped, Math.round(x), Math.round(bottomY - drawHeight), drawWidth, drawHeight);
   return drawHeight;
 };
 
@@ -219,7 +220,7 @@ const drawBarcode = (
     margin: 0,
     background: "#ffffff",
     lineColor: "#111111",
-    width: barcodeValue.length >= 14 ? 3 : 4,
+    width: barcodeValue.length >= 14 ? 2 : 3,
     height: barcodeValue.length >= 20 ? height - 18 : height - 8,
   });
 
@@ -238,135 +239,141 @@ const drawSingleTag = (
   const innerX = x + PANEL_PADDING_X;
   const innerY = y + PANEL_PADDING_Y;
   const innerWidth = width - PANEL_PADDING_X * 2;
+  const detailsWidth = Math.round(innerWidth * 0.72);
+  const detailsX = x + (width - detailsWidth) / 2;
   const barcodeValue = safeText(input.barcodeValue);
   const specLines = input.specLines.slice(0, 4);
+  const pricePanelHeight = 177;
+  const supportLine = safeText(input.supportLine);
+  const priceText = moneyLikeText(input.priceLabel);
+  const contentTopAnchor = y + Math.round(height * 0.29);
+  const provisionalDetailsBottomLimit = contentTopAnchor - 16;
 
   drawRoundedRect(ctx, x, y, width, height, PANEL_RADIUS);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
-  ctx.strokeStyle = "#d6dde6";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#e9eef5";
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  let cursorY = innerY;
+  let cursorY = innerY + 24 + mmToPx(4);
 
-  ctx.fillStyle = "#0f172a";
-  if (logoImage && logoImage.width > 0 && logoImage.height > 0) {
-    const drawnHeight = drawLogo(ctx, logoImage, x + width / 2, cursorY);
-    cursorY += drawnHeight + 10;
-  } else {
-    ctx.font = "700 31px Arial";
-    const fallbackShop = safeText(input.shopName) || "CorePOS";
-    const fallbackWidth = ctx.measureText(fallbackShop).width;
-    ctx.fillText(fallbackShop, x + (width - fallbackWidth) / 2, cursorY + 18);
-    cursorY += 62;
-  }
-
-  ctx.font = "600 16px Arial";
-  ctx.fillStyle = "#64748b";
-  const supportLine = safeText(input.supportLine);
-  if (supportLine) {
-    const supportLines = wrapTextLines(ctx, supportLine.toUpperCase(), innerWidth, 2);
-    supportLines.forEach((line, index) => {
-      const lineWidth = ctx.measureText(line).width;
-      ctx.fillText(line, x + (width - lineWidth) / 2, cursorY + index * 20);
-    });
-    cursorY += supportLines.length * 20 + 12;
-  } else {
-    cursorY += 6;
-  }
-  
-  ctx.font = "600 16px Arial";
-  ctx.fillStyle = "#64748b";
-  const priceEyebrow = "Retail price";
-  const priceEyebrowWidth = ctx.measureText(priceEyebrow).width;
-  ctx.fillText(priceEyebrow, x + (width - priceEyebrowWidth) / 2, cursorY + 14);
-
-  ctx.font = "700 78px Arial";
-  ctx.fillStyle = "#111111";
-  const priceText = moneyLikeText(input.priceLabel);
-  const priceWidth = ctx.measureText(priceText).width;
-  const priceBaselineY = cursorY + 86;
-  ctx.fillText(priceText, x + (width - priceWidth) / 2, priceBaselineY);
-
-  const dividerY = priceBaselineY + 18;
-  ctx.strokeStyle = "#e5e7eb";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(innerX, dividerY);
-  ctx.lineTo(innerX + innerWidth, dividerY);
-  ctx.stroke();
-
-  const detailsBottomY = y + height - BARCODE_BLOCK_HEIGHT;
-  let detailsY = dividerY + 30;
-  ctx.font = "700 42px Arial";
+  ctx.font = "700 68px Arial";
   ctx.fillStyle = "#111111";
   const productLines = wrapTextLines(ctx, input.productName, innerWidth, 3);
   productLines.forEach((line, index) => {
-    ctx.fillText(line, innerX, detailsY + index * 46);
+    const lineWidth = ctx.measureText(line).width;
+    ctx.fillText(line, x + (width - lineWidth) / 2, cursorY + index * 52);
   });
-  detailsY += productLines.length * 46 + 8;
+  cursorY += productLines.length * 52 + 70;
 
   if (safeText(input.variantLabel)) {
-    ctx.font = "600 23px Arial";
+    ctx.font = "600 17px Arial";
     ctx.fillStyle = "#475569";
-    const variantLines = wrapTextLines(ctx, input.variantLabel, innerWidth, 2);
+    const variantLines = wrapTextLines(ctx, input.variantLabel, detailsWidth, 2);
     variantLines.forEach((line, index) => {
-      ctx.fillText(line, innerX, detailsY + index * 27);
+      ctx.fillText(line, detailsX, cursorY + index * 22);
     });
-    detailsY += variantLines.length * 27 + 12;
+    cursorY += variantLines.length * 22 + 16;
   }
 
-  ctx.font = "500 21px Arial";
-  ctx.fillStyle = "#334155";
-  specLines.forEach((line) => {
-    if (detailsY + 28 > detailsBottomY - 8) {
-      return;
-    }
-    ctx.fillText(`• ${line}`, innerX, detailsY);
-    detailsY += 28;
-  });
+  ctx.font = "600 37px Arial";
+  ctx.fillStyle = "#111111";
+  for (const line of specLines) {
+    const bulletRadius = 4;
+    const bulletGap = 18;
+    const bulletLineHeight = 42;
+    const bulletItemGap = 10;
+    const wrappedSpecLines = wrapTextLines(ctx, line, detailsWidth - 28, 2);
 
-  const barcodeBlockY = y + height - BARCODE_BLOCK_HEIGHT;
-  drawRoundedRect(
-    ctx,
-    x + 18,
-    barcodeBlockY,
-    width - 36,
-    BARCODE_BLOCK_HEIGHT - 18,
-    14,
-  );
-  ctx.fillStyle = "#f8fafc";
-  ctx.fill();
-  ctx.strokeStyle = "#e2e8f0";
-  ctx.lineWidth = 2;
-  ctx.stroke();
+    if (cursorY + wrappedSpecLines.length * bulletLineHeight + bulletItemGap > provisionalDetailsBottomLimit) {
+      break;
+    }
+
+    wrappedSpecLines.forEach((wrappedLine, wrappedIndex) => {
+      if (wrappedIndex === 0) {
+        ctx.beginPath();
+        ctx.arc(detailsX + bulletRadius, cursorY - 11, bulletRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillText(
+        wrappedLine,
+        detailsX + bulletRadius * 2 + bulletGap,
+        cursorY + wrappedIndex * bulletLineHeight,
+      );
+    });
+    cursorY += wrappedSpecLines.length * bulletLineHeight + bulletItemGap;
+  }
+
+  const barcodeY = Math.max(contentTopAnchor, cursorY + 80 + mmToPx(LOWER_CLUSTER_SHIFT_MM));
+  const barcodeNumberY = barcodeY + BARCODE_BLOCK_HEIGHT + 34;
+  const pricePanelY = barcodeNumberY + 98;
+  const footerCaptionY = pricePanelY + pricePanelHeight + 32;
+  const footerLogoBottomY = y + height - 54;
+  const footerLogoLeftX = x + 28;
 
   if (barcodeValue) {
-    const barcodeWidth = Math.round(innerWidth * 0.78);
+    const barcodeWidth = Math.round(innerWidth * 0.58);
     const barcodeX = x + (width - barcodeWidth) / 2;
-    const barcodeY = barcodeBlockY + 24;
-    drawBarcode(ctx, barcodeValue, barcodeX, barcodeY, barcodeWidth, 114);
+    drawBarcode(ctx, barcodeValue, barcodeX, barcodeY, barcodeWidth, BARCODE_BLOCK_HEIGHT);
 
-    ctx.font = "700 26px monospace";
-    ctx.fillStyle = "#334155";
+    ctx.font = "500 36px Arial";
+    ctx.fillStyle = "#111111";
     const barcodeTextWidth = ctx.measureText(barcodeValue).width;
-    ctx.fillText(barcodeValue, x + (width - barcodeTextWidth) / 2, barcodeY + 138);
+    ctx.fillText(barcodeValue, x + (width - barcodeTextWidth) / 2, barcodeNumberY);
   } else {
-    ctx.font = "700 26px Arial";
+    ctx.font = "700 28px Arial";
     ctx.fillStyle = "#475569";
     const emptyText = "Barcode pending";
     const emptyTextWidth = ctx.measureText(emptyText).width;
-    ctx.fillText(emptyText, x + (width - emptyTextWidth) / 2, barcodeBlockY + 90);
+    ctx.fillText(emptyText, x + (width - emptyTextWidth) / 2, barcodeY + 82);
   }
 
   const skuValue = safeText(input.sku);
   if (skuValue) {
-    ctx.font = "600 17px monospace";
+    ctx.font = "600 18px monospace";
     ctx.fillStyle = "#64748b";
     const skuText = `SKU ${skuValue}`;
     const skuWidth = ctx.measureText(skuText).width;
-    ctx.fillText(skuText, x + (width - skuWidth) / 2, barcodeBlockY + 188);
+    ctx.fillText(skuText, x + (width - skuWidth) / 2, barcodeNumberY + 26);
+  }
+
+  ctx.font = "700 143px Arial";
+  const measuredPriceWidth = ctx.measureText(priceText).width;
+  const pricePanelWidth = Math.min(
+    Math.max(Math.round(measuredPriceWidth + 158), Math.round(innerWidth * 0.68)),
+    Math.round(innerWidth * 0.92),
+  );
+  const pricePanelX = x + (width - pricePanelWidth) / 2;
+
+  drawRoundedRect(ctx, pricePanelX, pricePanelY, pricePanelWidth, pricePanelHeight, 16);
+  ctx.fillStyle = "#435aa8";
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.save();
+  ctx.textBaseline = "middle";
+  ctx.fillText(
+    priceText,
+    pricePanelX + (pricePanelWidth - measuredPriceWidth) / 2,
+    pricePanelY + pricePanelHeight / 2 + 2,
+  );
+  ctx.restore();
+
+  if (supportLine) {
+    ctx.font = "500 22px Arial";
+    ctx.fillStyle = "#30343b";
+    const captionWidth = ctx.measureText(supportLine).width;
+    ctx.fillText(supportLine, x + (width - captionWidth) / 2, footerCaptionY);
+  }
+
+  ctx.fillStyle = "#0f172a";
+  if (logoImage && logoImage.width > 0 && logoImage.height > 0) {
+    drawLogo(ctx, logoImage, footerLogoLeftX, footerLogoBottomY);
+  } else {
+    ctx.font = "700 28px Arial";
+    const fallbackShop = safeText(input.shopName) || "CorePOS";
+    ctx.fillText(fallbackShop, footerLogoLeftX, y + height - 58);
   }
 };
 
