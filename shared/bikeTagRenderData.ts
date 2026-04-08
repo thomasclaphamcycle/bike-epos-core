@@ -41,6 +41,25 @@ const moneyFormatter = new Intl.NumberFormat("en-GB", {
 const normalizeText = (value: string | null | undefined) => value?.trim() ?? "";
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const MAX_SPEC_LINES = 4;
+const parseManualSellingPoints = (value: string | null | undefined) => {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+
+  normalizeText(value)
+    .split(/\r?\n/)
+    .map((line) => normalizeText(line))
+    .filter(Boolean)
+    .forEach((line) => {
+      const key = line.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      lines.push(line);
+    });
+
+  return lines;
+};
 
 export const buildBikeTagProductName = (
   variant: BikeTagVariantLike,
@@ -80,7 +99,7 @@ export const buildBikeTagBarcodeValue = (variant: BikeTagVariantLike) =>
   || normalizeText(variant.manufacturerBarcode)
   || normalizeText(variant.internalBarcode);
 
-export const buildBikeTagSpecLines = (
+export const buildBikeTagFallbackSpecLines = (
   variant: BikeTagVariantLike,
   product: BikeTagProductLike | null,
 ) => {
@@ -90,10 +109,7 @@ export const buildBikeTagSpecLines = (
   const variantLabel = buildBikeTagVariantLabel(variant, product).toLowerCase();
   const category = product?.category ?? variant.product?.category ?? null;
   const manualSellingPoints = isBikeCategory(category)
-    ? normalizeText(product?.keySellingPoints ?? variant.product?.keySellingPoints)
-        .split(/\r?\n/)
-        .map((line) => normalizeText(line))
-        .filter(Boolean)
+    ? parseManualSellingPoints(product?.keySellingPoints ?? variant.product?.keySellingPoints)
     : [];
 
   const push = (value: string | null | undefined) => {
@@ -119,14 +135,15 @@ export const buildBikeTagSpecLines = (
 
   if (manualSellingPoints.length > 0) {
     manualSellingPoints.forEach((line) => push(line));
-  } else {
-    const descriptionChunks = normalizeText(product?.description)
-      .split(/\n+|•|(?<=\.)\s+|,\s+/)
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length >= 4 && chunk.length <= 72);
-
-    descriptionChunks.forEach((chunk) => push(chunk));
+    return lines.slice(0, MAX_SPEC_LINES);
   }
+
+  const descriptionChunks = normalizeText(product?.description)
+    .split(/\n+|•|(?<=\.)\s+|,\s+/)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length >= 4 && chunk.length <= 72);
+
+  descriptionChunks.forEach((chunk) => push(chunk));
 
   if (lines.length < 3) {
     push(product?.brand || variant.product?.brand || null);
@@ -141,6 +158,22 @@ export const buildBikeTagSpecLines = (
   }
 
   return lines.slice(0, MAX_SPEC_LINES);
+};
+
+export const buildBikeTagSpecLines = (
+  variant: BikeTagVariantLike,
+  product: BikeTagProductLike | null,
+) => {
+  const category = product?.category ?? variant.product?.category ?? null;
+  const manualSellingPoints = isBikeCategory(category)
+    ? parseManualSellingPoints(product?.keySellingPoints ?? variant.product?.keySellingPoints)
+    : [];
+
+  if (manualSellingPoints.length > 0) {
+    return manualSellingPoints.slice(0, MAX_SPEC_LINES);
+  }
+
+  return buildBikeTagFallbackSpecLines(variant, product);
 };
 
 export const buildBikeTagSupportLine = (

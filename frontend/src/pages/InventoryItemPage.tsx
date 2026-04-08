@@ -5,6 +5,7 @@ import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { useAppConfig } from "../config/appConfig";
 import { isBikeCategory } from "@shared/bikeCategory";
+import { buildBikeTagFallbackSpecLines } from "@shared/bikeTagRenderData";
 
 type VariantDetail = {
   id: string;
@@ -25,11 +26,20 @@ type VariantDetail = {
     name: string;
     category: string | null;
     brand: string | null;
+    description: string | null;
     keySellingPoints: string | null;
   };
 };
 
 type VariantProductDetail = NonNullable<VariantDetail["product"]>;
+type ProductDetail = {
+  id: string;
+  name: string;
+  category: string | null;
+  brand: string | null;
+  description: string | null;
+  keySellingPoints: string | null;
+};
 
 type StockResponse = {
   variantId: string;
@@ -242,6 +252,7 @@ export const InventoryItemPage = () => {
   const [submittingCount, setSubmittingCount] = useState(false);
   const [sellingPointsDraft, setSellingPointsDraft] = useState("");
   const [savingSellingPoints, setSavingSellingPoints] = useState(false);
+  const [generatingSellingPoints, setGeneratingSellingPoints] = useState(false);
   const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const canViewMovements = useMemo(() => isManagerPlus(user?.role), [user?.role]);
@@ -551,6 +562,7 @@ export const InventoryItemPage = () => {
                     ...current.product,
                     category: updatedProduct.category,
                     brand: updatedProduct.brand,
+                    description: updatedProduct.description,
                     keySellingPoints: updatedProduct.keySellingPoints,
                     name: updatedProduct.name,
                   }
@@ -565,6 +577,55 @@ export const InventoryItemPage = () => {
       error(message);
     } finally {
       setSavingSellingPoints(false);
+    }
+  };
+
+  const generateSellingPointsFromSpecs = async () => {
+    if (!variant || !variant.product?.id || !isBikeProduct) {
+      error("No bike-tag selling points could be generated from the current product details.");
+      return;
+    }
+
+    setGeneratingSellingPoints(true);
+    try {
+      const productDetail = await apiGet<ProductDetail>(`/api/products/${encodeURIComponent(variant.product.id)}`);
+      const generatedSellingPoints = buildBikeTagFallbackSpecLines(
+        {
+          sku: variant.sku,
+          barcode: variant.barcode,
+          manufacturerBarcode: variant.manufacturerBarcode,
+          internalBarcode: variant.internalBarcode,
+          name: variant.name,
+          option: variant.option,
+          retailPricePence: variant.retailPricePence,
+          product: {
+            name: productDetail.name,
+            category: productDetail.category,
+            brand: productDetail.brand,
+            keySellingPoints: null,
+          },
+        },
+        {
+          name: productDetail.name,
+          category: productDetail.category,
+          brand: productDetail.brand,
+          description: productDetail.description,
+          keySellingPoints: null,
+        },
+      );
+
+      if (generatedSellingPoints.length === 0) {
+        error("No bike-tag selling points could be generated from the current product details.");
+        return;
+      }
+
+      setSellingPointsDraft(generatedSellingPoints.join("\n"));
+      success("Selling point suggestions loaded. Review and save when you are happy.");
+    } catch (generateError) {
+      const message = generateError instanceof Error ? generateError.message : "Failed to generate selling points";
+      error(message);
+    } finally {
+      setGeneratingSellingPoints(false);
     }
   };
 
@@ -649,7 +710,7 @@ export const InventoryItemPage = () => {
                   <div>
                     <h2 style={{ marginBottom: "6px" }}>Key Selling Points</h2>
                     <p className="muted-text" style={{ marginBottom: 0 }}>
-                      Used on printed bike tags. One point per line.
+                      Used on printed bike tags. One point per line. Short lines work best on printed tags.
                     </p>
                   </div>
                   {!canEditSellingPoints ? <span className="muted-text">MANAGER+ only</span> : null}
@@ -665,6 +726,13 @@ export const InventoryItemPage = () => {
                     style={{ width: "100%", marginTop: "12px" }}
                   />
                   <div className="actions-inline" style={{ marginTop: "12px" }}>
+                    <button
+                      type="button"
+                      onClick={generateSellingPointsFromSpecs}
+                      disabled={!canEditSellingPoints || savingSellingPoints || generatingSellingPoints}
+                    >
+                      {generatingSellingPoints ? "Generating..." : "Generate from specs"}
+                    </button>
                     <button
                       type="submit"
                       className="primary"

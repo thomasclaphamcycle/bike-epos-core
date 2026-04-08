@@ -298,6 +298,7 @@ const toVariantResponse = (variant: {
       name: string;
       category: string | null;
       brand: string | null;
+      description?: string | null;
       keySellingPoints?: string | null;
     };
 }) => {
@@ -321,6 +322,7 @@ const toVariantResponse = (variant: {
           name: variant.product.name,
           category: variant.product.category,
           brand: variant.product.brand,
+          description: variant.product.description ?? null,
           keySellingPoints: variant.product.keySellingPoints ?? null,
         }
       : undefined,
@@ -794,6 +796,7 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
           name: true,
           category: true,
           brand: true,
+          description: true,
           keySellingPoints: true,
         },
       },
