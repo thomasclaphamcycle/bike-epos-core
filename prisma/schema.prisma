@@ -28,6 +28,7 @@ model Product {
   brand       String?
   category    String?
   description String?
+  keySellingPoints String?
   isActive    Boolean @default(true)
 
   createdAt DateTime @default(now())

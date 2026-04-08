@@ -13,6 +13,7 @@ const { createSmokeServerController } = require("./smoke_server_helper");
 register({ transpileOnly: true });
 
 const { startPrintAgentServer } = require(path.join(__dirname, "..", "print-agent", "src", "app.ts"));
+const { buildBikeTagRenderData } = require(path.join(__dirname, "..", "shared", "bikeTagRenderData.ts"));
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -162,6 +163,87 @@ const run = async () => {
     });
     createdProductIds.push(product.id);
     createdVariantIds.push(product.variants[0].id);
+
+    const manualSellingPoints = [
+      "Hand-built in London",
+      "4-speed gearing",
+      "Integrated battery",
+      "Hand-built in London",
+    ].join("\n");
+
+    const saveSellingPointsRes = await fetchJson(`/api/products/${encodeURIComponent(product.id)}`, {
+      method: "PATCH",
+      headers: {
+        ...MANAGER_HEADERS,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        keySellingPoints: manualSellingPoints,
+      }),
+    });
+    assert.equal(saveSellingPointsRes.status, 200, JSON.stringify(saveSellingPointsRes.json));
+    assert.equal(saveSellingPointsRes.json.keySellingPoints, manualSellingPoints);
+
+    const productDetailRes = await fetchJson(`/api/products/${encodeURIComponent(product.id)}`, {
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(productDetailRes.status, 200, JSON.stringify(productDetailRes.json));
+    assert.equal(productDetailRes.json.keySellingPoints, manualSellingPoints);
+
+    const manualRenderData = buildBikeTagRenderData(
+      {
+        sku: product.variants[0].sku,
+        barcode: `210000${uniqueToken.slice(-6).padStart(6, "0")}`.slice(0, 12),
+        manufacturerBarcode: null,
+        internalBarcode: null,
+        name: "54cm",
+        option: "Slate Blue",
+        retailPricePence: 249900,
+        product: {
+          name: productDetailRes.json.name,
+          category: productDetailRes.json.category,
+          brand: productDetailRes.json.brand,
+          keySellingPoints: productDetailRes.json.keySellingPoints,
+        },
+      },
+      productDetailRes.json,
+    );
+    assert.deepEqual(manualRenderData.specLines, [
+      "Hand-built in London",
+      "4-speed gearing",
+      "Integrated battery",
+    ]);
+
+    const nonBikeRenderData = buildBikeTagRenderData(
+      {
+        sku: `HELMET-${uniqueToken}`.toUpperCase(),
+        barcode: "5012345678901",
+        manufacturerBarcode: null,
+        internalBarcode: null,
+        name: "Medium",
+        option: "Gloss Black",
+        retailPricePence: 8999,
+        product: {
+          name: "Metro Helmet",
+          category: "Helmets",
+          brand: "CorePOS",
+          keySellingPoints: "Should not appear",
+        },
+      },
+      {
+        name: "Metro Helmet",
+        category: "Helmets",
+        brand: "CorePOS",
+        description: "MIPS safety, lightweight shell, everyday commuter fit",
+        keySellingPoints: "Should not appear",
+      },
+    );
+    assert.equal(nonBikeRenderData.specLines.includes("Should not appear"), false);
+    assert.deepEqual(nonBikeRenderData.specLines.slice(0, 3), [
+      "MIPS safety",
+      "lightweight shell",
+      "everyday commuter fit",
+    ]);
 
     const createPrinterRes = await fetchJson("/api/settings/printers", {
       method: "POST",

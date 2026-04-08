@@ -1,3 +1,5 @@
+import { isBikeCategory } from "./bikeCategory";
+
 export type BikeTagVariantLike = {
   sku: string;
   barcode: string | null;
@@ -10,6 +12,7 @@ export type BikeTagVariantLike = {
     name: string;
     category: string | null;
     brand: string | null;
+    keySellingPoints?: string | null;
   };
 };
 
@@ -18,6 +21,7 @@ export type BikeTagProductLike = {
   category: string | null;
   brand: string | null;
   description: string | null;
+  keySellingPoints?: string | null;
 };
 
 export type BikeTagRenderData = {
@@ -36,6 +40,7 @@ const moneyFormatter = new Intl.NumberFormat("en-GB", {
 
 const normalizeText = (value: string | null | undefined) => value?.trim() ?? "";
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const MAX_SPEC_LINES = 4;
 
 export const buildBikeTagProductName = (
   variant: BikeTagVariantLike,
@@ -83,6 +88,13 @@ export const buildBikeTagSpecLines = (
   const seen = new Set<string>();
   const productName = buildBikeTagProductName(variant, product).toLowerCase();
   const variantLabel = buildBikeTagVariantLabel(variant, product).toLowerCase();
+  const category = product?.category ?? variant.product?.category ?? null;
+  const manualSellingPoints = isBikeCategory(category)
+    ? normalizeText(product?.keySellingPoints ?? variant.product?.keySellingPoints)
+        .split(/\r?\n/)
+        .map((line) => normalizeText(line))
+        .filter(Boolean)
+    : [];
 
   const push = (value: string | null | undefined) => {
     const normalized = normalizeText(value);
@@ -105,12 +117,16 @@ export const buildBikeTagSpecLines = (
     lines.push(normalized);
   };
 
-  const descriptionChunks = normalizeText(product?.description)
-    .split(/\n+|•|(?<=\.)\s+|,\s+/)
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length >= 4 && chunk.length <= 72);
+  if (manualSellingPoints.length > 0) {
+    manualSellingPoints.forEach((line) => push(line));
+  } else {
+    const descriptionChunks = normalizeText(product?.description)
+      .split(/\n+|•|(?<=\.)\s+|,\s+/)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length >= 4 && chunk.length <= 72);
 
-  descriptionChunks.forEach((chunk) => push(chunk));
+    descriptionChunks.forEach((chunk) => push(chunk));
+  }
 
   if (lines.length < 3) {
     push(product?.brand || variant.product?.brand || null);
@@ -124,7 +140,7 @@ export const buildBikeTagSpecLines = (
     push("Ask in store for full build, sizing, and fit advice.");
   }
 
-  return lines.slice(0, 4);
+  return lines.slice(0, MAX_SPEC_LINES);
 };
 
 export const buildBikeTagSupportLine = (

@@ -14,6 +14,7 @@ type CreateProductInput = {
   category?: string;
   brand?: string;
   description?: string;
+  keySellingPoints?: string;
   isActive?: boolean;
   defaultVariant?: {
     sku?: string;
@@ -30,6 +31,7 @@ type UpdateProductInput = {
   category?: string;
   brand?: string;
   description?: string;
+  keySellingPoints?: string | null;
   isActive?: boolean;
 };
 
@@ -253,6 +255,7 @@ const toProductResponse = (product: {
   category: string | null;
   brand: string | null;
   description: string | null;
+  keySellingPoints: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -266,6 +269,7 @@ const toProductResponse = (product: {
     category: product.category,
     brand: product.brand,
     description: product.description,
+    keySellingPoints: product.keySellingPoints,
     isActive: product.isActive,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
@@ -294,6 +298,7 @@ const toVariantResponse = (variant: {
       name: string;
       category: string | null;
       brand: string | null;
+      keySellingPoints?: string | null;
     };
 }) => {
   return {
@@ -316,6 +321,7 @@ const toVariantResponse = (variant: {
           name: variant.product.name,
           category: variant.product.category,
           brand: variant.product.brand,
+          keySellingPoints: variant.product.keySellingPoints ?? null,
         }
       : undefined,
     createdAt: variant.createdAt,
@@ -423,6 +429,7 @@ export const listProducts = async (filters: ListProductsInput = {}) => {
               { category: { contains: normalizedQuery, mode: "insensitive" } },
               { brand: { contains: normalizedQuery, mode: "insensitive" } },
               { description: { contains: normalizedQuery, mode: "insensitive" } },
+              { keySellingPoints: { contains: normalizedQuery, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -463,12 +470,14 @@ export const createProduct = async (input: CreateProductInput) => {
   return prisma.$transaction(async (tx) => {
     const brand = normalizeOptionalText(input.brand);
     const description = normalizeOptionalText(input.description);
+    const keySellingPoints = normalizeOptionalText(input.keySellingPoints);
     const product = await tx.product.create({
       data: {
         name,
         ...(category !== undefined ? { category } : {}),
         ...(brand !== undefined ? { brand } : {}),
         ...(description !== undefined ? { description } : {}),
+        ...(keySellingPoints !== undefined ? { keySellingPoints } : {}),
         isActive: input.isActive ?? true,
       },
     });
@@ -670,6 +679,7 @@ export const updateProductById = async (productId: string, input: UpdateProductI
     Object.prototype.hasOwnProperty.call(input, "category") ||
     Object.prototype.hasOwnProperty.call(input, "brand") ||
     Object.prototype.hasOwnProperty.call(input, "description") ||
+    Object.prototype.hasOwnProperty.call(input, "keySellingPoints") ||
     Object.prototype.hasOwnProperty.call(input, "isActive");
 
   if (!hasAnyField) {
@@ -696,6 +706,10 @@ export const updateProductById = async (productId: string, input: UpdateProductI
 
   if (Object.prototype.hasOwnProperty.call(input, "description")) {
     data.description = normalizeOptionalNullableText(input.description) ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "keySellingPoints")) {
+    data.keySellingPoints = normalizeOptionalNullableText(input.keySellingPoints) ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(input, "isActive")) {
@@ -780,6 +794,7 @@ export const listVariants = async (filters: ListVariantsInput = {}) => {
           name: true,
           category: true,
           brand: true,
+          keySellingPoints: true,
         },
       },
     },
