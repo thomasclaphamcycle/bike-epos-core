@@ -91,6 +91,7 @@ export const createProductHandler = async (req: Request, res: Response) => {
     category?: string;
     brand?: string;
     description?: string;
+    keySellingPoints?: string;
     isActive?: boolean;
     defaultVariant?: {
       sku?: string;
@@ -113,6 +114,9 @@ export const createProductHandler = async (req: Request, res: Response) => {
   }
   if (body.description !== undefined && typeof body.description !== "string") {
     throw new HttpError(400, "description must be a string", "INVALID_PRODUCT");
+  }
+  if (body.keySellingPoints !== undefined && typeof body.keySellingPoints !== "string") {
+    throw new HttpError(400, "keySellingPoints must be a string", "INVALID_PRODUCT");
   }
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     throw new HttpError(400, "isActive must be a boolean", "INVALID_PRODUCT");
@@ -164,6 +168,7 @@ export const patchProductHandler = async (req: Request, res: Response) => {
     category?: string;
     brand?: string;
     description?: string;
+    keySellingPoints?: string | null;
     isActive?: boolean;
   };
 
@@ -178,6 +183,13 @@ export const patchProductHandler = async (req: Request, res: Response) => {
   }
   if (body.description !== undefined && typeof body.description !== "string") {
     throw new HttpError(400, "description must be a string", "INVALID_PRODUCT_UPDATE");
+  }
+  if (
+    body.keySellingPoints !== undefined
+    && body.keySellingPoints !== null
+    && typeof body.keySellingPoints !== "string"
+  ) {
+    throw new HttpError(400, "keySellingPoints must be a string or null", "INVALID_PRODUCT_UPDATE");
   }
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     throw new HttpError(400, "isActive must be a boolean", "INVALID_PRODUCT_UPDATE");

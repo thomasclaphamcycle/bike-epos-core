@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ApiError, apiGet, apiPost } from "../api/client";
+import { ApiError, apiGet, apiPatch, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { useAppConfig } from "../config/appConfig";
+import { isBikeCategory } from "@shared/bikeCategory";
 
 type VariantDetail = {
   id: string;
@@ -22,9 +23,13 @@ type VariantDetail = {
   product?: {
     id: string;
     name: string;
+    category: string | null;
     brand: string | null;
+    keySellingPoints: string | null;
   };
 };
+
+type VariantProductDetail = NonNullable<VariantDetail["product"]>;
 
 type StockResponse = {
   variantId: string;
@@ -67,6 +72,9 @@ type StockAdjustmentResponse = {
 
 const formatMoney = (pence: number | null) =>
   pence === null ? "-" : `£${(pence / 100).toFixed(2)}`;
+
+const normalizeMultilineText = (value: string | null | undefined) =>
+  (value ?? "").replace(/\r\n/g, "\n").trim();
 
 const formatSignedQuantity = (quantity: number) => (quantity > 0 ? `+${quantity}` : `${quantity}`);
 
@@ -232,11 +240,26 @@ export const InventoryItemPage = () => {
   const [countedQuantity, setCountedQuantity] = useState("");
   const [countNote, setCountNote] = useState("");
   const [submittingCount, setSubmittingCount] = useState(false);
+  const [sellingPointsDraft, setSellingPointsDraft] = useState("");
+  const [savingSellingPoints, setSavingSellingPoints] = useState(false);
   const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const canViewMovements = useMemo(() => isManagerPlus(user?.role), [user?.role]);
   const canAdjustStock = useMemo(() => isManagerPlus(user?.role), [user?.role]);
+  const canEditSellingPoints = useMemo(() => isManagerPlus(user?.role), [user?.role]);
   const isCountMode = searchParams.get("mode") === "count";
+  const isBikeProduct = useMemo(
+    () => isBikeCategory(variant?.product?.category ?? null),
+    [variant?.product?.category],
+  );
+  const normalizedStoredSellingPoints = useMemo(
+    () => normalizeMultilineText(variant?.product?.keySellingPoints),
+    [variant?.product?.keySellingPoints],
+  );
+  const sellingPointsDirty = useMemo(
+    () => normalizeMultilineText(sellingPointsDraft) !== normalizedStoredSellingPoints,
+    [normalizedStoredSellingPoints, sellingPointsDraft],
+  );
 
   const loadInventoryDetail = async () => {
     if (!variantId) {
@@ -252,6 +275,7 @@ export const InventoryItemPage = () => {
 
       setVariant(variantPayload);
       setStock(stockPayload);
+      setSellingPointsDraft(variantPayload.product?.keySellingPoints ?? "");
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load inventory item";
       error(message);
@@ -503,6 +527,47 @@ export const InventoryItemPage = () => {
     }
   };
 
+  const saveSellingPoints = async (event: FormEvent) => {
+    event.preventDefault();
+
+    const productId = variant?.product?.id;
+    if (!productId || !isBikeProduct) {
+      return;
+    }
+
+    setSavingSellingPoints(true);
+    try {
+      const normalized = normalizeMultilineText(sellingPointsDraft);
+      const updatedProduct = await apiPatch<VariantProductDetail>(`/api/products/${encodeURIComponent(productId)}`, {
+        keySellingPoints: normalized || null,
+      });
+
+      setVariant((current) =>
+        current
+          ? {
+              ...current,
+              product: current.product
+                ? {
+                    ...current.product,
+                    category: updatedProduct.category,
+                    brand: updatedProduct.brand,
+                    keySellingPoints: updatedProduct.keySellingPoints,
+                    name: updatedProduct.name,
+                  }
+                : current.product,
+            }
+          : current,
+      );
+      setSellingPointsDraft(updatedProduct.keySellingPoints ?? "");
+      success("Key selling points saved.");
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Failed to save key selling points";
+      error(message);
+    } finally {
+      setSavingSellingPoints(false);
+    }
+  };
+
   if (!variantId) {
     return <div className="page-shell"><p>Missing inventory item id.</p></div>;
   }
@@ -577,6 +642,49 @@ export const InventoryItemPage = () => {
             <p className="muted-text">
               {stockAttentionMessage}
             </p>
+
+            {isBikeProduct && variant.product ? (
+              <div style={{ marginTop: "20px", borderTop: "1px solid var(--border-color, #d7deea)", paddingTop: "20px" }}>
+                <div className="card-header-row" style={{ alignItems: "flex-start", gap: "16px" }}>
+                  <div>
+                    <h2 style={{ marginBottom: "6px" }}>Key Selling Points</h2>
+                    <p className="muted-text" style={{ marginBottom: 0 }}>
+                      Used on printed bike tags. One point per line.
+                    </p>
+                  </div>
+                  {!canEditSellingPoints ? <span className="muted-text">MANAGER+ only</span> : null}
+                </div>
+
+                <form onSubmit={saveSellingPoints}>
+                  <textarea
+                    value={sellingPointsDraft}
+                    onChange={(event) => setSellingPointsDraft(event.target.value)}
+                    rows={5}
+                    disabled={!canEditSellingPoints || savingSellingPoints}
+                    placeholder={"Lightweight aluminium frame\nBosch Performance Line motor\nRack, mudguards, and integrated lights"}
+                    style={{ width: "100%", marginTop: "12px" }}
+                  />
+                  <div className="actions-inline" style={{ marginTop: "12px" }}>
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={!canEditSellingPoints || savingSellingPoints || !sellingPointsDirty}
+                    >
+                      {savingSellingPoints ? "Saving..." : "Save selling points"}
+                    </button>
+                    {sellingPointsDirty ? (
+                      <button
+                        type="button"
+                        onClick={() => setSellingPointsDraft(variant.product?.keySellingPoints ?? "")}
+                        disabled={savingSellingPoints}
+                      >
+                        Reset
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
+              </div>
+            ) : null}
           </>
         ) : null}
       </section>
