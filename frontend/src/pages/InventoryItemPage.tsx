@@ -586,6 +586,13 @@ export const InventoryItemPage = () => {
       return;
     }
 
+    if (normalizeMultilineText(sellingPointsDraft)) {
+      const shouldContinue = window.confirm("This will replace current selling points. Continue?");
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
     setGeneratingSellingPoints(true);
     try {
       const productDetail = await apiGet<ProductDetail>(`/api/products/${encodeURIComponent(variant.product.id)}`);
@@ -710,7 +717,10 @@ export const InventoryItemPage = () => {
                   <div>
                     <h2 style={{ marginBottom: "6px" }}>Key Selling Points</h2>
                     <p className="muted-text" style={{ marginBottom: 0 }}>
-                      Used on printed bike tags. One point per line. Short lines work best on printed tags.
+                      Shown on bike tag print preview. One short point per line.
+                    </p>
+                    <p className="muted-text" style={{ marginBottom: 0 }}>
+                      Aim for 3-5 short lines for the clearest printed tag.
                     </p>
                   </div>
                   {!canEditSellingPoints ? <span className="muted-text">MANAGER+ only</span> : null}
@@ -732,6 +742,13 @@ export const InventoryItemPage = () => {
                       disabled={!canEditSellingPoints || savingSellingPoints || generatingSellingPoints}
                     >
                       {generatingSellingPoints ? "Generating..." : "Generate from specs"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSellingPointsDraft("")}
+                      disabled={!canEditSellingPoints || savingSellingPoints || generatingSellingPoints || !sellingPointsDraft}
+                    >
+                      Clear
                     </button>
                     <button
                       type="submit"

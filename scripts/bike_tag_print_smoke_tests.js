@@ -164,6 +164,37 @@ const run = async () => {
     createdProductIds.push(product.id);
     createdVariantIds.push(product.variants[0].id);
 
+    const generatedRenderData = buildBikeTagRenderData(
+      {
+        sku: product.variants[0].sku,
+        barcode: `210000${uniqueToken.slice(-6).padStart(6, "0")}`.slice(0, 12),
+        manufacturerBarcode: null,
+        internalBarcode: null,
+        name: "54cm",
+        option: "Slate Blue",
+        retailPricePence: 249900,
+        product: {
+          name: product.name,
+          category: product.category,
+          brand: product.brand,
+          keySellingPoints: null,
+        },
+      },
+      {
+        name: product.name,
+        category: product.category,
+        brand: product.brand,
+        description: product.description,
+        keySellingPoints: null,
+      },
+    );
+    assert.deepEqual(generatedRenderData.specLines, [
+      "CorePOS",
+      "Road bike",
+      "Carbon frame",
+      "Shimano 105 Di2",
+    ]);
+
     const manualSellingPoints = [
       "Hand-built in London",
       "4-speed gearing",
