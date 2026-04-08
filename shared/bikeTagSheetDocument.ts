@@ -24,13 +24,11 @@ const SHEET_DPI = 300;
 const SHEET_PADDING = 52;
 const PANEL_GAP = 42;
 const PANEL_PADDING_X = 44;
-const PANEL_PADDING_Y = 42;
-const HEADER_HEIGHT = 200;
-const PRICE_HEIGHT = 210;
-const BARCODE_BLOCK_HEIGHT = 280;
+const PANEL_PADDING_Y = 38;
+const BARCODE_BLOCK_HEIGHT = 270;
 const PANEL_RADIUS = 18;
-const LOGO_MAX_WIDTH = 300;
-const LOGO_MAX_HEIGHT = 108;
+const LOGO_MAX_WIDTH = 264;
+const LOGO_MAX_HEIGHT = 90;
 const CUT_GUIDE_MARGIN = 96;
 
 const mmToPx = (value: number) => Math.round((value / 25.4) * SHEET_DPI);
@@ -246,8 +244,8 @@ const drawSingleTag = (
   drawRoundedRect(ctx, x, y, width, height, PANEL_RADIUS);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
-  ctx.strokeStyle = "#d1d5db";
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#d6dde6";
+  ctx.lineWidth = 2;
   ctx.stroke();
 
   let cursorY = innerY;
@@ -255,89 +253,87 @@ const drawSingleTag = (
   ctx.fillStyle = "#0f172a";
   if (logoImage && logoImage.width > 0 && logoImage.height > 0) {
     const drawnHeight = drawLogo(ctx, logoImage, x + width / 2, cursorY);
-    cursorY += drawnHeight + 16;
+    cursorY += drawnHeight + 10;
   } else {
-    ctx.font = "700 34px Arial";
+    ctx.font = "700 31px Arial";
     const fallbackShop = safeText(input.shopName) || "CorePOS";
     const fallbackWidth = ctx.measureText(fallbackShop).width;
     ctx.fillText(fallbackShop, x + (width - fallbackWidth) / 2, cursorY + 18);
-    cursorY += 72;
+    cursorY += 62;
   }
 
-  ctx.font = "600 18px Arial";
+  ctx.font = "600 16px Arial";
   ctx.fillStyle = "#64748b";
   const supportLine = safeText(input.supportLine);
   if (supportLine) {
     const supportLines = wrapTextLines(ctx, supportLine.toUpperCase(), innerWidth, 2);
     supportLines.forEach((line, index) => {
       const lineWidth = ctx.measureText(line).width;
-      ctx.fillText(line, x + (width - lineWidth) / 2, cursorY + index * 22);
+      ctx.fillText(line, x + (width - lineWidth) / 2, cursorY + index * 20);
     });
-    cursorY += supportLines.length * 22 + 18;
+    cursorY += supportLines.length * 20 + 12;
   } else {
-    cursorY += 12;
+    cursorY += 6;
   }
-
-  const headerBottomY = y + HEADER_HEIGHT;
-  ctx.strokeStyle = "#e5e7eb";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(innerX, headerBottomY);
-  ctx.lineTo(innerX + innerWidth, headerBottomY);
-  ctx.stroke();
-
-  ctx.font = "600 18px Arial";
+  
+  ctx.font = "600 16px Arial";
   ctx.fillStyle = "#64748b";
-  ctx.fillText("Retail price", innerX, headerBottomY + 18);
-  ctx.font = "700 88px Arial";
+  const priceEyebrow = "Retail price";
+  const priceEyebrowWidth = ctx.measureText(priceEyebrow).width;
+  ctx.fillText(priceEyebrow, x + (width - priceEyebrowWidth) / 2, cursorY + 14);
+
+  ctx.font = "700 78px Arial";
   ctx.fillStyle = "#111111";
   const priceText = moneyLikeText(input.priceLabel);
   const priceWidth = ctx.measureText(priceText).width;
-  ctx.fillText(priceText, x + (width - priceWidth) / 2, headerBottomY + 46);
+  const priceBaselineY = cursorY + 86;
+  ctx.fillText(priceText, x + (width - priceWidth) / 2, priceBaselineY);
 
-  const detailsTopY = y + PRICE_HEIGHT;
-  const detailsBottomY = y + height - BARCODE_BLOCK_HEIGHT;
+  const dividerY = priceBaselineY + 18;
+  ctx.strokeStyle = "#e5e7eb";
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(innerX, detailsTopY);
-  ctx.lineTo(innerX + innerWidth, detailsTopY);
+  ctx.moveTo(innerX, dividerY);
+  ctx.lineTo(innerX + innerWidth, dividerY);
   ctx.stroke();
 
-  let detailsY = detailsTopY + 28;
-  ctx.font = "700 38px Arial";
+  const detailsBottomY = y + height - BARCODE_BLOCK_HEIGHT;
+  let detailsY = dividerY + 30;
+  ctx.font = "700 42px Arial";
   ctx.fillStyle = "#111111";
   const productLines = wrapTextLines(ctx, input.productName, innerWidth, 3);
   productLines.forEach((line, index) => {
-    ctx.fillText(line, innerX, detailsY + index * 44);
+    ctx.fillText(line, innerX, detailsY + index * 46);
   });
-  detailsY += productLines.length * 44 + 10;
+  detailsY += productLines.length * 46 + 8;
 
   if (safeText(input.variantLabel)) {
-    ctx.font = "600 24px Arial";
+    ctx.font = "600 23px Arial";
     ctx.fillStyle = "#475569";
     const variantLines = wrapTextLines(ctx, input.variantLabel, innerWidth, 2);
     variantLines.forEach((line, index) => {
-      ctx.fillText(line, innerX, detailsY + index * 28);
+      ctx.fillText(line, innerX, detailsY + index * 27);
     });
-    detailsY += variantLines.length * 28 + 14;
+    detailsY += variantLines.length * 27 + 12;
   }
 
-  ctx.font = "500 22px Arial";
+  ctx.font = "500 21px Arial";
   ctx.fillStyle = "#334155";
   specLines.forEach((line) => {
-    if (detailsY + 30 > detailsBottomY - 12) {
+    if (detailsY + 28 > detailsBottomY - 8) {
       return;
     }
     ctx.fillText(`• ${line}`, innerX, detailsY);
-    detailsY += 30;
+    detailsY += 28;
   });
 
   const barcodeBlockY = y + height - BARCODE_BLOCK_HEIGHT;
   drawRoundedRect(
     ctx,
-    x + 16,
+    x + 18,
     barcodeBlockY,
-    width - 32,
-    BARCODE_BLOCK_HEIGHT - 16,
+    width - 36,
+    BARCODE_BLOCK_HEIGHT - 18,
     14,
   );
   ctx.fillStyle = "#f8fafc";
@@ -347,30 +343,30 @@ const drawSingleTag = (
   ctx.stroke();
 
   if (barcodeValue) {
-    const barcodeWidth = Math.round(innerWidth * 0.82);
+    const barcodeWidth = Math.round(innerWidth * 0.78);
     const barcodeX = x + (width - barcodeWidth) / 2;
-    const barcodeY = barcodeBlockY + 38;
-    drawBarcode(ctx, barcodeValue, barcodeX, barcodeY, barcodeWidth, 120);
+    const barcodeY = barcodeBlockY + 24;
+    drawBarcode(ctx, barcodeValue, barcodeX, barcodeY, barcodeWidth, 114);
 
     ctx.font = "700 26px monospace";
     ctx.fillStyle = "#334155";
     const barcodeTextWidth = ctx.measureText(barcodeValue).width;
-    ctx.fillText(barcodeValue, x + (width - barcodeTextWidth) / 2, barcodeY + 146);
+    ctx.fillText(barcodeValue, x + (width - barcodeTextWidth) / 2, barcodeY + 138);
   } else {
     ctx.font = "700 26px Arial";
     ctx.fillStyle = "#475569";
     const emptyText = "Barcode pending";
     const emptyTextWidth = ctx.measureText(emptyText).width;
-    ctx.fillText(emptyText, x + (width - emptyTextWidth) / 2, barcodeBlockY + 104);
+    ctx.fillText(emptyText, x + (width - emptyTextWidth) / 2, barcodeBlockY + 90);
   }
 
   const skuValue = safeText(input.sku);
   if (skuValue) {
-    ctx.font = "600 18px monospace";
+    ctx.font = "600 17px monospace";
     ctx.fillStyle = "#64748b";
     const skuText = `SKU ${skuValue}`;
     const skuWidth = ctx.measureText(skuText).width;
-    ctx.fillText(skuText, x + (width - skuWidth) / 2, barcodeBlockY + 204);
+    ctx.fillText(skuText, x + (width - skuWidth) / 2, barcodeBlockY + 188);
   }
 };
 
