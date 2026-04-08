@@ -428,6 +428,7 @@ test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, re
 
   await apiJsonWithHeaderBypass(request, "PATCH", `/api/products/${encodeURIComponent(seeded.product.id)}`, "MANAGER", {
     data: {
+      category: "Road Bikes",
       description: "Full carbon gravel bike, Shimano 105 Di2, hydraulic disc brakes, tubeless-ready wheels",
     },
   });
@@ -436,6 +437,12 @@ test("Inventory detail opens the 2-up A5 bike tag print page", async ({ page, re
   await expect(page.getByRole("heading", { name: "Inventory Detail" })).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Print bike tag" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Key Selling Points" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Generate from specs" })).toBeVisible();
+  await page.getByRole("button", { name: "Generate from specs" }).click();
+  await expect(
+    page.locator('textarea[placeholder*="Lightweight aluminium frame"]'),
+  ).toHaveValue(/Full carbon gravel bike|Shimano 105 Di2|hydraulic disc brakes/i);
   await page.getByRole("button", { name: "Print bike tag" }).click();
   await expect(page).toHaveURL(new RegExp(`/variants/${seeded.variant.id}/bike-tag/print`));
   await expect(page.getByRole("heading", { name: "Bike Tag Preview" })).toBeVisible();
