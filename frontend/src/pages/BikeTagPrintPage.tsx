@@ -155,9 +155,14 @@ export const BikeTagPrintPage = () => {
           <Link className="button-link" to={`/inventory/${variantId}`}>Close preview</Link>
           <Link className="button-link" to={`/inventory/${variantId}/label`}>Open product label</Link>
         </div>
-        <button type="button" className="primary" onClick={() => window.print()} disabled={!variant || loading}>
-          {loading ? "Loading..." : "Print bike tag sheet"}
-        </button>
+        <div className="actions-inline">
+          <button type="button" className="primary" onClick={() => void handleDirectPrint()} disabled={!variant || loading || directPrinting}>
+            {loading ? "Loading..." : directPrinting ? "Printing bike tag..." : "Print bike tag sheet"}
+          </button>
+          <button type="button" className="button-link" onClick={() => window.print()} disabled={!variant || loading}>
+            Use browser print (fallback)
+          </button>
+        </div>
       </div>
 
       <div className="bike-tag-print-page__copy">
@@ -166,7 +171,7 @@ export const BikeTagPrintPage = () => {
           Exact A5 landscape bike-tag sheet preview. This is the same rendered 2-up A6 image CorePOS sends to direct print.
         </p>
         <p className="muted-text">
-          Two identical A6 bike tags sit side by side on one A5 landscape sheet, ready to print and cut. Use Print to open the browser dialog if you need the fallback path.
+          Two identical A6 bike tags sit side by side on one A5 landscape sheet, ready to print and cut. Direct print is the main path here, with browser print kept as an explicit fallback.
         </p>
       </div>
 

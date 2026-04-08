@@ -1,14 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, apiGet, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { useAuth } from "../auth/AuthContext";
 import { useAppConfig } from "../config/appConfig";
-import {
-  getBikeTagDirectPrintErrorMessage,
-  getBikeTagDirectPrintSuccessMessage,
-  printBikeTagDirect,
-} from "../features/labels/bikeTagPrinting";
 
 type VariantDetail = {
   id: string;
@@ -216,6 +211,7 @@ const getStockStateClass = (onHand: number, lowStockThreshold: number) => {
 export const InventoryItemPage = () => {
   const appConfig = useAppConfig();
   const { variantId } = useParams<{ variantId: string }>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { error, success } = useToasts();
@@ -236,7 +232,6 @@ export const InventoryItemPage = () => {
   const [countedQuantity, setCountedQuantity] = useState("");
   const [countNote, setCountNote] = useState("");
   const [submittingCount, setSubmittingCount] = useState(false);
-  const [printingBikeTag, setPrintingBikeTag] = useState(false);
   const lowStockThreshold = appConfig.operations.lowStockThreshold;
 
   const canViewMovements = useMemo(() => isManagerPlus(user?.role), [user?.role]);
@@ -508,22 +503,6 @@ export const InventoryItemPage = () => {
     }
   };
 
-  const handleBikeTagDirectPrint = async () => {
-    if (!variantId || !variant || printingBikeTag) {
-      return;
-    }
-
-    setPrintingBikeTag(true);
-    try {
-      const payload = await printBikeTagDirect(variantId);
-      success(getBikeTagDirectPrintSuccessMessage(payload));
-    } catch (printError) {
-      error(getBikeTagDirectPrintErrorMessage(printError));
-    } finally {
-      setPrintingBikeTag(false);
-    }
-  };
-
   if (!variantId) {
     return <div className="page-shell"><p>Missing inventory item id.</p></div>;
   }
@@ -543,12 +522,11 @@ export const InventoryItemPage = () => {
             <button
               type="button"
               className="primary"
-              onClick={() => void handleBikeTagDirectPrint()}
-              disabled={loading || !variant || printingBikeTag}
+              onClick={() => navigate(`/variants/${variantId}/bike-tag/print`)}
+              disabled={loading || !variant}
             >
-              {printingBikeTag ? "Printing bike tag..." : "Print bike tag"}
+              Print bike tag
             </button>
-            <Link className="button-link" to={`/variants/${variantId}/bike-tag/print`}>Preview bike tag</Link>
             <Link to={`/inventory/${variantId}/label`}>Print label</Link>
             <Link to={`/inventory/${variantId}?mode=count`}>Cycle count</Link>
             <Link to="/inventory">Back to Inventory</Link>

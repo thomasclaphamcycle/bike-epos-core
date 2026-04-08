@@ -20,6 +20,10 @@ $image = [System.Drawing.Image]::FromFile($ImagePath)
 $document = New-Object System.Drawing.Printing.PrintDocument
 
 try {
+  if ($image.Width -le $image.Height) {
+    $image.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone)
+  }
+
   $document.PrinterSettings.PrinterName = $PrinterName
   if (-not $document.PrinterSettings.IsValid) {
     throw "Windows printer '$PrinterName' is not installed or is unavailable."
@@ -42,7 +46,13 @@ try {
   $handler = [System.Drawing.Printing.PrintPageEventHandler]{
     param($sender, $eventArgs)
     $eventArgs.Graphics.Clear([System.Drawing.Color]::White)
-    $eventArgs.Graphics.DrawImage($image, $eventArgs.PageBounds)
+    $eventArgs.Graphics.DrawImage(
+      $image,
+      0,
+      0,
+      $eventArgs.PageBounds.Width,
+      $eventArgs.PageBounds.Height
+    )
     $eventArgs.HasMorePages = $false
   }
 
