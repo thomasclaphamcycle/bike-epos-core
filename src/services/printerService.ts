@@ -10,6 +10,11 @@ import {
   type ProductLabelPrintTransportMode,
 } from "../../shared/productLabelPrintContract";
 import {
+  ESC_POS_80MM_MODEL_HINT,
+  THERMAL_RECEIPT_PRINTER_FAMILY,
+  type ReceiptPrintTransportMode,
+} from "../../shared/receiptPrintContract";
+import {
   ZEBRA_GK420D_MODEL_HINT,
   ZEBRA_LABEL_PRINTER_FAMILY,
   type PrintAgentTransportMode,
@@ -18,17 +23,20 @@ import { prisma } from "../lib/prisma";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import { createAuditEventTx, type AuditActor } from "./auditService";
+import { resolveReceiptPrintWorkstation } from "./receiptPrintStationService";
 
 type PrinterClient = Prisma.TransactionClient | typeof prisma;
 type RegisteredPrinterTransportModeValue = "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
 type DefaultPrinterConfigKey =
   | typeof DEFAULT_SHIPPING_LABEL_PRINTER_CONFIG_KEY
   | typeof DEFAULT_PRODUCT_LABEL_PRINTER_CONFIG_KEY
-  | typeof DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY;
+  | typeof DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY
+  | typeof DEFAULT_RECEIPT_PRINTER_CONFIG_KEY;
 
 const DEFAULT_SHIPPING_LABEL_PRINTER_CONFIG_KEY = "dispatch.defaultShippingLabelPrinterId";
 const DEFAULT_PRODUCT_LABEL_PRINTER_CONFIG_KEY = "labels.defaultProductLabelPrinterId";
 const DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY = "documents.defaultBikeTagPrinterId";
+const DEFAULT_RECEIPT_PRINTER_CONFIG_KEY = "receipts.defaultReceiptPrinterId";
 const DEFAULT_RAW_TCP_PORT = 9100;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -41,6 +49,7 @@ const printerSelect = Prisma.validator<Prisma.PrinterSelect>()({
   supportsShippingLabels: true,
   supportsProductLabels: true,
   supportsBikeTags: true,
+  supportsReceipts: true,
   isActive: true,
   transportMode: true,
   windowsPrinterName: true,
@@ -58,6 +67,7 @@ type StoredPrinterDefaults = {
   defaultShippingLabelPrinterId: string | null;
   defaultProductLabelPrinterId: string | null;
   defaultBikeTagPrinterId: string | null;
+  defaultReceiptPrinterId: string | null;
 };
 
 export type RegisteredPrinterResponse = {
@@ -69,6 +79,7 @@ export type RegisteredPrinterResponse = {
   supportsShippingLabels: boolean;
   supportsProductLabels: boolean;
   supportsBikeTags: boolean;
+  supportsReceipts: boolean;
   isActive: boolean;
   transportMode: RegisteredPrinterTransportModeValue;
   windowsPrinterName: string | null;
@@ -81,6 +92,7 @@ export type RegisteredPrinterResponse = {
   isDefaultShippingLabelPrinter: boolean;
   isDefaultProductLabelPrinter: boolean;
   isDefaultBikeTagPrinter: boolean;
+  isDefaultReceiptPrinter: boolean;
 };
 
 export type RegisteredPrinterListResponse = {
@@ -91,6 +103,8 @@ export type RegisteredPrinterListResponse = {
   defaultProductLabelPrinter: RegisteredPrinterResponse | null;
   defaultBikeTagPrinterId: string | null;
   defaultBikeTagPrinter: RegisteredPrinterResponse | null;
+  defaultReceiptPrinterId: string | null;
+  defaultReceiptPrinter: RegisteredPrinterResponse | null;
 };
 
 export type RegisteredPrinterInput = {
@@ -101,6 +115,7 @@ export type RegisteredPrinterInput = {
   supportsShippingLabels?: boolean;
   supportsProductLabels?: boolean;
   supportsBikeTags?: boolean;
+  supportsReceipts?: boolean;
   isActive?: boolean;
   transportMode?: string;
   windowsPrinterName?: string | null;
@@ -111,11 +126,16 @@ export type RegisteredPrinterInput = {
   setAsDefaultShippingLabel?: boolean;
   setAsDefaultProductLabel?: boolean;
   setAsDefaultBikeTag?: boolean;
+  setAsDefaultReceipt?: boolean;
 };
 
 export type ResolvePrinterSelectionInput = {
   printerId?: string | null;
   printerKey?: string | null;
+};
+
+export type ResolveReceiptPrinterSelectionInput = ResolvePrinterSelectionInput & {
+  workstationKey?: string | null;
 };
 
 export type ResolvedShipmentPrinter = {
@@ -157,6 +177,21 @@ export type ResolvedBikeTagPrinter = {
   supportsBikeTags: true;
   isActive: true;
   resolutionSource: "selected" | "default";
+};
+
+export type ResolvedReceiptPrinter = {
+  id: string;
+  key: string;
+  name: string;
+  printerFamily: typeof THERMAL_RECEIPT_PRINTER_FAMILY;
+  printerModelHint: typeof ESC_POS_80MM_MODEL_HINT;
+  transportMode: ReceiptPrintTransportMode;
+  windowsPrinterName: string | null;
+  rawTcpHost: string | null;
+  rawTcpPort: number | null;
+  supportsReceipts: true;
+  isActive: true;
+  resolutionSource: "selected" | "workstation" | "default";
 };
 
 const normalizeOptionalText = (
@@ -245,10 +280,13 @@ const normalizePrinterFamily = (value: unknown, fallback: RegisteredPrinterFamil
   if (normalized === OFFICE_DOCUMENT_PRINTER_FAMILY) {
     return RegisteredPrinterFamily.OFFICE_DOCUMENT;
   }
+  if (normalized === THERMAL_RECEIPT_PRINTER_FAMILY) {
+    return RegisteredPrinterFamily.THERMAL_RECEIPT;
+  }
 
   throw new HttpError(
     400,
-    `printerFamily must be ${ZEBRA_LABEL_PRINTER_FAMILY}, ${DYMO_LABEL_PRINTER_FAMILY}, or ${OFFICE_DOCUMENT_PRINTER_FAMILY}`,
+    `printerFamily must be ${ZEBRA_LABEL_PRINTER_FAMILY}, ${DYMO_LABEL_PRINTER_FAMILY}, ${OFFICE_DOCUMENT_PRINTER_FAMILY}, or ${THERMAL_RECEIPT_PRINTER_FAMILY}`,
     "INVALID_PRINTER",
   );
 };
@@ -258,6 +296,8 @@ const defaultModelHintForFamily = (printerFamily: RegisteredPrinterFamily) =>
     ? DYMO_57X32_MODEL_HINT
     : printerFamily === RegisteredPrinterFamily.OFFICE_DOCUMENT
       ? OFFICE_A5_DOCUMENT_MODEL_HINT
+      : printerFamily === RegisteredPrinterFamily.THERMAL_RECEIPT
+        ? ESC_POS_80MM_MODEL_HINT
       : ZEBRA_GK420D_MODEL_HINT;
 
 const normalizePrinterModelHint = (value: unknown, printerFamily: RegisteredPrinterFamily) => {
@@ -282,6 +322,13 @@ const normalizePrinterModelHint = (value: unknown, printerFamily: RegisteredPrin
     throw new HttpError(
       400,
       `printerModelHint must be ${OFFICE_A5_DOCUMENT_MODEL_HINT} for office-document printers`,
+      "INVALID_PRINTER",
+    );
+  }
+  if (printerFamily === RegisteredPrinterFamily.THERMAL_RECEIPT && normalized !== ESC_POS_80MM_MODEL_HINT) {
+    throw new HttpError(
+      400,
+      `printerModelHint must be ${ESC_POS_80MM_MODEL_HINT} for thermal receipt printers`,
       "INVALID_PRINTER",
     );
   }
@@ -351,39 +398,67 @@ const ensureTransportMatchesFamily = (
       "INVALID_PRINTER",
     );
   }
+
+  if (
+    printerFamily === RegisteredPrinterFamily.THERMAL_RECEIPT
+    && transportMode !== RegisteredPrinterTransportMode.DRY_RUN
+    && transportMode !== RegisteredPrinterTransportMode.RAW_TCP
+    && transportMode !== RegisteredPrinterTransportMode.WINDOWS_PRINTER
+  ) {
+    throw new HttpError(
+      400,
+      "Thermal receipt printers must use DRY_RUN, RAW_TCP, or WINDOWS_PRINTER transport",
+      "INVALID_PRINTER",
+    );
+  }
 };
 
 const ensureCapabilitiesMatchFamily = (
   printerFamily: RegisteredPrinterFamily,
-  capabilities: { supportsShippingLabels: boolean; supportsProductLabels: boolean; supportsBikeTags: boolean },
+  capabilities: {
+    supportsShippingLabels: boolean;
+    supportsProductLabels: boolean;
+    supportsBikeTags: boolean;
+    supportsReceipts: boolean;
+  },
 ) => {
   if (
     printerFamily === RegisteredPrinterFamily.ZEBRA_LABEL
-    && (capabilities.supportsProductLabels || capabilities.supportsBikeTags)
+    && (capabilities.supportsProductLabels || capabilities.supportsBikeTags || capabilities.supportsReceipts)
   ) {
     throw new HttpError(
       400,
-      "Zebra shipment printers cannot be marked as product-label or bike-tag printers",
+      "Zebra shipment printers cannot be marked as product-label, bike-tag, or receipt printers",
       "INVALID_PRINTER",
     );
   }
   if (
     printerFamily === RegisteredPrinterFamily.DYMO_LABEL
-    && (capabilities.supportsShippingLabels || capabilities.supportsBikeTags)
+    && (capabilities.supportsShippingLabels || capabilities.supportsBikeTags || capabilities.supportsReceipts)
   ) {
     throw new HttpError(
       400,
-      "Dymo product-label printers cannot be marked as shipping-label or bike-tag printers",
+      "Dymo product-label printers cannot be marked as shipping-label, bike-tag, or receipt printers",
       "INVALID_PRINTER",
     );
   }
   if (
     printerFamily === RegisteredPrinterFamily.OFFICE_DOCUMENT
-    && (capabilities.supportsShippingLabels || capabilities.supportsProductLabels)
+    && (capabilities.supportsShippingLabels || capabilities.supportsProductLabels || capabilities.supportsReceipts)
   ) {
     throw new HttpError(
       400,
-      "Office document printers cannot be marked as shipping-label or product-label printers",
+      "Office document printers cannot be marked as shipping-label, product-label, or receipt printers",
+      "INVALID_PRINTER",
+    );
+  }
+  if (
+    printerFamily === RegisteredPrinterFamily.THERMAL_RECEIPT
+    && (capabilities.supportsShippingLabels || capabilities.supportsProductLabels || capabilities.supportsBikeTags)
+  ) {
+    throw new HttpError(
+      400,
+      "Thermal receipt printers cannot be marked as shipping-label, product-label, or bike-tag printers",
       "INVALID_PRINTER",
     );
   }
@@ -450,16 +525,23 @@ const getStoredDefaultPrinterId = async (
 };
 
 const getStoredPrinterDefaults = async (db: PrinterClient = prisma): Promise<StoredPrinterDefaults> => {
-  const [defaultShippingLabelPrinterId, defaultProductLabelPrinterId, defaultBikeTagPrinterId] = await Promise.all([
+  const [
+    defaultShippingLabelPrinterId,
+    defaultProductLabelPrinterId,
+    defaultBikeTagPrinterId,
+    defaultReceiptPrinterId,
+  ] = await Promise.all([
     getStoredDefaultPrinterId(DEFAULT_SHIPPING_LABEL_PRINTER_CONFIG_KEY, db),
     getStoredDefaultPrinterId(DEFAULT_PRODUCT_LABEL_PRINTER_CONFIG_KEY, db),
     getStoredDefaultPrinterId(DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY, db),
+    getStoredDefaultPrinterId(DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, db),
   ]);
 
   return {
     defaultShippingLabelPrinterId,
     defaultProductLabelPrinterId,
     defaultBikeTagPrinterId,
+    defaultReceiptPrinterId,
   };
 };
 
@@ -475,6 +557,7 @@ const toPrinterResponse = (
   supportsShippingLabels: printer.supportsShippingLabels,
   supportsProductLabels: printer.supportsProductLabels,
   supportsBikeTags: printer.supportsBikeTags,
+  supportsReceipts: printer.supportsReceipts,
   isActive: printer.isActive,
   transportMode: printer.transportMode,
   windowsPrinterName: printer.windowsPrinterName ?? null,
@@ -487,6 +570,7 @@ const toPrinterResponse = (
   isDefaultShippingLabelPrinter: printer.id === defaults.defaultShippingLabelPrinterId,
   isDefaultProductLabelPrinter: printer.id === defaults.defaultProductLabelPrinterId,
   isDefaultBikeTagPrinter: printer.id === defaults.defaultBikeTagPrinterId,
+  isDefaultReceiptPrinter: printer.id === defaults.defaultReceiptPrinterId,
 });
 
 const ensurePrinterCanBeDefaultShipping = (printer: PrinterRecord) => {
@@ -528,6 +612,19 @@ const ensurePrinterCanBeDefaultBikeTag = (printer: PrinterRecord) => {
   }
 };
 
+const ensurePrinterCanBeDefaultReceipt = (printer: PrinterRecord) => {
+  if (!printer.isActive) {
+    throw new HttpError(409, "Inactive printers cannot be the default receipt printer", "PRINTER_INACTIVE");
+  }
+  if (!printer.supportsReceipts) {
+    throw new HttpError(
+      409,
+      "This printer does not support receipts",
+      "PRINTER_NOT_RECEIPT_CAPABLE",
+    );
+  }
+};
+
 const getPrinterByIdOrThrow = async (printerId: string, db: PrinterClient = prisma) => {
   const normalizedPrinterId = parseUuid(printerId, "printerId", "INVALID_PRINTER_ID");
   const printer = await db.printer.findUnique({
@@ -562,10 +659,16 @@ const normalizePrinterCreateData = (input: RegisteredPrinterInput) => {
     "supportsBikeTags",
     printerFamily === RegisteredPrinterFamily.OFFICE_DOCUMENT,
   );
+  const supportsReceipts = normalizeBoolean(
+    input.supportsReceipts,
+    "supportsReceipts",
+    printerFamily === RegisteredPrinterFamily.THERMAL_RECEIPT,
+  );
   ensureCapabilitiesMatchFamily(printerFamily, {
     supportsShippingLabels,
     supportsProductLabels,
     supportsBikeTags,
+    supportsReceipts,
   });
 
   const rawTcpHost = transportMode === RegisteredPrinterTransportMode.RAW_TCP ? normalizeRawTcpHost(input.rawTcpHost) : null;
@@ -595,6 +698,7 @@ const normalizePrinterCreateData = (input: RegisteredPrinterInput) => {
     supportsShippingLabels,
     supportsProductLabels,
     supportsBikeTags,
+    supportsReceipts,
     isActive: normalizeBoolean(input.isActive, "isActive", true),
     transportMode,
     windowsPrinterName,
@@ -605,6 +709,7 @@ const normalizePrinterCreateData = (input: RegisteredPrinterInput) => {
     setAsDefaultShippingLabel: input.setAsDefaultShippingLabel === true,
     setAsDefaultProductLabel: input.setAsDefaultProductLabel === true,
     setAsDefaultBikeTag: input.setAsDefaultBikeTag === true,
+    setAsDefaultReceipt: input.setAsDefaultReceipt === true,
   };
 };
 
@@ -635,10 +740,15 @@ const normalizePrinterPatchData = (input: RegisteredPrinterInput, existing: Prin
     input.supportsBikeTags !== undefined
       ? normalizeBoolean(input.supportsBikeTags, "supportsBikeTags", existing.supportsBikeTags)
       : existing.supportsBikeTags;
+  const nextSupportsReceipts =
+    input.supportsReceipts !== undefined
+      ? normalizeBoolean(input.supportsReceipts, "supportsReceipts", existing.supportsReceipts)
+      : existing.supportsReceipts;
   ensureCapabilitiesMatchFamily(nextPrinterFamily, {
     supportsShippingLabels: nextSupportsShippingLabels,
     supportsProductLabels: nextSupportsProductLabels,
     supportsBikeTags: nextSupportsBikeTags,
+    supportsReceipts: nextSupportsReceipts,
   });
 
   const data: Prisma.PrinterUpdateInput = {};
@@ -663,6 +773,9 @@ const normalizePrinterPatchData = (input: RegisteredPrinterInput, existing: Prin
   }
   if (input.supportsBikeTags !== undefined) {
     data.supportsBikeTags = nextSupportsBikeTags;
+  }
+  if (input.supportsReceipts !== undefined) {
+    data.supportsReceipts = nextSupportsReceipts;
   }
   if (input.isActive !== undefined) {
     data.isActive = normalizeBoolean(input.isActive, "isActive", true);
@@ -719,11 +832,19 @@ const normalizePrinterPatchData = (input: RegisteredPrinterInput, existing: Prin
       input.setAsDefaultProductLabel === undefined ? undefined : input.setAsDefaultProductLabel === true,
     setAsDefaultBikeTag:
       input.setAsDefaultBikeTag === undefined ? undefined : input.setAsDefaultBikeTag === true,
+    setAsDefaultReceipt:
+      input.setAsDefaultReceipt === undefined ? undefined : input.setAsDefaultReceipt === true,
   };
 };
 
 export const listRegisteredPrinters = async (
-  input: { activeOnly?: boolean; shippingLabelOnly?: boolean; productLabelOnly?: boolean; bikeTagOnly?: boolean } = {},
+  input: {
+    activeOnly?: boolean;
+    shippingLabelOnly?: boolean;
+    productLabelOnly?: boolean;
+    bikeTagOnly?: boolean;
+    receiptOnly?: boolean;
+  } = {},
   db: PrinterClient = prisma,
 ): Promise<RegisteredPrinterListResponse> => {
   const where: Prisma.PrinterWhereInput = {};
@@ -738,6 +859,9 @@ export const listRegisteredPrinters = async (
   }
   if (input.bikeTagOnly) {
     where.supportsBikeTags = true;
+  }
+  if (input.receiptOnly) {
+    where.supportsReceipts = true;
   }
 
   const [printers, defaults] = await Promise.all([
@@ -761,6 +885,9 @@ export const listRegisteredPrinters = async (
     defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
     defaultBikeTagPrinter:
       mapped.find((printer) => printer.id === defaults.defaultBikeTagPrinterId) ?? null,
+    defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
+    defaultReceiptPrinter:
+      mapped.find((printer) => printer.id === defaults.defaultReceiptPrinterId) ?? null,
   };
 };
 
@@ -781,6 +908,7 @@ export const createRegisteredPrinter = async (
           supportsShippingLabels: normalized.supportsShippingLabels,
           supportsProductLabels: normalized.supportsProductLabels,
           supportsBikeTags: normalized.supportsBikeTags,
+          supportsReceipts: normalized.supportsReceipts,
           isActive: normalized.isActive,
           transportMode: normalized.transportMode,
           windowsPrinterName: normalized.windowsPrinterName,
@@ -804,6 +932,10 @@ export const createRegisteredPrinter = async (
         ensurePrinterCanBeDefaultBikeTag(created);
         await writeDefaultPrinterIdTx(tx, DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY, created.id);
       }
+      if (normalized.setAsDefaultReceipt) {
+        ensurePrinterCanBeDefaultReceipt(created);
+        await writeDefaultPrinterIdTx(tx, DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, created.id);
+      }
 
       await createAuditEventTx(
         tx,
@@ -819,9 +951,11 @@ export const createRegisteredPrinter = async (
             supportsShippingLabels: created.supportsShippingLabels,
             supportsProductLabels: created.supportsProductLabels,
             supportsBikeTags: created.supportsBikeTags,
+            supportsReceipts: created.supportsReceipts,
             isDefaultShippingLabelPrinter: normalized.setAsDefaultShippingLabel,
             isDefaultProductLabelPrinter: normalized.setAsDefaultProductLabel,
             isDefaultBikeTagPrinter: normalized.setAsDefaultBikeTag,
+            isDefaultReceiptPrinter: normalized.setAsDefaultReceipt,
           },
         },
         auditActor,
@@ -833,6 +967,7 @@ export const createRegisteredPrinter = async (
         defaultShippingLabelPrinterId: defaults.defaultShippingLabelPrinterId,
         defaultProductLabelPrinterId: defaults.defaultProductLabelPrinterId,
         defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
+        defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
       };
     });
 
@@ -897,6 +1032,15 @@ export const updateRegisteredPrinter = async (
         await writeDefaultPrinterIdTx(tx, DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY, null);
       }
 
+      if (defaultsBefore.defaultReceiptPrinterId === saved.id && (!saved.isActive || !saved.supportsReceipts)) {
+        await writeDefaultPrinterIdTx(tx, DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, null);
+      } else if (normalized.setAsDefaultReceipt === true) {
+        ensurePrinterCanBeDefaultReceipt(saved);
+        await writeDefaultPrinterIdTx(tx, DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, saved.id);
+      } else if (normalized.setAsDefaultReceipt === false && defaultsBefore.defaultReceiptPrinterId === saved.id) {
+        await writeDefaultPrinterIdTx(tx, DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, null);
+      }
+
       const defaults = await getStoredPrinterDefaults(tx);
 
       await createAuditEventTx(
@@ -913,10 +1057,12 @@ export const updateRegisteredPrinter = async (
             supportsShippingLabels: saved.supportsShippingLabels,
             supportsProductLabels: saved.supportsProductLabels,
             supportsBikeTags: saved.supportsBikeTags,
+            supportsReceipts: saved.supportsReceipts,
             isActive: saved.isActive,
             defaultShippingLabelPrinterId: defaults.defaultShippingLabelPrinterId,
             defaultProductLabelPrinterId: defaults.defaultProductLabelPrinterId,
             defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
+            defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
           },
         },
         auditActor,
@@ -927,6 +1073,7 @@ export const updateRegisteredPrinter = async (
         defaultShippingLabelPrinterId: defaults.defaultShippingLabelPrinterId,
         defaultProductLabelPrinterId: defaults.defaultProductLabelPrinterId,
         defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
+        defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
       };
     });
 
@@ -956,6 +1103,7 @@ export const setDefaultShippingLabelPrinter = async (
     let printer: PrinterRecord | null = null;
     let defaultProductLabelPrinter: PrinterRecord | null = null;
     let defaultBikeTagPrinter: PrinterRecord | null = null;
+    let defaultReceiptPrinter: PrinterRecord | null = null;
     if (normalizedPrinterId) {
       printer = await getPrinterByIdOrThrow(normalizedPrinterId, tx);
       ensurePrinterCanBeDefaultShipping(printer);
@@ -993,6 +1141,12 @@ export const setDefaultShippingLabelPrinter = async (
         select: printerSelect,
       });
     }
+    if (defaults.defaultReceiptPrinterId) {
+      defaultReceiptPrinter = await tx.printer.findUnique({
+        where: { id: defaults.defaultReceiptPrinterId },
+        select: printerSelect,
+      });
+    }
     return {
       defaultShippingLabelPrinterId: defaults.defaultShippingLabelPrinterId,
       defaultShippingLabelPrinter:
@@ -1005,6 +1159,9 @@ export const setDefaultShippingLabelPrinter = async (
       defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
       defaultBikeTagPrinter:
         defaultBikeTagPrinter ? toPrinterResponse(defaultBikeTagPrinter, defaults) : null,
+      defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
+      defaultReceiptPrinter:
+        defaultReceiptPrinter ? toPrinterResponse(defaultReceiptPrinter, defaults) : null,
     };
   });
 
@@ -1026,6 +1183,7 @@ export const setDefaultProductLabelPrinter = async (
     let printer: PrinterRecord | null = null;
     let defaultShippingLabelPrinter: PrinterRecord | null = null;
     let defaultBikeTagPrinter: PrinterRecord | null = null;
+    let defaultReceiptPrinter: PrinterRecord | null = null;
     if (normalizedPrinterId) {
       printer = await getPrinterByIdOrThrow(normalizedPrinterId, tx);
       ensurePrinterCanBeDefaultProductLabel(printer);
@@ -1063,6 +1221,12 @@ export const setDefaultProductLabelPrinter = async (
         select: printerSelect,
       });
     }
+    if (defaults.defaultReceiptPrinterId) {
+      defaultReceiptPrinter = await tx.printer.findUnique({
+        where: { id: defaults.defaultReceiptPrinterId },
+        select: printerSelect,
+      });
+    }
     return {
       defaultProductLabelPrinterId: defaults.defaultProductLabelPrinterId,
       defaultProductLabelPrinter:
@@ -1075,6 +1239,9 @@ export const setDefaultProductLabelPrinter = async (
       defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
       defaultBikeTagPrinter:
         defaultBikeTagPrinter ? toPrinterResponse(defaultBikeTagPrinter, defaults) : null,
+      defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
+      defaultReceiptPrinter:
+        defaultReceiptPrinter ? toPrinterResponse(defaultReceiptPrinter, defaults) : null,
     };
   });
 
@@ -1096,6 +1263,7 @@ export const setDefaultBikeTagPrinter = async (
     let printer: PrinterRecord | null = null;
     let defaultShippingLabelPrinter: PrinterRecord | null = null;
     let defaultProductLabelPrinter: PrinterRecord | null = null;
+    let defaultReceiptPrinter: PrinterRecord | null = null;
     if (normalizedPrinterId) {
       printer = await getPrinterByIdOrThrow(normalizedPrinterId, tx);
       ensurePrinterCanBeDefaultBikeTag(printer);
@@ -1133,6 +1301,12 @@ export const setDefaultBikeTagPrinter = async (
         select: printerSelect,
       });
     }
+    if (defaults.defaultReceiptPrinterId) {
+      defaultReceiptPrinter = await tx.printer.findUnique({
+        where: { id: defaults.defaultReceiptPrinterId },
+        select: printerSelect,
+      });
+    }
     return {
       defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
       defaultBikeTagPrinter:
@@ -1145,12 +1319,96 @@ export const setDefaultBikeTagPrinter = async (
       defaultProductLabelPrinterId: defaults.defaultProductLabelPrinterId,
       defaultProductLabelPrinter:
         defaultProductLabelPrinter ? toPrinterResponse(defaultProductLabelPrinter, defaults) : null,
+      defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
+      defaultReceiptPrinter:
+        defaultReceiptPrinter ? toPrinterResponse(defaultReceiptPrinter, defaults) : null,
     };
   });
 
   logOperationalEvent("bike_tag.printer.default_updated", {
     entityId: result.defaultBikeTagPrinterId ?? DEFAULT_BIKE_TAG_PRINTER_CONFIG_KEY,
     printerId: result.defaultBikeTagPrinterId,
+  });
+
+  return result;
+};
+
+export const setDefaultReceiptPrinter = async (
+  printerId: string | null,
+  auditActor?: AuditActor,
+) => {
+  const normalizedPrinterId = printerId ? parseUuid(printerId, "printerId", "INVALID_PRINTER_ID") : null;
+
+  const result = await prisma.$transaction(async (tx) => {
+    let printer: PrinterRecord | null = null;
+    let defaultShippingLabelPrinter: PrinterRecord | null = null;
+    let defaultProductLabelPrinter: PrinterRecord | null = null;
+    let defaultBikeTagPrinter: PrinterRecord | null = null;
+    if (normalizedPrinterId) {
+      printer = await getPrinterByIdOrThrow(normalizedPrinterId, tx);
+      ensurePrinterCanBeDefaultReceipt(printer);
+    }
+
+    await writeDefaultPrinterIdTx(tx, DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, normalizedPrinterId);
+
+    await createAuditEventTx(
+      tx,
+      {
+        action: normalizedPrinterId
+          ? "DEFAULT_RECEIPT_PRINTER_SET"
+          : "DEFAULT_RECEIPT_PRINTER_CLEARED",
+        entityType: "APP_CONFIG",
+        entityId: DEFAULT_RECEIPT_PRINTER_CONFIG_KEY,
+        metadata: {
+          printerId: normalizedPrinterId,
+          printerKey: printer?.key ?? null,
+          printerName: printer?.name ?? null,
+        },
+      },
+      auditActor,
+    );
+
+    const defaults = await getStoredPrinterDefaults(tx);
+    if (defaults.defaultShippingLabelPrinterId) {
+      defaultShippingLabelPrinter = await tx.printer.findUnique({
+        where: { id: defaults.defaultShippingLabelPrinterId },
+        select: printerSelect,
+      });
+    }
+    if (defaults.defaultProductLabelPrinterId) {
+      defaultProductLabelPrinter = await tx.printer.findUnique({
+        where: { id: defaults.defaultProductLabelPrinterId },
+        select: printerSelect,
+      });
+    }
+    if (defaults.defaultBikeTagPrinterId) {
+      defaultBikeTagPrinter = await tx.printer.findUnique({
+        where: { id: defaults.defaultBikeTagPrinterId },
+        select: printerSelect,
+      });
+    }
+
+    return {
+      defaultReceiptPrinterId: defaults.defaultReceiptPrinterId,
+      defaultReceiptPrinter:
+        printer && defaults.defaultReceiptPrinterId === printer.id
+          ? toPrinterResponse(printer, defaults)
+          : null,
+      defaultShippingLabelPrinterId: defaults.defaultShippingLabelPrinterId,
+      defaultShippingLabelPrinter:
+        defaultShippingLabelPrinter ? toPrinterResponse(defaultShippingLabelPrinter, defaults) : null,
+      defaultProductLabelPrinterId: defaults.defaultProductLabelPrinterId,
+      defaultProductLabelPrinter:
+        defaultProductLabelPrinter ? toPrinterResponse(defaultProductLabelPrinter, defaults) : null,
+      defaultBikeTagPrinterId: defaults.defaultBikeTagPrinterId,
+      defaultBikeTagPrinter:
+        defaultBikeTagPrinter ? toPrinterResponse(defaultBikeTagPrinter, defaults) : null,
+    };
+  });
+
+  logOperationalEvent("receipt.printer.default_updated", {
+    entityId: result.defaultReceiptPrinterId ?? DEFAULT_RECEIPT_PRINTER_CONFIG_KEY,
+    printerId: result.defaultReceiptPrinterId,
   });
 
   return result;
@@ -1433,6 +1691,138 @@ export const resolveBikeTagPrinterSelection = async (
       ? printer.windowsPrinterName ?? printer.name
       : null,
     supportsBikeTags: true,
+    isActive: true,
+    resolutionSource,
+  };
+};
+
+export const resolveReceiptPrinterSelection = async (
+  input: ResolveReceiptPrinterSelectionInput = {},
+  db: PrinterClient = prisma,
+): Promise<ResolvedReceiptPrinter> => {
+  const normalizedPrinterId =
+    input.printerId === undefined || input.printerId === null || input.printerId === ""
+      ? null
+      : parseUuid(input.printerId, "printerId", "INVALID_PRINTER_ID");
+  const normalizedPrinterKey =
+    input.printerKey === undefined || input.printerKey === null || String(input.printerKey).trim().length === 0
+      ? null
+      : normalizePrinterKey(input.printerKey);
+
+  let printer: PrinterRecord | null = null;
+  let resolutionSource: "selected" | "workstation" | "default" = "selected";
+
+  if (normalizedPrinterId) {
+    printer = await db.printer.findUnique({
+      where: { id: normalizedPrinterId },
+      select: printerSelect,
+    });
+  } else if (normalizedPrinterKey) {
+    printer = await db.printer.findUnique({
+      where: { key: normalizedPrinterKey },
+      select: printerSelect,
+    });
+  } else {
+    const workstation = await resolveReceiptPrintWorkstation(input.workstationKey, db);
+    if (workstation?.defaultPrinterId) {
+      resolutionSource = "workstation";
+      printer = await db.printer.findUnique({
+        where: { id: workstation.defaultPrinterId },
+        select: printerSelect,
+      });
+    } else {
+      resolutionSource = "default";
+      const defaultPrinterId = await getStoredDefaultPrinterId(DEFAULT_RECEIPT_PRINTER_CONFIG_KEY, db);
+      if (!defaultPrinterId) {
+        throw new HttpError(
+          409,
+          "No default receipt printer is configured. Set one in Settings, assign a receipt workstation printer, or choose a registered printer.",
+          "DEFAULT_RECEIPT_PRINTER_NOT_CONFIGURED",
+        );
+      }
+      printer = await db.printer.findUnique({
+        where: { id: defaultPrinterId },
+        select: printerSelect,
+      });
+    }
+  }
+
+  if (!printer) {
+    throw new HttpError(404, "Registered printer not found", "PRINTER_NOT_FOUND");
+  }
+  if (!printer.isActive) {
+    throw new HttpError(409, "This printer is inactive and cannot be used", "PRINTER_INACTIVE");
+  }
+  if (!printer.supportsReceipts) {
+    throw new HttpError(
+      409,
+      "This printer is not configured for receipts",
+      "PRINTER_NOT_RECEIPT_CAPABLE",
+    );
+  }
+  if (printer.printerFamily !== RegisteredPrinterFamily.THERMAL_RECEIPT) {
+    throw new HttpError(
+      409,
+      "Only managed thermal receipt printers are supported in this flow",
+      "PRINTER_FAMILY_NOT_SUPPORTED",
+    );
+  }
+  if (printer.printerModelHint !== ESC_POS_80MM_MODEL_HINT) {
+    throw new HttpError(
+      409,
+      `Only ${ESC_POS_80MM_MODEL_HINT} printer model hints are supported in this flow`,
+      "PRINTER_MODEL_NOT_SUPPORTED",
+    );
+  }
+  if (
+    printer.transportMode !== RegisteredPrinterTransportMode.DRY_RUN
+    && printer.transportMode !== RegisteredPrinterTransportMode.RAW_TCP
+    && printer.transportMode !== RegisteredPrinterTransportMode.WINDOWS_PRINTER
+  ) {
+    throw new HttpError(
+      409,
+      "Only DRY_RUN, RAW_TCP, and WINDOWS_PRINTER transports are supported for managed receipts",
+      "PRINTER_TRANSPORT_NOT_SUPPORTED",
+    );
+  }
+  if (printer.transportMode === RegisteredPrinterTransportMode.RAW_TCP && !printer.rawTcpHost) {
+    throw new HttpError(
+      409,
+      "This RAW_TCP receipt printer is missing its host configuration",
+      "PRINTER_TARGET_MISCONFIGURED",
+    );
+  }
+  if (
+    printer.transportMode === RegisteredPrinterTransportMode.WINDOWS_PRINTER
+    && !printer.windowsPrinterName
+  ) {
+    throw new HttpError(
+      409,
+      "This Windows receipt printer is missing its installed printer name",
+      "PRINTER_TARGET_MISCONFIGURED",
+    );
+  }
+
+  return {
+    id: printer.id,
+    key: printer.key,
+    name: printer.name,
+    printerFamily: THERMAL_RECEIPT_PRINTER_FAMILY,
+    printerModelHint: ESC_POS_80MM_MODEL_HINT,
+    transportMode: printer.transportMode,
+    windowsPrinterName:
+      printer.transportMode === RegisteredPrinterTransportMode.WINDOWS_PRINTER
+        ? printer.windowsPrinterName ?? printer.name
+        : null,
+    rawTcpHost:
+      printer.transportMode === RegisteredPrinterTransportMode.RAW_TCP
+        ? printer.rawTcpHost ?? null
+        : null,
+    rawTcpPort:
+      printer.transportMode === RegisteredPrinterTransportMode.RAW_TCP
+        ? printer.rawTcpPort ?? DEFAULT_RAW_TCP_PORT
+        : null,
+    supportsReceipts: true,
     isActive: true,
     resolutionSource,
   };

@@ -7,6 +7,10 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { SurfaceCard } from "../components/ui/SurfaceCard";
+import {
+  getStoredReceiptWorkstationKey,
+  setStoredReceiptWorkstationKey,
+} from "../features/receipts/receiptWorkstation";
 
 const STORE_WEEKDAYS = [
   { key: "MONDAY", label: "Monday" },
@@ -78,11 +82,12 @@ type SettingsResponse = {
   };
 };
 
-type RegisteredPrinterFamily = "ZEBRA_LABEL" | "DYMO_LABEL" | "OFFICE_DOCUMENT";
+type RegisteredPrinterFamily = "ZEBRA_LABEL" | "DYMO_LABEL" | "OFFICE_DOCUMENT" | "THERMAL_RECEIPT";
 type RegisteredPrinterModelHint =
   | "GK420D_OR_COMPATIBLE"
   | "LABELWRITER_57X32_OR_COMPATIBLE"
-  | "A5_LANDSCAPE_2UP_OR_COMPATIBLE";
+  | "A5_LANDSCAPE_2UP_OR_COMPATIBLE"
+  | "ESC_POS_80MM_OR_COMPATIBLE";
 type RegisteredPrinterTransportMode = "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
 
 type RegisteredPrinter = {
@@ -94,6 +99,7 @@ type RegisteredPrinter = {
   supportsShippingLabels: boolean;
   supportsProductLabels: boolean;
   supportsBikeTags: boolean;
+  supportsReceipts: boolean;
   isActive: boolean;
   transportMode: RegisteredPrinterTransportMode;
   windowsPrinterName: string | null;
@@ -106,6 +112,7 @@ type RegisteredPrinter = {
   isDefaultShippingLabelPrinter: boolean;
   isDefaultProductLabelPrinter: boolean;
   isDefaultBikeTagPrinter: boolean;
+  isDefaultReceiptPrinter: boolean;
 };
 
 type RegisteredPrinterListResponse = {
@@ -116,6 +123,8 @@ type RegisteredPrinterListResponse = {
   defaultProductLabelPrinter: RegisteredPrinter | null;
   defaultBikeTagPrinterId: string | null;
   defaultBikeTagPrinter: RegisteredPrinter | null;
+  defaultReceiptPrinterId: string | null;
+  defaultReceiptPrinter: RegisteredPrinter | null;
 };
 
 type PrinterMutationResponse = {
@@ -123,6 +132,7 @@ type PrinterMutationResponse = {
   defaultShippingLabelPrinterId: string | null;
   defaultProductLabelPrinterId: string | null;
   defaultBikeTagPrinterId: string | null;
+  defaultReceiptPrinterId: string | null;
 };
 
 type DefaultPrinterResponse = {
@@ -132,6 +142,8 @@ type DefaultPrinterResponse = {
   defaultProductLabelPrinter: RegisteredPrinter | null;
   defaultBikeTagPrinterId: string | null;
   defaultBikeTagPrinter: RegisteredPrinter | null;
+  defaultReceiptPrinterId: string | null;
+  defaultReceiptPrinter: RegisteredPrinter | null;
 };
 
 type PrinterFormState = {
@@ -142,6 +154,7 @@ type PrinterFormState = {
   supportsShippingLabels: boolean;
   supportsProductLabels: boolean;
   supportsBikeTags: boolean;
+  supportsReceipts: boolean;
   isActive: boolean;
   transportMode: RegisteredPrinterTransportMode;
   windowsPrinterName: string;
@@ -152,6 +165,7 @@ type PrinterFormState = {
   setAsDefaultShippingLabel: boolean;
   setAsDefaultProductLabel: boolean;
   setAsDefaultBikeTag: boolean;
+  setAsDefaultReceipt: boolean;
 };
 
 type ShippingProviderEnvironment = "SANDBOX" | "LIVE";
@@ -284,6 +298,41 @@ type BikeTagPrintAgentFormState = {
   clearSharedSecret: boolean;
 };
 
+type ReceiptPrintAgentConfig = {
+  url: string | null;
+  hasSharedSecret: boolean;
+  sharedSecretHint: string | null;
+  updatedAt: string | null;
+  effectiveUrl: string | null;
+  effectiveSource: "settings" | "environment" | "unconfigured";
+  envFallbackUrl: string | null;
+  envFallbackHasSharedSecret: boolean;
+};
+
+type ReceiptPrintAgentSettingsResponse = {
+  config: ReceiptPrintAgentConfig;
+};
+
+type ReceiptPrintAgentFormState = {
+  url: string;
+  sharedSecret: string;
+  clearSharedSecret: boolean;
+};
+
+type ReceiptPrintWorkstation = {
+  key: string;
+  label: string;
+  description: string;
+  defaultPrinterId: string | null;
+};
+
+type ReceiptPrintWorkstationSettingsResponse = {
+  config: {
+    updatedAt: string | null;
+    workstations: ReceiptPrintWorkstation[];
+  };
+};
+
 const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
@@ -298,6 +347,7 @@ const DEFAULT_PRINTER_FORM: PrinterFormState = {
   supportsShippingLabels: true,
   supportsProductLabels: false,
   supportsBikeTags: false,
+  supportsReceipts: false,
   isActive: true,
   transportMode: "DRY_RUN",
   windowsPrinterName: "",
@@ -308,6 +358,7 @@ const DEFAULT_PRINTER_FORM: PrinterFormState = {
   setAsDefaultShippingLabel: false,
   setAsDefaultProductLabel: false,
   setAsDefaultBikeTag: false,
+  setAsDefaultReceipt: false,
 };
 
 const DEFAULT_SHIPPING_PROVIDER_FORM: ShippingProviderFormState = {
@@ -348,10 +399,17 @@ const DEFAULT_BIKE_TAG_PRINT_AGENT_FORM: BikeTagPrintAgentFormState = {
   clearSharedSecret: false,
 };
 
+const DEFAULT_RECEIPT_PRINT_AGENT_FORM: ReceiptPrintAgentFormState = {
+  url: "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+};
+
 const getPrinterCapabilitiesForFamily = (printerFamily: RegisteredPrinterFamily) => ({
   supportsShippingLabels: printerFamily === "ZEBRA_LABEL",
   supportsProductLabels: printerFamily === "DYMO_LABEL",
   supportsBikeTags: printerFamily === "OFFICE_DOCUMENT",
+  supportsReceipts: printerFamily === "THERMAL_RECEIPT",
 });
 
 const getPrinterModelHintForFamily = (printerFamily: RegisteredPrinterFamily): RegisteredPrinterModelHint =>
@@ -359,6 +417,8 @@ const getPrinterModelHintForFamily = (printerFamily: RegisteredPrinterFamily): R
     ? "LABELWRITER_57X32_OR_COMPATIBLE"
     : printerFamily === "OFFICE_DOCUMENT"
       ? "A5_LANDSCAPE_2UP_OR_COMPATIBLE"
+      : printerFamily === "THERMAL_RECEIPT"
+        ? "ESC_POS_80MM_OR_COMPATIBLE"
       : "GK420D_OR_COMPATIBLE";
 
 const getAllowedTransportModesForFamily = (
@@ -524,6 +584,7 @@ const toPrinterFormState = (
   defaultShippingLabelPrinterId: string | null,
   defaultProductLabelPrinterId: string | null,
   defaultBikeTagPrinterId: string | null,
+  defaultReceiptPrinterId: string | null,
 ): PrinterFormState => {
   if (!printer) {
     return DEFAULT_PRINTER_FORM;
@@ -537,6 +598,7 @@ const toPrinterFormState = (
     supportsShippingLabels: printer.supportsShippingLabels,
     supportsProductLabels: printer.supportsProductLabels,
     supportsBikeTags: printer.supportsBikeTags,
+    supportsReceipts: printer.supportsReceipts,
     isActive: printer.isActive,
     transportMode: printer.transportMode,
     windowsPrinterName: printer.windowsPrinterName ?? "",
@@ -547,6 +609,7 @@ const toPrinterFormState = (
     setAsDefaultShippingLabel: printer.id === defaultShippingLabelPrinterId,
     setAsDefaultProductLabel: printer.id === defaultProductLabelPrinterId,
     setAsDefaultBikeTag: printer.id === defaultBikeTagPrinterId,
+    setAsDefaultReceipt: printer.id === defaultReceiptPrinterId,
   };
 };
 
@@ -602,6 +665,14 @@ const toBikeTagPrintAgentFormState = (
   clearSharedSecret: false,
 });
 
+const toReceiptPrintAgentFormState = (
+  config: ReceiptPrintAgentConfig | null,
+): ReceiptPrintAgentFormState => ({
+  url: config?.url ?? "",
+  sharedSecret: "",
+  clearSharedSecret: false,
+});
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -620,9 +691,17 @@ export const SystemSettingsPage = () => {
   const [bikeTagPrintAgentForm, setBikeTagPrintAgentForm] = useState<BikeTagPrintAgentFormState>(
     DEFAULT_BIKE_TAG_PRINT_AGENT_FORM,
   );
+  const [receiptPrintAgentConfig, setReceiptPrintAgentConfig] = useState<ReceiptPrintAgentConfig | null>(null);
+  const [receiptPrintAgentForm, setReceiptPrintAgentForm] = useState<ReceiptPrintAgentFormState>(
+    DEFAULT_RECEIPT_PRINT_AGENT_FORM,
+  );
   const [productLabelPrintAgentConfig, setProductLabelPrintAgentConfig] = useState<ProductLabelPrintAgentConfig | null>(null);
   const [productLabelPrintAgentForm, setProductLabelPrintAgentForm] = useState<ProductLabelPrintAgentFormState>(
     DEFAULT_PRODUCT_LABEL_PRINT_AGENT_FORM,
+  );
+  const [receiptWorkstations, setReceiptWorkstations] = useState<ReceiptPrintWorkstation[]>([]);
+  const [browserReceiptWorkstationKey, setBrowserReceiptWorkstationKey] = useState<string>(
+    () => getStoredReceiptWorkstationKey() ?? "",
   );
   const [printersPayload, setPrintersPayload] = useState<RegisteredPrinterListResponse | null>(null);
   const [selectedPrinterId, setSelectedPrinterId] = useState("");
@@ -636,9 +715,11 @@ export const SystemSettingsPage = () => {
   const [settingDefaultProvider, setSettingDefaultProvider] = useState(false);
   const [savingShippingPrintAgent, setSavingShippingPrintAgent] = useState(false);
   const [savingBikeTagPrintAgent, setSavingBikeTagPrintAgent] = useState(false);
+  const [savingReceiptPrintAgent, setSavingReceiptPrintAgent] = useState(false);
   const [savingProductLabelPrintAgent, setSavingProductLabelPrintAgent] = useState(false);
   const [savingPrinter, setSavingPrinter] = useState(false);
   const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
+  const [savingReceiptWorkstations, setSavingReceiptWorkstations] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -652,7 +733,9 @@ export const SystemSettingsPage = () => {
           providerSettingsResponse,
           shippingPrintAgentResponse,
           bikeTagPrintAgentResponse,
+          receiptPrintAgentResponse,
           productLabelPrintAgentResponse,
+          receiptWorkstationsResponse,
           printersResponse,
         ] = await Promise.all([
           apiGet<StoreInfoResponse>("/api/settings/store-info"),
@@ -660,7 +743,9 @@ export const SystemSettingsPage = () => {
           apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers"),
           apiGet<ShippingPrintAgentSettingsResponse>("/api/settings/shipping-print-agent"),
           apiGet<BikeTagPrintAgentSettingsResponse>("/api/settings/bike-tag-print-agent"),
+          apiGet<ReceiptPrintAgentSettingsResponse>("/api/settings/receipt-print-agent"),
           apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent"),
+          apiGet<ReceiptPrintWorkstationSettingsResponse>("/api/settings/receipt-workstations"),
           apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
         ]);
         if (cancelled) {
@@ -691,11 +776,15 @@ export const SystemSettingsPage = () => {
         setShippingPrintAgentForm(toShippingPrintAgentFormState(shippingPrintAgentResponse.config));
         setBikeTagPrintAgentConfig(bikeTagPrintAgentResponse.config);
         setBikeTagPrintAgentForm(toBikeTagPrintAgentFormState(bikeTagPrintAgentResponse.config));
+        setReceiptPrintAgentConfig(receiptPrintAgentResponse.config);
+        setReceiptPrintAgentForm(toReceiptPrintAgentFormState(receiptPrintAgentResponse.config));
         setProductLabelPrintAgentConfig(productLabelPrintAgentResponse.config);
         setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(productLabelPrintAgentResponse.config));
+        setReceiptWorkstations(receiptWorkstationsResponse.config.workstations);
         setPrintersPayload(printersResponse);
         const preferredPrinterId =
           printersResponse.defaultBikeTagPrinterId
+          ?? printersResponse.defaultReceiptPrinterId
           ?? printersResponse.defaultShippingLabelPrinterId
           ?? printersResponse.defaultProductLabelPrinterId
           ?? printersResponse.printers[0]?.id
@@ -707,6 +796,7 @@ export const SystemSettingsPage = () => {
             printersResponse.defaultShippingLabelPrinterId,
             printersResponse.defaultProductLabelPrinterId,
             printersResponse.defaultBikeTagPrinterId,
+            printersResponse.defaultReceiptPrinterId,
           ),
         );
       } catch (loadError) {
@@ -951,6 +1041,22 @@ export const SystemSettingsPage = () => {
     return errors;
   }, [bikeTagPrintAgentForm]);
   const hasBikeTagPrintAgentValidationErrors = Object.keys(bikeTagPrintAgentValidationErrors).length > 0;
+  const receiptPrintAgentValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof ReceiptPrintAgentFormState, string>> = {};
+
+    if (receiptPrintAgentForm.url.trim() && !isValidUrl(receiptPrintAgentForm.url)) {
+      errors.url = "Helper URL must start with http:// or https://";
+    }
+    if (
+      receiptPrintAgentForm.clearSharedSecret
+      && receiptPrintAgentForm.sharedSecret.trim().length > 0
+    ) {
+      errors.sharedSecret = "Enter a new shared secret or clear the stored secret, not both.";
+    }
+
+    return errors;
+  }, [receiptPrintAgentForm]);
+  const hasReceiptPrintAgentValidationErrors = Object.keys(receiptPrintAgentValidationErrors).length > 0;
   const productLabelPrintAgentValidationErrors = useMemo(() => {
     const errors: Partial<Record<keyof ProductLabelPrintAgentFormState, string>> = {};
 
@@ -970,6 +1076,10 @@ export const SystemSettingsPage = () => {
   const selectedPrinter = useMemo(
     () => printersPayload?.printers.find((printer) => printer.id === selectedPrinterId) ?? null,
     [printersPayload?.printers, selectedPrinterId],
+  );
+  const receiptCapablePrinters = useMemo(
+    () => printersPayload?.printers.filter((printer) => printer.supportsReceipts && printer.isActive) ?? [],
+    [printersPayload?.printers],
   );
   const allowedPrinterTransportModes = useMemo(
     () => getAllowedTransportModesForFamily(printerForm.printerFamily),
@@ -1033,6 +1143,7 @@ export const SystemSettingsPage = () => {
         supportsShippingLabels: capabilities.supportsShippingLabels,
         supportsProductLabels: capabilities.supportsProductLabels,
         supportsBikeTags: capabilities.supportsBikeTags,
+        supportsReceipts: capabilities.supportsReceipts,
         transportMode: nextTransportMode,
         windowsPrinterName:
           nextTransportMode === "WINDOWS_PRINTER"
@@ -1043,6 +1154,7 @@ export const SystemSettingsPage = () => {
         setAsDefaultShippingLabel: capabilities.supportsShippingLabels ? current.setAsDefaultShippingLabel : false,
         setAsDefaultProductLabel: capabilities.supportsProductLabels ? current.setAsDefaultProductLabel : false,
         setAsDefaultBikeTag: capabilities.supportsBikeTags ? current.setAsDefaultBikeTag : false,
+        setAsDefaultReceipt: capabilities.supportsReceipts ? current.setAsDefaultReceipt : false,
       };
     });
   };
@@ -1066,6 +1178,13 @@ export const SystemSettingsPage = () => {
     value: BikeTagPrintAgentFormState[K],
   ) => {
     setBikeTagPrintAgentForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const setReceiptPrintAgentField = <K extends keyof ReceiptPrintAgentFormState>(
+    key: K,
+    value: ReceiptPrintAgentFormState[K],
+  ) => {
+    setReceiptPrintAgentForm((current) => ({ ...current, [key]: value }));
   };
 
   const setProductLabelPrintAgentField = <K extends keyof ProductLabelPrintAgentFormState>(
@@ -1116,6 +1235,7 @@ export const SystemSettingsPage = () => {
     const nextPrinterId =
       preferredPrinterId
       ?? payload.defaultBikeTagPrinterId
+      ?? payload.defaultReceiptPrinterId
       ?? payload.defaultShippingLabelPrinterId
       ?? payload.defaultProductLabelPrinterId
       ?? payload.printers[0]?.id
@@ -1127,6 +1247,7 @@ export const SystemSettingsPage = () => {
         payload.defaultShippingLabelPrinterId,
         payload.defaultProductLabelPrinterId,
         payload.defaultBikeTagPrinterId,
+        payload.defaultReceiptPrinterId,
       ),
     );
     return payload;
@@ -1170,6 +1291,19 @@ export const SystemSettingsPage = () => {
     return payload;
   };
 
+  const loadReceiptPrintAgentSettings = async () => {
+    const payload = await apiGet<ReceiptPrintAgentSettingsResponse>("/api/settings/receipt-print-agent");
+    setReceiptPrintAgentConfig(payload.config);
+    setReceiptPrintAgentForm(toReceiptPrintAgentFormState(payload.config));
+    return payload;
+  };
+
+  const loadReceiptWorkstations = async () => {
+    const payload = await apiGet<ReceiptPrintWorkstationSettingsResponse>("/api/settings/receipt-workstations");
+    setReceiptWorkstations(payload.config.workstations);
+    return payload;
+  };
+
   const selectShippingProviderForEditing = (providerKey: string) => {
     const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
     setSelectedProviderKey(providerKey);
@@ -1185,6 +1319,7 @@ export const SystemSettingsPage = () => {
         printersPayload?.defaultShippingLabelPrinterId ?? null,
         printersPayload?.defaultProductLabelPrinterId ?? null,
         printersPayload?.defaultBikeTagPrinterId ?? null,
+        printersPayload?.defaultReceiptPrinterId ?? null,
       ),
     );
   };
@@ -1194,7 +1329,9 @@ export const SystemSettingsPage = () => {
     setPrinterForm({
       ...DEFAULT_PRINTER_FORM,
       setAsDefaultShippingLabel: printersPayload?.defaultShippingLabelPrinterId === null,
+      setAsDefaultProductLabel: printersPayload?.defaultProductLabelPrinterId === null,
       setAsDefaultBikeTag: printersPayload?.defaultBikeTagPrinterId === null,
+      setAsDefaultReceipt: printersPayload?.defaultReceiptPrinterId === null,
     });
   };
 
@@ -1291,6 +1428,56 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to save bike-tag print helper settings");
     } finally {
       setSavingBikeTagPrintAgent(false);
+    }
+  };
+
+  const saveReceiptPrintAgentSettings = async () => {
+    if (hasReceiptPrintAgentValidationErrors) {
+      error("Fix the highlighted receipt print helper fields before saving.");
+      return;
+    }
+
+    setSavingReceiptPrintAgent(true);
+    try {
+      const payload = await apiPut<ReceiptPrintAgentSettingsResponse>(
+        "/api/settings/receipt-print-agent",
+        {
+          url: receiptPrintAgentForm.url.trim() || null,
+          sharedSecret: receiptPrintAgentForm.sharedSecret.trim() || undefined,
+          clearSharedSecret: receiptPrintAgentForm.clearSharedSecret,
+        },
+      );
+      setReceiptPrintAgentConfig(payload.config);
+      setReceiptPrintAgentForm(toReceiptPrintAgentFormState(payload.config));
+      success(
+        payload.config.effectiveSource === "settings"
+          ? "Receipt print helper settings updated."
+          : payload.config.effectiveSource === "environment"
+            ? "Stored receipt helper settings cleared. CorePOS is using environment fallback."
+            : "Receipt print helper settings cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save receipt print helper settings");
+    } finally {
+      setSavingReceiptPrintAgent(false);
+    }
+  };
+
+  const saveReceiptWorkstationDefaults = async () => {
+    setSavingReceiptWorkstations(true);
+    try {
+      const payload = await apiPut<ReceiptPrintWorkstationSettingsResponse>("/api/settings/receipt-workstations", {
+        workstations: receiptWorkstations.map((workstation) => ({
+          key: workstation.key,
+          defaultPrinterId: workstation.defaultPrinterId,
+        })),
+      });
+      setReceiptWorkstations(payload.config.workstations);
+      success("Receipt workstation defaults updated.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save receipt workstation defaults");
+    } finally {
+      setSavingReceiptWorkstations(false);
     }
   };
 
@@ -1518,6 +1705,7 @@ export const SystemSettingsPage = () => {
       supportsShippingLabels: printerForm.supportsShippingLabels,
       supportsProductLabels: printerForm.supportsProductLabels,
       supportsBikeTags: printerForm.supportsBikeTags,
+      supportsReceipts: printerForm.supportsReceipts,
       isActive: printerForm.isActive,
       transportMode: printerForm.transportMode,
       windowsPrinterName: printerForm.transportMode === "WINDOWS_PRINTER"
@@ -1532,6 +1720,7 @@ export const SystemSettingsPage = () => {
       setAsDefaultShippingLabel: printerForm.setAsDefaultShippingLabel,
       setAsDefaultProductLabel: printerForm.setAsDefaultProductLabel,
       setAsDefaultBikeTag: printerForm.setAsDefaultBikeTag,
+      setAsDefaultReceipt: printerForm.setAsDefaultReceipt,
     };
 
     setSavingPrinter(true);
@@ -1568,11 +1757,14 @@ export const SystemSettingsPage = () => {
           defaultProductLabelPrinter: response.defaultProductLabelPrinter,
           defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
           defaultBikeTagPrinter: response.defaultBikeTagPrinter,
+          defaultReceiptPrinterId: response.defaultReceiptPrinterId,
+          defaultReceiptPrinter: response.defaultReceiptPrinter,
           printers: current.printers.map((printer) => ({
             ...printer,
             isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
             isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
             isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
+            isDefaultReceiptPrinter: printer.id === response.defaultReceiptPrinterId,
           })),
         }
         : current);
@@ -1581,6 +1773,7 @@ export const SystemSettingsPage = () => {
         setAsDefaultShippingLabel: selectedPrinterId === printerId,
         setAsDefaultProductLabel: current.setAsDefaultProductLabel && selectedPrinterId === response.defaultProductLabelPrinterId,
         setAsDefaultBikeTag: current.setAsDefaultBikeTag && selectedPrinterId === response.defaultBikeTagPrinterId,
+        setAsDefaultReceipt: current.setAsDefaultReceipt && selectedPrinterId === response.defaultReceiptPrinterId,
       }));
       success(
         printerId
@@ -1610,11 +1803,14 @@ export const SystemSettingsPage = () => {
           defaultProductLabelPrinter: response.defaultProductLabelPrinter,
           defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
           defaultBikeTagPrinter: response.defaultBikeTagPrinter,
+          defaultReceiptPrinterId: response.defaultReceiptPrinterId,
+          defaultReceiptPrinter: response.defaultReceiptPrinter,
           printers: current.printers.map((printer) => ({
             ...printer,
             isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
             isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
             isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
+            isDefaultReceiptPrinter: printer.id === response.defaultReceiptPrinterId,
           })),
         }
         : current);
@@ -1623,6 +1819,7 @@ export const SystemSettingsPage = () => {
         setAsDefaultShippingLabel: current.setAsDefaultShippingLabel && selectedPrinterId === response.defaultShippingLabelPrinterId,
         setAsDefaultProductLabel: selectedPrinterId === printerId,
         setAsDefaultBikeTag: current.setAsDefaultBikeTag && selectedPrinterId === response.defaultBikeTagPrinterId,
+        setAsDefaultReceipt: current.setAsDefaultReceipt && selectedPrinterId === response.defaultReceiptPrinterId,
       }));
       success(
         printerId
@@ -1652,11 +1849,14 @@ export const SystemSettingsPage = () => {
           defaultProductLabelPrinter: response.defaultProductLabelPrinter,
           defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
           defaultBikeTagPrinter: response.defaultBikeTagPrinter,
+          defaultReceiptPrinterId: response.defaultReceiptPrinterId,
+          defaultReceiptPrinter: response.defaultReceiptPrinter,
           printers: current.printers.map((printer) => ({
             ...printer,
             isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
             isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
             isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
+            isDefaultReceiptPrinter: printer.id === response.defaultReceiptPrinterId,
           })),
         }
         : current);
@@ -1665,6 +1865,7 @@ export const SystemSettingsPage = () => {
         setAsDefaultShippingLabel: current.setAsDefaultShippingLabel && selectedPrinterId === response.defaultShippingLabelPrinterId,
         setAsDefaultProductLabel: current.setAsDefaultProductLabel && selectedPrinterId === response.defaultProductLabelPrinterId,
         setAsDefaultBikeTag: selectedPrinterId === printerId,
+        setAsDefaultReceipt: current.setAsDefaultReceipt && selectedPrinterId === response.defaultReceiptPrinterId,
       }));
       success(
         printerId
@@ -1673,6 +1874,52 @@ export const SystemSettingsPage = () => {
       );
     } catch (saveError) {
       error(saveError instanceof Error ? saveError.message : "Failed to update default bike-tag printer");
+    } finally {
+      setSettingDefaultPrinter(false);
+    }
+  };
+
+  const updateDefaultReceiptPrinter = async (printerId: string | null) => {
+    setSettingDefaultPrinter(true);
+    try {
+      const response = await apiPut<DefaultPrinterResponse>(
+        "/api/settings/printers/default-receipt",
+        { printerId },
+      );
+      setPrintersPayload((current) => current
+        ? {
+          ...current,
+          defaultShippingLabelPrinterId: response.defaultShippingLabelPrinterId,
+          defaultShippingLabelPrinter: response.defaultShippingLabelPrinter,
+          defaultProductLabelPrinterId: response.defaultProductLabelPrinterId,
+          defaultProductLabelPrinter: response.defaultProductLabelPrinter,
+          defaultBikeTagPrinterId: response.defaultBikeTagPrinterId,
+          defaultBikeTagPrinter: response.defaultBikeTagPrinter,
+          defaultReceiptPrinterId: response.defaultReceiptPrinterId,
+          defaultReceiptPrinter: response.defaultReceiptPrinter,
+          printers: current.printers.map((printer) => ({
+            ...printer,
+            isDefaultShippingLabelPrinter: printer.id === response.defaultShippingLabelPrinterId,
+            isDefaultProductLabelPrinter: printer.id === response.defaultProductLabelPrinterId,
+            isDefaultBikeTagPrinter: printer.id === response.defaultBikeTagPrinterId,
+            isDefaultReceiptPrinter: printer.id === response.defaultReceiptPrinterId,
+          })),
+        }
+        : current);
+      setPrinterForm((current) => ({
+        ...current,
+        setAsDefaultShippingLabel: current.setAsDefaultShippingLabel && selectedPrinterId === response.defaultShippingLabelPrinterId,
+        setAsDefaultProductLabel: current.setAsDefaultProductLabel && selectedPrinterId === response.defaultProductLabelPrinterId,
+        setAsDefaultBikeTag: current.setAsDefaultBikeTag && selectedPrinterId === response.defaultBikeTagPrinterId,
+        setAsDefaultReceipt: selectedPrinterId === printerId,
+      }));
+      success(
+        printerId
+          ? "Default receipt printer updated."
+          : "Default receipt printer cleared.",
+      );
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to update default receipt printer");
     } finally {
       setSettingDefaultPrinter(false);
     }
@@ -2485,7 +2732,7 @@ export const SystemSettingsPage = () => {
       <SurfaceCard>
         <SectionHeader
           title="Registered Printers"
-          description="Register Zebra shipment printers, Dymo product-label printers, and office document printers, then choose the default target each workflow should use."
+          description="Register Zebra, Dymo, office-document, and thermal receipt printers, then choose the default target each managed print workflow should use."
           actions={(
             <div className="actions-inline">
               <button type="button" className="button-link" onClick={resetPrinterForm}>
@@ -2506,7 +2753,7 @@ export const SystemSettingsPage = () => {
         {loading ? (
           <EmptyState
             title="Loading Registered Printers"
-            description="Fetching the registered printer list and current default shipping and product-label targets."
+            description="Fetching the registered printer list and current default shipping, product-label, bike-tag, and receipt targets."
           />
         ) : null}
 
@@ -2536,6 +2783,9 @@ export const SystemSettingsPage = () => {
                           {printer.isDefaultBikeTagPrinter ? (
                             <span className="status-badge status-info">Default bike tag</span>
                           ) : null}
+                          {printer.isDefaultReceiptPrinter ? (
+                            <span className="status-badge status-info">Default receipt</span>
+                          ) : null}
                         </div>
                         <div className="dispatch-printer-row__meta">
                           <span>{printer.key}</span>
@@ -2548,6 +2798,7 @@ export const SystemSettingsPage = () => {
                               printer.supportsShippingLabels ? "Shipping labels" : null,
                               printer.supportsProductLabels ? "Product labels" : null,
                               printer.supportsBikeTags ? "Bike tags" : null,
+                              printer.supportsReceipts ? "Receipts" : null,
                             ].filter(Boolean).join(" · ") || "No workflow capability"}
                           </span>
                           <span>{printer.isActive ? "Active" : "Inactive"}</span>
@@ -2604,6 +2855,7 @@ export const SystemSettingsPage = () => {
                     <option value="ZEBRA_LABEL">Zebra shipping label</option>
                     <option value="DYMO_LABEL">Dymo product label</option>
                     <option value="OFFICE_DOCUMENT">Office document / bike tag</option>
+                    <option value="THERMAL_RECEIPT">Thermal receipt printer</option>
                   </select>
                 </label>
                 <label>
@@ -2646,7 +2898,13 @@ export const SystemSettingsPage = () => {
                   <input
                     value={printerForm.windowsPrinterName}
                     onChange={(event) => setPrinterField("windowsPrinterName", event.target.value)}
-                    placeholder={printerForm.printerFamily === "OFFICE_DOCUMENT" ? "Xerox VersaLink C405" : "DYMO LabelWriter 550"}
+                    placeholder={
+                      printerForm.printerFamily === "OFFICE_DOCUMENT"
+                        ? "Xerox VersaLink C405"
+                        : printerForm.printerFamily === "THERMAL_RECEIPT"
+                          ? "Till Receipt Printer"
+                          : "DYMO LabelWriter 550"
+                    }
                     disabled={printerForm.transportMode !== "WINDOWS_PRINTER"}
                   />
                   {printerValidationErrors.windowsPrinterName ? (
@@ -2723,6 +2981,17 @@ export const SystemSettingsPage = () => {
                   />
                 </label>
                 <label className="store-info-grid-span store-settings-checkbox">
+                  <span>Supports receipts</span>
+                  <div className="table-secondary">
+                    Thermal receipt printers drive the managed ESC/POS receipt flow for POS, workshop, and reprints.
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={printerFamilyCapabilities.supportsReceipts}
+                    disabled
+                  />
+                </label>
+                <label className="store-info-grid-span store-settings-checkbox">
                   <span>Printer is active</span>
                   <div className="table-secondary">
                     Inactive printers stay on record for audit/history but cannot be used for live printing.
@@ -2772,6 +3041,20 @@ export const SystemSettingsPage = () => {
                       checked={printerForm.setAsDefaultBikeTag}
                       onChange={(event) =>
                         setPrinterField("setAsDefaultBikeTag", event.target.checked)}
+                    />
+                  </label>
+                ) : null}
+                {printerFamilyCapabilities.supportsReceipts ? (
+                  <label className="store-info-grid-span store-settings-checkbox">
+                    <span>Make this the default receipt printer</span>
+                    <div className="table-secondary">
+                      Managed thermal receipt printing uses this printer when the current workstation does not override it.
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={printerForm.setAsDefaultReceipt}
+                      onChange={(event) =>
+                        setPrinterField("setAsDefaultReceipt", event.target.checked)}
                     />
                   </label>
                 ) : null}
@@ -2833,15 +3116,224 @@ export const SystemSettingsPage = () => {
                       </button>
                     </>
                   ) : null}
+                  {selectedPrinter.supportsReceipts ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void updateDefaultReceiptPrinter(selectedPrinter.id)}
+                        disabled={settingDefaultPrinter || !selectedPrinter.isActive || !selectedPrinter.supportsReceipts}
+                      >
+                        {settingDefaultPrinter ? "Updating..." : "Set As Default Receipt Printer"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateDefaultReceiptPrinter(null)}
+                        disabled={settingDefaultPrinter || printersPayload?.defaultReceiptPrinterId !== selectedPrinter.id}
+                      >
+                        Clear Receipt Default
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
 
               <div className="restricted-panel info-panel">
-                Registered printers give CorePOS a stable local-print target. Zebra records drive shipment-label printing for dispatch, Dymo records drive direct product-label printing, and office document records drive one-click bike-tag printing through the controlled Xerox-style helper path.
+                Registered printers give CorePOS a stable local-print target. Zebra records drive shipment-label printing for dispatch, Dymo records drive direct product-label printing, office document records drive one-click bike-tag printing, and thermal receipt records drive managed ESC/POS receipt printing over the LAN or a controlled Windows host.
               </div>
             </section>
           </div>
         ) : null}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Receipt Print Helper"
+          description="Persist the managed receipt helper URL in CorePOS so thermal receipt printing routes through the registered-printer system instead of relying on browser printer memory."
+          actions={(
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => setReceiptPrintAgentForm(toReceiptPrintAgentFormState(receiptPrintAgentConfig))}
+                disabled={savingReceiptPrintAgent}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveReceiptPrintAgentSettings()}
+                disabled={savingReceiptPrintAgent || hasReceiptPrintAgentValidationErrors}
+              >
+                {savingReceiptPrintAgent ? "Saving..." : "Save Helper"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Receipt Print Helper"
+            description="Fetching the persisted thermal receipt helper settings and any backend environment fallback."
+          />
+        ) : (
+          <div className="purchase-form-grid store-info-grid">
+            <label className="store-info-grid-span">
+              Helper base URL
+              <input
+                value={receiptPrintAgentForm.url}
+                onChange={(event) => setReceiptPrintAgentField("url", event.target.value)}
+                placeholder="http://192.168.1.45:3214"
+              />
+              {receiptPrintAgentValidationErrors.url ? (
+                <span className="field-error">{receiptPrintAgentValidationErrors.url}</span>
+              ) : (
+                <span className="table-secondary">
+                  CorePOS posts managed receipt jobs to <code>/jobs/receipt</code> on this helper.
+                </span>
+              )}
+            </label>
+            <label>
+              Shared secret
+              <input
+                type="password"
+                value={receiptPrintAgentForm.sharedSecret}
+                onChange={(event) => setReceiptPrintAgentField("sharedSecret", event.target.value)}
+                placeholder={receiptPrintAgentConfig?.sharedSecretHint ?? "Enter a new shared secret"}
+              />
+              {receiptPrintAgentValidationErrors.sharedSecret ? (
+                <span className="field-error">{receiptPrintAgentValidationErrors.sharedSecret}</span>
+              ) : receiptPrintAgentConfig?.hasSharedSecret ? (
+                <span className="table-secondary">
+                  Stored secret: {receiptPrintAgentConfig.sharedSecretHint}
+                </span>
+              ) : (
+                <span className="table-secondary">
+                  Optional, but recommended when the receipt helper is reachable over the local network.
+                </span>
+              )}
+            </label>
+            <label className="store-settings-checkbox">
+              <span>Clear stored shared secret on save</span>
+              <div className="table-secondary">
+                Leave unticked to preserve the current secret when you are only changing the helper URL.
+              </div>
+              <input
+                type="checkbox"
+                checked={receiptPrintAgentForm.clearSharedSecret}
+                onChange={(event) => setReceiptPrintAgentField("clearSharedSecret", event.target.checked)}
+              />
+            </label>
+            <div className="restricted-panel info-panel store-info-grid-span">
+              <strong>Effective helper:</strong>{" "}
+              {receiptPrintAgentConfig?.effectiveUrl ? (
+                <>
+                  <code>{receiptPrintAgentConfig.effectiveUrl}</code> via{" "}
+                  {receiptPrintAgentConfig.effectiveSource === "settings"
+                    ? "persisted Settings"
+                    : "backend environment fallback"}
+                  . Health check: <code>{`${receiptPrintAgentConfig.effectiveUrl}/health`}</code>
+                </>
+              ) : (
+                "No receipt print helper is configured yet. Save the helper URL here before relying on managed thermal receipt printing."
+              )}
+            </div>
+            {receiptPrintAgentConfig?.effectiveSource === "environment" && receiptPrintAgentConfig.envFallbackUrl ? (
+              <div className="restricted-panel warning-panel store-info-grid-span">
+                CorePOS is currently using legacy environment fallback at <code>{receiptPrintAgentConfig.envFallbackUrl}</code>. Save a helper URL here to make receipt printing configuration persistent in CorePOS itself.
+              </div>
+            ) : null}
+          </div>
+        )}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Receipt Workstations"
+          description="Set the default managed receipt printer for each shop station, then choose which station this browser should behave as."
+          actions={(
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void saveReceiptWorkstationDefaults()}
+                disabled={savingReceiptWorkstations}
+              >
+                {savingReceiptWorkstations ? "Saving..." : "Save Workstations"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loading ? (
+          <EmptyState
+            title="Loading Receipt Workstations"
+            description="Fetching current workstation routing defaults for managed receipt printing."
+          />
+        ) : (
+          <div className="store-info-sections">
+            <section className="store-info-section">
+              <h3>This Browser</h3>
+              <div className="purchase-form-grid store-info-grid">
+                <label>
+                  Workstation identity
+                  <select
+                    value={browserReceiptWorkstationKey}
+                    onChange={(event) => {
+                      const nextKey = event.target.value;
+                      setBrowserReceiptWorkstationKey(nextKey);
+                      setStoredReceiptWorkstationKey(nextKey || null);
+                    }}
+                  >
+                    <option value="">Use global receipt default</option>
+                    {receiptWorkstations.map((workstation) => (
+                      <option key={workstation.key} value={workstation.key}>
+                        {workstation.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="table-secondary">
+                    Till PC and Workshop 1 can keep a fixed printer default here. Workshop 2 can still override the target on the receipt page.
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section className="store-info-section">
+              <h3>Station Defaults</h3>
+              <div className="purchase-form-grid store-info-grid">
+                {receiptWorkstations.map((workstation) => (
+                  <label key={workstation.key} className="store-info-grid-span">
+                    {workstation.label}
+                    <select
+                      value={workstation.defaultPrinterId ?? ""}
+                      onChange={(event) => {
+                        const nextPrinterId = event.target.value || null;
+                        setReceiptWorkstations((current) =>
+                          current.map((entry) =>
+                            entry.key === workstation.key
+                              ? { ...entry, defaultPrinterId: nextPrinterId }
+                              : entry,
+                          ));
+                      }}
+                    >
+                      <option value="">Use global receipt default</option>
+                      {receiptCapablePrinters.map((printer) => (
+                        <option key={printer.id} value={printer.id}>
+                          {printer.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="table-secondary">{workstation.description}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="restricted-panel info-panel">
+                Managed receipt printing resolves in this order: explicit printer override, workstation default, then the global default receipt printer.
+              </div>
+            </section>
+          </div>
+        )}
       </SurfaceCard>
 
       <SurfaceCard>

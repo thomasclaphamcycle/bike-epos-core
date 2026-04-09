@@ -1015,6 +1015,7 @@ enum RegisteredPrinterFamily {
   ZEBRA_LABEL
   DYMO_LABEL
   OFFICE_DOCUMENT
+  THERMAL_RECEIPT
 }
 
 enum RegisteredPrinterTransportMode {
@@ -1174,6 +1175,7 @@ model Printer {
   supportsShippingLabels Boolean                        @default(true)
   supportsProductLabels  Boolean                        @default(false)
   supportsBikeTags       Boolean                        @default(false)
+  supportsReceipts       Boolean                        @default(false)
   isActive               Boolean                        @default(true)
   transportMode          RegisteredPrinterTransportMode @default(DRY_RUN)
   windowsPrinterName     String?
@@ -1187,6 +1189,7 @@ model Printer {
   @@index([supportsShippingLabels, isActive])
   @@index([supportsProductLabels, isActive])
   @@index([supportsBikeTags, isActive])
+  @@index([supportsReceipts, isActive])
   @@index([printerFamily, isActive])
   @@index([transportMode, isActive])
 }

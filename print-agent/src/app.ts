@@ -9,6 +9,10 @@ import {
   type ProductLabelPrintAgentSubmitResponse,
 } from "../../shared/productLabelPrintContract";
 import {
+  validateReceiptPrintAgentSubmitRequest,
+  type ReceiptPrintAgentSubmitResponse,
+} from "../../shared/receiptPrintContract";
+import {
   validateShipmentPrintAgentSubmitRequest,
   type ShipmentPrintAgentSubmitResponse,
 } from "../../shared/shippingPrintContract";
@@ -16,6 +20,7 @@ import type { PrintAgentConfig } from "./config";
 import { submitBikeTagPrintJob } from "./bikeTagTransport";
 import { loadPrintAgentConfig } from "./config";
 import { submitProductLabelPrintJob } from "./productLabelTransport";
+import { submitReceiptPrintJob } from "./receiptTransport";
 import { submitShipmentPrintJob } from "./transport";
 
 type PrintAgentError = Error & {
@@ -53,6 +58,7 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
         shipmentLabels: ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"],
         productLabels: ["DRY_RUN", "WINDOWS_PRINTER"],
         bikeTags: ["DRY_RUN", "WINDOWS_PRINTER"],
+        receipts: ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"],
       },
       bindHost: config.bindHost,
       port: config.port,
@@ -166,6 +172,41 @@ export const createPrintAgentApp = (config: PrintAgentConfig = loadPrintAgentCon
         job,
       };
       console.info(`[print-agent] Bike-tag job ${job.jobId} completed`);
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/jobs/receipt", async (req, res, next) => {
+    try {
+      requireSecret(req.header("X-CorePOS-Print-Agent-Secret") ?? undefined, config);
+      let payload;
+      try {
+        payload = validateReceiptPrintAgentSubmitRequest(req.body);
+      } catch (error) {
+        throw createHttpError(
+          400,
+          "PRINT_AGENT_REQUEST_INVALID",
+          error instanceof Error ? error.message : "Receipt print request payload was invalid",
+        );
+      }
+
+      let job;
+      try {
+        job = await submitReceiptPrintJob(payload.printRequest, config);
+      } catch (error) {
+        throw createHttpError(
+          502,
+          "PRINT_AGENT_TRANSPORT_FAILED",
+          error instanceof Error ? error.message : "Receipt print transport failed",
+        );
+      }
+
+      const response: ReceiptPrintAgentSubmitResponse = {
+        ok: true,
+        job,
+      };
       res.status(201).json(response);
     } catch (error) {
       next(error);

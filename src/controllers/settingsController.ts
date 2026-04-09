@@ -5,6 +5,10 @@ import {
   updateBikeTagPrintAgentSettings,
 } from "../services/bikeTagPrintAgentConfigService";
 import {
+  listReceiptPrintAgentSettings,
+  updateReceiptPrintAgentSettings,
+} from "../services/receiptPrintAgentConfigService";
+import {
   listShopSettings,
   listStoreInfoSettings,
   updateShopSettings,
@@ -23,9 +27,14 @@ import {
   listRegisteredPrinters,
   setDefaultBikeTagPrinter,
   setDefaultProductLabelPrinter,
+  setDefaultReceiptPrinter,
   setDefaultShippingLabelPrinter,
   updateRegisteredPrinter,
 } from "../services/printerService";
+import {
+  listReceiptPrintStations,
+  updateReceiptPrintStations,
+} from "../services/receiptPrintStationService";
 import {
   listShippingProviderSettings,
   setDefaultShippingProvider,
@@ -84,6 +93,7 @@ const toRegisteredPrinterInput = (body: unknown) => {
   assertOptionalBoolean(record.supportsShippingLabels, "supportsShippingLabels");
   assertOptionalBoolean(record.supportsProductLabels, "supportsProductLabels");
   assertOptionalBoolean(record.supportsBikeTags, "supportsBikeTags");
+  assertOptionalBoolean(record.supportsReceipts, "supportsReceipts");
   assertOptionalBoolean(record.isActive, "isActive");
   assertOptionalString(record.transportMode, "transportMode");
   assertOptionalString(record.windowsPrinterName, "windowsPrinterName");
@@ -94,6 +104,7 @@ const toRegisteredPrinterInput = (body: unknown) => {
   assertOptionalBoolean(record.setAsDefaultShippingLabel, "setAsDefaultShippingLabel");
   assertOptionalBoolean(record.setAsDefaultProductLabel, "setAsDefaultProductLabel");
   assertOptionalBoolean(record.setAsDefaultBikeTag, "setAsDefaultBikeTag");
+  assertOptionalBoolean(record.setAsDefaultReceipt, "setAsDefaultReceipt");
 
   return {
     name: record.name as string | undefined,
@@ -103,6 +114,7 @@ const toRegisteredPrinterInput = (body: unknown) => {
     supportsShippingLabels: record.supportsShippingLabels as boolean | undefined,
     supportsProductLabels: record.supportsProductLabels as boolean | undefined,
     supportsBikeTags: record.supportsBikeTags as boolean | undefined,
+    supportsReceipts: record.supportsReceipts as boolean | undefined,
     isActive: record.isActive as boolean | undefined,
     transportMode: record.transportMode as string | undefined,
     windowsPrinterName: record.windowsPrinterName as string | null | undefined,
@@ -113,6 +125,7 @@ const toRegisteredPrinterInput = (body: unknown) => {
     setAsDefaultShippingLabel: record.setAsDefaultShippingLabel as boolean | undefined,
     setAsDefaultProductLabel: record.setAsDefaultProductLabel as boolean | undefined,
     setAsDefaultBikeTag: record.setAsDefaultBikeTag as boolean | undefined,
+    setAsDefaultReceipt: record.setAsDefaultReceipt as boolean | undefined,
   };
 };
 
@@ -314,6 +327,96 @@ const toBikeTagPrintAgentSettingsInput = (body: unknown) => {
   };
 };
 
+const toReceiptPrintAgentSettingsInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(
+      400,
+      "receipt print agent body must be an object",
+      "INVALID_RECEIPT_PRINT_AGENT_SETTINGS",
+    );
+  }
+
+  const record = body as Record<string, unknown>;
+  if (record.url !== undefined && record.url !== null && typeof record.url !== "string") {
+    throw new HttpError(400, "url must be a string or null", "INVALID_RECEIPT_PRINT_AGENT_SETTINGS");
+  }
+  if (
+    record.sharedSecret !== undefined
+    && record.sharedSecret !== null
+    && typeof record.sharedSecret !== "string"
+  ) {
+    throw new HttpError(400, "sharedSecret must be a string or null", "INVALID_RECEIPT_PRINT_AGENT_SETTINGS");
+  }
+  if (record.clearSharedSecret !== undefined && typeof record.clearSharedSecret !== "boolean") {
+    throw new HttpError(
+      400,
+      "clearSharedSecret must be a boolean",
+      "INVALID_RECEIPT_PRINT_AGENT_SETTINGS",
+    );
+  }
+
+  return {
+    url: record.url as string | null | undefined,
+    sharedSecret: record.sharedSecret as string | null | undefined,
+    clearSharedSecret: record.clearSharedSecret as boolean | undefined,
+  };
+};
+
+const toReceiptPrintStationSettingsInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(
+      400,
+      "receipt workstation body must be an object",
+      "INVALID_RECEIPT_WORKSTATION_SETTINGS",
+    );
+  }
+
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.workstations)) {
+    throw new HttpError(
+      400,
+      "workstations must be an array",
+      "INVALID_RECEIPT_WORKSTATION_SETTINGS",
+    );
+  }
+
+  return {
+    workstations: record.workstations.map((entry, index) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new HttpError(
+          400,
+          `workstations[${index}] must be an object`,
+          "INVALID_RECEIPT_WORKSTATION_SETTINGS",
+        );
+      }
+      const workstation = entry as Record<string, unknown>;
+      if (typeof workstation.key !== "string") {
+        throw new HttpError(
+          400,
+          `workstations[${index}].key must be a string`,
+          "INVALID_RECEIPT_WORKSTATION_SETTINGS",
+        );
+      }
+      if (
+        workstation.defaultPrinterId !== undefined
+        && workstation.defaultPrinterId !== null
+        && typeof workstation.defaultPrinterId !== "string"
+      ) {
+        throw new HttpError(
+          400,
+          `workstations[${index}].defaultPrinterId must be a string or null`,
+          "INVALID_RECEIPT_WORKSTATION_SETTINGS",
+        );
+      }
+
+      return {
+        key: workstation.key,
+        defaultPrinterId: workstation.defaultPrinterId as string | null | undefined,
+      };
+    }),
+  };
+};
+
 export const listSettingsHandler = async (_req: Request, res: Response) => {
   const settings = await listShopSettings();
   res.json({ settings });
@@ -343,8 +446,18 @@ export const listBikeTagPrintAgentSettingsHandler = async (_req: Request, res: R
   res.json({ config });
 };
 
+export const listReceiptPrintAgentSettingsHandler = async (_req: Request, res: Response) => {
+  const config = await listReceiptPrintAgentSettings();
+  res.json({ config });
+};
+
 export const listShippingPrintAgentSettingsHandler = async (_req: Request, res: Response) => {
   const config = await listShippingPrintAgentSettings();
+  res.json({ config });
+};
+
+export const listReceiptPrintStationsHandler = async (_req: Request, res: Response) => {
+  const config = await listReceiptPrintStations();
   res.json({ config });
 };
 
@@ -384,6 +497,7 @@ export const listRegisteredPrintersHandler = async (req: Request, res: Response)
     shippingLabelOnly: parseBooleanQuery(req.query.shippingLabelOnly),
     productLabelOnly: parseBooleanQuery(req.query.productLabelOnly),
     bikeTagOnly: parseBooleanQuery(req.query.bikeTagOnly),
+    receiptOnly: parseBooleanQuery(req.query.receiptOnly),
   });
   res.json(payload);
 };
@@ -461,6 +575,23 @@ export const setDefaultBikeTagPrinterHandler = async (req: Request, res: Respons
   res.json(result);
 };
 
+export const setDefaultReceiptPrinterHandler = async (req: Request, res: Response) => {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    throw new HttpError(400, "default printer body must be an object", "INVALID_PRINTER");
+  }
+
+  const body = req.body as { printerId?: unknown };
+  if (body.printerId !== undefined && body.printerId !== null && typeof body.printerId !== "string") {
+    throw new HttpError(400, "printerId must be a string or null", "INVALID_PRINTER");
+  }
+
+  const result = await setDefaultReceiptPrinter(
+    (body.printerId as string | null | undefined) ?? null,
+    getRequestAuditActor(req),
+  );
+  res.json(result);
+};
+
 export const updateProductLabelPrintAgentSettingsHandler = async (req: Request, res: Response) => {
   const config = await updateProductLabelPrintAgentSettings(
     toProductLabelPrintAgentSettingsInput(req.body),
@@ -480,6 +611,22 @@ export const updateShippingPrintAgentSettingsHandler = async (req: Request, res:
 export const updateBikeTagPrintAgentSettingsHandler = async (req: Request, res: Response) => {
   const config = await updateBikeTagPrintAgentSettings(
     toBikeTagPrintAgentSettingsInput(req.body),
+    getRequestAuditActor(req),
+  );
+  res.json({ config });
+};
+
+export const updateReceiptPrintAgentSettingsHandler = async (req: Request, res: Response) => {
+  const config = await updateReceiptPrintAgentSettings(
+    toReceiptPrintAgentSettingsInput(req.body),
+    getRequestAuditActor(req),
+  );
+  res.json({ config });
+};
+
+export const updateReceiptPrintStationsHandler = async (req: Request, res: Response) => {
+  const config = await updateReceiptPrintStations(
+    toReceiptPrintStationSettingsInput(req.body),
     getRequestAuditActor(req),
   );
   res.json({ config });

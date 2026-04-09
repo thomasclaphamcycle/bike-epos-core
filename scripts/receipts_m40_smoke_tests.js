@@ -5,9 +5,14 @@ const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { register } = require("ts-node");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { createSmokeServerController } = require("./smoke_server_helper");
+
+register({ transpileOnly: true });
+
+const { startPrintAgentServer } = require(path.join(__dirname, "..", "print-agent", "src", "app.ts"));
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3100";
 const DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
@@ -96,6 +101,7 @@ const run = async () => {
     userId: null,
     productId: null,
     variantId: null,
+    printerIds: new Set(),
     basketIds: new Set(),
     saleIds: new Set(),
     paymentIds: new Set(),
@@ -113,7 +119,7 @@ const run = async () => {
         name: "M40 Manager",
         email: managerEmail,
         passwordHash: await bcrypt.hash(managerPassword, 10),
-        role: "MANAGER",
+        role: "ADMIN",
         isActive: true,
       },
     });
@@ -331,6 +337,106 @@ const run = async () => {
     });
     assert.equal(legacySaleReceipt.payload.saleId, tenderSale.sale.id);
 
+    const receiptPrintAgent = await startPrintAgentServer({
+      bindHost: "127.0.0.1",
+      port: 0,
+      sharedSecret: "m40-receipt-print-secret",
+      dryRunOutputDir: path.resolve(process.cwd(), "tmp", "m40-receipt-print-agent"),
+      rawTcpTimeoutMs: 5000,
+    });
+
+    try {
+      const receiptPrinter = await apiJson({
+        path: "/api/settings/printers",
+        method: "POST",
+        body: {
+          name: "M40 Till Receipt Printer",
+          key: `M40_TILL_RECEIPT_${token}`.toUpperCase(),
+          printerFamily: "THERMAL_RECEIPT",
+          transportMode: "DRY_RUN",
+          location: "Till",
+          notes: "Managed thermal receipt smoke printer",
+        },
+        cookie,
+      });
+      const receiptPrinterId = receiptPrinter.payload.printer.id;
+      created.printerIds.add(receiptPrinterId);
+
+      await apiJson({
+        path: "/api/settings/receipt-print-agent",
+        method: "PUT",
+        body: {
+          url: `http://${receiptPrintAgent.host}:${receiptPrintAgent.port}`,
+          sharedSecret: "m40-receipt-print-secret",
+        },
+        cookie,
+      });
+
+      await apiJson({
+        path: "/api/settings/receipt-workstations",
+        method: "PUT",
+        body: {
+          workstations: [
+            {
+              key: "TILL_PC",
+              defaultPrinterId: receiptPrinterId,
+            },
+            {
+              key: "WORKSHOP_1",
+              defaultPrinterId: null,
+            },
+            {
+              key: "WORKSHOP_2",
+              defaultPrinterId: null,
+            },
+          ],
+        },
+        cookie,
+      });
+
+      const unresolvedPrepare = await apiJson({
+        path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/receipt/prepare-print`,
+        method: "POST",
+        body: {},
+        cookie,
+      });
+      assert.equal(unresolvedPrepare.payload.printer, null);
+      assert.equal(unresolvedPrepare.payload.resolutionError?.code, "DEFAULT_RECEIPT_PRINTER_NOT_CONFIGURED");
+
+      const preparedManagedReceipt = await apiJson({
+        path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/receipt/prepare-print`,
+        method: "POST",
+        body: {
+          workstationKey: "TILL_PC",
+        },
+        cookie,
+      });
+      assert.equal(preparedManagedReceipt.payload.receipt.receiptNumber, issuedSale.payload.receipt.receiptNumber);
+      assert.equal(preparedManagedReceipt.payload.currentWorkstation?.key, "TILL_PC");
+      assert.equal(preparedManagedReceipt.payload.printer?.id, receiptPrinterId);
+      assert.equal(preparedManagedReceipt.payload.printer?.resolutionSource, "workstation");
+      assert.equal(preparedManagedReceipt.payload.availablePrinters.length >= 1, true);
+      assert.equal(preparedManagedReceipt.payload.browserPrintPath, `/sales/${tenderSale.sale.id}/receipt/print`);
+
+      const managedPrint = await apiJson({
+        path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/receipt/print`,
+        method: "POST",
+        body: {
+          workstationKey: "TILL_PC",
+        },
+        cookie,
+      });
+      assert.equal(managedPrint.payload.receipt.receiptNumber, issuedSale.payload.receipt.receiptNumber);
+      assert.equal(managedPrint.payload.printer.id, receiptPrinterId);
+      assert.equal(managedPrint.payload.printer.resolutionSource, "workstation");
+      assert.equal(managedPrint.payload.printJob.simulated, true);
+      assert.equal(managedPrint.payload.printJob.copies, 1);
+      assert.ok(managedPrint.payload.printJob.outputPath, "expected DRY_RUN output path");
+      await fs.access(managedPrint.payload.printJob.outputPath);
+    } finally {
+      await receiptPrintAgent.close();
+    }
+
     const paidSale = await createSaleViaBasket({
       paymentMethod: "CARD",
       amountPence: 1500,
@@ -379,7 +485,13 @@ const run = async () => {
     await prisma.appConfig.deleteMany({
       where: {
         key: {
-          in: ["store.logoUrl", "store.uploadedLogoPath"],
+          in: [
+            "store.logoUrl",
+            "store.uploadedLogoPath",
+            "receipts.printAgent",
+            "receipts.workstationDefaults",
+            "receipts.defaultReceiptPrinterId",
+          ],
         },
       },
     });
@@ -429,6 +541,11 @@ const run = async () => {
       await prisma.inventoryMovement.deleteMany({ where: { variantId: created.variantId } });
       await prisma.barcode.deleteMany({ where: { variantId: created.variantId } });
       await prisma.variant.deleteMany({ where: { id: created.variantId } });
+    }
+
+    const printerIds = Array.from(created.printerIds);
+    if (printerIds.length > 0) {
+      await prisma.printer.deleteMany({ where: { id: { in: printerIds } } });
     }
 
     if (created.productId) {

@@ -297,6 +297,122 @@ const run = async () => {
 
     const renderedBikeTag = await fs.readFile(bikeTagPayload.job.outputPath);
     assert.equal(renderedBikeTag.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+
+    let resolveReceiptPayload;
+    const receiptPayloadPromise = new Promise((resolve) => {
+      resolveReceiptPayload = resolve;
+    });
+    const receiptPrinterServer = net.createServer((socket) => {
+      const chunks = [];
+      socket.on("data", (chunk) => {
+        chunks.push(chunk);
+      });
+      socket.on("end", () => {
+        resolveReceiptPayload(Buffer.concat(chunks));
+      });
+      printerConnections.push(socket);
+    });
+    const receiptPrinterAddress = await listen(receiptPrinterServer);
+
+    const receiptRequest = {
+      version: 1,
+      intentType: "RECEIPT_PRINT",
+      saleId: "sale-smoke-1",
+      receiptNumber: "REC-SMOKE-0001",
+      printer: {
+        transport: "WINDOWS_LOCAL_AGENT",
+        printerId: "printer-receipt-1",
+        printerKey: "TILL_RECEIPT_PRINTER",
+        printerFamily: "THERMAL_RECEIPT",
+        printerModelHint: "ESC_POS_80MM_OR_COMPATIBLE",
+        printerName: "Till Receipt Printer",
+        transportMode: "RAW_TCP",
+        windowsPrinterName: null,
+        rawTcpHost: "127.0.0.1",
+        rawTcpPort: receiptPrinterAddress.port,
+        copies: 2,
+      },
+      document: {
+        format: "ESC_POS",
+        mimeType: "application/octet-stream",
+        fileName: "receipt-smoke.escpos",
+        bytesBase64: Buffer.from("\x1b@\nHELLO COREPOS RECEIPT\n\x1dV\x00", "latin1").toString("base64"),
+      },
+      metadata: {
+        source: "PRINT_AGENT_SMOKE",
+        sourceLabel: "REC-SMOKE-0001",
+        workstationKey: "TILL_PC",
+        workstationLabel: "Till PC",
+      },
+    };
+
+    const receiptInvalidRes = await fetch(`http://${agent.host}:${agent.port}/jobs/receipt`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+      },
+      body: JSON.stringify({ printRequest: { ...receiptRequest, document: { ...receiptRequest.document, format: "PNG" } } }),
+    });
+    assert.equal(receiptInvalidRes.status, 400);
+
+    const receiptRes = await fetch(`http://${agent.host}:${agent.port}/jobs/receipt`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+      },
+      body: JSON.stringify({ printRequest: receiptRequest }),
+    });
+    const receiptPayload = await receiptRes.json();
+    assert.equal(receiptRes.status, 201, JSON.stringify(receiptPayload));
+    assert.equal(receiptPayload.ok, true);
+    assert.equal(receiptPayload.job.transportMode, "RAW_TCP");
+    assert.equal(receiptPayload.job.simulated, false);
+    assert.equal(receiptPayload.job.printerId, "printer-receipt-1");
+    assert.equal(receiptPayload.job.printerKey, "TILL_RECEIPT_PRINTER");
+    assert.equal(receiptPayload.job.printerTarget, `127.0.0.1:${receiptPrinterAddress.port}`);
+    assert.equal(receiptPayload.job.documentFormat, "ESC_POS");
+    assert.equal(receiptPayload.job.copies, 2);
+
+    const expectedReceiptPayload = Buffer.concat([
+      Buffer.from(receiptRequest.document.bytesBase64, "base64"),
+      Buffer.from(receiptRequest.document.bytesBase64, "base64"),
+    ]);
+    const receivedReceiptPayload = await receiptPayloadPromise;
+    assert.equal(Buffer.compare(receivedReceiptPayload, expectedReceiptPayload), 0);
+    assert.equal(receiptPayload.job.bytesSent, expectedReceiptPayload.length);
+
+    if (process.platform !== "win32") {
+      const receiptWindowsRes = await fetch(`http://${agent.host}:${agent.port}/jobs/receipt`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CorePOS-Print-Agent-Secret": "print-agent-smoke-secret",
+        },
+        body: JSON.stringify({
+          printRequest: {
+            ...receiptRequest,
+            printer: {
+              ...receiptRequest.printer,
+              transportMode: "WINDOWS_PRINTER",
+              rawTcpHost: null,
+              rawTcpPort: null,
+              windowsPrinterName: "Till Receipt Printer",
+            },
+          },
+        }),
+      });
+      const receiptWindowsPayload = await receiptWindowsRes.json();
+      assert.equal(receiptWindowsRes.status, 502, JSON.stringify(receiptWindowsPayload));
+      assert.equal(receiptWindowsPayload.error.code, "PRINT_AGENT_TRANSPORT_FAILED");
+      assert.match(
+        receiptWindowsPayload.error.message,
+        /require a Windows host running the CorePOS print agent/i,
+      );
+    }
+
+    await closeServer(receiptPrinterServer);
   } finally {
     for (const socket of printerConnections) {
       socket.destroy();

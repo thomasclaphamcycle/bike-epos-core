@@ -4,6 +4,8 @@ import {
   createRegisteredPrinterHandler,
   listBikeTagPrintAgentSettingsHandler,
   listProductLabelPrintAgentSettingsHandler,
+  listReceiptPrintAgentSettingsHandler,
+  listReceiptPrintStationsHandler,
   listRegisteredPrintersHandler,
   listShippingPrintAgentSettingsHandler,
   listShippingProvidersHandler,
@@ -12,11 +14,14 @@ import {
   removeStoreLogoHandler,
   setDefaultBikeTagPrinterHandler,
   setDefaultProductLabelPrinterHandler,
+  setDefaultReceiptPrinterHandler,
   setDefaultShippingProviderHandler,
   setDefaultShippingLabelPrinterHandler,
   uploadStoreLogoHandler,
   updateBikeTagPrintAgentSettingsHandler,
   updateProductLabelPrintAgentSettingsHandler,
+  updateReceiptPrintAgentSettingsHandler,
+  updateReceiptPrintStationsHandler,
   updateRegisteredPrinterHandler,
   updateShippingPrintAgentSettingsHandler,
   updateShippingProviderSettingsHandler,
@@ -37,11 +42,16 @@ settingsRouter.get("/bike-tag-print-agent", requireRoleAtLeast("MANAGER"), listB
 settingsRouter.put("/bike-tag-print-agent", requireRoleAtLeast("ADMIN"), updateBikeTagPrintAgentSettingsHandler);
 settingsRouter.get("/product-label-print-agent", requireRoleAtLeast("MANAGER"), listProductLabelPrintAgentSettingsHandler);
 settingsRouter.put("/product-label-print-agent", requireRoleAtLeast("ADMIN"), updateProductLabelPrintAgentSettingsHandler);
+settingsRouter.get("/receipt-print-agent", requireRoleAtLeast("MANAGER"), listReceiptPrintAgentSettingsHandler);
+settingsRouter.put("/receipt-print-agent", requireRoleAtLeast("ADMIN"), updateReceiptPrintAgentSettingsHandler);
+settingsRouter.get("/receipt-workstations", requireRoleAtLeast("MANAGER"), listReceiptPrintStationsHandler);
+settingsRouter.put("/receipt-workstations", requireRoleAtLeast("ADMIN"), updateReceiptPrintStationsHandler);
 settingsRouter.get("/printers", requireRoleAtLeast("MANAGER"), listRegisteredPrintersHandler);
 settingsRouter.post("/printers", requireRoleAtLeast("ADMIN"), createRegisteredPrinterHandler);
 settingsRouter.patch("/printers/:printerId", requireRoleAtLeast("ADMIN"), updateRegisteredPrinterHandler);
 settingsRouter.put("/printers/default-bike-tag", requireRoleAtLeast("ADMIN"), setDefaultBikeTagPrinterHandler);
 settingsRouter.put("/printers/default-product-label", requireRoleAtLeast("ADMIN"), setDefaultProductLabelPrinterHandler);
+settingsRouter.put("/printers/default-receipt", requireRoleAtLeast("ADMIN"), setDefaultReceiptPrinterHandler);
 settingsRouter.put("/printers/default-shipping-label", requireRoleAtLeast("ADMIN"), setDefaultShippingLabelPrinterHandler);
 settingsRouter.get("/store-info", requireRoleAtLeast("ADMIN"), listStoreInfoHandler);
 settingsRouter.patch("/store-info", requireRoleAtLeast("ADMIN"), updateStoreInfoHandler);

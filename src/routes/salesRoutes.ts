@@ -12,7 +12,11 @@ import {
   listSalesHandler,
 } from "../controllers/salesController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
-import { getSaleReceiptHandler } from "../controllers/receiptController";
+import {
+  getSaleReceiptHandler,
+  prepareSaleReceiptPrintHandler,
+  printSaleReceiptHandler,
+} from "../controllers/receiptController";
 import { saleCustomerCaptureRouter } from "./saleCustomerCaptureRoutes";
 
 export const salesRouter = Router();
@@ -32,4 +36,6 @@ salesRouter.delete(
 );
 salesRouter.post("/:saleId/complete", requireRoleAtLeast("STAFF"), completeSaleHandler);
 salesRouter.get("/:saleId/receipt", requireRoleAtLeast("STAFF"), getSaleReceiptHandler);
+salesRouter.post("/:saleId/receipt/prepare-print", requireRoleAtLeast("STAFF"), prepareSaleReceiptPrintHandler);
+salesRouter.post("/:saleId/receipt/print", requireRoleAtLeast("STAFF"), printSaleReceiptHandler);
 salesRouter.get("/:id", requireRoleAtLeast("STAFF"), getSaleHandler);
