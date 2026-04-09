@@ -64,6 +64,7 @@
     "test:m32": "node scripts/run_smoke_test.js scripts/sales_m32_smoke_tests.js",
     "test:m33": "node scripts/run_smoke_test.js scripts/inventory_adjust_m33_smoke_tests.js",
     "test:m34": "node scripts/run_smoke_test.js scripts/customers_m34_smoke_tests.js",
+    "test:sale-customer-capture": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/sale_customer_capture_smoke_tests.js",
     "test:m35": "node scripts/run_smoke_test.js scripts/auth_m35_smoke_tests.js",
     "test:m36": "node scripts/run_smoke_test.js scripts/admin_m36_smoke_tests.js",
     "test:m37": "node scripts/run_smoke_test.js scripts/till_m37_smoke_tests.js",

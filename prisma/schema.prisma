@@ -542,6 +542,12 @@ enum PaymentIntentStatus {
   CANCELED
 }
 
+enum SaleCustomerCaptureSessionStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
 model Sale {
   id                 String    @id @default(uuid()) @db.Uuid
   basketId           String?   @unique @db.Uuid
@@ -572,6 +578,7 @@ model Sale {
   paymentIntents          PaymentIntent[]
   returns                 SaleReturn[]
   refunds                 Refund[]
+  customerCaptureSessions SaleCustomerCaptureSession[]
   cashMovements           CashMovement[]               @relation("CashMovementSale")
   workshopCheckoutOutcome WorkshopCheckoutOutcome?
 
@@ -581,6 +588,31 @@ model Sale {
   @@index([locationId])
   @@index([completedAt])
   @@index([createdByStaffId])
+}
+
+model SaleCustomerCaptureSession {
+  id                    String                           @id @default(uuid()) @db.Uuid
+  saleId                String                           @db.Uuid
+  token                 String                           @unique
+  status                SaleCustomerCaptureSessionStatus @default(ACTIVE)
+  expiresAt             DateTime
+  completedAt           DateTime?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  submittedFirstName    String?
+  submittedLastName     String?
+  submittedEmail        String?
+  submittedPhone        String?
+  emailMarketingConsent Boolean?
+  smsMarketingConsent   Boolean?
+  customerId            String?                          @db.Uuid
+
+  sale     Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([saleId, status])
+  @@index([expiresAt])
+  @@index([customerId])
 }
 
 model SaleItem {
@@ -1259,6 +1291,7 @@ model Customer {
   updatedAt       DateTime @updatedAt
 
   sales                 Sale[]
+  customerCaptureSessions SaleCustomerCaptureSession[]
   account               CustomerAccount?
   workshopJobs          WorkshopJob[]
   bikes                 CustomerBike[]

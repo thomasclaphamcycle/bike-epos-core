@@ -1,0 +1,29 @@
+@baseUrl = http://localhost:3100
+@staffRole = STAFF
+@staffId = sale-customer-capture-request
+@saleId = REPLACE_SALE_ID
+@token = REPLACE_CAPTURE_TOKEN
+
+### Create sale-linked customer capture session (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Content-Type: application/json
+
+{}
+
+### Get public customer capture session state
+GET {{baseUrl}}/api/public/customer-capture/{{token}}
+
+### Submit public customer capture details
+POST {{baseUrl}}/api/public/customer-capture/{{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Jamie",
+  "lastName": "Rider",
+  "email": "jamie.rider@example.com",
+  "phone": "07123456789",
+  "emailMarketingConsent": true,
+  "smsMarketingConsent": false
+}
