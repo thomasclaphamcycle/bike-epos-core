@@ -14101,26 +14101,6 @@ body.rota-row-drag-copy-active {
   box-shadow: 0 14px 28px rgba(15, 34, 52, 0.12);
 }
 
-.pos-customer-capture-inline {
-  margin-top: 4px;
-  font-size: 0.76rem;
-}
-
-.pos-customer-capture-compact {
-  margin-top: 6px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.pos-customer-capture-note {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .pos-side-column .pos-panel {
   padding: 0;
   border: 0;
@@ -14651,32 +14631,6 @@ body.rota-row-drag-copy-active {
   color: #243746;
 }
 
-.capture-link-panel {
-  display: grid;
-  gap: 10px;
-}
-
-.capture-link-panel label,
-.customer-capture-grid label {
-  display: grid;
-  gap: 6px;
-}
-
-.customer-capture-card {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.customer-capture-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.customer-capture-checkbox {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -14944,8 +14898,6 @@ body.rota-row-drag-copy-active {
   .pos-topbar,
   .pos-context-header,
   .selected-customer-panel,
-  .pos-customer-capture-compact,
-  .pos-customer-capture-note,
   .customer-search-panel,
   .pos-panel-heading,
   .pos-line-item,
@@ -15476,10 +15428,6 @@ body.rota-row-drag-copy-active {
   }
 
   .quick-create-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .customer-capture-grid {
     grid-template-columns: 1fr;
   }
 

@@ -37,7 +37,6 @@ const baselineSteps = [
   "test:domain-events",
   "test:security",
   "test:health-monitoring",
-  "test:sale-customer-capture",
   "test:customer-accounts",
   "test:workshop-commercial-intelligence",
   // Current management-reporting surfaces

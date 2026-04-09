@@ -17,7 +17,6 @@ import {
   CustomerAccountAccessPage,
   CustomerAccountDashboardPage,
   CustomerAccountLoginPage,
-  CustomerCapturePage,
   CustomerCommunicationQueuePage,
   CustomerInsightsPage,
   CustomerProfilePage,
@@ -736,8 +735,6 @@ export const App = () => {
         <Route path="/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
         <Route path="/site/book-workshop" element={<PublicWorkshopBookingPage />} />
         <Route path="/site/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
-        <Route path="/customer-capture" element={<CustomerCapturePage />} />
-        <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
         <Route path="/account" element={<CustomerAccountDashboardPage />} />
         <Route path="/account/login" element={<CustomerAccountLoginPage />} />
         <Route path="/account/access/:token" element={<CustomerAccountAccessPage />} />

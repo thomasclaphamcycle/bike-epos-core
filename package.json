@@ -99,7 +99,6 @@
     "test:m126": "node scripts/run_smoke_test.js scripts/action_centre_m126_smoke_tests.js",
     "test:m127": "node scripts/run_smoke_test.js scripts/inventory_investigations_m127_smoke_tests.js",
     "test:m128": "node scripts/run_smoke_test.js scripts/reminder_candidates_m128_smoke_tests.js",
-    "test:sale-customer-capture": "npm run prisma:generate && node scripts/run_smoke_test.js scripts/sale_customer_capture_smoke_tests.js",
     "test:customer-accounts": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/customer_account_identity_smoke_tests.js",
     "test:workshop-commercial-intelligence": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/workshop_commercial_intelligence_smoke_tests.js",
     "test:health-monitoring": "node scripts/run_smoke_test.js scripts/health_monitoring_smoke_tests.js",

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -147,37 +146,7 @@ type CompletedSaleState = {
   receiptPrinterName: string | null;
 };
 
-type CaptureSessionStatus = "ACTIVE" | "COMPLETED" | "EXPIRED";
-
-type SaleCustomerCaptureSession = {
-  id: string;
-  saleId: string;
-  token: string;
-  status: CaptureSessionStatus;
-  expiresAt: string;
-  createdAt: string;
-  completedAt?: string | null;
-  publicPath: string;
-};
-
-type SaleCustomerCaptureSessionResponse = {
-  session: SaleCustomerCaptureSession;
-};
-
-type PublicSaleCustomerCaptureSessionState = {
-  session: {
-    status: CaptureSessionStatus;
-    expiresAt: string;
-    completedAt: string | null;
-  };
-};
-
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-
-const getPublicAppOrigin = () => {
-  const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN?.trim();
-  return configuredOrigin ? configuredOrigin.replace(/\/$/, "") : window.location.origin;
-};
 
 const getPosReceiptPrintButtonLabel = (
   queueing: boolean,
@@ -197,9 +166,6 @@ const getPosReceiptPrintButtonLabel = (
   }
   return "Print receipt";
 };
-
-const buildCustomerCaptureEntryUrl = (token: string) =>
-  `${getPublicAppOrigin()}/customer-capture?token=${encodeURIComponent(token)}`;
 
 const parseCurrencyInputToPence = (value: string): number | null => {
   const normalized = value.trim().replace(/[^0-9.]/g, "");
@@ -281,10 +247,6 @@ export const PosPage = () => {
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
   const [printingReceipt, setPrintingReceipt] = useState(false);
-  const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSession | null>(null);
-  const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
-  const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
-  const [captureQrBusy, setCaptureQrBusy] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -473,7 +435,6 @@ export const PosPage = () => {
   const loadSale = async (
     id: string,
     options?: {
-      preserveCaptureSession?: boolean;
       requestId?: number;
     },
   ) => {
@@ -483,9 +444,6 @@ export const PosPage = () => {
     }
     setSale(payload);
     setSelectedCustomer(payload.sale.customer ?? null);
-    if (!options?.preserveCaptureSession) {
-      setCaptureSession(null);
-    }
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
     return payload;
   };
@@ -511,7 +469,6 @@ export const PosPage = () => {
     setSale(null);
     setReceiptUrl(null);
     setCashTenderedAmount("");
-    setCaptureSession(null);
     if (!options?.preserveTransientUi) {
       setSearchText("");
       setSearchRows([]);
@@ -604,7 +561,6 @@ export const PosPage = () => {
           const loadedSale = needsSaleLoad
             ? await loadSale(saleId, {
                 requestId,
-                preserveCaptureSession: true,
               })
             : currentSale;
 
@@ -625,7 +581,6 @@ export const PosPage = () => {
         if (currentSale) {
           setSale(null);
           setReceiptUrl(null);
-          setCaptureSession(null);
         }
 
         const storedBasketId = readStoredBasketId();
@@ -1170,13 +1125,12 @@ export const PosPage = () => {
       return;
     }
 
-    try {
-      const requestId = beginPosLifecycleRequest();
-      setCompletedSale(null);
-      setCaptureSession(null);
-      const payload = await apiPost<{ sale: { id: string } }>(
-        `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
-        {},
+      try {
+        const requestId = beginPosLifecycleRequest();
+        setCompletedSale(null);
+        const payload = await apiPost<{ sale: { id: string } }>(
+          `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
+          {},
       );
       if (!canApplyPosLifecycle(requestId)) {
         return;
@@ -1200,7 +1154,6 @@ export const PosPage = () => {
       } else {
         await loadSale(nextSaleId, {
           requestId,
-          preserveCaptureSession: true,
         });
         if (!canApplyPosLifecycle(requestId)) {
           return;
@@ -1211,166 +1164,6 @@ export const PosPage = () => {
     } catch (checkoutError) {
       const message = checkoutError instanceof Error ? checkoutError.message : "Checkout failed";
       error(message);
-    }
-  };
-
-  const captureUrl = useMemo(() => {
-    if (!captureSession) {
-      return null;
-    }
-
-    return buildCustomerCaptureEntryUrl(captureSession.token);
-  }, [captureSession]);
-
-  useEffect(() => {
-    if (!captureUrl || captureSession?.status !== "ACTIVE") {
-      setCaptureQrImage(null);
-      setCaptureQrBusy(false);
-      return;
-    }
-
-    let cancelled = false;
-    setCaptureQrBusy(true);
-
-    void QRCode.toDataURL(captureUrl, {
-      margin: 1,
-      width: 240,
-    })
-      .then((nextImage) => {
-        if (!cancelled) {
-          setCaptureQrImage(nextImage);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCaptureQrImage(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCaptureQrBusy(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [captureSession?.status, captureUrl]);
-
-  useEffect(() => {
-    if (!captureSession || captureSession.status !== "ACTIVE" || !sale?.sale.id || sale.sale.completedAt) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const syncCaptureState = async () => {
-      try {
-        const payload = await apiGet<PublicSaleCustomerCaptureSessionState>(
-          `/api/public/customer-capture/${encodeURIComponent(captureSession.token)}`,
-        );
-        if (cancelled) {
-          return;
-        }
-
-        if (payload.session.status === "ACTIVE") {
-          setCaptureSession((current) => {
-            if (!current || current.id !== captureSession.id) {
-              return current;
-            }
-
-            return {
-              ...current,
-              expiresAt: payload.session.expiresAt,
-            };
-          });
-          return;
-        }
-
-        if (payload.session.status === "COMPLETED") {
-          const refreshedSale = await apiGet<SaleResponse>(`/api/sales/${encodeURIComponent(sale.sale.id)}`);
-          if (cancelled) {
-            return;
-          }
-          setSale(refreshedSale);
-          setSelectedCustomer(refreshedSale.sale.customer ?? null);
-          localStorage.setItem(ACTIVE_SALE_KEY, refreshedSale.sale.id);
-          setCaptureSession((current) => {
-            if (!current || current.id !== captureSession.id) {
-              return current;
-            }
-
-            return {
-              ...current,
-              status: payload.session.status,
-              expiresAt: payload.session.expiresAt,
-              completedAt: payload.session.completedAt,
-            };
-          });
-          success("Customer details attached to sale.");
-          return;
-        }
-
-        setCaptureSession((current) => {
-          if (!current || current.id !== captureSession.id) {
-            return current;
-          }
-
-          return {
-            ...current,
-            status: payload.session.status,
-            expiresAt: payload.session.expiresAt,
-            completedAt: payload.session.completedAt,
-          };
-        });
-      } catch {
-        // Keep polling quiet; the visible session state will recover on the next successful check.
-      }
-    };
-
-    void syncCaptureState();
-    const intervalId = window.setInterval(() => {
-      void syncCaptureState();
-    }, 2000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [captureSession, sale?.sale.completedAt, sale?.sale.id, success]);
-
-  const createCustomerCaptureSession = async () => {
-    if (!sale?.sale.id) {
-      error("Create a sale before generating a customer capture link.");
-      return;
-    }
-
-    setCreatingCaptureSession(true);
-    try {
-      const payload = await apiPost<SaleCustomerCaptureSessionResponse>(
-        `/api/sales/${encodeURIComponent(sale.sale.id)}/customer-capture-sessions`,
-        {},
-      );
-      setCaptureSession(payload.session);
-      success("Customer capture link ready.");
-    } catch (captureError) {
-      const message = captureError instanceof Error ? captureError.message : "Failed to create capture link";
-      error(message);
-    } finally {
-      setCreatingCaptureSession(false);
-    }
-  };
-
-  const copyCaptureUrl = async () => {
-    if (!captureUrl) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(captureUrl);
-      success("Capture link copied.");
-    } catch {
-      error("Could not copy the capture link.");
     }
   };
 
@@ -2106,114 +1899,6 @@ export const PosPage = () => {
                 </div>
               ) : null}
 
-              {captureSession && captureUrl ? (
-                <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
-                  {captureSession.status === "ACTIVE" ? (
-                    <div className="cash-qr-card">
-                      <div className="card-header-row">
-                        <div>
-                          <span className="status-badge">Waiting for customer</span>
-                          <p className="muted-text">
-                            Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="primary"
-                          data-testid="pos-customer-capture-generate"
-                          onClick={() => void createCustomerCaptureSession()}
-                          disabled={creatingCaptureSession}
-                        >
-                          {creatingCaptureSession ? "Preparing..." : "Refresh Link"}
-                        </button>
-                      </div>
-                      <div className="cash-qr-layout">
-                        <div className="cash-qr-box">
-                          {captureQrBusy ? (
-                            <span>Generating QR...</span>
-                          ) : captureQrImage ? (
-                            <img
-                              src={captureQrImage}
-                              alt="Customer capture QR code"
-                              data-testid="pos-customer-capture-qr"
-                            />
-                          ) : (
-                            <span>QR unavailable</span>
-                          )}
-                        </div>
-                        <div className="cash-qr-copy">
-                          <div>
-                            <div className="table-primary">Need the link instead?</div>
-                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
-                          </div>
-                          <label>
-                            Public capture URL
-                            <input
-                              data-testid="pos-customer-capture-url"
-                              value={captureUrl}
-                              readOnly
-                            />
-                          </label>
-                          <div className="actions-inline">
-                            <button type="button" onClick={() => void copyCaptureUrl()}>
-                              Copy Link
-                            </button>
-                            <a href={captureUrl} target="_blank" rel="noreferrer">
-                              Open Link
-                            </a>
-                          </div>
-                          <p className="muted-text">
-                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : captureSession.status === "COMPLETED" ? (
-                    <div className="success-panel success-panel-sale">
-                      <div className="success-panel-heading">
-                        <strong>Customer capture complete.</strong>
-                        <span className="status-badge status-complete">Attached to sale</span>
-                      </div>
-                      <p className="muted-text">
-                        {sale?.sale.customer?.name
-                          ? `${sale.sale.customer.name} is now attached to this sale.`
-                          : "The customer details have been attached to the active sale."}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="pos-customer-capture-note">
-                      <span className="status-badge">Expired</span>
-                      <strong>Capture link expired</strong>
-                      <button
-                        type="button"
-                        data-testid="pos-customer-capture-generate"
-                        onClick={() => void createCustomerCaptureSession()}
-                        disabled={creatingCaptureSession}
-                      >
-                        {creatingCaptureSession ? "Preparing..." : "Start Again"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : sale?.sale.id && !sale.sale.completedAt ? (
-                <div className="quick-create-panel pos-customer-capture-compact" data-testid="pos-customer-capture-panel">
-                  <div>
-                    <div className="table-primary">Add Customer</div>
-                    <p className="muted-text">QR/NFC capture for the active sale.</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="primary"
-                    data-testid="pos-customer-capture-generate"
-                    onClick={() => void createCustomerCaptureSession()}
-                    disabled={creatingCaptureSession}
-                  >
-                    {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
-                  </button>
-                </div>
-              ) : (
-                null
-              )}
             </section>
 
             <section className="pos-panel pos-basket-panel">
