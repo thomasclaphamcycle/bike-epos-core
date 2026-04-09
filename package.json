@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.2.61",
+  "version": "1.2.62",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -113,6 +113,7 @@
     "test:financial-reports": "node scripts/run_smoke_test.js scripts/financial_reports_smoke_tests.js",
     "test:business-intelligence": "node scripts/run_smoke_test.js scripts/business_intelligence_phase1_smoke_tests.js",
     "test:print-agent": "node scripts/run_smoke_test.js scripts/print_agent_smoke_tests.js",
+    "test:print-queue": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/print_queue_smoke_tests.js",
     "test:bike-tag-print": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/bike_tag_print_smoke_tests.js",
     "test:product-label-print": "npm run test:db:migrate && npm run prisma:generate && node scripts/run_smoke_test.js scripts/product_label_print_smoke_tests.js",
     "test:dymo-agent-bundle": "node scripts/dymo_product_label_agent_bundle_smoke_tests.js",

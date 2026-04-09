@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useToasts } from "../components/ToastProvider";
+import {
+  getManagedPrintJob,
+  getManagedPrintJobStatusBadgeClassName,
+  getManagedPrintJobStatusLabel,
+  isManagedPrintJobTerminal,
+  type ManagedPrintJobSummary,
+} from "../features/printing/managedPrintJobs";
 import {
   getManagedReceiptPrintErrorMessage,
   getManagedReceiptPrintSuccessMessage,
@@ -11,15 +18,40 @@ import {
 import { getStoredReceiptWorkstationKey } from "../features/receipts/receiptWorkstation";
 import { SalesReceipt, type SalesReceiptData } from "../features/receipts/SalesReceipt";
 
+const getReceiptPrintButtonLabel = (
+  loading: boolean,
+  queueing: boolean,
+  printJob: ManagedPrintJobSummary | null,
+) => {
+  if (loading) {
+    return "Loading...";
+  }
+  if (queueing) {
+    return "Queueing...";
+  }
+  if (printJob?.status === "PENDING" || printJob?.status === "PROCESSING") {
+    return "Printing...";
+  }
+  if (printJob?.status === "SUCCEEDED") {
+    return "Reprint receipt";
+  }
+  if (printJob?.status === "FAILED" || printJob?.status === "CANCELLED") {
+    return "Retry receipt print";
+  }
+  return "Print receipt";
+};
+
 export const SalesReceiptPrintPage = () => {
   const { saleId } = useParams<{ saleId: string }>();
   const { error, success } = useToasts();
   const [receipt, setReceipt] = useState<SalesReceiptData | null>(null);
   const [preparation, setPreparation] = useState<ReceiptPrintPreparationResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [printing, setPrinting] = useState(false);
+  const [queueing, setQueueing] = useState(false);
   const [selectedPrinterId, setSelectedPrinterId] = useState<string>("");
+  const [printJob, setPrintJob] = useState<ManagedPrintJobSummary | null>(null);
   const workstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
+  const announcedFailedJobStateRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!saleId) {
@@ -68,6 +100,49 @@ export const SalesReceiptPrintPage = () => {
     };
   }, [receipt]);
 
+  useEffect(() => {
+    if (!printJob || isManagedPrintJobTerminal(printJob.status)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshJob = async () => {
+      try {
+        const payload = await getManagedPrintJob(printJob.id);
+        if (!cancelled) {
+          setPrintJob(payload.job);
+        }
+      } catch (jobError) {
+        if (!cancelled) {
+          error(jobError instanceof Error ? jobError.message : "Failed to refresh receipt print status");
+        }
+      }
+    };
+
+    void refreshJob();
+    const intervalId = window.setInterval(() => {
+      void refreshJob();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [error, printJob]);
+
+  useEffect(() => {
+    if (!printJob || (printJob.status !== "FAILED" && printJob.status !== "CANCELLED")) {
+      return;
+    }
+
+    const failureKey = `${printJob.id}:${printJob.status}:${printJob.attemptCount}`;
+    if (announcedFailedJobStateRef.current === failureKey) {
+      return;
+    }
+    announcedFailedJobStateRef.current = failureKey;
+    error(printJob.lastError || "Receipt print failed. Use browser print fallback if needed.");
+  }, [error, printJob]);
+
   const printPageStyle = useMemo(() => (
     `@media print {
       @page {
@@ -82,13 +157,15 @@ export const SalesReceiptPrintPage = () => {
       return;
     }
 
-    setPrinting(true);
+    setQueueing(true);
     try {
       const result = await printManagedReceipt(saleId, {
         workstationKey,
         printerId: selectedPrinterId || undefined,
       });
       success(getManagedReceiptPrintSuccessMessage(result));
+      announcedFailedJobStateRef.current = null;
+      setPrintJob(result.job);
       setPreparation((current) => current ? {
         ...current,
         printer: {
@@ -98,7 +175,7 @@ export const SalesReceiptPrintPage = () => {
     } catch (printError) {
       error(getManagedReceiptPrintErrorMessage(printError));
     } finally {
-      setPrinting(false);
+      setQueueing(false);
     }
   };
 
@@ -122,7 +199,7 @@ export const SalesReceiptPrintPage = () => {
               <select
                 value={selectedPrinterId}
                 onChange={(event) => setSelectedPrinterId(event.target.value)}
-                disabled={loading || printing}
+                disabled={loading || queueing || Boolean(printJob && !isManagedPrintJobTerminal(printJob.status))}
               >
                 <option value="">Use workstation/default route</option>
                 {preparation.availablePrinters.map((printer) => (
@@ -137,9 +214,15 @@ export const SalesReceiptPrintPage = () => {
             type="button"
             className="primary"
             onClick={() => void handleManagedPrint()}
-            disabled={!receipt || loading || printing || Boolean(preparation?.resolutionError && !selectedPrinterId)}
+            disabled={
+              !receipt
+              || loading
+              || queueing
+              || Boolean(preparation?.resolutionError && !selectedPrinterId)
+              || Boolean(printJob && !isManagedPrintJobTerminal(printJob.status))
+            }
           >
-            {loading ? "Loading..." : printing ? "Printing..." : "Print receipt"}
+            {getReceiptPrintButtonLabel(loading, queueing, printJob)}
           </button>
           <button type="button" onClick={() => window.print()} disabled={!receipt || loading}>
             Use browser print (fallback)
@@ -166,6 +249,29 @@ export const SalesReceiptPrintPage = () => {
         ) : null}
         {preparation?.resolutionError ? (
           <p className="warning-text">{preparation.resolutionError.message}</p>
+        ) : null}
+        {printJob ? (
+          <div className="sales-receipt-print-page__job-status">
+            <span className={getManagedPrintJobStatusBadgeClassName(printJob.status)}>
+              {getManagedPrintJobStatusLabel(printJob.status)}
+            </span>
+            <span className="table-secondary">
+              Job {printJob.id.slice(0, 8)} on {printJob.printerName || "managed receipt printer"}
+              {printJob.status === "PENDING" ? " is queued." : null}
+              {printJob.status === "PROCESSING" ? " is printing now." : null}
+              {printJob.status === "SUCCEEDED" ? " completed successfully." : null}
+              {printJob.status === "FAILED" ? ` failed after ${printJob.attemptCount} attempt${printJob.attemptCount === 1 ? "" : "s"}.` : null}
+              {printJob.status === "CANCELLED" ? " was cancelled." : null}
+            </span>
+            {printJob.lastError ? (
+              <span className="warning-text">{printJob.lastError}</span>
+            ) : null}
+            {printJob.nextAttemptAt && !isManagedPrintJobTerminal(printJob.status) ? (
+              <span className="table-secondary">
+                Next retry due around {new Date(printJob.nextAttemptAt).toLocaleTimeString()}.
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

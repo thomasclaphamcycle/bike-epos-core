@@ -56,6 +56,7 @@ const baselineSteps = [
   "test:stock-transfers",
   "test:bike-hire",
   "test:print-agent",
+  "test:print-queue",
   "test:bike-tag-print",
   "test:product-label-print",
   "test:dymo-agent-bundle",

@@ -6,6 +6,7 @@ This document describes the current real CorePOS local print-agent paths for:
 - office-printer bike tags
 - Dymo product labels printed from the product-label page
 - thermal receipts printed from POS, workshop reprints, and the managed receipt page
+- the shared managed print queue that now serializes physical printer delivery
 
 ## What is implemented now
 
@@ -19,6 +20,7 @@ CorePOS now supports real backend-to-agent print handoff for four narrow workflo
 - A standalone Windows bike-tag helper EXE package can now accept rendered bike-tag sheet payloads for an installed office printer without needing a CorePOS repo checkout or npm on the printer host.
 - A standalone Windows Dymo helper EXE package can accept the product-label payload without needing a CorePOS repo checkout or npm on the printer host.
 - Managed receipts currently use the repo-local / standard Windows print-agent path and the same registered-printer routing model, but they do not yet have a standalone packaged receipt-only helper bundle.
+- Managed printing now passes through a durable CorePOS print-job queue before delivery. Receipts are the first live consumer, and the queue model is intentionally shared so shipment labels, product labels, and bike tags can migrate onto it cleanly.
 - The print host can either:
   - simulate printing safely in `DRY_RUN`
   - send Zebra ZPL to the registered shipment printer over raw TCP
@@ -32,6 +34,24 @@ CorePOS now supports real backend-to-agent print handoff for four narrow workflo
 - Product-label direct prints stay separate from shipment state and keep the browser-print fallback available.
 
 This is intentionally the first operational slice, not the final multi-device print platform.
+
+## Managed print queue
+
+CorePOS now persists managed print jobs before delivery.
+
+Current operational behavior:
+
+- one active `PROCESSING` job per physical printer at a time
+- jobs stay durable in the database as `PENDING`, `PROCESSING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`
+- transient receipt-print failures retry automatically with short backoff
+- configuration and payload problems fail fast and do not retry forever
+- operators can inspect pending, printing, and failed jobs from the Settings surface and retry failed jobs manually
+
+In this first slice:
+
+- receipts are the first queued workflow in live use
+- the queue/dispatcher contract is shared across receipts, shipment labels, product labels, and bike tags
+- browser receipt print remains available only as explicit fallback
 
 ## Architecture
 
@@ -65,7 +85,12 @@ The local print-agent path is now split into six layers:
    - `src/services/receiptPrintAgentDeliveryService.ts`
    - delivers prepared print jobs to the configured agent URL with timeout handling and normalized errors
 
-6. Local Windows print hosts
+6. Managed print queue and dispatcher
+   - `src/services/managedPrintQueueService.ts`
+   - `src/services/managedPrintDispatchService.ts`
+   - persists jobs, enforces one-at-a-time delivery per printer, retries transient failures, and records terminal job state
+
+7. Local Windows print hosts
    - repo-local Node agent in `print-agent/src/`
    - standalone Zebra shipment helper EXE package built from source assets in `print-agent/windows-zebra-agent/`
    - standalone bike-tag helper EXE package built from source assets in `print-agent/windows-bike-tag-agent/`
@@ -114,6 +139,12 @@ Receipts currently stay on the repo-local / standard Windows print-agent path:
 - `POST /jobs/receipt`
 
 That is intentional. It keeps each Windows host focused on one workflow instead of turning the helpers into a broad printer platform.
+
+Queue note:
+
+- the helper still receives one real print request at a time
+- CorePOS now decides when that request is eligible to be sent based on printer queue state
+- overlapping requests from multiple browsers or workstations should therefore serialize per printer instead of racing the same device
 
 ## Supported transport modes now
 

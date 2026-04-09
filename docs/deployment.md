@@ -88,6 +88,15 @@ npm run print-agent:start
 
 Then register a printer in `/management/settings`, mark it shipping-label, receipt, bike-tag, or product-label capable as appropriate, and set it as the default printer for that workflow. For managed receipts, also configure the Receipt Print Helper and station defaults for Till PC / Workshop 1 / Workshop 2. For the full Windows helper setup, see [windows_print_agent.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/windows_print_agent.md).
 
+Managed receipt printing is now queue-backed:
+
+- CorePOS persists the print job first
+- only one active managed job is delivered to a given printer at a time
+- transient helper/network failures retry automatically with short backoff
+- browser receipt print remains available as explicit fallback if the managed route is unavailable
+
+Operators can inspect queued, printing, and failed jobs from Settings under `Managed Print Queue`.
+
 For a Windows office-printer host that should print bike tags without a CorePOS repo checkout or npm, build the standalone bike-tag helper EXE package from a CorePOS dev/release machine:
 
 ```bash

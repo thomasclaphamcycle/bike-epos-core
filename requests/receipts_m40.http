@@ -55,7 +55,7 @@ X-Staff-Id: {{staffId}}
   "workstationKey": "TILL_PC"
 }
 
-### Execute managed receipt print (STAFF+)
+### Enqueue managed receipt print job (STAFF+)
 POST {{baseUrl}}/api/sales/{{saleId}}/receipt/print
 Content-Type: application/json
 X-Staff-Role: {{staffRole}}
@@ -64,3 +64,8 @@ X-Staff-Id: {{staffId}}
 {
   "workstationKey": "TILL_PC"
 }
+
+### Inspect managed receipt print job state (STAFF+)
+GET {{baseUrl}}/api/print-jobs/REPLACE_PRINT_JOB_ID
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}

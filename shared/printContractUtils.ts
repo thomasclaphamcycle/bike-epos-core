@@ -33,6 +33,14 @@ export const expectPositiveInteger = (value: unknown, field: string) => {
   return Number(value);
 };
 
+export const expectNonNegativeInteger = (value: unknown, field: string) => {
+  if (!Number.isInteger(value) || Number(value) < 0) {
+    throw new Error(`${field} must be a non-negative integer`);
+  }
+
+  return Number(value);
+};
+
 export const expectIsoDateString = (value: unknown, field: string) => {
   const normalized = expectString(value, field);
   if (Number.isNaN(new Date(normalized).getTime())) {

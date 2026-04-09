@@ -96,6 +96,14 @@ export const deliverReceiptPrintRequestToAgent = async (
         );
       }
 
+      if (remoteError.code === "PRINT_AGENT_TRANSPORT_FAILED") {
+        throw new HttpError(
+          502,
+          remoteError.message,
+          "RECEIPT_PRINT_AGENT_TRANSPORT_FAILED",
+        );
+      }
+
       throw new HttpError(502, remoteError.message, "RECEIPT_PRINT_AGENT_REJECTED");
     }
 
