@@ -4,6 +4,12 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import {
+  getManagedReceiptPrintErrorMessage,
+  getManagedReceiptPrintSuccessMessage,
+  printManagedReceipt,
+} from "../features/receipts/managedReceiptPrinting";
+import { getStoredReceiptWorkstationKey } from "../features/receipts/receiptWorkstation";
 import { parseCombinedCustomerName } from "../utils/customerName";
 import {
   DEFAULT_SALE_CONTEXT,
@@ -246,6 +252,7 @@ export const PosPage = () => {
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
+  const [printingReceipt, setPrintingReceipt] = useState(false);
   const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSession | null>(null);
   const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
   const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
@@ -258,6 +265,7 @@ export const PosPage = () => {
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
+  const receiptWorkstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
   const posOpenStateSignature = useMemo(() => JSON.stringify(posOpenState ?? null), [posOpenState]);
 
@@ -1391,6 +1399,26 @@ export const PosPage = () => {
     }
   };
 
+  const handleManagedReceiptPrint = async () => {
+    if (!completedSale) {
+      error("No completed sale is ready to print.");
+      return;
+    }
+
+    setPrintingReceipt(true);
+    try {
+      const result = await printManagedReceipt(
+        completedSale.saleId,
+        receiptWorkstationKey ? { workstationKey: receiptWorkstationKey } : {},
+      );
+      success(getManagedReceiptPrintSuccessMessage(result));
+    } catch (printError) {
+      error(getManagedReceiptPrintErrorMessage(printError));
+    } finally {
+      setPrintingReceipt(false);
+    }
+  };
+
   const activeTotal = useMemo(() => {
     if (sale) {
       return sale.tenderSummary.totalPence;
@@ -1610,13 +1638,21 @@ export const PosPage = () => {
                     <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
                       New sale
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleManagedReceiptPrint()}
+                      data-testid="pos-print-receipt-link"
+                      disabled={printingReceipt}
+                    >
+                      {printingReceipt ? "Printing..." : "Print receipt"}
+                    </button>
                     <a
                       href={`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`}
                       target="_blank"
                       rel="noreferrer"
-                      data-testid="pos-print-receipt-link"
+                      data-testid="pos-receipt-options-link"
                     >
-                      Print receipt
+                      Receipt options
                     </a>
                     <a
                       href={`/sales/${encodeURIComponent(completedSale.saleId)}/invoice/print`}

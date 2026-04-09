@@ -626,9 +626,12 @@ test("React POS checkout opens a printable thermal receipt page", async ({ page,
   await page.getByTestId("pos-complete-sale").click();
   await expect(page.getByText("Sale complete.")).toBeVisible();
 
-  const printReceiptLink = page.getByTestId("pos-print-receipt-link");
-  await expect(printReceiptLink).toBeVisible();
-  const printReceiptHref = await printReceiptLink.getAttribute("href");
+  const printReceiptButton = page.getByTestId("pos-print-receipt-link");
+  await expect(printReceiptButton).toBeVisible();
+
+  const receiptOptionsLink = page.getByTestId("pos-receipt-options-link");
+  await expect(receiptOptionsLink).toBeVisible();
+  const printReceiptHref = await receiptOptionsLink.getAttribute("href");
   expect(printReceiptHref).toBeTruthy();
 
   const printInvoiceLink = page.getByTestId("pos-print-invoice-link");

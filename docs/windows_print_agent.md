@@ -5,24 +5,27 @@ This document describes the current real CorePOS local print-agent paths for:
 - web-order Zebra shipment labels
 - office-printer bike tags
 - Dymo product labels printed from the product-label page
+- thermal receipts printed from POS, workshop reprints, and the managed receipt page
 
 ## What is implemented now
 
-CorePOS now supports real backend-to-agent print handoff for three narrow workflows:
+CorePOS now supports real backend-to-agent print handoff for four narrow workflows:
 
-- CorePOS still owns shipment lifecycle, bike-tag intent preparation, product-label intent preparation, and print orchestration.
-- Shipment, bike-tag, and product-label print payloads remain separate stable backend contracts.
-- CorePOS resolves all three through registered printer records and workflow-specific defaults.
+- CorePOS still owns shipment lifecycle, bike-tag intent preparation, product-label intent preparation, receipt preparation, and print orchestration.
+- Shipment, bike-tag, product-label, and receipt print payloads remain separate stable backend contracts.
+- CorePOS resolves all four through registered printer records and workflow-specific defaults.
 - A repo-local Windows-oriented print agent can accept that payload over HTTP for development and combined local setups.
 - A standalone Windows Zebra helper EXE package can now accept shipment-label payloads for a USB-connected GK420d without needing a CorePOS repo checkout or npm on the printer host.
 - A standalone Windows bike-tag helper EXE package can now accept rendered bike-tag sheet payloads for an installed office printer without needing a CorePOS repo checkout or npm on the printer host.
 - A standalone Windows Dymo helper EXE package can accept the product-label payload without needing a CorePOS repo checkout or npm on the printer host.
+- Managed receipts currently use the repo-local / standard Windows print-agent path and the same registered-printer routing model, but they do not yet have a standalone packaged receipt-only helper bundle.
 - The print host can either:
   - simulate printing safely in `DRY_RUN`
   - send Zebra ZPL to the registered shipment printer over raw TCP
   - send Zebra ZPL to an installed Windows printer by name on a Windows helper host
   - receive a CorePOS-rendered A5 landscape 2-up bike-tag PNG sheet and hand it to the installed Windows office printer by name
   - receive a CorePOS-rendered Dymo 57x32 PNG and hand it to the installed Windows printer by name
+  - receive a CorePOS-rendered ESC/POS receipt payload and send it either directly over raw TCP or to an installed Windows receipt printer by name
 - Successful agent prints mark the shipment as printed in CorePOS.
 - Failed agent prints do not set `printedAt`.
 - Bike-tag direct prints stay separate from shipment state and keep the preview/browser-print fallback available.
@@ -48,6 +51,7 @@ The local print-agent path is now split into six layers:
    - CorePOS prepares a `SHIPMENT_LABEL_PRINT` payload with Zebra-oriented metadata plus the resolved registered printer target
    - CorePOS prepares a `BIKE_TAG_PRINT` payload for the rendered A5 landscape 2-up bike-tag sheet
    - CorePOS also prepares a separate `PRODUCT_LABEL_PRINT` payload for Dymo-style product labels, including the rendered PNG document that the host should print
+   - CorePOS also prepares a separate `RECEIPT_PRINT` payload carrying the final ESC/POS bytes that should reach the receipt printer
    - shipment payloads remain fetchable and previewable from CorePOS
 
 4. Printer registration and default selection
@@ -58,6 +62,7 @@ The local print-agent path is now split into six layers:
    - `src/services/shipping/printAgentDeliveryService.ts`
    - `src/services/bikeTagPrintAgentDeliveryService.ts`
    - `src/services/productLabelPrintAgentDeliveryService.ts`
+   - `src/services/receiptPrintAgentDeliveryService.ts`
    - delivers prepared print jobs to the configured agent URL with timeout handling and normalized errors
 
 6. Local Windows print hosts
@@ -75,12 +80,14 @@ The repo-local Node print agent exposes:
 - `POST /jobs/shipment-label`
 - `POST /jobs/bike-tag`
 - `POST /jobs/product-label`
+- `POST /jobs/receipt`
 
 The print-job endpoint accepts:
 
 - `{ "printRequest": <SHIPMENT_LABEL_PRINT payload> }`
 - `{ "printRequest": <BIKE_TAG_PRINT payload> }`
 - `{ "printRequest": <PRODUCT_LABEL_PRINT payload> }`
+- `{ "printRequest": <RECEIPT_PRINT payload> }`
 
 If `COREPOS_PRINT_AGENT_SHARED_SECRET` is set, CorePOS must send the same value in:
 
@@ -100,6 +107,11 @@ The standalone Dymo helper EXE package implements the narrow product-label subse
 
 - `GET /health`
 - `POST /jobs/product-label`
+
+Receipts currently stay on the repo-local / standard Windows print-agent path:
+
+- `GET /health`
+- `POST /jobs/receipt`
 
 That is intentional. It keeps each Windows host focused on one workflow instead of turning the helpers into a broad printer platform.
 
@@ -147,6 +159,11 @@ Behavior:
 - on Windows, the agent invokes `powershell.exe` and prints that PNG to the installed printer named on the registered Dymo printer record
 - this avoids the browser print popup and its paper-size handling limits
 - the current product-label renderer is intentionally retail-first: subtle brand line only when useful, stronger product-and-price hierarchy, and a cleaner barcode footer sized for the Dymo 57x32 stock
+- for receipts:
+  - CorePOS sends a `RECEIPT_PRINT` request to the local agent
+  - CorePOS includes the already-rendered ESC/POS byte payload in that request
+  - `RAW_TCP` is the preferred LAN-first path for network receipt printers
+  - `WINDOWS_PRINTER` remains available when a controlled Windows host needs to bridge to a locally installed receipt printer
 
 ## Current scope and limits
 
@@ -155,6 +172,7 @@ The real transports are still intentionally narrow:
 - shipment labels: `RAW_TCP` or `WINDOWS_PRINTER`
 - bike tags: `WINDOWS_PRINTER`
 - product labels: `WINDOWS_PRINTER`
+- receipts: `RAW_TCP`, `WINDOWS_PRINTER`, or `DRY_RUN`
 
 That means:
 
@@ -172,8 +190,9 @@ The preferred setup is now:
 
 1. In CorePOS Settings, save the shipping helper URL and shared secret under `Shipping Print Helper (Zebra)`.
 2. In CorePOS Settings, save the bike-tag helper URL and shared secret under `Bike-Tag Print Helper`.
-3. In CorePOS Settings, save the product-label helper URL and shared secret under `Product-Label Print Helper`.
-4. Keep backend env vars only as a legacy fallback for older deployments.
+3. In CorePOS Settings, save the receipt helper URL and shared secret under `Receipt Print Helper`.
+4. In CorePOS Settings, save the product-label helper URL and shared secret under `Product-Label Print Helper`.
+5. Keep backend env vars only as a legacy fallback for older deployments.
 
 Legacy backend env fallback keys remain supported:
 
@@ -183,6 +202,9 @@ Legacy backend env fallback keys remain supported:
 - `COREPOS_BIKE_TAG_PRINT_AGENT_URL` (legacy fallback only; bike-tag direct printing can now be configured persistently in CorePOS Settings)
 - `COREPOS_BIKE_TAG_PRINT_AGENT_TIMEOUT_MS` (optional, default `10000`)
 - `COREPOS_BIKE_TAG_PRINT_AGENT_SHARED_SECRET` (legacy fallback only; used when the bike-tag helper is reachable over the local network)
+- `COREPOS_RECEIPT_PRINT_AGENT_URL` (legacy fallback only; managed receipt printing can now be configured persistently in CorePOS Settings)
+- `COREPOS_RECEIPT_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
+- `COREPOS_RECEIPT_PRINT_AGENT_SHARED_SECRET` (legacy fallback only; used when the receipt helper is reachable over the local network)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_URL` (legacy fallback only; product-label direct printing can now be configured persistently in CorePOS Settings)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_TIMEOUT_MS` (optional, default `7000`)
 - `COREPOS_PRODUCT_LABEL_PRINT_AGENT_SHARED_SECRET` (legacy fallback only; falls back to `COREPOS_SHIPPING_PRINT_AGENT_SHARED_SECRET`)
@@ -206,14 +228,14 @@ CorePOS uses persisted settings first and falls back to env only when no saved h
 
 ## Printer registration in CorePOS
 
-CorePOS now owns the operational printer registry for shipment labels.
+CorePOS now owns the operational printer registry for shipment labels, thermal receipts, bike tags, and product labels.
 
 Each registered printer record includes:
 
 - name
 - internal key/code
 - printer family and model hint
-- shipping-label, bike-tag, or product-label capability
+- shipping-label, bike-tag, product-label, or receipt capability
 - active/inactive status
 - transport mode (`DRY_RUN`, `RAW_TCP`, or `WINDOWS_PRINTER`)
 - current target details for the supported transport
@@ -238,6 +260,18 @@ Current bike-tag behavior:
 - CorePOS uses the default bike-tag printer unless a later caller explicitly selects another registered office-document target
 - the registered office printer record stores the installed Windows printer name when `WINDOWS_PRINTER` transport is used
 - the fallback preview route still exists on `/variants/:variantId/bike-tag/print`, but it is now secondary to the controlled helper-driven print path
+
+Current receipt behavior:
+
+- POS checkout uses managed receipt printing as the primary path
+- `/sales/:saleId/receipt/print` is now the managed receipt options and fallback page
+- CorePOS resolves thermal receipt targets in this order:
+  - explicit selected printer
+  - workstation default
+  - global default receipt printer
+- workstation defaults are configured in Settings for `Till PC`, `Workshop 1`, and `Workshop 2 / Dymo PC`
+- the current browser still stores which workstation it should behave as
+- browser print remains available only as an explicit fallback action on the receipt page
 
 ## Print agent configuration
 

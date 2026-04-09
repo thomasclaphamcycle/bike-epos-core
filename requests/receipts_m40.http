@@ -44,3 +44,23 @@ X-Staff-Id: {{staffId}}
 GET {{baseUrl}}/sales/{{saleId}}/receipt
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
+
+### Prepare managed receipt print (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/receipt/prepare-print
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "workstationKey": "TILL_PC"
+}
+
+### Execute managed receipt print (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/receipt/print
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "workstationKey": "TILL_PC"
+}

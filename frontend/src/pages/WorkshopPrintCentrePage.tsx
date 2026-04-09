@@ -205,11 +205,7 @@ export const WorkshopPrintCentrePage = () => {
                       <a href={toBackendUrl(`/workshop/${encodeURIComponent(job.id)}/print`)} target="_blank" rel="noreferrer">
                         Print job card
                       </a>
-                      {job.sale ? (
-                        <a href={toBackendUrl(`/sales/${encodeURIComponent(job.sale.id)}/receipt`)} target="_blank" rel="noreferrer">
-                          Print receipt
-                        </a>
-                      ) : null}
+                      {job.sale ? <Link to={`/sales/${encodeURIComponent(job.sale.id)}/receipt/print`}>Print receipt</Link> : null}
                     </div>
                   </td>
                 </tr>

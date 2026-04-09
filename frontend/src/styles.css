@@ -1035,9 +1035,19 @@ body {
   gap: 6px;
 }
 
+.sales-receipt-print-page__printer-select {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
 .sales-receipt-print-page__copy h1,
 .sales-receipt-print-page__copy p {
   margin: 0;
+}
+
+.warning-text {
+  color: #8a6500;
 }
 
 .sales-receipt-print-page__sheet {

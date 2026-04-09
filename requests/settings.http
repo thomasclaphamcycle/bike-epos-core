@@ -84,6 +84,50 @@ GET {{baseUrl}}/api/settings/bike-tag-print-agent
 X-Staff-Role: MANAGER
 X-Staff-Id: demo-manager
 
+### Get persisted receipt print helper settings (MANAGER+)
+GET {{baseUrl}}/api/settings/receipt-print-agent
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Update persisted receipt print helper settings (ADMIN)
+PUT {{baseUrl}}/api/settings/receipt-print-agent
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "url": "http://192.168.1.45:3214",
+  "sharedSecret": "replace-with-shared-secret"
+}
+
+### Get receipt workstation defaults (MANAGER+)
+GET {{baseUrl}}/api/settings/receipt-workstations
+X-Staff-Role: MANAGER
+X-Staff-Id: demo-manager
+
+### Update receipt workstation defaults (ADMIN)
+PUT {{baseUrl}}/api/settings/receipt-workstations
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "workstations": [
+    {
+      "key": "TILL_PC",
+      "defaultPrinterId": "{{printerId}}"
+    },
+    {
+      "key": "WORKSHOP_1",
+      "defaultPrinterId": "{{printerId}}"
+    },
+    {
+      "key": "WORKSHOP_2",
+      "defaultPrinterId": null
+    }
+  ]
+}
+
 ### Update persisted bike-tag print helper settings (ADMIN)
 PUT {{baseUrl}}/api/settings/bike-tag-print-agent
 Content-Type: application/json
@@ -186,6 +230,24 @@ X-Staff-Id: demo-admin
   "setAsDefaultBikeTag": true
 }
 
+### Create a registered thermal receipt printer (ADMIN)
+POST {{baseUrl}}/api/settings/printers
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "name": "Till Receipt Printer",
+  "key": "TILL_RECEIPT_PRINTER",
+  "printerFamily": "THERMAL_RECEIPT",
+  "transportMode": "RAW_TCP",
+  "rawTcpHost": "192.168.1.60",
+  "rawTcpPort": 9100,
+  "location": "Main till",
+  "notes": "Primary LAN receipt printer",
+  "setAsDefaultReceipt": true
+}
+
 ### Update a registered dispatch printer (ADMIN)
 PATCH {{baseUrl}}/api/settings/printers/{{printerId}}
 Content-Type: application/json
@@ -221,6 +283,16 @@ X-Staff-Id: demo-admin
 
 ### Set the default bike-tag printer (ADMIN)
 PUT {{baseUrl}}/api/settings/printers/default-bike-tag
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "printerId": "{{printerId}}"
+}
+
+### Set the default receipt printer (ADMIN)
+PUT {{baseUrl}}/api/settings/printers/default-receipt
 Content-Type: application/json
 X-Staff-Role: ADMIN
 X-Staff-Id: demo-admin
