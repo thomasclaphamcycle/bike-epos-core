@@ -41,6 +41,47 @@ const moneyFormatter = new Intl.NumberFormat("en-GB", {
 const normalizeText = (value: string | null | undefined) => value?.trim() ?? "";
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const MAX_SPEC_LINES = 4;
+const GENERIC_DESCRIPTION_PATTERNS = [
+  /\bgreat bike\b/i,
+  /\bperfect for\b/i,
+  /\bideal for\b/i,
+  /\bask in store\b/i,
+  /\bfull build\b/i,
+  /\bcomplete bike\b/i,
+];
+const GENERIC_VARIANT_PATTERNS = [
+  /^default$/i,
+  /^\d{2,3}\s?cm$/i,
+  /^(xs|s|sm|small|m|md|medium|l|lg|large|xl|xxl)$/i,
+  /^(black|white|grey|gray|silver|blue|red|green|orange|yellow|pink|purple|brown)$/i,
+];
+const COLOUR_WORDS = new Set([
+  "black",
+  "white",
+  "grey",
+  "gray",
+  "silver",
+  "blue",
+  "red",
+  "green",
+  "orange",
+  "yellow",
+  "pink",
+  "purple",
+  "brown",
+  "navy",
+  "slate",
+  "graphite",
+  "sage",
+  "olive",
+  "teal",
+  "cream",
+  "bronze",
+  "gold",
+  "gloss",
+  "matte",
+]);
+
 const parseManualSellingPoints = (value: string | null | undefined) => {
   const seen = new Set<string>();
   const lines: string[] = [];
@@ -60,6 +101,61 @@ const parseManualSellingPoints = (value: string | null | undefined) => {
 
   return lines;
 };
+
+const normalizeGeneratedLineKey = (value: string) =>
+  value.toLowerCase().replace(/[^\w\s/-]+/g, "").replace(/\s+/g, " ").trim();
+
+const looksGenericDescription = (value: string) =>
+  GENERIC_DESCRIPTION_PATTERNS.some((pattern) => pattern.test(value));
+
+const normalizeCategorySellingPoint = (value: string | null | undefined) => {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const compact = normalized
+    .replace(/\bcategory\b/gi, "")
+    .replace(/\bbikes\b/gi, "bike")
+    .replace(/\sebikes\b/gi, " e-bike")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return compact;
+};
+
+const cleanVariantSellingPoint = (value: string | null | undefined) => {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const meaningfulParts = normalized
+    .split(/[\/,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !GENERIC_VARIANT_PATTERNS.some((pattern) => pattern.test(part)));
+
+  const compact = meaningfulParts.join(" / ").replace(/^[-/,\s]+|[-/,\s]+$/g, "").trim();
+  if (!compact) {
+    return "";
+  }
+
+  const compactWords = compact.toLowerCase().split(/\s+/).filter(Boolean);
+  if (compactWords.length > 0 && compactWords.every((word) => COLOUR_WORDS.has(word))) {
+    return "";
+  }
+
+  return compact;
+};
+
+const buildDescriptionSellingPointCandidates = (description: string | null | undefined) =>
+  normalizeText(description)
+    .split(/\n+|•|;|(?<=\.)\s+|,\s+/)
+    .map((chunk) => chunk.replace(/\.$/, "").trim())
+    .filter((chunk) => chunk.length >= 4 && chunk.length <= 80)
+    .filter((chunk) => !looksGenericDescription(chunk))
+    .sort((left, right) => left.length - right.length);
 
 export const buildBikeTagProductName = (
   variant: BikeTagVariantLike,
@@ -105,12 +201,8 @@ export const buildBikeTagFallbackSpecLines = (
 ) => {
   const lines: string[] = [];
   const seen = new Set<string>();
-  const productName = buildBikeTagProductName(variant, product).toLowerCase();
-  const variantLabel = buildBikeTagVariantLabel(variant, product).toLowerCase();
-  const category = product?.category ?? variant.product?.category ?? null;
-  const manualSellingPoints = isBikeCategory(category)
-    ? parseManualSellingPoints(product?.keySellingPoints ?? variant.product?.keySellingPoints)
-    : [];
+  const productName = normalizeGeneratedLineKey(buildBikeTagProductName(variant, product));
+  const variantLabel = normalizeGeneratedLineKey(buildBikeTagVariantLabel(variant, product));
 
   const push = (value: string | null | undefined) => {
     const normalized = normalizeText(value);
@@ -118,7 +210,7 @@ export const buildBikeTagFallbackSpecLines = (
       return;
     }
 
-    const key = normalized.toLowerCase();
+    const key = normalizeGeneratedLineKey(normalized);
     if (productName && (key === productName || productName.includes(key) || key.includes(productName))) {
       return;
     }
@@ -133,28 +225,60 @@ export const buildBikeTagFallbackSpecLines = (
     lines.push(normalized);
   };
 
-  if (manualSellingPoints.length > 0) {
-    manualSellingPoints.forEach((line) => push(line));
-    return lines.slice(0, MAX_SPEC_LINES);
+  buildDescriptionSellingPointCandidates(product?.description).forEach((chunk) => push(chunk));
+
+  if (lines.length < 3) {
+    push(normalizeCategorySellingPoint(product?.category || variant.product?.category || null));
   }
-
-  const descriptionChunks = normalizeText(product?.description)
-    .split(/\n+|•|(?<=\.)\s+|,\s+/)
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length >= 4 && chunk.length <= 72);
-
-  descriptionChunks.forEach((chunk) => push(chunk));
 
   if (lines.length < 3) {
     push(product?.brand || variant.product?.brand || null);
   }
 
   if (lines.length < 3) {
-    push(product?.category || variant.product?.category || null);
+    push(cleanVariantSellingPoint(buildBikeTagVariantLabel(variant, product)));
   }
 
   if (lines.length === 0) {
     push("Ask in store for full build, sizing, and fit advice.");
+  }
+
+  return lines.slice(0, MAX_SPEC_LINES);
+};
+
+export const buildBikeTagGeneratedSpecLines = (
+  variant: BikeTagVariantLike,
+  product: BikeTagProductLike | null,
+) => {
+  const category = product?.category ?? variant.product?.category ?? null;
+  if (!isBikeCategory(category)) {
+    return buildBikeTagFallbackSpecLines(variant, product);
+  }
+
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  const push = (value: string | null | undefined) => {
+    const normalized = normalizeText(value);
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalizeGeneratedLineKey(normalized);
+    if (!key || seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    lines.push(normalized);
+  };
+
+  push(product?.brand || variant.product?.brand || null);
+  push(normalizeCategorySellingPoint(category));
+  push(cleanVariantSellingPoint(buildBikeTagVariantLabel(variant, product)));
+  buildDescriptionSellingPointCandidates(product?.description).forEach((chunk) => push(chunk));
+
+  if (lines.length < 3) {
+    buildBikeTagFallbackSpecLines(variant, product).forEach((line) => push(line));
   }
 
   return lines.slice(0, MAX_SPEC_LINES);
@@ -173,7 +297,7 @@ export const buildBikeTagSpecLines = (
     return manualSellingPoints.slice(0, MAX_SPEC_LINES);
   }
 
-  return buildBikeTagFallbackSpecLines(variant, product);
+  return buildBikeTagGeneratedSpecLines(variant, product);
 };
 
 export const buildBikeTagSupportLine = (
