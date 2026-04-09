@@ -1184,8 +1184,12 @@ test("POS customer capture link flow attaches captured customer to the active sa
 
   await page.getByTestId("pos-checkout-basket").click();
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
+  await expect(page.getByTestId("pos-customer-capture-panel")).toContainText("Add Customer");
+  await expect(page.getByTestId("pos-customer-capture-panel")).toContainText("Scan QR or tap NFC");
 
   await page.getByTestId("pos-customer-capture-generate").click();
+  await expect(page.getByTestId("pos-customer-capture-modal")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-title")).toHaveText("Scan QR or tap NFC");
   const captureUrlInput = page.getByTestId("pos-customer-capture-url");
   await expect(captureUrlInput).toBeVisible();
   await expect(page.getByTestId("pos-customer-capture-qr")).toBeVisible();
@@ -1205,7 +1209,8 @@ test("POS customer capture link flow attaches captured customer to the active sa
   expect(saleId).toBeTruthy();
 
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Taylor Rider");
-  await expect(page.getByText("Customer capture complete.")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-modal")).toContainText("Customer added.");
+  await expect(page.getByTestId("pos-customer-capture-modal")).toContainText("Attached to sale");
 
   await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
   await expect(capturePage.getByText("No active customer capture yet")).toBeVisible();

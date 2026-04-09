@@ -285,6 +285,7 @@ export const PosPage = () => {
   const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
   const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
   const [captureQrBusy, setCaptureQrBusy] = useState(false);
+  const [customerCaptureModalOpen, setCustomerCaptureModalOpen] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -1222,6 +1223,19 @@ export const PosPage = () => {
     return buildCustomerCaptureEntryUrl(captureSession.token);
   }, [captureSession]);
 
+  const captureExpiresLabel = useMemo(() => {
+    if (!captureSession) {
+      return null;
+    }
+    return new Date(captureSession.expiresAt).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [captureSession]);
+
+  const saleAllowsCustomerCapture = Boolean(sale?.sale.id && !sale.sale.completedAt);
+  const showCustomerCaptureEntry = Boolean(saleAllowsCustomerCapture && !sale?.sale.customer);
+
   useEffect(() => {
     if (!captureUrl || captureSession?.status !== "ACTIVE") {
       setCaptureQrImage(null);
@@ -1256,6 +1270,23 @@ export const PosPage = () => {
       cancelled = true;
     };
   }, [captureSession?.status, captureUrl]);
+
+  useEffect(() => {
+    if (!customerCaptureModalOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCustomerCaptureModalOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customerCaptureModalOpen]);
 
   useEffect(() => {
     if (!captureSession || captureSession.status !== "ACTIVE" || !sale?.sale.id || sale.sale.completedAt) {
@@ -1342,7 +1373,7 @@ export const PosPage = () => {
   const createCustomerCaptureSession = async () => {
     if (!sale?.sale.id) {
       error("Create a sale before generating a customer capture link.");
-      return;
+      return null;
     }
 
     setCreatingCaptureSession(true);
@@ -1353,11 +1384,20 @@ export const PosPage = () => {
       );
       setCaptureSession(payload.session);
       success("Customer capture link ready.");
+      return payload.session;
     } catch (captureError) {
       const message = captureError instanceof Error ? captureError.message : "Failed to create capture link";
       error(message);
+      return null;
     } finally {
       setCreatingCaptureSession(false);
+    }
+  };
+
+  const openCustomerCaptureModal = async () => {
+    setCustomerCaptureModalOpen(true);
+    if (!captureSession || captureSession.status === "EXPIRED") {
+      await createCustomerCaptureSession();
     }
   };
 
@@ -2106,114 +2146,49 @@ export const PosPage = () => {
                 </div>
               ) : null}
 
-              {captureSession && captureUrl ? (
-                <div className="quick-create-panel" data-testid="pos-customer-capture-panel">
-                  {captureSession.status === "ACTIVE" ? (
-                    <div className="cash-qr-card">
-                      <div className="card-header-row">
-                        <div>
-                          <span className="status-badge">Waiting for customer</span>
-                          <p className="muted-text">
-                            Scan QR or tap NFC. This sale refreshes automatically as soon as the customer saves their details.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="primary"
-                          data-testid="pos-customer-capture-generate"
-                          onClick={() => void createCustomerCaptureSession()}
-                          disabled={creatingCaptureSession}
-                        >
-                          {creatingCaptureSession ? "Preparing..." : "Refresh Link"}
-                        </button>
+              {showCustomerCaptureEntry ? (
+                <div className="quick-create-panel pos-customer-capture-entry" data-testid="pos-customer-capture-panel">
+                  <div className="pos-customer-capture-entry__copy">
+                    <div className="pos-customer-capture-entry__headline">
+                      <div>
+                        <div className="table-primary">Add Customer</div>
+                        <p className="muted-text">
+                          Scan QR or tap NFC to let the customer add their details without slowing down checkout.
+                        </p>
                       </div>
-                      <div className="cash-qr-layout">
-                        <div className="cash-qr-box">
-                          {captureQrBusy ? (
-                            <span>Generating QR...</span>
-                          ) : captureQrImage ? (
-                            <img
-                              src={captureQrImage}
-                              alt="Customer capture QR code"
-                              data-testid="pos-customer-capture-qr"
-                            />
-                          ) : (
-                            <span>QR unavailable</span>
-                          )}
-                        </div>
-                        <div className="cash-qr-copy">
-                          <div>
-                            <div className="table-primary">Need the link instead?</div>
-                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
-                          </div>
-                          <label>
-                            Public capture URL
-                            <input
-                              data-testid="pos-customer-capture-url"
-                              value={captureUrl}
-                              readOnly
-                            />
-                          </label>
-                          <div className="actions-inline">
-                            <button type="button" onClick={() => void copyCaptureUrl()}>
-                              Copy Link
-                            </button>
-                            <a href={captureUrl} target="_blank" rel="noreferrer">
-                              Open Link
-                            </a>
-                          </div>
-                          <p className="muted-text">
-                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
-                          </p>
-                        </div>
-                      </div>
+                      {captureSession?.status === "ACTIVE" ? (
+                        <span className="status-badge">Waiting</span>
+                      ) : captureSession?.status === "EXPIRED" ? (
+                        <span className="status-badge">Expired</span>
+                      ) : null}
                     </div>
-                  ) : captureSession.status === "COMPLETED" ? (
-                    <div className="success-panel success-panel-sale">
-                      <div className="success-panel-heading">
-                        <strong>Customer capture complete.</strong>
-                        <span className="status-badge status-complete">Attached to sale</span>
-                      </div>
-                      <p className="muted-text">
-                        {sale?.sale.customer?.name
-                          ? `${sale.sale.customer.name} is now attached to this sale.`
-                          : "The customer details have been attached to the active sale."}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="pos-customer-capture-note">
-                      <span className="status-badge">Expired</span>
-                      <strong>Capture link expired</strong>
-                      <button
-                        type="button"
-                        data-testid="pos-customer-capture-generate"
-                        onClick={() => void createCustomerCaptureSession()}
-                        disabled={creatingCaptureSession}
-                      >
-                        {creatingCaptureSession ? "Preparing..." : "Start Again"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : sale?.sale.id && !sale.sale.completedAt ? (
-                <div className="quick-create-panel pos-customer-capture-compact" data-testid="pos-customer-capture-panel">
-                  <div>
-                    <div className="table-primary">Add Customer</div>
-                    <p className="muted-text">QR/NFC capture for the active sale.</p>
+                    <p className="pos-customer-capture-entry__hint">
+                      {captureSession?.status === "ACTIVE"
+                        ? `Capture live now${captureExpiresLabel ? ` until ${captureExpiresLabel}` : ""}.`
+                        : captureSession?.status === "EXPIRED"
+                          ? "Previous link expired. Open capture to generate a fresh QR code."
+                          : "Open a customer capture screen with QR, NFC-ready wording, and a direct customer link."}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    className="primary"
-                    data-testid="pos-customer-capture-generate"
-                    onClick={() => void createCustomerCaptureSession()}
-                    disabled={creatingCaptureSession}
-                  >
-                    {creatingCaptureSession ? "Preparing..." : "Start Add Customer"}
-                  </button>
+                  <div className="pos-customer-capture-entry__actions">
+                    <button
+                      type="button"
+                      className="primary"
+                      data-testid="pos-customer-capture-generate"
+                      onClick={() => void openCustomerCaptureModal()}
+                      disabled={creatingCaptureSession}
+                    >
+                      {creatingCaptureSession
+                        ? "Preparing..."
+                        : captureSession?.status === "ACTIVE"
+                          ? "Show QR"
+                          : captureSession?.status === "EXPIRED"
+                            ? "Restart Capture"
+                            : "Scan QR or Tap NFC"}
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                null
-              )}
+              ) : null}
             </section>
 
             <section className="pos-panel pos-basket-panel">
@@ -2442,6 +2417,163 @@ export const PosPage = () => {
           </div>
         </div>
       </section>
+      {customerCaptureModalOpen ? (
+        <div
+          className="pos-customer-capture-modal-backdrop"
+          onClick={() => setCustomerCaptureModalOpen(false)}
+          aria-hidden="true"
+        >
+          <div
+            className="pos-customer-capture-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pos-customer-capture-modal-title"
+            data-testid="pos-customer-capture-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="pos-customer-capture-modal__header">
+              <div>
+                <div className="pos-section-kicker">Customer Capture</div>
+                <h2 id="pos-customer-capture-modal-title" data-testid="pos-customer-capture-title">Scan QR or tap NFC</h2>
+                <p className="muted-text">
+                  Let the customer add their own details on their phone. CorePOS refreshes this sale automatically when they finish.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pos-customer-capture-modal__close"
+                onClick={() => setCustomerCaptureModalOpen(false)}
+                aria-label="Close customer capture"
+              >
+                Close
+              </button>
+            </div>
+
+            {creatingCaptureSession && !captureSession ? (
+              <div className="quick-create-panel pos-customer-capture-modal__state">
+                <strong>Preparing customer capture...</strong>
+                <p className="muted-text">Generating a fresh QR link for this active sale.</p>
+              </div>
+            ) : captureSession && captureUrl ? (
+              captureSession.status === "ACTIVE" ? (
+                <div className="cash-qr-card pos-customer-capture-modal__card">
+                  <div className="card-header-row">
+                    <div>
+                      <span className="status-badge">Waiting for customer</span>
+                      <p className="muted-text">
+                        Scan QR or tap NFC. Keep this screen open at the till while the customer completes their details.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="primary"
+                      data-testid="pos-customer-capture-refresh"
+                      onClick={() => void createCustomerCaptureSession()}
+                      disabled={creatingCaptureSession}
+                    >
+                      {creatingCaptureSession ? "Preparing..." : "Refresh Link"}
+                    </button>
+                  </div>
+                  <div className="cash-qr-layout">
+                    <div className="cash-qr-box">
+                      {captureQrBusy ? (
+                        <span>Generating QR...</span>
+                      ) : captureQrImage ? (
+                        <img
+                          src={captureQrImage}
+                          alt="Customer capture QR code"
+                          data-testid="pos-customer-capture-qr"
+                        />
+                      ) : (
+                        <span>QR unavailable</span>
+                      )}
+                    </div>
+                    <div className="cash-qr-copy">
+                      <div className="pos-customer-capture-modal__copy-block">
+                        <div className="table-primary">Need the link instead?</div>
+                        <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR code.</p>
+                      </div>
+                      <label>
+                        Public capture URL
+                        <input
+                          data-testid="pos-customer-capture-url"
+                          value={captureUrl}
+                          readOnly
+                        />
+                      </label>
+                      <div className="actions-inline">
+                        <button type="button" onClick={() => void copyCaptureUrl()}>
+                          Copy Link
+                        </button>
+                        <a href={captureUrl} target="_blank" rel="noreferrer">
+                          Open Link
+                        </a>
+                      </div>
+                      <p className="muted-text">
+                        {captureExpiresLabel ? `Expires ${captureExpiresLabel}.` : "Expires soon."} This sale refreshes automatically as soon as the customer saves their details.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : captureSession.status === "COMPLETED" ? (
+                <div className="success-panel success-panel-sale pos-customer-capture-modal__state">
+                  <div className="success-panel-heading">
+                    <strong>Customer added.</strong>
+                    <span className="status-badge status-complete">Attached to sale</span>
+                  </div>
+                  <p className="muted-text">
+                    {sale?.sale.customer?.name
+                      ? `${sale.sale.customer.name} is now attached to this sale and ready for checkout.`
+                      : "The customer details have been attached to the active sale."}
+                  </p>
+                  <div className="actions-inline">
+                    <button type="button" className="primary" onClick={() => setCustomerCaptureModalOpen(false)}>
+                      Back to sale
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="quick-create-panel pos-customer-capture-modal__state">
+                  <div className="pos-customer-capture-note">
+                    <span className="status-badge">Expired</span>
+                    <strong>Capture link expired</strong>
+                  </div>
+                  <p className="muted-text">
+                    Start again to generate a fresh QR code and public capture link for this sale.
+                  </p>
+                  <div className="actions-inline">
+                    <button
+                      type="button"
+                      className="primary"
+                      data-testid="pos-customer-capture-generate"
+                      onClick={() => void createCustomerCaptureSession()}
+                      disabled={creatingCaptureSession}
+                    >
+                      {creatingCaptureSession ? "Preparing..." : "Generate New Link"}
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="quick-create-panel pos-customer-capture-modal__state">
+                <strong>No capture link ready yet.</strong>
+                <p className="muted-text">Generate a link to show the customer QR code and NFC-ready capture wording.</p>
+                <div className="actions-inline">
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-customer-capture-generate"
+                    onClick={() => void createCustomerCaptureSession()}
+                    disabled={creatingCaptureSession}
+                  >
+                    {creatingCaptureSession ? "Preparing..." : "Generate Link"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
