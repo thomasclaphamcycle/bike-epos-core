@@ -5,6 +5,13 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import {
+  getManagedPrintJob,
+  getManagedPrintJobStatusBadgeClassName,
+  getManagedPrintJobStatusLabel,
+  isManagedPrintJobTerminal,
+  type ManagedPrintJobSummary,
+} from "../features/printing/managedPrintJobs";
+import {
   getManagedReceiptPrintErrorMessage,
   getManagedReceiptPrintSuccessMessage,
   printManagedReceipt,
@@ -136,6 +143,8 @@ type CompletedSaleState = {
   customerName: string | null;
   cashTenderedPence: number | null;
   totalPaidPence: number;
+  receiptPrintJob: ManagedPrintJobSummary | null;
+  receiptPrinterName: string | null;
 };
 
 type CaptureSessionStatus = "ACTIVE" | "COMPLETED" | "EXPIRED";
@@ -168,6 +177,25 @@ const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 const getPublicAppOrigin = () => {
   const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN?.trim();
   return configuredOrigin ? configuredOrigin.replace(/\/$/, "") : window.location.origin;
+};
+
+const getPosReceiptPrintButtonLabel = (
+  queueing: boolean,
+  printJob: ManagedPrintJobSummary | null,
+) => {
+  if (queueing) {
+    return "Queueing...";
+  }
+  if (printJob?.status === "PENDING" || printJob?.status === "PROCESSING") {
+    return "Printing...";
+  }
+  if (printJob?.status === "SUCCEEDED") {
+    return "Reprint receipt";
+  }
+  if (printJob?.status === "FAILED" || printJob?.status === "CANCELLED") {
+    return "Retry receipt print";
+  }
+  return "Print receipt";
 };
 
 const buildCustomerCaptureEntryUrl = (token: string) =>
@@ -266,6 +294,7 @@ export const PosPage = () => {
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
   const receiptWorkstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
+  const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
   const posOpenStateSignature = useMemo(() => JSON.stringify(posOpenState ?? null), [posOpenState]);
 
@@ -1385,6 +1414,8 @@ export const PosPage = () => {
         customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
         cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
         totalPaidPence: sale.tenderSummary.totalPence,
+        receiptPrintJob: null,
+        receiptPrinterName: null,
       });
       setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
       await createBasket();
@@ -1412,12 +1443,67 @@ export const PosPage = () => {
         receiptWorkstationKey ? { workstationKey: receiptWorkstationKey } : {},
       );
       success(getManagedReceiptPrintSuccessMessage(result));
+      announcedReceiptPrintFailureRef.current = null;
+      setCompletedSale((current) => current ? {
+        ...current,
+        receiptPrintJob: result.job,
+        receiptPrinterName: result.printer.name,
+      } : current);
     } catch (printError) {
       error(getManagedReceiptPrintErrorMessage(printError));
     } finally {
       setPrintingReceipt(false);
     }
   };
+
+  useEffect(() => {
+    const job = completedSale?.receiptPrintJob;
+    if (!job || isManagedPrintJobTerminal(job.status)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshJob = async () => {
+      try {
+        const payload = await getManagedPrintJob(job.id);
+        if (!cancelled) {
+          setCompletedSale((current) => current ? {
+            ...current,
+            receiptPrintJob: payload.job,
+            receiptPrinterName: current.receiptPrinterName ?? payload.job.printerName,
+          } : current);
+        }
+      } catch (jobError) {
+        if (!cancelled) {
+          error(jobError instanceof Error ? jobError.message : "Failed to refresh receipt print status");
+        }
+      }
+    };
+
+    void refreshJob();
+    const intervalId = window.setInterval(() => {
+      void refreshJob();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [completedSale?.receiptPrintJob, error]);
+
+  useEffect(() => {
+    const job = completedSale?.receiptPrintJob;
+    if (!job || (job.status !== "FAILED" && job.status !== "CANCELLED")) {
+      return;
+    }
+
+    const failureKey = `${job.id}:${job.status}:${job.attemptCount}`;
+    if (announcedReceiptPrintFailureRef.current === failureKey) {
+      return;
+    }
+    announcedReceiptPrintFailureRef.current = failureKey;
+    error(job.lastError || "Receipt print failed. Use Receipt options for browser fallback if needed.");
+  }, [completedSale?.receiptPrintJob, error]);
 
   const activeTotal = useMemo(() => {
     if (sale) {
@@ -1642,9 +1728,9 @@ export const PosPage = () => {
                       type="button"
                       onClick={() => void handleManagedReceiptPrint()}
                       data-testid="pos-print-receipt-link"
-                      disabled={printingReceipt}
+                      disabled={printingReceipt || Boolean(completedSale.receiptPrintJob && !isManagedPrintJobTerminal(completedSale.receiptPrintJob.status))}
                     >
-                      {printingReceipt ? "Printing..." : "Print receipt"}
+                      {getPosReceiptPrintButtonLabel(printingReceipt, completedSale.receiptPrintJob)}
                     </button>
                     <a
                       href={`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`}
@@ -1673,6 +1759,24 @@ export const PosPage = () => {
                       Open direct receipt page
                     </a>
                   </div>
+                  {completedSale.receiptPrintJob ? (
+                    <div className="success-panel-sale__print-status">
+                      <span className={getManagedPrintJobStatusBadgeClassName(completedSale.receiptPrintJob.status)}>
+                        {getManagedPrintJobStatusLabel(completedSale.receiptPrintJob.status)}
+                      </span>
+                      <span className="table-secondary">
+                        {completedSale.receiptPrinterName || completedSale.receiptPrintJob.printerName || "Managed receipt printer"}
+                        {completedSale.receiptPrintJob.status === "PENDING" ? " is queued." : null}
+                        {completedSale.receiptPrintJob.status === "PROCESSING" ? " is printing now." : null}
+                        {completedSale.receiptPrintJob.status === "SUCCEEDED" ? " finished printing." : null}
+                        {completedSale.receiptPrintJob.status === "FAILED" ? ` failed after ${completedSale.receiptPrintJob.attemptCount} attempt${completedSale.receiptPrintJob.attemptCount === 1 ? "" : "s"}.` : null}
+                        {completedSale.receiptPrintJob.status === "CANCELLED" ? " was cancelled." : null}
+                      </span>
+                      {completedSale.receiptPrintJob.lastError ? (
+                        <span className="warning-text">{completedSale.receiptPrintJob.lastError}</span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

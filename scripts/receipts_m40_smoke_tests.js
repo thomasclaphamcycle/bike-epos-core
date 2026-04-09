@@ -71,6 +71,29 @@ const apiJson = async ({ path, method = "GET", body, cookie }) => {
   return { payload, status: response.status };
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForPrintJobTerminalState = async (jobId, cookie, timeoutMs = 10000) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const jobResponse = await apiJson({
+      path: `/api/print-jobs/${encodeURIComponent(jobId)}`,
+      cookie,
+    });
+    if (
+      jobResponse.payload.job.status === "SUCCEEDED"
+      || jobResponse.payload.job.status === "FAILED"
+      || jobResponse.payload.job.status === "CANCELLED"
+    ) {
+      return jobResponse.payload.job;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`Timed out waiting for print job ${jobId} to reach a terminal state.`);
+};
+
 const login = async (email, password) => {
   const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
@@ -102,6 +125,7 @@ const run = async () => {
     productId: null,
     variantId: null,
     printerIds: new Set(),
+    printJobIds: new Set(),
     basketIds: new Set(),
     saleIds: new Set(),
     paymentIds: new Set(),
@@ -426,13 +450,21 @@ const run = async () => {
         },
         cookie,
       });
+      assert.equal(managedPrint.status, 202);
       assert.equal(managedPrint.payload.receipt.receiptNumber, issuedSale.payload.receipt.receiptNumber);
       assert.equal(managedPrint.payload.printer.id, receiptPrinterId);
       assert.equal(managedPrint.payload.printer.resolutionSource, "workstation");
-      assert.equal(managedPrint.payload.printJob.simulated, true);
-      assert.equal(managedPrint.payload.printJob.copies, 1);
-      assert.ok(managedPrint.payload.printJob.outputPath, "expected DRY_RUN output path");
-      await fs.access(managedPrint.payload.printJob.outputPath);
+      assert.ok(managedPrint.payload.job?.id, "expected managed print job id");
+      assert.equal(managedPrint.payload.job.workflowType, "RECEIPT_PRINT");
+      assert.equal(managedPrint.payload.job.printerId, receiptPrinterId);
+      assert.equal(managedPrint.payload.job.status, "PENDING");
+      created.printJobIds.add(managedPrint.payload.job.id);
+
+      const queuedJob = await waitForPrintJobTerminalState(managedPrint.payload.job.id, cookie);
+      assert.equal(queuedJob.status, "SUCCEEDED");
+      assert.equal(queuedJob.printerId, receiptPrinterId);
+      assert.equal(queuedJob.attemptCount, 1);
+      assert.equal(queuedJob.lastError, null);
     } finally {
       await receiptPrintAgent.close();
     }
@@ -544,6 +576,16 @@ const run = async () => {
     }
 
     const printerIds = Array.from(created.printerIds);
+    const printJobIds = Array.from(created.printJobIds);
+    if (printJobIds.length > 0) {
+      await prisma.printJob.deleteMany({ where: { id: { in: printJobIds } } });
+      await prisma.auditEvent.deleteMany({
+        where: {
+          entityType: "PRINT_JOB",
+          entityId: { in: printJobIds },
+        },
+      });
+    }
     if (printerIds.length > 0) {
       await prisma.printer.deleteMany({ where: { id: { in: printerIds } } });
     }

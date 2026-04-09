@@ -1,4 +1,5 @@
 import { ApiError, apiPost } from "../../api/client";
+import type { ManagedPrintJobSummary } from "../printing/managedPrintJobs";
 import type { SalesReceiptData } from "./SalesReceipt";
 
 type ReceiptPrintTransportMode = "DRY_RUN" | "RAW_TCP" | "WINDOWS_PRINTER";
@@ -9,6 +10,7 @@ type ReceiptPrinterErrorCode =
   | "RECEIPT_PRINT_AGENT_NOT_CONFIGURED"
   | "RECEIPT_PRINT_AGENT_UNREACHABLE"
   | "RECEIPT_PRINT_AGENT_TIMEOUT"
+  | "RECEIPT_PRINT_AGENT_TRANSPORT_FAILED"
   | "RECEIPT_PRINT_AGENT_REQUEST_INVALID"
   | "RECEIPT_PRINT_AGENT_REJECTED"
   | "RECEIPT_PRINT_AGENT_INVALID_RESPONSE"
@@ -58,16 +60,10 @@ export type ReceiptPrintPreparationResponse = {
   } | null;
 };
 
-export type ReceiptDirectPrintResponse = {
+export type ReceiptQueuedPrintResponse = {
   receipt: SalesReceiptData;
   printer: ReceiptPrintResolvedPrinter;
-  printJob: {
-    jobId: string;
-    printerTarget: string;
-    simulated: boolean;
-    outputPath: string | null;
-    copies: number;
-  };
+  job: ManagedPrintJobSummary;
   browserPrintPath: string;
   copies: number;
 };
@@ -113,18 +109,13 @@ export const printManagedReceipt = async (
   saleId: string,
   options: ReceiptPrintRequestOptions = {},
 ) =>
-  apiPost<ReceiptDirectPrintResponse>(
+  apiPost<ReceiptQueuedPrintResponse>(
     `/api/sales/${encodeURIComponent(saleId)}/receipt/print`,
     buildRequestBody(options),
   );
 
-export const getManagedReceiptPrintSuccessMessage = (response: ReceiptDirectPrintResponse) => {
-  const copyLabel = `${response.printJob.copies} cop${response.printJob.copies === 1 ? "y" : "ies"}`;
-  if (response.printJob.simulated) {
-    return `Receipt rendered in dry-run mode for ${response.printer.name} (${copyLabel}).`;
-  }
-  return `Receipt sent to ${response.printer.name} (${copyLabel}).`;
-};
+export const getManagedReceiptPrintSuccessMessage = (response: ReceiptQueuedPrintResponse) =>
+  `Receipt queued for ${response.printer.name}.`;
 
 export const getManagedReceiptPrintErrorMessage = (error: unknown) => {
   const code = getApiErrorCode(error);
@@ -137,6 +128,8 @@ export const getManagedReceiptPrintErrorMessage = (error: unknown) => {
     case "RECEIPT_PRINT_AGENT_UNREACHABLE":
     case "RECEIPT_PRINT_AGENT_TIMEOUT":
       return "Receipt print helper unavailable. Check the managed print host and try again, or use browser print fallback.";
+    case "RECEIPT_PRINT_AGENT_TRANSPORT_FAILED":
+      return "Receipt printer is not accepting jobs right now. Check the printer or network route, then try again.";
     case "RECEIPT_PRINT_AGENT_REQUEST_INVALID":
       return "Receipt print helper rejected this job. Ask a manager to check the helper version and receipt settings.";
     case "RECEIPT_PRINT_AGENT_REJECTED":

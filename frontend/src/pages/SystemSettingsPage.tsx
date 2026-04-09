@@ -8,6 +8,14 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { SurfaceCard } from "../components/ui/SurfaceCard";
 import {
+  getManagedPrintJobStatusBadgeClassName,
+  getManagedPrintJobStatusLabel,
+  listManagedPrintJobs,
+  retryManagedPrintJob,
+  type ManagedPrintJobSummary,
+  type ManagedPrintWorkflowType,
+} from "../features/printing/managedPrintJobs";
+import {
   getStoredReceiptWorkstationKey,
   setStoredReceiptWorkstationKey,
 } from "../features/receipts/receiptWorkstation";
@@ -673,6 +681,26 @@ const toReceiptPrintAgentFormState = (
   clearSharedSecret: false,
 });
 
+const formatManagedPrintWorkflowLabel = (workflowType: ManagedPrintWorkflowType) => {
+  switch (workflowType) {
+    case "RECEIPT_PRINT":
+      return "Receipt";
+    case "SHIPMENT_LABEL_PRINT":
+      return "Shipment label";
+    case "PRODUCT_LABEL_PRINT":
+      return "Product label";
+    case "BIKE_TAG_PRINT":
+      return "Bike tag";
+  }
+};
+
+const formatManagedPrintTimestamp = (value: string | null) => {
+  if (!value) {
+    return "Not started";
+  }
+  return new Date(value).toLocaleString();
+};
+
 export const SystemSettingsPage = () => {
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
@@ -700,6 +728,7 @@ export const SystemSettingsPage = () => {
     DEFAULT_PRODUCT_LABEL_PRINT_AGENT_FORM,
   );
   const [receiptWorkstations, setReceiptWorkstations] = useState<ReceiptPrintWorkstation[]>([]);
+  const [managedPrintJobs, setManagedPrintJobs] = useState<ManagedPrintJobSummary[]>([]);
   const [browserReceiptWorkstationKey, setBrowserReceiptWorkstationKey] = useState<string>(
     () => getStoredReceiptWorkstationKey() ?? "",
   );
@@ -720,6 +749,8 @@ export const SystemSettingsPage = () => {
   const [savingPrinter, setSavingPrinter] = useState(false);
   const [settingDefaultPrinter, setSettingDefaultPrinter] = useState(false);
   const [savingReceiptWorkstations, setSavingReceiptWorkstations] = useState(false);
+  const [loadingManagedPrintJobs, setLoadingManagedPrintJobs] = useState(true);
+  const [retryingManagedPrintJobId, setRetryingManagedPrintJobId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -737,6 +768,7 @@ export const SystemSettingsPage = () => {
           productLabelPrintAgentResponse,
           receiptWorkstationsResponse,
           printersResponse,
+          managedPrintJobsResponse,
         ] = await Promise.all([
           apiGet<StoreInfoResponse>("/api/settings/store-info"),
           apiGet<SettingsResponse>("/api/settings"),
@@ -747,6 +779,10 @@ export const SystemSettingsPage = () => {
           apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent"),
           apiGet<ReceiptPrintWorkstationSettingsResponse>("/api/settings/receipt-workstations"),
           apiGet<RegisteredPrinterListResponse>("/api/settings/printers"),
+          listManagedPrintJobs({
+            status: ["PENDING", "PROCESSING", "FAILED"],
+            take: 30,
+          }),
         ]);
         if (cancelled) {
           return;
@@ -782,6 +818,7 @@ export const SystemSettingsPage = () => {
         setProductLabelPrintAgentForm(toProductLabelPrintAgentFormState(productLabelPrintAgentResponse.config));
         setReceiptWorkstations(receiptWorkstationsResponse.config.workstations);
         setPrintersPayload(printersResponse);
+        setManagedPrintJobs(managedPrintJobsResponse.jobs);
         const preferredPrinterId =
           printersResponse.defaultBikeTagPrinterId
           ?? printersResponse.defaultReceiptPrinterId
@@ -806,6 +843,7 @@ export const SystemSettingsPage = () => {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setLoadingManagedPrintJobs(false);
         }
       }
     };
@@ -1304,6 +1342,20 @@ export const SystemSettingsPage = () => {
     return payload;
   };
 
+  const loadManagedPrintJobs = async () => {
+    setLoadingManagedPrintJobs(true);
+    try {
+      const payload = await listManagedPrintJobs({
+        status: ["PENDING", "PROCESSING", "FAILED"],
+        take: 30,
+      });
+      setManagedPrintJobs(payload.jobs);
+      return payload;
+    } finally {
+      setLoadingManagedPrintJobs(false);
+    }
+  };
+
   const selectShippingProviderForEditing = (providerKey: string) => {
     const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
     setSelectedProviderKey(providerKey);
@@ -1478,6 +1530,20 @@ export const SystemSettingsPage = () => {
       error(saveError instanceof Error ? saveError.message : "Failed to save receipt workstation defaults");
     } finally {
       setSavingReceiptWorkstations(false);
+    }
+  };
+
+  const handleRetryManagedPrintJob = async (jobId: string) => {
+    setRetryingManagedPrintJobId(jobId);
+    try {
+      const payload = await retryManagedPrintJob(jobId);
+      setManagedPrintJobs((current) => current.map((job) => job.id === jobId ? payload.job : job));
+      success("Print job queued for retry.");
+      await loadManagedPrintJobs();
+    } catch (retryError) {
+      error(retryError instanceof Error ? retryError.message : "Failed to retry print job");
+    } finally {
+      setRetryingManagedPrintJobId(null);
     }
   };
 
@@ -3332,6 +3398,87 @@ export const SystemSettingsPage = () => {
                 Managed receipt printing resolves in this order: explicit printer override, workstation default, then the global default receipt printer.
               </div>
             </section>
+          </div>
+        )}
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <SectionHeader
+          title="Managed Print Queue"
+          description="Inspect queued, printing, and failed managed print jobs. CorePOS only processes one active job per physical printer at a time."
+          actions={(
+            <div className="actions-inline">
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => void loadManagedPrintJobs()}
+                disabled={loadingManagedPrintJobs || Boolean(retryingManagedPrintJobId)}
+              >
+                {loadingManagedPrintJobs ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+          )}
+        />
+
+        {loadingManagedPrintJobs && managedPrintJobs.length === 0 ? (
+          <EmptyState
+            title="Loading Print Queue"
+            description="Fetching pending, in-progress, and failed managed print jobs."
+          />
+        ) : managedPrintJobs.length === 0 ? (
+          <EmptyState
+            title="No Active Print Jobs"
+            description="There are no pending, printing, or failed managed print jobs right now."
+          />
+        ) : (
+          <div className="managed-print-job-list">
+            {managedPrintJobs.map((job) => (
+              <div key={job.id} className="managed-print-job-card">
+                <div className="managed-print-job-card__header">
+                  <div>
+                    <div className="table-primary">
+                      {formatManagedPrintWorkflowLabel(job.workflowType)}
+                      {job.documentLabel ? ` · ${job.documentLabel}` : ""}
+                    </div>
+                    <div className="table-secondary">
+                      {job.printerName || job.printerKey || "Managed printer"} · job {job.id.slice(0, 8)}
+                    </div>
+                  </div>
+                  <span className={getManagedPrintJobStatusBadgeClassName(job.status)}>
+                    {getManagedPrintJobStatusLabel(job.status)}
+                  </span>
+                </div>
+
+                <div className="managed-print-job-card__meta">
+                  <span>Attempts {job.attemptCount}/{job.maxAttempts}</span>
+                  <span>Created {formatManagedPrintTimestamp(job.createdAt)}</span>
+                  <span>
+                    {job.status === "PENDING"
+                      ? `Next attempt ${formatManagedPrintTimestamp(job.nextAttemptAt || job.createdAt)}`
+                      : `Started ${formatManagedPrintTimestamp(job.startedAt)}`}
+                  </span>
+                </div>
+
+                {job.lastError ? (
+                  <div className="restricted-panel warning-panel managed-print-job-card__error">
+                    <strong>Last error:</strong> {job.lastError}
+                  </div>
+                ) : null}
+
+                {job.canRetry ? (
+                  <div className="managed-print-job-card__actions">
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void handleRetryManagedPrintJob(job.id)}
+                      disabled={retryingManagedPrintJobId === job.id}
+                    >
+                      {retryingManagedPrintJobId === job.id ? "Retrying..." : "Retry job"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         )}
       </SurfaceCard>

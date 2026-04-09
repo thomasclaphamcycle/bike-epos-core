@@ -1,0 +1,22 @@
+@baseUrl = http://localhost:3100
+@managerRole = MANAGER
+@managerId = manager-1
+@staffRole = STAFF
+@staffId = staff-1
+@jobId = REPLACE_PRINT_JOB_ID
+
+### List active / failed managed print jobs (MANAGER+)
+GET {{baseUrl}}/api/print-jobs?status=PENDING,PROCESSING,FAILED&take=20
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}
+
+### Get a single managed print job (STAFF+)
+GET {{baseUrl}}/api/print-jobs/{{jobId}}
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Retry a failed managed print job (MANAGER+)
+POST {{baseUrl}}/api/print-jobs/{{jobId}}/retry
+Content-Type: application/json
+X-Staff-Role: {{managerRole}}
+X-Staff-Id: {{managerId}}

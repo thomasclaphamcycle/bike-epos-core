@@ -4,11 +4,11 @@ import {
   getSaleReceiptById,
   issueReceipt,
 } from "../services/receiptService";
-import { getRequestStaffActorId } from "../middleware/staffRole";
+import { getRequestAuditActor, getRequestStaffActorId } from "../middleware/staffRole";
 import { HttpError } from "../utils/http";
 import {
   prepareSaleReceiptPrint,
-  printSaleReceiptDirect,
+  queueSaleReceiptPrint,
 } from "../services/receiptPrintService";
 
 const toReceiptPrintInput = (body: unknown) => {
@@ -83,10 +83,11 @@ export const prepareSaleReceiptPrintHandler = async (req: Request, res: Response
 };
 
 export const printSaleReceiptHandler = async (req: Request, res: Response) => {
-  const result = await printSaleReceiptDirect(
+  const result = await queueSaleReceiptPrint(
     req.params.saleId,
     toReceiptPrintInput(req.body),
     getRequestStaffActorId(req),
+    getRequestAuditActor(req),
   );
-  res.json(result);
+  res.status(202).json(result);
 };

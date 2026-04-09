@@ -7,9 +7,12 @@ import {
   RECEIPT_PRINT_REQUEST_VERSION,
   THERMAL_RECEIPT_PRINTER_FAMILY,
   WINDOWS_LOCAL_AGENT_TRANSPORT,
-  type ReceiptPrintAgentJob,
   type ReceiptPrintRequest,
 } from "../../shared/receiptPrintContract";
+import {
+  MANAGED_PRINT_QUEUE_PAYLOAD_VERSION,
+  type ManagedPrintJobSummary,
+} from "../../shared/managedPrintJobContract";
 import { logOperationalEvent } from "../lib/operationalLogger";
 import { HttpError } from "../utils/http";
 import { renderReceiptEscPosDocument } from "./receiptEscPosDocument";
@@ -25,7 +28,9 @@ import {
   resolveReceiptPrintWorkstation,
   type ReceiptPrintWorkstation,
 } from "./receiptPrintStationService";
-import { deliverReceiptPrintRequestToAgent } from "./receiptPrintAgentDeliveryService";
+import { type AuditActor } from "./auditService";
+import { buildManagedPrintQueuePayload } from "./managedPrintDispatchService";
+import { enqueueManagedPrintJob } from "./managedPrintQueueService";
 
 const MAX_RECEIPT_COPIES = 5;
 const PRINTER_RESOLUTION_ERROR_CODES = new Set([
@@ -57,10 +62,10 @@ export type ReceiptPrintPreparationResponse = {
   } | null;
 };
 
-export type ReceiptDirectPrintResponse = {
+export type ReceiptQueuedPrintResponse = {
   receipt: DetailedReceipt;
   printer: ResolvedReceiptPrinter;
-  printJob: ReceiptPrintAgentJob;
+  job: ManagedPrintJobSummary;
   browserPrintPath: string;
   copies: number;
 };
@@ -177,11 +182,12 @@ export const prepareSaleReceiptPrint = async (
   }
 };
 
-export const printSaleReceiptDirect = async (
+export const queueSaleReceiptPrint = async (
   saleId: string,
   input: ReceiptPrintPreparationInput = {},
   issuedByStaffId?: string,
-): Promise<ReceiptDirectPrintResponse> => {
+  auditActor?: AuditActor,
+): Promise<ReceiptQueuedPrintResponse> => {
   const copies = normalizeCopies(input.copies);
   const [receipt, printer, currentWorkstation] = await Promise.all([
     loadDetailedSaleReceipt(saleId, issuedByStaffId),
@@ -192,30 +198,45 @@ export const printSaleReceiptDirect = async (
   const printRequest = buildReceiptPrintRequest(saleId, receipt, printer, currentWorkstation, copies);
 
   try {
-    const printAgentResponse = await deliverReceiptPrintRequestToAgent(printRequest);
+    const queued = await enqueueManagedPrintJob(
+      {
+        workflowType: "RECEIPT_PRINT",
+        printerId: printer.id,
+        payload: buildManagedPrintQueuePayload({
+          version: MANAGED_PRINT_QUEUE_PAYLOAD_VERSION,
+          workflowType: "RECEIPT_PRINT",
+          printRequest,
+        }),
+        documentLabel: receipt.receiptNumber,
+        sourceEntityType: "SALE_RECEIPT",
+        sourceEntityId: saleId,
+        createdByStaffId: issuedByStaffId ?? null,
+      },
+      auditActor,
+    );
 
-    logOperationalEvent("receipt.direct_print.completed", {
+    logOperationalEvent("receipt.print_job.enqueued", {
       entityId: receipt.receiptNumber,
       receiptNumber: receipt.receiptNumber,
       saleId,
+      printJobId: queued.job.id,
       printerId: printer.id,
       printerKey: printer.key,
       transportMode: printer.transportMode,
       resolutionSource: printer.resolutionSource,
       workstationKey: currentWorkstation?.key ?? null,
       copies,
-      simulated: printAgentResponse.job.simulated,
     });
 
     return {
       receipt,
       printer,
-      printJob: printAgentResponse.job,
+      job: queued.job,
       browserPrintPath: `/sales/${encodeURIComponent(saleId)}/receipt/print`,
       copies,
     };
   } catch (error) {
-    logOperationalEvent("receipt.direct_print.failed", {
+    logOperationalEvent("receipt.print_job.enqueue_failed", {
       entityId: receipt.receiptNumber,
       receiptNumber: receipt.receiptNumber,
       saleId,

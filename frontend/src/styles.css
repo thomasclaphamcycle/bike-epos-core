@@ -1046,6 +1046,12 @@ body {
   margin: 0;
 }
 
+.sales-receipt-print-page__job-status {
+  display: grid;
+  gap: 6px;
+  max-width: 780px;
+}
+
 .warning-text {
   color: #8a6500;
 }
@@ -10674,6 +10680,45 @@ button.primary.workshop-status-action {
   justify-self: start;
 }
 
+.managed-print-job-list {
+  display: grid;
+  gap: 12px;
+}
+
+.managed-print-job-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #d6dee8;
+  background: #f7fafc;
+}
+
+.managed-print-job-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.managed-print-job-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: #506171;
+  font-size: 0.92rem;
+}
+
+.managed-print-job-card__error {
+  margin: 0;
+}
+
+.managed-print-job-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .dispatch-printers-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
@@ -13542,6 +13587,11 @@ body.rota-row-drag-copy-active {
 .success-links-sale {
   margin-top: 0;
   align-items: center;
+}
+
+.success-panel-sale__print-status {
+  display: grid;
+  gap: 6px;
 }
 
 .cash-upload-shell {

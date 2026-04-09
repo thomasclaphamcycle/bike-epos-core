@@ -1024,6 +1024,21 @@ enum RegisteredPrinterTransportMode {
   WINDOWS_PRINTER
 }
 
+enum PrintJobWorkflowType {
+  RECEIPT_PRINT
+  SHIPMENT_LABEL_PRINT
+  PRODUCT_LABEL_PRINT
+  BIKE_TAG_PRINT
+}
+
+enum PrintJobStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 model WebOrder {
   id                    String                    @id @default(uuid()) @db.Uuid
   orderNumber           String                    @unique
@@ -1185,6 +1200,7 @@ model Printer {
   notes                  String?
   createdAt              DateTime                       @default(now())
   updatedAt              DateTime                       @updatedAt
+  printJobs              PrintJob[]
 
   @@index([supportsShippingLabels, isActive])
   @@index([supportsProductLabels, isActive])
@@ -1192,6 +1208,36 @@ model Printer {
   @@index([supportsReceipts, isActive])
   @@index([printerFamily, isActive])
   @@index([transportMode, isActive])
+}
+
+model PrintJob {
+  id                 String               @id @default(uuid()) @db.Uuid
+  workflowType       PrintJobWorkflowType
+  printerId          String               @db.Uuid
+  status             PrintJobStatus       @default(PENDING)
+  attemptCount       Int                  @default(0)
+  maxAttempts        Int                  @default(3)
+  payload            Json
+  documentLabel      String?
+  sourceEntityType   String?
+  sourceEntityId     String?
+  createdByStaffId   String?
+  lastError          String?
+  lastErrorCode      String?
+  lastErrorRetryable Boolean?
+  nextAttemptAt      DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+
+  printer Printer @relation(fields: [printerId], references: [id], onDelete: Restrict)
+
+  @@index([printerId, status, nextAttemptAt, createdAt])
+  @@index([workflowType, status, createdAt])
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([sourceEntityType, sourceEntityId, createdAt])
 }
 
 model SaleReturn {
