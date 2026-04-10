@@ -170,9 +170,12 @@ export const CustomerCapturePage = () => {
 
         {!loading && !loadError && session?.status === "COMPLETED" && !result ? (
           <div className="quick-create-panel">
-            <strong>Link already used</strong>
+            <strong>Details already submitted</strong>
             <p className="muted-text">
-              This customer capture link has already been completed. If staff still need your details, please ask them for a fresh link.
+              This customer capture link has already been completed and the sale should now show the attached customer back on the till.
+            </p>
+            <p className="muted-text">
+              If staff still need anything else, ask them to generate a fresh link rather than reusing this one.
             </p>
           </div>
         ) : null}
@@ -181,7 +184,10 @@ export const CustomerCapturePage = () => {
           <div className="quick-create-panel">
             <strong>Link replaced</strong>
             <p className="muted-text">
-              Staff have already generated a newer customer capture link for this sale. Please scan the latest QR code or ask them to reopen the newest link.
+              Staff have already generated a newer customer capture link for this sale, so this older link is no longer active.
+            </p>
+            <p className="muted-text">
+              Please scan the latest QR code or ask them to reopen the newest link.
             </p>
           </div>
         ) : null}
@@ -190,7 +196,10 @@ export const CustomerCapturePage = () => {
           <div className="quick-create-panel">
             <strong>Link expired</strong>
             <p className="muted-text">
-              This customer capture link has expired. Please ask staff for a fresh link and try again.
+              This customer capture link expired before it was used.
+            </p>
+            <p className="muted-text">
+              Please ask staff for a fresh link and try again.
             </p>
           </div>
         ) : null}

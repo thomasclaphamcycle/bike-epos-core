@@ -353,6 +353,7 @@ export const PosPage = () => {
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
   const posOpenStateSignature = useMemo(() => JSON.stringify(posOpenState ?? null), [posOpenState]);
+  const isCaptureEligible = Boolean(sale?.sale.id && !sale.sale.completedAt && !sale.sale.customer?.id);
 
   useEffect(() => {
     basketStateRef.current = basket;
@@ -2168,16 +2169,16 @@ export const PosPage = () => {
                 </div>
               ) : null}
 
-              {!sale?.sale.customer?.id ? (
-                <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
-                  <div className="card-header-row">
-                    <div>
-                      <div className="table-primary">Add Customer</div>
-                      <p className="muted-text">
-                        Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
-                      </p>
-                    </div>
-                    {captureSession?.status === "COMPLETED" && sale?.sale.id ? (
+              <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
+                <div className="card-header-row">
+                  <div>
+                    <div className="table-primary">Add Customer</div>
+                    <p className="muted-text">
+                      Share a QR code or link so the customer can attach their details to this sale from their phone.
+                    </p>
+                  </div>
+                  {isCaptureEligible ? (
+                    captureSession?.status === "COMPLETED" && sale?.sale.id ? (
                       <button
                         type="button"
                         className="primary"
@@ -2192,16 +2193,42 @@ export const PosPage = () => {
                         className="primary"
                         data-testid="pos-customer-capture-generate"
                         onClick={() => void createCustomerCaptureSession()}
-                        disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession || captureSessionLoading}
+                        disabled={creatingCaptureSession || captureSessionLoading}
                       >
                         {creatingCaptureSession ? "Preparing..." : captureSession ? "Regenerate" : "Start Add Customer"}
                       </button>
-                    )}
-                  </div>
+                    )
+                  ) : null}
+                </div>
 
-                  {!sale?.sale.id ? (
-                    <p className="muted-text">Available after basket checkout creates a sale.</p>
-                  ) : captureSessionLoading ? (
+                {!sale?.sale.id ? (
+                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-no-sale-state">
+                    <span className="status-badge">Unavailable</span>
+                    <strong>No active sale yet</strong>
+                    <p className="muted-text">
+                      Customer capture becomes available after basket checkout creates a live sale.
+                    </p>
+                  </div>
+                ) : sale.sale.customer ? (
+                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-attached-state">
+                    <span className="status-badge status-complete">Not needed</span>
+                    <strong>Customer already attached</strong>
+                    <p className="muted-text">
+                      This sale already has {sale.sale.customer.name} attached, so Add Customer is no longer needed here.
+                    </p>
+                    <p className="muted-text">
+                      {formatCustomerContactSummary(sale.sale.customer)}
+                    </p>
+                  </div>
+                ) : sale.sale.completedAt ? (
+                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ineligible-state">
+                    <span className="status-badge">Unavailable</span>
+                    <strong>Sale already completed</strong>
+                    <p className="muted-text">
+                      Customer capture can only be started while the sale is still active.
+                    </p>
+                  </div>
+                ) : captureSessionLoading ? (
                     <div className="quick-create-panel pos-customer-capture-state">
                       <span className="status-badge">Loading</span>
                       <strong>Checking current customer capture</strong>
@@ -2307,7 +2334,7 @@ export const PosPage = () => {
                       </div>
                     </div>
                   ) : captureSession?.status === "COMPLETED" ? (
-                    <div className="success-panel success-panel-sale">
+                    <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-completed-state">
                       <div className="success-panel-heading">
                         <strong>Customer capture complete.</strong>
                         <span className="status-badge status-complete">
@@ -2322,7 +2349,7 @@ export const PosPage = () => {
                               captureSession.outcome.matchType,
                               captureSession.outcome.customer.name,
                             )
-                          : "The customer has finished the form and the sale can now refresh with their details."}
+                          : "The customer has already finished the form. Refresh the sale to pull their details into the till."}
                       </p>
                     </div>
                   ) : captureSession?.status === "EXPIRED" ? (
@@ -2334,16 +2361,15 @@ export const PosPage = () => {
                       </p>
                     </div>
                   ) : (
-                    <div className="quick-create-panel pos-customer-capture-state">
+                    <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ready-state">
                       <span className="status-badge">Ready</span>
-                      <strong>Ready to add a customer</strong>
+                      <strong>No live capture link</strong>
                       <p className="muted-text">
-                        Start Add Customer to show a QR code and public link for this sale.
+                        Start Add Customer when the customer is ready. CorePOS will then show a fresh QR code and public link for this sale.
                       </p>
                     </div>
                   )}
-                </div>
-              ) : null}
+              </div>
 
               <div className="customer-search-panel">
                 <div className="customer-search-stack grow">

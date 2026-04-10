@@ -584,6 +584,9 @@ test("React POS customer search, attach, change, and checkout preserves final cu
 
   await page.getByTestId("pos-checkout-basket").click();
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to sale");
+  await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
+  await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(firstCustomer.email);
+  await expect(page.getByTestId("pos-customer-capture-generate")).toHaveCount(0);
 
   const saleIdAfterCheckout = new URL(page.url()).searchParams.get("saleId");
   expect(saleIdAfterCheckout).toBeTruthy();
@@ -669,7 +672,7 @@ test("POS customer capture flow attaches captured customer to the active sale", 
   await expect(page.getByTestId("pos-customer-capture-success")).toContainText("Created a new customer profile for Taylor Rider.");
   await expect(page.getByTestId("pos-customer-capture-success")).toContainText("New customer");
   await expect(page.getByTestId("pos-customer-capture-success")).toContainText(`capture-${token}@example.com`);
-  await expect(page.getByTestId("pos-customer-capture-panel")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
   await page.getByTestId("pos-customer-capture-dismiss").click();
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
   await expect(page.getByTestId("pos-selected-customer")).toContainText(`capture-${token}@example.com`);
@@ -679,8 +682,10 @@ test("POS customer capture flow attaches captured customer to the active sale", 
   await page.goto(`${frontendBaseUrl}/pos?saleId=${encodeURIComponent(saleId)}`);
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Taylor Rider");
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
-  await expect(page.getByTestId("pos-customer-capture-panel")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
 
+  await capturePage.goto(captureUrl);
+  await expect(capturePage.getByText("Details already submitted")).toBeVisible();
   await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
   await expect(capturePage.getByText("No active customer capture yet")).toBeVisible();
 
@@ -742,6 +747,25 @@ test("POS customer capture regeneration makes older public links fail clearly", 
   const secondCapturePage = await context.newPage();
   await secondCapturePage.goto(secondCaptureUrl);
   await expect(secondCapturePage.getByTestId("customer-capture-form")).toBeVisible();
+});
+
+test("POS customer capture stays non-actionable until a live sale exists", async ({
+  page,
+  request,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-customer-capture-no-sale",
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await expect(page.getByTestId("pos-customer-capture-no-sale-state")).toContainText("No active sale yet");
+  await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(
+    "Customer capture becomes available after basket checkout creates a live sale.",
+  );
+  await expect(page.getByTestId("pos-customer-capture-generate")).toHaveCount(0);
 });
 
 test("POS customer capture reloads the correct active session after switching sales", async ({
@@ -826,6 +850,58 @@ test("POS customer capture shows matched-by-email outcome for existing customers
   await expect(page.getByTestId("pos-customer-capture-success")).toContainText("Matched by email");
   await expect(page.getByTestId("pos-customer-capture-success")).toContainText("Matched existing customer Morgan Existing by email.");
   await expect(page.getByTestId("pos-customer-capture-success")).toContainText(existingCustomer.email);
+});
+
+test("POS customer capture shows matched-by-phone outcome for existing customers", async ({
+  page,
+  request,
+  context,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-customer-capture-match-phone",
+  });
+  const seeded = await seedCatalogVariant(request, { prefix: "pos-customer-capture-match-phone" });
+  const token = uniqueToken("pos-customer-capture-match-phone");
+  const existingPhone = `07${token.replace(/\D/g, "").slice(-9).padStart(9, "2")}`;
+  const existingCustomer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
+    data: {
+      name: `Jamie Phone ${token}`,
+      phone: existingPhone,
+    },
+  });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await page.getByTestId("pos-product-search").fill(seeded.sku);
+  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
+  await page.getByTestId("pos-checkout-basket").click();
+  await page.getByTestId("pos-customer-capture-generate").click();
+
+  const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  const capturePage = await context.newPage();
+  await capturePage.goto(captureUrl);
+  await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
+  await capturePage.getByTestId("customer-capture-first-name").fill("Jamie");
+  await capturePage.getByTestId("customer-capture-last-name").fill("Phone");
+  await capturePage.getByTestId("customer-capture-email").fill(`fresh-${token}@example.com`);
+  await capturePage.getByTestId("customer-capture-phone").fill(existingPhone);
+  await capturePage.getByRole("button", { name: "Save details" }).click();
+  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("matched an existing customer by phone");
+
+  await expect.poll(async () => {
+    const chip = page.getByTestId("pos-selected-customer");
+    if (await chip.count() === 0) {
+      return null;
+    }
+    return chip.textContent();
+  }).toContain(existingCustomer.name);
+
+  await expect(page.getByTestId("pos-customer-capture-success")).toContainText("Matched by phone");
+  await expect(page.getByTestId("pos-customer-capture-success")).toContainText(`Matched existing customer ${existingCustomer.name} by phone.`);
+  await expect(page.getByTestId("pos-customer-capture-success")).toContainText(existingPhone);
 });
 
 test("React POS checkout opens a printable thermal receipt page", async ({ page, request }) => {
