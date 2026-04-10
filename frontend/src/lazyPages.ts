@@ -43,6 +43,10 @@ export const CustomersPage = lazyPage(
   () => import("./pages/CustomersPage"),
   "CustomersPage",
 );
+export const CustomerCapturePage = lazyPage(
+  () => import("./pages/CustomerCapturePage"),
+  "CustomerCapturePage",
+);
 export const CustomerProfilePage = lazyPage(
   () => import("./pages/CustomerProfilePage"),
   "CustomerProfilePage",
@@ -395,10 +399,6 @@ export const CashReceiptUploadPage = lazyPage(
 export const CustomerSitePage = lazyPage(
   () => import("./pages/CustomerSitePage"),
   "CustomerSitePage",
-);
-export const CustomerCapturePage = lazyPage(
-  () => import("./pages/CustomerCapturePage"),
-  "CustomerCapturePage",
 );
 export const CustomerAccountLoginPage = lazyPage(
   () => import("./pages/CustomerAccountLoginPage"),

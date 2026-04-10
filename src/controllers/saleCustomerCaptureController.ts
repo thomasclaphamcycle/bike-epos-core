@@ -1,14 +1,21 @@
 import { Request, Response } from "express";
+import { getRequestAuditActor } from "../middleware/staffRole";
 import { HttpError } from "../utils/http";
 import {
   createSaleCustomerCaptureSession,
+  getCurrentSaleCustomerCaptureSession,
   getPublicSaleCustomerCaptureSession,
   submitPublicSaleCustomerCapture,
 } from "../services/saleCustomerCaptureService";
 
 export const createSaleCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
-  const result = await createSaleCustomerCaptureSession(req.params.saleId);
+  const result = await createSaleCustomerCaptureSession(req.params.saleId, getRequestAuditActor(req));
   res.status(201).json(result);
+};
+
+export const getCurrentSaleCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
+  const result = await getCurrentSaleCustomerCaptureSession(req.params.saleId);
+  res.json(result);
 };
 
 export const getPublicSaleCustomerCaptureSessionHandler = async (req: Request, res: Response) => {

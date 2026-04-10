@@ -48,6 +48,7 @@ const parseJson = async (response) => {
   if (!text) {
     return null;
   }
+
   try {
     return JSON.parse(text);
   } catch {
@@ -75,12 +76,23 @@ const apiJson = async ({ path, method = "GET", body, headers }) => {
 const apiJsonOrThrow = async (request) => {
   const result = await apiJson(request);
   if (result.status < 200 || result.status >= 300) {
-    throw new Error(`${request.method || "GET"} ${request.path} failed (${result.status}): ${JSON.stringify(result.payload)}`);
+    throw new Error(
+      `${request.method || "GET"} ${request.path} failed (${result.status}): ${JSON.stringify(result.payload)}`,
+    );
   }
   return result.payload;
 };
 
 const cleanup = async (created) => {
+  if (created.sessionIds.size > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityType: "SALE_CUSTOMER_CAPTURE_SESSION",
+        entityId: { in: Array.from(created.sessionIds) },
+      },
+    });
+  }
+
   if (created.sessionIds.size > 0) {
     await prisma.saleCustomerCaptureSession.deleteMany({
       where: { id: { in: Array.from(created.sessionIds) } },
@@ -90,44 +102,14 @@ const cleanup = async (created) => {
   if (created.saleIds.size > 0) {
     const saleIds = Array.from(created.saleIds);
 
-    await prisma.saleItem.deleteMany({
-      where: { saleId: { in: saleIds } },
-    });
-
     await prisma.sale.deleteMany({
       where: { id: { in: saleIds } },
     });
   }
 
-  if (created.basketIds.size > 0) {
-    const basketIds = Array.from(created.basketIds);
-    await prisma.basketItem.deleteMany({
-      where: { basketId: { in: basketIds } },
-    });
-    await prisma.basket.deleteMany({
-      where: { id: { in: basketIds } },
-    });
-  }
-
-  if (created.variantIds.size > 0) {
-    const variantIds = Array.from(created.variantIds);
-    await prisma.stockLedgerEntry.deleteMany({
-      where: { variantId: { in: variantIds } },
-    });
-    await prisma.inventoryMovement.deleteMany({
-      where: { variantId: { in: variantIds } },
-    });
-    await prisma.barcode.deleteMany({
-      where: { variantId: { in: variantIds } },
-    });
-    await prisma.variant.deleteMany({
-      where: { id: { in: variantIds } },
-    });
-  }
-
-  if (created.productIds.size > 0) {
-    await prisma.product.deleteMany({
-      where: { id: { in: Array.from(created.productIds) } },
+  if (created.locationIds.size > 0) {
+    await prisma.location.deleteMany({
+      where: { id: { in: Array.from(created.locationIds) } },
     });
   }
 
@@ -136,41 +118,25 @@ const cleanup = async (created) => {
       where: { id: { in: Array.from(created.customerIds) } },
     });
   }
-
-  if (created.userIds.size > 0) {
-    await prisma.user.deleteMany({
-      where: { id: { in: Array.from(created.userIds) } },
-    });
-  }
 };
 
-const createSale = async (created, variantId) => {
-  const basket = await apiJsonOrThrow({
-    path: "/api/baskets",
-    method: "POST",
-    body: {},
-    headers: STAFF_HEADERS,
-  });
-  created.basketIds.add(basket.id);
-
-  await apiJsonOrThrow({
-    path: `/api/baskets/${encodeURIComponent(basket.id)}/lines`,
-    method: "POST",
-    body: {
-      variantId,
-      quantity: 1,
+const createSale = async (created, locationId) => {
+  const sale = await prisma.sale.create({
+    data: {
+      locationId,
+      subtotalPence: 2500,
+      taxPence: 0,
+      totalPence: 2500,
+      changeDuePence: 0,
     },
-    headers: STAFF_HEADERS,
+    select: {
+      id: true,
+      completedAt: true,
+      customerId: true,
+    },
   });
-
-  const checkout = await apiJsonOrThrow({
-    path: `/api/baskets/${encodeURIComponent(basket.id)}/checkout`,
-    method: "POST",
-    body: {},
-    headers: STAFF_HEADERS,
-  });
-  created.saleIds.add(checkout.sale.id);
-  return checkout.sale;
+  created.saleIds.add(sale.id);
+  return sale;
 };
 
 const createCaptureSession = async (created, saleId) => {
@@ -181,59 +147,162 @@ const createCaptureSession = async (created, saleId) => {
     headers: STAFF_HEADERS,
   });
   created.sessionIds.add(payload.session.id);
-  return payload.session;
+  return payload;
+};
+
+const getCurrentCaptureSession = async (saleId) => {
+  return apiJsonOrThrow({
+    path: `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions/current`,
+    method: "GET",
+    headers: STAFF_HEADERS,
+  });
 };
 
 const run = async () => {
   const created = {
-    productIds: new Set(),
-    variantIds: new Set(),
-    basketIds: new Set(),
+    locationIds: new Set(),
     saleIds: new Set(),
     sessionIds: new Set(),
     customerIds: new Set(),
-    userIds: new Set(["sale-customer-capture-smoke-manager"]),
   };
 
   try {
     await serverController.startIfNeeded();
 
     const token = uniqueRef();
-    const product = await apiJsonOrThrow({
-      path: "/api/products",
-      method: "POST",
-      body: {
-        name: `Capture Product ${token}`,
-        brand: "Capture",
+    const location = await prisma.location.create({
+      data: {
+        name: `Capture Location ${token}`,
+        code: `CAPTURE_${token.slice(-8)}`,
       },
-      headers: STAFF_HEADERS,
     });
-    created.productIds.add(product.id);
+    created.locationIds.add(location.id);
 
-    const variant = await apiJsonOrThrow({
-      path: "/api/variants",
+    const invalidSaleIdCreate = await apiJson({
+      path: "/api/sales/not-a-uuid/customer-capture-sessions",
       method: "POST",
-      body: {
-        productId: product.id,
-        sku: `CAPTURE-${token}`,
-        retailPricePence: 2500,
-      },
+      body: {},
       headers: STAFF_HEADERS,
     });
-    created.variantIds.add(variant.id);
+    assert.equal(invalidSaleIdCreate.status, 400);
+    assert.equal(invalidSaleIdCreate.payload.error.code, "INVALID_SALE_ID");
 
-    await apiJsonOrThrow({
-      path: "/api/inventory/movements",
+    const missingSaleCreate = await apiJson({
+      path: "/api/sales/00000000-0000-4000-8000-000000000001/customer-capture-sessions",
       method: "POST",
-      body: {
-        variantId: variant.id,
-        type: "PURCHASE",
-        quantity: 5,
-        referenceType: "SALE_CAPTURE_TEST",
-        referenceId: `seed_${token}`,
-      },
+      body: {},
       headers: STAFF_HEADERS,
     });
+    assert.equal(missingSaleCreate.status, 404);
+    assert.equal(missingSaleCreate.payload.error.code, "SALE_NOT_FOUND");
+
+    const completedSale = await createSale(created, location.id);
+    await prisma.sale.update({
+      where: { id: completedSale.id },
+      data: { completedAt: new Date() },
+    });
+    const completedSaleCreate = await apiJson({
+      path: `/api/sales/${encodeURIComponent(completedSale.id)}/customer-capture-sessions`,
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(completedSaleCreate.status, 409);
+    assert.equal(completedSaleCreate.payload.error.code, "SALE_ALREADY_COMPLETED");
+
+    const attachedCustomer = await prisma.customer.create({
+      data: {
+        firstName: "Attached",
+        lastName: "Customer",
+        email: `attached-${token}@example.com`,
+      },
+    });
+    created.customerIds.add(attachedCustomer.id);
+
+    const customerAttachedSale = await createSale(created, location.id);
+    await prisma.sale.update({
+      where: { id: customerAttachedSale.id },
+      data: { customerId: attachedCustomer.id },
+    });
+    const attachedSaleCreate = await apiJson({
+      path: `/api/sales/${encodeURIComponent(customerAttachedSale.id)}/customer-capture-sessions`,
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(attachedSaleCreate.status, 409);
+    assert.equal(attachedSaleCreate.payload.error.code, "SALE_CUSTOMER_ALREADY_ATTACHED");
+
+    const reusableSale = await createSale(created, location.id);
+    const emptyCurrentSession = await getCurrentCaptureSession(reusableSale.id);
+    assert.equal(emptyCurrentSession.session, null);
+
+    const firstSessionPayload = await createCaptureSession(created, reusableSale.id);
+    assert.equal(firstSessionPayload.session.saleId, reusableSale.id);
+    assert.equal(firstSessionPayload.session.status, "ACTIVE");
+    assert.equal(firstSessionPayload.replacedActiveSessionCount, 0);
+    assert.ok(firstSessionPayload.session.token);
+    assert.match(firstSessionPayload.session.publicPath, /\/customer-capture\//);
+
+    const firstCurrentSession = await getCurrentCaptureSession(reusableSale.id);
+    assert.equal(firstCurrentSession.session.id, firstSessionPayload.session.id);
+    assert.equal(firstCurrentSession.session.status, "ACTIVE");
+
+    const secondSessionPayload = await createCaptureSession(created, reusableSale.id);
+    assert.equal(secondSessionPayload.replacedActiveSessionCount, 1);
+    assert.notEqual(secondSessionPayload.session.id, firstSessionPayload.session.id);
+
+    const secondCurrentSession = await getCurrentCaptureSession(reusableSale.id);
+    assert.equal(secondCurrentSession.session.id, secondSessionPayload.session.id);
+    assert.equal(secondCurrentSession.session.status, "ACTIVE");
+
+    const firstSessionState = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(firstSessionPayload.session.token)}`,
+      method: "GET",
+    });
+    assert.equal(firstSessionState.session.status, "EXPIRED");
+    assert.equal(firstSessionState.session.isReplaced, true);
+
+    const secondSessionState = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(secondSessionPayload.session.token)}`,
+      method: "GET",
+    });
+    assert.equal(secondSessionState.session.status, "ACTIVE");
+    assert.equal(secondSessionState.session.isReplaced, false);
+
+    const replacedSubmit = await apiJson({
+      path: `/api/public/customer-capture/${encodeURIComponent(firstSessionPayload.session.token)}`,
+      method: "POST",
+      body: {
+        firstName: "Late",
+        lastName: "Replacement",
+        email: `replaced-${token}@example.com`,
+      },
+    });
+    assert.equal(replacedSubmit.status, 409);
+    assert.equal(replacedSubmit.payload.error.code, "CUSTOMER_CAPTURE_REPLACED");
+
+    const invalidSubmitMissingName = await apiJson({
+      path: `/api/public/customer-capture/${encodeURIComponent(secondSessionPayload.session.token)}`,
+      method: "POST",
+      body: {
+        lastName: "Missing First",
+        email: `missing-first-${token}@example.com`,
+      },
+    });
+    assert.equal(invalidSubmitMissingName.status, 400);
+    assert.equal(invalidSubmitMissingName.payload.error.code, "INVALID_CUSTOMER_CAPTURE");
+
+    const invalidSubmitMissingContact = await apiJson({
+      path: `/api/public/customer-capture/${encodeURIComponent(secondSessionPayload.session.token)}`,
+      method: "POST",
+      body: {
+        firstName: "No",
+        lastName: "Contact",
+      },
+    });
+    assert.equal(invalidSubmitMissingContact.status, 400);
+    assert.equal(invalidSubmitMissingContact.payload.error.code, "INVALID_CUSTOMER_CAPTURE");
 
     const emailMatchCustomer = await prisma.customer.create({
       data: {
@@ -255,23 +324,10 @@ const run = async () => {
     });
     created.customerIds.add(phoneMatchCustomer.id);
 
-    const creationSale = await createSale(created, variant.id);
-    const creationSession = await createCaptureSession(created, creationSale.id);
-    assert.equal(creationSession.saleId, creationSale.id);
-    assert.equal(creationSession.status, "ACTIVE");
-    assert.ok(creationSession.token);
-    assert.match(creationSession.publicPath, /\/customer-capture\//);
-
-    const fetchedSession = await apiJsonOrThrow({
-      path: `/api/public/customer-capture/${encodeURIComponent(creationSession.token)}`,
-      method: "GET",
-    });
-    assert.equal(fetchedSession.session.status, "ACTIVE");
-
-    const createdCustomerSale = await createSale(created, variant.id);
+    const createdCustomerSale = await createSale(created, location.id);
     const createdCustomerSession = await createCaptureSession(created, createdCustomerSale.id);
     const createdCustomerSubmit = await apiJsonOrThrow({
-      path: `/api/public/customer-capture/${encodeURIComponent(createdCustomerSession.token)}`,
+      path: `/api/public/customer-capture/${encodeURIComponent(createdCustomerSession.session.token)}`,
       method: "POST",
       body: {
         firstName: "New",
@@ -292,10 +348,19 @@ const run = async () => {
       headers: STAFF_HEADERS,
     });
     assert.equal(createdCustomerSalePayload.sale.customer.id, createdCustomerSubmit.customer.id);
-    assert.equal(createdCustomerSalePayload.sale.customer.email, `new-customer-${token}@example.com`);
+    assert.equal(
+      createdCustomerSalePayload.sale.customer.email,
+      `new-customer-${token}@example.com`,
+    );
+
+    const completedCurrentSession = await getCurrentCaptureSession(createdCustomerSale.id);
+    assert.equal(completedCurrentSession.session.id, createdCustomerSession.session.id);
+    assert.equal(completedCurrentSession.session.status, "COMPLETED");
+    assert.equal(completedCurrentSession.session.outcome.matchType, "created");
+    assert.equal(completedCurrentSession.session.outcome.customer.id, createdCustomerSubmit.customer.id);
 
     const completedRetry = await apiJson({
-      path: `/api/public/customer-capture/${encodeURIComponent(createdCustomerSession.token)}`,
+      path: `/api/public/customer-capture/${encodeURIComponent(createdCustomerSession.session.token)}`,
       method: "POST",
       body: {
         firstName: "Retry",
@@ -306,10 +371,10 @@ const run = async () => {
     assert.equal(completedRetry.status, 409);
     assert.equal(completedRetry.payload.error.code, "CUSTOMER_CAPTURE_COMPLETED");
 
-    const emailPrioritySale = await createSale(created, variant.id);
+    const emailPrioritySale = await createSale(created, location.id);
     const emailPrioritySession = await createCaptureSession(created, emailPrioritySale.id);
     const emailPrioritySubmit = await apiJsonOrThrow({
-      path: `/api/public/customer-capture/${encodeURIComponent(emailPrioritySession.token)}`,
+      path: `/api/public/customer-capture/${encodeURIComponent(emailPrioritySession.session.token)}`,
       method: "POST",
       body: {
         firstName: "Email",
@@ -321,10 +386,10 @@ const run = async () => {
     assert.equal(emailPrioritySubmit.matchType, "email");
     assert.equal(emailPrioritySubmit.customer.id, emailMatchCustomer.id);
 
-    const phonePrioritySale = await createSale(created, variant.id);
+    const phonePrioritySale = await createSale(created, location.id);
     const phonePrioritySession = await createCaptureSession(created, phonePrioritySale.id);
     const phonePrioritySubmit = await apiJsonOrThrow({
-      path: `/api/public/customer-capture/${encodeURIComponent(phonePrioritySession.token)}`,
+      path: `/api/public/customer-capture/${encodeURIComponent(phonePrioritySession.session.token)}`,
       method: "POST",
       body: {
         firstName: "Phone",
@@ -335,10 +400,10 @@ const run = async () => {
     assert.equal(phonePrioritySubmit.matchType, "phone");
     assert.equal(phonePrioritySubmit.customer.id, phoneMatchCustomer.id);
 
-    const expiredSale = await createSale(created, variant.id);
+    const expiredSale = await createSale(created, location.id);
     const expiredSession = await createCaptureSession(created, expiredSale.id);
     await prisma.saleCustomerCaptureSession.update({
-      where: { id: expiredSession.id },
+      where: { id: expiredSession.session.id },
       data: {
         expiresAt: new Date(Date.now() - 60_000),
         status: "ACTIVE",
@@ -346,13 +411,14 @@ const run = async () => {
     });
 
     const expiredGet = await apiJsonOrThrow({
-      path: `/api/public/customer-capture/${encodeURIComponent(expiredSession.token)}`,
+      path: `/api/public/customer-capture/${encodeURIComponent(expiredSession.session.token)}`,
       method: "GET",
     });
     assert.equal(expiredGet.session.status, "EXPIRED");
+    assert.equal(expiredGet.session.isReplaced, false);
 
     const expiredSubmit = await apiJson({
-      path: `/api/public/customer-capture/${encodeURIComponent(expiredSession.token)}`,
+      path: `/api/public/customer-capture/${encodeURIComponent(expiredSession.session.token)}`,
       method: "POST",
       body: {
         firstName: "Late",
@@ -362,6 +428,23 @@ const run = async () => {
     });
     assert.equal(expiredSubmit.status, 410);
     assert.equal(expiredSubmit.payload.error.code, "CUSTOMER_CAPTURE_EXPIRED");
+
+    const auditEvents = await prisma.auditEvent.findMany({
+      where: {
+        entityType: "SALE_CUSTOMER_CAPTURE_SESSION",
+        entityId: { in: Array.from(created.sessionIds) },
+      },
+      select: {
+        entityId: true,
+        action: true,
+        metadata: true,
+      },
+    });
+    const auditActions = auditEvents.map((event) => event.action);
+    assert.ok(auditActions.includes("customer_capture.session_created"));
+    assert.ok(auditActions.includes("customer_capture.session_replaced"));
+    assert.ok(auditActions.includes("customer_capture.submit_completed"));
+    assert.ok(auditActions.includes("customer_capture.submit_rejected"));
 
     console.log("[sale-customer-capture-smoke] sale-linked customer capture passed");
   } finally {

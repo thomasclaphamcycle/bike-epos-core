@@ -1,78 +1,71 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api/client";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import {
+  getCustomerCapturePublicPageErrorMessage,
+  getPublicSaleCustomerCaptureSession,
+  submitPublicSaleCustomerCapture,
+  type PublicSaleCustomerCaptureSessionState,
+  type PublicSaleCustomerCaptureSubmitResponse,
+} from "../features/customerCapture/customerCapture";
 
-type PublicCaptureSessionState = {
-  session: {
-    status: "ACTIVE" | "COMPLETED" | "EXPIRED";
-    expiresAt: string;
-    completedAt: string | null;
-  };
+type CaptureFormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
 };
 
-type PublicCaptureSubmitResponse = {
-  session: {
-    status: "COMPLETED";
-    expiresAt: string;
-    completedAt: string | null;
-  };
-  customer: {
-    id: string;
-    name: string;
-    firstName: string;
-    lastName: string;
-    email: string | null;
-    phone: string | null;
-  };
-  sale: {
-    id: string;
-  };
-  matchType: "email" | "phone" | "created";
-};
-
-const defaultForm = {
+const defaultFormState: CaptureFormState = {
   firstName: "",
   lastName: "",
   email: "",
   phone: "",
-  emailMarketingConsent: false,
-  smsMarketingConsent: false,
 };
+
+const getFriendlySubmitError = (error: unknown) =>
+  getCustomerCapturePublicPageErrorMessage(error) || "We could not save your details. Please try again.";
 
 export const CustomerCapturePage = () => {
   const { token: routeToken } = useParams();
   const [searchParams] = useSearchParams();
-  const token = routeToken?.trim() || searchParams.get("token")?.trim() || null;
-  const [session, setSession] = useState<PublicCaptureSessionState["session"] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const token = useMemo(
+    () => routeToken?.trim() || searchParams.get("token")?.trim() || null,
+    [routeToken, searchParams],
+  );
+  const [session, setSession] = useState<PublicSaleCustomerCaptureSessionState["session"] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [form, setForm] = useState<CaptureFormState>(defaultFormState);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState(defaultForm);
-  const [result, setResult] = useState<PublicCaptureSubmitResponse | null>(null);
+  const [result, setResult] = useState<PublicSaleCustomerCaptureSubmitResponse | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       if (!token) {
+        setLoading(false);
         setSession(null);
         setLoadError(null);
-        setLoading(false);
+        setResult(null);
         return;
       }
 
       setLoading(true);
       setLoadError(null);
+      setResult(null);
+      setSubmitError(null);
       try {
-        const payload = await apiGet<PublicCaptureSessionState>(
-          `/api/public/customer-capture/${encodeURIComponent(token)}`,
-        );
+        const payload = await getPublicSaleCustomerCaptureSession(token);
         if (!cancelled) {
           setSession(payload.session);
         }
       } catch (error) {
         if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : "Failed to load customer capture link.");
+          setSession(null);
+          setLoadError(getCustomerCapturePublicPageErrorMessage(error));
         }
       } finally {
         if (!cancelled) {
@@ -82,10 +75,11 @@ export const CustomerCapturePage = () => {
     };
 
     void load();
+
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, reloadNonce]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -93,59 +87,67 @@ export const CustomerCapturePage = () => {
       return;
     }
 
+    if (!form.firstName.trim() || !form.lastName.trim() || (!form.email.trim() && !form.phone.trim())) {
+      setSubmitError("Enter first name, last name, and at least one contact method.");
+      return;
+    }
+
     setSubmitting(true);
-    setLoadError(null);
+    setSubmitError(null);
     try {
-      const payload = await apiPost<PublicCaptureSubmitResponse>(
-        `/api/public/customer-capture/${encodeURIComponent(token)}`,
-        {
-          firstName: form.firstName,
-          lastName: form.lastName,
-          email: form.email || undefined,
-          phone: form.phone || undefined,
-          emailMarketingConsent: form.emailMarketingConsent,
-          smsMarketingConsent: form.smsMarketingConsent,
-        },
-      );
+      const payload = await submitPublicSaleCustomerCapture(token, {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        ...(form.email.trim() ? { email: form.email.trim() } : {}),
+        ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
+      });
       setResult(payload);
       setSession(payload.session);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Failed to save your details.");
+      setSubmitError(getFriendlySubmitError(error));
+      try {
+        const payload = await getPublicSaleCustomerCaptureSession(token);
+        setSession(payload.session);
+      } catch {
+        // Keep the friendly submit error already shown.
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
   const isActive = session?.status === "ACTIVE" && !result;
+  const isReplaced = session?.status === "EXPIRED" && session.isReplaced;
 
   return (
-    <div className="page-shell cash-upload-shell">
-      <section className="card cash-upload-card customer-capture-card">
-        <div className="cash-upload-heading">
-          <span className="status-badge">{session?.status ?? "Customer capture"}</span>
+    <div className="page-shell customer-capture-shell">
+      <section className="card customer-capture-card">
+        <div className="customer-capture-heading">
+          <span className="status-badge">Customer capture</span>
           <h1>Share your contact details</h1>
           <p className="muted-text">
-            Add your contact details to this sale so the shop can attach them to today&apos;s checkout.
+            Add your details to this sale so the shop can attach them to today&apos;s checkout quickly and accurately.
           </p>
         </div>
 
         {loading ? <p>Loading link...</p> : null}
 
+        {!loading && !token ? (
+          <div className="quick-create-panel">
+            <strong>No active customer capture yet</strong>
+            <p className="muted-text">Ask staff to start Add Customer on the till, then scan the QR code or open the link again.</p>
+          </div>
+        ) : null}
+
         {!loading && loadError ? (
           <div className="quick-create-panel">
             <strong>Link unavailable</strong>
             <p className="muted-text">{loadError}</p>
-            <Link to="/login">Back to CorePOS</Link>
-          </div>
-        ) : null}
-
-        {!loading && !loadError && !token ? (
-          <div className="quick-create-panel">
-            <span className="status-badge">Ready for QR or NFC</span>
-            <strong>No active customer capture yet</strong>
-            <p className="muted-text">
-              Ask staff to tap Add Customer on the till, then scan the QR code or tap the counter NFC prompt again.
-            </p>
+            <div className="actions-inline">
+              <button type="button" onClick={() => setReloadNonce((current) => current + 1)}>
+                Try again
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -159,7 +161,9 @@ export const CustomerCapturePage = () => {
               Thanks {result.customer.firstName}. Your details have been linked to the sale.
             </p>
             <p className="muted-text">
-              Match result: {result.matchType === "created" ? "new customer created" : `matched by ${result.matchType}`}.
+              {result.matchType === "created"
+                ? "A new customer profile was created."
+                : `Your details matched an existing customer by ${result.matchType}.`}
             </p>
           </div>
         ) : null}
@@ -167,26 +171,42 @@ export const CustomerCapturePage = () => {
         {!loading && !loadError && session?.status === "COMPLETED" && !result ? (
           <div className="quick-create-panel">
             <strong>Link already used</strong>
-            <p className="muted-text">This customer capture link has already been completed.</p>
+            <p className="muted-text">
+              This customer capture link has already been completed. If staff still need your details, please ask them for a fresh link.
+            </p>
           </div>
         ) : null}
 
-        {!loading && !loadError && session?.status === "EXPIRED" ? (
+        {!loading && !loadError && isReplaced ? (
+          <div className="quick-create-panel">
+            <strong>Link replaced</strong>
+            <p className="muted-text">
+              Staff have already generated a newer customer capture link for this sale. Please scan the latest QR code or ask them to reopen the newest link.
+            </p>
+          </div>
+        ) : null}
+
+        {!loading && !loadError && session?.status === "EXPIRED" && !isReplaced ? (
           <div className="quick-create-panel">
             <strong>Link expired</strong>
-            <p className="muted-text">This customer capture link has expired. Please ask staff for a fresh link.</p>
+            <p className="muted-text">
+              This customer capture link has expired. Please ask staff for a fresh link and try again.
+            </p>
           </div>
         ) : null}
 
         {isActive ? (
-          <form className="cash-upload-form" onSubmit={handleSubmit} data-testid="customer-capture-form">
-            <div className="quick-create-grid customer-capture-grid">
+          <form className="customer-capture-form" onSubmit={handleSubmit} data-testid="customer-capture-form">
+            <div className="customer-capture-grid">
               <label>
                 First name
                 <input
                   data-testid="customer-capture-first-name"
                   value={form.firstName}
                   onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
+                  autoComplete="given-name"
+                  placeholder="Alex"
+                  disabled={submitting}
                   required
                 />
               </label>
@@ -196,6 +216,9 @@ export const CustomerCapturePage = () => {
                   data-testid="customer-capture-last-name"
                   value={form.lastName}
                   onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
+                  autoComplete="family-name"
+                  placeholder="Taylor"
+                  disabled={submitting}
                   required
                 />
               </label>
@@ -206,7 +229,9 @@ export const CustomerCapturePage = () => {
                   type="email"
                   value={form.email}
                   onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                  autoComplete="email"
                   placeholder="name@example.com"
+                  disabled={submitting}
                 />
               </label>
               <label>
@@ -215,42 +240,27 @@ export const CustomerCapturePage = () => {
                   data-testid="customer-capture-phone"
                   value={form.phone}
                   onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
-                  placeholder="Phone number"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="07..."
+                  disabled={submitting}
                 />
               </label>
             </div>
 
-            <p className="muted-text">Enter at least one contact method: email or phone.</p>
+            <p className="muted-text">
+              Enter first and last name, plus at least one contact method. Short accurate details work best for fast checkout follow-up.
+            </p>
 
-            <label className="customer-capture-checkbox">
-              <input
-                type="checkbox"
-                checked={form.emailMarketingConsent}
-                onChange={(event) => setForm((current) => ({
-                  ...current,
-                  emailMarketingConsent: event.target.checked,
-                }))}
-              />
-              <span>Email me about offers and updates</span>
-            </label>
-
-            <label className="customer-capture-checkbox">
-              <input
-                type="checkbox"
-                checked={form.smsMarketingConsent}
-                onChange={(event) => setForm((current) => ({
-                  ...current,
-                  smsMarketingConsent: event.target.checked,
-                }))}
-              />
-              <span>Text me about offers and updates</span>
-            </label>
+            {submitError ? <p className="customer-capture-error">{submitError}</p> : null}
 
             <button type="submit" className="primary" disabled={submitting}>
-              {submitting ? "Saving..." : "Save details"}
+              {submitting ? "Saving details..." : "Save details"}
             </button>
 
             <p className="muted-text">
+              Started {new Date(session.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+              {" "}
               This link expires at {new Date(session.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
             </p>
           </form>

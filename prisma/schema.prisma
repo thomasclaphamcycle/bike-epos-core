@@ -548,6 +548,12 @@ enum SaleCustomerCaptureSessionStatus {
   EXPIRED
 }
 
+enum SaleCustomerCaptureMatchType {
+  EMAIL
+  PHONE
+  CREATED
+}
+
 model Sale {
   id                 String    @id @default(uuid()) @db.Uuid
   basketId           String?   @unique @db.Uuid
@@ -595,6 +601,7 @@ model SaleCustomerCaptureSession {
   saleId                String                           @db.Uuid
   token                 String                           @unique
   status                SaleCustomerCaptureSessionStatus @default(ACTIVE)
+  matchType             SaleCustomerCaptureMatchType?
   expiresAt             DateTime
   completedAt           DateTime?
   createdAt             DateTime                         @default(now())
@@ -1290,17 +1297,17 @@ model Customer {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  sales                   Sale[]
+  sales                 Sale[]
   customerCaptureSessions SaleCustomerCaptureSession[]
-  account                 CustomerAccount?
-  workshopJobs            WorkshopJob[]
-  bikes                   CustomerBike[]
-  creditAccounts          CreditAccount[]
-  reminderCandidates      ReminderCandidate[]
-  workshopNotifications   WorkshopNotification[]
-  workshopConversations   WorkshopConversation[]
-  hireBookings            HireBooking[]
-  webOrders               WebOrder[]
+  account               CustomerAccount?
+  workshopJobs          WorkshopJob[]
+  bikes                 CustomerBike[]
+  creditAccounts        CreditAccount[]
+  reminderCandidates    ReminderCandidate[]
+  workshopNotifications WorkshopNotification[]
+  workshopConversations WorkshopConversation[]
+  hireBookings          HireBooking[]
+  webOrders             WebOrder[]
 
   @@index([firstName])
   @@index([lastName])

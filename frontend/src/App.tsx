@@ -14,10 +14,10 @@ import {
   BikeHirePage,
   CashOversightPage,
   CashReceiptUploadPage,
+  CustomerCapturePage,
   CustomerAccountAccessPage,
   CustomerAccountDashboardPage,
   CustomerAccountLoginPage,
-  CustomerCapturePage,
   CustomerCommunicationQueuePage,
   CustomerInsightsPage,
   CustomerProfilePage,
@@ -730,14 +730,14 @@ export const App = () => {
     <Suspense fallback={null}>
       <Routes>
         <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
+        <Route path="/customer-capture" element={<CustomerCapturePage />} />
+        <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
         <Route path="/public/workshop/:token" element={<WorkshopQuotePage />} />
         <Route path="/quote/:token" element={<WorkshopQuotePage />} />
         <Route path="/book-workshop" element={<PublicWorkshopBookingPage />} />
         <Route path="/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
         <Route path="/site/book-workshop" element={<PublicWorkshopBookingPage />} />
         <Route path="/site/bookings/:token" element={<PublicWorkshopBookingManagePage />} />
-        <Route path="/customer-capture" element={<CustomerCapturePage />} />
-        <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
         <Route path="/account" element={<CustomerAccountDashboardPage />} />
         <Route path="/account/login" element={<CustomerAccountLoginPage />} />
         <Route path="/account/access/:token" element={<CustomerAccountAccessPage />} />

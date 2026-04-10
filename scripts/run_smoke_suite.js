@@ -20,6 +20,7 @@ const baselineSteps = [
   "test:m32",
   "test:sales-history-api",
   "test:m34",
+  "test:sale-customer-capture",
   "test:m35",
   "test:m36",
   "test:m37",
@@ -37,7 +38,6 @@ const baselineSteps = [
   "test:domain-events",
   "test:security",
   "test:health-monitoring",
-  "test:sale-customer-capture",
   "test:customer-accounts",
   "test:workshop-commercial-intelligence",
   // Current management-reporting surfaces

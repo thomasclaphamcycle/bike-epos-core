@@ -1,16 +1,27 @@
-### Create sale-linked customer capture session
-POST http://localhost:3100/api/sales/{{saleId}}/customer-capture-sessions
-X-Staff-Role: STAFF
-X-Staff-Id: sale-customer-capture-request
+@baseUrl = http://localhost:3100
+@staffRole = STAFF
+@staffId = sale-customer-capture-request
+@saleId = REPLACE_SALE_ID
+@token = REPLACE_CAPTURE_TOKEN
+
+### Create sale-linked customer capture session (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
 Content-Type: application/json
 
 {}
 
+### Get latest staff-visible customer capture session for a sale
+GET {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions/current
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
 ### Get public customer capture session state
-GET http://localhost:3100/api/public/customer-capture/{{token}}
+GET {{baseUrl}}/api/public/customer-capture/{{token}}
 
 ### Submit public customer capture details
-POST http://localhost:3100/api/public/customer-capture/{{token}}
+POST {{baseUrl}}/api/public/customer-capture/{{token}}
 Content-Type: application/json
 
 {

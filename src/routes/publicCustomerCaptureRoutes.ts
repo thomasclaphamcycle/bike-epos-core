@@ -6,5 +6,11 @@ import {
 
 export const publicCustomerCaptureRouter = Router();
 
-publicCustomerCaptureRouter.get("/customer-capture/:token", getPublicSaleCustomerCaptureSessionHandler);
-publicCustomerCaptureRouter.post("/customer-capture/:token", submitPublicSaleCustomerCaptureHandler);
+publicCustomerCaptureRouter.get(
+  "/customer-capture/:token",
+  getPublicSaleCustomerCaptureSessionHandler,
+);
+publicCustomerCaptureRouter.post(
+  "/customer-capture/:token",
+  submitPublicSaleCustomerCaptureHandler,
+);
