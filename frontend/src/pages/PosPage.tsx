@@ -153,7 +153,63 @@ type CompletedSaleState = {
   receiptPrinterName: string | null;
 };
 
+type CaptureCompletionSummary = {
+  saleId: string;
+  sessionId: string;
+  customerId: string;
+  customerName: string;
+  matchType: "email" | "phone" | "created";
+};
+
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const formatCaptureMatchOutcome = (
+  matchType: "email" | "phone" | "created",
+  customerName?: string | null,
+) => {
+  switch (matchType) {
+    case "created":
+      return customerName
+        ? `Created a new customer profile for ${customerName}.`
+        : "Created a new customer profile.";
+    case "email":
+      return customerName
+        ? `Matched existing customer ${customerName} by email.`
+        : "Matched an existing customer by email.";
+    case "phone":
+      return customerName
+        ? `Matched existing customer ${customerName} by phone.`
+        : "Matched an existing customer by phone.";
+    default:
+      return "Customer attached to sale.";
+  }
+};
+
+const formatRelativeMinutes = (targetDate: string, options?: { suffix?: "ago" | "remaining" }) => {
+  const targetTime = new Date(targetDate).getTime();
+  if (Number.isNaN(targetTime)) {
+    return null;
+  }
+
+  const diffMs = targetTime - Date.now();
+  const diffMinutes = Math.round(Math.abs(diffMs) / 60000);
+
+  if (options?.suffix === "remaining") {
+    if (diffMs <= 0) {
+      return "expired";
+    }
+    if (diffMinutes <= 1) {
+      return "less than 1 min left";
+    }
+    return `${diffMinutes} min left`;
+  }
+
+  if (diffMinutes <= 1) {
+    return "just now";
+  }
+
+  return `${diffMinutes} min ago`;
+};
 
 const getPosReceiptPrintButtonLabel = (
   queueing: boolean,
@@ -252,6 +308,7 @@ export const PosPage = () => {
   const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
   const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
   const [captureQrBusy, setCaptureQrBusy] = useState(false);
+  const [captureCompletionSummary, setCaptureCompletionSummary] = useState<CaptureCompletionSummary | null>(null);
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
@@ -515,6 +572,7 @@ export const PosPage = () => {
     options?: {
       requestId?: number;
       showToast?: boolean;
+      completionSummary?: CaptureCompletionSummary | null;
     },
   ) => {
     const refreshed = await loadSale(targetSaleId, { requestId: options?.requestId });
@@ -525,10 +583,20 @@ export const PosPage = () => {
     if (refreshed.sale.customer?.id) {
       setCaptureSession(null);
       setCaptureStatusError(null);
+      if (options?.completionSummary) {
+        setCaptureCompletionSummary(options.completionSummary);
+      }
       const announcementKey = `${targetSaleId}:${refreshed.sale.customer.id}`;
       if (options?.showToast !== false && announcedCaptureCompletionRef.current !== announcementKey) {
         announcedCaptureCompletionRef.current = announcementKey;
-        success("Customer details attached to sale.");
+        if (options?.completionSummary) {
+          success(formatCaptureMatchOutcome(
+            options.completionSummary.matchType,
+            options.completionSummary.customerName,
+          ));
+        } else {
+          success("Customer details attached to sale.");
+        }
       }
     }
 
@@ -554,10 +622,11 @@ export const PosPage = () => {
     try {
       const payload = await createSaleCustomerCaptureSessionRequest(sale.sale.id);
       setCaptureSession(payload.session);
+      setCaptureCompletionSummary(null);
       announcedCaptureCompletionRef.current = null;
       success(
         payload.replacedActiveSessionCount > 0
-          ? "Customer capture link refreshed."
+          ? "New customer capture link ready. The previous link has been replaced."
           : "Customer capture link ready.",
       );
     } catch (captureError) {
@@ -858,7 +927,19 @@ export const PosPage = () => {
         setCaptureStatusError(null);
 
         if (nextSession.session?.status === "COMPLETED") {
-          await refreshSaleAfterCustomerCapture(sale.sale.id);
+          const completionSummary = nextSession.session.outcome
+            ? {
+                saleId: sale.sale.id,
+                sessionId: nextSession.session.id,
+                customerId: nextSession.session.outcome.customer.id,
+                customerName: nextSession.session.outcome.customer.name,
+                matchType: nextSession.session.outcome.matchType,
+              }
+            : null;
+
+          await refreshSaleAfterCustomerCapture(sale.sale.id, {
+            completionSummary,
+          });
         }
       } catch {
         // Keep passive refresh quiet; the operator still has manual refresh controls.
@@ -973,6 +1054,17 @@ export const PosPage = () => {
       focusProductSearch();
     }
   }, [loading, basket, sale]);
+
+  useEffect(() => {
+    if (!sale?.sale.id) {
+      setCaptureCompletionSummary(null);
+      return;
+    }
+
+    setCaptureCompletionSummary((current) => (
+      current && current.saleId === sale.sale.id ? current : null
+    ));
+  }, [sale?.sale.id]);
 
   useEffect(() => {
     if (!sale || selectedTenderMethod !== "CASH") {
@@ -1997,6 +2089,18 @@ export const PosPage = () => {
                 <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
               )}
 
+              {captureCompletionSummary && sale?.sale.customer?.id === captureCompletionSummary.customerId ? (
+                <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-success">
+                  <div className="success-panel-heading">
+                    <strong>Customer added from phone</strong>
+                    <span className="status-badge status-complete">
+                      {captureCompletionSummary.matchType === "created" ? "New customer" : "Matched existing"}
+                    </span>
+                  </div>
+                  <p>{formatCaptureMatchOutcome(captureCompletionSummary.matchType, captureCompletionSummary.customerName)}</p>
+                </div>
+              ) : null}
+
               {!sale?.sale.customer?.id ? (
                 <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
                   <div className="card-header-row">
@@ -2048,7 +2152,14 @@ export const PosPage = () => {
                         <div>
                           <span className="status-badge">Waiting for customer</span>
                           <p className="muted-text">
-                            Scan QR or tap NFC. Use Refresh Status if the customer has already saved their details.
+                            Scan QR or tap NFC. CorePOS checks for completion automatically, and you can still refresh manually if needed.
+                          </p>
+                          <p className="muted-text">
+                            Created {formatRelativeMinutes(captureSession.createdAt) ?? "just now"}.
+                            {" "}
+                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            {" "}
+                            ({formatRelativeMinutes(captureSession.expiresAt, { suffix: "remaining" }) ?? "timing unavailable"}).
                           </p>
                         </div>
                       </div>
@@ -2097,7 +2208,20 @@ export const PosPage = () => {
                                   quiet: false,
                                 }).then((session) => {
                                   if (session?.status === "COMPLETED") {
-                                    void refreshSaleAfterCustomerCapture(sale.sale.id, { showToast: true });
+                                    const completionSummary = session.outcome
+                                      ? {
+                                          saleId: sale.sale.id,
+                                          sessionId: session.id,
+                                          customerId: session.outcome.customer.id,
+                                          customerName: session.outcome.customer.name,
+                                          matchType: session.outcome.matchType,
+                                        }
+                                      : null;
+
+                                    void refreshSaleAfterCustomerCapture(sale.sale.id, {
+                                      showToast: true,
+                                      completionSummary,
+                                    });
                                   }
                                 });
                               }}
@@ -2106,7 +2230,7 @@ export const PosPage = () => {
                             </button>
                           </div>
                           <p className="muted-text">
-                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+                            Generating a new link expires this one immediately.
                           </p>
                         </div>
                       </div>
@@ -2115,10 +2239,15 @@ export const PosPage = () => {
                     <div className="success-panel success-panel-sale">
                       <div className="success-panel-heading">
                         <strong>Customer capture complete.</strong>
-                        <span className="status-badge status-complete">Refresh to confirm</span>
+                        <span className="status-badge status-complete">Attached automatically</span>
                       </div>
                       <p className="muted-text">
-                        The customer has finished the form. Refresh the sale now to show the attached customer.
+                        {captureSession.outcome
+                          ? formatCaptureMatchOutcome(
+                              captureSession.outcome.matchType,
+                              captureSession.outcome.customer.name,
+                            )
+                          : "The customer has finished the form and the sale can now refresh with their details."}
                       </p>
                     </div>
                   ) : captureSession?.status === "EXPIRED" ? (

@@ -24,9 +24,17 @@ type CaptureSessionRecord = {
   saleId: string;
   token: string;
   status: CaptureSessionStatus;
+  matchType?: CustomerMatchType | "EMAIL" | "PHONE" | "CREATED" | null;
   expiresAt: Date;
   createdAt: Date;
   completedAt?: Date | null;
+  customer?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
 };
 
 const normalizeOptionalText = (value: string | undefined | null) => {
@@ -52,6 +60,53 @@ const createSecureToken = () => crypto.randomBytes(24).toString("base64url");
 
 const toPublicPath = (token: string) => `/customer-capture/${encodeURIComponent(token)}`;
 
+const toApiMatchType = (matchType: "EMAIL" | "PHONE" | "CREATED" | CustomerMatchType | null | undefined) => {
+  if (!matchType) {
+    return null;
+  }
+
+  switch (matchType) {
+    case "EMAIL":
+    case "email":
+      return "email";
+    case "PHONE":
+    case "phone":
+      return "phone";
+    case "CREATED":
+    case "created":
+      return "created";
+    default:
+      return null;
+  }
+};
+
+const toCustomerPayload = (customer: {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+}) => ({
+  id: customer.id,
+  name: getCustomerDisplayName(customer),
+  firstName: customer.firstName,
+  lastName: customer.lastName,
+  email: customer.email,
+  phone: customer.phone,
+});
+
+const toSessionOutcomePayload = (session: CaptureSessionRecord) => {
+  const matchType = toApiMatchType(session.matchType);
+  if (!matchType || !session.customer) {
+    return null;
+  }
+
+  return {
+    matchType,
+    customer: toCustomerPayload(session.customer),
+  };
+};
+
 const toSessionPayload = (session: CaptureSessionRecord) => ({
   id: session.id,
   saleId: session.saleId,
@@ -61,17 +116,22 @@ const toSessionPayload = (session: CaptureSessionRecord) => ({
   createdAt: session.createdAt,
   completedAt: session.completedAt ?? null,
   publicPath: toPublicPath(session.token),
+  outcome: toSessionOutcomePayload(session),
 });
 
 const toSessionState = (session: {
   status: CaptureSessionStatus;
   expiresAt: Date;
+  createdAt: Date;
   completedAt: Date | null;
+  isReplaced?: boolean;
 }) => ({
   session: {
     status: session.status,
     expiresAt: session.expiresAt,
+    createdAt: session.createdAt,
     completedAt: session.completedAt,
+    isReplaced: Boolean(session.isReplaced),
   },
 });
 
@@ -108,10 +168,20 @@ const getSessionByTokenOrThrowTx = async (tx: Prisma.TransactionClient, token: s
       saleId: true,
       token: true,
       status: true,
+      matchType: true,
       expiresAt: true,
       createdAt: true,
       completedAt: true,
       customerId: true,
+      customer: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
       sale: {
         select: {
           id: true,
@@ -169,12 +239,37 @@ const writeCaptureAudit = async (input: {
   });
 };
 
+const findNewerSessionTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    saleId: string;
+    createdAt: Date;
+    excludeSessionId: string;
+  },
+) =>
+  tx.saleCustomerCaptureSession.findFirst({
+    where: {
+      saleId: input.saleId,
+      id: { not: input.excludeSessionId },
+      createdAt: { gt: input.createdAt },
+    },
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      expiresAt: true,
+      completedAt: true,
+    },
+  });
+
 const assertSubmittableSessionOrAuditTx = async (
-  _tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient,
   session: {
     id: string;
     saleId: string;
     status: CaptureSessionStatus;
+    createdAt: Date;
     sale: { completedAt: Date | null };
   },
 ) => {
@@ -195,14 +290,30 @@ const assertSubmittableSessionOrAuditTx = async (
   }
 
   if (session.status === "EXPIRED") {
+    const newerSession = await findNewerSessionTx(tx, {
+      saleId: session.saleId,
+      createdAt: session.createdAt,
+      excludeSessionId: session.id,
+    });
+
     await writeCaptureAudit({
       sessionId: session.id,
       action: "customer_capture.submit_rejected",
       metadata: {
         saleId: session.saleId,
-        reason: "expired",
+        reason: newerSession ? "replaced" : "expired",
+        ...(newerSession ? { replacementSessionId: newerSession.id } : {}),
       },
     });
+
+    if (newerSession) {
+      throw new HttpError(
+        409,
+        "This customer capture link has been replaced",
+        "CUSTOMER_CAPTURE_REPLACED",
+      );
+    }
+
     throw new HttpError(
       410,
       "This customer capture link has expired",
@@ -318,9 +429,19 @@ export const getCurrentSaleCustomerCaptureSession = async (saleId: string) => {
         saleId: true,
         token: true,
         status: true,
+        matchType: true,
         expiresAt: true,
         createdAt: true,
         completedAt: true,
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
       },
     });
 
@@ -397,9 +518,19 @@ export const createSaleCustomerCaptureSession = async (saleId: string, auditActo
         saleId: true,
         token: true,
         status: true,
+        matchType: true,
         expiresAt: true,
         createdAt: true,
         completedAt: true,
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
       },
     });
 
@@ -441,7 +572,21 @@ export const createSaleCustomerCaptureSession = async (saleId: string, auditActo
 export const getPublicSaleCustomerCaptureSession = async (token: string) =>
   prisma.$transaction(async (tx) => {
     const session = await getSessionByTokenOrThrowTx(tx, token);
-    return toSessionState(session);
+    const newerSession = session.status === "EXPIRED"
+      ? await findNewerSessionTx(tx, {
+          saleId: session.saleId,
+          createdAt: session.createdAt,
+          excludeSessionId: session.id,
+        })
+      : null;
+
+    return toSessionState({
+      status: session.status,
+      expiresAt: session.expiresAt,
+      createdAt: session.createdAt,
+      completedAt: session.completedAt,
+      isReplaced: Boolean(newerSession),
+    });
   });
 
 export const submitPublicSaleCustomerCapture = async (
@@ -492,6 +637,7 @@ export const submitPublicSaleCustomerCapture = async (
       where: { id: session.id },
       data: {
         status: "COMPLETED",
+        matchType: matchType.toUpperCase() as "EMAIL" | "PHONE" | "CREATED",
         completedAt,
         submittedFirstName: firstName,
         submittedLastName: lastName,

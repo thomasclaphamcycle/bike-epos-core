@@ -11,6 +11,17 @@ export type SaleCustomerCaptureSession = {
   createdAt: string;
   completedAt: string | null;
   publicPath: string;
+  outcome: {
+    matchType: "email" | "phone" | "created";
+    customer: {
+      id: string;
+      name: string;
+      firstName: string;
+      lastName: string;
+      email: string | null;
+      phone: string | null;
+    };
+  } | null;
 };
 
 export type CurrentSaleCustomerCaptureSessionResponse = {
@@ -26,7 +37,9 @@ export type PublicSaleCustomerCaptureSessionState = {
   session: {
     status: CaptureSessionStatus;
     expiresAt: string;
+    createdAt: string;
     completedAt: string | null;
+    isReplaced: boolean;
   };
 };
 
@@ -111,6 +124,8 @@ export const getCustomerCapturePublicPageErrorMessage = (error: unknown) => {
       return "This customer capture link is not valid.";
     case "CUSTOMER_CAPTURE_EXPIRED":
       return "This customer capture link has expired. Please ask staff for a new one.";
+    case "CUSTOMER_CAPTURE_REPLACED":
+      return "This link has been replaced by a newer one. Please ask staff for the latest QR code or link.";
     case "CUSTOMER_CAPTURE_COMPLETED":
       return "This customer capture link has already been used.";
     case "INVALID_CUSTOMER_CAPTURE":

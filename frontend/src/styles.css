@@ -7310,12 +7310,13 @@ button.primary.workshop-status-action {
   max-width: 720px;
   margin: 0 auto;
   display: grid;
-  gap: 16px;
+  gap: 18px;
+  padding: 22px;
 }
 
 .customer-capture-heading {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   text-align: center;
 }
 
@@ -7325,18 +7326,22 @@ button.primary.workshop-status-action {
 
 .customer-capture-form {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .customer-capture-grid {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .customer-capture-grid label {
   display: grid;
   gap: 6px;
+}
+
+.customer-capture-grid input {
+  min-height: 46px;
 }
 
 .customer-capture-error {
@@ -14313,6 +14318,12 @@ body.rota-row-drag-copy-active {
   margin-top: 0;
 }
 
+.pos-customer-capture-panel .success-panel,
+.pos-customer-capture-panel .quick-create-panel,
+.pos-customer-capture-panel .cash-qr-card {
+  margin-top: 10px;
+}
+
 .pos-side-column .customer-search-panel > button {
   min-height: 40px;
   white-space: nowrap;
@@ -14955,6 +14966,10 @@ body.rota-row-drag-copy-active {
   .cash-qr-layout,
   .customer-capture-grid {
     grid-template-columns: 1fr;
+  }
+
+  .customer-capture-card {
+    padding: 18px;
   }
 
   .pos-workstation {

@@ -39,6 +39,7 @@ export const CustomerCapturePage = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<PublicSaleCustomerCaptureSubmitResponse | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,11 +49,14 @@ export const CustomerCapturePage = () => {
         setLoading(false);
         setSession(null);
         setLoadError(null);
+        setResult(null);
         return;
       }
 
       setLoading(true);
       setLoadError(null);
+      setResult(null);
+      setSubmitError(null);
       try {
         const payload = await getPublicSaleCustomerCaptureSession(token);
         if (!cancelled) {
@@ -75,7 +79,7 @@ export const CustomerCapturePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, reloadNonce]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -113,6 +117,7 @@ export const CustomerCapturePage = () => {
   };
 
   const isActive = session?.status === "ACTIVE" && !result;
+  const isReplaced = session?.status === "EXPIRED" && session.isReplaced;
 
   return (
     <div className="page-shell customer-capture-shell">
@@ -121,7 +126,7 @@ export const CustomerCapturePage = () => {
           <span className="status-badge">Customer capture</span>
           <h1>Share your contact details</h1>
           <p className="muted-text">
-            Add your details to this sale so the shop can attach them to today&apos;s checkout.
+            Add your details to this sale so the shop can attach them to today&apos;s checkout quickly and accurately.
           </p>
         </div>
 
@@ -138,6 +143,11 @@ export const CustomerCapturePage = () => {
           <div className="quick-create-panel">
             <strong>Link unavailable</strong>
             <p className="muted-text">{loadError}</p>
+            <div className="actions-inline">
+              <button type="button" onClick={() => setReloadNonce((current) => current + 1)}>
+                Try again
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -161,14 +171,27 @@ export const CustomerCapturePage = () => {
         {!loading && !loadError && session?.status === "COMPLETED" && !result ? (
           <div className="quick-create-panel">
             <strong>Link already used</strong>
-            <p className="muted-text">This customer capture link has already been completed.</p>
+            <p className="muted-text">
+              This customer capture link has already been completed. If staff still need your details, please ask them for a fresh link.
+            </p>
           </div>
         ) : null}
 
-        {!loading && !loadError && session?.status === "EXPIRED" ? (
+        {!loading && !loadError && isReplaced ? (
+          <div className="quick-create-panel">
+            <strong>Link replaced</strong>
+            <p className="muted-text">
+              Staff have already generated a newer customer capture link for this sale. Please scan the latest QR code or ask them to reopen the newest link.
+            </p>
+          </div>
+        ) : null}
+
+        {!loading && !loadError && session?.status === "EXPIRED" && !isReplaced ? (
           <div className="quick-create-panel">
             <strong>Link expired</strong>
-            <p className="muted-text">This customer capture link has expired. Please ask staff for a fresh link.</p>
+            <p className="muted-text">
+              This customer capture link has expired. Please ask staff for a fresh link and try again.
+            </p>
           </div>
         ) : null}
 
@@ -181,6 +204,9 @@ export const CustomerCapturePage = () => {
                   data-testid="customer-capture-first-name"
                   value={form.firstName}
                   onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
+                  autoComplete="given-name"
+                  placeholder="Alex"
+                  disabled={submitting}
                   required
                 />
               </label>
@@ -190,6 +216,9 @@ export const CustomerCapturePage = () => {
                   data-testid="customer-capture-last-name"
                   value={form.lastName}
                   onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
+                  autoComplete="family-name"
+                  placeholder="Taylor"
+                  disabled={submitting}
                   required
                 />
               </label>
@@ -200,7 +229,9 @@ export const CustomerCapturePage = () => {
                   type="email"
                   value={form.email}
                   onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                  autoComplete="email"
                   placeholder="name@example.com"
+                  disabled={submitting}
                 />
               </label>
               <label>
@@ -209,20 +240,27 @@ export const CustomerCapturePage = () => {
                   data-testid="customer-capture-phone"
                   value={form.phone}
                   onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
-                  placeholder="Phone number"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="07..."
+                  disabled={submitting}
                 />
               </label>
             </div>
 
-            <p className="muted-text">Enter at least one contact method: email or phone.</p>
+            <p className="muted-text">
+              Enter first and last name, plus at least one contact method. Short accurate details work best for fast checkout follow-up.
+            </p>
 
             {submitError ? <p className="customer-capture-error">{submitError}</p> : null}
 
             <button type="submit" className="primary" disabled={submitting}>
-              {submitting ? "Saving..." : "Save details"}
+              {submitting ? "Saving details..." : "Save details"}
             </button>
 
             <p className="muted-text">
+              Started {new Date(session.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+              {" "}
               This link expires at {new Date(session.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
             </p>
           </form>

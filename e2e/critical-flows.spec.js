@@ -654,6 +654,7 @@ test("POS customer capture flow attaches captured customer to the active sale", 
   await capturePage.getByTestId("customer-capture-phone").fill(uniquePhone);
   await capturePage.getByRole("button", { name: "Save details" }).click();
   await expect(capturePage.getByTestId("customer-capture-success")).toContainText("Details saved.");
+  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("A new customer profile was created.");
 
   const saleId = new URL(page.url()).searchParams.get("saleId");
   expect(saleId).toBeTruthy();
@@ -665,6 +666,7 @@ test("POS customer capture flow attaches captured customer to the active sale", 
     }
     return chip.textContent();
   }).toContain("Taylor Rider");
+  await expect(page.getByTestId("pos-customer-capture-success")).toContainText("Created a new customer profile for Taylor Rider.");
   await expect(page.getByTestId("pos-customer-capture-panel")).toHaveCount(0);
 
   await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
@@ -677,6 +679,57 @@ test("POS customer capture flow attaches captured customer to the active sale", 
     "MANAGER",
   );
   expect(refreshedSale.sale.customer?.email).toBe(`capture-${token}@example.com`);
+});
+
+test("POS customer capture regeneration makes older public links fail clearly", async ({
+  page,
+  request,
+  context,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-customer-capture-replaced",
+  });
+  const seeded = await seedCatalogVariant(request, { prefix: "pos-customer-capture-replaced" });
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await page.getByTestId("pos-product-search").fill(seeded.sku);
+  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
+  await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await page.getByTestId("pos-customer-capture-generate").click();
+
+  const firstCaptureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  await expect(firstCaptureUrl).toContain("/customer-capture?token=");
+  const saleId = new URL(page.url()).searchParams.get("saleId");
+  expect(saleId).toBeTruthy();
+
+  await apiJsonWithHeaderBypass(
+    request,
+    "POST",
+    `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions`,
+    "MANAGER",
+    {},
+  );
+
+  await page.getByRole("button", { name: "Refresh Status" }).click();
+  const captureUrlInput = page.getByTestId("pos-customer-capture-url");
+  await expect.poll(async () => captureUrlInput.inputValue()).not.toBe(firstCaptureUrl);
+  const secondCaptureUrl = await captureUrlInput.inputValue();
+  expect(secondCaptureUrl).toContain("/customer-capture?token=");
+  expect(secondCaptureUrl).not.toBe(firstCaptureUrl);
+
+  const firstCapturePage = await context.newPage();
+  await firstCapturePage.goto(firstCaptureUrl);
+  await expect(firstCapturePage.getByText("Link replaced")).toBeVisible();
+
+  const secondCapturePage = await context.newPage();
+  await secondCapturePage.goto(secondCaptureUrl);
+  await expect(secondCapturePage.getByTestId("customer-capture-form")).toBeVisible();
 });
 
 test("React POS checkout opens a printable thermal receipt page", async ({ page, request }) => {

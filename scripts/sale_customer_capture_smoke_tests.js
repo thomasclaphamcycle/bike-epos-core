@@ -261,12 +261,26 @@ const run = async () => {
       method: "GET",
     });
     assert.equal(firstSessionState.session.status, "EXPIRED");
+    assert.equal(firstSessionState.session.isReplaced, true);
 
     const secondSessionState = await apiJsonOrThrow({
       path: `/api/public/customer-capture/${encodeURIComponent(secondSessionPayload.session.token)}`,
       method: "GET",
     });
     assert.equal(secondSessionState.session.status, "ACTIVE");
+    assert.equal(secondSessionState.session.isReplaced, false);
+
+    const replacedSubmit = await apiJson({
+      path: `/api/public/customer-capture/${encodeURIComponent(firstSessionPayload.session.token)}`,
+      method: "POST",
+      body: {
+        firstName: "Late",
+        lastName: "Replacement",
+        email: `replaced-${token}@example.com`,
+      },
+    });
+    assert.equal(replacedSubmit.status, 409);
+    assert.equal(replacedSubmit.payload.error.code, "CUSTOMER_CAPTURE_REPLACED");
 
     const invalidSubmitMissingName = await apiJson({
       path: `/api/public/customer-capture/${encodeURIComponent(secondSessionPayload.session.token)}`,
@@ -342,6 +356,8 @@ const run = async () => {
     const completedCurrentSession = await getCurrentCaptureSession(createdCustomerSale.id);
     assert.equal(completedCurrentSession.session.id, createdCustomerSession.session.id);
     assert.equal(completedCurrentSession.session.status, "COMPLETED");
+    assert.equal(completedCurrentSession.session.outcome.matchType, "created");
+    assert.equal(completedCurrentSession.session.outcome.customer.id, createdCustomerSubmit.customer.id);
 
     const completedRetry = await apiJson({
       path: `/api/public/customer-capture/${encodeURIComponent(createdCustomerSession.session.token)}`,
@@ -399,6 +415,7 @@ const run = async () => {
       method: "GET",
     });
     assert.equal(expiredGet.session.status, "EXPIRED");
+    assert.equal(expiredGet.session.isReplaced, false);
 
     const expiredSubmit = await apiJson({
       path: `/api/public/customer-capture/${encodeURIComponent(expiredSession.session.token)}`,
