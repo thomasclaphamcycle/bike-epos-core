@@ -43,6 +43,10 @@ export const CustomersPage = lazyPage(
   () => import("./pages/CustomersPage"),
   "CustomersPage",
 );
+export const CustomerCapturePage = lazyPage(
+  () => import("./pages/CustomerCapturePage"),
+  "CustomerCapturePage",
+);
 export const CustomerProfilePage = lazyPage(
   () => import("./pages/CustomerProfilePage"),
   "CustomerProfilePage",

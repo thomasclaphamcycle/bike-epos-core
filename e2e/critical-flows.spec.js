@@ -613,6 +613,72 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   expect(completedSale.sale.customer?.name).toBe(secondCustomer.name);
 });
 
+test("POS customer capture flow attaches captured customer to the active sale", async ({
+  page,
+  request,
+  context,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-customer-capture",
+  });
+  const seeded = await seedCatalogVariant(request, { prefix: "pos-customer-capture" });
+  const token = uniqueToken("pos-customer-capture");
+  const uniquePhone = `07${token.replace(/\D/g, "").slice(-9).padStart(9, "0")}`;
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await page.getByTestId("pos-product-search").fill(seeded.sku);
+  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
+  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
+  await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
+
+  await page.getByTestId("pos-checkout-basket").click();
+  await expect(page.getByTestId("pos-customer-capture-panel")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
+
+  await page.getByTestId("pos-customer-capture-generate").click();
+  const captureUrlInput = page.getByTestId("pos-customer-capture-url");
+  await expect(captureUrlInput).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-qr")).toBeVisible();
+  const captureUrl = await captureUrlInput.inputValue();
+  expect(captureUrl).toContain("/customer-capture?token=");
+
+  const capturePage = await context.newPage();
+  await capturePage.goto(captureUrl);
+  await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
+  await capturePage.getByTestId("customer-capture-first-name").fill("Taylor");
+  await capturePage.getByTestId("customer-capture-last-name").fill("Rider");
+  await capturePage.getByTestId("customer-capture-email").fill(`capture-${token}@example.com`);
+  await capturePage.getByTestId("customer-capture-phone").fill(uniquePhone);
+  await capturePage.getByRole("button", { name: "Save details" }).click();
+  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("Details saved.");
+
+  const saleId = new URL(page.url()).searchParams.get("saleId");
+  expect(saleId).toBeTruthy();
+
+  await expect.poll(async () => {
+    const chip = page.getByTestId("pos-selected-customer");
+    if (await chip.count() === 0) {
+      return null;
+    }
+    return chip.textContent();
+  }).toContain("Taylor Rider");
+  await expect(page.getByTestId("pos-customer-capture-panel")).toHaveCount(0);
+
+  await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
+  await expect(capturePage.getByText("No active customer capture yet")).toBeVisible();
+
+  const refreshedSale = await apiJsonWithHeaderBypass(
+    request,
+    "GET",
+    `/api/sales/${encodeURIComponent(saleId)}`,
+    "MANAGER",
+  );
+  expect(refreshedSale.sale.customer?.email).toBe(`capture-${token}@example.com`);
+});
+
 test("React POS checkout opens a printable thermal receipt page", async ({ page, request }) => {
   const credentials = await ensureUserViaAdminBypass(request, {
     role: "MANAGER",

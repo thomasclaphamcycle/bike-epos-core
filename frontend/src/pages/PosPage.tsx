@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
+import {
+  buildCustomerCaptureEntryUrl,
+  createSaleCustomerCaptureSession as createSaleCustomerCaptureSessionRequest,
+  getCurrentSaleCustomerCaptureSession as getCurrentSaleCustomerCaptureSessionRequest,
+  type SaleCustomerCaptureSession,
+} from "../features/customerCapture/customerCapture";
 import {
   getManagedPrintJob,
   getManagedPrintJobStatusBadgeClassName,
@@ -219,6 +226,7 @@ export const PosPage = () => {
   const basketStateRef = useRef<BasketResponse | null>(null);
   const saleStateRef = useRef<SaleResponse | null>(null);
   const selectedCustomerStateRef = useRef<CustomerSearchRow | null>(null);
+  const announcedCaptureCompletionRef = useRef<string | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
@@ -238,6 +246,12 @@ export const PosPage = () => {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSession | null>(null);
+  const [captureSessionLoading, setCaptureSessionLoading] = useState(false);
+  const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
+  const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
+  const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
+  const [captureQrBusy, setCaptureQrBusy] = useState(false);
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
@@ -448,6 +462,126 @@ export const PosPage = () => {
     return payload;
   };
 
+  const captureUrl = useMemo(() => {
+    if (!captureSession) {
+      return null;
+    }
+
+    return buildCustomerCaptureEntryUrl(captureSession.token);
+  }, [captureSession]);
+
+  const loadCurrentCaptureSession = async (
+    targetSaleId: string,
+    options?: {
+      requestId?: number;
+      showLoading?: boolean;
+      quiet?: boolean;
+    },
+  ) => {
+    if (options?.showLoading !== false) {
+      setCaptureSessionLoading(true);
+    }
+
+    try {
+      const payload = await getCurrentSaleCustomerCaptureSessionRequest(targetSaleId);
+      if (!canApplyPosLifecycle(options?.requestId)) {
+        return null;
+      }
+      if (saleStateRef.current?.sale.id !== targetSaleId) {
+        return null;
+      }
+      setCaptureSession(payload.session);
+      setCaptureStatusError(null);
+      return payload.session;
+    } catch (captureError) {
+      if (!canApplyPosLifecycle(options?.requestId)) {
+        return null;
+      }
+      const message = captureError instanceof Error ? captureError.message : "Failed to load customer capture";
+      setCaptureStatusError(message);
+      if (!options?.quiet) {
+        error(message);
+      }
+      return null;
+    } finally {
+      if (canApplyPosLifecycle(options?.requestId) && options?.showLoading !== false) {
+        setCaptureSessionLoading(false);
+      }
+    }
+  };
+
+  const refreshSaleAfterCustomerCapture = async (
+    targetSaleId: string,
+    options?: {
+      requestId?: number;
+      showToast?: boolean;
+    },
+  ) => {
+    const refreshed = await loadSale(targetSaleId, { requestId: options?.requestId });
+    if (!refreshed || !canApplyPosLifecycle(options?.requestId)) {
+      return null;
+    }
+
+    if (refreshed.sale.customer?.id) {
+      setCaptureSession(null);
+      setCaptureStatusError(null);
+      const announcementKey = `${targetSaleId}:${refreshed.sale.customer.id}`;
+      if (options?.showToast !== false && announcedCaptureCompletionRef.current !== announcementKey) {
+        announcedCaptureCompletionRef.current = announcementKey;
+        success("Customer details attached to sale.");
+      }
+    }
+
+    return refreshed;
+  };
+
+  const createCustomerCaptureSession = async () => {
+    if (!sale?.sale.id) {
+      error("Create a sale before starting customer capture.");
+      return;
+    }
+    if (sale.sale.completedAt) {
+      error("Customer capture is only available for active sales.");
+      return;
+    }
+    if (sale.sale.customer?.id) {
+      error("This sale already has a customer attached.");
+      return;
+    }
+
+    setCreatingCaptureSession(true);
+    setCaptureStatusError(null);
+    try {
+      const payload = await createSaleCustomerCaptureSessionRequest(sale.sale.id);
+      setCaptureSession(payload.session);
+      announcedCaptureCompletionRef.current = null;
+      success(
+        payload.replacedActiveSessionCount > 0
+          ? "Customer capture link refreshed."
+          : "Customer capture link ready.",
+      );
+    } catch (captureError) {
+      const message = captureError instanceof Error ? captureError.message : "Failed to create capture link";
+      setCaptureStatusError(message);
+      error(message);
+    } finally {
+      setCreatingCaptureSession(false);
+    }
+  };
+
+  const copyCaptureUrl = async () => {
+    if (!captureUrl) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(captureUrl);
+      success("Customer capture link copied.");
+    } catch {
+      error("Could not copy the customer capture link.");
+    }
+  };
+
   const createBasket = async (options?: {
     saleContext?: SaleContext;
     customerId?: string | null;
@@ -652,6 +786,94 @@ export const PosPage = () => {
 
     void syncPosStateFromRoute();
   }, [basketId, saleId, posOpenStateSignature, error]);
+
+  useEffect(() => {
+    if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
+      setCaptureSession(null);
+      setCaptureStatusError(null);
+      setCaptureSessionLoading(false);
+      announcedCaptureCompletionRef.current = null;
+      return;
+    }
+
+    void loadCurrentCaptureSession(sale.sale.id, {
+      showLoading: true,
+      quiet: true,
+    });
+  }, [sale?.sale.id, sale?.sale.completedAt, sale?.sale.customer?.id]);
+
+  useEffect(() => {
+    if (!captureUrl || captureSession?.status !== "ACTIVE") {
+      setCaptureQrImage(null);
+      setCaptureQrBusy(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCaptureQrBusy(true);
+
+    void QRCode.toDataURL(captureUrl, {
+      margin: 1,
+      width: 240,
+    })
+      .then((nextImage) => {
+        if (!cancelled) {
+          setCaptureQrImage(nextImage);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCaptureQrImage(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCaptureQrBusy(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [captureSession?.status, captureUrl]);
+
+  useEffect(() => {
+    if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
+      return;
+    }
+    if (!captureSession || captureSession.status !== "ACTIVE") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncCaptureState = async () => {
+      try {
+        const nextSession = await getCurrentSaleCustomerCaptureSessionRequest(sale.sale.id);
+        if (cancelled || !isPageActiveRef.current) {
+          return;
+        }
+
+        setCaptureSession(nextSession.session);
+        setCaptureStatusError(null);
+
+        if (nextSession.session?.status === "COMPLETED") {
+          await refreshSaleAfterCustomerCapture(sale.sale.id);
+        }
+      } catch {
+        // Keep passive refresh quiet; the operator still has manual refresh controls.
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void syncCaptureState();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [captureSession?.id, captureSession?.status, sale?.sale.completedAt, sale?.sale.customer?.id, sale?.sale.id]);
 
   useEffect(() => {
     if (!debouncedSearch.trim()) {
@@ -1770,6 +1992,152 @@ export const PosPage = () => {
                   <div className="customer-status-chip">
                     {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
                   </div>
+                </div>
+              ) : (
+                <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
+              )}
+
+              {!sale?.sale.customer?.id ? (
+                <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
+                  <div className="card-header-row">
+                    <div>
+                      <div className="table-primary">Add Customer</div>
+                      <p className="muted-text">
+                        Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
+                      </p>
+                    </div>
+                    {captureSession?.status === "COMPLETED" && sale?.sale.id ? (
+                      <button
+                        type="button"
+                        className="primary"
+                        data-testid="pos-customer-capture-refresh-sale"
+                        onClick={() => void refreshSaleAfterCustomerCapture(sale.sale.id, { showToast: true })}
+                      >
+                        Refresh sale
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="primary"
+                        data-testid="pos-customer-capture-generate"
+                        onClick={() => void createCustomerCaptureSession()}
+                        disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession || captureSessionLoading}
+                      >
+                        {creatingCaptureSession ? "Preparing..." : captureSession ? "Regenerate" : "Start Add Customer"}
+                      </button>
+                    )}
+                  </div>
+
+                  {!sale?.sale.id ? (
+                    <p className="muted-text">Available after basket checkout creates a sale.</p>
+                  ) : captureSessionLoading ? (
+                    <div className="quick-create-panel pos-customer-capture-state">
+                      <span className="status-badge">Loading</span>
+                      <strong>Checking current customer capture</strong>
+                      <p className="muted-text">Loading any active customer capture link for this sale.</p>
+                    </div>
+                  ) : captureStatusError && !captureSession ? (
+                    <div className="quick-create-panel pos-customer-capture-state">
+                      <span className="status-badge">Error</span>
+                      <strong>Customer capture unavailable</strong>
+                      <p className="muted-text">{captureStatusError}</p>
+                    </div>
+                  ) : captureSession?.status === "ACTIVE" && captureUrl ? (
+                    <div className="cash-qr-card">
+                      <div className="card-header-row">
+                        <div>
+                          <span className="status-badge">Waiting for customer</span>
+                          <p className="muted-text">
+                            Scan QR or tap NFC. Use Refresh Status if the customer has already saved their details.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="cash-qr-layout">
+                        <div className="cash-qr-box">
+                          {captureQrBusy ? (
+                            <span>Generating QR...</span>
+                          ) : captureQrImage ? (
+                            <img
+                              src={captureQrImage}
+                              alt="Customer capture QR code"
+                              data-testid="pos-customer-capture-qr"
+                            />
+                          ) : (
+                            <span>QR unavailable</span>
+                          )}
+                        </div>
+                        <div className="cash-qr-copy">
+                          <div>
+                            <div className="table-primary">Need the link instead?</div>
+                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
+                          </div>
+                          <label>
+                            Public capture URL
+                            <input
+                              data-testid="pos-customer-capture-url"
+                              value={captureUrl}
+                              readOnly
+                            />
+                          </label>
+                          <div className="actions-inline">
+                            <button type="button" onClick={() => void copyCaptureUrl()}>
+                              Copy Link
+                            </button>
+                            <a href={captureUrl} target="_blank" rel="noreferrer">
+                              Open Link
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!sale?.sale.id) {
+                                  return;
+                                }
+                                void loadCurrentCaptureSession(sale.sale.id, {
+                                  showLoading: true,
+                                  quiet: false,
+                                }).then((session) => {
+                                  if (session?.status === "COMPLETED") {
+                                    void refreshSaleAfterCustomerCapture(sale.sale.id, { showToast: true });
+                                  }
+                                });
+                              }}
+                            >
+                              Refresh Status
+                            </button>
+                          </div>
+                          <p className="muted-text">
+                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : captureSession?.status === "COMPLETED" ? (
+                    <div className="success-panel success-panel-sale">
+                      <div className="success-panel-heading">
+                        <strong>Customer capture complete.</strong>
+                        <span className="status-badge status-complete">Refresh to confirm</span>
+                      </div>
+                      <p className="muted-text">
+                        The customer has finished the form. Refresh the sale now to show the attached customer.
+                      </p>
+                    </div>
+                  ) : captureSession?.status === "EXPIRED" ? (
+                    <div className="quick-create-panel pos-customer-capture-state">
+                      <span className="status-badge">Expired</span>
+                      <strong>Capture link expired</strong>
+                      <p className="muted-text">
+                        The last customer capture link expired before it was used. Start Add Customer again when the customer is ready.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="quick-create-panel pos-customer-capture-state">
+                      <span className="status-badge">Ready</span>
+                      <strong>Ready to add a customer</strong>
+                      <p className="muted-text">
+                        Start Add Customer to show a QR code and public link for this sale.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : null}
 

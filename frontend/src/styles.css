@@ -7299,6 +7299,52 @@ button.primary.workshop-status-action {
   background: #f8fbff;
 }
 
+.customer-capture-shell {
+  background:
+    radial-gradient(circle at top left, rgba(46, 124, 246, 0.14), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(255, 122, 24, 0.12), transparent 28%),
+    linear-gradient(180deg, #dce5ee 0%, #d2dce7 54%, #cad6e2 100%);
+}
+
+.customer-capture-card {
+  max-width: 720px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.customer-capture-heading {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.customer-capture-heading h1 {
+  margin: 0;
+}
+
+.customer-capture-form {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-capture-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-capture-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-capture-error {
+  margin: 0;
+  color: #9f1d1d;
+  font-weight: 600;
+}
+
 .cash-receipt-cell {
   display: inline-flex;
   align-items: center;
@@ -14246,6 +14292,27 @@ body.rota-row-drag-copy-active {
   padding: 10px 12px;
 }
 
+.pos-customer-capture-panel {
+  margin-top: 8px;
+}
+
+.pos-customer-capture-panel .card-header-row {
+  align-items: start;
+}
+
+.pos-customer-capture-panel .cash-qr-copy label {
+  display: grid;
+  gap: 6px;
+}
+
+.pos-customer-capture-panel .cash-qr-copy input {
+  width: 100%;
+}
+
+.pos-customer-capture-state {
+  margin-top: 0;
+}
+
 .pos-side-column .customer-search-panel > button {
   min-height: 40px;
   white-space: nowrap;
@@ -14885,7 +14952,8 @@ body.rota-row-drag-copy-active {
   .pos-workstation,
   .cash-form-grid,
   .cash-form-grid-wide,
-  .cash-qr-layout {
+  .cash-qr-layout,
+  .customer-capture-grid {
     grid-template-columns: 1fr;
   }
 

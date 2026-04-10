@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName, normalizeNamePart } from "../utils/customerName";
+import { createAuditEvent, createAuditEventTx, type AuditActor } from "./auditService";
 
 const CUSTOMER_CAPTURE_SESSION_TTL_MINUTES = 15;
 
@@ -16,6 +17,16 @@ type SubmitSaleCustomerCaptureInput = {
   phone?: string;
   emailMarketingConsent?: boolean;
   smsMarketingConsent?: boolean;
+};
+
+type CaptureSessionRecord = {
+  id: string;
+  saleId: string;
+  token: string;
+  status: CaptureSessionStatus;
+  expiresAt: Date;
+  createdAt: Date;
+  completedAt?: Date | null;
 };
 
 const normalizeOptionalText = (value: string | undefined | null) => {
@@ -40,6 +51,17 @@ const normalizePhone = (value: string | undefined | null) => {
 const createSecureToken = () => crypto.randomBytes(24).toString("base64url");
 
 const toPublicPath = (token: string) => `/customer-capture/${encodeURIComponent(token)}`;
+
+const toSessionPayload = (session: CaptureSessionRecord) => ({
+  id: session.id,
+  saleId: session.saleId,
+  token: session.token,
+  status: session.status,
+  expiresAt: session.expiresAt,
+  createdAt: session.createdAt,
+  completedAt: session.completedAt ?? null,
+  publicPath: toPublicPath(session.token),
+});
 
 const toSessionState = (session: {
   status: CaptureSessionStatus;
@@ -87,6 +109,7 @@ const getSessionByTokenOrThrowTx = async (tx: Prisma.TransactionClient, token: s
       token: true,
       status: true,
       expiresAt: true,
+      createdAt: true,
       completedAt: true,
       customerId: true,
       sale: {
@@ -112,11 +135,58 @@ const getSessionByTokenOrThrowTx = async (tx: Prisma.TransactionClient, token: s
   };
 };
 
-const assertSubmittableSession = (session: {
-  status: CaptureSessionStatus;
-  sale: { completedAt: Date | null };
+const writeCaptureAuditTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    sessionId: string;
+    action: string;
+    metadata?: Record<string, unknown>;
+  },
+  actor?: AuditActor,
+) => {
+  await createAuditEventTx(
+    tx,
+    {
+      action: input.action,
+      entityType: "SALE_CUSTOMER_CAPTURE_SESSION",
+      entityId: input.sessionId,
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+    },
+    actor,
+  );
+};
+
+const writeCaptureAudit = async (input: {
+  sessionId: string;
+  action: string;
+  metadata?: Record<string, unknown>;
 }) => {
+  await createAuditEvent({
+    action: input.action,
+    entityType: "SALE_CUSTOMER_CAPTURE_SESSION",
+    entityId: input.sessionId,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  });
+};
+
+const assertSubmittableSessionOrAuditTx = async (
+  _tx: Prisma.TransactionClient,
+  session: {
+    id: string;
+    saleId: string;
+    status: CaptureSessionStatus;
+    sale: { completedAt: Date | null };
+  },
+) => {
   if (session.status === "COMPLETED") {
+    await writeCaptureAudit({
+      sessionId: session.id,
+      action: "customer_capture.submit_rejected",
+      metadata: {
+        saleId: session.saleId,
+        reason: "already_completed",
+      },
+    });
     throw new HttpError(
       409,
       "This customer capture link has already been used",
@@ -125,6 +195,14 @@ const assertSubmittableSession = (session: {
   }
 
   if (session.status === "EXPIRED") {
+    await writeCaptureAudit({
+      sessionId: session.id,
+      action: "customer_capture.submit_rejected",
+      metadata: {
+        saleId: session.saleId,
+        reason: "expired",
+      },
+    });
     throw new HttpError(
       410,
       "This customer capture link has expired",
@@ -133,6 +211,14 @@ const assertSubmittableSession = (session: {
   }
 
   if (session.sale.completedAt) {
+    await writeCaptureAudit({
+      sessionId: session.id,
+      action: "customer_capture.submit_rejected",
+      metadata: {
+        saleId: session.saleId,
+        reason: "sale_completed",
+      },
+    });
     throw new HttpError(
       409,
       "This sale has already been completed",
@@ -209,7 +295,53 @@ const findOrCreateCustomerTx = async (
   }
 };
 
-export const createSaleCustomerCaptureSession = async (saleId: string) => {
+export const getCurrentSaleCustomerCaptureSession = async (saleId: string) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: { id: true },
+    });
+
+    if (!sale) {
+      throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+    }
+
+    const session = await tx.saleCustomerCaptureSession.findFirst({
+      where: { saleId },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        saleId: true,
+        token: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+        completedAt: true,
+      },
+    });
+
+    if (!session) {
+      return { session: null };
+    }
+
+    const normalizedSession = await expireSessionIfNeededTx(tx, session);
+
+    return {
+      session: toSessionPayload({
+        ...session,
+        status: normalizedSession.status,
+        expiresAt: normalizedSession.expiresAt,
+        completedAt: normalizedSession.completedAt,
+      }),
+    };
+  });
+};
+
+export const createSaleCustomerCaptureSession = async (saleId: string, auditActor?: AuditActor) => {
   if (!isUuid(saleId)) {
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
   }
@@ -267,14 +399,40 @@ export const createSaleCustomerCaptureSession = async (saleId: string) => {
         status: true,
         expiresAt: true,
         createdAt: true,
+        completedAt: true,
       },
     });
 
-    return {
-      session: {
-        ...created,
-        publicPath: toPublicPath(created.token),
+    await writeCaptureAuditTx(
+      tx,
+      {
+        sessionId: created.id,
+        action: "customer_capture.session_created",
+        metadata: {
+          saleId,
+          expiresAt: created.expiresAt.toISOString(),
+        },
       },
+      auditActor,
+    );
+
+    if (expiredActiveSessions.count > 0) {
+      await writeCaptureAuditTx(
+        tx,
+        {
+          sessionId: created.id,
+          action: "customer_capture.session_replaced",
+          metadata: {
+            saleId,
+            replacedActiveSessionCount: expiredActiveSessions.count,
+          },
+        },
+        auditActor,
+      );
+    }
+
+    return {
+      session: toSessionPayload(created),
       replacedActiveSessionCount: expiredActiveSessions.count,
     };
   });
@@ -313,7 +471,7 @@ export const submitPublicSaleCustomerCapture = async (
 
   return prisma.$transaction(async (tx) => {
     const session = await getSessionByTokenOrThrowTx(tx, token);
-    assertSubmittableSession(session);
+    await assertSubmittableSessionOrAuditTx(tx, session);
 
     const { customer, matchType } = await findOrCreateCustomerTx(tx, {
       firstName,
@@ -347,6 +505,18 @@ export const submitPublicSaleCustomerCapture = async (
         status: true,
         expiresAt: true,
         completedAt: true,
+      },
+    });
+
+    await writeCaptureAuditTx(tx, {
+      sessionId: session.id,
+      action: "customer_capture.submit_completed",
+      metadata: {
+        saleId: session.saleId,
+        customerId: customer.id,
+        matchType,
+        emailProvided: Boolean(email),
+        phoneProvided: Boolean(phone),
       },
     });
 

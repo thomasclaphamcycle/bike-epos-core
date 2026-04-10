@@ -85,6 +85,15 @@ const apiJsonOrThrow = async (request) => {
 
 const cleanup = async (created) => {
   if (created.sessionIds.size > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityType: "SALE_CUSTOMER_CAPTURE_SESSION",
+        entityId: { in: Array.from(created.sessionIds) },
+      },
+    });
+  }
+
+  if (created.sessionIds.size > 0) {
     await prisma.saleCustomerCaptureSession.deleteMany({
       where: { id: { in: Array.from(created.sessionIds) } },
     });
@@ -139,6 +148,14 @@ const createCaptureSession = async (created, saleId) => {
   });
   created.sessionIds.add(payload.session.id);
   return payload;
+};
+
+const getCurrentCaptureSession = async (saleId) => {
+  return apiJsonOrThrow({
+    path: `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions/current`,
+    method: "GET",
+    headers: STAFF_HEADERS,
+  });
 };
 
 const run = async () => {
@@ -217,6 +234,9 @@ const run = async () => {
     assert.equal(attachedSaleCreate.payload.error.code, "SALE_CUSTOMER_ALREADY_ATTACHED");
 
     const reusableSale = await createSale(created, location.id);
+    const emptyCurrentSession = await getCurrentCaptureSession(reusableSale.id);
+    assert.equal(emptyCurrentSession.session, null);
+
     const firstSessionPayload = await createCaptureSession(created, reusableSale.id);
     assert.equal(firstSessionPayload.session.saleId, reusableSale.id);
     assert.equal(firstSessionPayload.session.status, "ACTIVE");
@@ -224,9 +244,17 @@ const run = async () => {
     assert.ok(firstSessionPayload.session.token);
     assert.match(firstSessionPayload.session.publicPath, /\/customer-capture\//);
 
+    const firstCurrentSession = await getCurrentCaptureSession(reusableSale.id);
+    assert.equal(firstCurrentSession.session.id, firstSessionPayload.session.id);
+    assert.equal(firstCurrentSession.session.status, "ACTIVE");
+
     const secondSessionPayload = await createCaptureSession(created, reusableSale.id);
     assert.equal(secondSessionPayload.replacedActiveSessionCount, 1);
     assert.notEqual(secondSessionPayload.session.id, firstSessionPayload.session.id);
+
+    const secondCurrentSession = await getCurrentCaptureSession(reusableSale.id);
+    assert.equal(secondCurrentSession.session.id, secondSessionPayload.session.id);
+    assert.equal(secondCurrentSession.session.status, "ACTIVE");
 
     const firstSessionState = await apiJsonOrThrow({
       path: `/api/public/customer-capture/${encodeURIComponent(firstSessionPayload.session.token)}`,
@@ -311,6 +339,10 @@ const run = async () => {
       `new-customer-${token}@example.com`,
     );
 
+    const completedCurrentSession = await getCurrentCaptureSession(createdCustomerSale.id);
+    assert.equal(completedCurrentSession.session.id, createdCustomerSession.session.id);
+    assert.equal(completedCurrentSession.session.status, "COMPLETED");
+
     const completedRetry = await apiJson({
       path: `/api/public/customer-capture/${encodeURIComponent(createdCustomerSession.session.token)}`,
       method: "POST",
@@ -379,6 +411,23 @@ const run = async () => {
     });
     assert.equal(expiredSubmit.status, 410);
     assert.equal(expiredSubmit.payload.error.code, "CUSTOMER_CAPTURE_EXPIRED");
+
+    const auditEvents = await prisma.auditEvent.findMany({
+      where: {
+        entityType: "SALE_CUSTOMER_CAPTURE_SESSION",
+        entityId: { in: Array.from(created.sessionIds) },
+      },
+      select: {
+        entityId: true,
+        action: true,
+        metadata: true,
+      },
+    });
+    const auditActions = auditEvents.map((event) => event.action);
+    assert.ok(auditActions.includes("customer_capture.session_created"));
+    assert.ok(auditActions.includes("customer_capture.session_replaced"));
+    assert.ok(auditActions.includes("customer_capture.submit_completed"));
+    assert.ok(auditActions.includes("customer_capture.submit_rejected"));
 
     console.log("[sale-customer-capture-smoke] sale-linked customer capture passed");
   } finally {

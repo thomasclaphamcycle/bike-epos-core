@@ -23,6 +23,31 @@ type AuditQueryInput = {
   limit?: number;
 };
 
+const toAuditEventCreateInput = (
+  input: AuditWriteInput,
+  actor?: AuditActor,
+): Prisma.AuditEventCreateInput => {
+  const data: Prisma.AuditEventCreateInput = {
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+  };
+
+  if (actor?.role !== undefined) {
+    data.actorRole = actor.role;
+  }
+
+  if (actor?.actorId !== undefined) {
+    data.actorId = actor.actorId;
+  }
+
+  if (input.metadata !== undefined) {
+    data.metadata = input.metadata;
+  }
+
+  return data;
+};
+
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
@@ -75,26 +100,17 @@ export const createAuditEventTx = async (
   input: AuditWriteInput,
   actor?: AuditActor,
 ) => {
-  const data: Prisma.AuditEventCreateInput = {
-    action: input.action,
-    entityType: input.entityType,
-    entityId: input.entityId,
-  };
-
-  if (actor?.role !== undefined) {
-    data.actorRole = actor.role;
-  }
-
-  if (actor?.actorId !== undefined) {
-    data.actorId = actor.actorId;
-  }
-
-  if (input.metadata !== undefined) {
-    data.metadata = input.metadata;
-  }
-
   await tx.auditEvent.create({
-    data,
+    data: toAuditEventCreateInput(input, actor),
+  });
+};
+
+export const createAuditEvent = async (
+  input: AuditWriteInput,
+  actor?: AuditActor,
+) => {
+  await prisma.auditEvent.create({
+    data: toAuditEventCreateInput(input, actor),
   });
 };
 

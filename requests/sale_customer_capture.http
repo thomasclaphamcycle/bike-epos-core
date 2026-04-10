@@ -12,6 +12,11 @@ Content-Type: application/json
 
 {}
 
+### Get latest staff-visible customer capture session for a sale
+GET {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions/current
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
 ### Get public customer capture session state
 GET {{baseUrl}}/api/public/customer-capture/{{token}}
 
