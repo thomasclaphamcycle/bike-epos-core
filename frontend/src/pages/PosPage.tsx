@@ -156,8 +156,12 @@ type CompletedSaleState = {
 type CaptureCompletionSummary = {
   saleId: string;
   sessionId: string;
-  customerId: string;
-  customerName: string;
+  customer: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  };
   matchType: "email" | "phone" | "created";
 };
 
@@ -183,6 +187,24 @@ const formatCaptureMatchOutcome = (
     default:
       return "Customer attached to sale.";
   }
+};
+
+const getCaptureOutcomeLabel = (matchType: "email" | "phone" | "created") => {
+  switch (matchType) {
+    case "created":
+      return "New customer";
+    case "email":
+      return "Matched by email";
+    case "phone":
+      return "Matched by phone";
+    default:
+      return "Customer attached";
+  }
+};
+
+const formatCustomerContactSummary = (customer: { email?: string | null; phone?: string | null } | null | undefined) => {
+  const parts = [customer?.email, customer?.phone].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" • ") : "No contact details saved";
 };
 
 const formatRelativeMinutes = (targetDate: string, options?: { suffix?: "ago" | "remaining" }) => {
@@ -283,6 +305,7 @@ export const PosPage = () => {
   const saleStateRef = useRef<SaleResponse | null>(null);
   const selectedCustomerStateRef = useRef<CustomerSearchRow | null>(null);
   const announcedCaptureCompletionRef = useRef<string | null>(null);
+  const captureSaleScopeRef = useRef<string | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
@@ -330,6 +353,7 @@ export const PosPage = () => {
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
   const posOpenStateSignature = useMemo(() => JSON.stringify(posOpenState ?? null), [posOpenState]);
+  const isCaptureEligible = Boolean(sale?.sale.id && !sale.sale.completedAt && !sale.sale.customer?.id);
 
   useEffect(() => {
     basketStateRef.current = basket;
@@ -592,7 +616,7 @@ export const PosPage = () => {
         if (options?.completionSummary) {
           success(formatCaptureMatchOutcome(
             options.completionSummary.matchType,
-            options.completionSummary.customerName,
+            options.completionSummary.customer.name,
           ));
         } else {
           success("Customer details attached to sale.");
@@ -857,6 +881,24 @@ export const PosPage = () => {
   }, [basketId, saleId, posOpenStateSignature, error]);
 
   useEffect(() => {
+    const nextSaleId = sale?.sale.id ?? null;
+    if (captureSaleScopeRef.current === nextSaleId) {
+      return;
+    }
+
+    captureSaleScopeRef.current = nextSaleId;
+    setCaptureSession(null);
+    setCaptureStatusError(null);
+    setCaptureSessionLoading(false);
+    setCaptureQrImage(null);
+    setCaptureQrBusy(false);
+    announcedCaptureCompletionRef.current = null;
+    if (captureCompletionSummary && captureCompletionSummary.saleId !== nextSaleId) {
+      setCaptureCompletionSummary(null);
+    }
+  }, [sale?.sale.id, captureCompletionSummary]);
+
+  useEffect(() => {
     if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
       setCaptureSession(null);
       setCaptureStatusError(null);
@@ -931,8 +973,12 @@ export const PosPage = () => {
             ? {
                 saleId: sale.sale.id,
                 sessionId: nextSession.session.id,
-                customerId: nextSession.session.outcome.customer.id,
-                customerName: nextSession.session.outcome.customer.name,
+                customer: {
+                  id: nextSession.session.outcome.customer.id,
+                  name: nextSession.session.outcome.customer.name,
+                  email: nextSession.session.outcome.customer.email,
+                  phone: nextSession.session.outcome.customer.phone,
+                },
                 matchType: nextSession.session.outcome.matchType,
               }
             : null;
@@ -2089,28 +2135,50 @@ export const PosPage = () => {
                 <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
               )}
 
-              {captureCompletionSummary && sale?.sale.customer?.id === captureCompletionSummary.customerId ? (
+              {captureCompletionSummary && sale?.sale.customer?.id === captureCompletionSummary.customer.id ? (
                 <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-success">
-                  <div className="success-panel-heading">
-                    <strong>Customer added from phone</strong>
+                  <div className="success-panel-heading pos-customer-capture-summary-heading">
+                    <strong>Customer attached to sale</strong>
                     <span className="status-badge status-complete">
-                      {captureCompletionSummary.matchType === "created" ? "New customer" : "Matched existing"}
+                      {getCaptureOutcomeLabel(captureCompletionSummary.matchType)}
                     </span>
+                    <button
+                      type="button"
+                      className="link-button"
+                      data-testid="pos-customer-capture-dismiss"
+                      onClick={() => setCaptureCompletionSummary(null)}
+                    >
+                      Dismiss
+                    </button>
                   </div>
-                  <p>{formatCaptureMatchOutcome(captureCompletionSummary.matchType, captureCompletionSummary.customerName)}</p>
+                  <div className="pos-customer-capture-summary-grid">
+                    <div>
+                      <div className="muted-text">Customer</div>
+                      <div className="table-primary">
+                        {sale.sale.customer?.name || captureCompletionSummary.customer.name}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="muted-text">Contact</div>
+                      <div className="table-primary">
+                        {formatCustomerContactSummary(sale.sale.customer || captureCompletionSummary.customer)}
+                      </div>
+                    </div>
+                  </div>
+                  <p>{formatCaptureMatchOutcome(captureCompletionSummary.matchType, captureCompletionSummary.customer.name)}</p>
                 </div>
               ) : null}
 
-              {!sale?.sale.customer?.id ? (
-                <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
-                  <div className="card-header-row">
-                    <div>
-                      <div className="table-primary">Add Customer</div>
-                      <p className="muted-text">
-                        Scan QR or tap NFC so the customer can add their details from their phone and attach them to this sale.
-                      </p>
-                    </div>
-                    {captureSession?.status === "COMPLETED" && sale?.sale.id ? (
+              <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
+                <div className="card-header-row">
+                  <div>
+                    <div className="table-primary">Add Customer</div>
+                    <p className="muted-text">
+                      Share a QR code or link so the customer can attach their details to this sale from their phone.
+                    </p>
+                  </div>
+                  {isCaptureEligible ? (
+                    captureSession?.status === "COMPLETED" && sale?.sale.id ? (
                       <button
                         type="button"
                         className="primary"
@@ -2125,16 +2193,42 @@ export const PosPage = () => {
                         className="primary"
                         data-testid="pos-customer-capture-generate"
                         onClick={() => void createCustomerCaptureSession()}
-                        disabled={!sale?.sale.id || Boolean(sale?.sale.completedAt) || creatingCaptureSession || captureSessionLoading}
+                        disabled={creatingCaptureSession || captureSessionLoading}
                       >
                         {creatingCaptureSession ? "Preparing..." : captureSession ? "Regenerate" : "Start Add Customer"}
                       </button>
-                    )}
-                  </div>
+                    )
+                  ) : null}
+                </div>
 
-                  {!sale?.sale.id ? (
-                    <p className="muted-text">Available after basket checkout creates a sale.</p>
-                  ) : captureSessionLoading ? (
+                {!sale?.sale.id ? (
+                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-no-sale-state">
+                    <span className="status-badge">Unavailable</span>
+                    <strong>No active sale yet</strong>
+                    <p className="muted-text">
+                      Customer capture becomes available after basket checkout creates a live sale.
+                    </p>
+                  </div>
+                ) : sale.sale.customer ? (
+                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-attached-state">
+                    <span className="status-badge status-complete">Not needed</span>
+                    <strong>Customer already attached</strong>
+                    <p className="muted-text">
+                      This sale already has {sale.sale.customer.name} attached, so Add Customer is no longer needed here.
+                    </p>
+                    <p className="muted-text">
+                      {formatCustomerContactSummary(sale.sale.customer)}
+                    </p>
+                  </div>
+                ) : sale.sale.completedAt ? (
+                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ineligible-state">
+                    <span className="status-badge">Unavailable</span>
+                    <strong>Sale already completed</strong>
+                    <p className="muted-text">
+                      Customer capture can only be started while the sale is still active.
+                    </p>
+                  </div>
+                ) : captureSessionLoading ? (
                     <div className="quick-create-panel pos-customer-capture-state">
                       <span className="status-badge">Loading</span>
                       <strong>Checking current customer capture</strong>
@@ -2212,8 +2306,12 @@ export const PosPage = () => {
                                       ? {
                                           saleId: sale.sale.id,
                                           sessionId: session.id,
-                                          customerId: session.outcome.customer.id,
-                                          customerName: session.outcome.customer.name,
+                                          customer: {
+                                            id: session.outcome.customer.id,
+                                            name: session.outcome.customer.name,
+                                            email: session.outcome.customer.email,
+                                            phone: session.outcome.customer.phone,
+                                          },
                                           matchType: session.outcome.matchType,
                                         }
                                       : null;
@@ -2236,10 +2334,14 @@ export const PosPage = () => {
                       </div>
                     </div>
                   ) : captureSession?.status === "COMPLETED" ? (
-                    <div className="success-panel success-panel-sale">
+                    <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-completed-state">
                       <div className="success-panel-heading">
                         <strong>Customer capture complete.</strong>
-                        <span className="status-badge status-complete">Attached automatically</span>
+                        <span className="status-badge status-complete">
+                          {captureSession.outcome
+                            ? getCaptureOutcomeLabel(captureSession.outcome.matchType)
+                            : "Attached automatically"}
+                        </span>
                       </div>
                       <p className="muted-text">
                         {captureSession.outcome
@@ -2247,7 +2349,7 @@ export const PosPage = () => {
                               captureSession.outcome.matchType,
                               captureSession.outcome.customer.name,
                             )
-                          : "The customer has finished the form and the sale can now refresh with their details."}
+                          : "The customer has already finished the form. Refresh the sale to pull their details into the till."}
                       </p>
                     </div>
                   ) : captureSession?.status === "EXPIRED" ? (
@@ -2259,16 +2361,15 @@ export const PosPage = () => {
                       </p>
                     </div>
                   ) : (
-                    <div className="quick-create-panel pos-customer-capture-state">
+                    <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ready-state">
                       <span className="status-badge">Ready</span>
-                      <strong>Ready to add a customer</strong>
+                      <strong>No live capture link</strong>
                       <p className="muted-text">
-                        Start Add Customer to show a QR code and public link for this sale.
+                        Start Add Customer when the customer is ready. CorePOS will then show a fresh QR code and public link for this sale.
                       </p>
                     </div>
                   )}
-                </div>
-              ) : null}
+              </div>
 
               <div className="customer-search-panel">
                 <div className="customer-search-stack grow">

@@ -14324,6 +14324,37 @@ body.rota-row-drag-copy-active {
   margin-top: 10px;
 }
 
+.pos-customer-capture-summary-heading {
+  align-items: start;
+}
+
+.pos-customer-capture-summary-heading .link-button {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #315d82;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pos-customer-capture-summary-heading .link-button:hover,
+.pos-customer-capture-summary-heading .link-button:focus-visible {
+  color: #173956;
+  text-decoration: underline;
+}
+
+.pos-customer-capture-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.pos-customer-capture-summary-grid .table-primary,
+.pos-customer-capture-summary-grid .muted-text {
+  word-break: break-word;
+}
+
 .pos-side-column .customer-search-panel > button {
   min-height: 40px;
   white-space: nowrap;
