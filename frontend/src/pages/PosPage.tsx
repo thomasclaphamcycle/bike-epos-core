@@ -480,8 +480,6 @@ export const PosPage = () => {
 
   const {
     captureCompletionSummary,
-    captureQrBusy,
-    captureQrImage,
     captureSession,
     captureSessionLoading,
     captureStatusError,
@@ -492,7 +490,6 @@ export const PosPage = () => {
     createCustomerCaptureSession,
     dismissCaptureCompletionSummary,
     refreshCaptureStatus,
-    refreshTargetAfterCustomerCapture,
   } = usePosCustomerCapture({
     target: customerCaptureTarget,
     loadBasket: (targetBasketId) => loadBasket(targetBasketId),
@@ -1852,20 +1849,12 @@ export const PosPage = () => {
                 captureSessionLoading={captureSessionLoading}
                 creatingCaptureSession={creatingCaptureSession}
                 captureStatusError={captureStatusError}
-                captureQrImage={captureQrImage}
-                captureQrBusy={captureQrBusy}
                 captureUrl={captureUrl}
                 captureCompletionSummary={captureCompletionSummary}
                 onDismissCompletion={dismissCaptureCompletionSummary}
                 onCreateCustomerCaptureSession={() => void createCustomerCaptureSession()}
                 onCopyCaptureUrl={() => void copyCaptureUrl()}
                 onRefreshStatus={() => void refreshCaptureStatus()}
-                onRefreshTarget={() => {
-                  if (!customerCaptureTarget) {
-                    return;
-                  }
-                  void refreshTargetAfterCustomerCapture(customerCaptureTarget, { showToast: true });
-                }}
               />
 
               <div className="customer-search-panel">
