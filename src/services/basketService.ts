@@ -5,6 +5,13 @@ import { HttpError, isUuid } from "../utils/http";
 import { toPosLineItemType } from "./posLineItemType";
 
 type BasketWithItems = Basket & {
+  customer: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
   items: Array<
     BasketItem & {
       variant: {
@@ -27,6 +34,7 @@ type AddBasketItemInput = {
 };
 
 type CreateBasketInput = {
+  customerId?: string | null;
   items?: Array<{
     variantId: string;
     quantity: number;
@@ -38,6 +46,15 @@ const getBasketWithItems = async (basketId: string): Promise<BasketWithItems | n
   return prisma.basket.findUnique({
     where: { id: basketId },
     include: {
+      customer: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -74,6 +91,16 @@ const toBasketResponse = (basket: BasketWithItems) => {
 
   return {
     id: basket.id,
+    customer: basket.customer
+      ? {
+          id: basket.customer.id,
+          name: [basket.customer.firstName, basket.customer.lastName].filter(Boolean).join(" ").trim(),
+          firstName: basket.customer.firstName,
+          lastName: basket.customer.lastName,
+          email: basket.customer.email,
+          phone: basket.customer.phone,
+        }
+      : null,
     status: basket.status,
     createdAt: basket.createdAt,
     updatedAt: basket.updatedAt,
@@ -99,6 +126,7 @@ const toBasketResponse = (basket: BasketWithItems) => {
 };
 
 export const createBasket = async (input: CreateBasketInput = {}) => {
+  const requestedCustomerId = input.customerId ?? null;
   const requestedItems = Array.isArray(input.items) ? input.items : [];
 
   for (const item of requestedItems) {
@@ -116,9 +144,26 @@ export const createBasket = async (input: CreateBasketInput = {}) => {
     }
   }
 
+  if (requestedCustomerId !== null && !isUuid(requestedCustomerId)) {
+    throw new HttpError(400, "customerId must be a valid UUID", "INVALID_CUSTOMER_ID");
+  }
+
   const basketId = await prisma.$transaction(async (tx) => {
+    if (requestedCustomerId) {
+      const customer = await tx.customer.findUnique({
+        where: { id: requestedCustomerId },
+        select: { id: true },
+      });
+      if (!customer) {
+        throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+      }
+    }
+
     const basket = await tx.basket.create({
-      data: { status: BasketStatus.OPEN },
+      data: {
+        status: BasketStatus.OPEN,
+        customerId: requestedCustomerId,
+      },
       select: { id: true },
     });
 
@@ -194,6 +239,44 @@ export const getBasketById = async (basketId: string) => {
   }
 
   return toBasketResponse(basket);
+};
+
+export const attachCustomerToBasket = async (basketId: string, customerId: string | null) => {
+  validateBasketId(basketId);
+
+  if (customerId !== null && !isUuid(customerId)) {
+    throw new HttpError(400, "Invalid customer id", "INVALID_CUSTOMER_ID");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const basket = await tx.basket.findUnique({ where: { id: basketId } });
+    if (!basket) {
+      throw new HttpError(404, "Basket not found", "BASKET_NOT_FOUND");
+    }
+    assertOpenBasket(basket);
+
+    if (customerId !== null) {
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+        select: { id: true },
+      });
+      if (!customer) {
+        throw new HttpError(404, "Customer not found", "CUSTOMER_NOT_FOUND");
+      }
+    }
+
+    await tx.basket.update({
+      where: { id: basketId },
+      data: { customerId },
+    });
+  });
+
+  const updatedBasket = await getBasketWithItems(basketId);
+  if (!updatedBasket) {
+    throw new HttpError(500, "Could not load basket after customer update", "BASKET_LOAD_FAILED");
+  }
+
+  return toBasketResponse(updatedBasket);
 };
 
 export const addBasketItem = async (basketId: string, input: AddBasketItemInput) => {

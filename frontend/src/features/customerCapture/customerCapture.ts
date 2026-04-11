@@ -1,10 +1,13 @@
 import { ApiError, apiGet, apiPost } from "../../api/client";
 
 export type CaptureSessionStatus = "ACTIVE" | "COMPLETED" | "EXPIRED";
+export type CustomerCaptureOwnerType = "sale" | "basket";
 
-export type SaleCustomerCaptureSession = {
+export type CustomerCaptureSession = {
   id: string;
-  saleId: string;
+  saleId: string | null;
+  basketId: string | null;
+  ownerType: CustomerCaptureOwnerType;
   token: string;
   status: CaptureSessionStatus;
   expiresAt: string;
@@ -24,30 +27,33 @@ export type SaleCustomerCaptureSession = {
   } | null;
 };
 
-export type CurrentSaleCustomerCaptureSessionResponse = {
-  session: SaleCustomerCaptureSession | null;
+export type CurrentCustomerCaptureSessionResponse = {
+  session: CustomerCaptureSession | null;
 };
 
-export type CreateSaleCustomerCaptureSessionResponse = {
-  session: SaleCustomerCaptureSession;
+export type CreateCustomerCaptureSessionResponse = {
+  session: CustomerCaptureSession;
   replacedActiveSessionCount: number;
 };
 
-export type PublicSaleCustomerCaptureSessionState = {
+export type PublicCustomerCaptureSessionState = {
   session: {
     status: CaptureSessionStatus;
     expiresAt: string;
     createdAt: string;
     completedAt: string | null;
     isReplaced: boolean;
+    ownerType: CustomerCaptureOwnerType;
   };
 };
 
-export type PublicSaleCustomerCaptureSubmitResponse = {
+export type PublicCustomerCaptureSubmitResponse = {
   session: {
     status: "COMPLETED";
     expiresAt: string;
     completedAt: string | null;
+    isReplaced: boolean;
+    ownerType: CustomerCaptureOwnerType;
   };
   customer: {
     id: string;
@@ -59,7 +65,10 @@ export type PublicSaleCustomerCaptureSubmitResponse = {
   };
   sale: {
     id: string;
-  };
+  } | null;
+  basket: {
+    id: string;
+  } | null;
   matchType: "email" | "phone" | "created";
 };
 
@@ -78,18 +87,29 @@ export const buildCustomerCaptureEntryUrl = (token: string) =>
   `${getPublicAppOrigin()}/customer-capture?token=${encodeURIComponent(token)}`;
 
 export const getCurrentSaleCustomerCaptureSession = (saleId: string) =>
-  apiGet<CurrentSaleCustomerCaptureSessionResponse>(
+  apiGet<CurrentCustomerCaptureSessionResponse>(
     `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions/current`,
   );
 
 export const createSaleCustomerCaptureSession = (saleId: string) =>
-  apiPost<CreateSaleCustomerCaptureSessionResponse>(
+  apiPost<CreateCustomerCaptureSessionResponse>(
     `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions`,
     {},
   );
 
+export const getCurrentBasketCustomerCaptureSession = (basketId: string) =>
+  apiGet<CurrentCustomerCaptureSessionResponse>(
+    `/api/baskets/${encodeURIComponent(basketId)}/customer-capture-sessions/current`,
+  );
+
+export const createBasketCustomerCaptureSession = (basketId: string) =>
+  apiPost<CreateCustomerCaptureSessionResponse>(
+    `/api/baskets/${encodeURIComponent(basketId)}/customer-capture-sessions`,
+    {},
+  );
+
 export const getPublicSaleCustomerCaptureSession = (token: string) =>
-  apiGet<PublicSaleCustomerCaptureSessionState>(
+  apiGet<PublicCustomerCaptureSessionState>(
     `/api/public/customer-capture/${encodeURIComponent(token)}`,
   );
 
@@ -102,7 +122,7 @@ export const submitPublicSaleCustomerCapture = (
     phone?: string;
   },
 ) =>
-  apiPost<PublicSaleCustomerCaptureSubmitResponse>(
+  apiPost<PublicCustomerCaptureSubmitResponse>(
     `/api/public/customer-capture/${encodeURIComponent(token)}`,
     body,
   );

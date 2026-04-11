@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   addBasketItem,
+  attachCustomerToBasket,
   createBasket,
   getBasketById,
   removeBasketItem,
@@ -14,6 +15,7 @@ import { resolveRequestLocation } from "../services/locationService";
 
 export const createBasketHandler = async (_req: Request, res: Response) => {
   const body = ((_req.body ?? {}) as {
+    customerId?: unknown;
     items?: Array<{
       variantId?: unknown;
       quantity?: unknown;
@@ -23,6 +25,13 @@ export const createBasketHandler = async (_req: Request, res: Response) => {
 
   if (body.items !== undefined && !Array.isArray(body.items)) {
     throw new HttpError(400, "items must be an array", "INVALID_BASKET_PRELOAD");
+  }
+  if (
+    body.customerId !== undefined
+    && body.customerId !== null
+    && typeof body.customerId !== "string"
+  ) {
+    throw new HttpError(400, "customerId must be a uuid or null", "INVALID_CUSTOMER_ID");
   }
 
   const items = body.items?.map((item) => {
@@ -46,7 +55,10 @@ export const createBasketHandler = async (_req: Request, res: Response) => {
     };
   });
 
-  const basket = await createBasket(items ? { items } : undefined);
+  const basket = await createBasket({
+    ...(items ? { items } : {}),
+    ...(body.customerId !== undefined ? { customerId: body.customerId } : {}),
+  });
   res.status(201).json(basket);
 };
 
@@ -84,6 +96,28 @@ export const updateBasketItemHandler = async (req: Request, res: Response) => {
 
 export const deleteBasketItemHandler = async (req: Request, res: Response) => {
   const basket = await removeBasketItem(req.params.id, req.params.itemId);
+  res.json(basket);
+};
+
+export const attachCustomerToBasketHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { customerId?: string | null };
+  if (!Object.prototype.hasOwnProperty.call(body, "customerId")) {
+    throw new HttpError(
+      400,
+      "customerId is required and must be a uuid or null",
+      "INVALID_CUSTOMER_ID",
+    );
+  }
+
+  if (body.customerId !== null && typeof body.customerId !== "string") {
+    throw new HttpError(
+      400,
+      "customerId is required and must be a uuid or null",
+      "INVALID_CUSTOMER_ID",
+    );
+  }
+
+  const basket = await attachCustomerToBasket(req.params.id, body.customerId ?? null);
   res.json(basket);
 };
 
