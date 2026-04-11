@@ -1,0 +1,115 @@
+import type { SaleCustomerCaptureSession } from "./customerCapture";
+
+export type PosCustomerCaptureCustomer = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+};
+
+export type PosCustomerCaptureSale = {
+  sale: {
+    id: string;
+    completedAt: string | null;
+    customer: PosCustomerCaptureCustomer | null;
+  };
+};
+
+export type CaptureCompletionSummary = {
+  saleId: string;
+  sessionId: string;
+  customer: PosCustomerCaptureCustomer;
+  matchType: "email" | "phone" | "created";
+};
+
+export const buildCaptureCompletionSummary = (
+  saleId: string,
+  session: SaleCustomerCaptureSession,
+): CaptureCompletionSummary | null => {
+  if (!session.outcome) {
+    return null;
+  }
+
+  return {
+    saleId,
+    sessionId: session.id,
+    customer: {
+      id: session.outcome.customer.id,
+      name: session.outcome.customer.name,
+      email: session.outcome.customer.email,
+      phone: session.outcome.customer.phone,
+    },
+    matchType: session.outcome.matchType,
+  };
+};
+
+export const formatCaptureMatchOutcome = (
+  matchType: "email" | "phone" | "created",
+  customerName?: string | null,
+) => {
+  switch (matchType) {
+    case "created":
+      return customerName
+        ? `Created a new customer profile for ${customerName}.`
+        : "Created a new customer profile.";
+    case "email":
+      return customerName
+        ? `Matched existing customer ${customerName} by email.`
+        : "Matched an existing customer by email.";
+    case "phone":
+      return customerName
+        ? `Matched existing customer ${customerName} by phone.`
+        : "Matched an existing customer by phone.";
+    default:
+      return "Customer attached to sale.";
+  }
+};
+
+export const getCaptureOutcomeLabel = (matchType: "email" | "phone" | "created") => {
+  switch (matchType) {
+    case "created":
+      return "New customer";
+    case "email":
+      return "Matched by email";
+    case "phone":
+      return "Matched by phone";
+    default:
+      return "Customer attached";
+  }
+};
+
+export const formatCustomerContactSummary = (
+  customer: { email?: string | null; phone?: string | null } | null | undefined,
+) => {
+  const parts = [customer?.email, customer?.phone].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" • ") : "No contact details saved";
+};
+
+export const formatCaptureRelativeMinutes = (
+  targetDate: string,
+  options?: { suffix?: "ago" | "remaining" },
+) => {
+  const targetTime = new Date(targetDate).getTime();
+  if (Number.isNaN(targetTime)) {
+    return null;
+  }
+
+  const diffMs = targetTime - Date.now();
+  const diffMinutes = Math.round(Math.abs(diffMs) / 60000);
+
+  if (options?.suffix === "remaining") {
+    if (diffMs <= 0) {
+      return "expired";
+    }
+    if (diffMinutes <= 1) {
+      return "less than 1 min left";
+    }
+    return `${diffMinutes} min left`;
+  }
+
+  if (diffMinutes <= 1) {
+    return "just now";
+  }
+
+  return `${diffMinutes} min ago`;
+};
