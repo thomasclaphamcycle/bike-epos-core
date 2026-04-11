@@ -2,7 +2,9 @@ import { Request, Response } from "express";
 import { getRequestAuditActor } from "../middleware/staffRole";
 import { HttpError } from "../utils/http";
 import {
+  createBasketCustomerCaptureSession,
   createSaleCustomerCaptureSession,
+  getCurrentBasketCustomerCaptureSession,
   getCurrentSaleCustomerCaptureSession,
   getPublicSaleCustomerCaptureSession,
   submitPublicSaleCustomerCapture,
@@ -15,6 +17,16 @@ export const createSaleCustomerCaptureSessionHandler = async (req: Request, res:
 
 export const getCurrentSaleCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
   const result = await getCurrentSaleCustomerCaptureSession(req.params.saleId);
+  res.json(result);
+};
+
+export const createBasketCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
+  const result = await createBasketCustomerCaptureSession(req.params.basketId, getRequestAuditActor(req));
+  res.status(201).json(result);
+};
+
+export const getCurrentBasketCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
+  const result = await getCurrentBasketCustomerCaptureSession(req.params.basketId);
   res.json(result);
 };
 

@@ -438,13 +438,18 @@ enum BasketStatus {
 }
 
 model Basket {
-  id        String       @id @default(uuid()) @db.Uuid
-  status    BasketStatus @default(OPEN)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id         String       @id @default(uuid()) @db.Uuid
+  customerId String?      @db.Uuid
+  status     BasketStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
-  items BasketItem[]
-  sale  Sale?
+  customer                Customer?                    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items                   BasketItem[]
+  sale                    Sale?
+  customerCaptureSessions SaleCustomerCaptureSession[]
+
+  @@index([customerId])
 }
 
 model BasketItem {
@@ -598,7 +603,8 @@ model Sale {
 
 model SaleCustomerCaptureSession {
   id                    String                           @id @default(uuid()) @db.Uuid
-  saleId                String                           @db.Uuid
+  saleId                String?                          @db.Uuid
+  basketId              String?                          @db.Uuid
   token                 String                           @unique
   status                SaleCustomerCaptureSessionStatus @default(ACTIVE)
   matchType             SaleCustomerCaptureMatchType?
@@ -614,10 +620,12 @@ model SaleCustomerCaptureSession {
   smsMarketingConsent   Boolean?
   customerId            String?                          @db.Uuid
 
-  sale     Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale     Sale?     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  basket   Basket?   @relation(fields: [basketId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([saleId, status])
+  @@index([basketId, status])
   @@index([expiresAt])
   @@index([customerId])
 }
@@ -1297,6 +1305,7 @@ model Customer {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  baskets               Basket[]
   sales                 Sale[]
   customerCaptureSessions SaleCustomerCaptureSession[]
   account               CustomerAccount?

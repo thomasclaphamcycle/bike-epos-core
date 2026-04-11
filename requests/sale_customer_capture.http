@@ -2,6 +2,7 @@
 @staffRole = STAFF
 @staffId = sale-customer-capture-request
 @saleId = REPLACE_SALE_ID
+@basketId = REPLACE_BASKET_ID
 @token = REPLACE_CAPTURE_TOKEN
 
 ### Create sale-linked customer capture session (STAFF+)
@@ -14,6 +15,19 @@ Content-Type: application/json
 
 ### Get latest staff-visible customer capture session for a sale
 GET {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions/current
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Create basket-linked customer capture session (STAFF+)
+POST {{baseUrl}}/api/baskets/{{basketId}}/customer-capture-sessions
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+Content-Type: application/json
+
+{}
+
+### Get latest staff-visible customer capture session for a basket
+GET {{baseUrl}}/api/baskets/{{basketId}}/customer-capture-sessions/current
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
 

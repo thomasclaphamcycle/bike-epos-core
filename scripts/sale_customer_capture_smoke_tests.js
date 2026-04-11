@@ -107,6 +107,38 @@ const cleanup = async (created) => {
     });
   }
 
+  if (created.basketIds.size > 0) {
+    await prisma.basket.deleteMany({
+      where: { id: { in: Array.from(created.basketIds) } },
+    });
+  }
+
+  if (created.variantIds.size > 0) {
+    const variantIds = Array.from(created.variantIds);
+
+    await prisma.inventoryMovement.deleteMany({
+      where: { variantId: { in: variantIds } },
+    });
+    await prisma.stockLedgerEntry.deleteMany({
+      where: { variantId: { in: variantIds } },
+    });
+    await prisma.variant.deleteMany({
+      where: { id: { in: variantIds } },
+    });
+  }
+
+  if (created.productIds.size > 0) {
+    await prisma.product.deleteMany({
+      where: { id: { in: Array.from(created.productIds) } },
+    });
+  }
+
+  if (created.stockLocationIds.size > 0) {
+    await prisma.stockLocation.deleteMany({
+      where: { id: { in: Array.from(created.stockLocationIds) } },
+    });
+  }
+
   if (created.locationIds.size > 0) {
     await prisma.location.deleteMany({
       where: { id: { in: Array.from(created.locationIds) } },
@@ -139,6 +171,104 @@ const createSale = async (created, locationId) => {
   return sale;
 };
 
+const ensureDefaultStockLocation = async (created) => {
+  const existingDefault = await prisma.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  const location = await prisma.stockLocation.create({
+    data: {
+      name: `Capture Default Stock ${uniqueRef()}`,
+      isDefault: true,
+    },
+  });
+  created.stockLocationIds.add(location.id);
+  return location;
+};
+
+const createCheckoutReadyVariant = async (created, suffix) => {
+  const stockLocation = await ensureDefaultStockLocation(created);
+  const product = await prisma.product.create({
+    data: {
+      name: `Capture Product ${suffix}`,
+      brand: "Capture",
+      description: "Customer capture smoke checkout product",
+    },
+  });
+  created.productIds.add(product.id);
+
+  const variant = await prisma.variant.create({
+    data: {
+      productId: product.id,
+      sku: `CAPTURE-SKU-${suffix}`,
+      barcode: `CAPTURE-BC-${suffix}`,
+      name: `Capture Variant ${suffix}`,
+      retailPricePence: 2500,
+    },
+  });
+  created.variantIds.add(variant.id);
+
+  await prisma.stockLedgerEntry.create({
+    data: {
+      variantId: variant.id,
+      locationId: stockLocation.id,
+      type: "ADJUSTMENT",
+      quantityDelta: 10,
+      referenceType: "SMOKE_TEST",
+      referenceId: `capture_stock_${suffix}`,
+      note: "Seed stock for customer capture smoke test",
+    },
+  });
+
+  return variant;
+};
+
+const createBasket = async (created, body = {}) => {
+  const payload = await apiJsonOrThrow({
+    path: "/api/baskets",
+    method: "POST",
+    body,
+    headers: STAFF_HEADERS,
+  });
+  created.basketIds.add(payload.id);
+  return payload;
+};
+
+const addBasketItem = async (basketId, variantId) => {
+  return apiJsonOrThrow({
+    path: `/api/baskets/${encodeURIComponent(basketId)}/items`,
+    method: "POST",
+    body: {
+      variantId,
+      quantity: 1,
+    },
+    headers: STAFF_HEADERS,
+  });
+};
+
+const createBasketCaptureSession = async (created, basketId) => {
+  const payload = await apiJsonOrThrow({
+    path: `/api/baskets/${encodeURIComponent(basketId)}/customer-capture-sessions`,
+    method: "POST",
+    body: {},
+    headers: STAFF_HEADERS,
+  });
+  created.sessionIds.add(payload.session.id);
+  return payload;
+};
+
+const getCurrentBasketCaptureSession = async (basketId) => {
+  return apiJsonOrThrow({
+    path: `/api/baskets/${encodeURIComponent(basketId)}/customer-capture-sessions/current`,
+    method: "GET",
+    headers: STAFF_HEADERS,
+  });
+};
+
 const createCaptureSession = async (created, saleId) => {
   const payload = await apiJsonOrThrow({
     path: `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions`,
@@ -162,8 +292,12 @@ const run = async () => {
   const created = {
     locationIds: new Set(),
     saleIds: new Set(),
+    basketIds: new Set(),
     sessionIds: new Set(),
     customerIds: new Set(),
+    productIds: new Set(),
+    variantIds: new Set(),
+    stockLocationIds: new Set(),
   };
 
   try {
@@ -232,6 +366,133 @@ const run = async () => {
     });
     assert.equal(attachedSaleCreate.status, 409);
     assert.equal(attachedSaleCreate.payload.error.code, "SALE_CUSTOMER_ALREADY_ATTACHED");
+
+    const invalidBasketIdCreate = await apiJson({
+      path: "/api/baskets/not-a-uuid/customer-capture-sessions",
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(invalidBasketIdCreate.status, 400);
+    assert.equal(invalidBasketIdCreate.payload.error.code, "INVALID_BASKET_ID");
+
+    const missingBasketCreate = await apiJson({
+      path: "/api/baskets/00000000-0000-4000-8000-000000000001/customer-capture-sessions",
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(missingBasketCreate.status, 404);
+    assert.equal(missingBasketCreate.payload.error.code, "BASKET_NOT_FOUND");
+
+    const attachedBasket = await createBasket(created, {
+      customerId: attachedCustomer.id,
+    });
+    const attachedBasketCreate = await apiJson({
+      path: `/api/baskets/${encodeURIComponent(attachedBasket.id)}/customer-capture-sessions`,
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(attachedBasketCreate.status, 409);
+    assert.equal(attachedBasketCreate.payload.error.code, "BASKET_CUSTOMER_ALREADY_ATTACHED");
+
+    const checkoutVariant = await createCheckoutReadyVariant(created, token);
+    const preSaleBasket = await createBasket(created);
+    const emptyCurrentBasketSession = await getCurrentBasketCaptureSession(preSaleBasket.id);
+    assert.equal(emptyCurrentBasketSession.session, null);
+    await addBasketItem(preSaleBasket.id, checkoutVariant.id);
+
+    const preSaleSessionPayload = await createBasketCaptureSession(created, preSaleBasket.id);
+    assert.equal(preSaleSessionPayload.session.saleId, null);
+    assert.equal(preSaleSessionPayload.session.basketId, preSaleBasket.id);
+    assert.equal(preSaleSessionPayload.session.ownerType, "basket");
+
+    const preSaleCurrentSession = await getCurrentBasketCaptureSession(preSaleBasket.id);
+    assert.equal(preSaleCurrentSession.session.id, preSaleSessionPayload.session.id);
+    assert.equal(preSaleCurrentSession.session.status, "ACTIVE");
+    assert.equal(preSaleCurrentSession.session.ownerType, "basket");
+
+    const preSaleState = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(preSaleSessionPayload.session.token)}`,
+      method: "GET",
+    });
+    assert.equal(preSaleState.session.status, "ACTIVE");
+    assert.equal(preSaleState.session.ownerType, "basket");
+
+    const preSaleSubmit = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(preSaleSessionPayload.session.token)}`,
+      method: "POST",
+      body: {
+        firstName: "Pre",
+        lastName: "Checkout",
+        email: `pre-checkout-${token}@example.com`,
+      },
+    });
+    assert.equal(preSaleSubmit.matchType, "created");
+    assert.equal(preSaleSubmit.basket.id, preSaleBasket.id);
+    assert.equal(preSaleSubmit.sale, null);
+    created.customerIds.add(preSaleSubmit.customer.id);
+
+    const preSaleBasketPayload = await apiJsonOrThrow({
+      path: `/api/baskets/${encodeURIComponent(preSaleBasket.id)}`,
+      method: "GET",
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(preSaleBasketPayload.customer.id, preSaleSubmit.customer.id);
+
+    const preSaleCheckout = await apiJsonOrThrow({
+      path: `/api/baskets/${encodeURIComponent(preSaleBasket.id)}/checkout`,
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    created.saleIds.add(preSaleCheckout.sale.id);
+    assert.equal(preSaleCheckout.sale.customer.id, preSaleSubmit.customer.id);
+    assert.equal(preSaleCheckout.sale.customer.email, `pre-checkout-${token}@example.com`);
+
+    const carryForwardBasket = await createBasket(created);
+    await addBasketItem(carryForwardBasket.id, checkoutVariant.id);
+
+    const carryForwardSession = await createBasketCaptureSession(created, carryForwardBasket.id);
+    const carryForwardCheckout = await apiJsonOrThrow({
+      path: `/api/baskets/${encodeURIComponent(carryForwardBasket.id)}/checkout`,
+      method: "POST",
+      body: {},
+      headers: STAFF_HEADERS,
+    });
+    created.saleIds.add(carryForwardCheckout.sale.id);
+
+    const carryForwardSaleSession = await apiJsonOrThrow({
+      path: `/api/sales/${encodeURIComponent(carryForwardCheckout.sale.id)}/customer-capture-sessions/current`,
+      method: "GET",
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(carryForwardSaleSession.session.id, carryForwardSession.session.id);
+    assert.equal(carryForwardSaleSession.session.saleId, carryForwardCheckout.sale.id);
+    assert.equal(carryForwardSaleSession.session.basketId, null);
+    assert.equal(carryForwardSaleSession.session.ownerType, "sale");
+
+    const carryForwardSubmit = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(carryForwardSession.session.token)}`,
+      method: "POST",
+      body: {
+        firstName: "Carry",
+        lastName: "Forward",
+        phone: `07888${token.slice(-6)}`,
+      },
+    });
+    assert.equal(carryForwardSubmit.matchType, "created");
+    assert.equal(carryForwardSubmit.sale.id, carryForwardCheckout.sale.id);
+    assert.equal(carryForwardSubmit.basket, null);
+    created.customerIds.add(carryForwardSubmit.customer.id);
+
+    const carryForwardSalePayload = await apiJsonOrThrow({
+      path: `/api/sales/${encodeURIComponent(carryForwardCheckout.sale.id)}`,
+      method: "GET",
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(carryForwardSalePayload.sale.customer.id, carryForwardSubmit.customer.id);
 
     const reusableSale = await createSale(created, location.id);
     const emptyCurrentSession = await getCurrentCaptureSession(reusableSale.id);
