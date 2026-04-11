@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
-import {
-  buildCustomerCaptureEntryUrl,
-  createSaleCustomerCaptureSession as createSaleCustomerCaptureSessionRequest,
-  getCurrentSaleCustomerCaptureSession as getCurrentSaleCustomerCaptureSessionRequest,
-  type SaleCustomerCaptureSession,
-} from "../features/customerCapture/customerCapture";
+import { PosCustomerCapturePanel } from "../features/customerCapture/PosCustomerCapturePanel";
+import { usePosCustomerCapture } from "../features/customerCapture/usePosCustomerCapture";
 import {
   getManagedPrintJob,
   getManagedPrintJobStatusBadgeClassName,
@@ -153,85 +148,7 @@ type CompletedSaleState = {
   receiptPrinterName: string | null;
 };
 
-type CaptureCompletionSummary = {
-  saleId: string;
-  sessionId: string;
-  customer: {
-    id: string;
-    name: string;
-    email: string | null;
-    phone: string | null;
-  };
-  matchType: "email" | "phone" | "created";
-};
-
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
-
-const formatCaptureMatchOutcome = (
-  matchType: "email" | "phone" | "created",
-  customerName?: string | null,
-) => {
-  switch (matchType) {
-    case "created":
-      return customerName
-        ? `Created a new customer profile for ${customerName}.`
-        : "Created a new customer profile.";
-    case "email":
-      return customerName
-        ? `Matched existing customer ${customerName} by email.`
-        : "Matched an existing customer by email.";
-    case "phone":
-      return customerName
-        ? `Matched existing customer ${customerName} by phone.`
-        : "Matched an existing customer by phone.";
-    default:
-      return "Customer attached to sale.";
-  }
-};
-
-const getCaptureOutcomeLabel = (matchType: "email" | "phone" | "created") => {
-  switch (matchType) {
-    case "created":
-      return "New customer";
-    case "email":
-      return "Matched by email";
-    case "phone":
-      return "Matched by phone";
-    default:
-      return "Customer attached";
-  }
-};
-
-const formatCustomerContactSummary = (customer: { email?: string | null; phone?: string | null } | null | undefined) => {
-  const parts = [customer?.email, customer?.phone].filter((value): value is string => Boolean(value));
-  return parts.length > 0 ? parts.join(" • ") : "No contact details saved";
-};
-
-const formatRelativeMinutes = (targetDate: string, options?: { suffix?: "ago" | "remaining" }) => {
-  const targetTime = new Date(targetDate).getTime();
-  if (Number.isNaN(targetTime)) {
-    return null;
-  }
-
-  const diffMs = targetTime - Date.now();
-  const diffMinutes = Math.round(Math.abs(diffMs) / 60000);
-
-  if (options?.suffix === "remaining") {
-    if (diffMs <= 0) {
-      return "expired";
-    }
-    if (diffMinutes <= 1) {
-      return "less than 1 min left";
-    }
-    return `${diffMinutes} min left`;
-  }
-
-  if (diffMinutes <= 1) {
-    return "just now";
-  }
-
-  return `${diffMinutes} min ago`;
-};
 
 const getPosReceiptPrintButtonLabel = (
   queueing: boolean,
@@ -304,8 +221,6 @@ export const PosPage = () => {
   const basketStateRef = useRef<BasketResponse | null>(null);
   const saleStateRef = useRef<SaleResponse | null>(null);
   const selectedCustomerStateRef = useRef<CustomerSearchRow | null>(null);
-  const announcedCaptureCompletionRef = useRef<string | null>(null);
-  const captureSaleScopeRef = useRef<string | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const debouncedSearch = useDebouncedValue(searchText, 250);
@@ -325,13 +240,6 @@ export const PosPage = () => {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
-  const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSession | null>(null);
-  const [captureSessionLoading, setCaptureSessionLoading] = useState(false);
-  const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
-  const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
-  const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
-  const [captureQrBusy, setCaptureQrBusy] = useState(false);
-  const [captureCompletionSummary, setCaptureCompletionSummary] = useState<CaptureCompletionSummary | null>(null);
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
@@ -353,7 +261,6 @@ export const PosPage = () => {
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
   const posOpenStateSignature = useMemo(() => JSON.stringify(posOpenState ?? null), [posOpenState]);
-  const isCaptureEligible = Boolean(sale?.sale.id && !sale.sale.completedAt && !sale.sale.customer?.id);
 
   useEffect(() => {
     basketStateRef.current = basket;
@@ -543,137 +450,27 @@ export const PosPage = () => {
     return payload;
   };
 
-  const captureUrl = useMemo(() => {
-    if (!captureSession) {
-      return null;
-    }
-
-    return buildCustomerCaptureEntryUrl(captureSession.token);
-  }, [captureSession]);
-
-  const loadCurrentCaptureSession = async (
-    targetSaleId: string,
-    options?: {
-      requestId?: number;
-      showLoading?: boolean;
-      quiet?: boolean;
-    },
-  ) => {
-    if (options?.showLoading !== false) {
-      setCaptureSessionLoading(true);
-    }
-
-    try {
-      const payload = await getCurrentSaleCustomerCaptureSessionRequest(targetSaleId);
-      if (!canApplyPosLifecycle(options?.requestId)) {
-        return null;
-      }
-      if (saleStateRef.current?.sale.id !== targetSaleId) {
-        return null;
-      }
-      setCaptureSession(payload.session);
-      setCaptureStatusError(null);
-      return payload.session;
-    } catch (captureError) {
-      if (!canApplyPosLifecycle(options?.requestId)) {
-        return null;
-      }
-      const message = captureError instanceof Error ? captureError.message : "Failed to load customer capture";
-      setCaptureStatusError(message);
-      if (!options?.quiet) {
-        error(message);
-      }
-      return null;
-    } finally {
-      if (canApplyPosLifecycle(options?.requestId) && options?.showLoading !== false) {
-        setCaptureSessionLoading(false);
-      }
-    }
-  };
-
-  const refreshSaleAfterCustomerCapture = async (
-    targetSaleId: string,
-    options?: {
-      requestId?: number;
-      showToast?: boolean;
-      completionSummary?: CaptureCompletionSummary | null;
-    },
-  ) => {
-    const refreshed = await loadSale(targetSaleId, { requestId: options?.requestId });
-    if (!refreshed || !canApplyPosLifecycle(options?.requestId)) {
-      return null;
-    }
-
-    if (refreshed.sale.customer?.id) {
-      setCaptureSession(null);
-      setCaptureStatusError(null);
-      if (options?.completionSummary) {
-        setCaptureCompletionSummary(options.completionSummary);
-      }
-      const announcementKey = `${targetSaleId}:${refreshed.sale.customer.id}`;
-      if (options?.showToast !== false && announcedCaptureCompletionRef.current !== announcementKey) {
-        announcedCaptureCompletionRef.current = announcementKey;
-        if (options?.completionSummary) {
-          success(formatCaptureMatchOutcome(
-            options.completionSummary.matchType,
-            options.completionSummary.customer.name,
-          ));
-        } else {
-          success("Customer details attached to sale.");
-        }
-      }
-    }
-
-    return refreshed;
-  };
-
-  const createCustomerCaptureSession = async () => {
-    if (!sale?.sale.id) {
-      error("Create a sale before starting customer capture.");
-      return;
-    }
-    if (sale.sale.completedAt) {
-      error("Customer capture is only available for active sales.");
-      return;
-    }
-    if (sale.sale.customer?.id) {
-      error("This sale already has a customer attached.");
-      return;
-    }
-
-    setCreatingCaptureSession(true);
-    setCaptureStatusError(null);
-    try {
-      const payload = await createSaleCustomerCaptureSessionRequest(sale.sale.id);
-      setCaptureSession(payload.session);
-      setCaptureCompletionSummary(null);
-      announcedCaptureCompletionRef.current = null;
-      success(
-        payload.replacedActiveSessionCount > 0
-          ? "New customer capture link ready. The previous link has been replaced."
-          : "Customer capture link ready.",
-      );
-    } catch (captureError) {
-      const message = captureError instanceof Error ? captureError.message : "Failed to create capture link";
-      setCaptureStatusError(message);
-      error(message);
-    } finally {
-      setCreatingCaptureSession(false);
-    }
-  };
-
-  const copyCaptureUrl = async () => {
-    if (!captureUrl) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(captureUrl);
-      success("Customer capture link copied.");
-    } catch {
-      error("Could not copy the customer capture link.");
-    }
-  };
+  const {
+    captureCompletionSummary,
+    captureQrBusy,
+    captureQrImage,
+    captureSession,
+    captureSessionLoading,
+    captureStatusError,
+    captureUrl,
+    creatingCaptureSession,
+    isCaptureEligible,
+    copyCaptureUrl,
+    createCustomerCaptureSession,
+    dismissCaptureCompletionSummary,
+    refreshCaptureStatus,
+    refreshSaleAfterCustomerCapture,
+  } = usePosCustomerCapture({
+    sale,
+    loadSale: (targetSaleId) => loadSale(targetSaleId),
+    success,
+    error,
+  });
 
   const createBasket = async (options?: {
     saleContext?: SaleContext;
@@ -881,128 +678,6 @@ export const PosPage = () => {
   }, [basketId, saleId, posOpenStateSignature, error]);
 
   useEffect(() => {
-    const nextSaleId = sale?.sale.id ?? null;
-    if (captureSaleScopeRef.current === nextSaleId) {
-      return;
-    }
-
-    captureSaleScopeRef.current = nextSaleId;
-    setCaptureSession(null);
-    setCaptureStatusError(null);
-    setCaptureSessionLoading(false);
-    setCaptureQrImage(null);
-    setCaptureQrBusy(false);
-    announcedCaptureCompletionRef.current = null;
-    if (captureCompletionSummary && captureCompletionSummary.saleId !== nextSaleId) {
-      setCaptureCompletionSummary(null);
-    }
-  }, [sale?.sale.id, captureCompletionSummary]);
-
-  useEffect(() => {
-    if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
-      setCaptureSession(null);
-      setCaptureStatusError(null);
-      setCaptureSessionLoading(false);
-      announcedCaptureCompletionRef.current = null;
-      return;
-    }
-
-    void loadCurrentCaptureSession(sale.sale.id, {
-      showLoading: true,
-      quiet: true,
-    });
-  }, [sale?.sale.id, sale?.sale.completedAt, sale?.sale.customer?.id]);
-
-  useEffect(() => {
-    if (!captureUrl || captureSession?.status !== "ACTIVE") {
-      setCaptureQrImage(null);
-      setCaptureQrBusy(false);
-      return;
-    }
-
-    let cancelled = false;
-    setCaptureQrBusy(true);
-
-    void QRCode.toDataURL(captureUrl, {
-      margin: 1,
-      width: 240,
-    })
-      .then((nextImage) => {
-        if (!cancelled) {
-          setCaptureQrImage(nextImage);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCaptureQrImage(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCaptureQrBusy(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [captureSession?.status, captureUrl]);
-
-  useEffect(() => {
-    if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
-      return;
-    }
-    if (!captureSession || captureSession.status !== "ACTIVE") {
-      return;
-    }
-
-    let cancelled = false;
-
-    const syncCaptureState = async () => {
-      try {
-        const nextSession = await getCurrentSaleCustomerCaptureSessionRequest(sale.sale.id);
-        if (cancelled || !isPageActiveRef.current) {
-          return;
-        }
-
-        setCaptureSession(nextSession.session);
-        setCaptureStatusError(null);
-
-        if (nextSession.session?.status === "COMPLETED") {
-          const completionSummary = nextSession.session.outcome
-            ? {
-                saleId: sale.sale.id,
-                sessionId: nextSession.session.id,
-                customer: {
-                  id: nextSession.session.outcome.customer.id,
-                  name: nextSession.session.outcome.customer.name,
-                  email: nextSession.session.outcome.customer.email,
-                  phone: nextSession.session.outcome.customer.phone,
-                },
-                matchType: nextSession.session.outcome.matchType,
-              }
-            : null;
-
-          await refreshSaleAfterCustomerCapture(sale.sale.id, {
-            completionSummary,
-          });
-        }
-      } catch {
-        // Keep passive refresh quiet; the operator still has manual refresh controls.
-      }
-    };
-
-    const intervalId = window.setInterval(() => {
-      void syncCaptureState();
-    }, 2000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [captureSession?.id, captureSession?.status, sale?.sale.completedAt, sale?.sale.customer?.id, sale?.sale.id]);
-
-  useEffect(() => {
     if (!debouncedSearch.trim()) {
       setSearchRows([]);
       setHighlightedProductIndex(-1);
@@ -1100,17 +775,6 @@ export const PosPage = () => {
       focusProductSearch();
     }
   }, [loading, basket, sale]);
-
-  useEffect(() => {
-    if (!sale?.sale.id) {
-      setCaptureCompletionSummary(null);
-      return;
-    }
-
-    setCaptureCompletionSummary((current) => (
-      current && current.saleId === sale.sale.id ? current : null
-    ));
-  }, [sale?.sale.id]);
 
   useEffect(() => {
     if (!sale || selectedTenderMethod !== "CASH") {
@@ -2135,241 +1799,28 @@ export const PosPage = () => {
                 <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
               )}
 
-              {captureCompletionSummary && sale?.sale.customer?.id === captureCompletionSummary.customer.id ? (
-                <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-success">
-                  <div className="success-panel-heading pos-customer-capture-summary-heading">
-                    <strong>Customer attached to sale</strong>
-                    <span className="status-badge status-complete">
-                      {getCaptureOutcomeLabel(captureCompletionSummary.matchType)}
-                    </span>
-                    <button
-                      type="button"
-                      className="link-button"
-                      data-testid="pos-customer-capture-dismiss"
-                      onClick={() => setCaptureCompletionSummary(null)}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                  <div className="pos-customer-capture-summary-grid">
-                    <div>
-                      <div className="muted-text">Customer</div>
-                      <div className="table-primary">
-                        {sale.sale.customer?.name || captureCompletionSummary.customer.name}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="muted-text">Contact</div>
-                      <div className="table-primary">
-                        {formatCustomerContactSummary(sale.sale.customer || captureCompletionSummary.customer)}
-                      </div>
-                    </div>
-                  </div>
-                  <p>{formatCaptureMatchOutcome(captureCompletionSummary.matchType, captureCompletionSummary.customer.name)}</p>
-                </div>
-              ) : null}
-
-              <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
-                <div className="card-header-row">
-                  <div>
-                    <div className="table-primary">Add Customer</div>
-                    <p className="muted-text">
-                      Share a QR code or link so the customer can attach their details to this sale from their phone.
-                    </p>
-                  </div>
-                  {isCaptureEligible ? (
-                    captureSession?.status === "COMPLETED" && sale?.sale.id ? (
-                      <button
-                        type="button"
-                        className="primary"
-                        data-testid="pos-customer-capture-refresh-sale"
-                        onClick={() => void refreshSaleAfterCustomerCapture(sale.sale.id, { showToast: true })}
-                      >
-                        Refresh sale
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="primary"
-                        data-testid="pos-customer-capture-generate"
-                        onClick={() => void createCustomerCaptureSession()}
-                        disabled={creatingCaptureSession || captureSessionLoading}
-                      >
-                        {creatingCaptureSession ? "Preparing..." : captureSession ? "Regenerate" : "Start Add Customer"}
-                      </button>
-                    )
-                  ) : null}
-                </div>
-
-                {!sale?.sale.id ? (
-                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-no-sale-state">
-                    <span className="status-badge">Unavailable</span>
-                    <strong>No active sale yet</strong>
-                    <p className="muted-text">
-                      Customer capture becomes available after basket checkout creates a live sale.
-                    </p>
-                  </div>
-                ) : sale.sale.customer ? (
-                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-attached-state">
-                    <span className="status-badge status-complete">Not needed</span>
-                    <strong>Customer already attached</strong>
-                    <p className="muted-text">
-                      This sale already has {sale.sale.customer.name} attached, so Add Customer is no longer needed here.
-                    </p>
-                    <p className="muted-text">
-                      {formatCustomerContactSummary(sale.sale.customer)}
-                    </p>
-                  </div>
-                ) : sale.sale.completedAt ? (
-                  <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ineligible-state">
-                    <span className="status-badge">Unavailable</span>
-                    <strong>Sale already completed</strong>
-                    <p className="muted-text">
-                      Customer capture can only be started while the sale is still active.
-                    </p>
-                  </div>
-                ) : captureSessionLoading ? (
-                    <div className="quick-create-panel pos-customer-capture-state">
-                      <span className="status-badge">Loading</span>
-                      <strong>Checking current customer capture</strong>
-                      <p className="muted-text">Loading any active customer capture link for this sale.</p>
-                    </div>
-                  ) : captureStatusError && !captureSession ? (
-                    <div className="quick-create-panel pos-customer-capture-state">
-                      <span className="status-badge">Error</span>
-                      <strong>Customer capture unavailable</strong>
-                      <p className="muted-text">{captureStatusError}</p>
-                    </div>
-                  ) : captureSession?.status === "ACTIVE" && captureUrl ? (
-                    <div className="cash-qr-card">
-                      <div className="card-header-row">
-                        <div>
-                          <span className="status-badge">Waiting for customer</span>
-                          <p className="muted-text">
-                            Scan QR or tap NFC. CorePOS checks for completion automatically, and you can still refresh manually if needed.
-                          </p>
-                          <p className="muted-text">
-                            Created {formatRelativeMinutes(captureSession.createdAt) ?? "just now"}.
-                            {" "}
-                            Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            {" "}
-                            ({formatRelativeMinutes(captureSession.expiresAt, { suffix: "remaining" }) ?? "timing unavailable"}).
-                          </p>
-                        </div>
-                      </div>
-                      <div className="cash-qr-layout">
-                        <div className="cash-qr-box">
-                          {captureQrBusy ? (
-                            <span>Generating QR...</span>
-                          ) : captureQrImage ? (
-                            <img
-                              src={captureQrImage}
-                              alt="Customer capture QR code"
-                              data-testid="pos-customer-capture-qr"
-                            />
-                          ) : (
-                            <span>QR unavailable</span>
-                          )}
-                        </div>
-                        <div className="cash-qr-copy">
-                          <div>
-                            <div className="table-primary">Need the link instead?</div>
-                            <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
-                          </div>
-                          <label>
-                            Public capture URL
-                            <input
-                              data-testid="pos-customer-capture-url"
-                              value={captureUrl}
-                              readOnly
-                            />
-                          </label>
-                          <div className="actions-inline">
-                            <button type="button" onClick={() => void copyCaptureUrl()}>
-                              Copy Link
-                            </button>
-                            <a href={captureUrl} target="_blank" rel="noreferrer">
-                              Open Link
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!sale?.sale.id) {
-                                  return;
-                                }
-                                void loadCurrentCaptureSession(sale.sale.id, {
-                                  showLoading: true,
-                                  quiet: false,
-                                }).then((session) => {
-                                  if (session?.status === "COMPLETED") {
-                                    const completionSummary = session.outcome
-                                      ? {
-                                          saleId: sale.sale.id,
-                                          sessionId: session.id,
-                                          customer: {
-                                            id: session.outcome.customer.id,
-                                            name: session.outcome.customer.name,
-                                            email: session.outcome.customer.email,
-                                            phone: session.outcome.customer.phone,
-                                          },
-                                          matchType: session.outcome.matchType,
-                                        }
-                                      : null;
-
-                                    void refreshSaleAfterCustomerCapture(sale.sale.id, {
-                                      showToast: true,
-                                      completionSummary,
-                                    });
-                                  }
-                                });
-                              }}
-                            >
-                              Refresh Status
-                            </button>
-                          </div>
-                          <p className="muted-text">
-                            Generating a new link expires this one immediately.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : captureSession?.status === "COMPLETED" ? (
-                    <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-completed-state">
-                      <div className="success-panel-heading">
-                        <strong>Customer capture complete.</strong>
-                        <span className="status-badge status-complete">
-                          {captureSession.outcome
-                            ? getCaptureOutcomeLabel(captureSession.outcome.matchType)
-                            : "Attached automatically"}
-                        </span>
-                      </div>
-                      <p className="muted-text">
-                        {captureSession.outcome
-                          ? formatCaptureMatchOutcome(
-                              captureSession.outcome.matchType,
-                              captureSession.outcome.customer.name,
-                            )
-                          : "The customer has already finished the form. Refresh the sale to pull their details into the till."}
-                      </p>
-                    </div>
-                  ) : captureSession?.status === "EXPIRED" ? (
-                    <div className="quick-create-panel pos-customer-capture-state">
-                      <span className="status-badge">Expired</span>
-                      <strong>Capture link expired</strong>
-                      <p className="muted-text">
-                        The last customer capture link expired before it was used. Start Add Customer again when the customer is ready.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ready-state">
-                      <span className="status-badge">Ready</span>
-                      <strong>No live capture link</strong>
-                      <p className="muted-text">
-                        Start Add Customer when the customer is ready. CorePOS will then show a fresh QR code and public link for this sale.
-                      </p>
-                    </div>
-                  )}
-              </div>
+              <PosCustomerCapturePanel
+                sale={sale}
+                isCaptureEligible={isCaptureEligible}
+                captureSession={captureSession}
+                captureSessionLoading={captureSessionLoading}
+                creatingCaptureSession={creatingCaptureSession}
+                captureStatusError={captureStatusError}
+                captureQrImage={captureQrImage}
+                captureQrBusy={captureQrBusy}
+                captureUrl={captureUrl}
+                captureCompletionSummary={captureCompletionSummary}
+                onDismissCompletion={dismissCaptureCompletionSummary}
+                onCreateCustomerCaptureSession={() => void createCustomerCaptureSession()}
+                onCopyCaptureUrl={() => void copyCaptureUrl()}
+                onRefreshStatus={() => void refreshCaptureStatus()}
+                onRefreshSale={() => {
+                  if (!sale?.sale.id) {
+                    return;
+                  }
+                  void refreshSaleAfterCustomerCapture(sale.sale.id, { showToast: true });
+                }}
+              />
 
               <div className="customer-search-panel">
                 <div className="customer-search-stack grow">
