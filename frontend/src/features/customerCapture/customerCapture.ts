@@ -84,7 +84,7 @@ export const getPublicAppOrigin = () => {
 };
 
 export const buildCustomerCaptureEntryUrl = (token: string) =>
-  `${getPublicAppOrigin()}/customer-capture?token=${encodeURIComponent(token)}`;
+  `${getPublicAppOrigin()}/customer-capture/${encodeURIComponent(token)}`;
 
 export const getCurrentSaleCustomerCaptureSession = (saleId: string) =>
   apiGet<CurrentCustomerCaptureSessionResponse>(
