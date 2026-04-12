@@ -2,11 +2,12 @@ import "dotenv/config";
 
 import { prisma } from "../../src/lib/prisma";
 import { hashPassword, hashPin } from "../../src/services/passwordService";
+import { LOCAL_DEV_STAFF_PASSWORD } from "./local_staff_fixtures";
 
 const USERNAME = "thomas";
 const NAME = "Thomas";
 const PIN = "9999";
-const DEV_PASSWORD = "thomas-admin-dev";
+const DEV_PASSWORD = process.env.THOMAS_ADMIN_DEV_PASSWORD?.trim() || LOCAL_DEV_STAFF_PASSWORD;
 
 export async function createThomasAdmin() {
   const pinHash = await hashPin(PIN);
@@ -33,7 +34,7 @@ export async function createThomasAdmin() {
 
 async function main() {
   await createThomasAdmin();
-  console.log("Admin user 'Thomas' ready with PIN 9999");
+  console.log("Admin user 'Thomas' ready with PIN 9999 and the configured local-dev password.");
 }
 
 if (require.main === module) {
