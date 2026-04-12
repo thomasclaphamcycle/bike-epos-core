@@ -10,6 +10,14 @@ jobs:
     runs-on: self-hosted
 
     steps:
+      - name: Force-sync runtime checkout
+        shell: cmd
+        run: |
+          cd /d C:\Users\coreposadmin\corepos-runtime
+          git fetch origin
+          git reset --hard origin/main
+          git clean -fd
+
       - name: Deploy CorePOS
         shell: cmd
         run: |
