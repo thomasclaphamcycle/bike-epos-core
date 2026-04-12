@@ -395,7 +395,10 @@ export const PosPage = () => {
           return;
         }
 
-        setSearchParams(updated, { replace: true });
+        setSearchParams(updated, {
+          replace: true,
+          state: location.state,
+        });
       });
     });
   };
