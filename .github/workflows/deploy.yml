@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Capture pre-deploy runtime state
         id: preflight
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
           $repoPath = $env:COREPOS_REPO_PATH
@@ -42,7 +42,7 @@ jobs:
 
       - name: Force-sync runtime checkout
         id: sync
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
           $repoPath = $env:COREPOS_REPO_PATH
@@ -66,7 +66,7 @@ jobs:
           call "%COREPOS_DEPLOY_ENTRYPOINT%"
 
       - name: Verify deployed health
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
           Set-Location $env:COREPOS_REPO_PATH
@@ -74,7 +74,7 @@ jobs:
 
       - name: Capture failure diagnostics
         if: failure()
-        shell: pwsh
+        shell: powershell
         env:
           PREVIOUS_COMMIT: ${{ steps.preflight.outputs.previous_commit }}
           TARGET_COMMIT: ${{ steps.sync.outputs.target_commit }}
@@ -134,7 +134,7 @@ jobs:
 
       - name: Publish deploy summary
         if: always()
-        shell: pwsh
+        shell: powershell
         env:
           DEPLOY_RESULT: ${{ job.status }}
           PREVIOUS_COMMIT: ${{ steps.preflight.outputs.previous_commit }}
