@@ -20,6 +20,13 @@ const MANAGER_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": "online-store-smoke-manager",
 };
+const SMOKE_PRINTER_KEYS = [
+  "DISPATCH_ZEBRA_GK420D",
+  "DISPATCH_ZEBRA_USB_HELPER",
+  "FORCE_FAILING_ZEBRA",
+  "INACTIVE_ZEBRA",
+  "BACK_OFFICE_ONLY",
+];
 
 if (!DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required.");
@@ -217,6 +224,13 @@ const run = async () => {
             "dispatch.defaultShippingLabelPrinterId",
             "dispatch.shippingPrintAgent",
           ],
+        },
+      },
+    });
+    await prisma.printer.deleteMany({
+      where: {
+        key: {
+          in: SMOKE_PRINTER_KEYS,
         },
       },
     });
@@ -988,11 +1002,14 @@ const run = async () => {
         where: { id: { in: createdOrderIds } },
       });
     }
-    if (createdPrinterIds.length > 0) {
-      await prisma.printer.deleteMany({
-        where: { id: { in: createdPrinterIds } },
-      });
-    }
+    await prisma.printer.deleteMany({
+      where: {
+        OR: [
+          createdPrinterIds.length > 0 ? { id: { in: createdPrinterIds } } : undefined,
+          { key: { in: SMOKE_PRINTER_KEYS } },
+        ].filter(Boolean),
+      },
+    });
     await prisma.appConfig.deleteMany({
       where: {
         key: {
