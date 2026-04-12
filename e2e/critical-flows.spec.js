@@ -19,6 +19,10 @@ const {
 } = require("./helpers");
 
 const frontendBaseUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
+const toLocalFrontendUrl = (publicUrl) => {
+  const parsed = new URL(publicUrl);
+  return new URL(`${parsed.pathname}${parsed.search}`, frontendBaseUrl).toString();
+};
 
 const collectPosAddTwoDiagnostics = async (page, variantId) => page.evaluate((buttonTestId) => {
   const serializeElement = (selector) => {
@@ -651,12 +655,11 @@ test("POS customer capture works before checkout and carries the customer into t
   await page.getByTestId("pos-customer-capture-generate").click();
   const captureUrlInput = page.getByTestId("pos-customer-capture-url");
   await expect(captureUrlInput).toBeVisible();
-  await expect(page.getByTestId("pos-customer-capture-qr")).toBeVisible();
   const captureUrl = await captureUrlInput.inputValue();
-  expect(captureUrl).toContain("/customer-capture?token=");
+  expect(captureUrl).toContain("/customer-capture");
 
   const capturePage = await context.newPage();
-  await capturePage.goto(captureUrl);
+  await capturePage.goto(toLocalFrontendUrl(captureUrl));
   await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
   await capturePage.getByTestId("customer-capture-first-name").fill("Taylor");
   await capturePage.getByTestId("customer-capture-last-name").fill("Rider");
@@ -694,9 +697,9 @@ test("POS customer capture works before checkout and carries the customer into t
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
   await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
 
-  await capturePage.goto(captureUrl);
+  await capturePage.goto(toLocalFrontendUrl(captureUrl));
   await expect(capturePage.getByText("Details already submitted")).toBeVisible();
-  await capturePage.goto(new URL("/customer-capture", captureUrl).toString());
+  await capturePage.goto(new URL("/customer-capture", frontendBaseUrl).toString());
   await expect(capturePage.getByText("No active customer capture yet")).toBeVisible();
 
   const refreshedSale = await apiJsonWithHeaderBypass(
@@ -732,7 +735,7 @@ test("POS customer capture regeneration makes older public links fail clearly", 
   await page.getByTestId("pos-customer-capture-generate").click();
 
   const firstCaptureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
-  await expect(firstCaptureUrl).toContain("/customer-capture?token=");
+  await expect(firstCaptureUrl).toContain("/customer-capture");
   const saleId = new URL(page.url()).searchParams.get("saleId");
   expect(saleId).toBeTruthy();
 
@@ -748,15 +751,15 @@ test("POS customer capture regeneration makes older public links fail clearly", 
   const captureUrlInput = page.getByTestId("pos-customer-capture-url");
   await expect.poll(async () => captureUrlInput.inputValue()).not.toBe(firstCaptureUrl);
   const secondCaptureUrl = await captureUrlInput.inputValue();
-  expect(secondCaptureUrl).toContain("/customer-capture?token=");
+  expect(secondCaptureUrl).toContain("/customer-capture");
   expect(secondCaptureUrl).not.toBe(firstCaptureUrl);
 
   const firstCapturePage = await context.newPage();
-  await firstCapturePage.goto(firstCaptureUrl);
+  await firstCapturePage.goto(toLocalFrontendUrl(firstCaptureUrl));
   await expect(firstCapturePage.getByText("Link replaced")).toBeVisible();
 
   const secondCapturePage = await context.newPage();
-  await secondCapturePage.goto(secondCaptureUrl);
+  await secondCapturePage.goto(toLocalFrontendUrl(secondCaptureUrl));
   await expect(secondCapturePage.getByTestId("customer-capture-form")).toBeVisible();
 });
 
@@ -774,7 +777,7 @@ test("POS customer capture is actionable on a fresh basket before any products a
 
   await expect(page.getByTestId("pos-customer-capture-ready-state")).toContainText("No live capture link");
   await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(
-    "attach their details to this basket from their phone",
+    "Ask the customer to tap their phone to add their details.",
   );
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
 });
@@ -843,7 +846,7 @@ test("POS customer capture shows matched-by-email outcome for existing customers
 
   const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
   const capturePage = await context.newPage();
-  await capturePage.goto(captureUrl);
+  await capturePage.goto(toLocalFrontendUrl(captureUrl));
   await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
   await capturePage.getByTestId("customer-capture-first-name").fill("Morgan");
   await capturePage.getByTestId("customer-capture-last-name").fill("Existing");
@@ -896,7 +899,7 @@ test("POS customer capture shows matched-by-phone outcome for existing customers
 
   const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
   const capturePage = await context.newPage();
-  await capturePage.goto(captureUrl);
+  await capturePage.goto(toLocalFrontendUrl(captureUrl));
   await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
   await capturePage.getByTestId("customer-capture-first-name").fill("Jamie");
   await capturePage.getByTestId("customer-capture-last-name").fill("Phone");

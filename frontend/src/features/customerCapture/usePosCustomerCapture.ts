@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import {
   buildCustomerCaptureEntryUrl,
   createBasketCustomerCaptureSession,
@@ -54,8 +53,6 @@ export const usePosCustomerCapture = ({
   const [captureSessionLoading, setCaptureSessionLoading] = useState(false);
   const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
   const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
-  const [captureQrImage, setCaptureQrImage] = useState<string | null>(null);
-  const [captureQrBusy, setCaptureQrBusy] = useState(false);
   const [captureCompletionSummary, setCaptureCompletionSummary] = useState<CaptureCompletionSummary | null>(null);
 
   const captureUrl = useMemo(() => {
@@ -254,8 +251,6 @@ export const usePosCustomerCapture = ({
     setCaptureSession(null);
     setCaptureStatusError(null);
     setCaptureSessionLoading(false);
-    setCaptureQrImage(null);
-    setCaptureQrBusy(false);
     announcedCaptureCompletionRef.current = null;
     if (
       captureCompletionSummary
@@ -283,41 +278,6 @@ export const usePosCustomerCapture = ({
       quiet: true,
     });
   }, [target, isCaptureEligible]);
-
-  useEffect(() => {
-    if (!captureUrl || captureSession?.status !== "ACTIVE") {
-      setCaptureQrImage(null);
-      setCaptureQrBusy(false);
-      return;
-    }
-
-    let cancelled = false;
-    setCaptureQrBusy(true);
-
-    void QRCode.toDataURL(captureUrl, {
-      margin: 1,
-      width: 240,
-    })
-      .then((nextImage) => {
-        if (!cancelled) {
-          setCaptureQrImage(nextImage);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCaptureQrImage(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCaptureQrBusy(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [captureSession?.status, captureUrl]);
 
   useEffect(() => {
     if (!target || !isCaptureEligible) {
@@ -357,8 +317,6 @@ export const usePosCustomerCapture = ({
 
   return {
     captureCompletionSummary,
-    captureQrBusy,
-    captureQrImage,
     captureSession,
     captureSessionLoading,
     captureStatusError,
