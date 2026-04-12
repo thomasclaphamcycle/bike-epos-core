@@ -13,7 +13,7 @@ jobs:
       - name: Force-sync runtime checkout
         shell: cmd
         run: |
-          cd /d C:\Users\coreposadmin\corepos-runtime
+          cd /d C:\CorePOS
           git fetch origin
           git reset --hard origin/main
           git clean -fd
