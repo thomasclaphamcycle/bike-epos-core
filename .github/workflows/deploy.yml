@@ -85,7 +85,7 @@ jobs:
             "cd /d $repoPath",
             "git reset --hard $env:PREVIOUS_COMMIT",
             "git clean -fd",
-            "call `"$($env:COREPOS_DEPLOY_ENTRYPOINT)`""
+            ('call "{0}"' -f $env:COREPOS_DEPLOY_ENTRYPOINT)
           ) -join [Environment]::NewLine
 
           Write-Host "Previous commit: $env:PREVIOUS_COMMIT"
@@ -153,7 +153,7 @@ jobs:
             "cd /d $($env:COREPOS_REPO_PATH)",
             "git reset --hard $env:PREVIOUS_COMMIT",
             "git clean -fd",
-            "call `"$($env:COREPOS_DEPLOY_ENTRYPOINT)`"",
+            ('call "{0}"' -f $env:COREPOS_DEPLOY_ENTRYPOINT),
             "```",
             "",
             "If the failed deploy included a bad production migration, restore the verified database backup before rolling code back."
