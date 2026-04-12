@@ -13,11 +13,16 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    allowedHosts: ["capture.claphamcycle.com", "pos.claphamcycle.com"],
     proxy: {
       "/api": {
         target: apiProxyTarget,
         changeOrigin: true,
       },
     },
+  },
+  preview: {
+    port: 4173,
+    allowedHosts: ["capture.claphamcycle.com", "pos.claphamcycle.com"],
   },
 });
