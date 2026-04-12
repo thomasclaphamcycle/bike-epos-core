@@ -140,22 +140,27 @@ jobs:
           PREVIOUS_COMMIT: ${{ steps.preflight.outputs.previous_commit }}
           TARGET_COMMIT: ${{ steps.sync.outputs.target_commit }}
         run: |
-          $summary = @(
-            "## CorePOS deploy",
-            "",
-            "- Result: $env:DEPLOY_RESULT",
-            "- Previous commit: $env:PREVIOUS_COMMIT",
-            "- Target commit: $env:TARGET_COMMIT",
-            "- Health probes: $($env:COREPOS_DEPLOY_BASE_URL)/health?details=1, $($env:COREPOS_DEPLOY_BASE_URL)/api/system/version, $($env:COREPOS_DEPLOY_BASE_URL)/login",
-            "",
-            "### Rollback candidate",
-            "```cmd",
-            "cd /d $($env:COREPOS_REPO_PATH)",
-            "git reset --hard $env:PREVIOUS_COMMIT",
-            "git clean -fd",
-            ('call "{0}"' -f $env:COREPOS_DEPLOY_ENTRYPOINT),
-            "```",
-            "",
-            "If the failed deploy included a bad production migration, restore the verified database backup before rolling code back."
-          )
-          $summary -join [Environment]::NewLine | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          $rollbackCommand = @"
+          cd /d $($env:COREPOS_REPO_PATH)
+          git reset --hard $($env:PREVIOUS_COMMIT)
+          git clean -fd
+          call "$($env:COREPOS_DEPLOY_ENTRYPOINT)"
+          "@
+
+          $summary = @"
+          ## CorePOS deploy
+
+          - Result: $($env:DEPLOY_RESULT)
+          - Previous commit: $($env:PREVIOUS_COMMIT)
+          - Target commit: $($env:TARGET_COMMIT)
+          - Health probes: $($env:COREPOS_DEPLOY_BASE_URL)/health?details=1, $($env:COREPOS_DEPLOY_BASE_URL)/api/system/version, $($env:COREPOS_DEPLOY_BASE_URL)/login
+
+          ### Rollback candidate
+          ```cmd
+          $rollbackCommand
+          ```
+
+          If the failed deploy included a bad production migration, restore the verified database backup before rolling code back.
+          "@
+
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
