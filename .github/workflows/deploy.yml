@@ -1,0 +1,15 @@
+name: Deploy to CorePOS Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Deploy CorePOS
+        run: |
+          C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd
