@@ -255,32 +255,50 @@ const waitForPortState = async (port, shouldBeListening, timeoutMs) => {
 
 const waitForPortFree = (port, timeoutMs) => waitForPortState(port, false, timeoutMs);
 
-const parseProcessTable = () => {
-  const output = execFileSync(
-    "ps",
-    ["-axo", "pid=,ppid=,pgid=,tty=,command="],
-    { encoding: "utf8" },
+const canSkipProcessTableError = (error) =>
+  Boolean(
+    error &&
+    typeof error === "object" &&
+    (
+      error.code === "EPERM" ||
+      error.code === "EACCES" ||
+      error.code === "ENOENT"
+    ),
   );
 
-  return output
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const match = line.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
-      if (!match) {
-        return null;
-      }
+const parseProcessTable = () => {
+  try {
+    const output = execFileSync(
+      "ps",
+      ["-axo", "pid=,ppid=,pgid=,tty=,command="],
+      { encoding: "utf8" },
+    );
 
-      return {
-        pid: Number(match[1]),
-        ppid: Number(match[2]),
-        pgid: Number(match[3]),
-        tty: match[4],
-        command: match[5],
-      };
-    })
-    .filter(Boolean);
+    return output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const match = line.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
+        if (!match) {
+          return null;
+        }
+
+        return {
+          pid: Number(match[1]),
+          ppid: Number(match[2]),
+          pgid: Number(match[3]),
+          tty: match[4],
+          command: match[5],
+        };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    if (canSkipProcessTableError(error)) {
+      return [];
+    }
+    throw error;
+  }
 };
 
 const readProcessCwd = (pid) => {
