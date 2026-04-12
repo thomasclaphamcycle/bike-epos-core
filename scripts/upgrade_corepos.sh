@@ -24,6 +24,15 @@ log_step() {
   printf '\n[%s] %s\n' "corepos-upgrade" "$1"
 }
 
+require_clean_worktree() {
+  git update-index -q --refresh
+
+  if ! git diff-files --quiet --ignore-submodules -- || ! git diff-index --quiet --cached HEAD --; then
+    echo "Refusing to upgrade with uncommitted local changes in the checkout." >&2
+    exit 1
+  fi
+}
+
 require_restart_configuration() {
   if [[ -n "${COREPOS_RESTART_CMD:-}" ]] || [[ -n "${COREPOS_SYSTEMD_SERVICE:-}" ]]; then
     return 0
@@ -82,11 +91,10 @@ require_restart_configuration
 cd "$REPO_ROOT"
 
 log_step "Checking repository state"
-git fetch origin
+require_clean_worktree
 
-log_step "Resetting checkout to origin/main"
-git reset --hard origin/main
-git clean -fd
+log_step "Pulling latest code"
+git pull --ff-only
 
 log_step "Installing backend dependencies"
 npm install

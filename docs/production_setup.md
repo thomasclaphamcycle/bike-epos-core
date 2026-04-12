@@ -145,7 +145,7 @@ Recommended release procedure:
 
 1. take a fresh database backup
 2. confirm the new release includes committed Prisma migrations if schema changed
-3. note that the helper will forcibly discard local checkout drift before deploying
+3. make sure the production checkout is clean with no local edits
 4. configure a safe restart command using either:
    - `COREPOS_RESTART_CMD`, for example `COREPOS_RESTART_CMD="pm2 restart corepos"`
    - `COREPOS_SYSTEMD_SERVICE`, for example `COREPOS_SYSTEMD_SERVICE=corepos`
@@ -160,9 +160,7 @@ scripts/upgrade_corepos.sh
 Manual equivalent:
 
 ```bash
-git fetch origin
-git reset --hard origin/main
-git clean -fd
+git pull --ff-only
 npm install
 npm --prefix frontend install
 npx prisma validate
@@ -181,7 +179,7 @@ npm run build
    - `/purchasing`
    - `/management`
 
-The helper script now force-syncs the checkout to `origin/main` with `git fetch origin`, `git reset --hard origin/main`, and `git clean -fd` before continuing, so routine local drift such as server-side `package-lock.json` changes cannot block auto-deploy.
+The helper script will not run if the checkout is dirty, and it uses `git pull --ff-only` to avoid accidental merge commits during a production upgrade.
 
 If a release introduces unexpected operational issues, restore the backup and roll back to the last known-good release.
 
