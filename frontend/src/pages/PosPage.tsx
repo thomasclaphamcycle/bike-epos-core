@@ -480,8 +480,6 @@ export const PosPage = () => {
 
   const {
     captureCompletionSummary,
-    captureQrBusy,
-    captureQrImage,
     captureSession,
     captureSessionLoading,
     captureStatusError,
@@ -1852,8 +1850,6 @@ export const PosPage = () => {
                 captureSessionLoading={captureSessionLoading}
                 creatingCaptureSession={creatingCaptureSession}
                 captureStatusError={captureStatusError}
-                captureQrImage={captureQrImage}
-                captureQrBusy={captureQrBusy}
                 captureUrl={captureUrl}
                 captureCompletionSummary={captureCompletionSummary}
                 onDismissCompletion={dismissCaptureCompletionSummary}

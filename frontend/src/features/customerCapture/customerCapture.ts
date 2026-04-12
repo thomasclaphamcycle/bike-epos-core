@@ -145,7 +145,7 @@ export const getCustomerCapturePublicPageErrorMessage = (error: unknown) => {
     case "CUSTOMER_CAPTURE_EXPIRED":
       return "This customer capture link has expired. Please ask staff for a new one.";
     case "CUSTOMER_CAPTURE_REPLACED":
-      return "This link has been replaced by a newer one. Please ask staff for the latest QR code or link.";
+      return "This link has been replaced by a newer one. Please ask staff for the latest customer link.";
     case "CUSTOMER_CAPTURE_COMPLETED":
       return "This customer capture link has already been used.";
     case "INVALID_CUSTOMER_CAPTURE":

@@ -18,8 +18,6 @@ type PosCustomerCapturePanelProps = {
   captureSessionLoading: boolean;
   creatingCaptureSession: boolean;
   captureStatusError: string | null;
-  captureQrImage: string | null;
-  captureQrBusy: boolean;
   captureUrl: string | null;
   captureCompletionSummary: CaptureCompletionSummary | null;
   onDismissCompletion: () => void;
@@ -37,8 +35,6 @@ export const PosCustomerCapturePanel = ({
   captureSessionLoading,
   creatingCaptureSession,
   captureStatusError,
-  captureQrImage,
-  captureQrBusy,
   captureUrl,
   captureCompletionSummary,
   onDismissCompletion,
@@ -91,7 +87,7 @@ export const PosCustomerCapturePanel = ({
           <div>
             <div className="table-primary">Add Customer</div>
             <p className="muted-text">
-              Share a QR code or link so the customer can attach their details to this {captureContextLabel} from their phone.
+              Ask the customer to tap their phone to add their details.
             </p>
           </div>
           {isCaptureEligible ? (
@@ -112,7 +108,7 @@ export const PosCustomerCapturePanel = ({
                 onClick={onCreateCustomerCaptureSession}
                 disabled={actionsDisabled || creatingCaptureSession || captureSessionLoading}
               >
-                {creatingCaptureSession ? "Preparing..." : captureSession ? "Regenerate" : "Start Add Customer"}
+                {creatingCaptureSession ? "Preparing..." : "Start Customer Link"}
               </button>
             )
           ) : null}
@@ -155,7 +151,7 @@ export const PosCustomerCapturePanel = ({
               <div>
                 <span className="status-badge">Waiting for customer</span>
                 <p className="muted-text">
-                  Scan QR or tap NFC. CorePOS checks for completion automatically, and you can still refresh manually if needed.
+                  Ask the customer to tap their phone to add their details.
                 </p>
                 <p className="muted-text">
                   Created {formatCaptureRelativeMinutes(captureSession.createdAt) ?? "just now"}.
@@ -166,48 +162,33 @@ export const PosCustomerCapturePanel = ({
                 </p>
               </div>
             </div>
-            <div className="cash-qr-layout">
-              <div className="cash-qr-box">
-                {captureQrBusy ? (
-                  <span>Generating QR...</span>
-                ) : captureQrImage ? (
-                  <img
-                    src={captureQrImage}
-                    alt="Customer capture QR code"
-                    data-testid="pos-customer-capture-qr"
-                  />
-                ) : (
-                  <span>QR unavailable</span>
-                )}
+            <div className="cash-qr-copy">
+              <div>
+                <div className="table-primary">Need the link instead?</div>
+                <p className="muted-text">Copy it or open it directly on the customer&apos;s phone.</p>
               </div>
-              <div className="cash-qr-copy">
-                <div>
-                  <div className="table-primary">Need the link instead?</div>
-                  <p className="muted-text">Copy it or open it directly if the customer cannot scan the QR.</p>
-                </div>
-                <label>
-                  Public capture URL
-                  <input
-                    data-testid="pos-customer-capture-url"
-                    value={captureUrl}
-                    readOnly
-                  />
-                </label>
-                <div className="actions-inline">
-                  <button type="button" onClick={onCopyCaptureUrl}>
-                    Copy Link
-                  </button>
-                  <a href={captureUrl} target="_blank" rel="noreferrer">
-                    Open Link
-                  </a>
-                  <button type="button" onClick={onRefreshStatus}>
-                    Refresh Status
-                  </button>
-                </div>
-                <p className="muted-text">
-                  Generating a new link expires this one immediately.
-                </p>
+              <label>
+                Public capture URL
+                <input
+                  data-testid="pos-customer-capture-url"
+                  value={captureUrl}
+                  readOnly
+                />
+              </label>
+              <div className="actions-inline">
+                <button type="button" onClick={onCopyCaptureUrl}>
+                  Copy Link
+                </button>
+                <a href={captureUrl} target="_blank" rel="noreferrer">
+                  Open Link
+                </a>
+                <button type="button" onClick={onRefreshStatus}>
+                  Refresh Status
+                </button>
               </div>
+              <p className="muted-text">
+                Starting a new link expires this one immediately.
+              </p>
             </div>
           </div>
         ) : captureSession?.status === "COMPLETED" ? (
@@ -234,7 +215,7 @@ export const PosCustomerCapturePanel = ({
             <span className="status-badge">Expired</span>
             <strong>Capture link expired</strong>
             <p className="muted-text">
-              The last customer capture link expired before it was used. Start Add Customer again when the customer is ready.
+              The last customer link expired before it was used. Start Customer Link again when the customer is ready.
             </p>
           </div>
         ) : (
@@ -242,7 +223,7 @@ export const PosCustomerCapturePanel = ({
             <span className="status-badge">Ready</span>
             <strong>No live capture link</strong>
             <p className="muted-text">
-              Start Add Customer when the customer is ready. CorePOS will then show a fresh QR code and public link for this {captureContextLabel}.
+              Start Customer Link when the customer is ready. CorePOS will then show a fresh public link for this {captureContextLabel}.
             </p>
           </div>
         )}

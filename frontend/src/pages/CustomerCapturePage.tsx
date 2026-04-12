@@ -140,7 +140,7 @@ export const CustomerCapturePage = () => {
         {!loading && !token ? (
           <div className="quick-create-panel">
             <strong>No active customer capture yet</strong>
-            <p className="muted-text">Ask staff to start Add Customer on the till, then scan the QR code or open the link again.</p>
+            <p className="muted-text">Ask staff to start Customer Link on the till, then tap your phone or open the link again.</p>
           </div>
         ) : null}
 
@@ -192,7 +192,7 @@ export const CustomerCapturePage = () => {
               Staff have already generated a newer customer capture link for this sale, so this older link is no longer active.
             </p>
             <p className="muted-text">
-              Please scan the latest QR code or ask them to reopen the newest link.
+              Please tap the latest customer link or ask them to reopen the newest one.
             </p>
           </div>
         ) : null}
