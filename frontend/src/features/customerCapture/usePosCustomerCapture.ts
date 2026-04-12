@@ -2,19 +2,26 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
   buildCustomerCaptureEntryUrl,
+  createBasketCustomerCaptureSession,
   createSaleCustomerCaptureSession,
+  getCurrentBasketCustomerCaptureSession,
   getCurrentSaleCustomerCaptureSession,
-  type SaleCustomerCaptureSession,
+  type CustomerCaptureSession,
 } from "./customerCapture";
 import {
   buildCaptureCompletionSummary,
   formatCaptureMatchOutcome,
+  getCaptureTargetCustomer,
+  getCaptureTargetId,
   type CaptureCompletionSummary,
+  type PosCustomerCaptureBasket,
   type PosCustomerCaptureSale,
+  type PosCustomerCaptureTarget,
 } from "./posCustomerCapture";
 
 type UsePosCustomerCaptureOptions = {
-  sale: PosCustomerCaptureSale | null;
+  target: PosCustomerCaptureTarget | null;
+  loadBasket: (basketId: string) => Promise<PosCustomerCaptureBasket | null>;
   loadSale: (saleId: string) => Promise<PosCustomerCaptureSale | null>;
   success: (message: string) => void;
   error: (message: string) => void;
@@ -23,18 +30,27 @@ type UsePosCustomerCaptureOptions = {
 const getCaptureErrorMessage = (captureError: unknown, fallback: string) =>
   captureError instanceof Error ? captureError.message : fallback;
 
+const isSameTarget = (
+  left: PosCustomerCaptureTarget | null,
+  right: PosCustomerCaptureTarget | null,
+) => (
+  left?.ownerType === right?.ownerType
+  && getCaptureTargetId(left) === getCaptureTargetId(right)
+);
+
 export const usePosCustomerCapture = ({
-  sale,
+  target,
+  loadBasket,
   loadSale,
   success,
   error,
 }: UsePosCustomerCaptureOptions) => {
   const mountedRef = useRef(true);
-  const saleRef = useRef<PosCustomerCaptureSale | null>(sale);
-  const captureSaleScopeRef = useRef<string | null>(null);
+  const targetRef = useRef<PosCustomerCaptureTarget | null>(target);
+  const captureTargetScopeRef = useRef<string | null>(null);
   const announcedCaptureCompletionRef = useRef<string | null>(null);
 
-  const [captureSession, setCaptureSession] = useState<SaleCustomerCaptureSession | null>(null);
+  const [captureSession, setCaptureSession] = useState<CustomerCaptureSession | null>(null);
   const [captureSessionLoading, setCaptureSessionLoading] = useState(false);
   const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
   const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
@@ -50,11 +66,15 @@ export const usePosCustomerCapture = ({
     return buildCustomerCaptureEntryUrl(captureSession.token);
   }, [captureSession]);
 
-  const isCaptureEligible = Boolean(sale?.sale.id && !sale.sale.completedAt && !sale.sale.customer?.id);
+  const isCaptureEligible = Boolean(
+    target
+      && !getCaptureTargetCustomer(target)?.id
+      && (target.ownerType === "basket" || !target.sale.completedAt),
+  );
 
   useEffect(() => {
-    saleRef.current = sale;
-  }, [sale]);
+    targetRef.current = target;
+  }, [target]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -65,7 +85,7 @@ export const usePosCustomerCapture = ({
   }, []);
 
   const loadCurrentCaptureSession = async (
-    targetSaleId: string,
+    targetContext: PosCustomerCaptureTarget,
     options?: {
       showLoading?: boolean;
       quiet?: boolean;
@@ -76,15 +96,17 @@ export const usePosCustomerCapture = ({
     }
 
     try {
-      const payload = await getCurrentSaleCustomerCaptureSession(targetSaleId);
-      if (!mountedRef.current || saleRef.current?.sale.id !== targetSaleId) {
+      const payload = targetContext.ownerType === "sale"
+        ? await getCurrentSaleCustomerCaptureSession(targetContext.sale.id)
+        : await getCurrentBasketCustomerCaptureSession(targetContext.basket.id);
+      if (!mountedRef.current || !isSameTarget(targetContext, targetRef.current)) {
         return null;
       }
       setCaptureSession(payload.session);
       setCaptureStatusError(null);
       return payload.session;
     } catch (captureError) {
-      if (!mountedRef.current || saleRef.current?.sale.id !== targetSaleId) {
+      if (!mountedRef.current || !isSameTarget(targetContext, targetRef.current)) {
         return null;
       }
       const message = getCaptureErrorMessage(captureError, "Failed to load customer capture");
@@ -96,7 +118,7 @@ export const usePosCustomerCapture = ({
     } finally {
       if (
         mountedRef.current
-        && saleRef.current?.sale.id === targetSaleId
+        && isSameTarget(targetContext, targetRef.current)
         && options?.showLoading !== false
       ) {
         setCaptureSessionLoading(false);
@@ -104,25 +126,31 @@ export const usePosCustomerCapture = ({
     }
   };
 
-  const refreshSaleAfterCustomerCapture = async (
-    targetSaleId: string,
+  const refreshTargetAfterCustomerCapture = async (
+    targetContext: PosCustomerCaptureTarget,
     options?: {
       showToast?: boolean;
       completionSummary?: CaptureCompletionSummary | null;
     },
   ) => {
-    const refreshed = await loadSale(targetSaleId);
+    const refreshed = targetContext.ownerType === "sale"
+      ? await loadSale(targetContext.sale.id)
+      : await loadBasket(targetContext.basket.id);
     if (!refreshed || !mountedRef.current) {
       return null;
     }
 
-    if (refreshed.sale.customer?.id) {
+    const refreshedCustomer = targetContext.ownerType === "sale"
+      ? refreshed.sale.customer
+      : refreshed.basket.customer;
+
+    if (refreshedCustomer?.id) {
       setCaptureSession(null);
       setCaptureStatusError(null);
       if (options?.completionSummary) {
         setCaptureCompletionSummary(options.completionSummary);
       }
-      const announcementKey = `${targetSaleId}:${refreshed.sale.customer.id}`;
+      const announcementKey = `${targetContext.ownerType}:${getCaptureTargetId(targetContext)}:${refreshedCustomer.id}`;
       if (options?.showToast !== false && announcedCaptureCompletionRef.current !== announcementKey) {
         announcedCaptureCompletionRef.current = announcementKey;
         if (options?.completionSummary) {
@@ -133,7 +161,7 @@ export const usePosCustomerCapture = ({
             ),
           );
         } else {
-          success("Customer details attached to sale.");
+          success("Customer details attached.");
         }
       }
     }
@@ -141,25 +169,27 @@ export const usePosCustomerCapture = ({
     return refreshed;
   };
 
-  const createCustomerCaptureSessionForSale = async () => {
-    if (!sale?.sale.id) {
-      error("Create a sale before starting customer capture.");
+  const createCustomerCaptureSession = async () => {
+    if (!target) {
+      error("Create or open a transaction before starting customer capture.");
       return;
     }
-    if (sale.sale.completedAt) {
+    if (getCaptureTargetCustomer(target)?.id) {
+      error("This transaction already has a customer attached.");
+      return;
+    }
+    if (target.ownerType === "sale" && target.sale.completedAt) {
       error("Customer capture is only available for active sales.");
-      return;
-    }
-    if (sale.sale.customer?.id) {
-      error("This sale already has a customer attached.");
       return;
     }
 
     setCreatingCaptureSession(true);
     setCaptureStatusError(null);
     try {
-      const payload = await createSaleCustomerCaptureSession(sale.sale.id);
-      if (!mountedRef.current || saleRef.current?.sale.id !== sale.sale.id) {
+      const payload = target.ownerType === "sale"
+        ? await createSaleCustomerCaptureSession(target.sale.id)
+        : await createBasketCustomerCaptureSession(target.basket.id);
+      if (!mountedRef.current || !isSameTarget(target, targetRef.current)) {
         return;
       }
       setCaptureSession(payload.session);
@@ -171,14 +201,14 @@ export const usePosCustomerCapture = ({
           : "Customer capture link ready.",
       );
     } catch (captureError) {
-      if (!mountedRef.current || saleRef.current?.sale.id !== sale.sale.id) {
+      if (!mountedRef.current || !isSameTarget(target, targetRef.current)) {
         return;
       }
       const message = getCaptureErrorMessage(captureError, "Failed to create capture link");
       setCaptureStatusError(message);
       error(message);
     } finally {
-      if (mountedRef.current && saleRef.current?.sale.id === sale?.sale.id) {
+      if (mountedRef.current && isSameTarget(target, targetRef.current)) {
         setCreatingCaptureSession(false);
       }
     }
@@ -198,42 +228,49 @@ export const usePosCustomerCapture = ({
   };
 
   const refreshCaptureStatus = async () => {
-    if (!sale?.sale.id) {
+    if (!target) {
       return;
     }
 
-    const nextSession = await loadCurrentCaptureSession(sale.sale.id, {
+    const nextSession = await loadCurrentCaptureSession(target, {
       showLoading: true,
       quiet: false,
     });
     if (nextSession?.status === "COMPLETED") {
-      await refreshSaleAfterCustomerCapture(sale.sale.id, {
+      await refreshTargetAfterCustomerCapture(target, {
         showToast: true,
-        completionSummary: buildCaptureCompletionSummary(sale.sale.id, nextSession),
+        completionSummary: buildCaptureCompletionSummary(target, nextSession),
       });
     }
   };
 
   useEffect(() => {
-    const nextSaleId = sale?.sale.id ?? null;
-    if (captureSaleScopeRef.current === nextSaleId) {
+    const nextScope = target ? `${target.ownerType}:${getCaptureTargetId(target)}` : null;
+    if (captureTargetScopeRef.current === nextScope) {
       return;
     }
 
-    captureSaleScopeRef.current = nextSaleId;
+    captureTargetScopeRef.current = nextScope;
     setCaptureSession(null);
     setCaptureStatusError(null);
     setCaptureSessionLoading(false);
     setCaptureQrImage(null);
     setCaptureQrBusy(false);
     announcedCaptureCompletionRef.current = null;
-    if (captureCompletionSummary && captureCompletionSummary.saleId !== nextSaleId) {
+    if (
+      captureCompletionSummary
+      && (
+        !target
+        || captureCompletionSummary.ownerType !== target.ownerType
+        || captureCompletionSummary.ownerId !== getCaptureTargetId(target)
+      )
+    ) {
       setCaptureCompletionSummary(null);
     }
-  }, [sale?.sale.id, captureCompletionSummary]);
+  }, [target, captureCompletionSummary]);
 
   useEffect(() => {
-    if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
+    if (!target || !isCaptureEligible) {
       setCaptureSession(null);
       setCaptureStatusError(null);
       setCaptureSessionLoading(false);
@@ -241,11 +278,11 @@ export const usePosCustomerCapture = ({
       return;
     }
 
-    void loadCurrentCaptureSession(sale.sale.id, {
+    void loadCurrentCaptureSession(target, {
       showLoading: true,
       quiet: true,
     });
-  }, [sale?.sale.id, sale?.sale.completedAt, sale?.sale.customer?.id]);
+  }, [target, isCaptureEligible]);
 
   useEffect(() => {
     if (!captureUrl || captureSession?.status !== "ACTIVE") {
@@ -283,7 +320,7 @@ export const usePosCustomerCapture = ({
   }, [captureSession?.status, captureUrl]);
 
   useEffect(() => {
-    if (!sale?.sale.id || sale.sale.completedAt || sale.sale.customer?.id) {
+    if (!target || !isCaptureEligible) {
       return;
     }
     if (!captureSession || captureSession.status !== "ACTIVE") {
@@ -293,7 +330,7 @@ export const usePosCustomerCapture = ({
     let cancelled = false;
 
     const syncCaptureState = async () => {
-      const nextSession = await loadCurrentCaptureSession(sale.sale.id, {
+      const nextSession = await loadCurrentCaptureSession(target, {
         showLoading: false,
         quiet: true,
       });
@@ -302,8 +339,8 @@ export const usePosCustomerCapture = ({
       }
 
       if (nextSession.status === "COMPLETED") {
-        await refreshSaleAfterCustomerCapture(sale.sale.id, {
-          completionSummary: buildCaptureCompletionSummary(sale.sale.id, nextSession),
+        await refreshTargetAfterCustomerCapture(target, {
+          completionSummary: buildCaptureCompletionSummary(target, nextSession),
         });
       }
     };
@@ -316,7 +353,7 @@ export const usePosCustomerCapture = ({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [captureSession?.id, captureSession?.status, sale?.sale.completedAt, sale?.sale.customer?.id, sale?.sale.id]);
+  }, [captureSession?.id, captureSession?.status, target, isCaptureEligible]);
 
   return {
     captureCompletionSummary,
@@ -329,9 +366,9 @@ export const usePosCustomerCapture = ({
     creatingCaptureSession,
     isCaptureEligible,
     copyCaptureUrl,
-    createCustomerCaptureSession: createCustomerCaptureSessionForSale,
+    createCustomerCaptureSession,
     dismissCaptureCompletionSummary: () => setCaptureCompletionSummary(null),
     refreshCaptureStatus,
-    refreshSaleAfterCustomerCapture,
+    refreshTargetAfterCustomerCapture,
   };
 };

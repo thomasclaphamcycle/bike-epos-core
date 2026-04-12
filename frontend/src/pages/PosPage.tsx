@@ -5,6 +5,7 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { PosCustomerCapturePanel } from "../features/customerCapture/PosCustomerCapturePanel";
 import { usePosCustomerCapture } from "../features/customerCapture/usePosCustomerCapture";
+import { type PosCustomerCaptureTarget } from "../features/customerCapture/posCustomerCapture";
 import {
   getManagedPrintJob,
   getManagedPrintJobStatusBadgeClassName,
@@ -58,6 +59,7 @@ type QuickAddTile = {
 
 type BasketResponse = {
   id: string;
+  customer: CustomerSearchRow | null;
   status: string;
   items: Array<{
     id: string;
@@ -257,6 +259,7 @@ export const PosPage = () => {
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
+  const activeBasketId = basket?.id ?? basketId;
   const receiptWorkstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
@@ -425,6 +428,8 @@ export const PosPage = () => {
       return null;
     }
     setBasket(payload);
+    setSelectedCustomer(payload.customer ?? null);
+    setContextCustomerId(payload.customer?.id ?? null);
     persistActiveBasketId(payload.id);
     return payload;
   };
@@ -446,9 +451,32 @@ export const PosPage = () => {
     }
     setSale(payload);
     setSelectedCustomer(payload.sale.customer ?? null);
+    setContextCustomerId(payload.sale.customer?.id ?? null);
     localStorage.setItem(ACTIVE_SALE_KEY, payload.sale.id);
     return payload;
   };
+
+  const customerCaptureTarget = useMemo<PosCustomerCaptureTarget | null>(() => {
+    if (sale) {
+      return {
+        ownerType: "sale",
+        sale: sale.sale,
+      };
+    }
+
+    if (basket) {
+      return {
+        ownerType: "basket",
+        basket: {
+          id: basket.id,
+          status: basket.status,
+          customer: basket.customer,
+        },
+      };
+    }
+
+    return null;
+  }, [basket, sale]);
 
   const {
     captureCompletionSummary,
@@ -464,9 +492,10 @@ export const PosPage = () => {
     createCustomerCaptureSession,
     dismissCaptureCompletionSummary,
     refreshCaptureStatus,
-    refreshSaleAfterCustomerCapture,
+    refreshTargetAfterCustomerCapture,
   } = usePosCustomerCapture({
-    sale,
+    target: customerCaptureTarget,
+    loadBasket: (targetBasketId) => loadBasket(targetBasketId),
     loadSale: (targetSaleId) => loadSale(targetSaleId),
     success,
     error,
@@ -482,13 +511,15 @@ export const PosPage = () => {
     requestId?: number;
   }) => {
     const requestId = options?.requestId ?? beginPosLifecycleRequest();
-    const created = await apiPost<BasketResponse>("/api/baskets", options?.preloadedItems?.length
-      ? { items: options.preloadedItems }
-      : {});
+    const created = await apiPost<BasketResponse>("/api/baskets", {
+      ...(options?.preloadedItems?.length ? { items: options.preloadedItems } : {}),
+      ...(options?.customerId !== undefined ? { customerId: options.customerId } : {}),
+    });
     if (!canApplyPosLifecycle(requestId)) {
       return null;
     }
     setBasket(created);
+    setSelectedCustomer(created.customer ?? null);
     persistActiveBasketId(created.id);
     setSale(null);
     setReceiptUrl(null);
@@ -503,18 +534,7 @@ export const PosPage = () => {
       setShowCreateCustomer(false);
     }
     setSaleContext(options?.saleContext ?? DEFAULT_SALE_CONTEXT);
-    setContextCustomerId(options?.customerId ?? null);
-    if (options?.customerId) {
-      const customer = await loadContextCustomer(options.customerId, {
-        requestId,
-        syncContext: false,
-      });
-      if (!customer) {
-        return null;
-      }
-    } else {
-      setSelectedCustomer(null);
-    }
+    setContextCustomerId(created.customer?.id ?? options?.customerId ?? null);
     if (!canApplyPosLifecycle(requestId)) {
       return null;
     }
@@ -863,6 +883,24 @@ export const PosPage = () => {
     return payload;
   };
 
+  const attachCustomerToBasket = async (
+    targetBasketId: string,
+    customerId: string | null,
+    options?: { requestId?: number },
+  ) => {
+    const payload = await apiPatch<BasketResponse>(`/api/baskets/${encodeURIComponent(targetBasketId)}/customer`, {
+      customerId,
+    });
+    if (!canApplyPosLifecycle(options?.requestId)) {
+      return null;
+    }
+    setBasket(payload);
+    setSelectedCustomer(payload.customer ?? null);
+    setContextCustomerId(payload.customer?.id ?? null);
+    persistActiveBasketId(payload.id);
+    return payload;
+  };
+
   const selectCustomer = async (customer: CustomerSearchRow) => {
     setSelectedCustomer(customer);
     setContextCustomerId(customer.id);
@@ -882,6 +920,17 @@ export const PosPage = () => {
       return;
     }
 
+    if (activeBasketId) {
+      try {
+        await attachCustomerToBasket(activeBasketId, customer.id);
+        success("Customer selected. It will attach after checkout.");
+      } catch (attachError) {
+        const message = attachError instanceof Error ? attachError.message : "Failed to attach customer";
+        error(message);
+      }
+      return;
+    }
+
     success("Customer selected. It will attach after checkout.");
   };
 
@@ -892,6 +941,15 @@ export const PosPage = () => {
         success("Customer removed from sale");
       } catch (detachError) {
         const message = detachError instanceof Error ? detachError.message : "Failed to remove customer";
+        error(message);
+        return;
+      }
+    } else if (activeBasketId) {
+      try {
+        await attachCustomerToBasket(activeBasketId, null);
+        success("Customer cleared from basket");
+      } catch (detachError) {
+        const message = detachError instanceof Error ? detachError.message : "Failed to clear customer";
         error(message);
         return;
       }
@@ -1144,50 +1202,37 @@ export const PosPage = () => {
   };
 
   const checkoutBasket = async () => {
-    if (!basketId) {
+    if (!activeBasketId) {
       error("No active basket.");
       return;
     }
 
-      try {
-        const requestId = beginPosLifecycleRequest();
-        setCompletedSale(null);
-        const payload = await apiPost<{ sale: { id: string } }>(
-          `/api/baskets/${encodeURIComponent(basketId)}/checkout`,
-          {},
+    setLoading(true);
+    try {
+      const requestId = beginPosLifecycleRequest();
+      setCompletedSale(null);
+      const payload = await apiPost<{ sale: { id: string } }>(
+        `/api/baskets/${encodeURIComponent(activeBasketId)}/checkout`,
+        {},
       );
       if (!canApplyPosLifecycle(requestId)) {
         return;
       }
       const nextSaleId = payload.sale.id;
       clearStoredBasketId();
-      if (selectedCustomer?.id) {
-        await attachCustomerToSale(nextSaleId, selectedCustomer.id, { requestId });
-        if (!canApplyPosLifecycle(requestId)) {
-          return;
-        }
-        syncQuery({ basketId, saleId: nextSaleId });
-        success("Sale created and customer attached.");
-      } else if (contextCustomerId) {
-        await attachCustomerToSale(nextSaleId, contextCustomerId, { requestId });
-        if (!canApplyPosLifecycle(requestId)) {
-          return;
-        }
-        syncQuery({ basketId, saleId: nextSaleId });
-        success("Sale created and customer attached.");
-      } else {
-        await loadSale(nextSaleId, {
-          requestId,
-        });
-        if (!canApplyPosLifecycle(requestId)) {
-          return;
-        }
-        syncQuery({ basketId, saleId: nextSaleId });
-        success("Sale created.");
+      const nextSale = await loadSale(nextSaleId, {
+        requestId,
+      });
+      if (!canApplyPosLifecycle(requestId)) {
+        return;
       }
+      syncQuery({ basketId: activeBasketId, saleId: nextSaleId });
+      success(nextSale?.sale.customer?.id ? "Sale created and customer attached." : "Sale created.");
     } catch (checkoutError) {
       const message = checkoutError instanceof Error ? checkoutError.message : "Checkout failed";
       error(message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1800,8 +1845,9 @@ export const PosPage = () => {
               )}
 
               <PosCustomerCapturePanel
-                sale={sale}
+                target={customerCaptureTarget}
                 isCaptureEligible={isCaptureEligible}
+                actionsDisabled={loading || completing}
                 captureSession={captureSession}
                 captureSessionLoading={captureSessionLoading}
                 creatingCaptureSession={creatingCaptureSession}
@@ -1814,11 +1860,11 @@ export const PosPage = () => {
                 onCreateCustomerCaptureSession={() => void createCustomerCaptureSession()}
                 onCopyCaptureUrl={() => void copyCaptureUrl()}
                 onRefreshStatus={() => void refreshCaptureStatus()}
-                onRefreshSale={() => {
-                  if (!sale?.sale.id) {
+                onRefreshTarget={() => {
+                  if (!customerCaptureTarget) {
                     return;
                   }
-                  void refreshSaleAfterCustomerCapture(sale.sale.id, { showToast: true });
+                  void refreshTargetAfterCustomerCapture(customerCaptureTarget, { showToast: true });
                 }}
               />
 

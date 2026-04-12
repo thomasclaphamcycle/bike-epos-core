@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { Prisma } from "@prisma/client";
+import { BasketStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName, normalizeNamePart } from "../utils/customerName";
@@ -9,6 +9,7 @@ const CUSTOMER_CAPTURE_SESSION_TTL_MINUTES = 15;
 
 type CaptureSessionStatus = "ACTIVE" | "COMPLETED" | "EXPIRED";
 type CustomerMatchType = "email" | "phone" | "created";
+type CaptureOwnerType = "sale" | "basket";
 
 type SubmitSaleCustomerCaptureInput = {
   firstName?: string;
@@ -21,7 +22,8 @@ type SubmitSaleCustomerCaptureInput = {
 
 type CaptureSessionRecord = {
   id: string;
-  saleId: string;
+  saleId: string | null;
+  basketId: string | null;
   token: string;
   status: CaptureSessionStatus;
   matchType?: CustomerMatchType | "EMAIL" | "PHONE" | "CREATED" | null;
@@ -35,6 +37,11 @@ type CaptureSessionRecord = {
     email: string | null;
     phone: string | null;
   } | null;
+};
+
+type SessionOwnerWhereInput = {
+  saleId?: string | null;
+  basketId?: string | null;
 };
 
 const normalizeOptionalText = (value: string | undefined | null) => {
@@ -95,6 +102,25 @@ const toCustomerPayload = (customer: {
   phone: customer.phone,
 });
 
+const getOwnerType = (owner: SessionOwnerWhereInput): CaptureOwnerType => (
+  owner.saleId ? "sale" : "basket"
+);
+
+const getOwnerMetadata = (owner: SessionOwnerWhereInput) => (
+  owner.saleId ? { saleId: owner.saleId } : { basketId: owner.basketId }
+);
+
+const buildOwnerWhere = (owner: SessionOwnerWhereInput) => {
+  if (owner.saleId) {
+    return { saleId: owner.saleId };
+  }
+  if (owner.basketId) {
+    return { basketId: owner.basketId };
+  }
+
+  throw new HttpError(500, "Customer capture session owner is missing", "INVALID_CUSTOMER_CAPTURE_OWNER");
+};
+
 const toSessionOutcomePayload = (session: CaptureSessionRecord) => {
   const matchType = toApiMatchType(session.matchType);
   if (!matchType || !session.customer) {
@@ -109,7 +135,9 @@ const toSessionOutcomePayload = (session: CaptureSessionRecord) => {
 
 const toSessionPayload = (session: CaptureSessionRecord) => ({
   id: session.id,
-  saleId: session.saleId,
+  saleId: session.saleId ?? null,
+  basketId: session.basketId ?? null,
+  ownerType: getOwnerType(session),
   token: session.token,
   status: session.status,
   expiresAt: session.expiresAt,
@@ -120,6 +148,8 @@ const toSessionPayload = (session: CaptureSessionRecord) => ({
 });
 
 const toSessionState = (session: {
+  saleId?: string | null;
+  basketId?: string | null;
   status: CaptureSessionStatus;
   expiresAt: Date;
   createdAt: Date;
@@ -132,6 +162,7 @@ const toSessionState = (session: {
     createdAt: session.createdAt,
     completedAt: session.completedAt,
     isReplaced: Boolean(session.isReplaced),
+    ownerType: getOwnerType(session),
   },
 });
 
@@ -166,6 +197,7 @@ const getSessionByTokenOrThrowTx = async (tx: Prisma.TransactionClient, token: s
     select: {
       id: true,
       saleId: true,
+      basketId: true,
       token: true,
       status: true,
       matchType: true,
@@ -188,11 +220,27 @@ const getSessionByTokenOrThrowTx = async (tx: Prisma.TransactionClient, token: s
           completedAt: true,
         },
       },
+      basket: {
+        select: {
+          id: true,
+          status: true,
+          sale: {
+            select: {
+              id: true,
+              completedAt: true,
+            },
+          },
+        },
+      },
     },
   });
 
   if (!session) {
     throw new HttpError(404, "Customer capture session not found", "CUSTOMER_CAPTURE_NOT_FOUND");
+  }
+
+  if (!session.saleId && !session.basketId) {
+    throw new HttpError(500, "Customer capture session owner is missing", "INVALID_CUSTOMER_CAPTURE_OWNER");
   }
 
   const normalizedSession = await expireSessionIfNeededTx(tx, session);
@@ -241,15 +289,14 @@ const writeCaptureAudit = async (input: {
 
 const findNewerSessionTx = async (
   tx: Prisma.TransactionClient,
-  input: {
-    saleId: string;
+  input: SessionOwnerWhereInput & {
     createdAt: Date;
     excludeSessionId: string;
   },
 ) =>
   tx.saleCustomerCaptureSession.findFirst({
     where: {
-      saleId: input.saleId,
+      ...buildOwnerWhere(input),
       id: { not: input.excludeSessionId },
       createdAt: { gt: input.createdAt },
     },
@@ -267,18 +314,25 @@ const assertSubmittableSessionOrAuditTx = async (
   tx: Prisma.TransactionClient,
   session: {
     id: string;
-    saleId: string;
+    saleId: string | null;
+    basketId: string | null;
     status: CaptureSessionStatus;
     createdAt: Date;
-    sale: { completedAt: Date | null };
+    sale: { completedAt: Date | null } | null;
+    basket: {
+      status: BasketStatus;
+      sale: { id: string; completedAt: Date | null } | null;
+    } | null;
   },
 ) => {
+  const ownerMetadata = getOwnerMetadata(session);
+
   if (session.status === "COMPLETED") {
     await writeCaptureAudit({
       sessionId: session.id,
       action: "customer_capture.submit_rejected",
       metadata: {
-        saleId: session.saleId,
+        ...ownerMetadata,
         reason: "already_completed",
       },
     });
@@ -292,6 +346,7 @@ const assertSubmittableSessionOrAuditTx = async (
   if (session.status === "EXPIRED") {
     const newerSession = await findNewerSessionTx(tx, {
       saleId: session.saleId,
+      basketId: session.basketId,
       createdAt: session.createdAt,
       excludeSessionId: session.id,
     });
@@ -300,7 +355,7 @@ const assertSubmittableSessionOrAuditTx = async (
       sessionId: session.id,
       action: "customer_capture.submit_rejected",
       metadata: {
-        saleId: session.saleId,
+        ...ownerMetadata,
         reason: newerSession ? "replaced" : "expired",
         ...(newerSession ? { replacementSessionId: newerSession.id } : {}),
       },
@@ -321,12 +376,12 @@ const assertSubmittableSessionOrAuditTx = async (
     );
   }
 
-  if (session.sale.completedAt) {
+  if (session.sale?.completedAt || session.basket?.sale?.completedAt) {
     await writeCaptureAudit({
       sessionId: session.id,
       action: "customer_capture.submit_rejected",
       metadata: {
-        saleId: session.saleId,
+        ...ownerMetadata,
         reason: "sale_completed",
       },
     });
@@ -406,43 +461,38 @@ const findOrCreateCustomerTx = async (
   }
 };
 
-export const getCurrentSaleCustomerCaptureSession = async (saleId: string) => {
-  if (!isUuid(saleId)) {
-    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
-  }
+const selectSessionForPayload = {
+  id: true,
+  saleId: true,
+  basketId: true,
+  token: true,
+  status: true,
+  matchType: true,
+  expiresAt: true,
+  createdAt: true,
+  completedAt: true,
+  customer: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+    },
+  },
+} as const;
 
-  return prisma.$transaction(async (tx) => {
-    const sale = await tx.sale.findUnique({
-      where: { id: saleId },
-      select: { id: true },
-    });
-
-    if (!sale) {
-      throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
-    }
+const getCurrentCaptureSessionByOwner = async (
+  owner: SessionOwnerWhereInput,
+  validate: (tx: Prisma.TransactionClient) => Promise<void>,
+) =>
+  prisma.$transaction(async (tx) => {
+    await validate(tx);
 
     const session = await tx.saleCustomerCaptureSession.findFirst({
-      where: { saleId },
+      where: buildOwnerWhere(owner),
       orderBy: [{ createdAt: "desc" }],
-      select: {
-        id: true,
-        saleId: true,
-        token: true,
-        status: true,
-        matchType: true,
-        expiresAt: true,
-        createdAt: true,
-        completedAt: true,
-        customer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
+      select: selectSessionForPayload,
     });
 
     if (!session) {
@@ -460,6 +510,84 @@ export const getCurrentSaleCustomerCaptureSession = async (saleId: string) => {
       }),
     };
   });
+
+const createCaptureSessionByOwner = async (
+  owner: SessionOwnerWhereInput,
+  validate: (tx: Prisma.TransactionClient) => Promise<void>,
+  auditActor?: AuditActor,
+) =>
+  prisma.$transaction(async (tx) => {
+    await validate(tx);
+
+    const expiredActiveSessions = await tx.saleCustomerCaptureSession.updateMany({
+      where: {
+        ...buildOwnerWhere(owner),
+        status: "ACTIVE",
+      },
+      data: {
+        status: "EXPIRED",
+      },
+    });
+
+    const created = await tx.saleCustomerCaptureSession.create({
+      data: {
+        ...(owner.saleId ? { saleId: owner.saleId } : {}),
+        ...(owner.basketId ? { basketId: owner.basketId } : {}),
+        token: createSecureToken(),
+        expiresAt: new Date(Date.now() + CUSTOMER_CAPTURE_SESSION_TTL_MINUTES * 60 * 1000),
+      },
+      select: selectSessionForPayload,
+    });
+
+    await writeCaptureAuditTx(
+      tx,
+      {
+        sessionId: created.id,
+        action: "customer_capture.session_created",
+        metadata: {
+          ...getOwnerMetadata(owner),
+          expiresAt: created.expiresAt.toISOString(),
+        },
+      },
+      auditActor,
+    );
+
+    if (expiredActiveSessions.count > 0) {
+      await writeCaptureAuditTx(
+        tx,
+        {
+          sessionId: created.id,
+          action: "customer_capture.session_replaced",
+          metadata: {
+            ...getOwnerMetadata(owner),
+            replacedActiveSessionCount: expiredActiveSessions.count,
+          },
+        },
+        auditActor,
+      );
+    }
+
+    return {
+      session: toSessionPayload(created),
+      replacedActiveSessionCount: expiredActiveSessions.count,
+    };
+  });
+
+export const getCurrentSaleCustomerCaptureSession = async (saleId: string) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+
+  return getCurrentCaptureSessionByOwner({ saleId }, async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: { id: true },
+    });
+
+    if (!sale) {
+      throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+    }
+  });
 };
 
 export const createSaleCustomerCaptureSession = async (saleId: string, auditActor?: AuditActor) => {
@@ -467,7 +595,7 @@ export const createSaleCustomerCaptureSession = async (saleId: string, auditActo
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
   }
 
-  return prisma.$transaction(async (tx) => {
+  return createCaptureSessionByOwner({ saleId }, async (tx) => {
     const sale = await tx.sale.findUnique({
       where: { id: saleId },
       select: {
@@ -496,77 +624,61 @@ export const createSaleCustomerCaptureSession = async (saleId: string, auditActo
         "SALE_CUSTOMER_ALREADY_ATTACHED",
       );
     }
+  }, auditActor);
+};
 
-    const expiredActiveSessions = await tx.saleCustomerCaptureSession.updateMany({
-      where: {
-        saleId,
-        status: "ACTIVE",
-      },
-      data: {
-        status: "EXPIRED",
-      },
+export const getCurrentBasketCustomerCaptureSession = async (basketId: string) => {
+  if (!isUuid(basketId)) {
+    throw new HttpError(400, "Invalid basket id", "INVALID_BASKET_ID");
+  }
+
+  return getCurrentCaptureSessionByOwner({ basketId }, async (tx) => {
+    const basket = await tx.basket.findUnique({
+      where: { id: basketId },
+      select: { id: true },
     });
 
-    const created = await tx.saleCustomerCaptureSession.create({
-      data: {
-        saleId,
-        token: createSecureToken(),
-        expiresAt: new Date(Date.now() + CUSTOMER_CAPTURE_SESSION_TTL_MINUTES * 60 * 1000),
-      },
+    if (!basket) {
+      throw new HttpError(404, "Basket not found", "BASKET_NOT_FOUND");
+    }
+  });
+};
+
+export const createBasketCustomerCaptureSession = async (basketId: string, auditActor?: AuditActor) => {
+  if (!isUuid(basketId)) {
+    throw new HttpError(400, "Invalid basket id", "INVALID_BASKET_ID");
+  }
+
+  return createCaptureSessionByOwner({ basketId }, async (tx) => {
+    const basket = await tx.basket.findUnique({
+      where: { id: basketId },
       select: {
         id: true,
-        saleId: true,
-        token: true,
         status: true,
-        matchType: true,
-        expiresAt: true,
-        createdAt: true,
-        completedAt: true,
-        customer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
+        customerId: true,
       },
     });
 
-    await writeCaptureAuditTx(
-      tx,
-      {
-        sessionId: created.id,
-        action: "customer_capture.session_created",
-        metadata: {
-          saleId,
-          expiresAt: created.expiresAt.toISOString(),
-        },
-      },
-      auditActor,
-    );
+    if (!basket) {
+      throw new HttpError(404, "Basket not found", "BASKET_NOT_FOUND");
+    }
 
-    if (expiredActiveSessions.count > 0) {
-      await writeCaptureAuditTx(
-        tx,
-        {
-          sessionId: created.id,
-          action: "customer_capture.session_replaced",
-          metadata: {
-            saleId,
-            replacedActiveSessionCount: expiredActiveSessions.count,
-          },
-        },
-        auditActor,
+    if (basket.status !== BasketStatus.OPEN) {
+      throw new HttpError(
+        409,
+        "Customer capture sessions can only be created for open baskets",
+        "BASKET_NOT_OPEN",
       );
     }
 
-    return {
-      session: toSessionPayload(created),
-      replacedActiveSessionCount: expiredActiveSessions.count,
-    };
-  });
+    if (basket.customerId) {
+      throw new HttpError(
+        409,
+        "This basket already has a customer attached",
+        "BASKET_CUSTOMER_ALREADY_ATTACHED",
+      );
+    }
+  }, auditActor);
 };
 
 export const getPublicSaleCustomerCaptureSession = async (token: string) =>
@@ -575,12 +687,15 @@ export const getPublicSaleCustomerCaptureSession = async (token: string) =>
     const newerSession = session.status === "EXPIRED"
       ? await findNewerSessionTx(tx, {
           saleId: session.saleId,
+          basketId: session.basketId,
           createdAt: session.createdAt,
           excludeSessionId: session.id,
         })
       : null;
 
     return toSessionState({
+      saleId: session.saleId,
+      basketId: session.basketId,
       status: session.status,
       expiresAt: session.expiresAt,
       createdAt: session.createdAt,
@@ -625,12 +740,32 @@ export const submitPublicSaleCustomerCapture = async (
       phone,
     });
 
-    await tx.sale.update({
-      where: { id: session.saleId },
-      data: {
-        customerId: customer.id,
-      },
-    });
+    if (session.saleId) {
+      await tx.sale.update({
+        where: { id: session.saleId },
+        data: {
+          customerId: customer.id,
+        },
+      });
+    }
+
+    if (session.basketId) {
+      await tx.basket.update({
+        where: { id: session.basketId },
+        data: {
+          customerId: customer.id,
+        },
+      });
+
+      if (session.basket?.sale?.id && !session.basket.sale.completedAt) {
+        await tx.sale.update({
+          where: { id: session.basket.sale.id },
+          data: {
+            customerId: customer.id,
+          },
+        });
+      }
+    }
 
     const completedAt = new Date();
     const updatedSession = await tx.saleCustomerCaptureSession.update({
@@ -648,6 +783,8 @@ export const submitPublicSaleCustomerCapture = async (
         customerId: customer.id,
       },
       select: {
+        saleId: true,
+        basketId: true,
         status: true,
         expiresAt: true,
         completedAt: true,
@@ -658,7 +795,7 @@ export const submitPublicSaleCustomerCapture = async (
       sessionId: session.id,
       action: "customer_capture.submit_completed",
       metadata: {
-        saleId: session.saleId,
+        ...getOwnerMetadata(session),
         customerId: customer.id,
         matchType,
         emailProvided: Boolean(email),
@@ -676,9 +813,16 @@ export const submitPublicSaleCustomerCapture = async (
         email: customer.email,
         phone: customer.phone,
       },
-      sale: {
-        id: session.saleId,
-      },
+      sale: updatedSession.saleId
+        ? {
+            id: updatedSession.saleId,
+          }
+        : null,
+      basket: updatedSession.basketId
+        ? {
+            id: updatedSession.basketId,
+          }
+        : null,
       matchType,
     };
   });

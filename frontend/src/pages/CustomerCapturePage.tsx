@@ -4,8 +4,8 @@ import {
   getCustomerCapturePublicPageErrorMessage,
   getPublicSaleCustomerCaptureSession,
   submitPublicSaleCustomerCapture,
-  type PublicSaleCustomerCaptureSessionState,
-  type PublicSaleCustomerCaptureSubmitResponse,
+  type PublicCustomerCaptureSessionState,
+  type PublicCustomerCaptureSubmitResponse,
 } from "../features/customerCapture/customerCapture";
 
 type CaptureFormState = {
@@ -25,6 +25,10 @@ const defaultFormState: CaptureFormState = {
 const getFriendlySubmitError = (error: unknown) =>
   getCustomerCapturePublicPageErrorMessage(error) || "We could not save your details. Please try again.";
 
+const getCaptureContextLabel = (ownerType: "sale" | "basket") => (
+  ownerType === "sale" ? "sale" : "basket"
+);
+
 export const CustomerCapturePage = () => {
   const { token: routeToken } = useParams();
   const [searchParams] = useSearchParams();
@@ -32,13 +36,13 @@ export const CustomerCapturePage = () => {
     () => routeToken?.trim() || searchParams.get("token")?.trim() || null,
     [routeToken, searchParams],
   );
-  const [session, setSession] = useState<PublicSaleCustomerCaptureSessionState["session"] | null>(null);
+  const [session, setSession] = useState<PublicCustomerCaptureSessionState["session"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState<CaptureFormState>(defaultFormState);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<PublicSaleCustomerCaptureSubmitResponse | null>(null);
+  const [result, setResult] = useState<PublicCustomerCaptureSubmitResponse | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
@@ -118,6 +122,7 @@ export const CustomerCapturePage = () => {
 
   const isActive = session?.status === "ACTIVE" && !result;
   const isReplaced = session?.status === "EXPIRED" && session.isReplaced;
+  const contextLabel = getCaptureContextLabel(result?.session.ownerType ?? session?.ownerType ?? "sale");
 
   return (
     <div className="page-shell customer-capture-shell">
@@ -126,7 +131,7 @@ export const CustomerCapturePage = () => {
           <span className="status-badge">Customer capture</span>
           <h1>Share your contact details</h1>
           <p className="muted-text">
-            Add your details to this sale so the shop can attach them to today&apos;s checkout quickly and accurately.
+            Add your details to this {contextLabel} so the shop can attach them to today&apos;s checkout quickly and accurately.
           </p>
         </div>
 
@@ -155,10 +160,10 @@ export const CustomerCapturePage = () => {
           <div className="success-panel success-panel-sale" data-testid="customer-capture-success">
             <div className="success-panel-heading">
               <strong>Details saved.</strong>
-              <span className="status-badge status-complete">Attached to sale</span>
+              <span className="status-badge status-complete">Attached to {contextLabel}</span>
             </div>
             <p>
-              Thanks {result.customer.firstName}. Your details have been linked to the sale.
+              Thanks {result.customer.firstName}. Your details have been linked to the {contextLabel}.
             </p>
             <p className="muted-text">
               {result.matchType === "created"
@@ -172,7 +177,7 @@ export const CustomerCapturePage = () => {
           <div className="quick-create-panel">
             <strong>Details already submitted</strong>
             <p className="muted-text">
-              This customer capture link has already been completed and the sale should now show the attached customer back on the till.
+              This customer capture link has already been completed and the {contextLabel} should now show the attached customer back on the till.
             </p>
             <p className="muted-text">
               If staff still need anything else, ask them to generate a fresh link rather than reusing this one.

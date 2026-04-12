@@ -1,10 +1,18 @@
-import type { SaleCustomerCaptureSession } from "./customerCapture";
+import type { CustomerCaptureOwnerType, CustomerCaptureSession } from "./customerCapture";
 
 export type PosCustomerCaptureCustomer = {
   id: string;
   name: string;
   email: string | null;
   phone: string | null;
+};
+
+export type PosCustomerCaptureBasket = {
+  basket: {
+    id: string;
+    status: string;
+    customer: PosCustomerCaptureCustomer | null;
+  };
 };
 
 export type PosCustomerCaptureSale = {
@@ -15,23 +23,35 @@ export type PosCustomerCaptureSale = {
   };
 };
 
+export type PosCustomerCaptureTarget =
+  | {
+      ownerType: "basket";
+      basket: PosCustomerCaptureBasket["basket"];
+    }
+  | {
+      ownerType: "sale";
+      sale: PosCustomerCaptureSale["sale"];
+    };
+
 export type CaptureCompletionSummary = {
-  saleId: string;
+  ownerType: CustomerCaptureOwnerType;
+  ownerId: string;
   sessionId: string;
   customer: PosCustomerCaptureCustomer;
   matchType: "email" | "phone" | "created";
 };
 
 export const buildCaptureCompletionSummary = (
-  saleId: string,
-  session: SaleCustomerCaptureSession,
+  target: PosCustomerCaptureTarget,
+  session: CustomerCaptureSession,
 ): CaptureCompletionSummary | null => {
   if (!session.outcome) {
     return null;
   }
 
   return {
-    saleId,
+    ownerType: target.ownerType,
+    ownerId: target.ownerType === "sale" ? target.sale.id : target.basket.id,
     sessionId: session.id,
     customer: {
       id: session.outcome.customer.id,
@@ -42,6 +62,18 @@ export const buildCaptureCompletionSummary = (
     matchType: session.outcome.matchType,
   };
 };
+
+export const getCaptureTargetCustomer = (target: PosCustomerCaptureTarget | null) => (
+  target?.ownerType === "sale" ? target.sale.customer : target?.basket.customer ?? null
+);
+
+export const getCaptureTargetId = (target: PosCustomerCaptureTarget | null) => (
+  target?.ownerType === "sale" ? target.sale.id : target?.basket.id ?? null
+);
+
+export const getCaptureContextLabel = (ownerType: CustomerCaptureOwnerType) => (
+  ownerType === "sale" ? "sale" : "basket"
+);
 
 export const formatCaptureMatchOutcome = (
   matchType: "email" | "phone" | "created",
@@ -61,7 +93,7 @@ export const formatCaptureMatchOutcome = (
         ? `Matched existing customer ${customerName} by phone.`
         : "Matched an existing customer by phone.";
     default:
-      return "Customer attached to sale.";
+      return "Customer attached.";
   }
 };
 

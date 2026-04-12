@@ -1006,6 +1006,23 @@ export const deleteSaleTender = async (saleId: string, tenderId: string) => {
   });
 };
 
+const moveBasketCustomerCaptureSessionsToSaleTx = async (
+  tx: Prisma.TransactionClient,
+  basketId: string,
+  saleId: string,
+) => {
+  await tx.saleCustomerCaptureSession.updateMany({
+    where: {
+      basketId,
+      saleId: null,
+    },
+    data: {
+      basketId: null,
+      saleId,
+    },
+  });
+};
+
 export const checkoutBasketToSale = async (
   basketId: string,
   paymentInput: CheckoutPaymentInput,
@@ -1023,6 +1040,8 @@ export const checkoutBasketToSale = async (
 
     const existingSale = await tx.sale.findUnique({ where: { basketId } });
     if (existingSale) {
+      await moveBasketCustomerCaptureSessionsToSaleTx(tx, basketId, existingSale.id);
+
       const workshopJob = await getWorkshopJobForBasketTx(tx, basketId);
       let emittedWorkshopCompletion = false;
       let workshopCompletedAt: Date | null = null;
@@ -1089,6 +1108,8 @@ export const checkoutBasketToSale = async (
       });
 
       if (existingWorkshopSale) {
+        await moveBasketCustomerCaptureSessionsToSaleTx(tx, basket.id, existingWorkshopSale.id);
+
         await tx.basket.update({
           where: { id: basket.id },
           data: { status: BasketStatus.CHECKED_OUT },
@@ -1170,8 +1191,10 @@ export const checkoutBasketToSale = async (
         ...(workshopJob
           ? {
               workshopJobId: workshopJob.id,
-              customerId: workshopJob.customerId,
             }
+          : {}),
+        ...(basket.customerId ?? workshopJob?.customerId
+          ? { customerId: basket.customerId ?? workshopJob?.customerId ?? null }
           : {}),
         subtotalPence,
         taxPence,
@@ -1247,6 +1270,8 @@ export const checkoutBasketToSale = async (
       });
     }
 
+    await moveBasketCustomerCaptureSessionsToSaleTx(tx, basket.id, sale.id);
+
     await tx.basket.update({
       where: { id: basket.id },
       data: { status: BasketStatus.CHECKED_OUT },
@@ -1270,7 +1295,7 @@ export const checkoutBasketToSale = async (
       created: true,
       emittedWorkshopCompletion,
       workshopJobId: workshopJob?.id ?? null,
-      customerId: sale.customerId ?? workshopJob?.customerId ?? null,
+      customerId: sale.customerId ?? basket.customerId ?? workshopJob?.customerId ?? null,
       bikeId: workshopJob?.bikeId ?? null,
       workshopCompletedAt,
     };
