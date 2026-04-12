@@ -174,6 +174,51 @@ This includes:
 - `/sales/:saleId/receipt`
 - `/reports/daily-close/print`
 
+## Windows Auto-Deploy Safety Net
+
+The production self-hosted GitHub Actions workflow keeps the current Windows deployment model intact while adding a safety layer around it:
+
+1. capture the currently deployed commit from `C:\CorePOS`
+2. force-sync the runtime checkout with:
+   - `git fetch origin --prune`
+   - `git reset --hard origin/main`
+   - `git clean -fd`
+3. call the existing Windows deploy entrypoint:
+   - `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+4. verify the live app explicitly on the server using:
+   - `GET /health?details=1`
+   - `GET /api/system/version`
+   - `GET /login`
+
+If deployment fails, the workflow now reports:
+
+- the previous commit hash
+- the target commit hash
+- checkout state and recent git log
+- PM2 status/log snapshots when available
+- direct HTTP probe output for the health/version/login endpoints
+- an operator-ready rollback candidate command sequence
+
+Rollback notes:
+
+- the surfaced rollback candidate is intentionally code-first, not a blind automatic rollback
+- if the failed deploy included a bad production migration, restore the verified database backup before rolling the code back
+- the operator rollback candidate is:
+
+```cmd
+cd /d C:\CorePOS
+git reset --hard <previous-commit>
+git clean -fd
+call "C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd"
+```
+
+For manual validation from the production checkout, the same repo-native health probe can be run directly:
+
+```bash
+COREPOS_DEPLOY_BASE_URL=http://127.0.0.1:3000 \
+node scripts/deploy_health_check.js
+```
+
 ## Backup And Restore
 
 CorePOS now includes a simple repo-supported database backup helper for trusted local or operator-managed environments:

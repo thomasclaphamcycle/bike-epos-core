@@ -157,7 +157,7 @@ COREPOS_HEALTHCHECK_URL=http://127.0.0.1:3000/health \
 scripts/upgrade_corepos.sh
 ```
 
-Manual equivalent:
+Manual non-Windows equivalent:
 
 ```bash
 git pull --ff-only
@@ -169,6 +169,25 @@ npx prisma migrate deploy
 npm run build
 ```
 
+Windows self-hosted auto-deploy now uses a safer repo sync and verification flow around the existing runtime entrypoint:
+
+1. capture the currently deployed commit from `C:\CorePOS`
+2. force-sync the checkout with:
+   - `git fetch origin --prune`
+   - `git reset --hard origin/main`
+   - `git clean -fd`
+3. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+4. verify:
+   - `http://127.0.0.1:3000/health?details=1`
+   - `http://127.0.0.1:3000/api/system/version`
+   - `http://127.0.0.1:3000/login`
+5. if deployment fails, the workflow surfaces:
+   - the previous commit hash
+   - the target commit hash
+   - PM2/process diagnostics when available
+   - direct endpoint probe output
+   - an operator rollback candidate command
+
 6. restart the production process using your process manager
 7. smoke-check:
    - `/login`
@@ -179,9 +198,20 @@ npm run build
    - `/purchasing`
    - `/management`
 
-The helper script will not run if the checkout is dirty, and it uses `git pull --ff-only` to avoid accidental merge commits during a production upgrade.
+The Unix helper script still protects against dirty-checkout upgrades and uses `git pull --ff-only`. The Windows self-hosted auto-deploy path now prefers a deterministic force-sync because the runtime checkout can pick up local drift from prior installs.
 
 If a release introduces unexpected operational issues, restore the backup and roll back to the last known-good release.
+
+Current operator rollback candidate for the Windows self-hosted host:
+
+```cmd
+cd /d C:\CorePOS
+git reset --hard <previous-commit-from-workflow>
+git clean -fd
+call "C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd"
+```
+
+If the failed deploy applied a bad production migration, restore the verified database backup before rolling the code back.
 
 ## 7. Recovery Procedures
 
