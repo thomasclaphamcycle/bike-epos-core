@@ -126,14 +126,14 @@ app.post("/dev/seed-tube", async (req, res) => {
     data: {
       product: {
         connect: {
-          id: "cmmc05zf90000y1l0dl90n6to"
-        }
+          id: "cmmc05zf90000y1l0dl90n6to",
+        },
       },
       sku: "TUBE-700x25",
       name: "700x25-32 Presta",
       retailPricePence: 699,
-      costPricePence: 300
-    }
+      costPricePence: 300,
+    },
   });
 
   const barcode = await prisma.barcode.create({
@@ -141,8 +141,8 @@ app.post("/dev/seed-tube", async (req, res) => {
       variantId: variant.id,
       code: "1234567890123",
       type: "EAN",
-      isPrimary: true
-    }
+      isPrimary: true,
+    },
   });
 
   res.json({ variant, barcode });
@@ -213,7 +213,7 @@ app.get("/scan/:code", async (req, res) => {
       product: barcode.variant.product.name,
       variant: barcode.variant.name,
       sku: barcode.variant.sku,
-      price: barcode.variant.retailPricePence
+      price: barcode.variant.retailPricePence,
     });
   } catch (error) {
     if (error instanceof HttpError && error.code === "BARCODE_NOT_FOUND") {
@@ -278,8 +278,12 @@ if (serveFrontendSpa) {
     }),
   );
 
-  app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api/") || req.path === "/health" || isLegacyPrintableRoute(req.path)) {
+  app.get(/.*/, (req, res, next) => {
+    if (
+      req.path.startsWith("/api/") ||
+      req.path === "/health" ||
+      isLegacyPrintableRoute(req.path)
+    ) {
       return next();
     }
 
@@ -331,30 +335,23 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
     return shutdownPromise;
   }
 
-  logger.warn(
-    "process.signal",
-    {
-      resultStatus: "received",
-      signal,
-      pid: process.pid,
-    },
-  );
+  logger.warn("process.signal", {
+    resultStatus: "received",
+    signal,
+    pid: process.pid,
+  });
 
   shutdownPromise = (async () => {
     const forceExitTimer = setTimeout(() => {
       if (httpServer?.closeAllConnections) {
         httpServer.closeAllConnections();
       }
-      logger.error(
-        "server.shutdown.force_exit",
-        new Error("Server shutdown timed out"),
-        {
-          resultStatus: "timeout",
-          signal,
-          pid: process.pid,
-          timeoutMs: shutdownTimeoutMs,
-        },
-      );
+      logger.error("server.shutdown.force_exit", new Error("Server shutdown timed out"), {
+        resultStatus: "timeout",
+        signal,
+        pid: process.pid,
+        timeoutMs: shutdownTimeoutMs,
+      });
       process.exit(1);
     }, shutdownTimeoutMs);
     forceExitTimer.unref();
@@ -363,26 +360,19 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
       await closeHttpServer();
       await prisma.$disconnect();
       clearTimeout(forceExitTimer);
-      logger.warn(
-        "server.shutdown.complete",
-        {
-          resultStatus: "completed",
-          signal,
-          pid: process.pid,
-        },
-      );
+      logger.warn("server.shutdown.complete", {
+        resultStatus: "completed",
+        signal,
+        pid: process.pid,
+      });
       process.exit(0);
     } catch (error) {
       clearTimeout(forceExitTimer);
-      logger.error(
-        "server.shutdown.failed",
-        error,
-        {
-          resultStatus: "failed",
-          signal,
-          pid: process.pid,
-        },
-      );
+      logger.error("server.shutdown.failed", error, {
+        resultStatus: "failed",
+        signal,
+        pid: process.pid,
+      });
       process.exit(1);
     }
   })();
@@ -392,24 +382,16 @@ const shutdownServer = async (signal: "SIGINT" | "SIGTERM") => {
 
 const registerRuntimeDiagnostics = () => {
   process.on("unhandledRejection", (reason) => {
-    logger.error(
-      "process.unhandled_rejection",
-      reason,
-      {
-        resultStatus: "unhandled",
-      },
-    );
+    logger.error("process.unhandled_rejection", reason, {
+      resultStatus: "unhandled",
+    });
   });
 
   process.on("uncaughtExceptionMonitor", (error, origin) => {
-    logger.error(
-      "process.uncaught_exception",
-      error,
-      {
-        resultStatus: "unhandled",
-        origin,
-      },
-    );
+    logger.error("process.uncaught_exception", error, {
+      resultStatus: "unhandled",
+      origin,
+    });
   });
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -477,14 +459,10 @@ const startServer = async () => {
   } catch (error) {
     startupPayload.databaseStatus = "error";
     startupPayload.migrationStatus = "error";
-    logger.error(
-      "server.startup.preflight_failed",
-      error,
-      {
-        ...startupPayload,
-        resultStatus: "failed",
-      },
-    );
+    logger.error("server.startup.preflight_failed", error, {
+      ...startupPayload,
+      resultStatus: "failed",
+    });
   }
 
   httpServer = app.listen(port, "0.0.0.0", () => {
