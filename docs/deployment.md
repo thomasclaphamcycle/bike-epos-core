@@ -176,41 +176,53 @@ This includes:
 
 ## Windows Auto-Deploy Safety Net
 
-The production self-hosted GitHub Actions workflow keeps the current Windows deployment model intact while adding a safety layer around it:
+The production self-hosted GitHub Actions workflows now route deploy and rollback through the same repo-controlled release runner while keeping the existing Windows runtime entrypoint as the build/restart handoff:
 
-1. capture the currently deployed commit from `C:\CorePOS`
-2. force-sync the runtime checkout with:
+1. load the shared release logic from the workflow checkout
+2. inspect the runtime checkout at `C:\CorePOS`
+3. keep durable release metadata under:
+   - `C:\CorePOS\.corepos-runtime\successful-releases.json`
+   - `C:\CorePOS\.corepos-runtime\current-release.json`
+   - `C:\CorePOS\.corepos-runtime\last-release-summary.md`
+4. for normal deploy, force-sync the runtime checkout with:
    - `git fetch origin --prune`
    - `git reset --hard origin/main`
    - `git clean -fd`
-3. call the existing Windows deploy entrypoint:
+5. for rollback, resolve either:
+   - the previous known-good release
+   - a specific SHA already present in the known-good release history
+6. call the existing Windows deploy entrypoint:
    - `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
-4. verify the live app explicitly on the server using:
+7. verify the live app explicitly on the server using:
    - `GET /health?details=1`
    - `GET /api/system/version`
    - `GET /login`
+8. only after the health checks pass, append the release to the known-good history
 
-If deployment fails, the workflow now reports:
+If deployment or rollback fails, the workflow still reports:
 
-- the previous commit hash
-- the target commit hash
+- the current checkout commit hash
+- the target commit hash when known
 - checkout state and recent git log
 - PM2 status/log snapshots when available
 - direct HTTP probe output for the health/version/login endpoints
-- an operator-ready rollback candidate command sequence
+- a summary pointing operators to the manual rollback workflow instead of hand-editing git commands
 
 Rollback notes:
 
-- the surfaced rollback candidate is intentionally code-first, not a blind automatic rollback
-- if the failed deploy included a bad production migration, restore the verified database backup before rolling the code back
-- the operator rollback candidate is:
-
-```cmd
-cd /d C:\CorePOS
-git reset --hard <previous-commit>
-git clean -fd
-call "C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd"
-```
+- use the `Rollback CorePOS Production` GitHub Actions workflow for production rollback
+- the workflow supports:
+  - `previous_successful`
+  - `specific_sha`
+- `specific_sha` is accepted only when that commit already exists in the recorded known-good release history
+- rollback reuses the same production path as deploy:
+  - checkout target selection
+  - repo sync/checkout
+  - `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+  - `scripts/deploy_health_check.js`
+  - incident summary generation
+- if the rollback target is missing migration directories present in the current checkout, the summary warns explicitly that database restore may be required before reopening the app
+- failed rollback attempts do not rewrite the known-good release history
 
 For manual validation from the production checkout, the same repo-native health probe can be run directly:
 
