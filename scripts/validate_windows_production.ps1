@@ -127,6 +127,7 @@ if ($stateDirExists) {
   foreach ($stateFile in @(
       "successful-releases.json",
       "current-release.json",
+      "last-backup.json",
       "last-release-result.json",
       "last-release-summary.md",
       "health-state.json"

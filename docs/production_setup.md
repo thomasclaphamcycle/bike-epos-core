@@ -172,27 +172,29 @@ npm run build
 Windows self-hosted deploy and rollback now use the same repo-controlled release runner around the existing runtime entrypoint:
 
 1. keep durable release state under `C:\CorePOS\.corepos-runtime\`
+   - including `last-backup.json` after each verified backup
 2. for deploy, force-sync the checkout with:
    - `git fetch origin --prune`
    - `git reset --hard origin/main`
    - `git clean -fd`
 3. for rollback, select either:
-   - `previous_successful`
-   - `specific_sha` that already exists in the known-good release history
+   - `previous_safe` for the last rollback-safe release
+   - `recovery_mode` only after restoring a verified database backup
 4. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
 5. verify:
    - `http://127.0.0.1:3000/health?details=1`
    - `http://127.0.0.1:3000/api/system/version`
    - `http://127.0.0.1:3000/login`
-6. only after the health checks pass, record the release as known-good
-7. if deploy or rollback fails, the workflow surfaces:
+6. confirm the running revision matches the selected rollback target during rollback
+7. only after the health checks pass, record the release as known-good
+8. if deploy or rollback fails, the workflow surfaces:
    - the current checkout commit hash
    - the target commit hash when known
    - PM2/process diagnostics when available
    - direct endpoint probe output
    - a release summary for the incident record
 
-8. smoke-check:
+9. smoke-check:
    - `/login`
    - `/home`
    - `/pos`
@@ -234,7 +236,7 @@ If a release introduces unexpected operational issues, restore the backup and ro
 
 Use the `Rollback CorePOS Production` GitHub Actions workflow instead of hand-running `git reset` commands on the host.
 
-If the rollback target is missing migration directories present in the current checkout, or if the failed deploy applied a bad production migration, restore the verified database backup before reopening the app on the rolled-back code.
+If the rollback target is missing migration directories present in the current checkout, `previous_safe` blocks the rollback. Restore the verified database backup, then rerun the workflow in `recovery_mode`.
 
 ## 7. Recovery Procedures
 

@@ -90,7 +90,7 @@ jobs:
           }
 
           Write-Host ""
-          Write-Host "Next step: run the Rollback CorePOS Production workflow and choose previous_successful or a specific known-good SHA."
+          Write-Host "Next step: run the Rollback CorePOS Production workflow and choose previous_safe, or recovery_mode after restoring a verified backup."
 
       - name: Publish release summary
         if: always()

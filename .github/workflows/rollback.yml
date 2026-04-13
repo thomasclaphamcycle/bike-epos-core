@@ -3,18 +3,14 @@ name: Rollback CorePOS Production
 on:
   workflow_dispatch:
     inputs:
-      rollback_target:
-        description: Roll back to the previous known-good release or a specific known-good SHA
+      rollback_mode:
+        description: Choose the safe rollback path or the backup-restore recovery path
         required: true
-        default: previous_successful
+        default: previous_safe
         type: choice
         options:
-          - previous_successful
-          - specific_sha
-      commit_sha:
-        description: Specific known-good commit SHA to roll back to when rollback_target is specific_sha
-        required: false
-        type: string
+          - previous_safe
+          - recovery_mode
 
 concurrency:
   group: corepos-production-deploy
@@ -41,8 +37,7 @@ jobs:
       - name: Validate rollback input
         shell: powershell
         env:
-          COREPOS_ROLLBACK_TARGET: ${{ inputs.rollback_target }}
-          COREPOS_ROLLBACK_SHA: ${{ inputs.commit_sha }}
+          COREPOS_ROLLBACK_MODE: ${{ inputs.rollback_mode }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -50,26 +45,22 @@ jobs:
             throw "CorePOS runtime checkout was not found at $env:COREPOS_REPO_PATH"
           }
 
-          if ($env:COREPOS_ROLLBACK_TARGET -eq "specific_sha" -and [string]::IsNullOrWhiteSpace($env:COREPOS_ROLLBACK_SHA)) {
-            throw "commit_sha is required when rollback_target is specific_sha."
+          if ($env:COREPOS_ROLLBACK_MODE -notin @("previous_safe", "recovery_mode")) {
+            throw "rollback_mode must be previous_safe or recovery_mode."
           }
 
           Write-Host "Runtime checkout: $env:COREPOS_REPO_PATH"
+          Write-Host "Rollback mode: $env:COREPOS_ROLLBACK_MODE"
           git -C $env:COREPOS_REPO_PATH status --short --branch
           git -C $env:COREPOS_REPO_PATH log --oneline -1
 
       - name: Run shared rollback flow
         shell: powershell
         env:
-          COREPOS_ROLLBACK_TARGET: ${{ inputs.rollback_target }}
-          COREPOS_ROLLBACK_SHA: ${{ inputs.commit_sha }}
+          COREPOS_ROLLBACK_MODE: ${{ inputs.rollback_mode }}
         run: |
           $ErrorActionPreference = "Stop"
-          $args = @("scripts/manage_production_release.js", "rollback", "--target", $env:COREPOS_ROLLBACK_TARGET)
-          if ($env:COREPOS_ROLLBACK_TARGET -eq "specific_sha") {
-            $args += @("--sha", $env:COREPOS_ROLLBACK_SHA.Trim())
-          }
-
+          $args = @("scripts/manage_production_release.js", "rollback", "--mode", $env:COREPOS_ROLLBACK_MODE)
           node @args
 
       - name: Capture failure diagnostics
