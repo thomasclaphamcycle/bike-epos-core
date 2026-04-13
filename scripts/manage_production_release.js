@@ -509,9 +509,16 @@ const runEntrypoint = (config) => {
           args: [],
         };
 
+  const entrypointEnv = {
+    ...process.env,
+    COREPOS_SKIP_GIT_PULL:
+      config.operation === "rollback" ? "1" : (process.env.COREPOS_SKIP_GIT_PULL || ""),
+  };
+
   const result = runCommand(entrypointCommand.command, entrypointCommand.args, {
     cwd: config.repoPath,
     allowFailure: true,
+    env: entrypointEnv,
   });
 
   if (result.error || result.status !== 0) {
