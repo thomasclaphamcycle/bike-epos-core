@@ -112,7 +112,7 @@ jobs:
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           $payload = @{
-            text = "🚀 CorePOS deploy succeeded`nWorkflow: deploy`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
+            text = "[DEPLOY OK] CorePOS deploy succeeded`nWorkflow: deploy`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
           Invoke-RestMethod -Method Post `
@@ -129,7 +129,7 @@ jobs:
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           $payload = @{
-            text = "❌ CorePOS deploy failed`nWorkflow: deploy`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
+            text = "[DEPLOY FAIL] CorePOS deploy failed`nWorkflow: deploy`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
           Invoke-RestMethod -Method Post `
