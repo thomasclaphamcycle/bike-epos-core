@@ -50,4 +50,37 @@ mkdir -p "$(dirname "$output_path")"
   --file="$output_path" \
   "$DATABASE_URL"
 
+repo_root=""
+if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  repo_root="$git_root"
+fi
+
+if [[ -n "$repo_root" ]]; then
+  state_dir="${COREPOS_RELEASE_STATE_DIR:-$repo_root/.corepos-runtime}"
+  backup_metadata_path="${COREPOS_LAST_BACKUP_PATH:-$state_dir/last-backup.json}"
+  mkdir -p "$state_dir"
+
+  absolute_output_path="$(node -p "require('path').resolve(process.argv[1])" "$output_path")"
+  current_commit="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unknown)"
+
+  BACKUP_METADATA_PATH="$backup_metadata_path" \
+  BACKUP_OUTPUT_PATH="$absolute_output_path" \
+  BACKUP_TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+  BACKUP_COMMIT="$current_commit" \
+  node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const metadataPath = process.env.BACKUP_METADATA_PATH;
+const payload = {
+  timestamp: process.env.BACKUP_TIMESTAMP,
+  path: process.env.BACKUP_OUTPUT_PATH,
+  commit: process.env.BACKUP_COMMIT,
+};
+
+fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
+fs.writeFileSync(metadataPath, `${JSON.stringify(payload, null, 2)}\n`);
+NODE
+fi
+
 echo "CorePOS backup written to $output_path"

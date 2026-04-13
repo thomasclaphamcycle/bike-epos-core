@@ -10,16 +10,18 @@ const SUCCESS_HISTORY_FILENAME = "successful-releases.json";
 const CURRENT_RELEASE_FILENAME = "current-release.json";
 const LAST_RESULT_FILENAME = "last-release-result.json";
 const LAST_SUMMARY_FILENAME = "last-release-summary.md";
+const LAST_BACKUP_FILENAME = "last-backup.json";
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
 const ROLLBACK_WORKFLOW_NAME = "Rollback CorePOS Production";
 const HEALTHCHECK_SCRIPT_PATH = path.join(__dirname, "deploy_health_check.js");
 const PACKAGE_JSON_PATH = "package.json";
 const MIGRATIONS_TREE_PATH = "prisma/migrations";
+const DEFAULT_BACKUP_MAX_AGE_HOURS = 24;
 
 const usage = () => {
   console.error(`Usage:
   node scripts/manage_production_release.js deploy
-  node scripts/manage_production_release.js rollback [--target previous_successful|specific_sha] [--sha <commit>]
+  node scripts/manage_production_release.js rollback [--mode previous_safe|recovery_mode]
 
 Required environment:
   COREPOS_REPO_PATH          Runtime checkout path (for example C:\\CorePOS)
@@ -47,42 +49,31 @@ const parseArgs = (argv) => {
 
   const options = {
     operation,
-    targetMode: "previous_successful",
-    specificSha: "",
+    rollbackMode: "previous_safe",
     skipEntrypoint: process.env.COREPOS_RELEASE_SKIP_ENTRYPOINT === "1",
   };
 
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
 
-    if (argument === "--target") {
+    if (argument === "--mode") {
       const value = rest[index + 1];
       if (!value) {
-        throw new Error("--target requires a value.");
+        throw new Error("Rollback mode is required.");
       }
-      if (!["previous_successful", "specific_sha"].includes(value)) {
-        throw new Error(`Unsupported rollback target mode: ${value}`);
+      if (!["previous_safe", "recovery_mode"].includes(value)) {
+        throw new Error(`Rollback mode must be previous_safe or recovery_mode.`);
       }
-      options.targetMode = value;
+      options.rollbackMode = value;
       index += 1;
       continue;
     }
 
-    if (argument === "--sha") {
-      const value = rest[index + 1];
-      if (!value) {
-        throw new Error("--sha requires a commit value.");
-      }
-      options.specificSha = value.trim();
-      index += 1;
-      continue;
+    if (argument === "--target" || argument === "--sha") {
+      throw new Error("SHA-based rollback is no longer supported. Use --mode previous_safe or --mode recovery_mode.");
     }
 
     throw new Error(`Unsupported argument: ${argument}`);
-  }
-
-  if (options.operation === "rollback" && options.targetMode === "specific_sha" && !options.specificSha) {
-    throw new Error("Rollback target mode specific_sha requires --sha <commit>.");
   }
 
   return options;
@@ -133,6 +124,7 @@ const resolveConfig = (options) => {
     currentReleasePath: path.join(stateDir, CURRENT_RELEASE_FILENAME),
     resultPath: path.join(stateDir, LAST_RESULT_FILENAME),
     summaryPath: path.join(stateDir, LAST_SUMMARY_FILENAME),
+    backupMetadataPath: path.join(stateDir, LAST_BACKUP_FILENAME),
     rollbackWorkflowName:
       process.env.COREPOS_ROLLBACK_WORKFLOW_NAME?.trim() || ROLLBACK_WORKFLOW_NAME,
   };
@@ -218,7 +210,15 @@ const readJsonFile = (filePath, fallback) => {
   }
 };
 
-const readSuccessHistory = (historyPath) => {
+const migrationSetsDiffer = (leftMigrationNames, rightMigrationNames) => {
+  if (leftMigrationNames.length !== rightMigrationNames.length) {
+    return true;
+  }
+
+  return leftMigrationNames.some((name, index) => name !== rightMigrationNames[index]);
+};
+
+const readSuccessHistory = (repoPath, historyPath) => {
   const fallback = {
     schemaVersion: STATE_SCHEMA_VERSION,
     updatedAt: null,
@@ -228,7 +228,48 @@ const readSuccessHistory = (historyPath) => {
   if (!Array.isArray(history.releases)) {
     return fallback;
   }
-  return history;
+
+  const normalizedReleases = history.releases.map((release, index) => {
+    if (!release || typeof release !== "object") {
+      return release;
+    }
+
+    if (typeof release.schemaChanged === "boolean" && typeof release.rollbackSafe === "boolean") {
+      return release;
+    }
+
+    if (index === 0) {
+      return {
+        ...release,
+        schemaChanged: false,
+        rollbackSafe: true,
+      };
+    }
+
+    const previousRelease = history.releases[index - 1];
+    if (!previousRelease?.commit || !release.commit) {
+      return {
+        ...release,
+        schemaChanged: false,
+        rollbackSafe: true,
+      };
+    }
+
+    const previousMigrationNames = readMigrationNamesAtRef(repoPath, previousRelease.commit);
+    const releaseMigrationNames = readMigrationNamesAtRef(repoPath, release.commit);
+    const schemaChanged = migrationSetsDiffer(previousMigrationNames, releaseMigrationNames);
+
+    return {
+      ...release,
+      schemaChanged,
+      rollbackSafe: !schemaChanged,
+    };
+  });
+
+  return {
+    ...history,
+    releases: normalizedReleases,
+  };
 };
 
 const readPackageVersionFromString = (raw, fallback = null) => {
@@ -313,7 +354,7 @@ const compareMigrationSets = (currentMigrationNames, targetMigrationNames) => {
       ? `${missingFromTarget.slice(0, 6).join(", ")} (+${missingFromTarget.length - 6} more)`
       : missingFromTarget.join(", ");
 
-  return `Target release is missing ${missingFromTarget.length} migration ${missingFromTarget.length === 1 ? "directory" : "directories"} present in the current checkout (${listedNames}). If any of those migrations ran in production, restore the verified database backup before reopening the app on the rolled-back code.`;
+  return `Rollback blocked: newer database migrations detected. Restore backup, then rerun rollback in recovery mode. Missing from target: ${listedNames}.`;
 };
 
 const resolveVersionEndpointUrl = () =>
@@ -351,6 +392,44 @@ const readLiveVersionInfo = async () => {
       error: error instanceof Error ? error.message : String(error),
     };
   }
+};
+
+const readBackupMetadata = (backupMetadataPath) => {
+  const backup = readJsonFile(backupMetadataPath, null);
+  if (!backup || typeof backup !== "object") {
+    return null;
+  }
+
+  return {
+    timestamp: typeof backup.timestamp === "string" ? backup.timestamp : null,
+    path: typeof backup.path === "string" ? backup.path : null,
+    commit: typeof backup.commit === "string" ? backup.commit : null,
+  };
+};
+
+const ensureRecentBackup = (config) => {
+  const backup = readBackupMetadata(config.backupMetadataPath);
+  if (!backup?.timestamp || !backup?.path) {
+    throw new Error("Deploy blocked: no recent database backup found.");
+  }
+
+  const backupTime = Date.parse(backup.timestamp);
+  if (Number.isNaN(backupTime)) {
+    throw new Error("Deploy blocked: no recent database backup found.");
+  }
+
+  const maxAgeHours = Number.parseInt(process.env.COREPOS_BACKUP_MAX_AGE_HOURS || `${DEFAULT_BACKUP_MAX_AGE_HOURS}`, 10);
+  const maxAgeMs = (Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? maxAgeHours : DEFAULT_BACKUP_MAX_AGE_HOURS) * 60 * 60 * 1000;
+
+  if ((Date.now() - backupTime) > maxAgeMs) {
+    throw new Error("Deploy blocked: no recent database backup found.");
+  }
+
+  if (!fs.existsSync(backup.path)) {
+    throw new Error("Deploy blocked: no recent database backup found.");
+  }
+
+  return backup;
 };
 
 const probePm2Status = () => {
@@ -466,7 +545,14 @@ const runHealthCheck = () => {
   };
 };
 
-const createReleaseEntry = ({ operation, currentBefore, finalRelease, targetRelease, pm2Status }) => ({
+const createReleaseEntry = ({
+  operation,
+  currentBefore,
+  finalRelease,
+  targetRelease,
+  pm2Status,
+  schemaChanged,
+}) => ({
   recordedAt: new Date().toISOString(),
   operation,
   commit: finalRelease.commit,
@@ -478,11 +564,13 @@ const createReleaseEntry = ({ operation, currentBefore, finalRelease, targetRele
   targetCommit: targetRelease.commit,
   targetVersion: targetRelease.version,
   pm2Status: pm2Status.status,
+  schemaChanged,
+  rollbackSafe: !schemaChanged,
 });
 
 const updateKnownGoodState = (config, releaseEntry) => {
   ensureStateDir(config.stateDir);
-  const history = readSuccessHistory(config.historyPath);
+  const history = readSuccessHistory(config.repoPath, config.historyPath);
   const nextHistory = {
     schemaVersion: STATE_SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
@@ -521,6 +609,8 @@ const buildSummaryMarkdown = (config, result) => {
     `- PM2 status after entrypoint: ${result.pm2.available ? (result.pm2.found ? `${result.pm2.processName}: ${result.pm2.status || "unknown"}` : `${result.pm2.processName} process not found`) : "pm2 unavailable"}`,
     `- Health-check result: ${result.healthCheck.outcome}`,
     `- Final deployed release: ${result.finalRelease ? `${formatRelease(result.finalRelease)} (${result.finalRelease.commit})` : "not confirmed"}`,
+    `- Schema changed: ${result.schemaChanged ? "yes" : "no"}`,
+    `- Rollback-safe release: ${result.rollbackSafe ? "yes" : "no"}`,
     `- Known-good release history updated: ${result.historyUpdated ? "yes" : "no"}`,
   ];
 
@@ -546,7 +636,7 @@ const buildSummaryMarkdown = (config, result) => {
     summaryLines.push(
       "",
       "### Manual rollback",
-      `- Use the \`${config.rollbackWorkflowName}\` workflow to restore the previous known-good release or a specific SHA that already passed health checks.`,
+      `- Use the \`${config.rollbackWorkflowName}\` workflow with \`previous_safe\` for the last rollback-safe release or \`recovery_mode\` after restoring a database backup.`,
     );
   }
 
@@ -591,40 +681,38 @@ const findReleaseIndexForCommit = (history, commit) => {
 };
 
 const resolveRollbackTarget = (config, currentBefore) => {
-  const history = readSuccessHistory(config.historyPath);
+  const history = readSuccessHistory(config.repoPath, config.historyPath);
   if (history.releases.length === 0) {
-    throw new Error("No known-good release history is recorded yet, so rollback is unsafe.");
-  }
-
-  if (config.targetMode === "specific_sha") {
-    const targetCommit = runGitStdout(config.repoPath, ["rev-parse", "--verify", `${config.specificSha}^{commit}`]);
-    const targetRelease = history.releases.find((release) => release.commit === targetCommit);
-    if (!targetRelease) {
-      throw new Error(
-        `Commit ${targetCommit} is not present in the known-good release history, so rollback was refused.`,
-      );
-    }
-    return {
-      targetRelease,
-      selection: `specific known-good SHA ${targetCommit}`,
-    };
+    throw new Error("Rollback blocked: no known-good release history is available yet.");
   }
 
   const currentIndex = findReleaseIndexForCommit(history, currentBefore.commit);
   if (currentIndex === -1) {
-    throw new Error(
-      `Current checkout commit ${currentBefore.commit} does not appear in the known-good release history, so previous-successful rollback is ambiguous.`,
-    );
+    throw new Error("Rollback blocked: the current release is not in the known-good release history.");
   }
 
   if (currentIndex === 0) {
-    throw new Error("There is no earlier known-good release recorded before the current checkout.");
+    throw new Error("Rollback blocked: there is no earlier known-good release recorded.");
   }
 
-  return {
-    targetRelease: history.releases[currentIndex - 1],
-    selection: `previous known-good release before ${currentBefore.commit}`,
-  };
+  if (config.rollbackMode === "recovery_mode") {
+    return {
+      targetRelease: history.releases[currentIndex - 1],
+      selection: `previous known-good release before ${currentBefore.commit} (recovery mode)`,
+    };
+  }
+
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const candidate = history.releases[index];
+    if (candidate?.rollbackSafe === true) {
+      return {
+        targetRelease: candidate,
+        selection: `latest rollback-safe release before ${currentBefore.commit}`,
+      };
+    }
+  }
+
+  throw new Error("No rollback-safe release available.");
 };
 
 const checkoutTarget = (repoPath, targetCommit) => {
@@ -634,6 +722,20 @@ const checkoutTarget = (repoPath, targetCommit) => {
 
 const fetchOriginMain = (repoPath) => {
   runGit(repoPath, ["fetch", "origin", "--prune"]);
+};
+
+const ensureReleaseRevisionMatchesTarget = (targetRelease, finalRelease, liveRelease) => {
+  if (!finalRelease?.commit || finalRelease.commit !== targetRelease.commit) {
+    throw new Error("Rollback failed: the checked-out release does not match the selected rollback target.");
+  }
+
+  if (!liveRelease?.revision) {
+    throw new Error("Rollback failed: the live version check did not return a revision.");
+  }
+
+  if (liveRelease.revision !== targetRelease.shortCommit) {
+    throw new Error("Rollback failed: the live version does not match the selected rollback target.");
+  }
 };
 
 const executeDeploy = async (config) => {
@@ -662,6 +764,8 @@ const executeDeploy = async (config) => {
       status: null,
     },
     rollbackSelection: null,
+    schemaChanged: false,
+    rollbackSafe: true,
     historyUpdated: false,
     warnings: [],
     error: null,
@@ -671,6 +775,16 @@ const executeDeploy = async (config) => {
     fetchOriginMain(config.repoPath);
     const targetRelease = readReleaseInfoAtRef(config.repoPath, "origin/main");
     result.targetRelease = targetRelease;
+
+    const currentMigrationNames = readMigrationNamesAtRef(config.repoPath, currentBefore.commit);
+    const targetMigrationNames = readMigrationNamesAtRef(config.repoPath, targetRelease.commit);
+    const schemaChanged = migrationSetsDiffer(currentMigrationNames, targetMigrationNames);
+    result.schemaChanged = schemaChanged;
+    result.rollbackSafe = !schemaChanged;
+
+    if (schemaChanged) {
+      ensureRecentBackup(config);
+    }
 
     checkoutTarget(config.repoPath, targetRelease.commit);
 
@@ -689,6 +803,7 @@ const executeDeploy = async (config) => {
       finalRelease: result.finalRelease,
       targetRelease,
       pm2Status: result.pm2,
+      schemaChanged,
     });
     updateKnownGoodState(config, releaseEntry);
     result.historyUpdated = true;
@@ -729,6 +844,8 @@ const executeRollback = async (config) => {
       status: null,
     },
     rollbackSelection: null,
+    schemaChanged: false,
+    rollbackSafe: true,
     historyUpdated: false,
     warnings: [],
     error: null,
@@ -740,7 +857,7 @@ const executeRollback = async (config) => {
     const { targetRelease: knownGoodTarget, selection } = resolveRollbackTarget(config, currentBefore);
     const targetRelease = readReleaseInfoAtRef(config.repoPath, knownGoodTarget.commit);
     if (targetRelease.commit === currentBefore.commit) {
-      throw new Error("Rollback target resolves to the current checkout, so no rollback was performed.");
+      throw new Error("Rollback stopped: the selected release is already live.");
     }
 
     result.targetRelease = targetRelease;
@@ -748,8 +865,14 @@ const executeRollback = async (config) => {
 
     const currentMigrationNames = readMigrationNamesAtRef(config.repoPath, currentBefore.commit);
     const targetMigrationNames = readMigrationNamesAtRef(config.repoPath, targetRelease.commit);
+    const schemaChanged = migrationSetsDiffer(currentMigrationNames, targetMigrationNames);
+    result.schemaChanged = schemaChanged;
+    result.rollbackSafe = !schemaChanged;
     const rollbackWarning = compareMigrationSets(currentMigrationNames, targetMigrationNames);
     if (rollbackWarning) {
+      if (config.rollbackMode !== "recovery_mode") {
+        throw new Error("Rollback blocked: newer database migrations detected. Restore backup, then rerun rollback in recovery mode.");
+      }
       result.warnings.push(rollbackWarning);
     }
 
@@ -763,6 +886,7 @@ const executeRollback = async (config) => {
     result.healthCheck = runHealthCheck();
     result.liveRelease = await readLiveVersionInfo();
     result.finalRelease = readReleaseInfoFromCheckout(config.repoPath);
+    ensureReleaseRevisionMatchesTarget(targetRelease, result.finalRelease, result.liveRelease);
 
     const releaseEntry = createReleaseEntry({
       operation: "rollback",
@@ -770,6 +894,7 @@ const executeRollback = async (config) => {
       finalRelease: result.finalRelease,
       targetRelease,
       pm2Status: result.pm2,
+      schemaChanged,
     });
     updateKnownGoodState(config, releaseEntry);
     result.historyUpdated = true;
