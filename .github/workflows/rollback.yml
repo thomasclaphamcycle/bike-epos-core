@@ -57,6 +57,7 @@ jobs:
       - name: Run shared rollback flow
         shell: powershell
         env:
+          COREPOS_SKIP_GIT_PULL: "1"
           COREPOS_ROLLBACK_MODE: ${{ inputs.rollback_mode }}
         run: |
           $ErrorActionPreference = "Stop"
