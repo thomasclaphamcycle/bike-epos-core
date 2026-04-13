@@ -136,7 +136,7 @@ jobs:
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           $payload = @{
-            text = "🔄 CorePOS rollback succeeded`nWorkflow: rollback`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
+            text = "[ROLLBACK OK] CorePOS rollback succeeded`nWorkflow: rollback`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
           Invoke-RestMethod -Method Post `
@@ -153,7 +153,7 @@ jobs:
           GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           $payload = @{
-            text = "⚠️ CorePOS rollback failed`nWorkflow: rollback`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
+            text = "[ROLLBACK FAIL] CorePOS rollback failed`nWorkflow: rollback`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
           Invoke-RestMethod -Method Post `
