@@ -231,6 +231,23 @@ COREPOS_DEPLOY_BASE_URL=http://127.0.0.1:3000 \
 node scripts/deploy_health_check.js
 ```
 
+## Health Monitoring Alerts
+
+CorePOS now includes a simple one-shot health monitor for production operators and scheduled checks:
+
+```bash
+npm run health:check
+```
+
+Behavior:
+
+- requests `http://127.0.0.1:3000/health`
+- times out after about 3 seconds
+- exits silently when the app returns `{ "status": "ok" }`
+- sends a Slack alert through `SLACK_WEBHOOK_URL` when the health check fails
+
+The repo also includes a dedicated `CorePOS Health Monitor` GitHub Actions workflow that runs on the production self-hosted runner. GitHub Actions schedules are limited to 5-minute granularity, so the monitor is configured to run every 5 minutes rather than every 2 minutes.
+
 ## Backup And Restore
 
 CorePOS now includes a simple repo-supported database backup helper for trusted local or operator-managed environments:
