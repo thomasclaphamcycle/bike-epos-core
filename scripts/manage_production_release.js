@@ -403,7 +403,7 @@ const runEntrypoint = (config) => {
     process.platform === "win32"
       ? {
           command: "cmd.exe",
-          args: ["/d", "/s", "/c", `"${config.entrypointPath}"`],
+          args: ["/d", "/s", "/c", config.entrypointPath],
         }
       : {
           command: config.entrypointPath,
