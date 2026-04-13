@@ -64,8 +64,11 @@ jobs:
       - name: Run database migrations
         run: npx prisma migrate deploy
 
+      - name: Install Playwright system dependencies
+        run: bash scripts/install_playwright_system_deps.sh chromium
+
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run release verification
         run: npm run verify
