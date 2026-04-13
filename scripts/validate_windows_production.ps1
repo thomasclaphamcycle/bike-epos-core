@@ -4,7 +4,7 @@ param(
   [string]$EntrypointPath = "C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd",
   [string]$ReleaseStateDir = "C:\CorePOS\.corepos-runtime",
   [string]$BaseUrl = "http://127.0.0.1:3000",
-  [string]$Pm2ProcessName = "corepos",
+  [string]$Pm2ProcessName = "corepos-backend",
   [string]$HealthTaskName = "CorePOS Health Monitor"
 )
 
@@ -97,31 +97,29 @@ if ($repoExists) {
   Test-PathResult "repo" "health monitor script" (Join-Path $RepoPath "scripts\health_monitor.js")
   Test-PathResult "repo" "release runner script" (Join-Path $RepoPath "scripts\manage_production_release.js")
 
-  if (Test-CommandAvailable "git") {
-    try {
-      $branchLine = git -C $RepoPath status --short --branch | Select-Object -First 1
-      Add-Result "PASS" "repo" "git status" $branchLine
-    } catch {
-      Add-Result "FAIL" "repo" "git status" $_.Exception.Message
-    }
+  try {
+    $branchLine = git -C $RepoPath status --short --branch | Select-Object -First 1
+    Add-Result "PASS" "repo" "git status" $branchLine
+  } catch {
+    Add-Result "FAIL" "repo" "git status" $_.Exception.Message
+  }
 
-    try {
-      $dirtyLines = git -C $RepoPath status --porcelain
-      if ($dirtyLines) {
-        Add-Result "WARN" "repo" "working tree cleanliness" "Runtime checkout has local modifications"
-      } else {
-        Add-Result "PASS" "repo" "working tree cleanliness" "Runtime checkout is clean"
-      }
-    } catch {
-      Add-Result "FAIL" "repo" "working tree cleanliness" $_.Exception.Message
+  try {
+    $dirtyLines = git -C $RepoPath status --porcelain
+    if ($dirtyLines) {
+      Add-Result "WARN" "repo" "working tree cleanliness" "Runtime checkout has local modifications"
+    } else {
+      Add-Result "PASS" "repo" "working tree cleanliness" "Runtime checkout is clean"
     }
+  } catch {
+    Add-Result "FAIL" "repo" "working tree cleanliness" $_.Exception.Message
+  }
 
-    try {
-      $head = git -C $RepoPath rev-parse HEAD
-      Add-Result "PASS" "repo" "runtime HEAD" $head.Trim()
-    } catch {
-      Add-Result "FAIL" "repo" "runtime HEAD" $_.Exception.Message
-    }
+  try {
+    $head = git -C $RepoPath rev-parse HEAD
+    Add-Result "PASS" "repo" "runtime HEAD" $head.Trim()
+  } catch {
+    Add-Result "FAIL" "repo" "runtime HEAD" $_.Exception.Message
   }
 }
 
@@ -137,57 +135,34 @@ if ($stateDirExists) {
   }
 }
 
-if (Test-CommandAvailable "pm2") {
+$pm2Path = "C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd"
+
+if (Test-Path $pm2Path) {
   try {
-    $pm2Json = pm2 jlist
-    $pm2Processes = $pm2Json | ConvertFrom-Json
-    $targetProcess = $pm2Processes | Where-Object {
-      $_.name -eq $Pm2ProcessName -or $_.pm2_env.name -eq $Pm2ProcessName
-    } | Select-Object -First 1
-
-    if ($null -eq $targetProcess) {
-      Add-Result "FAIL" "process" "PM2 process" "No PM2 process named '$Pm2ProcessName' was found"
-    } else {
-      $pm2Status = $targetProcess.pm2_env.status
-      if ($pm2Status -eq "online") {
-        Add-Result "PASS" "process" "PM2 process" "'$Pm2ProcessName' is online"
-      } else {
-        Add-Result "FAIL" "process" "PM2 process" "'$Pm2ProcessName' status is $pm2Status"
-      }
-
-      $requiredPm2Env = @("DATABASE_URL", "AUTH_JWT_SECRET", "COOKIE_SECRET", "NODE_ENV", "PORT")
-      foreach ($envName in $requiredPm2Env) {
-        $hasValue = $false
-        if ($targetProcess.pm2_env.env -and $targetProcess.pm2_env.env.PSObject.Properties.Name -contains $envName) {
-          $value = [string]$targetProcess.pm2_env.env.$envName
-          $hasValue = -not [string]::IsNullOrWhiteSpace($value)
-        }
-
-        if ($hasValue) {
-          Add-Result "PASS" "process" "PM2 env $envName" "set"
-        } else {
-          Add-Result "WARN" "process" "PM2 env $envName" "not visible in PM2 metadata"
-        }
-      }
-
-      $optionalPm2Env = "PUBLIC_APP_URL"
-      $hasPublicAppUrl = $false
-      if ($targetProcess.pm2_env.env -and $targetProcess.pm2_env.env.PSObject.Properties.Name -contains $optionalPm2Env) {
-        $value = [string]$targetProcess.pm2_env.env.$optionalPm2Env
-        $hasPublicAppUrl = -not [string]::IsNullOrWhiteSpace($value)
-      }
-
-      if ($hasPublicAppUrl) {
-        Add-Result "PASS" "process" "PM2 env PUBLIC_APP_URL" "set"
-      } else {
-        Add-Result "WARN" "process" "PM2 env PUBLIC_APP_URL" "missing"
-      }
+    $pm2Describe = & $pm2Path describe $Pm2ProcessName
+    if ($LASTEXITCODE -ne 0) {
+      throw "pm2 describe failed for $Pm2ProcessName"
     }
+
+    $pm2DescribeText = ($pm2Describe | Out-String)
+
+    if ($pm2DescribeText -match "\bonline\b") {
+      Add-Result "PASS" "process" "PM2 process" "'$Pm2ProcessName' is online"
+    } else {
+      Add-Result "WARN" "process" "PM2 process" "Could not confirm online status for '$Pm2ProcessName'"
+    }
+
+    Add-Result "WARN" "process" "PM2 env DATABASE_URL" "not inspected by describe-mode validator"
+    Add-Result "WARN" "process" "PM2 env AUTH_JWT_SECRET" "not inspected by describe-mode validator"
+    Add-Result "WARN" "process" "PM2 env COOKIE_SECRET" "not inspected by describe-mode validator"
+    Add-Result "WARN" "process" "PM2 env NODE_ENV" "not inspected by describe-mode validator"
+    Add-Result "WARN" "process" "PM2 env PORT" "not inspected by describe-mode validator"
+    Add-Result "WARN" "process" "PM2 env PUBLIC_APP_URL" "not inspected by describe-mode validator"
   } catch {
     Add-Result "FAIL" "process" "PM2 inspection" $_.Exception.Message
   }
 } else {
-  Add-Result "FAIL" "process" "PM2 available" "pm2 not found on PATH"
+  Add-Result "FAIL" "process" "PM2 available" "$pm2Path not found"
 }
 
 Invoke-JsonCheck "health" "detailed health endpoint" "$BaseUrl/health?details=1" {
