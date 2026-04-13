@@ -115,11 +115,10 @@ jobs:
             text = "🚀 CorePOS deploy succeeded`nWorkflow: deploy`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
-          curl.exe --silent --show-error --fail `
-            -X POST `
-            -H "Content-type: application/json" `
-            --data-binary $payload `
-            $env:SLACK_WEBHOOK_URL
+          Invoke-RestMethod -Method Post `
+            -Uri $env:SLACK_WEBHOOK_URL `
+            -ContentType "application/json" `
+            -Body $payload
 
       - name: Notify Slack on deploy failure
         if: failure() && env.SLACK_WEBHOOK_URL != ''
@@ -133,8 +132,7 @@ jobs:
             text = "❌ CorePOS deploy failed`nWorkflow: deploy`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
-          curl.exe --silent --show-error --fail `
-            -X POST `
-            -H "Content-type: application/json" `
-            --data-binary $payload `
-            $env:SLACK_WEBHOOK_URL
+          Invoke-RestMethod -Method Post `
+            -Uri $env:SLACK_WEBHOOK_URL `
+            -ContentType "application/json" `
+            -Body $payload

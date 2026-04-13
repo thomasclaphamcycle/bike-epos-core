@@ -139,11 +139,10 @@ jobs:
             text = "🔄 CorePOS rollback succeeded`nWorkflow: rollback`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
-          curl.exe --silent --show-error --fail `
-            -X POST `
-            -H "Content-type: application/json" `
-            --data-binary $payload `
-            $env:SLACK_WEBHOOK_URL
+          Invoke-RestMethod -Method Post `
+            -Uri $env:SLACK_WEBHOOK_URL `
+            -ContentType "application/json" `
+            -Body $payload
 
       - name: Notify Slack on rollback failure
         if: failure() && env.SLACK_WEBHOOK_URL != ''
@@ -157,8 +156,7 @@ jobs:
             text = "⚠️ CorePOS rollback failed`nWorkflow: rollback`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
           } | ConvertTo-Json -Compress
 
-          curl.exe --silent --show-error --fail `
-            -X POST `
-            -H "Content-type: application/json" `
-            --data-binary $payload `
-            $env:SLACK_WEBHOOK_URL
+          Invoke-RestMethod -Method Post `
+            -Uri $env:SLACK_WEBHOOK_URL `
+            -ContentType "application/json" `
+            -Body $payload
