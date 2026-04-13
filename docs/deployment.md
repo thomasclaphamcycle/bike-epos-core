@@ -241,12 +241,21 @@ npm run health:check
 
 Behavior:
 
-- requests `http://127.0.0.1:3000/health`
+- requests `http://127.0.0.1:3000/health?details=1`
 - times out after about 3 seconds
-- exits silently when the app returns `{ "status": "ok" }`
-- sends a Slack alert through `SLACK_WEBHOOK_URL` when the health check fails
+- stores the last known state in `C:\CorePOS\.corepos-runtime\health-state.json`
+- exits silently when the app stays healthy
+- sends a Slack failure alert only when state changes from `HEALTHY` to `UNHEALTHY`
+- sends a Slack recovery alert only when state changes from `UNHEALTHY` to `HEALTHY`
 
 The repo also includes a dedicated `CorePOS Health Monitor` GitHub Actions workflow that runs on the production self-hosted runner. GitHub Actions schedules are limited to 5-minute granularity, so the monitor is configured to run every 5 minutes rather than every 2 minutes.
+
+For the Windows local-server deployment model, prefer exactly one recurring production monitor:
+
+- either the scheduled GitHub Actions workflow on the self-hosted runner
+- or a Windows Scheduled Task that runs `npm run health:check` from `C:\CorePOS`
+
+Do not leave both enabled unless duplicate monitoring and duplicate Slack transitions are intentional.
 
 ## Backup And Restore
 
