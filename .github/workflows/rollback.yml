@@ -126,3 +126,37 @@ jobs:
           } else {
             "## CorePOS rollback`n`n- No release summary file was produced." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           }
+
+      - name: Notify Slack on rollback success
+        if: ${{ success() && secrets.SLACK_WEBHOOK_URL != '' }}
+        shell: powershell
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $payload = @{
+            text = "🔄 CorePOS rollback succeeded`nWorkflow: rollback`nResult: success`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
+          } | ConvertTo-Json -Compress
+
+          curl.exe --silent --show-error --fail `
+            -X POST `
+            -H "Content-type: application/json" `
+            --data-binary $payload `
+            $env:SLACK_WEBHOOK_URL
+
+      - name: Notify Slack on rollback failure
+        if: ${{ failure() && secrets.SLACK_WEBHOOK_URL != '' }}
+        shell: powershell
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $payload = @{
+            text = "⚠️ CorePOS rollback failed`nWorkflow: rollback`nResult: failure`nRef: ${{ github.ref_name }}`nSHA: ${{ github.sha }}`nRun: $env:GITHUB_RUN_URL"
+          } | ConvertTo-Json -Compress
+
+          curl.exe --silent --show-error --fail `
+            -X POST `
+            -H "Content-type: application/json" `
+            --data-binary $payload `
+            $env:SLACK_WEBHOOK_URL
