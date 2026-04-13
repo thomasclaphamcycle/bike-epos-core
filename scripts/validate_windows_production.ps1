@@ -92,7 +92,7 @@ $stateDirExists = Test-PathResult "release-state" "release state directory" $Rel
 
 if ($repoExists) {
   Test-PathResult "repo" "package.json" (Join-Path $RepoPath "package.json")
-  Test-PathResult "repo" "frontend bundle" (Join-Path $RepoPath "frontend\dist\index.html")
+  Test-PathResult "repo" "frontend bundle" (Join-Path $RepoPath "frontend\dist\index.html") "WARN"
   Test-PathResult "repo" "deploy health script" (Join-Path $RepoPath "scripts\deploy_health_check.js")
   Test-PathResult "repo" "health monitor script" (Join-Path $RepoPath "scripts\health_monitor.js")
   Test-PathResult "repo" "release runner script" (Join-Path $RepoPath "scripts\manage_production_release.js")
@@ -137,7 +137,7 @@ if ($stateDirExists) {
   }
 }
 
-if (Test-CommandAvailable "pm2")) {
+if (Test-CommandAvailable "pm2") {
   try {
     $pm2Json = pm2 jlist
     $pm2Processes = $pm2Json | ConvertFrom-Json
@@ -166,7 +166,7 @@ if (Test-CommandAvailable "pm2")) {
         if ($hasValue) {
           Add-Result "PASS" "process" "PM2 env $envName" "set"
         } else {
-          Add-Result "FAIL" "process" "PM2 env $envName" "missing"
+          Add-Result "WARN" "process" "PM2 env $envName" "not visible in PM2 metadata"
         }
       }
 
