@@ -90,6 +90,22 @@ const parseArgs = (argv) => {
 
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, "");
 
+const DEFAULT_PM2_PROCESS_NAMES = ["corepos", "corepos-backend"];
+
+const resolvePm2ProcessNames = () => {
+  const raw = process.env.COREPOS_PM2_PROCESS_NAMES;
+  if (!raw || !raw.trim()) {
+    return DEFAULT_PM2_PROCESS_NAMES;
+  }
+
+  const parsed = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return parsed.length > 0 ? parsed : DEFAULT_PM2_PROCESS_NAMES;
+};
+
 const baseUrl = normalizeBaseUrl(process.env.COREPOS_DEPLOY_BASE_URL || DEFAULT_BASE_URL);
 
 const resolveConfig = (options) => {
@@ -338,6 +354,7 @@ const readLiveVersionInfo = async () => {
 };
 
 const probePm2Status = () => {
+  const processNames = resolvePm2ProcessNames();
   const result = runCommand("pm2", ["jlist"], {
     capture: true,
     allowFailure: true,
@@ -347,7 +364,7 @@ const probePm2Status = () => {
     return {
       available: false,
       found: false,
-      processName: "corepos",
+      processName: processNames.join(", "),
       status: null,
     };
   }
@@ -365,14 +382,17 @@ const probePm2Status = () => {
             processInfo.pm2_env && typeof processInfo.pm2_env.name === "string"
               ? processInfo.pm2_env.name
               : "";
-          return topLevelName === "corepos" || pm2EnvName === "corepos";
+          return processNames.includes(topLevelName) || processNames.includes(pm2EnvName);
         })
       : null;
 
     return {
       available: true,
       found: Boolean(coreposProcess),
-      processName: "corepos",
+      processName:
+        coreposProcess && typeof coreposProcess.name === "string" && coreposProcess.name.trim()
+          ? coreposProcess.name
+          : processNames.join(", "),
       status:
         coreposProcess &&
         coreposProcess.pm2_env &&
@@ -384,7 +404,7 @@ const probePm2Status = () => {
     return {
       available: true,
       found: false,
-      processName: "corepos",
+      processName: processNames.join(", "),
       status: null,
     };
   }
@@ -498,7 +518,7 @@ const buildSummaryMarkdown = (config, result) => {
     `- Current release before ${result.operation}: ${formatRelease(result.currentBefore)} (${result.currentBefore.commit || "unknown"})`,
     `- Target release: ${formatRelease(result.targetRelease)} (${result.targetRelease?.commit || "unknown"})`,
     `- Entrypoint outcome: ${result.entrypoint.outcome}`,
-    `- PM2 status after entrypoint: ${result.pm2.available ? (result.pm2.found ? result.pm2.status || "unknown" : "corepos process not found") : "pm2 unavailable"}`,
+    `- PM2 status after entrypoint: ${result.pm2.available ? (result.pm2.found ? `${result.pm2.processName}: ${result.pm2.status || "unknown"}` : `${result.pm2.processName} process not found`) : "pm2 unavailable"}`,
     `- Health-check result: ${result.healthCheck.outcome}`,
     `- Final deployed release: ${result.finalRelease ? `${formatRelease(result.finalRelease)} (${result.finalRelease.commit})` : "not confirmed"}`,
     `- Known-good release history updated: ${result.historyUpdated ? "yes" : "no"}`,
@@ -638,7 +658,7 @@ const executeDeploy = async (config) => {
     pm2: {
       available: false,
       found: false,
-      processName: "corepos",
+      processName: resolvePm2ProcessNames().join(", "),
       status: null,
     },
     rollbackSelection: null,
@@ -705,7 +725,7 @@ const executeRollback = async (config) => {
     pm2: {
       available: false,
       found: false,
-      processName: "corepos",
+      processName: resolvePm2ProcessNames().join(", "),
       status: null,
     },
     rollbackSelection: null,

@@ -3,7 +3,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
-const HEALTH_URL = process.env.COREPOS_HEALTH_URL || "http://127.0.0.1:3000/health";
+const HEALTH_URL = process.env.COREPOS_HEALTH_URL || "http://127.0.0.1:3000/health?details=1";
 const REQUEST_TIMEOUT_MS = 3000;
 const STATE_HEALTHY = "HEALTHY";
 const STATE_UNHEALTHY = "UNHEALTHY";

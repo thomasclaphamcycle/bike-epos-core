@@ -201,6 +201,33 @@ Windows self-hosted deploy and rollback now use the same repo-controlled release
    - `/purchasing`
    - `/management`
 
+For the target Windows 11 local-server setup, the repo currently assumes this server-side contract:
+
+- the runtime checkout lives at `C:\CorePOS`
+- the durable release-state folder lives at `C:\CorePOS\.corepos-runtime`
+- the external handoff script exists at `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+- that handoff script performs the install/build/migrate/restart work needed to leave the app healthy again on `http://127.0.0.1:3000`
+- PM2 manages the backend under the process name `corepos`
+- the self-hosted GitHub Actions runner runs on the same machine and can reach:
+  - `C:\CorePOS`
+  - `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+  - `http://127.0.0.1:3000`
+
+If you are fronting the server with Cloudflare Tunnel, set `PUBLIC_APP_URL` to the exact customer-facing hostname carried by that tunnel so workshop/public links match the externally reachable URL.
+
+For health monitoring on this Windows setup, use exactly one recurring production monitor:
+
+- a Windows Scheduled Task that runs `npm run health:check` from `C:\CorePOS` every 5 minutes
+- or the repo's scheduled `CorePOS Health Monitor` GitHub Actions workflow on the self-hosted runner
+
+Because `scripts/health_monitor.js` is stateful, it records transitions in `C:\CorePOS\.corepos-runtime\health-state.json` and sends Slack only when the state changes. Even so, keeping both schedulers active at once is still unnecessary and can create duplicate transition alerts.
+
+Before reopening the shop after a server rebuild, validate the machine assumptions directly from PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/validate_windows_production.ps1
+```
+
 The Unix helper script still protects against dirty-checkout upgrades and uses `git pull --ff-only`. The Windows self-hosted auto-deploy path now prefers a deterministic force-sync because the runtime checkout can pick up local drift from prior installs.
 
 If a release introduces unexpected operational issues, restore the backup and roll back to the last known-good release.
