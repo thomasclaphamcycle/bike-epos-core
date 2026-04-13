@@ -169,27 +169,30 @@ npx prisma migrate deploy
 npm run build
 ```
 
-Windows self-hosted auto-deploy now uses a safer repo sync and verification flow around the existing runtime entrypoint:
+Windows self-hosted deploy and rollback now use the same repo-controlled release runner around the existing runtime entrypoint:
 
-1. capture the currently deployed commit from `C:\CorePOS`
-2. force-sync the checkout with:
+1. keep durable release state under `C:\CorePOS\.corepos-runtime\`
+2. for deploy, force-sync the checkout with:
    - `git fetch origin --prune`
    - `git reset --hard origin/main`
    - `git clean -fd`
-3. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
-4. verify:
+3. for rollback, select either:
+   - `previous_successful`
+   - `specific_sha` that already exists in the known-good release history
+4. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+5. verify:
    - `http://127.0.0.1:3000/health?details=1`
    - `http://127.0.0.1:3000/api/system/version`
    - `http://127.0.0.1:3000/login`
-5. if deployment fails, the workflow surfaces:
-   - the previous commit hash
-   - the target commit hash
+6. only after the health checks pass, record the release as known-good
+7. if deploy or rollback fails, the workflow surfaces:
+   - the current checkout commit hash
+   - the target commit hash when known
    - PM2/process diagnostics when available
    - direct endpoint probe output
-   - an operator rollback candidate command
+   - a release summary for the incident record
 
-6. restart the production process using your process manager
-7. smoke-check:
+8. smoke-check:
    - `/login`
    - `/home`
    - `/pos`
@@ -202,16 +205,9 @@ The Unix helper script still protects against dirty-checkout upgrades and uses `
 
 If a release introduces unexpected operational issues, restore the backup and roll back to the last known-good release.
 
-Current operator rollback candidate for the Windows self-hosted host:
+Use the `Rollback CorePOS Production` GitHub Actions workflow instead of hand-running `git reset` commands on the host.
 
-```cmd
-cd /d C:\CorePOS
-git reset --hard <previous-commit-from-workflow>
-git clean -fd
-call "C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd"
-```
-
-If the failed deploy applied a bad production migration, restore the verified database backup before rolling the code back.
+If the rollback target is missing migration directories present in the current checkout, or if the failed deploy applied a bad production migration, restore the verified database backup before reopening the app on the rolled-back code.
 
 ## 7. Recovery Procedures
 
@@ -227,7 +223,7 @@ If the database is corrupted or a bad release must be reversed:
 
 1. stop the app
 2. restore the most recent verified backup
-3. redeploy the last known-good release
+3. run the `Rollback CorePOS Production` workflow to redeploy the last known-good release
 4. restart the app
 5. verify login and a small set of core workflows before resuming use
 

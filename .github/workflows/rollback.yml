@@ -1,16 +1,27 @@
-name: Deploy to CorePOS Server
+name: Rollback CorePOS Production
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      rollback_target:
+        description: Roll back to the previous known-good release or a specific known-good SHA
+        required: true
+        default: previous_successful
+        type: choice
+        options:
+          - previous_successful
+          - specific_sha
+      commit_sha:
+        description: Specific known-good commit SHA to roll back to when rollback_target is specific_sha
+        required: false
+        type: string
 
 concurrency:
   group: corepos-production-deploy
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  rollback:
     runs-on: self-hosted
     timeout-minutes: 30
     env:
@@ -24,26 +35,42 @@ jobs:
       COREPOS_ROLLBACK_WORKFLOW_NAME: Rollback CorePOS Production
 
     steps:
-      - name: Checkout deployment logic
+      - name: Checkout release logic
         uses: actions/checkout@v4
 
-      - name: Validate runtime checkout
+      - name: Validate rollback input
         shell: powershell
+        env:
+          COREPOS_ROLLBACK_TARGET: ${{ inputs.rollback_target }}
+          COREPOS_ROLLBACK_SHA: ${{ inputs.commit_sha }}
         run: |
           $ErrorActionPreference = "Stop"
+
           if (-not (Test-Path $env:COREPOS_REPO_PATH)) {
             throw "CorePOS runtime checkout was not found at $env:COREPOS_REPO_PATH"
+          }
+
+          if ($env:COREPOS_ROLLBACK_TARGET -eq "specific_sha" -and [string]::IsNullOrWhiteSpace($env:COREPOS_ROLLBACK_SHA)) {
+            throw "commit_sha is required when rollback_target is specific_sha."
           }
 
           Write-Host "Runtime checkout: $env:COREPOS_REPO_PATH"
           git -C $env:COREPOS_REPO_PATH status --short --branch
           git -C $env:COREPOS_REPO_PATH log --oneline -1
 
-      - name: Run shared deploy release flow
+      - name: Run shared rollback flow
         shell: powershell
+        env:
+          COREPOS_ROLLBACK_TARGET: ${{ inputs.rollback_target }}
+          COREPOS_ROLLBACK_SHA: ${{ inputs.commit_sha }}
         run: |
           $ErrorActionPreference = "Stop"
-          node scripts/manage_production_release.js deploy
+          $args = @("scripts/manage_production_release.js", "rollback", "--target", $env:COREPOS_ROLLBACK_TARGET)
+          if ($env:COREPOS_ROLLBACK_TARGET -eq "specific_sha") {
+            $args += @("--sha", $env:COREPOS_ROLLBACK_SHA.Trim())
+          }
+
+          node @args
 
       - name: Capture failure diagnostics
         if: failure()
@@ -67,7 +94,7 @@ jobs:
             Write-Host "PM2 logs corepos (last 120 lines):"
             pm2 logs corepos --lines 120 --nostream
           } else {
-            Write-Warning "pm2 is not available on PATH for deploy diagnostics."
+            Write-Warning "pm2 is not available on PATH for rollback diagnostics."
           }
 
           foreach ($path in @("/health?details=1", "/api/system/version", "/login")) {
@@ -89,9 +116,6 @@ jobs:
             }
           }
 
-          Write-Host ""
-          Write-Host "Next step: run the Rollback CorePOS Production workflow and choose previous_successful or a specific known-good SHA."
-
       - name: Publish release summary
         if: always()
         shell: powershell
@@ -100,5 +124,5 @@ jobs:
           if (Test-Path $summaryPath) {
             Get-Content -Raw $summaryPath | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           } else {
-            "## CorePOS deploy`n`n- No release summary file was produced." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "## CorePOS rollback`n`n- No release summary file was produced." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           }
