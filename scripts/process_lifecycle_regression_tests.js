@@ -9,6 +9,7 @@ const {
   listListeningPidsForPort,
   pidExists,
   signalCodeToExitCode,
+  terminateChildProcess,
   waitForPortFree,
 } = require("./process_lifecycle");
 
@@ -44,20 +45,38 @@ const waitForFile = async (filePath, timeoutMs = 5000) => {
   throw new Error(`Timed out waiting for ${filePath}`);
 };
 
-const waitForHealth = async (baseUrl, timeoutMs = 15000) => {
+const waitForHealth = async (
+  baseUrl,
+  { timeoutMs = 30000, pollIntervalMs = 150, child = null, label = "child process" } = {},
+) => {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
+    if (child && child.exitCode === null && child.signalCode === null && !pidExists(child.pid)) {
+      throw new Error(`${label} exited before health became available at ${baseUrl}/health`);
+    }
+
     try {
-      const response = await fetch(`${baseUrl}/health`);
+      const response = await fetch(`${baseUrl}/health`, {
+        signal: AbortSignal.timeout(1000),
+      });
       if (response.ok) {
         return;
       }
     } catch {
       // Keep polling.
     }
-    await sleep(100);
+
+    await sleep(pollIntervalMs);
   }
-  throw new Error(`Timed out waiting for health at ${baseUrl}/health`);
+
+  const listenerCount = listListeningPidsForPort(new URL(baseUrl).port).length;
+  const childStatus =
+    child && child.pid
+      ? `pid=${child.pid} exitCode=${child.exitCode ?? "running"} signal=${child.signalCode ?? "none"}`
+      : "no child status";
+  throw new Error(
+    `Timed out waiting for health at ${baseUrl}/health (${label}, listeners=${listenerCount}, ${childStatus})`,
+  );
 };
 
 const waitForExit = (child) =>
@@ -139,12 +158,21 @@ const runSmokeWrapperSignalRegression = async () => {
     },
   );
 
-  await waitForHealth(baseUrl);
-  process.kill(child.pid, "SIGINT");
-  const result = await waitForExit(child);
+  try {
+    await waitForHealth(baseUrl, { child, label: "run_smoke_test wrapper" });
+    process.kill(child.pid, "SIGINT");
+    const result = await waitForExit(child);
 
-  assert.equal(result.code, 130, "Expected run_smoke_test SIGINT exit code");
-  await assertClean(port, markerDir);
+    assert.equal(result.code, 130, "Expected run_smoke_test SIGINT exit code");
+    await assertClean(port, markerDir);
+  } finally {
+    if (pidExists(child.pid)) {
+      await terminateChildProcess(child, {
+        label: "run_smoke_test wrapper cleanup",
+        log: (message) => console.log(`[process-lifecycle] ${message}`),
+      });
+    }
+  }
 };
 
 const runTestEnvSignalRegression = async () => {
@@ -170,12 +198,21 @@ const runTestEnvSignalRegression = async () => {
     },
   );
 
-  await waitForHealth(baseUrl);
-  process.kill(child.pid, "SIGTERM");
-  const result = await waitForExit(child);
+  try {
+    await waitForHealth(baseUrl, { child, label: "run_with_test_env wrapper" });
+    process.kill(child.pid, "SIGTERM");
+    const result = await waitForExit(child);
 
-  assert.equal(result.code, 143, "Expected run_with_test_env SIGTERM exit code");
-  await assertClean(port, markerDir);
+    assert.equal(result.code, 143, "Expected run_with_test_env SIGTERM exit code");
+    await assertClean(port, markerDir);
+  } finally {
+    if (pidExists(child.pid)) {
+      await terminateChildProcess(child, {
+        label: "run_with_test_env wrapper cleanup",
+        log: (message) => console.log(`[process-lifecycle] ${message}`),
+      });
+    }
+  }
 };
 
 const runTestEnvTsNodeRegression = async () => {
@@ -204,22 +241,31 @@ const runTestEnvTsNodeRegression = async () => {
     },
   );
 
-  await waitForHealth(baseUrl);
-  await waitForFile(serverPidFile);
+  try {
+    await waitForHealth(baseUrl, { child, label: "run_with_test_env ts-node wrapper" });
+    await waitForFile(serverPidFile);
 
-  assert.equal(
-    pidExists(child.pid),
-    true,
-    "Expected run_with_test_env wrapper to stay alive for ts-node server",
-  );
+    assert.equal(
+      pidExists(child.pid),
+      true,
+      "Expected run_with_test_env wrapper to stay alive for ts-node server",
+    );
 
-  process.kill(child.pid, "SIGTERM");
-  const result = await waitForExit(child);
-  const serverPid = readPid(serverPidFile);
+    process.kill(child.pid, "SIGTERM");
+    const result = await waitForExit(child);
+    const serverPid = readPid(serverPidFile);
 
-  assert.equal(result.code, 143, "Expected ts-node run_with_test_env SIGTERM exit code");
-  assert.equal(await waitForPortFree(port, 5000), true, `Expected port ${port} to be released`);
-  assert.equal(pidExists(serverPid), false, `Expected ts-node server pid ${serverPid} to exit`);
+    assert.equal(result.code, 143, "Expected ts-node run_with_test_env SIGTERM exit code");
+    assert.equal(await waitForPortFree(port, 5000), true, `Expected port ${port} to be released`);
+    assert.equal(pidExists(serverPid), false, `Expected ts-node server pid ${serverPid} to exit`);
+  } finally {
+    if (pidExists(child.pid)) {
+      await terminateChildProcess(child, {
+        label: "run_with_test_env ts-node cleanup",
+        log: (message) => console.log(`[process-lifecycle] ${message}`),
+      });
+    }
+  }
 };
 
 const runStartTestServerSignalRegression = async () => {
@@ -235,14 +281,23 @@ const runStartTestServerSignalRegression = async () => {
     },
   });
 
-  await waitForHealth(baseUrl);
-  assert.equal(pidExists(child.pid), true, "Expected start_test_server process to stay alive");
+  try {
+    await waitForHealth(baseUrl, { child, label: "start_test_server" });
+    assert.equal(pidExists(child.pid), true, "Expected start_test_server process to stay alive");
 
-  process.kill(child.pid, "SIGTERM");
-  const result = await waitForExit(child);
+    process.kill(child.pid, "SIGTERM");
+    const result = await waitForExit(child);
 
-  assert.equal(result.code, 0, "Expected start_test_server SIGTERM to exit cleanly");
-  assert.equal(await waitForPortFree(port, 5000), true, `Expected port ${port} to be released`);
+    assert.equal(result.code, 0, "Expected start_test_server SIGTERM to exit cleanly");
+    assert.equal(await waitForPortFree(port, 5000), true, `Expected port ${port} to be released`);
+  } finally {
+    if (pidExists(child.pid)) {
+      await terminateChildProcess(child, {
+        label: "start_test_server cleanup",
+        log: (message) => console.log(`[process-lifecycle] ${message}`),
+      });
+    }
+  }
 };
 
 const main = async () => {

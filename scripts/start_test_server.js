@@ -44,26 +44,47 @@ const { startPrintAgentServer } = require(path.join(__dirname, "..", "print-agen
 let closed = false;
 let printAgentHandlePromise = null;
 let backendRuntimeInstalled = false;
+let shutdownPromise = null;
+
+const createShutdownTimer = (exitCode) => {
+  const timer = setTimeout(() => {
+    process.exit(exitCode);
+  }, 5000);
+  timer.unref();
+  return timer;
+};
 
 const stopPrintAgent = async ({ exitCode = 0, forceProcessExit = true } = {}) => {
-  if (closed) {
-    return;
+  if (shutdownPromise) {
+    return shutdownPromise;
   }
-  closed = true;
 
-  try {
-    const handle = await printAgentHandlePromise;
-    await handle?.close?.();
-  } catch {
-    // Best effort shutdown for the embedded test print agent.
-  } finally {
-    if (forceProcessExit) {
-      process.exit(exitCode);
+  shutdownPromise = (async () => {
+    if (closed) {
       return;
     }
+    closed = true;
 
-    process.exitCode = exitCode;
-  }
+    try {
+      const handle = await printAgentHandlePromise;
+      await handle?.close?.();
+    } catch {
+      // Best effort shutdown for the embedded test print agent.
+    } finally {
+      if (forceProcessExit) {
+        process.exit(exitCode);
+        return;
+      }
+
+      const shutdownTimer = createShutdownTimer(exitCode);
+      process.exitCode = exitCode;
+      process.once("exit", () => {
+        clearTimeout(shutdownTimer);
+      });
+    }
+  })();
+
+  return shutdownPromise;
 };
 
 process.once("SIGINT", () => {
