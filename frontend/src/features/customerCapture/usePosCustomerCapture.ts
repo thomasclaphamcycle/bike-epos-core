@@ -41,6 +41,27 @@ const getCaptureTargetScope = (target: PosCustomerCaptureTarget | null) => (
   target ? `${target.ownerType}:${getCaptureTargetId(target)}` : null
 );
 
+const getRelevantCaptureSession = (
+  captureSession: CustomerCaptureSession | null,
+  target: PosCustomerCaptureTarget | null,
+) => {
+  if (!captureSession) {
+    return null;
+  }
+
+  if (captureSession.status !== "COMPLETED") {
+    return captureSession;
+  }
+
+  const targetCustomerId = getCaptureTargetCustomer(target)?.id ?? null;
+  const completedCustomerId = captureSession.outcome?.customer.id ?? null;
+  if (!targetCustomerId || !completedCustomerId) {
+    return null;
+  }
+
+  return targetCustomerId === completedCustomerId ? captureSession : null;
+};
+
 export const usePosCustomerCapture = ({
   target,
   loadBasket,
@@ -52,9 +73,6 @@ export const usePosCustomerCapture = ({
   const targetRef = useRef<PosCustomerCaptureTarget | null>(target);
   const captureTargetScopeRef = useRef<string | null>(null);
   const announcedCaptureCompletionRef = useRef<string | null>(null);
-  const detachedCaptureScopeRef = useRef<string | null>(null);
-  const previousTargetScopeRef = useRef<string | null>(getCaptureTargetScope(target));
-  const previousTargetCustomerIdRef = useRef<string | null>(getCaptureTargetCustomer(target)?.id ?? null);
 
   const [captureSession, setCaptureSession] = useState<CustomerCaptureSession | null>(null);
   const [captureSessionLoading, setCaptureSessionLoading] = useState(false);
@@ -62,14 +80,18 @@ export const usePosCustomerCapture = ({
   const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
   const [captureCompletionSummary, setCaptureCompletionSummary] = useState<CaptureCompletionSummary | null>(null);
   const [captureSessionLaunchMode, setCaptureSessionLaunchMode] = useState<"fresh" | "replaced" | null>(null);
+  const relevantCaptureSession = useMemo(
+    () => getRelevantCaptureSession(captureSession, target),
+    [captureSession, target],
+  );
 
   const captureUrl = useMemo(() => {
-    if (!captureSession) {
+    if (!relevantCaptureSession) {
       return null;
     }
 
-    return buildCustomerCaptureEntryUrl(captureSession.token);
-  }, [captureSession]);
+    return buildCustomerCaptureEntryUrl(relevantCaptureSession.token);
+  }, [relevantCaptureSession]);
 
   const isCaptureEligible = Boolean(
     target
@@ -82,41 +104,16 @@ export const usePosCustomerCapture = ({
   }, [target]);
 
   useEffect(() => {
-    const currentScope = getCaptureTargetScope(target);
-    const previousScope = previousTargetScopeRef.current;
-    const currentCustomerId = getCaptureTargetCustomer(target)?.id ?? null;
-    const previousCustomerId = previousTargetCustomerIdRef.current;
-
-    if (currentScope && currentScope === previousScope && previousCustomerId && !currentCustomerId) {
-      detachedCaptureScopeRef.current = currentScope;
-      setCaptureSession(null);
-      setCaptureStatusError(null);
-      setCaptureSessionLoading(false);
-      setCaptureSessionLaunchMode(null);
-      setCaptureCompletionSummary(null);
-      announcedCaptureCompletionRef.current = null;
-    } else if (currentScope !== previousScope || currentCustomerId) {
-      detachedCaptureScopeRef.current = null;
-    }
-
-    previousTargetScopeRef.current = currentScope;
-    previousTargetCustomerIdRef.current = currentCustomerId;
-  }, [target]);
-
-  useEffect(() => {
     if (!captureCompletionSummary || !target) {
       return;
     }
 
     const currentCustomerId = getCaptureTargetCustomer(target)?.id ?? null;
-    if (!currentCustomerId) {
-      return;
-    }
-
     if (
-      captureCompletionSummary.ownerType === target.ownerType
-      && captureCompletionSummary.ownerId === getCaptureTargetId(target)
-      && captureCompletionSummary.customer.id !== currentCustomerId
+      !currentCustomerId
+      || captureCompletionSummary.ownerType !== target.ownerType
+      || captureCompletionSummary.ownerId !== getCaptureTargetId(target)
+      || captureCompletionSummary.customer.id !== currentCustomerId
     ) {
       setCaptureCompletionSummary(null);
     }
@@ -239,7 +236,6 @@ export const usePosCustomerCapture = ({
       if (!mountedRef.current || !isSameTarget(target, targetRef.current)) {
         return;
       }
-      detachedCaptureScopeRef.current = null;
       setCaptureSession(payload.session);
       setCaptureSessionLaunchMode(payload.replacedActiveSessionCount > 0 ? "replaced" : "fresh");
       setCaptureCompletionSummary(null);
@@ -300,7 +296,6 @@ export const usePosCustomerCapture = ({
     }
 
     captureTargetScopeRef.current = nextScope;
-    detachedCaptureScopeRef.current = null;
     setCaptureSession(null);
     setCaptureStatusError(null);
     setCaptureSessionLoading(false);
@@ -325,11 +320,6 @@ export const usePosCustomerCapture = ({
       setCaptureSessionLoading(false);
       setCaptureSessionLaunchMode(null);
       announcedCaptureCompletionRef.current = null;
-      return;
-    }
-
-    const currentScope = getCaptureTargetScope(target);
-    if (detachedCaptureScopeRef.current === currentScope) {
       return;
     }
 
@@ -377,7 +367,7 @@ export const usePosCustomerCapture = ({
 
   return {
     captureCompletionSummary,
-    captureSession,
+    captureSession: relevantCaptureSession,
     captureSessionLoading,
     captureSessionLaunchMode,
     captureStatusError,

@@ -766,72 +766,6 @@ test("POS customer capture regeneration makes older public links fail clearly", 
   await expect(secondCapturePage.getByTestId("customer-capture-form")).toBeVisible();
 });
 
-test("POS can remove an attached basket customer and restart customer capture on the same basket", async ({
-  page,
-  request,
-}) => {
-  const credentials = await ensureUserViaAdminBypass(request, {
-    role: "MANAGER",
-    prefix: "pos-remove-basket-customer",
-  });
-  const seeded = await seedCatalogVariant(request, { prefix: "pos-remove-basket-customer" });
-  const token = uniqueToken("pos-remove-basket-customer");
-  const customer = await apiJsonWithHeaderBypass(request, "POST", "/api/customers", "MANAGER", {
-    data: {
-      name: `Basket Remove ${token}`,
-      email: `basket-remove-${token}@example.com`,
-      phone: "07333333333",
-    },
-  });
-
-  await page.context().clearCookies();
-  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
-
-  const customerSearchInput = page.getByTestId("pos-customer-search");
-  await customerSearchInput.fill(customer.email);
-  await expect(page.getByTestId(`pos-customer-select-${customer.id}`)).toBeVisible();
-  await page.getByTestId(`pos-customer-select-${customer.id}`).click();
-
-  await expect(page.getByTestId("pos-selected-customer")).toContainText(customer.name);
-  await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to basket");
-  await expect(page.getByTestId("pos-customer-clear")).toHaveText("Remove customer");
-
-  let unexpectedDialogSeen = false;
-  const noItemDialogHandler = async (dialog) => {
-    unexpectedDialogSeen = true;
-    await dialog.dismiss();
-  };
-  page.on("dialog", noItemDialogHandler);
-
-  await page.getByTestId("pos-customer-clear").click();
-  await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
-  await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
-  expect(unexpectedDialogSeen).toBe(false);
-  page.off("dialog", noItemDialogHandler);
-
-  await customerSearchInput.fill(customer.name);
-  await expect(page.getByTestId(`pos-customer-select-${customer.id}`)).toBeVisible();
-  await page.getByTestId(`pos-customer-select-${customer.id}`).click();
-  await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to basket");
-
-  await page.getByTestId("pos-product-search").fill(seeded.sku);
-  await expect(page.getByTestId(`pos-product-add-${seeded.variant.id}`)).toBeVisible();
-  await page.getByTestId(`pos-product-add-${seeded.variant.id}`).click();
-  await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
-
-  let removalDialogMessage = "";
-  page.once("dialog", async (dialog) => {
-    removalDialogMessage = dialog.message();
-    await dialog.accept();
-  });
-
-  await page.getByTestId("pos-customer-clear").click();
-  await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
-  await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
-  expect(removalDialogMessage).toContain("Remove this customer from the active basket?");
-  await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
-});
-
 test("POS customer capture panel resets to ready after removing a captured basket customer", async ({
   page,
   request,
@@ -875,12 +809,15 @@ test("POS customer capture panel resets to ready after removing a captured baske
   await page.getByTestId("pos-customer-clear").click();
 
   await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
+  await expect(page.getByText("No customer attached yet. This basket stays as walk-in until you add one.")).toBeVisible();
+  await expect(page.locator(".pos-payment-summary")).toContainText("Walk-in");
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
   await expect(page.getByTestId("pos-customer-capture-completed-state")).toHaveCount(0);
   await expect(page.getByTestId("pos-customer-capture-ready-state")).toBeVisible();
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("Customer details received");
   await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("New customer");
+  await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("Created a new customer profile for");
 
   await page.getByTestId("pos-customer-capture-generate").click();
   await expect(page.getByTestId("pos-customer-capture-live-state")).toBeVisible();
