@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getCustomerCapturePublicPageErrorMessage,
+  getPublicCustomerCaptureStationEntry,
   getPublicSaleCustomerCaptureSession,
   submitPublicSaleCustomerCapture,
   type PublicCustomerCaptureSessionState,
@@ -30,13 +31,22 @@ const getCaptureContextLabel = (ownerType: "sale" | "basket") => (
 );
 
 export const CustomerCapturePage = () => {
-  const { token: routeToken } = useParams();
+  const { token: routeToken, station: routeStation } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = useMemo(
     () => routeToken?.trim() || searchParams.get("token")?.trim() || null,
     [routeToken, searchParams],
   );
+  const station = useMemo(
+    () => routeStation?.trim() || null,
+    [routeStation],
+  );
   const [session, setSession] = useState<PublicCustomerCaptureSessionState["session"] | null>(null);
+  const [entryStation, setEntryStation] = useState<{
+    key: string;
+    entryPath: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState<CaptureFormState>(defaultFormState);
@@ -50,14 +60,47 @@ export const CustomerCapturePage = () => {
 
     const load = async () => {
       if (!token) {
+        if (station) {
+          setLoading(true);
+          setLoadError(null);
+          setResult(null);
+          setSubmitError(null);
+          try {
+            const payload = await getPublicCustomerCaptureStationEntry(station);
+            if (!cancelled) {
+              setEntryStation(payload.station);
+              if (payload.session?.token) {
+                navigate(`/customer-capture?token=${encodeURIComponent(payload.session.token)}`, {
+                  replace: true,
+                });
+                return;
+              }
+              setSession(null);
+            }
+          } catch (error) {
+            if (!cancelled) {
+              setEntryStation(null);
+              setSession(null);
+              setLoadError(getCustomerCapturePublicPageErrorMessage(error));
+            }
+          } finally {
+            if (!cancelled) {
+              setLoading(false);
+            }
+          }
+          return;
+        }
+
         setLoading(false);
         setSession(null);
+        setEntryStation(null);
         setLoadError(null);
         setResult(null);
         return;
       }
 
       setLoading(true);
+      setEntryStation(null);
       setLoadError(null);
       setResult(null);
       setSubmitError(null);
@@ -83,7 +126,7 @@ export const CustomerCapturePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [token, reloadNonce]);
+  }, [navigate, reloadNonce, station, token]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,6 +165,7 @@ export const CustomerCapturePage = () => {
 
   const isActive = session?.status === "ACTIVE" && !result;
   const isReplaced = session?.status === "EXPIRED" && session.isReplaced;
+  const isWaitingForEntrySession = !token;
   const contextLabel = getCaptureContextLabel(result?.session.ownerType ?? session?.ownerType ?? "sale");
   const startedAtLabel = session?.createdAt
     ? new Date(session.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -134,19 +178,33 @@ export const CustomerCapturePage = () => {
     <div className="page-shell customer-capture-shell">
       <section className="card customer-capture-card">
         <div className="customer-capture-heading">
-          <span className="status-badge status-complete">Tap opened a secure customer form</span>
-          <h1>Share your details for this {contextLabel}</h1>
+          <span className="status-badge status-complete">
+            {isWaitingForEntrySession ? "Customer capture tap point" : "Tap opened a secure customer form"}
+          </span>
+          <h1>{isWaitingForEntrySession ? "Share your details when staff starts the request" : `Share your details for this ${contextLabel}`}</h1>
           <p className="muted-text">
-            This takes under a minute. Enter your name and at least one contact method so staff can attach it to today&apos;s {contextLabel}.
+            {isWaitingForEntrySession
+              ? "Staff will start a live tap request on the till when they are ready for your details."
+              : `This takes under a minute. Enter your name and at least one contact method so staff can attach it to today&apos;s ${contextLabel}.`}
           </p>
         </div>
 
         {loading ? <p>Loading link...</p> : null}
 
-        {!loading && !token ? (
-          <div className="quick-create-panel customer-capture-state-card">
-            <strong>No active customer capture yet</strong>
-            <p className="muted-text">Ask staff to start a new tap request on the till, then tap your phone again.</p>
+        {!loading && !token && !loadError ? (
+          <div
+            className="quick-create-panel customer-capture-state-card"
+            data-testid={station ? "customer-capture-entry-waiting" : "customer-capture-no-token"}
+          >
+            <strong>{station ? "Waiting for a live tap request" : "No active customer capture yet"}</strong>
+            <p className="muted-text">
+              Ask staff to start a new tap request on the till, then tap your phone again.
+            </p>
+            {entryStation ? (
+              <p className="muted-text">
+                Tap point: {entryStation.key}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

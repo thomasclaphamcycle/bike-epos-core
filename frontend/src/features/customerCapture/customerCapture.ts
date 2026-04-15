@@ -1,4 +1,5 @@
 import { ApiError, apiGet, apiPost } from "../../api/client";
+import { getStoredReceiptWorkstationKey } from "../receipts/receiptWorkstation";
 
 export type CaptureSessionStatus = "ACTIVE" | "COMPLETED" | "EXPIRED";
 export type CustomerCaptureOwnerType = "sale" | "basket";
@@ -7,6 +8,10 @@ export type CustomerCaptureSession = {
   id: string;
   saleId: string | null;
   basketId: string | null;
+  station: {
+    key: string;
+    entryPath: string;
+  } | null;
   ownerType: CustomerCaptureOwnerType;
   token: string;
   status: CaptureSessionStatus;
@@ -45,6 +50,20 @@ export type PublicCustomerCaptureSessionState = {
     isReplaced: boolean;
     ownerType: CustomerCaptureOwnerType;
   };
+};
+
+export type PublicCustomerCaptureStationEntryResponse = {
+  station: {
+    key: string;
+    entryPath: string;
+  } | null;
+  session: {
+    token: string;
+    ownerType: CustomerCaptureOwnerType;
+    publicPath: string;
+    expiresAt: string;
+    createdAt: string;
+  } | null;
 };
 
 export type PublicCustomerCaptureSubmitResponse = {
@@ -86,6 +105,12 @@ export const getPublicAppOrigin = () => {
 export const buildCustomerCaptureEntryUrl = (token: string) =>
   `${getPublicAppOrigin()}/customer-capture?token=${encodeURIComponent(token)}`;
 
+const DEFAULT_CUSTOMER_CAPTURE_STATION_KEY = "TILL_PC";
+
+const getCurrentCustomerCaptureStationKey = () => (
+  getStoredReceiptWorkstationKey() ?? DEFAULT_CUSTOMER_CAPTURE_STATION_KEY
+);
+
 export const getCurrentSaleCustomerCaptureSession = (saleId: string) =>
   apiGet<CurrentCustomerCaptureSessionResponse>(
     `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions/current`,
@@ -94,7 +119,9 @@ export const getCurrentSaleCustomerCaptureSession = (saleId: string) =>
 export const createSaleCustomerCaptureSession = (saleId: string) =>
   apiPost<CreateCustomerCaptureSessionResponse>(
     `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions`,
-    {},
+    {
+      stationKey: getCurrentCustomerCaptureStationKey(),
+    },
   );
 
 export const getCurrentBasketCustomerCaptureSession = (basketId: string) =>
@@ -105,7 +132,14 @@ export const getCurrentBasketCustomerCaptureSession = (basketId: string) =>
 export const createBasketCustomerCaptureSession = (basketId: string) =>
   apiPost<CreateCustomerCaptureSessionResponse>(
     `/api/baskets/${encodeURIComponent(basketId)}/customer-capture-sessions`,
-    {},
+    {
+      stationKey: getCurrentCustomerCaptureStationKey(),
+    },
+  );
+
+export const getPublicCustomerCaptureStationEntry = (station: string) =>
+  apiGet<PublicCustomerCaptureStationEntryResponse>(
+    `/api/public/customer-capture/entry/${encodeURIComponent(station)}`,
   );
 
 export const getPublicSaleCustomerCaptureSession = (token: string) =>
@@ -146,6 +180,8 @@ export const getCustomerCapturePublicPageErrorMessage = (error: unknown) => {
       return "This customer capture link has expired. Please ask staff for a new one.";
     case "CUSTOMER_CAPTURE_REPLACED":
       return "This link has been replaced by a newer one. Please ask staff for the latest customer link.";
+    case "CUSTOMER_CAPTURE_STATION_NOT_FOUND":
+      return "This tap point is not configured yet.";
     case "CUSTOMER_CAPTURE_COMPLETED":
       return "This customer capture link has already been used.";
     case "INVALID_CUSTOMER_CAPTURE":

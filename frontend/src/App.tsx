@@ -731,6 +731,7 @@ export const App = () => {
       <Routes>
         <Route path="/receipt-upload/:token" element={<CashReceiptUploadPage />} />
         <Route path="/customer-capture" element={<CustomerCapturePage />} />
+        <Route path="/customer-capture/entry/:station" element={<CustomerCapturePage />} />
         <Route path="/customer-capture/:token" element={<CustomerCapturePage />} />
         <Route path="/public/workshop/:token" element={<WorkshopQuotePage />} />
         <Route path="/quote/:token" element={<WorkshopQuotePage />} />
