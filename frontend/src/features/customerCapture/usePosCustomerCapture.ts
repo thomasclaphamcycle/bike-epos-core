@@ -48,6 +48,8 @@ export const usePosCustomerCapture = ({
   const targetRef = useRef<PosCustomerCaptureTarget | null>(target);
   const captureTargetScopeRef = useRef<string | null>(null);
   const announcedCaptureCompletionRef = useRef<string | null>(null);
+  const detachedCaptureScopeRef = useRef<string | null>(null);
+  const previousTargetCustomerIdRef = useRef<string | null>(getCaptureTargetCustomer(target)?.id ?? null);
 
   const [captureSession, setCaptureSession] = useState<CustomerCaptureSession | null>(null);
   const [captureSessionLoading, setCaptureSessionLoading] = useState(false);
@@ -72,6 +74,26 @@ export const usePosCustomerCapture = ({
 
   useEffect(() => {
     targetRef.current = target;
+  }, [target]);
+
+  useEffect(() => {
+    const currentScope = target ? `${target.ownerType}:${getCaptureTargetId(target)}` : null;
+    const currentCustomerId = getCaptureTargetCustomer(target)?.id ?? null;
+    const previousCustomerId = previousTargetCustomerIdRef.current;
+
+    if (currentScope && previousCustomerId && !currentCustomerId) {
+      detachedCaptureScopeRef.current = currentScope;
+      setCaptureSession(null);
+      setCaptureStatusError(null);
+      setCaptureSessionLoading(false);
+      setCaptureSessionLaunchMode(null);
+      setCaptureCompletionSummary(null);
+      announcedCaptureCompletionRef.current = null;
+    } else if (currentCustomerId) {
+      detachedCaptureScopeRef.current = null;
+    }
+
+    previousTargetCustomerIdRef.current = currentCustomerId;
   }, [target]);
 
   useEffect(() => {
@@ -191,6 +213,7 @@ export const usePosCustomerCapture = ({
       if (!mountedRef.current || !isSameTarget(target, targetRef.current)) {
         return;
       }
+      detachedCaptureScopeRef.current = null;
       setCaptureSession(payload.session);
       setCaptureSessionLaunchMode(payload.replacedActiveSessionCount > 0 ? "replaced" : "fresh");
       setCaptureCompletionSummary(null);
@@ -251,6 +274,7 @@ export const usePosCustomerCapture = ({
     }
 
     captureTargetScopeRef.current = nextScope;
+    detachedCaptureScopeRef.current = null;
     setCaptureSession(null);
     setCaptureStatusError(null);
     setCaptureSessionLoading(false);
@@ -275,6 +299,11 @@ export const usePosCustomerCapture = ({
       setCaptureSessionLoading(false);
       setCaptureSessionLaunchMode(null);
       announcedCaptureCompletionRef.current = null;
+      return;
+    }
+
+    const currentScope = `${target.ownerType}:${getCaptureTargetId(target)}`;
+    if (detachedCaptureScopeRef.current === currentScope) {
       return;
     }
 
