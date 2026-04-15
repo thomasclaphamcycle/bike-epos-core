@@ -37,6 +37,10 @@ const isSameTarget = (
   && getCaptureTargetId(left) === getCaptureTargetId(right)
 );
 
+const getCaptureTargetScope = (target: PosCustomerCaptureTarget | null) => (
+  target ? `${target.ownerType}:${getCaptureTargetId(target)}` : null
+);
+
 export const usePosCustomerCapture = ({
   target,
   loadBasket,
@@ -49,6 +53,7 @@ export const usePosCustomerCapture = ({
   const captureTargetScopeRef = useRef<string | null>(null);
   const announcedCaptureCompletionRef = useRef<string | null>(null);
   const detachedCaptureScopeRef = useRef<string | null>(null);
+  const previousTargetScopeRef = useRef<string | null>(getCaptureTargetScope(target));
   const previousTargetCustomerIdRef = useRef<string | null>(getCaptureTargetCustomer(target)?.id ?? null);
 
   const [captureSession, setCaptureSession] = useState<CustomerCaptureSession | null>(null);
@@ -77,11 +82,12 @@ export const usePosCustomerCapture = ({
   }, [target]);
 
   useEffect(() => {
-    const currentScope = target ? `${target.ownerType}:${getCaptureTargetId(target)}` : null;
+    const currentScope = getCaptureTargetScope(target);
+    const previousScope = previousTargetScopeRef.current;
     const currentCustomerId = getCaptureTargetCustomer(target)?.id ?? null;
     const previousCustomerId = previousTargetCustomerIdRef.current;
 
-    if (currentScope && previousCustomerId && !currentCustomerId) {
+    if (currentScope && currentScope === previousScope && previousCustomerId && !currentCustomerId) {
       detachedCaptureScopeRef.current = currentScope;
       setCaptureSession(null);
       setCaptureStatusError(null);
@@ -89,12 +95,32 @@ export const usePosCustomerCapture = ({
       setCaptureSessionLaunchMode(null);
       setCaptureCompletionSummary(null);
       announcedCaptureCompletionRef.current = null;
-    } else if (currentCustomerId) {
+    } else if (currentScope !== previousScope || currentCustomerId) {
       detachedCaptureScopeRef.current = null;
     }
 
+    previousTargetScopeRef.current = currentScope;
     previousTargetCustomerIdRef.current = currentCustomerId;
   }, [target]);
+
+  useEffect(() => {
+    if (!captureCompletionSummary || !target) {
+      return;
+    }
+
+    const currentCustomerId = getCaptureTargetCustomer(target)?.id ?? null;
+    if (!currentCustomerId) {
+      return;
+    }
+
+    if (
+      captureCompletionSummary.ownerType === target.ownerType
+      && captureCompletionSummary.ownerId === getCaptureTargetId(target)
+      && captureCompletionSummary.customer.id !== currentCustomerId
+    ) {
+      setCaptureCompletionSummary(null);
+    }
+  }, [captureCompletionSummary, target]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -268,7 +294,7 @@ export const usePosCustomerCapture = ({
   };
 
   useEffect(() => {
-    const nextScope = target ? `${target.ownerType}:${getCaptureTargetId(target)}` : null;
+    const nextScope = getCaptureTargetScope(target);
     if (captureTargetScopeRef.current === nextScope) {
       return;
     }
@@ -302,7 +328,7 @@ export const usePosCustomerCapture = ({
       return;
     }
 
-    const currentScope = `${target.ownerType}:${getCaptureTargetId(target)}`;
+    const currentScope = getCaptureTargetScope(target);
     if (detachedCaptureScopeRef.current === currentScope) {
       return;
     }

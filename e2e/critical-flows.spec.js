@@ -692,6 +692,9 @@ test("POS customer capture works before checkout and carries the customer into t
 
   await page.goto(`${frontendBaseUrl}/pos`);
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-completed-state")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-ready-state")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await page.goto(`${frontendBaseUrl}/pos?saleId=${encodeURIComponent(saleId)}`);
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Taylor Rider");
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
@@ -878,6 +881,10 @@ test("POS customer capture panel resets to ready after removing a captured baske
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("Customer details received");
   await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("New customer");
+
+  await page.getByTestId("pos-customer-capture-generate").click();
+  await expect(page.getByTestId("pos-customer-capture-live-state")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-url")).toHaveValue(/customer-capture\?token=/);
 });
 
 test("POS customer capture is actionable on a fresh basket before any products are added", async ({
