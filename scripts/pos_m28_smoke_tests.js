@@ -64,6 +64,7 @@ const cleanup = async (state) => {
   const basketIds = Array.from(state.basketIds);
   const variantIds = Array.from(state.variantIds);
   const productIds = Array.from(state.productIds);
+  const customerIds = Array.from(state.customerIds);
   const userIds = Array.from(state.userIds);
 
   let saleItemIds = [];
@@ -184,6 +185,16 @@ const cleanup = async (state) => {
     });
   }
 
+  if (customerIds.length > 0) {
+    await prisma.customer.deleteMany({
+      where: {
+        id: {
+          in: customerIds,
+        },
+      },
+    });
+  }
+
   if (userIds.length > 0) {
     await prisma.user.deleteMany({
       where: {
@@ -201,6 +212,7 @@ const run = async () => {
     basketIds: new Set(),
     variantIds: new Set(),
     productIds: new Set(),
+    customerIds: new Set(),
     userIds: new Set(),
   };
 
@@ -299,6 +311,29 @@ const run = async () => {
     const basketId = createBasketRes.json.id;
     state.basketIds.add(basketId);
 
+    const customerRes = await fetchJson("/api/customers", {
+      method: "POST",
+      headers: managerHeaders,
+      body: JSON.stringify({
+        firstName: "Basket",
+        lastName: `Customer ${uniqueRef()}`,
+        email: `basket-customer-${uniqueRef()}@example.com`,
+        phone: "07111111111",
+      }),
+    });
+    assert.equal(customerRes.status, 201, JSON.stringify(customerRes.json));
+    state.customerIds.add(customerRes.json.id);
+
+    const attachCustomerRes = await fetchJson(`/api/baskets/${basketId}/customer`, {
+      method: "PATCH",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        customerId: customerRes.json.id,
+      }),
+    });
+    assert.equal(attachCustomerRes.status, 200, JSON.stringify(attachCustomerRes.json));
+    assert.equal(attachCustomerRes.json.customer.id, customerRes.json.id);
+
     const addLineRes = await fetchJson(`/api/baskets/${basketId}/lines`, {
       method: "POST",
       headers: staffHeaders,
@@ -318,8 +353,21 @@ const run = async () => {
     });
     assert.equal(patchLineRes.status, 200, JSON.stringify(patchLineRes.json));
     assert.equal(patchLineRes.json.items[0].quantity, 3);
+    assert.equal(patchLineRes.json.customer.id, customerRes.json.id);
 
-    const expectedTotal = patchLineRes.json.totals.totalPence;
+    const detachCustomerRes = await fetchJson(`/api/baskets/${basketId}/customer`, {
+      method: "PATCH",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        customerId: null,
+      }),
+    });
+    assert.equal(detachCustomerRes.status, 200, JSON.stringify(detachCustomerRes.json));
+    assert.equal(detachCustomerRes.json.customer, null);
+    assert.equal(detachCustomerRes.json.items.length, 1);
+    assert.equal(detachCustomerRes.json.items[0].quantity, 3);
+
+    const expectedTotal = detachCustomerRes.json.totals.totalPence;
 
     const checkoutRes = await fetchJson(`/api/baskets/${basketId}/checkout`, {
       method: "POST",
