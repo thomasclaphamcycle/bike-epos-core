@@ -592,7 +592,7 @@ test("React POS customer search, attach, change, and checkout preserves final cu
       return null;
     }
     return chip.textContent();
-  }).toContain("Selected for checkout");
+  }).toContain("Attached to basket");
 
   await page.getByTestId("pos-product-search").fill(seeded.barcode);
   await page.getByTestId("pos-product-search").press("Enter");
