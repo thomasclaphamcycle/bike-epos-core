@@ -39,6 +39,8 @@ const STAFF_HEADERS = {
   "X-Staff-Role": "MANAGER",
   "X-Staff-Id": "sale-customer-capture-smoke-manager",
 };
+const CAPTURE_STATION_KEY = "TILL_PC";
+const CAPTURE_STATION_SLUG = "till-pc";
 
 let sequence = 0;
 const uniqueRef = () => `${Date.now()}_${sequence++}`;
@@ -250,11 +252,13 @@ const addBasketItem = async (basketId, variantId) => {
   });
 };
 
-const createBasketCaptureSession = async (created, basketId) => {
+const createBasketCaptureSession = async (created, basketId, stationKey = CAPTURE_STATION_KEY) => {
   const payload = await apiJsonOrThrow({
     path: `/api/baskets/${encodeURIComponent(basketId)}/customer-capture-sessions`,
     method: "POST",
-    body: {},
+    body: {
+      stationKey,
+    },
     headers: STAFF_HEADERS,
   });
   created.sessionIds.add(payload.session.id);
@@ -269,11 +273,13 @@ const getCurrentBasketCaptureSession = async (basketId) => {
   });
 };
 
-const createCaptureSession = async (created, saleId) => {
+const createCaptureSession = async (created, saleId, stationKey = CAPTURE_STATION_KEY) => {
   const payload = await apiJsonOrThrow({
     path: `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions`,
     method: "POST",
-    body: {},
+    body: {
+      stationKey,
+    },
     headers: STAFF_HEADERS,
   });
   created.sessionIds.add(payload.session.id);
@@ -285,6 +291,13 @@ const getCurrentCaptureSession = async (saleId) => {
     path: `/api/sales/${encodeURIComponent(saleId)}/customer-capture-sessions/current`,
     method: "GET",
     headers: STAFF_HEADERS,
+  });
+};
+
+const getCurrentCaptureStationEntry = async (stationSlug = CAPTURE_STATION_SLUG) => {
+  return apiJsonOrThrow({
+    path: `/api/public/customer-capture/entry/${encodeURIComponent(stationSlug)}`,
+    method: "GET",
   });
 };
 
@@ -391,22 +404,45 @@ const run = async () => {
     const attachedBasketCreate = await apiJson({
       path: `/api/baskets/${encodeURIComponent(attachedBasket.id)}/customer-capture-sessions`,
       method: "POST",
-      body: {},
+      body: {
+        stationKey: CAPTURE_STATION_KEY,
+      },
       headers: STAFF_HEADERS,
     });
     assert.equal(attachedBasketCreate.status, 409);
     assert.equal(attachedBasketCreate.payload.error.code, "BASKET_CUSTOMER_ALREADY_ATTACHED");
 
+    const invalidStationEntry = await apiJson({
+      path: "/api/public/customer-capture/entry/not-a-real-station",
+      method: "GET",
+    });
+    assert.equal(invalidStationEntry.status, 404);
+    assert.equal(invalidStationEntry.payload.error.code, "CUSTOMER_CAPTURE_STATION_NOT_FOUND");
+
     const checkoutVariant = await createCheckoutReadyVariant(created, token);
     const preSaleBasket = await createBasket(created);
     const emptyCurrentBasketSession = await getCurrentBasketCaptureSession(preSaleBasket.id);
     assert.equal(emptyCurrentBasketSession.session, null);
+    const emptyStationEntry = await getCurrentCaptureStationEntry();
+    assert.equal(emptyStationEntry.station.key, CAPTURE_STATION_KEY);
+    assert.equal(emptyStationEntry.station.entryPath, `/customer-capture/entry/${CAPTURE_STATION_SLUG}`);
+    assert.equal(emptyStationEntry.session, null);
     await addBasketItem(preSaleBasket.id, checkoutVariant.id);
 
     const preSaleSessionPayload = await createBasketCaptureSession(created, preSaleBasket.id);
     assert.equal(preSaleSessionPayload.session.saleId, null);
     assert.equal(preSaleSessionPayload.session.basketId, preSaleBasket.id);
     assert.equal(preSaleSessionPayload.session.ownerType, "basket");
+    assert.equal(preSaleSessionPayload.session.station.key, CAPTURE_STATION_KEY);
+    assert.equal(
+      preSaleSessionPayload.session.station.entryPath,
+      `/customer-capture/entry/${CAPTURE_STATION_SLUG}`,
+    );
+
+    const activeStationEntry = await getCurrentCaptureStationEntry();
+    assert.equal(activeStationEntry.station.key, CAPTURE_STATION_KEY);
+    assert.equal(activeStationEntry.session.token, preSaleSessionPayload.session.token);
+    assert.equal(activeStationEntry.session.ownerType, "basket");
 
     const preSaleCurrentSession = await getCurrentBasketCaptureSession(preSaleBasket.id);
     assert.equal(preSaleCurrentSession.session.id, preSaleSessionPayload.session.id);
@@ -494,6 +530,9 @@ const run = async () => {
     });
     assert.equal(carryForwardSalePayload.sale.customer.id, carryForwardSubmit.customer.id);
 
+    const postCompleteStationEntry = await getCurrentCaptureStationEntry();
+    assert.equal(postCompleteStationEntry.session, null);
+
     const reusableSale = await createSale(created, location.id);
     const emptyCurrentSession = await getCurrentCaptureSession(reusableSale.id);
     assert.equal(emptyCurrentSession.session, null);
@@ -530,6 +569,21 @@ const run = async () => {
     });
     assert.equal(secondSessionState.session.status, "ACTIVE");
     assert.equal(secondSessionState.session.isReplaced, false);
+
+    const stationScopedFirstSale = await createSale(created, location.id);
+    const stationScopedFirstSession = await createCaptureSession(created, stationScopedFirstSale.id);
+    const stationScopedSecondSale = await createSale(created, location.id);
+    const stationScopedSecondSession = await createCaptureSession(created, stationScopedSecondSale.id);
+
+    const latestStationEntry = await getCurrentCaptureStationEntry();
+    assert.equal(latestStationEntry.session.token, stationScopedSecondSession.session.token);
+    assert.equal(latestStationEntry.session.ownerType, "sale");
+
+    const olderStationScopedTokenState = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(stationScopedFirstSession.session.token)}`,
+      method: "GET",
+    });
+    assert.equal(olderStationScopedTokenState.session.status, "ACTIVE");
 
     const replacedSubmit = await apiJson({
       path: `/api/public/customer-capture/${encodeURIComponent(firstSessionPayload.session.token)}`,

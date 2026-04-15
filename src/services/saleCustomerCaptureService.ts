@@ -4,6 +4,10 @@ import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName, normalizeNamePart } from "../utils/customerName";
 import { createAuditEvent, createAuditEventTx, type AuditActor } from "./auditService";
+import {
+  normalizeReceiptWorkstationKey,
+  toReceiptWorkstationSlug,
+} from "./receiptPrintStationService";
 
 const CUSTOMER_CAPTURE_SESSION_TTL_MINUTES = 15;
 
@@ -24,6 +28,7 @@ type CaptureSessionRecord = {
   id: string;
   saleId: string | null;
   basketId: string | null;
+  stationKey?: string | null;
   token: string;
   status: CaptureSessionStatus;
   matchType?: CustomerMatchType | "EMAIL" | "PHONE" | "CREATED" | null;
@@ -66,6 +71,10 @@ const normalizePhone = (value: string | undefined | null) => {
 const createSecureToken = () => crypto.randomBytes(24).toString("base64url");
 
 const toPublicPath = (token: string) => `/customer-capture/${encodeURIComponent(token)}`;
+
+const toPublicEntryPath = (stationKey: string) => (
+  `/customer-capture/entry/${encodeURIComponent(toReceiptWorkstationSlug(stationKey) ?? stationKey)}`
+);
 
 const toApiMatchType = (matchType: "EMAIL" | "PHONE" | "CREATED" | CustomerMatchType | null | undefined) => {
   if (!matchType) {
@@ -133,10 +142,23 @@ const toSessionOutcomePayload = (session: CaptureSessionRecord) => {
   };
 };
 
+const toStationPayload = (stationKey: string | null | undefined) => {
+  const normalizedStationKey = normalizeReceiptWorkstationKey(stationKey);
+  if (!normalizedStationKey) {
+    return null;
+  }
+
+  return {
+    key: normalizedStationKey,
+    entryPath: toPublicEntryPath(normalizedStationKey),
+  };
+};
+
 const toSessionPayload = (session: CaptureSessionRecord) => ({
   id: session.id,
   saleId: session.saleId ?? null,
   basketId: session.basketId ?? null,
+  station: toStationPayload(session.stationKey),
   ownerType: getOwnerType(session),
   token: session.token,
   status: session.status,
@@ -145,6 +167,14 @@ const toSessionPayload = (session: CaptureSessionRecord) => ({
   completedAt: session.completedAt ?? null,
   publicPath: toPublicPath(session.token),
   outcome: toSessionOutcomePayload(session),
+});
+
+const toStationEntrySessionPayload = (session: CaptureSessionRecord) => ({
+  token: session.token,
+  ownerType: getOwnerType(session),
+  publicPath: toPublicPath(session.token),
+  expiresAt: session.expiresAt,
+  createdAt: session.createdAt,
 });
 
 const toSessionState = (session: {
@@ -465,6 +495,7 @@ const selectSessionForPayload = {
   id: true,
   saleId: true,
   basketId: true,
+  stationKey: true,
   token: true,
   status: true,
   matchType: true,
@@ -514,10 +545,21 @@ const getCurrentCaptureSessionByOwner = async (
 const createCaptureSessionByOwner = async (
   owner: SessionOwnerWhereInput,
   validate: (tx: Prisma.TransactionClient) => Promise<void>,
+  stationKey?: string | null,
   auditActor?: AuditActor,
 ) =>
   prisma.$transaction(async (tx) => {
     await validate(tx);
+    const normalizedStationKey = stationKey === undefined
+      ? null
+      : normalizeReceiptWorkstationKey(stationKey);
+    if (stationKey !== undefined && !normalizedStationKey) {
+      throw new HttpError(
+        400,
+        "Choose a valid customer capture station",
+        "INVALID_CUSTOMER_CAPTURE_STATION",
+      );
+    }
 
     const expiredActiveSessions = await tx.saleCustomerCaptureSession.updateMany({
       where: {
@@ -533,6 +575,7 @@ const createCaptureSessionByOwner = async (
       data: {
         ...(owner.saleId ? { saleId: owner.saleId } : {}),
         ...(owner.basketId ? { basketId: owner.basketId } : {}),
+        stationKey: normalizedStationKey,
         token: createSecureToken(),
         expiresAt: new Date(Date.now() + CUSTOMER_CAPTURE_SESSION_TTL_MINUTES * 60 * 1000),
       },
@@ -547,6 +590,7 @@ const createCaptureSessionByOwner = async (
         metadata: {
           ...getOwnerMetadata(owner),
           expiresAt: created.expiresAt.toISOString(),
+          ...(normalizedStationKey ? { stationKey: normalizedStationKey } : {}),
         },
       },
       auditActor,
@@ -561,6 +605,7 @@ const createCaptureSessionByOwner = async (
           metadata: {
             ...getOwnerMetadata(owner),
             replacedActiveSessionCount: expiredActiveSessions.count,
+            ...(normalizedStationKey ? { stationKey: normalizedStationKey } : {}),
           },
         },
         auditActor,
@@ -590,7 +635,11 @@ export const getCurrentSaleCustomerCaptureSession = async (saleId: string) => {
   });
 };
 
-export const createSaleCustomerCaptureSession = async (saleId: string, auditActor?: AuditActor) => {
+export const createSaleCustomerCaptureSession = async (
+  saleId: string,
+  stationKey?: string | null,
+  auditActor?: AuditActor,
+) => {
   if (!isUuid(saleId)) {
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
   }
@@ -624,7 +673,7 @@ export const createSaleCustomerCaptureSession = async (saleId: string, auditActo
         "SALE_CUSTOMER_ALREADY_ATTACHED",
       );
     }
-  }, auditActor);
+  }, stationKey, auditActor);
 };
 
 export const getCurrentBasketCustomerCaptureSession = async (basketId: string) => {
@@ -644,7 +693,11 @@ export const getCurrentBasketCustomerCaptureSession = async (basketId: string) =
   });
 };
 
-export const createBasketCustomerCaptureSession = async (basketId: string, auditActor?: AuditActor) => {
+export const createBasketCustomerCaptureSession = async (
+  basketId: string,
+  stationKey?: string | null,
+  auditActor?: AuditActor,
+) => {
   if (!isUuid(basketId)) {
     throw new HttpError(400, "Invalid basket id", "INVALID_BASKET_ID");
   }
@@ -678,8 +731,53 @@ export const createBasketCustomerCaptureSession = async (basketId: string, audit
         "BASKET_CUSTOMER_ALREADY_ATTACHED",
       );
     }
-  }, auditActor);
+  }, stationKey, auditActor);
 };
+
+export const getPublicCustomerCaptureStationEntry = async (station: string) =>
+  prisma.$transaction(async (tx) => {
+    const normalizedStationKey = normalizeReceiptWorkstationKey(station);
+    if (!normalizedStationKey) {
+      throw new HttpError(
+        404,
+        "This customer tap point is not configured",
+        "CUSTOMER_CAPTURE_STATION_NOT_FOUND",
+      );
+    }
+
+    const session = await tx.saleCustomerCaptureSession.findFirst({
+      where: {
+        stationKey: normalizedStationKey,
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: selectSessionForPayload,
+    });
+
+    if (!session) {
+      return {
+        station: toStationPayload(normalizedStationKey),
+        session: null,
+      };
+    }
+
+    const normalizedSession = await expireSessionIfNeededTx(tx, session);
+    if (normalizedSession.status !== "ACTIVE") {
+      return {
+        station: toStationPayload(normalizedStationKey),
+        session: null,
+      };
+    }
+
+    return {
+      station: toStationPayload(normalizedStationKey),
+      session: toStationEntrySessionPayload({
+        ...session,
+        status: normalizedSession.status,
+        expiresAt: normalizedSession.expiresAt,
+        completedAt: normalizedSession.completedAt,
+      }),
+    };
+  });
 
 export const getPublicSaleCustomerCaptureSession = async (token: string) =>
   prisma.$transaction(async (tx) => {

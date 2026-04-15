@@ -5,13 +5,23 @@ import {
   createBasketCustomerCaptureSession,
   createSaleCustomerCaptureSession,
   getCurrentBasketCustomerCaptureSession,
+  getPublicCustomerCaptureStationEntry,
   getCurrentSaleCustomerCaptureSession,
   getPublicSaleCustomerCaptureSession,
   submitPublicSaleCustomerCapture,
 } from "../services/saleCustomerCaptureService";
 
 export const createSaleCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
-  const result = await createSaleCustomerCaptureSession(req.params.saleId, getRequestAuditActor(req));
+  const stationKey = typeof req.body?.stationKey === "string" ? req.body.stationKey : undefined;
+  if (req.body?.stationKey !== undefined && typeof req.body.stationKey !== "string") {
+    throw new HttpError(400, "stationKey must be a string", "INVALID_CUSTOMER_CAPTURE");
+  }
+
+  const result = await createSaleCustomerCaptureSession(
+    req.params.saleId,
+    stationKey,
+    getRequestAuditActor(req),
+  );
   res.status(201).json(result);
 };
 
@@ -21,7 +31,16 @@ export const getCurrentSaleCustomerCaptureSessionHandler = async (req: Request, 
 };
 
 export const createBasketCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
-  const result = await createBasketCustomerCaptureSession(req.params.basketId, getRequestAuditActor(req));
+  const stationKey = typeof req.body?.stationKey === "string" ? req.body.stationKey : undefined;
+  if (req.body?.stationKey !== undefined && typeof req.body.stationKey !== "string") {
+    throw new HttpError(400, "stationKey must be a string", "INVALID_CUSTOMER_CAPTURE");
+  }
+
+  const result = await createBasketCustomerCaptureSession(
+    req.params.basketId,
+    stationKey,
+    getRequestAuditActor(req),
+  );
   res.status(201).json(result);
 };
 
@@ -32,6 +51,11 @@ export const getCurrentBasketCustomerCaptureSessionHandler = async (req: Request
 
 export const getPublicSaleCustomerCaptureSessionHandler = async (req: Request, res: Response) => {
   const result = await getPublicSaleCustomerCaptureSession(req.params.token);
+  res.json(result);
+};
+
+export const getPublicCustomerCaptureStationEntryHandler = async (req: Request, res: Response) => {
+  const result = await getPublicCustomerCaptureStationEntry(req.params.station);
   res.json(result);
 };
 

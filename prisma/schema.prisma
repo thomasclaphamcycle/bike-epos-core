@@ -605,6 +605,7 @@ model SaleCustomerCaptureSession {
   id                    String                           @id @default(uuid()) @db.Uuid
   saleId                String?                          @db.Uuid
   basketId              String?                          @db.Uuid
+  stationKey            String?
   token                 String                           @unique
   status                SaleCustomerCaptureSessionStatus @default(ACTIVE)
   matchType             SaleCustomerCaptureMatchType?
@@ -626,6 +627,7 @@ model SaleCustomerCaptureSession {
 
   @@index([saleId, status])
   @@index([basketId, status])
+  @@index([stationKey, createdAt])
   @@index([expiresAt])
   @@index([customerId])
 }

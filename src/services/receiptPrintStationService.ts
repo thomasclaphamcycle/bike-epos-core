@@ -58,6 +58,20 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isReceiptWorkstationKey = (value: string): value is ReceiptWorkstationKey =>
   RECEIPT_WORKSTATION_OPTIONS.some((option) => option.key === value);
 
+export const normalizeReceiptWorkstationKey = (
+  value: string | null | undefined,
+): ReceiptWorkstationKey | null => {
+  const normalizedKey = typeof value === "string"
+    ? value.trim().replace(/[\s-]+/g, "_").toUpperCase()
+    : "";
+  return normalizedKey && isReceiptWorkstationKey(normalizedKey) ? normalizedKey : null;
+};
+
+export const toReceiptWorkstationSlug = (value: string | null | undefined) => {
+  const normalizedKey = normalizeReceiptWorkstationKey(value);
+  return normalizedKey ? normalizedKey.toLowerCase().replace(/_/g, "-") : null;
+};
+
 const normalizeUuidOrNull = (value: unknown, field: string) => {
   if (value === undefined || value === null || value === "") {
     return null;
@@ -123,8 +137,8 @@ export const resolveReceiptPrintWorkstation = async (
   key: string | null | undefined,
   db: ReceiptPrintStationClient = prisma,
 ): Promise<ReceiptPrintWorkstation | null> => {
-  const normalizedKey = typeof key === "string" ? key.trim().toUpperCase() : "";
-  if (!normalizedKey || !isReceiptWorkstationKey(normalizedKey)) {
+  const normalizedKey = normalizeReceiptWorkstationKey(key);
+  if (!normalizedKey) {
     return null;
   }
 

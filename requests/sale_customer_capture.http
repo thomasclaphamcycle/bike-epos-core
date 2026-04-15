@@ -4,6 +4,7 @@
 @saleId = REPLACE_SALE_ID
 @basketId = REPLACE_BASKET_ID
 @token = REPLACE_CAPTURE_TOKEN
+@station = till-pc
 
 ### Create sale-linked customer capture session (STAFF+)
 POST {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions
@@ -11,7 +12,9 @@ X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
 Content-Type: application/json
 
-{}
+{
+  "stationKey": "TILL_PC"
+}
 
 ### Get latest staff-visible customer capture session for a sale
 GET {{baseUrl}}/api/sales/{{saleId}}/customer-capture-sessions/current
@@ -24,7 +27,9 @@ X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
 Content-Type: application/json
 
-{}
+{
+  "stationKey": "TILL_PC"
+}
 
 ### Get latest staff-visible customer capture session for a basket
 GET {{baseUrl}}/api/baskets/{{basketId}}/customer-capture-sessions/current
@@ -33,6 +38,9 @@ X-Staff-Id: {{staffId}}
 
 ### Get public customer capture session state
 GET {{baseUrl}}/api/public/customer-capture/{{token}}
+
+### Resolve the current live customer capture session for a static NFC tap point
+GET {{baseUrl}}/api/public/customer-capture/entry/{{station}}
 
 ### Submit public customer capture details
 POST {{baseUrl}}/api/public/customer-capture/{{token}}
