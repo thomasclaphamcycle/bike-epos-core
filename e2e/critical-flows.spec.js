@@ -829,6 +829,57 @@ test("POS can remove an attached basket customer and restart customer capture on
   await expect(page.getByTestId("pos-checkout-basket")).toBeEnabled();
 });
 
+test("POS customer capture panel resets to ready after removing a captured basket customer", async ({
+  page,
+  request,
+  context,
+}) => {
+  const credentials = await ensureUserViaAdminBypass(request, {
+    role: "MANAGER",
+    prefix: "pos-capture-reset-after-detach",
+  });
+  const token = uniqueToken("pos-capture-reset-after-detach");
+  const uniquePhone = uniquePhoneForToken(token);
+
+  await page.context().clearCookies();
+  await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
+
+  await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
+  await page.getByTestId("pos-customer-capture-generate").click();
+
+  const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  await expect(captureUrl).toContain("/customer-capture");
+
+  const capturePage = await context.newPage();
+  await capturePage.goto(toLocalFrontendUrl(captureUrl));
+  await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
+  await capturePage.getByTestId("customer-capture-first-name").fill("Reset");
+  await capturePage.getByTestId("customer-capture-last-name").fill("Rider");
+  await capturePage.getByTestId("customer-capture-email").fill(`reset-capture-${token}@example.com`);
+  await capturePage.getByTestId("customer-capture-phone").fill(uniquePhone);
+  await capturePage.getByRole("button", { name: "Save details" }).click();
+  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("Details saved.");
+
+  await expect.poll(async () => {
+    const chip = page.getByTestId("pos-selected-customer");
+    if (await chip.count() === 0) {
+      return null;
+    }
+    return chip.textContent();
+  }).toContain("Reset Rider");
+
+  await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
+  await page.getByTestId("pos-customer-clear").click();
+
+  await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-completed-state")).toHaveCount(0);
+  await expect(page.getByTestId("pos-customer-capture-ready-state")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
+  await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("Customer details received");
+  await expect(page.getByTestId("pos-customer-capture-panel")).not.toContainText("New customer");
+});
+
 test("POS customer capture is actionable on a fresh basket before any products are added", async ({
   page,
   request,
