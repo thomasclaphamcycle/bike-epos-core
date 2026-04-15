@@ -7312,11 +7312,13 @@ button.primary.workshop-status-action {
   display: grid;
   gap: 18px;
   padding: 22px;
+  border: 1px solid rgba(16, 42, 67, 0.08);
+  box-shadow: 0 18px 50px rgba(30, 48, 72, 0.10);
 }
 
 .customer-capture-heading {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   text-align: center;
 }
 
@@ -7327,6 +7329,25 @@ button.primary.workshop-status-action {
 .customer-capture-form {
   display: grid;
   gap: 14px;
+}
+
+.customer-capture-state-card {
+  gap: 8px;
+}
+
+.customer-capture-active-note {
+  margin-bottom: 2px;
+  border: 1px solid #d2dff2;
+  background: linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%);
+}
+
+.customer-capture-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #315d82;
 }
 
 .customer-capture-grid {
@@ -14303,6 +14324,16 @@ body.rota-row-drag-copy-active {
 
 .pos-customer-capture-panel .card-header-row {
   align-items: start;
+  gap: 10px;
+}
+
+.pos-customer-capture-eyebrow {
+  margin: 4px 0 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #315d82;
 }
 
 .pos-customer-capture-panel .cash-qr-copy label {
@@ -14322,6 +14353,60 @@ body.rota-row-drag-copy-active {
 .pos-customer-capture-panel .quick-create-panel,
 .pos-customer-capture-panel .cash-qr-card {
   margin-top: 10px;
+}
+
+.pos-customer-capture-live {
+  border: 1px solid #d1deef;
+  background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%);
+}
+
+.pos-customer-capture-live-header {
+  gap: 12px;
+}
+
+.pos-customer-capture-live-title {
+  margin-top: 6px;
+}
+
+.pos-customer-capture-live-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.pos-customer-capture-live-meta > div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(49, 93, 130, 0.12);
+}
+
+.pos-customer-capture-replaced-note {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #e7d0a7;
+  background: #fff8eb;
+}
+
+.pos-customer-capture-replaced-note p {
+  margin: 0;
+}
+
+.pos-customer-capture-fallback {
+  border-top: 1px solid rgba(49, 93, 130, 0.12);
+  padding-top: 12px;
+}
+
+.pos-customer-capture-fallback-heading {
+  margin-bottom: 8px;
+}
+
+.pos-customer-capture-fallback-heading p {
+  margin: 4px 0 0;
 }
 
 .pos-customer-capture-summary-heading {
@@ -15001,6 +15086,11 @@ body.rota-row-drag-copy-active {
 
   .customer-capture-card {
     padding: 18px;
+  }
+
+  .customer-capture-meta,
+  .pos-customer-capture-live-meta {
+    grid-template-columns: 1fr;
   }
 
   .pos-workstation {

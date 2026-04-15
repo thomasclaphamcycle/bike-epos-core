@@ -777,7 +777,7 @@ test("POS customer capture is actionable on a fresh basket before any products a
 
   await expect(page.getByTestId("pos-customer-capture-ready-state")).toContainText("No live capture link");
   await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(
-    "Ask the customer to tap their phone to add their details.",
+    "Start a tap request when the customer is ready at the till.",
   );
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
 });

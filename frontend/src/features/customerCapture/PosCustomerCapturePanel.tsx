@@ -16,6 +16,7 @@ type PosCustomerCapturePanelProps = {
   actionsDisabled?: boolean;
   captureSession: CustomerCaptureSession | null;
   captureSessionLoading: boolean;
+  captureSessionLaunchMode: "fresh" | "replaced" | null;
   creatingCaptureSession: boolean;
   captureStatusError: string | null;
   captureUrl: string | null;
@@ -33,6 +34,7 @@ export const PosCustomerCapturePanel = ({
   actionsDisabled = false,
   captureSession,
   captureSessionLoading,
+  captureSessionLaunchMode,
   creatingCaptureSession,
   captureStatusError,
   captureUrl,
@@ -45,6 +47,9 @@ export const PosCustomerCapturePanel = ({
 }: PosCustomerCapturePanelProps) => {
   const captureContextLabel = getCaptureContextLabel(target?.ownerType ?? "basket");
   const targetCustomer = getCaptureTargetCustomer(target);
+  const expiresAtLabel = captureSession?.expiresAt
+    ? new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
 
   return (
     <>
@@ -85,9 +90,10 @@ export const PosCustomerCapturePanel = ({
       <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
         <div className="card-header-row">
           <div>
-            <div className="table-primary">Add Customer</div>
+            <div className="table-primary">NFC Customer Capture</div>
+            <p className="pos-customer-capture-eyebrow">Tap first. Link fallback only when needed.</p>
             <p className="muted-text">
-              Ask the customer to tap their phone to add their details.
+              Start a tap request when the customer is ready at the till. CorePOS keeps the latest capture live for this {captureContextLabel}.
             </p>
           </div>
           {isCaptureEligible ? (
@@ -108,7 +114,7 @@ export const PosCustomerCapturePanel = ({
                 onClick={onCreateCustomerCaptureSession}
                 disabled={actionsDisabled || creatingCaptureSession || captureSessionLoading}
               >
-                {creatingCaptureSession ? "Preparing..." : "Start Customer Link"}
+                {creatingCaptureSession ? "Preparing tap request..." : "Start Tap Request"}
               </button>
             )
           ) : null}
@@ -119,7 +125,7 @@ export const PosCustomerCapturePanel = ({
             <span className="status-badge status-complete">Not needed</span>
             <strong>Customer already attached</strong>
             <p className="muted-text">
-              This {captureContextLabel} already has {targetCustomer.name} attached, so Add Customer is no longer needed here.
+              This {captureContextLabel} already has {targetCustomer.name} attached, so customer capture is finished here.
             </p>
             <p className="muted-text">
               {formatCustomerContactSummary(targetCustomer)}
@@ -130,14 +136,14 @@ export const PosCustomerCapturePanel = ({
             <span className="status-badge">Unavailable</span>
             <strong>Sale already completed</strong>
             <p className="muted-text">
-              Customer capture can only be started while the sale is still active.
+              Customer capture can only run while the sale is still open at the till.
             </p>
           </div>
         ) : captureSessionLoading ? (
           <div className="quick-create-panel pos-customer-capture-state">
             <span className="status-badge">Loading</span>
-            <strong>Checking current customer capture</strong>
-            <p className="muted-text">Loading any active customer capture link for this {captureContextLabel}.</p>
+            <strong>Checking customer capture status</strong>
+            <p className="muted-text">Loading the latest capture state for this {captureContextLabel}.</p>
           </div>
         ) : captureStatusError && !captureSession ? (
           <div className="quick-create-panel pos-customer-capture-state">
@@ -146,29 +152,54 @@ export const PosCustomerCapturePanel = ({
             <p className="muted-text">{captureStatusError}</p>
           </div>
         ) : captureSession?.status === "ACTIVE" && captureUrl ? (
-          <div className="cash-qr-card">
-            <div className="card-header-row">
+          <div className="cash-qr-card pos-customer-capture-live" data-testid="pos-customer-capture-live-state">
+            <div className="card-header-row pos-customer-capture-live-header">
               <div>
                 <span className="status-badge">Waiting for customer</span>
+                <div className="table-primary pos-customer-capture-live-title">Ask the customer to tap their phone now</div>
                 <p className="muted-text">
-                  Ask the customer to tap their phone to add their details.
+                  Their phone should open the secure capture page for this {captureContextLabel}. Keep this screen open until the details come back.
                 </p>
-                <p className="muted-text">
-                  Created {formatCaptureRelativeMinutes(captureSession.createdAt) ?? "just now"}.
-                  {" "}
-                  Expires {new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {" "}
-                  ({formatCaptureRelativeMinutes(captureSession.expiresAt, { suffix: "remaining" }) ?? "timing unavailable"}).
-                </p>
+              </div>
+              <button type="button" onClick={onRefreshStatus}>
+                Refresh Status
+              </button>
+            </div>
+            <div className="pos-customer-capture-live-meta">
+              <div>
+                <div className="muted-text">Started</div>
+                <div className="table-primary">
+                  {formatCaptureRelativeMinutes(captureSession.createdAt) ?? "just now"}
+                </div>
+              </div>
+              <div>
+                <div className="muted-text">Expires</div>
+                <div className="table-primary">
+                  {expiresAtLabel || "Timing unavailable"}
+                </div>
+              </div>
+              <div>
+                <div className="muted-text">Time left</div>
+                <div className="table-primary">
+                  {formatCaptureRelativeMinutes(captureSession.expiresAt, { suffix: "remaining" }) ?? "timing unavailable"}
+                </div>
               </div>
             </div>
-            <div className="cash-qr-copy">
-              <div>
-                <div className="table-primary">Need the link instead?</div>
-                <p className="muted-text">Copy it or open it directly on the customer&apos;s phone.</p>
+            {captureSessionLaunchMode === "replaced" ? (
+              <div className="pos-customer-capture-replaced-note">
+                <span className="status-badge status-warning">Replaced</span>
+                <p className="muted-text">
+                  This new tap request replaced an older one. Only the newest customer link will work now.
+                </p>
+              </div>
+            ) : null}
+            <div className="cash-qr-copy pos-customer-capture-fallback">
+              <div className="pos-customer-capture-fallback-heading">
+                <div className="table-primary">Link fallback</div>
+                <p className="muted-text">Use this only if the customer&apos;s tap does not open the page.</p>
               </div>
               <label>
-                Public capture URL
+                Fallback capture URL
                 <input
                   data-testid="pos-customer-capture-url"
                   value={captureUrl}
@@ -177,28 +208,25 @@ export const PosCustomerCapturePanel = ({
               </label>
               <div className="actions-inline">
                 <button type="button" onClick={onCopyCaptureUrl}>
-                  Copy Link
+                  Copy Fallback Link
                 </button>
                 <a href={captureUrl} target="_blank" rel="noreferrer">
                   Open Link
                 </a>
-                <button type="button" onClick={onRefreshStatus}>
-                  Refresh Status
-                </button>
               </div>
               <p className="muted-text">
-                Starting a new link expires this one immediately.
+                Starting another tap request expires this one immediately.
               </p>
             </div>
           </div>
         ) : captureSession?.status === "COMPLETED" ? (
           <div className="success-panel success-panel-sale" data-testid="pos-customer-capture-completed-state">
             <div className="success-panel-heading">
-              <strong>Customer capture complete.</strong>
+              <strong>Customer details received.</strong>
               <span className="status-badge status-complete">
                 {captureSession.outcome
                   ? getCaptureOutcomeLabel(captureSession.outcome.matchType)
-                  : "Attached automatically"}
+                  : "Ready to attach"}
               </span>
             </div>
             <p className="muted-text">
@@ -207,23 +235,23 @@ export const PosCustomerCapturePanel = ({
                     captureSession.outcome.matchType,
                     captureSession.outcome.customer.name,
                   )
-                : `The customer has already finished the form. Refresh the ${captureContextLabel} to pull their details into the till.`}
+                : `The customer has finished on their phone. Refresh the ${captureContextLabel} to pull their details into the till.`}
             </p>
           </div>
         ) : captureSession?.status === "EXPIRED" ? (
           <div className="quick-create-panel pos-customer-capture-state">
             <span className="status-badge">Expired</span>
-            <strong>Capture link expired</strong>
+            <strong>Customer capture expired</strong>
             <p className="muted-text">
-              The last customer link expired before it was used. Start Customer Link again when the customer is ready.
+              The last tap request expired before the customer finished. Start a fresh tap request when they are ready.
             </p>
           </div>
         ) : (
           <div className="quick-create-panel pos-customer-capture-state" data-testid="pos-customer-capture-ready-state">
-            <span className="status-badge">Ready</span>
-            <strong>No live capture link</strong>
+            <span className="status-badge status-complete">Ready</span>
+            <strong>Ready for customer capture</strong>
             <p className="muted-text">
-              Start Customer Link when the customer is ready. CorePOS will then show a fresh public link for this {captureContextLabel}.
+              No live capture link yet. Start a tap request when the customer is ready, and keep the link fallback for phones that need it.
             </p>
           </div>
         )}
