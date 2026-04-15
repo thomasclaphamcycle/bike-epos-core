@@ -839,7 +839,7 @@ test("POS customer capture panel resets to ready after removing a captured baske
     prefix: "pos-capture-reset-after-detach",
   });
   const token = uniqueToken("pos-capture-reset-after-detach");
-  const uniquePhone = uniquePhoneForToken(token);
+  const uniquePhone = `07${token.replace(/\D/g, "").slice(-9).padStart(9, "0")}`;
 
   await page.context().clearCookies();
   await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
