@@ -884,7 +884,7 @@ test("POS customer capture panel resets to ready after removing a captured baske
 
   await page.getByTestId("pos-customer-capture-generate").click();
   await expect(page.getByTestId("pos-customer-capture-live-state")).toBeVisible();
-  await expect(page.getByTestId("pos-customer-capture-url")).toHaveValue(/\/customer-capture\//);
+  await expect(page.getByTestId("pos-customer-capture-url")).toHaveValue(/customer-capture\?token=/);
 });
 
 test("POS customer capture is actionable on a fresh basket before any products are added", async ({
