@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.2.72",
+  "version": "1.2.74",
   "description": "",
   "main": "index.js",
   "scripts": {

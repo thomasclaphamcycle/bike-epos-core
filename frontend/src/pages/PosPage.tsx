@@ -260,6 +260,16 @@ export const PosPage = () => {
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
   const activeBasketId = basket?.id ?? basketId;
+  const basketItemCount = basket?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const selectedCustomerAttachedToSale = Boolean(
+    selectedCustomer
+    && sale?.sale.customer?.id === selectedCustomer.id,
+  );
+  const selectedCustomerAttachedToBasket = Boolean(
+    selectedCustomer
+    && !selectedCustomerAttachedToSale
+    && basket?.customer?.id === selectedCustomer.id,
+  );
   const receiptWorkstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
@@ -947,9 +957,19 @@ export const PosPage = () => {
         return;
       }
     } else if (activeBasketId) {
+      if (
+        selectedCustomerAttachedToBasket
+        && basketItemCount > 0
+        && !window.confirm(
+          "Remove this customer from the active basket? The basket items will stay in place and the basket will return to walk-in.",
+        )
+      ) {
+        return;
+      }
+
       try {
         await attachCustomerToBasket(activeBasketId, null);
-        success("Customer cleared from basket");
+        success("Customer removed. Basket is back to walk-in.");
       } catch (detachError) {
         const message = detachError instanceof Error ? detachError.message : "Failed to clear customer";
         error(message);
@@ -1825,7 +1845,9 @@ export const PosPage = () => {
                     data-testid="pos-customer-clear"
                     onClick={() => void clearSelectedCustomer()}
                   >
-                    {sale?.sale.customer ? "Remove Customer" : "Clear Selection"}
+                    {selectedCustomerAttachedToSale || selectedCustomerAttachedToBasket
+                      ? "Remove customer"
+                      : "Clear selection"}
                   </button>
                 ) : null}
               </div>
@@ -1839,11 +1861,15 @@ export const PosPage = () => {
                     </div>
                   </div>
                   <div className="customer-status-chip">
-                    {sale?.sale.customer?.id === selectedCustomer.id ? "Attached to sale" : "Selected for checkout"}
+                    {selectedCustomerAttachedToSale
+                      ? "Attached to sale"
+                      : selectedCustomerAttachedToBasket
+                        ? "Attached to basket"
+                        : "Selected for checkout"}
                   </div>
                 </div>
               ) : (
-                <p className="muted-text">No customer selected yet. Search below or leave this sale as walk-in.</p>
+                <p className="muted-text">No customer attached yet. This basket stays as walk-in until you add one.</p>
               )}
 
               <PosCustomerCapturePanel
